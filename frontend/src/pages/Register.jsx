@@ -30,15 +30,10 @@ const Register = () => {
     e.preventDefault();
     try {
       await axios.post(
-  `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-  formData,
-  {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  }
-);
-
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
+        formData
+      );
+      alert("Успешная регистрация!");
     } catch (error) {
       console.error("Ошибка регистрации:", error);
       alert("Ошибка при регистрации.");
@@ -82,13 +77,11 @@ const Register = () => {
         </h2>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-          {/* Левая колонка */}
           <div>
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Название</label>
               <input name="name" required onChange={handleChange} className="w-full border p-2" />
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Тип поставщика</label>
               <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
@@ -96,7 +89,6 @@ const Register = () => {
                 <option value="транспорт">Транспорт</option>
               </select>
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Локация</label>
               <input
@@ -107,7 +99,6 @@ const Register = () => {
                 className="w-full border p-2"
               />
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Фото профиля</label>
               <input
@@ -120,23 +111,19 @@ const Register = () => {
             </div>
           </div>
 
-          {/* Правая колонка */}
           <div>
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Телефон</label>
               <input name="phone" required onChange={handleChange} className="w-full border p-2" />
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Email</label>
               <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Ссылка на соцсети</label>
               <input name="social" onChange={handleChange} className="w-full border p-2" />
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Пароль</label>
               <input
