@@ -34,13 +34,13 @@ const Register = () => {
       formData,
       {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       }
     );
     alert("Регистрация прошла успешно!");
   } catch (error) {
-    console.error("Ошибка регистрации:", error);
+    console.error("Ошибка регистрации:", error.response?.data || error.message);
     alert("Ошибка при регистрации.");
   }
 };
