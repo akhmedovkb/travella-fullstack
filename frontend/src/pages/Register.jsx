@@ -15,11 +15,42 @@ const Register = () => {
     password: ""
   });
 
-  const cities = [
-    "Самарканд", "Бухара", "Ташкент", "Хива", "Коканд",
-    "Андижан", "Навои", "Карши", "Фергана", "Термез", "Наманган", "Ургенч"
-  ];
   const [locationSuggestions, setLocationSuggestions] = useState([]);
+
+  let debounceTimeout = null;
+
+  const fetchCities = async (query) => {
+    if (!query) return setLocationSuggestions([]);
+
+    try {
+      const response = await axios.get(
+        `https://wft-geo-db.p.rapidapi.com/v1/geo/cities`,
+        {
+          params: {
+            namePrefix: query,
+            limit: 5,
+            sort: "-population",
+            countryIds: "UZ"
+          },
+          headers: {
+            "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
+            "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
+          },
+        }
+      );
+
+      const cities = response.data.data.map((city) => city.city);
+      setLocationSuggestions(cities);
+    } catch (err) {
+      console.error("Ошибка автоподсказки:", err);
+      setLocationSuggestions([]);
+    }
+  };
+
+  const handleLocationSelect = (city) => {
+    setFormData((prev) => ({ ...prev, location: city }));
+    setLocationSuggestions([]);
+  };
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -30,20 +61,15 @@ const Register = () => {
       };
       reader.readAsDataURL(files[0]);
     } else if (name === "location") {
-      const input = value.toLowerCase();
-      const filtered = cities.filter((city) =>
-        city.toLowerCase().startsWith(input)
-      );
-      setLocationSuggestions(filtered);
       setFormData((prev) => ({ ...prev, [name]: value }));
+
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        fetchCities(value);
+      }, 300);
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
-  };
-
-  const handleLocationSelect = (city) => {
-    setFormData((prev) => ({ ...prev, location: city }));
-    setLocationSuggestions([]);
   };
 
   const handleSubmit = async (e) => {
@@ -115,31 +141,30 @@ const Register = () => {
                 <option value="транспорт">Транспорт</option>
               </select>
             </div>
-
-            <div style={{ position: "relative", marginBottom: "1.5rem" }}>
+            <div style={{ marginBottom: "1.5rem", position: "relative" }}>
               <label>Локация</label>
               <input
                 name="location"
-                required
                 value={formData.location}
+                required
                 onChange={handleChange}
                 placeholder="например, Самарканд, Бухара"
                 className="w-full border p-2"
-                autoComplete="off"
               />
               {locationSuggestions.length > 0 && (
                 <ul
                   style={{
                     position: "absolute",
-                    top: "100%",
-                    left: 0,
-                    right: 0,
                     backgroundColor: "#fff",
                     border: "1px solid #ccc",
-                    zIndex: 10,
+                    borderTop: "none",
                     maxHeight: "150px",
                     overflowY: "auto",
-                    marginTop: "0.25rem",
+                    zIndex: 1000,
+                    width: "100%",
+                    listStyle: "none",
+                    margin: 0,
+                    padding: "0",
                   }}
                 >
                   {locationSuggestions.map((city, index) => (
@@ -147,8 +172,9 @@ const Register = () => {
                       key={index}
                       onClick={() => handleLocationSelect(city)}
                       style={{
-                        padding: "0.5rem",
+                        padding: "8px 12px",
                         cursor: "pointer",
+                        borderBottom: "1px solid #eee",
                       }}
                     >
                       {city}
@@ -157,7 +183,6 @@ const Register = () => {
                 </ul>
               )}
             </div>
-
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Фото профиля</label>
               <input
