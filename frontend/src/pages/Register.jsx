@@ -1,27 +1,28 @@
-
 import React, { useState } from "react";
 import axios from "axios";
 
 const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
-    password: "",
-    type: "гид",
+    type: "",
     location: "",
+    photo: "",
     phone: "",
+    email: "",
     social: "",
-    photo: ""
+    password: "",
   });
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    if (name === "photo" && files.length > 0) {
+    if (name === "photo") {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({ ...formData, photo: reader.result });
       };
-      reader.readAsDataURL(files[0]);
+      if (files && files[0]) {
+        reader.readAsDataURL(files[0]);
+      }
     } else {
       setFormData({ ...formData, [name]: value });
     }
@@ -30,105 +31,82 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(
-        "https://travella-fullstack-production.up.railway.app/api/providers/register",
-        formData
-      );
-      alert(res.data.message);
-      window.location.href = "/login";
-    } catch (err) {
-      alert(err.response?.data?.message || "Ошибка регистрации");
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, formData);
+      alert("Успешная регистрация!");
+    } catch (error) {
+      console.error("Ошибка регистрации:", error);
+      alert("Ошибка при регистрации.");
     }
   };
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      minHeight: "100vh",
-      backgroundColor: "#F1F1F1"
-    }}>
+    <div
+      style={{
+        fontFamily: "Manrope, sans-serif",
+        background: "#F1F1F1",
+        minHeight: "100vh",
+        padding: "2rem",
+      }}
+    >
       <form
         onSubmit={handleSubmit}
         style={{
-          backgroundColor: "#FFFFFF",
+          display: "flex",
+          gap: "2rem",
+          justifyContent: "center",
+          background: "#fff",
           padding: "2rem",
-          borderRadius: "10px",
-          width: "100%",
-          maxWidth: "900px",
-          boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)"
+          borderRadius: "8px",
+          maxWidth: "1000px",
+          margin: "0 auto",
         }}
       >
-        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "2rem" }}>
-          Регистрация поставщика
-        </h2>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "2rem"
-        }}>
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="name">Название</label>
-              <input name="name" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="type">Тип поставщика</label>
-              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
-                <option value="гид">Гид</option>
-                <option value="транспорт">Транспорт</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="location">Локация</label>
-              <input name="location" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="photo">Фото профиля</label>
-              <input name="photo" type="file" accept="image/*" onChange={handleChange} className="w-full border p-2" />
-            </div>
-          </div>
-
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="phone">Телефон</label>
-              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="email">Email</label>
-              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="social">Ссылка на соцсети</label>
-              <input name="social" onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="password">Пароль</label>
-              <input name="password" type="password" required onChange={handleChange} className="w-full border p-2" style={{ border: "2px solid #FF5722" }} />
-            </div>
-          </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <label>Название
+            <input name="name" type="text" onChange={handleChange} />
+          </label>
+          <label>Тип поставщика
+            <select name="type" onChange={handleChange}>
+              <option value="">Выберите тип</option>
+              <option value="Гид">Гид</option>
+              <option value="Транспорт">Транспорт</option>
+            </select>
+          </label>
+          <label>Локация
+            <input name="location" type="text" onChange={handleChange} />
+          </label>
+          <label>Фото профиля
+            <input name="photo" type="file" accept="image/*" onChange={handleChange} />
+          </label>
         </div>
 
-        <button type="submit" style={{
-          backgroundColor: "#FF5722",
-          color: "#FFF",
-          padding: "0.75rem 1.5rem",
-          border: "none",
-          borderRadius: "5px",
-          width: "100%",
-          fontWeight: "bold",
-          marginTop: "1.5rem"
-        }}>
-          Зарегистрироваться
-        </button>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <label>Телефон
+            <input name="phone" type="text" onChange={handleChange} />
+          </label>
+          <label>Email
+            <input name="email" type="email" onChange={handleChange} />
+          </label>
+          <label>Ссылки на соцсети
+            <input name="social" type="text" onChange={handleChange} />
+          </label>
+          <label style={{ fontWeight: "bold", color: "#FF5722" }}>Пароль
+            <input name="password" type="password" onChange={handleChange} />
+          </label>
+          <button
+            type="submit"
+            style={{
+              marginTop: "1rem",
+              background: "#FF5722",
+              color: "#fff",
+              padding: "0.75rem",
+              borderRadius: "6px",
+              fontWeight: "bold",
+            }}
+          >
+            Зарегистрироваться
+          </button>
+        </div>
       </form>
     </div>
   );
