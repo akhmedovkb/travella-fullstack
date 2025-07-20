@@ -15,6 +15,12 @@ const Register = () => {
     password: ""
   });
 
+  const cities = [
+    "Самарканд", "Бухара", "Ташкент", "Хива", "Коканд",
+    "Андижан", "Навои", "Карши", "Фергана", "Термез", "Наманган", "Ургенч"
+  ];
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     if (name === "photo" && files.length > 0) {
@@ -23,9 +29,21 @@ const Register = () => {
         setFormData((prev) => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(files[0]);
+    } else if (name === "location") {
+      const input = value.toLowerCase();
+      const filtered = cities.filter((city) =>
+        city.toLowerCase().startsWith(input)
+      );
+      setLocationSuggestions(filtered);
+      setFormData((prev) => ({ ...prev, [name]: value }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleLocationSelect = (city) => {
+    setFormData((prev) => ({ ...prev, location: city }));
+    setLocationSuggestions([]);
   };
 
   const handleSubmit = async (e) => {
@@ -97,16 +115,49 @@ const Register = () => {
                 <option value="транспорт">Транспорт</option>
               </select>
             </div>
-            <div style={{ marginBottom: "1.5rem" }}>
+
+            <div style={{ position: "relative", marginBottom: "1.5rem" }}>
               <label>Локация</label>
               <input
                 name="location"
                 required
+                value={formData.location}
                 onChange={handleChange}
                 placeholder="например, Самарканд, Бухара"
                 className="w-full border p-2"
+                autoComplete="off"
               />
+              {locationSuggestions.length > 0 && (
+                <ul
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    backgroundColor: "#fff",
+                    border: "1px solid #ccc",
+                    zIndex: 10,
+                    maxHeight: "150px",
+                    overflowY: "auto",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  {locationSuggestions.map((city, index) => (
+                    <li
+                      key={index}
+                      onClick={() => handleLocationSelect(city)}
+                      style={{
+                        padding: "0.5rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {city}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
+
             <div style={{ marginBottom: "1.5rem" }}>
               <label>Фото профиля</label>
               <input
