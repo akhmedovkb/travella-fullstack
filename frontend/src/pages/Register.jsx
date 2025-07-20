@@ -1,17 +1,16 @@
-import.meta.env.VITE_API_BASE_URL
 import React, { useState } from "react";
 import axios from "axios";
 
 const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
-    password: "",
     type: "гид",
     location: "",
+    photo: "",
     phone: "",
+    email: "",
     social: "",
-    photo: ""
+    password: ""
   });
 
   const handleChange = (e) => {
@@ -30,112 +29,7 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(
-  `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-  formData,
-  {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }
-);
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, formData);
+      alert("Регистрация прошла успешно!");
     } catch (error) {
-      console.error("Ошибка регистрации:", error);
-      alert("Ошибка при регистрации.");
-    }
-  };
-
-  return (
-    <div style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      minHeight: "100vh",
-      backgroundColor: "#F1F1F1"
-    }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          backgroundColor: "#FFFFFF",
-          padding: "2rem",
-          borderRadius: "10px",
-          width: "100%",
-          maxWidth: "900px",
-          boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)"
-        }}
-      >
-        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "2rem" }}>
-          Регистрация поставщика
-        </h2>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "2rem"
-        }}>
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="name">Название</label>
-              <input name="name" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="type">Тип поставщика</label>
-              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
-                <option value="гид">Гид</option>
-                <option value="транспорт">Транспорт</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="location">Локация</label>
-              <input name="location" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="photo">Фото профиля</label>
-              <input name="photo" type="file" accept="image/*" onChange={handleChange} className="w-full border p-2" />
-            </div>
-          </div>
-
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="phone">Телефон</label>
-              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="email">Email</label>
-              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="social">Ссылка на соцсети</label>
-              <input name="social" onChange={handleChange} className="w-full border p-2" />
-            </div>
-
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label htmlFor="password">Пароль</label>
-              <input name="password" type="password" required onChange={handleChange} className="w-full border p-2" style={{ border: "2px solid #FF5722" }} />
-            </div>
-          </div>
-        </div>
-
-        <button type="submit" style={{
-          backgroundColor: "#FF5722",
-          color: "#FFF",
-          padding: "0.75rem 1.5rem",
-          border: "none",
-          borderRadius: "5px",
-          width: "100%",
-          fontWeight: "bold",
-          marginTop: "1.5rem"
-        }}>
-          Зарегистрироваться
-        </button>
-      </form>
-    </div>
-  );
-};
-
-export default Register;
+      console.error("Ошибка регистрации:"
