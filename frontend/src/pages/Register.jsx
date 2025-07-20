@@ -4,9 +4,9 @@ import axios from "axios";
 const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
-    type: "",
+    type: "Гид",
     location: "",
-    photo: "",
+    photo: null,
     phone: "",
     email: "",
     social: "",
@@ -16,13 +16,7 @@ const Register = () => {
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     if (name === "photo") {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, photo: reader.result });
-      };
-      if (files && files[0]) {
-        reader.readAsDataURL(files[0]);
-      }
+      setFormData({ ...formData, photo: files[0] });
     } else {
       setFormData({ ...formData, [name]: value });
     }
@@ -30,79 +24,138 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const data = new FormData();
+    for (const key in formData) {
+      data.append(key, formData[key]);
+    }
     try {
-      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, formData);
-      alert("Успешная регистрация!");
+      await axios.post(
+        "https://travella-fullstack-production.up.railway.app/api/providers/register",
+        data
+      );
+      alert("Успешно зарегистрировано!");
     } catch (error) {
-      console.error("Ошибка регистрации:", error);
-      alert("Ошибка при регистрации.");
+      alert("Ошибка при регистрации");
+      console.error(error);
     }
   };
 
   return (
-    <div
-      style={{
-        fontFamily: "Manrope, sans-serif",
-        background: "#F1F1F1",
-        minHeight: "100vh",
-        padding: "2rem",
-      }}
-    >
+    <div className="min-h-screen flex items-center justify-center bg-[#F1F1F1] font-[Manrope]">
       <form
         onSubmit={handleSubmit}
-        style={{
-          display: "flex",
-          gap: "2rem",
-          justifyContent: "center",
-          background: "#fff",
-          padding: "2rem",
-          borderRadius: "8px",
-          maxWidth: "1000px",
-          margin: "0 auto",
-        }}
+        className="bg-white p-10 rounded shadow-md w-full max-w-5xl grid grid-cols-2 gap-8 text-[#333]"
       >
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <label>Название
-            <input name="name" type="text" onChange={handleChange} />
-          </label>
-          <label>Тип поставщика
-            <select name="type" onChange={handleChange}>
-              <option value="">Выберите тип</option>
+        {/* Левая колонка */}
+        <div className="flex flex-col space-y-6">
+          <div>
+            <label className="block font-bold mb-2">Название</label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2">Тип поставщика</label>
+            <select
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              required
+            >
               <option value="Гид">Гид</option>
               <option value="Транспорт">Транспорт</option>
             </select>
-          </label>
-          <label>Локация
-            <input name="location" type="text" onChange={handleChange} />
-          </label>
-          <label>Фото профиля
-            <input name="photo" type="file" accept="image/*" onChange={handleChange} />
-          </label>
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2">Локация</label>
+            <input
+              type="text"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              placeholder="например, Самарканд, Бухара"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2">Фото профиля</label>
+            <input
+              type="file"
+              name="photo"
+              accept="image/*"
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
         </div>
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <label>Телефон
-            <input name="phone" type="text" onChange={handleChange} />
-          </label>
-          <label>Email
-            <input name="email" type="email" onChange={handleChange} />
-          </label>
-          <label>Ссылки на соцсети
-            <input name="social" type="text" onChange={handleChange} />
-          </label>
-          <label style={{ fontWeight: "bold", color: "#FF5722" }}>Пароль
-            <input name="password" type="password" onChange={handleChange} />
-          </label>
+        {/* Правая колонка */}
+        <div className="flex flex-col space-y-6">
+          <div>
+            <label className="block font-bold mb-2">Телефон</label>
+            <input
+              type="text"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2">Email</label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2">Ссылка на соцсети</label>
+            <input
+              type="text"
+              name="social"
+              value={formData.social}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold mb-2 text-[#FF5722]">
+              Пароль
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full p-3 border-2 border-[#FF5722] rounded font-semibold"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="col-span-2 text-center mt-4">
           <button
             type="submit"
-            style={{
-              marginTop: "1rem",
-              background: "#FF5722",
-              color: "#fff",
-              padding: "0.75rem",
-              borderRadius: "6px",
-              fontWeight: "bold",
-            }}
+            className="bg-[#FF5722] text-white px-6 py-3 rounded hover:bg-[#FFAD7A] transition"
           >
             Зарегистрироваться
           </button>
