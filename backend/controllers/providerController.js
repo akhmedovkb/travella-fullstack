@@ -1,14 +1,12 @@
-const registerProvider = async (req, res) => {
-  try {
-    console.log("Получено тело запроса:", req.body);
-
-
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
 const registerProvider = async (req, res) => {
   try {
+    // 👉 Лог тела запроса для отладки
+    console.log("📦 Получено тело запроса:", req.body);
+
     const {
       name,
       email,
@@ -25,7 +23,7 @@ const registerProvider = async (req, res) => {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
 
-    // Проверка на формат фото (base64 строка)
+    // Проверка на формат фото
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
@@ -61,10 +59,9 @@ const registerProvider = async (req, res) => {
     });
 
   } catch (error) {
-  console.error("Ошибка регистрации:", error.message);
-  res.status(500).json({ message: "Ошибка сервера", error: error.message });
-}
-
+    console.error("❌ Ошибка регистрации:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
 };
 
 module.exports = { registerProvider };
