@@ -29,23 +29,16 @@ const Register = () => {
   const handleSubmit = async (e) => {
   e.preventDefault();
   try {
-    const form = new FormData();
-    for (const key in formData) {
-      form.append(key, formData[key]);
-    }
-
     await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-      form,
+      formData,
       {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
       }
     );
-    
     alert("Регистрация прошла успешно!");
-
   } catch (error) {
     console.error("Ошибка регистрации:", error);
     alert("Ошибка при регистрации.");
