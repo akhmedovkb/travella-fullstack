@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import axios from "axios";
 
@@ -13,7 +12,7 @@ const Login = () => {
     e.preventDefault();
     try {
       const res = await axios.post(
-        "https://your-backend-url/api/providers/login",
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/login`,
         formData
       );
       alert("Успешный вход");
