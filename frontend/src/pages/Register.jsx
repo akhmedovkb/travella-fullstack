@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,25 +9,42 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:5000/api/providers/register", {
+    const res = await fetch("https://travella-api.up.railway.app/api/providers/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
     });
     if (res.ok) {
+      alert("Регистрация успешна");
       navigate("/login");
     } else {
-      alert("Registration failed");
+      alert("Ошибка при регистрации");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
-      <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" />
-      <button type="submit">Register</button>
-    </form>
+    <div style={ padding: "2rem" }>
+      <h2>Регистрация</h2>
+      <form onSubmit={handleSubmit}>
+        <input
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        /><br />
+        <input
+          placeholder="Пароль"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        /><br />
+        <input
+          placeholder="Имя"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        /><br />
+        <button type="submit">Зарегистрироваться</button>
+      </form>
+    </div>
   );
 };
 
