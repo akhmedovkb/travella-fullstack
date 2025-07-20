@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import axios from "axios";
 
@@ -10,7 +11,7 @@ const Register = () => {
     location: "",
     phone: "",
     social: "",
-    photo: "",
+    photo: ""
   });
 
   const handleChange = (e) => {
@@ -30,11 +31,10 @@ const Register = () => {
     e.preventDefault();
     try {
       const res = await axios.post(
-        "https://travella-fullstack-backend-url/api/providers/register",
+        "https://your-backend-url/api/providers/register",
         formData
       );
       alert(res.data.message);
-      // перенаправление после регистрации
       window.location.href = "/login";
     } catch (err) {
       alert(err.response?.data?.message || "Ошибка регистрации");
