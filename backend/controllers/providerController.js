@@ -64,8 +64,6 @@ const registerProvider = async (req, res) => {
   }
 };
 
-module.exports = { registerProvider };
-
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -99,9 +97,5 @@ const loginProvider = async (req, res) => {
   }
 };
 
-module.exports = {
-  registerProvider,
-  loginProvider, //
-};
-
+module.exports = { registerProvider, loginProvider };
 
