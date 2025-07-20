@@ -65,3 +65,43 @@ const registerProvider = async (req, res) => {
 };
 
 module.exports = { registerProvider };
+
+const loginProvider = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const provider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    if (provider.rows.length === 0) {
+      return res.status(400).json({ message: "Пользователь не найден" });
+    }
+
+    const isMatch = await bcrypt.compare(password, provider.rows[0].password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Неверный пароль" });
+    }
+
+    const token = jwt.sign({ id: provider.rows[0].id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      message: "Вход успешен",
+      provider: {
+        id: provider.rows[0].id,
+        name: provider.rows[0].name,
+        email: provider.rows[0].email,
+      },
+      token,
+    });
+  } catch (error) {
+    console.error("❌ Ошибка входа:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+module.exports = {
+  registerProvider,
+  loginProvider, //
+};
+
+
