@@ -8,6 +8,9 @@ const app = express();
 // Разрешаем CORS
 app.use(cors());
 
+// Позволяем читать application/x-www-form-urlencoded (нужно для form-data)
+app.use(express.urlencoded({ extended: true }));
+
 // Увеличиваем лимит JSON-боди (для base64 изображений)
 app.use(express.json({ limit: "10mb" }));
 
