@@ -56,55 +56,65 @@ const Register = () => {
           padding: "2rem",
           borderRadius: "10px",
           width: "100%",
-          maxWidth: "500px",
+          maxWidth: "900px",
           boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)"
         }}
       >
-        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "1.5rem" }}>
+        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "2rem" }}>
           Регистрация поставщика
         </h2>
 
-        <div className="mb-3">
-          <label htmlFor="name">Название</label>
-          <input name="name" required onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "2rem"
+        }}>
+          <div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="name">Название</label>
+              <input name="name" required onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="type">Тип поставщика</label>
-          <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2 mb-2">
-            <option value="гид">Гид</option>
-            <option value="транспорт">Транспорт</option>
-          </select>
-        </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="type">Тип поставщика</label>
+              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
+                <option value="гид">Гид</option>
+                <option value="транспорт">Транспорт</option>
+              </select>
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="location">Локация</label>
-          <input name="location" required onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="location">Локация</label>
+              <input name="location" required onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="phone">Телефон</label>
-          <input name="phone" required onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="photo">Фото профиля</label>
+              <input name="photo" type="file" accept="image/*" onChange={handleChange} className="w-full border p-2" />
+            </div>
+          </div>
 
-        <div className="mb-3">
-          <label htmlFor="email">Email</label>
-          <input name="email" type="email" required onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+          <div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="phone">Телефон</label>
+              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="password">Пароль</label>
-          <input name="password" type="password" required onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="email">Email</label>
+              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="social">Ссылка на соцсети</label>
-          <input name="social" onChange={handleChange} className="w-full border p-2 mb-2" />
-        </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="social">Ссылка на соцсети</label>
+              <input name="social" onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-        <div className="mb-3">
-          <label htmlFor="photo">Фото профиля</label>
-          <input name="photo" type="file" accept="image/*" onChange={handleChange} className="w-full border p-2 mb-4" />
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="password">Пароль</label>
+              <input name="password" type="password" required onChange={handleChange} className="w-full border p-2" style={{ border: "2px solid #FF5722" }} />
+            </div>
+          </div>
         </div>
 
         <button type="submit" style={{
@@ -114,7 +124,8 @@ const Register = () => {
           border: "none",
           borderRadius: "5px",
           width: "100%",
-          fontWeight: "bold"
+          fontWeight: "bold",
+          marginTop: "1.5rem"
         }}>
           Зарегистрироваться
         </button>
