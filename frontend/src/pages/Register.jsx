@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 
 const Register = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
     type: "гид",
@@ -39,6 +40,7 @@ const Register = () => {
         }
       );
       alert("Регистрация прошла успешно!");
+      navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error.response?.data || error.message);
       alert("Ошибка при регистрации.");
