@@ -5,19 +5,23 @@ import axios from "axios";
 const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
-    type: "Гид",
-    location: "",
-    photo: null,
-    phone: "",
     email: "",
-    social: "",
     password: "",
+    type: "гид",
+    location: "",
+    phone: "",
+    social: "",
+    photo: ""
   });
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    if (name === "photo") {
-      setFormData({ ...formData, photo: files[0] });
+    if (name === "photo" && files.length > 0) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result });
+      };
+      reader.readAsDataURL(files[0]);
     } else {
       setFormData({ ...formData, [name]: value });
     }
@@ -25,113 +29,106 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const data = new FormData();
-    for (const key in formData) {
-      data.append(key, formData[key]);
-    }
-
     try {
-      const response = await axios.post(
-        "https://travella-fullstack-production.up.railway.app/api/providers/register",
-        data
+      const res = await axios.post(
+        "https://your-backend-url/api/providers/register",
+        formData
       );
-      alert("Успешно зарегистрирован!");
-    } catch (error) {
-      console.error("Ошибка регистрации", error);
-      alert("Ошибка регистрации");
+      alert(res.data.message);
+      window.location.href = "/login";
+    } catch (err) {
+      alert(err.response?.data?.message || "Ошибка регистрации");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F1F1F1] flex items-center justify-center p-4">
+    <div style={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "100vh",
+      backgroundColor: "#F1F1F1"
+    }}>
       <form
         onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-lg shadow-md max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 font-[Manrope]"
+        style={{
+          backgroundColor: "#FFFFFF",
+          padding: "2rem",
+          borderRadius: "10px",
+          width: "100%",
+          maxWidth: "900px",
+          boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)"
+        }}
       >
-        <div className="flex flex-col gap-4">
-          <label className="font-bold">Название</label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
+        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "2rem" }}>
+          Регистрация поставщика
+        </h2>
 
-          <label className="font-bold">Тип поставщика</label>
-          <select
-            name="type"
-            value={formData.type}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          >
-            <option value="Гид">Гид</option>
-            <option value="Транспорт">Транспорт</option>
-          </select>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "2rem"
+        }}>
+          <div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="name">Название</label>
+              <input name="name" required onChange={handleChange} className="w-full border p-2" />
+            </div>
 
-          <label className="font-bold">Локация</label>
-          <input
-            type="text"
-            name="location"
-            placeholder="например, Самарканд, Бухара"
-            value={formData.location}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="type">Тип поставщика</label>
+              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
+                <option value="гид">Гид</option>
+                <option value="транспорт">Транспорт</option>
+              </select>
+            </div>
 
-          <label className="font-bold">Фото профиля</label>
-          <input
-            type="file"
-            name="photo"
-            onChange={handleChange}
-            className="border p-2 rounded bg-white"
-          />
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="location">Локация</label>
+              <input name="location" required onChange={handleChange} className="w-full border p-2" />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="photo">Фото профиля</label>
+              <input name="photo" type="file" accept="image/*" onChange={handleChange} className="w-full border p-2" />
+            </div>
+          </div>
+
+          <div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="phone">Телефон</label>
+              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="email">Email</label>
+              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="social">Ссылка на соцсети</label>
+              <input name="social" onChange={handleChange} className="w-full border p-2" />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label htmlFor="password">Пароль</label>
+              <input name="password" type="password" required onChange={handleChange} className="w-full border p-2" style={{ border: "2px solid #FF5722" }} />
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <label className="font-bold">Телефон</label>
-          <input
-            type="text"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-
-          <label className="font-bold">Email</label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-
-          <label className="font-bold">Ссылка на соцсети</label>
-          <input
-            type="text"
-            name="social"
-            value={formData.social}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-
-          <label className="font-bold text-[#FF5722]">Пароль</label>
-          <input
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-
-          <button
-            type="submit"
-            className="bg-[#FF5722] text-white py-2 rounded mt-4 hover:bg-[#FF784E] transition-colors"
-          >
-            Зарегистрироваться
-          </button>
-        </div>
+        <button type="submit" style={{
+          backgroundColor: "#FF5722",
+          color: "#FFF",
+          padding: "0.75rem 1.5rem",
+          border: "none",
+          borderRadius: "5px",
+          width: "100%",
+          fontWeight: "bold",
+          marginTop: "1.5rem"
+        }}>
+          Зарегистрироваться
+        </button>
       </form>
     </div>
   );
