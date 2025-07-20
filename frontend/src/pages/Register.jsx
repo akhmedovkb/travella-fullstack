@@ -30,14 +30,11 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(
-        "https://your-backend-url/api/providers/register",
-        formData
-      );
-      alert(res.data.message);
-      window.location.href = "/login";
-    } catch (err) {
-      alert(err.response?.data?.message || "Ошибка регистрации");
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, formData);
+      alert("Успешная регистрация!");
+    } catch (error) {
+      console.error("Ошибка регистрации:", error);
+      alert("Ошибка при регистрации.");
     }
   };
 
