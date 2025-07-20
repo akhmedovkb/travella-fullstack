@@ -15,6 +15,16 @@ const registerProvider = async (req, res) => {
       photo
     } = req.body;
 
+    // Проверка на обязательные поля
+    if (!name || !email || !password || !type || !location || !phone) {
+      return res.status(400).json({ message: "Заполните все обязательные поля" });
+    }
+
+    // Проверка на формат фото (base64 строка)
+    if (photo && typeof photo !== "string") {
+      return res.status(400).json({ message: "Некорректный формат изображения" });
+    }
+
     const existingProvider = await pool.query(
       "SELECT * FROM providers WHERE email = $1",
       [email]
@@ -46,7 +56,7 @@ const registerProvider = async (req, res) => {
     });
   } catch (error) {
     console.error("Ошибка регистрации:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера при регистрации" });
   }
 };
 
