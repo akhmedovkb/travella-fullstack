@@ -1,0 +1,5 @@
+/* index.css — можно оставить пустым или добавить Tailwind/общие стили */
+body {
+  margin: 0;
+  font-family: sans-serif;
+}
