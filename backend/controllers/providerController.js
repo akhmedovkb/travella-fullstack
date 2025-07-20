@@ -54,10 +54,12 @@ const registerProvider = async (req, res) => {
       provider: newProvider.rows[0],
       token,
     });
+
   } catch (error) {
-    console.error("Ошибка регистрации:", error);
-    res.status(500).json({ message: "Ошибка сервера при регистрации" });
-  }
+  console.error("Ошибка регистрации:", error.message);
+  res.status(500).json({ message: "Ошибка сервера", error: error.message });
+}
+
 };
 
 module.exports = { registerProvider };
