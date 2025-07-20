@@ -23,7 +23,7 @@ const Register = () => {
   };
 
   return (
-    <div style={ padding: "2rem" }>
+    <div style={{ padding: "2rem" }}>
       <h2>Регистрация</h2>
       <form onSubmit={handleSubmit}>
         <input
