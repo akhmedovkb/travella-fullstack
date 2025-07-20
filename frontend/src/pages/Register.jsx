@@ -16,36 +16,34 @@ const Register = () => {
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     if (name === "photo" && files.length > 0) {
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    setFormData({ ...formData, photo: reader.result });
-  };
-  reader.readAsDataURL(files[0]);
-}
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, photo: reader.result }));
+      };
+      reader.readAsDataURL(files[0]);
     } else {
-      setFormData({ ...formData, [name]: value });
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  try {
-    await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    alert("Регистрация прошла успешно!");
-  } catch (error) {
-    console.error("Ошибка регистрации:", error.response?.data || error.message);
-    alert("Ошибка при регистрации.");
-  }
-};
-
+    e.preventDefault();
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      alert("Регистрация прошла успешно!");
+    } catch (error) {
+      console.error("Ошибка регистрации:", error.response?.data || error.message);
+      alert("Ошибка при регистрации.");
+    }
+  };
 
   return (
     <div
