@@ -31,7 +31,7 @@ const Register = () => {
     e.preventDefault();
     try {
       const res = await axios.post(
-        "https://your-backend-url/api/providers/register",
+        "https://travella-fullstack-production.up.railway.app/api/providers/register",
         formData
       );
       alert(res.data.message);
