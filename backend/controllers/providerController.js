@@ -1,3 +1,8 @@
+const registerProvider = async (req, res) => {
+  try {
+    console.log("Получено тело запроса:", req.body);
+
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
