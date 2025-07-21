@@ -115,10 +115,95 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
+// ДОБАВИТЬ УСЛУГУ
+const addService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const { title, description, price, category, images, availability } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO services (provider_id, title, description, price, category, images, availability)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [providerId, title, description, price, category, images, availability]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Ошибка добавления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ПОЛУЧИТЬ УСЛУГИ ПОСТАВЩИКА
+const getServices = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const result = await pool.query(
+      "SELECT * FROM services WHERE provider_id = $1",
+      [providerId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Ошибка получения услуг:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ОБНОВИТЬ УСЛУГУ
+const updateService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+    const { title, description, price, category, images, availability } = req.body;
+
+    const result = await pool.query(
+      `UPDATE services SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6
+       WHERE id=$7 AND provider_id=$8 RETURNING *`,
+      [title, description, price, category, images, availability, serviceId, providerId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Ошибка обновления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// УДАЛИТЬ УСЛУГУ
+const deleteService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+
+    const result = await pool.query(
+      "DELETE FROM services WHERE id=$1 AND provider_id=$2 RETURNING *",
+      [serviceId, providerId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    res.json({ message: "Услуга удалена" });
+  } catch (error) {
+    console.error("❌ Ошибка удаления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+
 // 👇 Обновляем экспорт:
 module.exports = {
   registerProvider,
   loginProvider,
   getProviderProfile,
-  updateProviderProfile
+  updateProviderProfile,
+  addService,
+  getServices,
+  updateService,
+  deleteService,
 };
