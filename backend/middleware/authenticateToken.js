@@ -1,4 +1,4 @@
-const jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken"); 
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -11,7 +11,7 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.provider = decoded; // теперь доступно: req.provider.id
+    req.user = decoded; // ✅ исправлено
     next();
   } catch (err) {
     return res.status(403).json({ message: "Неверный токен" });
