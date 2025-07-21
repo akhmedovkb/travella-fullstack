@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { DayPicker } from "react-day-picker";
@@ -11,30 +12,26 @@ const Dashboard = () => {
     phone: "",
     social: "",
     photo: "",
-    email: "",
   });
 
   const [newPassword, setNewPassword] = useState("");
-  const [message, setMessage] = useState("");
-
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
+  const [message, setMessage] = useState("");
 
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   useEffect(() => {
-    if (token) {
-      axios
-        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-        .then((res) => setProfile(res.data))
-        .catch((err) => console.error("Ошибка загрузки профиля", err));
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .then((res) => setProfile(res.data))
+      .catch((err) => console.error("Ошибка профиля", err));
 
-      axios
-        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-        .then((res) => setServices(res.data))
-        .catch((err) => console.error("Ошибка загрузки услуг", err));
-    }
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .then((res) => setServices(res.data))
+      .catch((err) => console.error("Ошибка услуг", err));
   }, []);
 
   const handleChange = (e) => {
@@ -56,29 +53,19 @@ const Dashboard = () => {
     try {
       await axios.put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, profile, config);
       setMessage("Профиль обновлён");
-    } catch (error) {
-      console.error(error);
-      setMessage("Ошибка обновления профиля");
+    } catch {
+      setMessage("Ошибка при обновлении профиля");
     }
   };
 
   const handleChangePassword = async () => {
     try {
-      await axios.put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
-        { password: newPassword },
-        config
-      );
+      await axios.put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`, { password: newPassword }, config);
       setNewPassword("");
-      setMessage("Пароль успешно изменён");
-    } catch (error) {
-      console.error(error);
+      setMessage("Пароль обновлён");
+    } catch {
       setMessage("Ошибка при смене пароля");
     }
-  };
-
-  const handleEditService = (service) => {
-    setSelectedService(service);
   };
 
   const handleDeleteService = async (id) => {
@@ -86,52 +73,51 @@ const Dashboard = () => {
       await axios.delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config);
       setServices((prev) => prev.filter((s) => s.id !== id));
       setSelectedService(null);
-    } catch (error) {
-      console.error("Ошибка удаления", error);
+    } catch (err) {
+      console.error("Ошибка удаления", err);
     }
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen p-6 bg-gray-50 gap-6 font-sans">
-      {/* Профиль */}
-      <div className="w-full md:w-1/2 bg-white rounded-xl shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
+    <div className="flex flex-col md:flex-row gap-6 bg-gray-50 p-6 min-h-screen font-sans">
+      <div className="w-full md:w-1/2 bg-white rounded-xl shadow p-6">
+        <h2 className="text-2xl font-bold mb-6">Профиль поставщика</h2>
         <div className="flex items-center gap-4 mb-4">
           {profile.photo ? (
-            <img src={profile.photo} alt="Фото" className="w-24 h-24 rounded-full object-cover" />
+            <img src={profile.photo} className="w-24 h-24 rounded-full object-cover" />
           ) : (
             <div className="w-24 h-24 rounded-full bg-gray-200" />
           )}
           <input type="file" onChange={handlePhotoChange} className="text-sm" />
         </div>
+
         <div className="space-y-3">
           <div>
-            <label className="font-medium">Наименование</label>
-            <input name="name" value={profile.name} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+            <label className="text-sm font-medium">Наименование</label>
+            <input value={profile.name} disabled className="w-full border rounded px-3 py-2 bg-gray-100" />
           </div>
           <div>
-            <label className="font-medium">Тип поставщика</label>
-            <input value={profile.type} disabled className="w-full border rounded px-3 py-2 mt-1 bg-gray-100" />
+            <label className="text-sm font-medium">Тип поставщика</label>
+            <input value={profile.type} disabled className="w-full border rounded px-3 py-2 bg-gray-100" />
           </div>
           <div>
-            <label className="font-medium">Локация</label>
-            <input name="location" value={profile.location} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+            <label className="text-sm font-medium">Локация</label>
+            <input name="location" value={profile.location} onChange={handleChange} className="w-full border rounded px-3 py-2" />
           </div>
           <div>
-            <label className="font-medium">Телефон</label>
-            <input name="phone" value={profile.phone} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+            <label className="text-sm font-medium">Телефон</label>
+            <input name="phone" value={profile.phone} onChange={handleChange} className="w-full border rounded px-3 py-2" />
           </div>
           <div>
-            <label className="font-medium">Ссылка на соцсети</label>
-            <input name="social" value={profile.social} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+            <label className="text-sm font-medium">Ссылка на соцсети</label>
+            <input name="social" value={profile.social} onChange={handleChange} className="w-full border rounded px-3 py-2" />
           </div>
         </div>
 
-        <button onClick={handleUpdateProfile} className="mt-4 w-full bg-orange-500 text-white py-2 rounded font-bold">
+        <button onClick={handleUpdateProfile} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded font-semibold w-full">
           Сохранить
         </button>
 
-        {/* Смена пароля */}
         <div className="mt-6">
           <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
           <input
@@ -141,30 +127,28 @@ const Dashboard = () => {
             onChange={(e) => setNewPassword(e.target.value)}
             className="w-full border rounded px-3 py-2 mb-3"
           />
-          <button onClick={handleChangePassword} className="w-full bg-black text-white py-2 rounded font-bold">
+          <button
+            onClick={handleChangePassword}
+            className="w-full bg-black text-white py-2 rounded font-bold"
+          >
             Сменить
           </button>
         </div>
 
-        {message && <p className="text-sm text-center mt-3 text-gray-600">{message}</p>}
+        {message && <p className="text-sm text-center mt-4 text-gray-600">{message}</p>}
       </div>
 
-      {/* Услуги и календарь */}
-      <div className="w-full md:w-1/2 bg-white rounded-xl shadow-md p-6">
+      <div className="w-full md:w-1/2 bg-white rounded-xl shadow p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Услуги</h2>
-          <button
-            onClick={() => setSelectedService(null)}
-            className="bg-orange-500 text-white px-4 py-2 rounded font-semibold"
-          >
+          <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-semibold">
             + Добавить услугу
           </button>
         </div>
 
-        {/* Выбранная услуга */}
-        {selectedService && (
+        {selectedService ? (
           <>
-            <h3 className="text-lg font-medium mb-2">{selectedService.title}</h3>
+            <h3 className="text-lg font-medium mb-3">{selectedService.title}</h3>
             <DayPicker
               mode="multiple"
               selected={selectedService.availability.map((d) => new Date(d))}
@@ -172,12 +156,7 @@ const Dashboard = () => {
               className="border rounded-lg p-4 mb-4"
             />
             <div className="flex gap-4">
-              <button
-                onClick={() => handleEditService(selectedService)}
-                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-              >
-                Редактировать
-              </button>
+              <button className="w-full bg-orange-500 text-white py-2 rounded font-bold">Редактировать</button>
               <button
                 onClick={() => handleDeleteService(selectedService.id)}
                 className="w-full bg-red-600 text-white py-2 rounded font-bold"
@@ -186,15 +165,12 @@ const Dashboard = () => {
               </button>
             </div>
           </>
-        )}
-
-        {/* Если ни одна не выбрана — показать список */}
-        {!selectedService && (
+        ) : (
           <div className="space-y-4">
             {services.map((s) => (
               <div
                 key={s.id}
-                className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition cursor-pointer"
                 onClick={() => setSelectedService(s)}
               >
                 <div className="font-bold text-lg">{s.title}</div>
