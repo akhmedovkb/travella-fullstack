@@ -4,21 +4,27 @@ const {
   registerProvider,
   loginProvider,
   getProviderProfile,
-  updateProviderProfile
+  updateProviderProfile,
+  addService,
+  getServices,
+  updateService,
+  deleteService
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
 
-// POST /api/providers/register
+// 👉 Аутентификация
 router.post("/register", registerProvider);
-
-// POST /api/providers/login
 router.post("/login", loginProvider);
 
-// GET /api/providers/profile
+// 👉 Профиль
 router.get("/profile", authenticateToken, getProviderProfile);
-
-// PUT /api/providers/profile
 router.put("/profile", authenticateToken, updateProviderProfile);
+
+// 👉 Услуги
+router.post("/services", authenticateToken, addService);        // Добавить услугу
+router.get("/services", authenticateToken, getServices);        // Получить все услуги
+router.put("/services/:id", authenticateToken, updateService);  // Обновить услугу
+router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
 
 module.exports = router;
