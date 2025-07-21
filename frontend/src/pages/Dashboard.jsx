@@ -1,113 +1,173 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 
 const Dashboard = () => {
+  const [profile, setProfile] = useState({
+    name: "",
+    type: "",
+    location: "",
+    phone: "",
+    social: "",
+    photo: "",
+    email: "",
+  });
+
+  const [newPassword, setNewPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      axios
+        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then((res) => setProfile(res.data))
+        .catch((err) => console.error("Ошибка загрузки профиля", err));
+    }
+  }, []);
+
+  const handleChange = (e) => {
+    setProfile({ ...profile, [e.target.name]: e.target.value });
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfile((prev) => ({ ...prev, photo: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      await axios.put(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`,
+        profile,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setMessage("Профиль обновлён");
+    } catch (error) {
+      console.error(error);
+      setMessage("Ошибка обновления профиля");
+    }
+  };
+
+  const handleChangePassword = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      await axios.put(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+        { password: newPassword },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setNewPassword("");
+      setMessage("Пароль успешно изменён");
+    } catch (error) {
+      console.error(error);
+      setMessage("Ошибка при смене пароля");
+    }
+  };
+
   return (
-    <div
-      style={{
-        display: "flex",
-        padding: "2rem",
-        gap: "2rem",
-        backgroundColor: "#f5f5f5",
-        minHeight: "100vh",
-        fontFamily: "Manrope, sans-serif"
-      }}
-    >
-      {/* Левый блок — Профиль */}
-      <div
-        style={{
-          flex: "0 0 30%",
-          backgroundColor: "#fff",
-          padding: "1.5rem",
-          borderRadius: "8px",
-          boxShadow: "0 0 10px rgba(0,0,0,0.05)"
-        }}
-      >
-        <h2 style={{ color: "#FF5722", marginBottom: "1rem" }}>Профиль</h2>
+    <div className="min-h-screen flex p-4 bg-gray-100 gap-6">
+      {/* Левая часть: профиль */}
+      <div className="w-1/3 bg-white p-4 rounded shadow">
+        <h2 className="text-xl font-bold mb-4 text-orange-600">Профиль поставщика</h2>
 
-        <div style={{ textAlign: "center", marginBottom: "1rem" }}>
-          <img
-            src="/default-profile.jpg"
-            alt="Фото"
-            style={{
-              width: "8rem",
-              height: "8rem",
-              borderRadius: "50%",
-              objectFit: "cover",
-              marginBottom: "1rem"
-            }}
-          />
-          <input type="file" accept="image/*" />
+        <div className="flex justify-center mb-4">
+          {profile.photo && (
+            <img
+              src={profile.photo}
+              alt="Фото профиля"
+              className="w-32 h-32 object-cover rounded-full border"
+            />
+          )}
         </div>
 
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Наименование</label>
-          <input className="w-full border p-2" />
-        </div>
+        <input type="file" accept="image/*" onChange={handlePhotoChange} className="mb-4" />
 
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Тип поставщика</label>
-          <input className="w-full border p-2 bg-gray-100" disabled />
-        </div>
+        <label className="block mb-1 font-medium">Наименование</label>
+        <input
+          name="name"
+          value={profile.name}
+          onChange={handleChange}
+          className="w-full border p-2 mb-3"
+        />
 
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Локация</label>
-          <input className="w-full border p-2" />
-        </div>
+        <label className="block mb-1 font-medium">Тип поставщика</label>
+        <input
+          value={profile.type}
+          disabled
+          className="w-full border p-2 mb-3 bg-gray-100"
+        />
 
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Телефон</label>
-          <input className="w-full border p-2" />
-        </div>
+        <label className="block mb-1 font-medium">Локация</label>
+        <input
+          name="location"
+          value={profile.location}
+          onChange={handleChange}
+          className="w-full border p-2 mb-3"
+        />
 
-        <div style={{ marginBottom: "1rem" }}>
-          <label>Соцсети</label>
-          <input className="w-full border p-2" />
-        </div>
+        <label className="block mb-1 font-medium">Телефон</label>
+        <input
+          name="phone"
+          value={profile.phone}
+          onChange={handleChange}
+          className="w-full border p-2 mb-3"
+        />
 
-        <hr style={{ margin: "1.5rem 0" }} />
+        <label className="block mb-1 font-medium">Ссылки на соцсети</label>
+        <input
+          name="social"
+          value={profile.social}
+          onChange={handleChange}
+          className="w-full border p-2 mb-4"
+        />
 
-        <h3 style={{ fontSize: "1rem", marginBottom: "1rem", color: "#FF5722" }}>
-          Смена пароля
-        </h3>
+        <button
+          onClick={handleUpdateProfile}
+          className="w-full bg-orange-500 text-white font-bold py-2 rounded"
+        >
+          Сохранить профиль
+        </button>
+
+        <hr className="my-4" />
+
+        <h3 className="font-semibold mb-2 text-orange-600">Сменить пароль</h3>
         <input
           type="password"
           placeholder="Новый пароль"
-          className="w-full border p-2 mb-2"
-        />
-        <input
-          type="password"
-          placeholder="Повторите пароль"
-          className="w-full border p-2 mb-2"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="w-full border p-2 mb-3"
         />
         <button
-          style={{
-            backgroundColor: "#FF5722",
-            color: "white",
-            padding: "0.5rem 1rem",
-            border: "none",
-            borderRadius: "4px",
-            width: "100%",
-            fontWeight: "bold"
-          }}
+          onClick={handleChangePassword}
+          className="w-full bg-gray-800 text-white font-bold py-2 rounded"
         >
           Обновить пароль
         </button>
+
+        {message && (
+          <p className="text-sm text-center mt-3 text-gray-700">{message}</p>
+        )}
       </div>
 
-      {/* Правый блок — Услуги */}
-      <div
-        style={{
-          flex: "1",
-          backgroundColor: "#fff",
-          padding: "1.5rem",
-          borderRadius: "8px",
-          boxShadow: "0 0 10px rgba(0,0,0,0.05)"
-        }}
-      >
-        <h2 style={{ color: "#FF5722", marginBottom: "1rem" }}>
-          Ваши услуги и календарь
-        </h2>
-        <p>Сюда добавим интерфейс управления услугами и календарь бронирования…</p>
+      {/* Правая часть — пока пустая, позже вставим услуги и календарь */}
+      <div className="w-2/3 bg-white p-4 rounded shadow">
+        <h2 className="text-xl font-bold text-orange-600">Ваши услуги</h2>
+        {/* Тут будет календарь и управление услугами */}
       </div>
     </div>
   );
