@@ -18,33 +18,18 @@ const Dashboard = () => {
   const [message, setMessage] = useState("");
 
   const [services, setServices] = useState([]);
-  const [serviceForm, setServiceForm] = useState({
-    id: null,
-    title: "",
-    description: "",
-    price: "",
-    category: "",
-    images: [],
-    availability: [],
-  });
-  const [selectedDates, setSelectedDates] = useState([]);
+  const [selectedService, setSelectedService] = useState(null);
 
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  // Загрузка профиля
   useEffect(() => {
     if (token) {
       axios
         .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
         .then((res) => setProfile(res.data))
         .catch((err) => console.error("Ошибка загрузки профиля", err));
-    }
-  }, []);
 
-  // Загрузка услуг
-  useEffect(() => {
-    if (token) {
       axios
         .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
         .then((res) => setServices(res.data))
@@ -92,211 +77,133 @@ const Dashboard = () => {
     }
   };
 
-  const handleServiceChange = (e) => {
-    setServiceForm({ ...serviceForm, [e.target.name]: e.target.value });
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setServiceForm((prev) => ({
-          ...prev,
-          images: [reader.result],
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleAddOrUpdateService = async () => {
-    const data = {
-      ...serviceForm,
-      availability: selectedDates.map((d) => d.toISOString().split("T")[0]),
-    };
-
-    try {
-      if (serviceForm.id) {
-        // Обновление
-        await axios.put(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${serviceForm.id}`,
-          data,
-          config
-        );
-      } else {
-        // Добавление
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
-          data,
-          config
-        );
-      }
-
-      // Очистка формы
-      setServiceForm({ id: null, title: "", description: "", price: "", category: "", images: [], availability: [] });
-      setSelectedDates([]);
-      // Перезагрузка списка
-      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config);
-      setServices(res.data);
-    } catch (error) {
-      console.error("Ошибка добавления/обновления услуги", error);
-    }
-  };
-
   const handleEditService = (service) => {
-    setServiceForm({
-      id: service.id,
-      title: service.title,
-      description: service.description,
-      price: service.price,
-      category: service.category,
-      images: service.images,
-      availability: service.availability,
-    });
-    setSelectedDates(service.availability.map((d) => new Date(d)));
+    setSelectedService(service);
   };
 
   const handleDeleteService = async (id) => {
     try {
       await axios.delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config);
       setServices((prev) => prev.filter((s) => s.id !== id));
+      setSelectedService(null);
     } catch (error) {
       console.error("Ошибка удаления", error);
     }
   };
 
   return (
-    <div className="min-h-screen flex p-4 bg-gray-100 gap-6">
-      {/* Левая часть: профиль */}
-      <div className="w-1/3 bg-white p-4 rounded shadow">
-        <h2 className="text-xl font-bold mb-4 text-orange-600">Профиль поставщика</h2>
-        <div className="flex justify-center mb-4">
-          {profile.photo && (
-            <img src={profile.photo} alt="Фото профиля" className="w-32 h-32 object-cover rounded-full border" />
+    <div className="flex flex-col md:flex-row min-h-screen p-6 bg-gray-50 gap-6 font-sans">
+      {/* Профиль */}
+      <div className="w-full md:w-1/2 bg-white rounded-xl shadow-md p-6">
+        <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
+        <div className="flex items-center gap-4 mb-4">
+          {profile.photo ? (
+            <img src={profile.photo} alt="Фото" className="w-24 h-24 rounded-full object-cover" />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-gray-200" />
           )}
+          <input type="file" onChange={handlePhotoChange} className="text-sm" />
         </div>
-        <input type="file" accept="image/*" onChange={handlePhotoChange} className="mb-4" />
-        <label className="block mb-1 font-medium">Наименование</label>
-        <input name="name" value={profile.name} onChange={handleChange} className="w-full border p-2 mb-3" />
-        <label className="block mb-1 font-medium">Тип поставщика</label>
-        <input value={profile.type} disabled className="w-full border p-2 mb-3 bg-gray-100" />
-        <label className="block mb-1 font-medium">Локация</label>
-        <input name="location" value={profile.location} onChange={handleChange} className="w-full border p-2 mb-3" />
-        <label className="block mb-1 font-medium">Телефон</label>
-        <input name="phone" value={profile.phone} onChange={handleChange} className="w-full border p-2 mb-3" />
-        <label className="block mb-1 font-medium">Ссылки на соцсети</label>
-        <input name="social" value={profile.social} onChange={handleChange} className="w-full border p-2 mb-4" />
-        <button onClick={handleUpdateProfile} className="w-full bg-orange-500 text-white font-bold py-2 rounded">
-          Сохранить профиль
+        <div className="space-y-3">
+          <div>
+            <label className="font-medium">Наименование</label>
+            <input name="name" value={profile.name} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+          </div>
+          <div>
+            <label className="font-medium">Тип поставщика</label>
+            <input value={profile.type} disabled className="w-full border rounded px-3 py-2 mt-1 bg-gray-100" />
+          </div>
+          <div>
+            <label className="font-medium">Локация</label>
+            <input name="location" value={profile.location} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+          </div>
+          <div>
+            <label className="font-medium">Телефон</label>
+            <input name="phone" value={profile.phone} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+          </div>
+          <div>
+            <label className="font-medium">Ссылка на соцсети</label>
+            <input name="social" value={profile.social} onChange={handleChange} className="w-full border rounded px-3 py-2 mt-1" />
+          </div>
+        </div>
+
+        <button onClick={handleUpdateProfile} className="mt-4 w-full bg-orange-500 text-white py-2 rounded font-bold">
+          Сохранить
         </button>
-        <hr className="my-4" />
-        <h3 className="font-semibold mb-2 text-orange-600">Сменить пароль</h3>
-        <input
-          type="password"
-          placeholder="Новый пароль"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          className="w-full border p-2 mb-3"
-        />
-        <button onClick={handleChangePassword} className="w-full bg-gray-800 text-white font-bold py-2 rounded">
-          Обновить пароль
-        </button>
-        {message && <p className="text-sm text-center mt-3 text-gray-700">{message}</p>}
+
+        {/* Смена пароля */}
+        <div className="mt-6">
+          <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
+          <input
+            type="password"
+            placeholder="Новый пароль"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full border rounded px-3 py-2 mb-3"
+          />
+          <button onClick={handleChangePassword} className="w-full bg-black text-white py-2 rounded font-bold">
+            Сменить
+          </button>
+        </div>
+
+        {message && <p className="text-sm text-center mt-3 text-gray-600">{message}</p>}
       </div>
 
-      {/* Правая часть — услуги и календарь */}
-      <div className="w-2/3 bg-white p-4 rounded shadow">
-        <h2 className="text-xl font-bold text-orange-600 mb-4">Ваши услуги</h2>
-
-        {/* Список услуг */}
-        <div className="space-y-4 mb-6">
-          {services.map((s) => (
-            <div key={s.id} className="border p-3 rounded shadow-sm bg-gray-50">
-              <div className="font-semibold text-lg">{s.title}</div>
-              <div className="text-sm text-gray-600 mb-2">{s.description}</div>
-              <div className="text-sm">Цена: {s.price} сум</div>
-              <div className="text-sm">Категория: {s.category}</div>
-              <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => handleEditService(s)}
-                  className="px-3 py-1 bg-yellow-500 text-white rounded text-sm"
-                >
-                  Редактировать
-                </button>
-                <button
-                  onClick={() => handleDeleteService(s.id)}
-                  className="px-3 py-1 bg-red-600 text-white rounded text-sm"
-                >
-                  Удалить
-                </button>
-              </div>
-            </div>
-          ))}
+      {/* Услуги и календарь */}
+      <div className="w-full md:w-1/2 bg-white rounded-xl shadow-md p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold">Услуги</h2>
+          <button
+            onClick={() => setSelectedService(null)}
+            className="bg-orange-500 text-white px-4 py-2 rounded font-semibold"
+          >
+            + Добавить услугу
+          </button>
         </div>
 
-        {/* Форма добавления/редактирования */}
-        <h3 className="font-semibold mb-2 text-orange-600">Добавить/Редактировать услугу</h3>
-        <input
-          name="title"
-          value={serviceForm.title}
-          onChange={handleServiceChange}
-          placeholder="Название"
-          className="w-full border p-2 mb-2"
-        />
-        <textarea
-          name="description"
-          value={serviceForm.description}
-          onChange={handleServiceChange}
-          placeholder="Описание"
-          className="w-full border p-2 mb-2"
-        />
-        <input
-          name="price"
-          type="number"
-          value={serviceForm.price}
-          onChange={handleServiceChange}
-          placeholder="Цена"
-          className="w-full border p-2 mb-2"
-        />
-        <select
-          name="category"
-          value={serviceForm.category}
-          onChange={handleServiceChange}
-          className="w-full border p-2 mb-2"
-        >
-          <option value="">Выберите категорию</option>
-          {profile.type === "guide" && (
-            <>
-              <option value="city tour">City Tour</option>
-              <option value="multiple city tour">Multiple City Tour</option>
-              <option value="mountain tour">Mountain Tour</option>
-            </>
-          )}
-          {profile.type === "transport" && (
-            <>
-              <option value="city tour">City Tour</option>
-              <option value="multiple city tour">Multiple City Tour</option>
-              <option value="mountain tour">Mountain Tour</option>
-              <option value="one way transfer">One Way Transfer</option>
-              <option value="dinner transfer">Dinner Transfer</option>
-              <option value="border transfer">Border Transfer</option>
-            </>
-          )}
-        </select>
-        <input type="file" accept="image/*" onChange={handleImageUpload} className="mb-2" />
-        <DayPicker
-          mode="multiple"
-          selected={selectedDates}
-          onSelect={setSelectedDates}
-          className="mb-4"
-        />
-        <button
-          onClick={handleAddOrUpdateService}
-          className="w-full bg-orange-500 text-white font-bold py-2 rounded"
-        >
-          {serviceForm.id ? "Сохранить изменения" : "Добавить услугу"}
-        </button>
+        {/* Выбранная услуга */}
+        {selectedService && (
+          <>
+            <h3 className="text-lg font-medium mb-2">{selectedService.title}</h3>
+            <DayPicker
+              mode="multiple"
+              selected={selectedService.availability.map((d) => new Date(d))}
+              disabled
+              className="border rounded-lg p-4 mb-4"
+            />
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleEditService(selectedService)}
+                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+              >
+                Редактировать
+              </button>
+              <button
+                onClick={() => handleDeleteService(selectedService.id)}
+                className="w-full bg-red-600 text-white py-2 rounded font-bold"
+              >
+                Удалить
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Если ни одна не выбрана — показать список */}
+        {!selectedService && (
+          <div className="space-y-4">
+            {services.map((s) => (
+              <div
+                key={s.id}
+                className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                onClick={() => setSelectedService(s)}
+              >
+                <div className="font-bold text-lg">{s.title}</div>
+                <div className="text-sm text-gray-600">{s.category}</div>
+                <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
