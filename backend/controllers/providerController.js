@@ -4,35 +4,18 @@ const pool = require("../db");
 
 const registerProvider = async (req, res) => {
   try {
-    // 👉 Лог тела запроса для отладки
     console.log("📦 Получено тело запроса:", req.body);
+    const { name, email, password, type, location, phone, social, photo } = req.body;
 
-    const {
-      name,
-      email,
-      password,
-      type,
-      location,
-      phone,
-      social,
-      photo
-    } = req.body;
-
-    // Проверка на обязательные поля
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
 
-    // Проверка на формат фото
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
 
-    const existingProvider = await pool.query(
-      "SELECT * FROM providers WHERE email = $1",
-      [email]
-    );
-
+    const existingProvider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
     if (existingProvider.rows.length > 0) {
       return res.status(400).json({ message: "Email уже используется" });
     }
@@ -46,11 +29,7 @@ const registerProvider = async (req, res) => {
       [name, email, hashedPassword, type, [location], phone, social, photo]
     );
 
-    const token = jwt.sign(
-      { id: newProvider.rows[0].id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     res.status(201).json({
       message: "Регистрация прошла успешно",
@@ -67,8 +46,8 @@ const registerProvider = async (req, res) => {
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const provider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+
     if (provider.rows.length === 0) {
       return res.status(400).json({ message: "Пользователь не найден" });
     }
@@ -97,5 +76,49 @@ const loginProvider = async (req, res) => {
   }
 };
 
-module.exports = { registerProvider, loginProvider };
+// 👇 ДОБАВЛЕНО:
+const getProviderProfile = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const result = await pool.query(
+      "SELECT id, name, email, type, location, phone, social, photo FROM providers WHERE id = $1",
+      [id]
+    );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Поставщик не найден" });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Ошибка получения профиля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const updateProviderProfile = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const { name, location, phone, social, photo } = req.body;
+
+    await pool.query(
+      `UPDATE providers
+       SET name = $1, location = $2, phone = $3, social = $4, photo = $5
+       WHERE id = $6`,
+      [name, location, phone, social, photo, id]
+    );
+
+    res.status(200).json({ message: "Профиль обновлён успешно" });
+  } catch (error) {
+    console.error("❌ Ошибка обновления профиля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// 👇 Обновляем экспорт:
+module.exports = {
+  registerProvider,
+  loginProvider,
+  getProviderProfile,
+  updateProviderProfile
+};
