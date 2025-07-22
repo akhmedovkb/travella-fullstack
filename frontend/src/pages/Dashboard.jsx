@@ -122,21 +122,6 @@ const Dashboard = () => {
                 {profile.phone || "Не указано"}
               </div>
             )}
-
-            <h3 className="font-semibold text-lg mt-2 mb-2">Сменить пароль</h3>
-            <input
-              type="password"
-              placeholder="Новый пароль"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="border px-3 py-2 mb-2 rounded w-full"
-            />
-            <button
-              onClick={handleChangePassword}
-              className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-            >
-              Сменить
-            </button>
           </div>
 
           {/* Правая колонка */}
@@ -180,6 +165,23 @@ const Dashboard = () => {
             >
               {isEditing ? "Сохранить" : "Редактировать"}
             </button>
+          <div className="mt-4">
+              <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
+                <input
+                type="password"
+                placeholder="Новый пароль"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="border px-3 py-2 mb-2 rounded w-full"
+              />
+            <button
+            onClick={handleChangePassword}
+            className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+            >
+            Сменить
+            </button>
+          </div>
+
           </div>
         </div>
         {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
