@@ -119,6 +119,12 @@ const Dashboard = () => {
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
           );
           setSelectedService(null);
+          setTitle("");
+          setDescription("");
+          setCategory("");
+          setPrice("");
+          setAvailability([]);
+          setImages([]);
           setMessageService("Услуга обновлена");
         })
         .catch(() => setMessageService("Ошибка обновления"));
