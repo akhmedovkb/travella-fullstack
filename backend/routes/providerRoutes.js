@@ -5,6 +5,7 @@ const {
   loginProvider,
   getProviderProfile,
   updateProviderProfile,
+  changeProviderPassword, // ✅ добавлено сюда
   addService,
   getServices,
   updateService,
@@ -20,6 +21,9 @@ router.post("/login", loginProvider);
 // 👉 Профиль
 router.get("/profile", authenticateToken, getProviderProfile);
 router.put("/profile", authenticateToken, updateProviderProfile);
+
+// 👉 Смена пароля поставщика
+router.put("/change-password", authenticateToken, changeProviderPassword);
 
 // 👉 Услуги
 router.post("/services", authenticateToken, addService);        // Добавить услугу
