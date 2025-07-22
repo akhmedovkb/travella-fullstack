@@ -47,17 +47,21 @@ const Dashboard = () => {
   };
 
   const handleSaveProfile = () => {
-    const updated = {
-      ...profile,
-      location: newLocation,
-      social: newSocial,
-      phone: newPhone,
-      photo: newPhoto || profile.photo,
-    };
+    const updated = {};
+    if (newLocation !== profile.location) updated.location = newLocation;
+    if (newSocial !== profile.social) updated.social = newSocial;
+    if (newPhone !== profile.phone) updated.phone = newPhone;
+    if (newPhoto) updated.photo = newPhoto;
+
+    if (Object.keys(updated).length === 0) {
+      setMessage("Нет изменений для сохранения");
+      return;
+    }
+
     axios
       .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
       .then(() => {
-        setProfile(updated);
+        setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
         setMessage("Профиль обновлён");
       })
@@ -94,14 +98,11 @@ const Dashboard = () => {
           {/* Левая колонка */}
           <div className="flex flex-col items-center w-1/2">
             <div className="relative">
-              {profile.photo || newPhoto ? (
-                <img
-                  src={newPhoto || profile.photo}
-                  className="w-24 h-24 rounded-full object-cover mb-2"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-gray-200 mb-2" />
-              )}
+              <img
+                src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
+                className="w-24 h-24 rounded-full object-cover mb-2"
+                alt="Фото"
+              />
               {isEditing && (
                 <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />
               )}
@@ -118,7 +119,7 @@ const Dashboard = () => {
               />
             ) : (
               <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-                {profile.phone || "—"}
+                {profile.phone || "Не указано"}
               </div>
             )}
 
@@ -169,7 +170,7 @@ const Dashboard = () => {
                   className="border px-3 py-2 rounded w-full"
                 />
               ) : (
-                <div className="border px-3 py-2 rounded bg-gray-100">{profile.social}</div>
+                <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || "Не указано"}</div>
               )}
             </div>
 
