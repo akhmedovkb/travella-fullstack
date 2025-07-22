@@ -122,7 +122,7 @@ const Dashboard = () => {
         .catch(() => setMessageService("Ошибка обновления"));
     } else {
       axios
-        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -138,7 +138,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
