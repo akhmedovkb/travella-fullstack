@@ -7,6 +7,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
+  const [newCertificate, setNewCertificate] = useState(null);
   const [newLocation, setNewLocation] = useState("");
   const [newSocial, setNewSocial] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -46,12 +47,24 @@ const Dashboard = () => {
     }
   };
 
+  const handleCertificateChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewCertificate(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveProfile = () => {
     const updated = {};
     if (newLocation !== profile.location) updated.location = newLocation;
     if (newSocial !== profile.social) updated.social = newSocial;
     if (newPhone !== profile.phone) updated.phone = newPhone;
     if (newPhoto) updated.photo = newPhoto;
+    if (newCertificate) updated.certificate = newCertificate;
 
     if (Object.keys(updated).length === 0) {
       setMessage("Нет изменений для сохранения");
@@ -159,29 +172,52 @@ const Dashboard = () => {
               )}
             </div>
 
+            <div>
+              <label className="block font-medium">Сертификат</label>
+              {isEditing ? (
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleCertificateChange}
+                  className="border px-3 py-2 rounded w-full"
+                />
+              ) : profile.certificate ? (
+                <a
+                  href={profile.certificate}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  Посмотреть сертификат
+                </a>
+              ) : (
+                <div className="text-gray-500">Сертификат не загружен</div>
+              )}
+            </div>
+
             <button
               onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
               className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
             >
               {isEditing ? "Сохранить" : "Редактировать"}
             </button>
-          <div className="mt-4">
+
+            <div className="mt-4">
               <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
-                <input
+              <input
                 type="password"
                 placeholder="Новый пароль"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="border px-3 py-2 mb-2 rounded w-full"
               />
-            <button
-            onClick={handleChangePassword}
-            className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-            >
-            Сменить
-            </button>
-          </div>
-
+              <button
+                onClick={handleChangePassword}
+                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+              >
+                Сменить
+              </button>
+            </div>
           </div>
         </div>
         {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
