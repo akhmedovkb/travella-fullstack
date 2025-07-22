@@ -287,7 +287,6 @@ const handleImageUpload = (e) => {
               ← Назад
             </button>
           ) 
-        </div>
 
         {selectedService ? (
           <>
