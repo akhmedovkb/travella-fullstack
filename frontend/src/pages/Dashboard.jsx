@@ -143,6 +143,7 @@ const Dashboard = () => {
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
         <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
         <div className="flex gap-4">
+          {/* Левая колонка */}
           <div className="flex flex-col items-center w-1/2">
             <div className="relative">
               <img
@@ -170,6 +171,7 @@ const Dashboard = () => {
             )}
           </div>
 
+          {/* Правая колонка */}
           <div className="w-1/2 space-y-3">
             <div>
               <label className="block font-medium">Наименование</label>
@@ -200,9 +202,7 @@ const Dashboard = () => {
                   className="border px-3 py-2 rounded w-full"
                 />
               ) : (
-                <div className="border px-3 py-2 rounded bg-gray-100">
-                  {profile.social || "Не указано"}
-                </div>
+                <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || "Не указано"}</div>
               )}
             </div>
             <div>
@@ -251,7 +251,6 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-        {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
       </div>
 
       {/* Правый блок — Услуги */}
@@ -288,47 +287,62 @@ const Dashboard = () => {
             </div>
           </>
         ) : (
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Название"
-              value={newServiceTitle}
-              onChange={(e) => setNewServiceTitle(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <textarea
-              placeholder="Описание"
-              value={newServiceDescription}
-              onChange={(e) => setNewServiceDescription(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="text"
-              placeholder="Категория"
-              value={newServiceCategory}
-              onChange={(e) => setNewServiceCategory(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="number"
-              placeholder="Цена"
-              value={newServicePrice}
-              onChange={(e) => setNewServicePrice(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <DayPicker
-              mode="multiple"
-              selected={newServiceDates}
-              onSelect={setNewServiceDates}
-              className="border rounded-lg p-4"
-            />
-            <button
-              className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-              onClick={handleCreateService}
-            >
-              Сохранить услугу
-            </button>
-          </div>
+          <>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Название"
+                value={newServiceTitle}
+                onChange={(e) => setNewServiceTitle(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <textarea
+                placeholder="Описание"
+                value={newServiceDescription}
+                onChange={(e) => setNewServiceDescription(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <input
+                type="text"
+                placeholder="Категория"
+                value={newServiceCategory}
+                onChange={(e) => setNewServiceCategory(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <input
+                type="number"
+                placeholder="Цена"
+                value={newServicePrice}
+                onChange={(e) => setNewServicePrice(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <DayPicker
+                mode="multiple"
+                selected={newServiceDates}
+                onSelect={setNewServiceDates}
+                className="border rounded-lg p-4"
+              />
+              <button
+                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+                onClick={handleCreateService}
+              >
+                Сохранить услугу
+              </button>
+            </div>
+            <div className="space-y-4 mt-6">
+              {services.map((s) => (
+                <div
+                  key={s.id}
+                  className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                  onClick={() => setSelectedService(s)}
+                >
+                  <div className="font-bold text-lg">{s.title}</div>
+                  <div className="text-sm text-gray-600">{s.category}</div>
+                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
         {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
       </div>
