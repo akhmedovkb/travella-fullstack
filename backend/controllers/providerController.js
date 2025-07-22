@@ -81,7 +81,7 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const result = await pool.query(
-      "SELECT id, name, email, type, location, phone, social, photo FROM providers WHERE id = $1",
+      "SELECT id, name, email, type, location, phone, social, photo, certificate FROM providers WHERE id = $1",
       [id]
     );
 
