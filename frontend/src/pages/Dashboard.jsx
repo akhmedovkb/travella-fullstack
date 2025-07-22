@@ -17,9 +17,6 @@ const Dashboard = () => {
   const [messageProfile, setMessageProfile] = useState("");
   const [messageService, setMessageService] = useState("");
   const [images, setImages] = useState([]);
-  const handleRemoveImage = (index) => {
-  setImages((prev) => prev.filter((_, i) => i !== index));
-};
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -27,6 +24,7 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  
 
   useEffect(() => {
     axios
@@ -119,12 +117,6 @@ const Dashboard = () => {
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
           );
           setSelectedService(null);
-          setTitle("");
-          setDescription("");
-          setCategory("");
-          setPrice("");
-          setAvailability([]);
-          setImages([]);
           setMessageService("Услуга обновлена");
         })
         .catch(() => setMessageService("Ошибка обновления"));
@@ -164,7 +156,7 @@ const Dashboard = () => {
     setMessageService("");
     setImages(service.images || []);
   };
-
+  
 const handleImageUpload = (e) => {
   const files = Array.from(e.target.files);
   const readers = files.map(file => {
@@ -176,7 +168,7 @@ const handleImageUpload = (e) => {
   });
 
   Promise.all(readers).then((base64Images) => {
-    setImages((prev) => [...prev, ...base64Images]);
+    setImages(base64Images);
   });
 };
 
@@ -265,34 +257,24 @@ const handleImageUpload = (e) => {
       {/* Правый блок */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
         <div className="flex justify-between items-center mb-4">
-  <h2 className="text-2xl font-bold">Услуги</h2>
-          <div className="mt-4 space-y-2">
-  {services.map((s) => (
-    <div key={s.id} className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => loadServiceToEdit(s)}>
-      <div className="font-bold text-lg">{s.title}</div>
-      <div className="text-sm text-gray-600">{s.category}</div>
-      <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
-    </div>
-  ))}
-</div>
-
-  {selectedService && (
-    <button
-      onClick={() => {
-        setSelectedService(null);
-        setTitle("");
-        setDescription("");
-        setCategory("");
-        setPrice("");
-        setAvailability([]);
-        setImages([]);
-      }}
-      className="text-sm text-orange-500 underline"
-    >
-      ← Назад
-    </button>
-  )}
-</div>
+          <h2 className="text-2xl font-bold">Услуги</h2>
+          {selectedService ? (
+            <button onClick={() => {
+              setSelectedService(null);
+              setTitle("");
+              setDescription("");
+              setCategory("");
+              setPrice("");
+              setAvailability([]);
+            }} className="text-sm text-orange-500 underline">
+              ← Назад
+            </button>
+          ) : (
+            <button className="bg-orange-500 text-white px-4 py-2 rounded font-semibold" onClick={() => setSelectedService(null)}>
+              + Добавить услугу
+            </button>
+          )}
+        </div>
 
         {selectedService ? (
           <>
@@ -304,21 +286,10 @@ const handleImageUpload = (e) => {
   <label className="block font-medium mb-1">Изображения (можно несколько):</label>
   <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
   <div className="flex gap-2 flex-wrap">
-  {images.map((img, idx) => (
-    <div key={idx} className="relative">
-      <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
-      <button
-        type="button"
-        onClick={() => handleRemoveImage(idx)}
-        className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-        title="Удалить"
-      >
-        ×
-      </button>
-    </div>
-  ))}
-</div>
-
+    {images.map((img, idx) => (
+      <img key={idx} src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+    ))}
+  </div>
 </div>
 <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
             <div className="flex gap-4">
@@ -336,25 +307,22 @@ const handleImageUpload = (e) => {
   <label className="block font-medium mb-1">Изображения (можно несколько):</label>
   <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
   <div className="flex gap-2 flex-wrap">
-  {images.map((img, idx) => (
-    <div key={idx} className="relative">
-      <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
-      <button
-        type="button"
-        onClick={() => handleRemoveImage(idx)}
-        className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-        title="Удалить"
-      >
-        ×
-      </button>
-    </div>
-  ))}
-</div>
-
+    {images.map((img, idx) => (
+      <img key={idx} src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+    ))}
+  </div>
 </div>
             <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
             <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
-            
+            <div className="mt-4 space-y-2">
+              {services.map((s) => (
+                <div key={s.id} className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => loadServiceToEdit(s)}>
+                  <div className="font-bold text-lg">{s.title}</div>
+                  <div className="text-sm text-gray-600">{s.category}</div>
+                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+                </div>
+              ))}
+            </div>
           </>
         )}
         {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
