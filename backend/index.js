@@ -6,7 +6,14 @@ dotenv.config();
 const app = express();
 
 // Разрешаем CORS
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://travella-fullstack.vercel.app", // 👈 твой frontend
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
 // Позволяем читать application/x-www-form-urlencoded (нужно для form-data)
 app.use(express.urlencoded({ extended: true }));
