@@ -93,16 +93,36 @@ const Dashboard = () => {
         <div className="flex gap-4">
           {/* Левая колонка */}
           <div className="flex flex-col items-center w-1/2">
-            {profile.photo || newPhoto ? (
-              <img
-                src={newPhoto || profile.photo}
-                className="w-24 h-24 rounded-full object-cover mb-2"
+            <div className="relative">
+              {profile.photo || newPhoto ? (
+                <img
+                  src={newPhoto || profile.photo}
+                  className="w-24 h-24 rounded-full object-cover mb-2"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gray-200 mb-2" />
+              )}
+              {isEditing && (
+                <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />
+              )}
+            </div>
+
+            <h3 className="font-semibold text-lg mt-6 mb-2">Телефон</h3>
+            {isEditing ? (
+              <input
+                type="text"
+                placeholder="Телефон"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                className="border px-3 py-2 mb-2 rounded w-full"
               />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-gray-200 mb-2" />
+              <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+                {profile.phone || "—"}
+              </div>
             )}
-            <input type="file" onChange={handlePhotoChange} className="text-sm" />
-            <h3 className="font-semibold text-lg mt-6 mb-2">Сменить пароль</h3>
+
+            <h3 className="font-semibold text-lg mt-2 mb-2">Сменить пароль</h3>
             <input
               type="password"
               placeholder="Новый пароль"
@@ -138,18 +158,6 @@ const Dashboard = () => {
                 />
               ) : (
                 <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
-              )}
-            </div>
-            <div>
-              <label className="block font-medium">Телефон</label>
-              {isEditing ? (
-                <input
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="border px-3 py-2 rounded w-full"
-                />
-              ) : (
-                <div className="border px-3 py-2 rounded bg-gray-100">{profile.phone}</div>
               )}
             </div>
             <div>
