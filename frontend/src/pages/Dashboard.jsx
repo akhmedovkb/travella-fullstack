@@ -31,7 +31,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -72,7 +72,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -84,7 +84,7 @@ const Dashboard = () => {
   const handleChangePassword = () => {
     axios
       .put(
-        ${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
         { password: newPassword },
         config
       )
@@ -97,7 +97,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
+      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => setServices((prev) => prev.filter((s) => s.id !== id)))
       .catch(() => setMessage("Ошибка удаления"));
   };
