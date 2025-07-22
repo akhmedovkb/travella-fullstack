@@ -17,11 +17,11 @@ const Dashboard = () => {
   const [message, setMessage] = useState("");
 
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: Bearer ${token} } };
+  const config = { headers: { Authorization: `Bearer ${token}` } };
 
   useEffect(() => {
     axios
-      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
