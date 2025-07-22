@@ -99,21 +99,38 @@ const getProviderProfile = async (req, res) => {
 const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
-    const { name, location, phone, social, photo } = req.body;
+
+    // Получаем текущие данные из базы
+    const current = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ message: "Поставщик не найден" });
+    }
+
+    const old = current.rows[0];
+
+    // Обновляем поля, если они переданы
+    const updated = {
+      name: req.body.name ?? old.name,
+      location: req.body.location ?? old.location,
+      phone: req.body.phone ?? old.phone,
+      social: req.body.social ?? old.social,
+      photo: req.body.photo ?? old.photo,
+    };
 
     await pool.query(
       `UPDATE providers
        SET name = $1, location = $2, phone = $3, social = $4, photo = $5
        WHERE id = $6`,
-      [name, location, phone, social, photo, id]
+      [updated.name, updated.location, updated.phone, updated.social, updated.photo, id]
     );
 
     res.status(200).json({ message: "Профиль обновлён успешно" });
   } catch (error) {
     console.error("❌ Ошибка обновления профиля:", error.message);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
+
 
 // ДОБАВИТЬ УСЛУГУ
 const addService = async (req, res) => {
