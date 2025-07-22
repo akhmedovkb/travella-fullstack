@@ -14,8 +14,8 @@ const Dashboard = () => {
   const [newPassword, setNewPassword] = useState("");
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
-  const [profileMessage, setProfileMessage] = useState("");
-  const [serviceMessage, setServiceMessage] = useState("");
+  const [messageProfile, setMessageProfile] = useState("");
+  const [messageService, setMessageService] = useState("");
 
   const [newServiceTitle, setNewServiceTitle] = useState("");
   const [newServiceDescription, setNewServiceDescription] = useState("");
@@ -74,7 +74,7 @@ const Dashboard = () => {
     if (newCertificate) updated.certificate = newCertificate;
 
     if (Object.keys(updated).length === 0) {
-      setProfileMessage("Нет изменений для сохранения");
+      setMessageProfile("Нет изменений для сохранения");
       return;
     }
 
@@ -83,9 +83,9 @@ const Dashboard = () => {
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
-        setProfileMessage("Профиль обновлён");
+        setMessageProfile("Профиль обновлён");
       })
-      .catch(() => setProfileMessage("Ошибка обновления"));
+      .catch(() => setMessageProfile("Ошибка обновления"));
   };
 
   const handleChangePassword = () => {
@@ -97,21 +97,21 @@ const Dashboard = () => {
       )
       .then(() => {
         setNewPassword("");
-        setProfileMessage("Пароль обновлён");
+        setMessageProfile("Пароль обновлён");
       })
-      .catch(() => setProfileMessage("Ошибка смены пароля"));
+      .catch(() => setMessageProfile("Ошибка смены пароля"));
   };
 
   const handleDeleteService = (id) => {
     axios
       .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => setServices((prev) => prev.filter((s) => s.id !== id)))
-      .catch(() => setServiceMessage("Ошибка удаления"));
+      .catch(() => setMessageService("Ошибка удаления"));
   };
 
   const handleCreateService = () => {
     if (!newServiceTitle || !newServiceCategory || !newServicePrice || newServiceDates.length === 0) {
-      setServiceMessage("Пожалуйста, заполните все поля и выберите даты");
+      setMessageService("Пожалуйста, заполните все поля и выберите даты");
       return;
     }
     axios
@@ -133,9 +133,9 @@ const Dashboard = () => {
         setNewServicePrice("");
         setNewServiceCategory("");
         setNewServiceDates([]);
-        setServiceMessage("Услуга добавлена");
+        setMessageService("Услуга добавлена");
       })
-      .catch(() => setServiceMessage("Ошибка добавления услуги"));
+      .catch(() => setMessageService("Ошибка добавления услуги"));
   };
 
   return (
@@ -207,7 +207,6 @@ const Dashboard = () => {
                 <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || "Не указано"}</div>
               )}
             </div>
-
             <div>
               <label className="block font-medium">Сертификат</label>
               {isEditing ? (
@@ -256,7 +255,7 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
-        {profileMessage && <p className="text-sm text-center text-gray-600 mt-4">{profileMessage}</p>}
+        {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
       </div>
 
       {/* Правый блок — Услуги */}
@@ -293,49 +292,64 @@ const Dashboard = () => {
             </div>
           </>
         ) : (
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Название"
-              value={newServiceTitle}
-              onChange={(e) => setNewServiceTitle(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <textarea
-              placeholder="Описание"
-              value={newServiceDescription}
-              onChange={(e) => setNewServiceDescription(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="text"
-              placeholder="Категория"
-              value={newServiceCategory}
-              onChange={(e) => setNewServiceCategory(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="number"
-              placeholder="Цена"
-              value={newServicePrice}
-              onChange={(e) => setNewServicePrice(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <DayPicker
-              mode="multiple"
-              selected={newServiceDates}
-              onSelect={setNewServiceDates}
-              className="border rounded-lg p-4"
-            />
-            <button
-              className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-              onClick={handleCreateService}
-            >
-              Сохранить услугу
-            </button>
-          </div>
+          <>
+            <div className="space-y-4 mb-6">
+              <input
+                type="text"
+                placeholder="Название"
+                value={newServiceTitle}
+                onChange={(e) => setNewServiceTitle(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <textarea
+                placeholder="Описание"
+                value={newServiceDescription}
+                onChange={(e) => setNewServiceDescription(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <input
+                type="text"
+                placeholder="Категория"
+                value={newServiceCategory}
+                onChange={(e) => setNewServiceCategory(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <input
+                type="number"
+                placeholder="Цена"
+                value={newServicePrice}
+                onChange={(e) => setNewServicePrice(e.target.value)}
+                className="border px-3 py-2 rounded w-full"
+              />
+              <DayPicker
+                mode="multiple"
+                selected={newServiceDates}
+                onSelect={setNewServiceDates}
+                className="border rounded-lg p-4"
+              />
+              <button
+                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+                onClick={handleCreateService}
+              >
+                Сохранить услугу
+              </button>
+            </div>
+            <div className="space-y-4">
+              {services.map((s) => (
+                <div
+                  key={s.id}
+                  className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                  onClick={() => setSelectedService(s)}
+                >
+                  <div className="font-bold text-lg">{s.title}</div>
+                  <div className="text-sm text-gray-600">{s.category}</div>
+                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
-        {serviceMessage && <p className="text-sm text-center text-gray-600 mt-4">{serviceMessage}</p>}
+        {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
       </div>
     </div>
   );
