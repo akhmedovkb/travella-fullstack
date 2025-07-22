@@ -24,7 +24,6 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
-  
 
   useEffect(() => {
     axios
@@ -156,7 +155,7 @@ const Dashboard = () => {
     setMessageService("");
     setImages(service.images || []);
   };
-  
+
 const handleImageUpload = (e) => {
   const files = Array.from(e.target.files);
   const readers = files.map(file => {
