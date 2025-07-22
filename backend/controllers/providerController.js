@@ -212,6 +212,24 @@ const deleteService = async (req, res) => {
   }
 };
 
+const changeProviderPassword = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Пароль должен содержать минимум 6 символов" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.query("UPDATE providers SET password = $1 WHERE id = $2", [hashedPassword, id]);
+
+    res.status(200).json({ message: "Пароль обновлён успешно" });
+  } catch (error) {
+    console.error("❌ Ошибка смены пароля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
+};
 
 // 👇 Обновляем экспорт:
 module.exports = {
@@ -223,4 +241,5 @@ module.exports = {
   getServices,
   updateService,
   deleteService,
+  changeProviderPassword,
 };
