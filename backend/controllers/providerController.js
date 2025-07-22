@@ -110,18 +110,20 @@ const updateProviderProfile = async (req, res) => {
 
     // Обновляем поля, если они переданы
     const updated = {
-      name: req.body.name ?? old.name,
-      location: req.body.location ?? old.location,
-      phone: req.body.phone ?? old.phone,
-      social: req.body.social ?? old.social,
-      photo: req.body.photo ?? old.photo,
+     name: req.body.name ?? old.name,
+     location: req.body.location ?? old.location,
+     phone: req.body.phone ?? old.phone,
+     social: req.body.social ?? old.social,
+     photo: req.body.photo ?? old.photo,
+     certificate: req.body.certificate ?? old.certificate,
     };
 
+
     await pool.query(
-      `UPDATE providers
-       SET name = $1, location = $2, phone = $3, social = $4, photo = $5
-       WHERE id = $6`,
-      [updated.name, updated.location, updated.phone, updated.social, updated.photo, id]
+     `UPDATE providers
+      SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6
+      WHERE id = $7`,
+      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, id]
     );
 
     res.status(200).json({ message: "Профиль обновлён успешно" });
