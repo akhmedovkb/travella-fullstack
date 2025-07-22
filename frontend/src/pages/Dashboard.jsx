@@ -286,9 +286,7 @@ const handleImageUpload = (e) => {
             }} className="text-sm text-orange-500 underline">
               ← Назад
             </button>
-          ) : (
-            
-          )}
+          ) 
         </div>
 
         {selectedService ? (
