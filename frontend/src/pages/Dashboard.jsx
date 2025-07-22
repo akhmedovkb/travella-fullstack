@@ -16,18 +16,12 @@ const Dashboard = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [message, setMessage] = useState("");
 
-  const [newServiceTitle, setNewServiceTitle] = useState("");
-  const [newServiceDescription, setNewServiceDescription] = useState("");
-  const [newServicePrice, setNewServicePrice] = useState("");
-  const [newServiceCategory, setNewServiceCategory] = useState("");
-  const [newServiceDates, setNewServiceDates] = useState([]);
-
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = { headers: { Authorization: Bearer ${token} } };
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
@@ -37,7 +31,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -78,7 +72,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -90,7 +84,7 @@ const Dashboard = () => {
   const handleChangePassword = () => {
     axios
       .put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+        ${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
         { password: newPassword },
         config
       )
@@ -103,43 +97,131 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
       .then(() => setServices((prev) => prev.filter((s) => s.id !== id)))
       .catch(() => setMessage("Ошибка удаления"));
   };
 
-  const handleCreateService = () => {
-    if (!newServiceTitle || !newServiceCategory || !newServicePrice || newServiceDates.length === 0) {
-      setMessage("Пожалуйста, заполните все поля и выберите даты");
-      return;
-    }
-    axios
-      .post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
-        {
-          title: newServiceTitle,
-          description: newServiceDescription,
-          price: newServicePrice,
-          category: newServiceCategory,
-          availability: newServiceDates
-        },
-        config
-      )
-      .then((res) => {
-        setServices((prev) => [...prev, res.data]);
-        setNewServiceTitle("");
-        setNewServiceDescription("");
-        setNewServicePrice("");
-        setNewServiceCategory("");
-        setNewServiceDates([]);
-        setMessage("Услуга добавлена");
-      })
-      .catch(() => setMessage("Ошибка добавления услуги"));
-  };
-
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
-      {/* ...Левый блок не изменяется... */}
+      {/* Левый блок */}
+      <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
+        <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
+        <div className="flex gap-4">
+          {/* Левая колонка */}
+          <div className="flex flex-col items-center w-1/2">
+            <div className="relative">
+              <img
+                src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
+                className="w-24 h-24 rounded-full object-cover mb-2"
+                alt="Фото"
+              />
+              {isEditing && (
+                <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />
+              )}
+            </div>
+
+            <h3 className="font-semibold text-lg mt-6 mb-2">Телефон</h3>
+            {isEditing ? (
+              <input
+                type="text"
+                placeholder="Телефон"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                className="border px-3 py-2 mb-2 rounded w-full"
+              />
+            ) : (
+              <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+                {profile.phone || "Не указано"}
+              </div>
+            )}
+          </div>
+
+          {/* Правая колонка */}
+          <div className="w-1/2 space-y-3">
+            <div>
+              <label className="block font-medium">Наименование</label>
+              <div className="border px-3 py-2 rounded bg-gray-100">{profile.name}</div>
+            </div>
+            <div>
+              <label className="block font-medium">Тип поставщика</label>
+              <div className="border px-3 py-2 rounded bg-gray-100">{profile.type}</div>
+            </div>
+            <div>
+              <label className="block font-medium">Локация</label>
+              {isEditing ? (
+                <input
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                  className="border px-3 py-2 rounded w-full"
+                />
+              ) : (
+                <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
+              )}
+            </div>
+            <div>
+              <label className="block font-medium">Ссылка на соцсети</label>
+              {isEditing ? (
+                <input
+                  value={newSocial}
+                  onChange={(e) => setNewSocial(e.target.value)}
+                  className="border px-3 py-2 rounded w-full"
+                />
+              ) : (
+                <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || "Не указано"}</div>
+              )}
+            </div>
+
+            <div>
+              <label className="block font-medium">Сертификат</label>
+              {isEditing ? (
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleCertificateChange}
+                  className="border px-3 py-2 rounded w-full"
+                />
+              ) : profile.certificate ? (
+                <a
+                  href={profile.certificate}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  Посмотреть сертификат
+                </a>
+              ) : (
+                <div className="text-gray-500">Сертификат не загружен</div>
+              )}
+            </div>
+
+            <button
+              onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
+              className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
+            >
+              {isEditing ? "Сохранить" : "Редактировать"}
+            </button>
+
+            <div className="mt-4">
+              <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
+              <input
+                type="password"
+                placeholder="Новый пароль"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="border px-3 py-2 mb-2 rounded w-full"
+              />
+              <button
+                onClick={handleChangePassword}
+                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+              >
+                Сменить
+              </button>
+            </div>
+          </div>
+        </div>
+        {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
+      </div>
 
       {/* Правый блок — Услуги */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
@@ -176,48 +258,19 @@ const Dashboard = () => {
           </>
         ) : (
           <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Название"
-              value={newServiceTitle}
-              onChange={(e) => setNewServiceTitle(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <textarea
-              placeholder="Описание"
-              value={newServiceDescription}
-              onChange={(e) => setNewServiceDescription(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="text"
-              placeholder="Категория"
-              value={newServiceCategory}
-              onChange={(e) => setNewServiceCategory(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <input
-              type="number"
-              placeholder="Цена"
-              value={newServicePrice}
-              onChange={(e) => setNewServicePrice(e.target.value)}
-              className="border px-3 py-2 rounded w-full"
-            />
-            <DayPicker
-              mode="multiple"
-              selected={newServiceDates}
-              onSelect={setNewServiceDates}
-              className="border rounded-lg p-4"
-            />
-            <button
-              className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-              onClick={handleCreateService}
-            >
-              Сохранить услугу
-            </button>
+            {services.map((s) => (
+              <div
+                key={s.id}
+                className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                onClick={() => setSelectedService(s)}
+              >
+                <div className="font-bold text-lg">{s.title}</div>
+                <div className="text-sm text-gray-600">{s.category}</div>
+                <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+              </div>
+            ))}
           </div>
         )}
-        {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
       </div>
     </div>
   );
