@@ -266,6 +266,16 @@ const handleImageUpload = (e) => {
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
         <div className="flex justify-between items-center mb-4">
   <h2 className="text-2xl font-bold">Услуги</h2>
+          <div className="mt-4 space-y-2">
+  {services.map((s) => (
+    <div key={s.id} className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => loadServiceToEdit(s)}>
+      <div className="font-bold text-lg">{s.title}</div>
+      <div className="text-sm text-gray-600">{s.category}</div>
+      <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+    </div>
+  ))}
+</div>
+
   {selectedService && (
     <button
       onClick={() => {
@@ -344,15 +354,7 @@ const handleImageUpload = (e) => {
 </div>
             <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
             <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
-            <div className="mt-4 space-y-2">
-              {services.map((s) => (
-                <div key={s.id} className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => loadServiceToEdit(s)}>
-                  <div className="font-bold text-lg">{s.title}</div>
-                  <div className="text-sm text-gray-600">{s.category}</div>
-                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
-                </div>
-              ))}
-            </div>
+            
           </>
         )}
         {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
