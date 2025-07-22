@@ -16,12 +16,12 @@ const Dashboard = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [messageProfile, setMessageProfile] = useState("");
   const [messageService, setMessageService] = useState("");
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
-  const [bookedDates, setBookedDates] = useState([]);
 
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -39,13 +39,11 @@ const Dashboard = () => {
 
     axios
       .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-      .then((res) => {
-        setServices(res.data);
-        const allDates = res.data.flatMap((s) => s.availability);
-        setBookedDates(allDates);
-      })
+      .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
+
+  const allUnavailableDates = services.flatMap((s) => s.availability.map((d) => new Date(d)));
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -112,14 +110,15 @@ const Dashboard = () => {
       return;
     }
 
-    const selectedDateStrings = availability.map((date) => date.toISOString().split("T")[0]);
-    const conflict = selectedDateStrings.some((d) => bookedDates.includes(d));
-    if (conflict) {
-      setMessageService("Вы выбрали дату, уже занятую другой услугой");
+    const conflict = availability.some((d) =>
+      allUnavailableDates.some((u) => u.toDateString() === d.toDateString())
+    );
+    if (!selectedService && conflict) {
+      setMessageService("Некоторые выбранные даты уже заняты другими услугами");
       return;
     }
 
-    const data = { title, description, category, price, availability: selectedDateStrings };
+    const data = { title, description, category, price, availability };
 
     if (selectedService) {
       axios
@@ -137,7 +136,6 @@ const Dashboard = () => {
         .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
-          setBookedDates((prev) => [...prev, ...selectedDateStrings]);
           setTitle("");
           setDescription("");
           setCategory("");
@@ -169,34 +167,27 @@ const Dashboard = () => {
     setMessageService("");
   };
 
-  const disabledDays = [
-    { before: new Date() },
-    ...bookedDates.map((d) => new Date(d)),
-  ];
-
-  const modifiers = {
-    booked: bookedDates.map((d) => new Date(d)),
-  };
-
-  const modifiersStyles = {
-    booked: {
-      backgroundColor: "#ccc",
-      color: "#555",
-      cursor: "not-allowed",
-    },
-  };
+  const today = new Date();
 
   return (
-    // ... остальная разметка не меняется, DayPicker обновляется так:
-    <DayPicker
-      mode="multiple"
-      selected={availability}
-      onSelect={setAvailability}
-      disabled={disabledDays}
-      modifiers={modifiers}
-      modifiersStyles={modifiersStyles}
-      className="border rounded-lg p-4 mb-4"
-    />
+    <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
+      {/* ...левый блок без изменений... */}
+
+      {/* Правый блок */}
+      <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
+        {/* ... */}
+        <DayPicker
+          mode="multiple"
+          selected={availability}
+          onSelect={setAvailability}
+          disabled={{ before: today }}
+          modifiers={{ booked: allUnavailableDates }}
+          modifiersStyles={{ booked: { backgroundColor: "#ccc", color: "#fff" } }}
+          className="border rounded-lg p-4 mb-4"
+        />
+        {/* ... */}
+      </div>
+    </div>
   );
 };
 
