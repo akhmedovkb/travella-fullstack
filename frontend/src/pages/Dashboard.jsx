@@ -257,23 +257,25 @@ const handleImageUpload = (e) => {
       {/* Правый блок */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Услуги</h2>
-          {selectedService ? (
-            <button onClick={() => {
-              setSelectedService(null);
-              setTitle("");
-              setDescription("");
-              setCategory("");
-              setPrice("");
-              setAvailability([]);
-            }} className="text-sm text-orange-500 underline">
-              ← Назад
-            </button>
-          ) : (
-            <button className="bg-orange-500 text-white px-4 py-2 rounded font-semibold" onClick={() => setSelectedService(null)}>
-              + Добавить услугу
-            </button>
-          )}
+  <h2 className="text-2xl font-bold">Услуги</h2>
+  {selectedService && (
+    <button
+      onClick={() => {
+        setSelectedService(null);
+        setTitle("");
+        setDescription("");
+        setCategory("");
+        setPrice("");
+        setAvailability([]);
+        setImages([]);
+      }}
+      className="text-sm text-orange-500 underline"
+    >
+      ← Назад
+    </button>
+  )}
+</div>
+
         </div>
 
         {selectedService ? (
