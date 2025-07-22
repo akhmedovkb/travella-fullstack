@@ -14,7 +14,8 @@ const Dashboard = () => {
   const [newPassword, setNewPassword] = useState("");
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
-  const [message, setMessage] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [serviceMessage, setServiceMessage] = useState("");
 
   const [newServiceTitle, setNewServiceTitle] = useState("");
   const [newServiceDescription, setNewServiceDescription] = useState("");
@@ -73,7 +74,7 @@ const Dashboard = () => {
     if (newCertificate) updated.certificate = newCertificate;
 
     if (Object.keys(updated).length === 0) {
-      setMessage("Нет изменений для сохранения");
+      setProfileMessage("Нет изменений для сохранения");
       return;
     }
 
@@ -82,9 +83,9 @@ const Dashboard = () => {
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
-        setMessage("Профиль обновлён");
+        setProfileMessage("Профиль обновлён");
       })
-      .catch(() => setMessage("Ошибка обновления"));
+      .catch(() => setProfileMessage("Ошибка обновления"));
   };
 
   const handleChangePassword = () => {
@@ -96,21 +97,21 @@ const Dashboard = () => {
       )
       .then(() => {
         setNewPassword("");
-        setMessage("Пароль обновлён");
+        setProfileMessage("Пароль обновлён");
       })
-      .catch(() => setMessage("Ошибка смены пароля"));
+      .catch(() => setProfileMessage("Ошибка смены пароля"));
   };
 
   const handleDeleteService = (id) => {
     axios
       .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => setServices((prev) => prev.filter((s) => s.id !== id)))
-      .catch(() => setMessage("Ошибка удаления"));
+      .catch(() => setServiceMessage("Ошибка удаления"));
   };
 
   const handleCreateService = () => {
     if (!newServiceTitle || !newServiceCategory || !newServicePrice || newServiceDates.length === 0) {
-      setMessage("Пожалуйста, заполните все поля и выберите даты");
+      setServiceMessage("Пожалуйста, заполните все поля и выберите даты");
       return;
     }
     axios
@@ -132,9 +133,9 @@ const Dashboard = () => {
         setNewServicePrice("");
         setNewServiceCategory("");
         setNewServiceDates([]);
-        setMessage("Услуга добавлена");
+        setServiceMessage("Услуга добавлена");
       })
-      .catch(() => setMessage("Ошибка добавления услуги"));
+      .catch(() => setServiceMessage("Ошибка добавления услуги"));
   };
 
   return (
@@ -155,6 +156,7 @@ const Dashboard = () => {
                 <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />
               )}
             </div>
+
             <h3 className="font-semibold text-lg mt-6 mb-2">Телефон</h3>
             {isEditing ? (
               <input
@@ -205,6 +207,7 @@ const Dashboard = () => {
                 <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || "Не указано"}</div>
               )}
             </div>
+
             <div>
               <label className="block font-medium">Сертификат</label>
               {isEditing ? (
@@ -227,12 +230,14 @@ const Dashboard = () => {
                 <div className="text-gray-500">Сертификат не загружен</div>
               )}
             </div>
+
             <button
               onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
               className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
             >
               {isEditing ? "Сохранить" : "Редактировать"}
             </button>
+
             <div className="mt-4">
               <h3 className="font-semibold text-lg mb-2">Сменить пароль</h3>
               <input
@@ -251,6 +256,7 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+        {profileMessage && <p className="text-sm text-center text-gray-600 mt-4">{profileMessage}</p>}
       </div>
 
       {/* Правый блок — Услуги */}
@@ -287,64 +293,49 @@ const Dashboard = () => {
             </div>
           </>
         ) : (
-          <>
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Название"
-                value={newServiceTitle}
-                onChange={(e) => setNewServiceTitle(e.target.value)}
-                className="border px-3 py-2 rounded w-full"
-              />
-              <textarea
-                placeholder="Описание"
-                value={newServiceDescription}
-                onChange={(e) => setNewServiceDescription(e.target.value)}
-                className="border px-3 py-2 rounded w-full"
-              />
-              <input
-                type="text"
-                placeholder="Категория"
-                value={newServiceCategory}
-                onChange={(e) => setNewServiceCategory(e.target.value)}
-                className="border px-3 py-2 rounded w-full"
-              />
-              <input
-                type="number"
-                placeholder="Цена"
-                value={newServicePrice}
-                onChange={(e) => setNewServicePrice(e.target.value)}
-                className="border px-3 py-2 rounded w-full"
-              />
-              <DayPicker
-                mode="multiple"
-                selected={newServiceDates}
-                onSelect={setNewServiceDates}
-                className="border rounded-lg p-4"
-              />
-              <button
-                className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-                onClick={handleCreateService}
-              >
-                Сохранить услугу
-              </button>
-            </div>
-            <div className="space-y-4 mt-6">
-              {services.map((s) => (
-                <div
-                  key={s.id}
-                  className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
-                  onClick={() => setSelectedService(s)}
-                >
-                  <div className="font-bold text-lg">{s.title}</div>
-                  <div className="text-sm text-gray-600">{s.category}</div>
-                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
-                </div>
-              ))}
-            </div>
-          </>
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Название"
+              value={newServiceTitle}
+              onChange={(e) => setNewServiceTitle(e.target.value)}
+              className="border px-3 py-2 rounded w-full"
+            />
+            <textarea
+              placeholder="Описание"
+              value={newServiceDescription}
+              onChange={(e) => setNewServiceDescription(e.target.value)}
+              className="border px-3 py-2 rounded w-full"
+            />
+            <input
+              type="text"
+              placeholder="Категория"
+              value={newServiceCategory}
+              onChange={(e) => setNewServiceCategory(e.target.value)}
+              className="border px-3 py-2 rounded w-full"
+            />
+            <input
+              type="number"
+              placeholder="Цена"
+              value={newServicePrice}
+              onChange={(e) => setNewServicePrice(e.target.value)}
+              className="border px-3 py-2 rounded w-full"
+            />
+            <DayPicker
+              mode="multiple"
+              selected={newServiceDates}
+              onSelect={setNewServiceDates}
+              className="border rounded-lg p-4"
+            />
+            <button
+              className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+              onClick={handleCreateService}
+            >
+              Сохранить услугу
+            </button>
+          </div>
         )}
-        {message && <p className="text-sm text-center text-gray-600 mt-4">{message}</p>}
+        {serviceMessage && <p className="text-sm text-center text-gray-600 mt-4">{serviceMessage}</p>}
       </div>
     </div>
   );
