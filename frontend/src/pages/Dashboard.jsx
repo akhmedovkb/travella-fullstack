@@ -139,7 +139,7 @@ const Dashboard = () => {
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
-      {/* ...Левый блок не изменяется... */}
+      {/* Левый блок остаётся без изменений */}
 
       {/* Правый блок — Услуги */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
