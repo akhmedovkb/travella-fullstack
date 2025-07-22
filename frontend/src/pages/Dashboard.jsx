@@ -16,15 +16,15 @@ const Dashboard = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [messageProfile, setMessageProfile] = useState("");
   const [messageService, setMessageService] = useState("");
-
+  const [images, setImages] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
-
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  
 
   useEffect(() => {
     axios
@@ -107,7 +107,7 @@ const Dashboard = () => {
       return;
     }
 
-    const data = { title, description, category, price, availability };
+    const data = { title, description, category, price, availability, images };
 
     if (selectedService) {
       axios
@@ -154,7 +154,23 @@ const Dashboard = () => {
     setPrice(service.price);
     setAvailability(service.availability.map((d) => new Date(d)));
     setMessageService("");
+    setImages(service.images || []);
   };
+  
+const handleImageUpload = (e) => {
+  const files = Array.from(e.target.files);
+  const readers = files.map(file => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  });
+
+  Promise.all(readers).then((base64Images) => {
+    setImages(base64Images);
+  });
+};
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
@@ -266,7 +282,16 @@ const Dashboard = () => {
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
             <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
-            <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
+            <div className="mb-4">
+  <label className="block font-medium mb-1">Изображения (можно несколько):</label>
+  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
+  <div className="flex gap-2 flex-wrap">
+    {images.map((img, idx) => (
+      <img key={idx} src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+    ))}
+  </div>
+</div>
+<DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
             <div className="flex gap-4">
               <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить</button>
               <button className="w-full bg-red-600 text-white py-2 rounded font-bold" onClick={() => handleDeleteService(selectedService.id)}>Удалить</button>
@@ -278,6 +303,15 @@ const Dashboard = () => {
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
             <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
+            <div className="mb-4">
+  <label className="block font-medium mb-1">Изображения (можно несколько):</label>
+  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
+  <div className="flex gap-2 flex-wrap">
+    {images.map((img, idx) => (
+      <img key={idx} src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+    ))}
+  </div>
+</div>
             <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
             <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
             <div className="mt-4 space-y-2">
