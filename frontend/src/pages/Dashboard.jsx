@@ -170,7 +170,7 @@ const handleImageUpload = (e) => {
   });
 
   Promise.all(readers).then((base64Images) => {
-    setImages(base64Images);
+    setImages((prev) => [...prev, ...base64Images]);
   });
 };
 
