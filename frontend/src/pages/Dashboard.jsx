@@ -116,16 +116,6 @@ const Dashboard = () => {
             >
               Сменить
             </button>
-
-            {/* Добавляем редактирование телефона */}
-            <h3 className="font-semibold text-lg mt-6 mb-2">Телефон</h3>
-            <input
-              type="text"
-              placeholder="Телефон"
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              className="border px-3 py-2 mb-2 rounded w-full"
-            />
           </div>
 
           {/* Правая колонка */}
@@ -148,6 +138,18 @@ const Dashboard = () => {
                 />
               ) : (
                 <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
+              )}
+            </div>
+            <div>
+              <label className="block font-medium">Телефон</label>
+              {isEditing ? (
+                <input
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  className="border px-3 py-2 rounded w-full"
+                />
+              ) : (
+                <div className="border px-3 py-2 rounded bg-gray-100">{profile.phone}</div>
               )}
             </div>
             <div>
