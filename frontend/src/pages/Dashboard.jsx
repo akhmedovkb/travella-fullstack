@@ -383,7 +383,6 @@ const handleImageUpload = (e) => {
 </div> 
 );
 };
-
 export default Dashboard;
 
 
