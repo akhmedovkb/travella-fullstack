@@ -331,7 +331,9 @@ const handleImageUpload = (e) => {
       </div>
     </>
   ) : (
-    <>
+    <> <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
+        Чтобы создать новую услугу, заполните все поля ниже и нажмите на <strong>«Сохранить услугу»</strong>.
+       </div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название" className="w-full border px-3 py-2 rounded mb-2" />
       <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
       <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
