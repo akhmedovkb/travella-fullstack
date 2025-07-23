@@ -209,6 +209,15 @@ const handleImageUpload = (e) => {
                 {profile.phone || "Не указано"}
               </div>
             )}
+            <button
+             onClick={() => {
+             localStorage.removeItem("token");
+             window.location.href = "/login";
+             }}
+             className="absolute top-4 left-4 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow z-50"
+            >
+           Выйти
+          </button>
           </div>
           <div className="w-1/2 space-y-3">
             <div>
