@@ -186,12 +186,16 @@ const handleImageUpload = (e) => {
 };
 
   return (
+  <>
     <button
-  onClick={handleLogout}
-  className="absolute top-4 left-6 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow"
->
-  Выйти
-</button>
+      onClick={() => {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }}
+      className="absolute top-4 left-6 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow"
+    >
+      Выйти
+    </button>
 
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
       {/* Левый блок */}
