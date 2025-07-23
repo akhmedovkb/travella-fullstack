@@ -361,8 +361,6 @@ const handleImageUpload = (e) => {
   )}
         {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
     </div> {/* Правый блок */}
- 
   );
 };
-
 export default Dashboard;
