@@ -275,6 +275,7 @@ const handleImageUpload = (e) => {
             setCategory("");
             setPrice("");
             setAvailability([]);
+            setImages([]); // ✅ сброс изображений
           }}
           className="text-sm text-orange-500 underline"
         >
