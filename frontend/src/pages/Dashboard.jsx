@@ -261,9 +261,8 @@ const handleImageUpload = (e) => {
         </div>
         {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
       </div>
-
-      {/* Правый блок */}
-      <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
+{/* Правый блок */}
+<div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
   <div className="mb-6">
     <div className="flex justify-between items-center">
       <h2 className="text-2xl font-bold">Услуги</h2>
@@ -297,7 +296,7 @@ const handleImageUpload = (e) => {
         </div>
       ))}
     </div>
-  </div>
+  </div> {/* Закрытие .mb-6 */}
 
   {selectedService ? (
     <>
@@ -359,8 +358,12 @@ const handleImageUpload = (e) => {
       <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
     </>
   )}
-        {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
-    </div> {/* Правый блок */}
-  );
-};
+
+  {messageService && (
+    <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
+  )}
+</div> {/* Правый блок */}
 export default Dashboard;
+
+
+
