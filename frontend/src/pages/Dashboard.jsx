@@ -359,7 +359,10 @@ const handleImageUpload = (e) => {
       <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
     </>
   )}
-  {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
-</div>
+        {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
+    </div> {/* Правый блок */}
+  </div> {/* Весь flex wrapper */}
+  );
+};
 
 export default Dashboard;
