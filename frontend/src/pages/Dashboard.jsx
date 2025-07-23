@@ -186,7 +186,17 @@ const handleImageUpload = (e) => {
 };
 
   return (
-      <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
+      <<div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen relative">
+
+    <button
+      onClick={() => {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }}
+      className="absolute top-4 left-4 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow z-50"
+    >
+      Выйти
+    </button>
       {/* Левый блок */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
         <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
