@@ -186,16 +186,7 @@ const handleImageUpload = (e) => {
 };
 
   return (
-      <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen relative">
-  <button
-    onClick={() => {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
-    }}
-    className="absolute top-4 left-6 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow"
-  >
-    Выйти
-  </button>
+      <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
       {/* Левый блок */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
         <h2 className="text-2xl font-bold mb-4">Профиль поставщика</h2>
@@ -222,6 +213,15 @@ const handleImageUpload = (e) => {
               <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
                 {profile.phone || "Не указано"}
               </div>
+        <button
+  onClick={() => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  }}
+  className="mt-2 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow w-full"
+>
+  Выйти
+</button>
             )}
           </div>
           <div className="w-1/2 space-y-3">
