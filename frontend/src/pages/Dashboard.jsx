@@ -264,102 +264,102 @@ const handleImageUpload = (e) => {
 
       {/* Правый блок */}
       <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
-        <div className="flex justify-between items-center mb-4">
-  <h2 className="text-2xl font-bold">Услуги</h2>
-          <div className="mt-4 space-y-2">
-              {services.map((s) => (
-                <div key={s.id} className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => loadServiceToEdit(s)}>
-                  <div className="font-bold text-lg">{s.title}</div>
-                  <div className="text-sm text-gray-600">{s.category}</div>
-                  <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
-                </div>
-              ))}
-            </div>
-  {selectedService && (
-    <button
-      onClick={() => {
-        setSelectedService(null);
-        setTitle("");
-        setDescription("");
-        setCategory("");
-        setPrice("");
-        setAvailability([]);
-      }}
-      className="text-sm text-orange-500 underline"
-    >
-      ← Назад
-    </button>
-  )}
-</div>
-
-
-        {selectedService ? (
-          <>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название" className="w-full border px-3 py-2 rounded mb-2" />
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
-            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
-            <div className="mb-4">
-  <label className="block font-medium mb-1">Изображения (можно несколько):</label>
-  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
-  <div className="flex gap-2 flex-wrap">
-  {images.map((img, idx) => (
-    <div key={idx} className="relative">
-      <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
-      <button
-        type="button"
-        onClick={() => handleRemoveImage(idx)}
-        className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-        title="Удалить"
-      >
-        ×
-      </button>
+  <div className="mb-6">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold">Услуги</h2>
+      {selectedService && (
+        <button
+          onClick={() => {
+            setSelectedService(null);
+            setTitle("");
+            setDescription("");
+            setCategory("");
+            setPrice("");
+            setAvailability([]);
+          }}
+          className="text-sm text-orange-500 underline"
+        >
+          ← Назад
+        </button>
+      )}
     </div>
-  ))}
-</div>
 
-</div>
-<DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
-            <div className="flex gap-4">
-              <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить</button>
-              <button className="w-full bg-red-600 text-white py-2 rounded font-bold" onClick={() => handleDeleteService(selectedService.id)}>Удалить</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название" className="w-full border px-3 py-2 rounded mb-2" />
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
-            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
-            <div className="mb-4">
-  <label className="block font-medium mb-1">Изображения (можно несколько):</label>
-  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
-  <div className="flex gap-2 flex-wrap">
-  {images.map((img, idx) => (
-    <div key={idx} className="relative">
-      <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
-      <button
-        type="button"
-        onClick={() => handleRemoveImage(idx)}
-        className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-        title="Удалить"
-      >
-        ×
-      </button>
+    <div className="mt-4 space-y-2">
+      {services.map((s) => (
+        <div
+          key={s.id}
+          className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+          onClick={() => loadServiceToEdit(s)}
+        >
+          <div className="font-bold text-lg">{s.title}</div>
+          <div className="text-sm text-gray-600">{s.category}</div>
+          <div className="text-sm text-gray-800">Цена: {s.price} сум</div>
+        </div>
+      ))}
     </div>
-  ))}
-</div>
+  </div>
 
-</div>
-            <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
-            <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
-            
-          </>
-        )}
-        {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
+  {selectedService ? (
+    <>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название" className="w-full border px-3 py-2 rounded mb-2" />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
+      <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
+      <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Изображения (можно несколько):</label>
+        <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
+        <div className="flex gap-2 flex-wrap">
+          {images.map((img, idx) => (
+            <div key={idx} className="relative">
+              <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+              <button
+                type="button"
+                onClick={() => handleRemoveImage(idx)}
+                className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                title="Удалить"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
-};
+      <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
+      <div className="flex gap-4">
+        <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить</button>
+        <button className="w-full bg-red-600 text-white py-2 rounded font-bold" onClick={() => handleDeleteService(selectedService.id)}>Удалить</button>
+      </div>
+    </>
+  ) : (
+    <>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название" className="w-full border px-3 py-2 rounded mb-2" />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание" className="w-full border px-3 py-2 rounded mb-2" />
+      <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" className="w-full border px-3 py-2 rounded mb-2" />
+      <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена" className="w-full border px-3 py-2 rounded mb-2" />
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Изображения (можно несколько):</label>
+        <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="mb-2" />
+        <div className="flex gap-2 flex-wrap">
+          {images.map((img, idx) => (
+            <div key={idx} className="relative">
+              <img src={img} alt={`preview-${idx}`} className="w-20 h-20 object-cover rounded" />
+              <button
+                type="button"
+                onClick={() => handleRemoveImage(idx)}
+                className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                title="Удалить"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <DayPicker mode="multiple" selected={availability} onSelect={setAvailability} className="border rounded-lg p-4 mb-4" />
+      <button className="w-full bg-orange-500 text-white py-2 rounded font-bold" onClick={handleSaveService}>Сохранить услугу</button>
+    </>
+  )}
+  {messageService && <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>}
+</div>
 
 export default Dashboard;
