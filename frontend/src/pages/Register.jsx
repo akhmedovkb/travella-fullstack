@@ -2,12 +2,11 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлено
 
 const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-
   const [formData, setFormData] = useState({
     name: "",
     type: "гид",
@@ -19,7 +18,6 @@ const Register = () => {
     password: ""
   });
 
-  const [errors, setErrors] = useState({});
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   let debounceTimeout = null;
 
@@ -57,8 +55,6 @@ const Register = () => {
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    setErrors((prev) => ({ ...prev, [name]: null }));
-
     if (name === "photo" && files.length > 0) {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -78,18 +74,6 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newErrors = {};
-    if (!formData.name) newErrors.name = t("register.required");
-    if (!formData.phone) newErrors.phone = t("register.required");
-    if (!formData.email) newErrors.email = t("register.required");
-    if (!formData.password) newErrors.password = t("register.required");
-    if (!formData.location) newErrors.location = t("register.required");
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
     try {
       await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
@@ -110,17 +94,17 @@ const Register = () => {
         onSubmit={handleSubmit}
         className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
       >
-        <div className="flex justify-end mb-4"><LanguageSelector /></div>
-
-        <h2 className="text-2xl font-bold text-center text-orange-600 mb-8">
-          {t("register.title")}
-        </h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-orange-600">
+            {t("register.title")}
+          </h2>
+          <LanguageSelector /> {/* Языковой переключатель */}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label>{t("register.name")}</label>
-            <input name="name" value={formData.name} onChange={handleChange} className="w-full border p-2 mb-1" />
-            {errors.name && <p className="text-red-500 text-sm mb-2">{errors.name}</p>}
+            <input name="name" required onChange={handleChange} className="w-full border p-2 mb-4" />
 
             <label>{t("register.type")}</label>
             <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2 mb-4">
@@ -132,14 +116,13 @@ const Register = () => {
             <input
               name="location"
               value={formData.location}
+              required
               onChange={handleChange}
               placeholder={t("register.location_placeholder")}
-              className="w-full border p-2 mb-1"
+              className="w-full border p-2 mb-4"
             />
-            {errors.location && <p className="text-red-500 text-sm mb-2">{errors.location}</p>}
-
             {locationSuggestions.length > 0 && (
-              <ul className="bg-white border max-h-40 overflow-y-auto z-10 relative mb-2">
+              <ul className="bg-white border mt-0 -mt-4 max-h-40 overflow-y-auto z-10 relative">
                 {locationSuggestions.map((city, index) => (
                   <li
                     key={index}
@@ -158,31 +141,28 @@ const Register = () => {
               type="file"
               accept="image/*"
               onChange={handleChange}
-              className="w-full border p-2 mb-4 file:bg-orange-600 file:text-white file:rounded file:px-4 file:py-1"
+              className="w-full border p-2 mb-4"
             />
           </div>
 
           <div>
             <label>{t("register.phone")}</label>
-            <input name="phone" value={formData.phone} onChange={handleChange} className="w-full border p-2 mb-1" />
-            {errors.phone && <p className="text-red-500 text-sm mb-2">{errors.phone}</p>}
+            <input name="phone" required onChange={handleChange} className="w-full border p-2 mb-4" />
 
             <label>{t("register.email")}</label>
-            <input name="email" type="email" value={formData.email} onChange={handleChange} className="w-full border p-2 mb-1" />
-            {errors.email && <p className="text-red-500 text-sm mb-2">{errors.email}</p>}
+            <input name="email" type="email" required onChange={handleChange} className="w-full border p-2 mb-4" />
 
             <label>{t("register.social")}</label>
-            <input name="social" value={formData.social} onChange={handleChange} className="w-full border p-2 mb-4" />
+            <input name="social" onChange={handleChange} className="w-full border p-2 mb-4" />
 
             <label>{t("register.password")}</label>
             <input
               name="password"
               type="password"
-              value={formData.password}
+              required
               onChange={handleChange}
-              className="w-full border p-2 mb-1 font-bold border-2 border-orange-500"
+              className="w-full border p-2 font-bold border-2 border-orange-500"
             />
-            {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
           </div>
         </div>
 
