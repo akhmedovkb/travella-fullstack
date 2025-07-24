@@ -37,18 +37,20 @@
     "button": "Kirish",
     "no_account": "Hisobingiz yo‘qmi? "
   },
-  "register": {
-    "title": "Ta'minotchini ro'yxatdan o'tkazish",
-    "name": "Nomi",
-    "phone": "Telefon",
-    "type": "Ta'minotchi turi",
-    "location_placeholder": "masalan, Samarqand, Buxoro",
-    "email": "Email",
-    "social": "Ijtimoiy tarmoq havolasi",
-    "photo": "Profil rasmi",
-    "password": "Parol",
-    "button": "Ro'yxatdan o'tish"
-  }
+ "register": {
+  "title": "Ta'minotchini ro'yxatdan o'tkazish",
+  "name": "Nomi",
+  "type": "Ta'minotchi turi",
+  "location_placeholder": "masalan, Samarqand, Buxoro",
+  "email": "Email",
+  "social": "Ijtimoiy tarmoq havolasi",
+  "photo": "Profil rasmi",
+  "phone": "Telefon",
+  "password": "Parol",
+  "button": "Ro'yxatdan o'tish",
+  "success": "Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!",
+  "error": "Ro'yxatdan o'tishda xatolik yuz berdi."
+}
 }
 
 
