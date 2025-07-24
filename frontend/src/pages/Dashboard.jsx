@@ -184,7 +184,10 @@ const Dashboard = () => {
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
-     {/* Левый блок */}
+    
+      <LanguageSelector />  {/* 🔥 Добавили языковой свитчер */}
+      
+      {/* Левый блок */}
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
   <h2 className="text-2xl font-bold mb-4">{t("provider_profile")}</h2>
   <div className="flex gap-4">
