@@ -36,7 +36,8 @@
     "email": "Email",
     "password": "Password",
     "button": "Login",
-    "no_account": "No account? "
+    "no_account": "No account? ",
+    "error": "email or password error!"
   },
   "register": {
   "title": "Provider Registration",
