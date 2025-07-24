@@ -5,6 +5,7 @@ import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 
 const Dashboard = () => {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
@@ -20,8 +21,7 @@ const Dashboard = () => {
   const [images, setImages] = useState([]);
   const handleRemoveImage = (index) => {
   setImages((prev) => prev.filter((_, i) => i !== index));
-  const { t } = useTranslation();
-
+  
 };
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -219,7 +219,7 @@ const handleImageUpload = (e) => {
              }}
              className="mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold w-full"
             >
-           Выйти
+           {t("logout")}
           </button>
           </div>
           <div className="w-1/2 space-y-3">
