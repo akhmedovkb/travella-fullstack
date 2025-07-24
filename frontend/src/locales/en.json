@@ -27,5 +27,6 @@
   "select_files": "Select files",
   "no_file_chosen": "No file chosen",
   "back": "← Back",
-  "save_service": "Save Service"
+  "save_service": "Save Service",
+  "delete": "Delete"
 }
