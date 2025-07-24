@@ -51,7 +51,10 @@
   "password": "Password",
   "button": "Register",
   "success": "Registration successful!",
-  "error": "Registration failed."
+  "error": "Registration failed.",
+  "select_file": "Choose File",
+  "no_file": "No file selected",
+  "file_chosen": "File selected"
 }
 
 }
