@@ -29,6 +29,16 @@
   "back": "← Назад",
   "save_service": "Сохранить услугу",
   "delete": "Удалить",
+  "no_changes": "Нет изменений для сохранения",
+  "profile_updated": "Профиль обновлён",
+  "update_error": "Ошибка обновления",
+  "password_changed": "Пароль обновлён",
+  "password_error": "Ошибка смены пароля",
+  "fill_all_fields": "Заполните все поля и выберите даты",
+  "service_updated": "Услуга обновлена",
+  "service_added": "Услуга добавлена",
+  "add_error": "Ошибка добавления",
+  "delete_error": "Ошибка удаления"
 
   "login": {
     "title": "Вход для поставщика",
