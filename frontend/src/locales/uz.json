@@ -27,5 +27,6 @@
   "select_files": "Fayllarni tanlash",
   "no_file_chosen": "Fayl tanlanmagan",
   "back": "← Orqaga",
-  "save_service": "Xizmatni saqlash"
+  "save_service": "Xizmatni saqlash",
+  "delete": "Oʻchirish"
 }
