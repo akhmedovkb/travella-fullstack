@@ -30,6 +30,9 @@ const Login = () => {
       <h2 className="text-2xl font-bold text-center mb-6 text-orange-500">
         {t("login.title")}
       </h2>
+      
+      <LanguageSelector />
+
       <form onSubmit={handleLogin}>
         <div className="mb-4">
           <label className="block text-gray-700">{t("login.email")}</label>
