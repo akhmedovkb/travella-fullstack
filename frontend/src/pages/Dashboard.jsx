@@ -10,6 +10,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
+  const [newAddress, setNewAddress] = useState("");
   const [newCertificate, setNewCertificate] = useState(null);
   const [newLocation, setNewLocation] = useState("");
   const [newSocial, setNewSocial] = useState("");
@@ -39,6 +40,7 @@ const Dashboard = () => {
         setNewLocation(res.data.location);
         setNewSocial(res.data.social);
         setNewPhone(res.data.phone);
+        setNewAddress(res.data.address);
       })
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
@@ -77,7 +79,7 @@ const Dashboard = () => {
     if (newPhone !== profile.phone) updated.phone = newPhone;
     if (newPhoto) updated.photo = newPhoto;
     if (newCertificate) updated.certificate = newCertificate;
-
+    if (newAddress !== profile.address) updated.address = newAddress;
     if (Object.keys(updated).length === 0) {
       setMessageProfile(t("no_changes"));
       return;
@@ -215,6 +217,40 @@ const Dashboard = () => {
           {profile.phone || t("not_specified")}
         </div>
       )}
+
+<h3 className="font-semibold text-lg mb-2">{t("address")}</h3>
+{isEditing ? (
+  <input
+    type="text"
+    placeholder={t("address")}
+    value={newAddress}
+    onChange={(e) => setNewAddress(e.target.value)}
+    className="border px-3 py-2 mb-2 rounded w-full"
+  />
+) : (
+  <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+    {profile.address || t("not_specified")}
+  </div>
+)}
+
+{/* Карта (только если адрес есть) */}
+{profile.address && !isEditing && (
+  <div className="w-full mb-4">
+    <iframe
+      title="provider-map"
+      width="100%"
+      height="200"
+      frameBorder="0"
+      scrolling="no"
+      marginHeight="0"
+      marginWidth="0"
+      className="rounded"
+      src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+    ></iframe>
+  </div>
+)}
+
+      
       <button
         onClick={() => {
           localStorage.removeItem("token");
