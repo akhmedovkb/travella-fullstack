@@ -198,18 +198,18 @@ const handleImageUpload = (e) => {
               />
               {isEditing && <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />}
             </div>
-            <h3 className="font-semibold text-lg mt-6 mb-2">Телефон</h3>
+            <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
             {isEditing ? (
               <input
                 type="text"
-                placeholder="Телефон"
+                placeholder={t("phone")}
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
                 className="border px-3 py-2 mb-2 rounded w-full"
               />
             ) : (
               <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-                {profile.phone || "Не указано"}
+                {profile.phone || t("not_specified")}
               </div>
             )}
             <button
