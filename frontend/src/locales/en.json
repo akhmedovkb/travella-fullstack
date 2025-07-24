@@ -29,6 +29,16 @@
   "back": "← Back",
   "save_service": "Save Service",
   "delete": "Delete",
+  "no_changes": "No changes to save",
+  "profile_updated": "Profile updated",
+  "update_error": "Update failed",
+  "password_changed": "Password changed",
+  "password_error": "Password change failed",
+  "fill_all_fields": "Please fill in all fields and select dates",
+  "service_updated": "Service updated",
+  "service_added": "Service added",
+  "add_error": "Failed to add service",
+  "delete_error": "Failed to delete service"
 
 
   "login": {
