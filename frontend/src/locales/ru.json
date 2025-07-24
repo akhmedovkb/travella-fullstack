@@ -27,5 +27,6 @@
   "select_files": "Выбрать файлы",
   "no_file_chosen": "Файл не выбран",
   "back": "← Назад",
-  "save_service": "Сохранить услугу"
+  "save_service": "Сохранить услугу",
+  "delete": "Удалить"
 }
