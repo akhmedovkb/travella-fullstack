@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { useTranslation } from "react-i18next";
 
 const Dashboard = () => {
   const [profile, setProfile] = useState({});
@@ -19,6 +20,8 @@ const Dashboard = () => {
   const [images, setImages] = useState([]);
   const handleRemoveImage = (index) => {
   setImages((prev) => prev.filter((_, i) => i !== index));
+  const { t } = useTranslation();
+
 };
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
