@@ -40,7 +40,7 @@
   "add_error": "Ошибка добавления",
   "delete_error": "Ошибка удаления",
   "choose_files": "Выбрать файлы",
-  "no_files_chosen": "Файлы не выбраны",
+  "no_files_selected": "Файлы не выбраны",
 
 
   "login": {
