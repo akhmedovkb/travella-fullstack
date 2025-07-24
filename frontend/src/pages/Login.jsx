@@ -1,92 +1,64 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 const Login = () => {
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const { t } = useTranslation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(
+      const response = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/login`,
-        formData
+        { email, password }
       );
-      alert("Успешный вход");
-      localStorage.setItem("token", res.data.token);
-      window.location.href = "/dashboard";
+      localStorage.setItem("token", response.data.token);
+      navigate("/dashboard");
     } catch (err) {
-      alert(err.response?.data?.message || "Ошибка входа");
+      setError("Неверный email или пароль");
     }
   };
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      minHeight: "100vh",
-      backgroundColor: "#F1F1F1"
-    }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          backgroundColor: "#FFFFFF",
-          padding: "2rem",
-          borderRadius: "10px",
-          width: "100%",
-          maxWidth: "500px",
-          boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)"
-        }}
-      >
-        <h2 style={{ color: "#FF5722", textAlign: "center", marginBottom: "2rem" }}>
-          Вход для поставщика
-        </h2>
-
-        <div style={{ marginBottom: "1.5rem" }}>
-          <label htmlFor="email">Email</label>
+    <div className="max-w-md mx-auto bg-white p-8 rounded shadow-md mt-10">
+      <h2 className="text-2xl font-bold text-center mb-6 text-orange-500">
+        {t("login.title")}
+      </h2>
+      <form onSubmit={handleLogin}>
+        <div className="mb-4">
+          <label className="block text-gray-700">{t("login.email")}</label>
           <input
-            name="email"
             type="email"
-            required
-            onChange={handleChange}
-            className="w-full border p-2"
+            className="w-full border px-3 py-2 rounded"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-
-        <div style={{ marginBottom: "1.5rem" }}>
-          <label htmlFor="password">Пароль</label>
+        <div className="mb-4">
+          <label className="block text-gray-700">{t("login.password")}</label>
           <input
-            name="password"
             type="password"
-            required
-            onChange={handleChange}
-            className="w-full border p-2"
+            className="w-full border px-3 py-2 rounded"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-
-        <button type="submit" style={{
-          backgroundColor: "#FF5722",
-          color: "#FFF",
-          padding: "0.75rem 1.5rem",
-          border: "none",
-          borderRadius: "5px",
-          width: "100%",
-          fontWeight: "bold",
-          marginBottom: "1rem"
-        }}>
-          Войти
+        {error && <p className="text-red-500 mb-2">{error}</p>}
+        <button
+          type="submit"
+          className="w-full bg-orange-500 text-white py-2 rounded hover:bg-orange-600"
+        >
+          {t("login.button")}
         </button>
-
-        <div style={{ textAlign: "center" }}>
-          <a href="/register" style={{ color: "#FF5722", fontWeight: "600" }}>
-            Нет аккаунта? Зарегистрируйтесь
-          </a>
-        </div>
       </form>
+      <p className="mt-4 text-center text-sm text-red-600">
+        {t("login.no_account")} <Link to="/register" className="underline">{t("register.button")}</Link>
+      </p>
     </div>
   );
 };
