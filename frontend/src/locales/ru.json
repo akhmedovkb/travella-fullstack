@@ -35,7 +35,8 @@
     "email": "Email",
     "password": "Пароль",
     "button": "Войти",
-    "no_account": "Нет аккаунта?"
+    "no_account": "Нет аккаунта?",
+    "error": "Неверный email или пароль"
   },
   "register": {
   "title": "Регистрация поставщика",
