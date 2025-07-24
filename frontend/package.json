@@ -14,7 +14,7 @@
     "react-day-picker": "^8.0.0"
     "i18next": "^23.6.3",
     "react-i18next": "^13.2.2",
-    "i18next-browser-languagedetector": "^7.0.1",
+    "i18next-browser-languagedetector": "^7.0.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
