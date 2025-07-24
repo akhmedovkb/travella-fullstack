@@ -5,7 +5,7 @@
   "logout": "Logout",
   "name": "Name",
   "type": "Provider Type",
-  "location": "Location",
+  "location": "Activity region",
   "social": "Social Media Link",
   "certificate": "Certificate",
   "view_certificate": "View Certificate",
