@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлено
 
 const Register = () => {
   const { t } = useTranslation();
@@ -93,9 +94,12 @@ const Register = () => {
         onSubmit={handleSubmit}
         className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
       >
-        <h2 className="text-2xl font-bold text-center text-orange-600 mb-8">
-          {t("register.title")}
-        </h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-orange-600">
+            {t("register.title")}
+          </h2>
+          <LanguageSelector /> {/* Языковой переключатель */}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
