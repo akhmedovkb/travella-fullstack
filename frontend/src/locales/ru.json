@@ -28,9 +28,8 @@
   "no_file_chosen": "Файл не выбран",
   "back": "← Назад",
   "save_service": "Сохранить услугу",
-  "delete": "Удалить"
-}
-{
+  "delete": "Удалить",
+
   "login": {
     "title": "Вход для поставщика",
     "email": "Email",
