@@ -38,7 +38,7 @@
   "service_updated": "Услуга обновлена",
   "service_added": "Услуга добавлена",
   "add_error": "Ошибка добавления",
-  "delete_error": "Ошибка удаления"
+  "delete_error": "Ошибка удаления",
 
   "login": {
     "title": "Вход для поставщика",
