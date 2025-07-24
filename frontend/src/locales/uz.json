@@ -28,5 +28,28 @@
   "no_file_chosen": "Fayl tanlanmagan",
   "back": "← Orqaga",
   "save_service": "Xizmatni saqlash",
-  "delete": "Oʻchirish"
+  "delete": "Oʻchirish",
+
+  {
+  "login": {
+    "title": "Ta'minotchilar uchun kirish",
+    "email": "Email",
+    "password": "Parol",
+    "button": "Kirish",
+    "no_account": "Hisobingiz yo‘qmi? Ro‘yxatdan o‘ting"
+  },
+  "register": {
+    "title": "Ta'minotchini ro'yxatdan o'tkazish",
+    "name": "Nomi",
+    "phone": "Telefon",
+    "type": "Ta'minotchi turi",
+    "location_placeholder": "masalan, Samarqand, Buxoro",
+    "email": "Email",
+    "social": "Ijtimoiy tarmoq havolasi",
+    "photo": "Profil rasmi",
+    "password": "Parol",
+    "button": "Ro'yxatdan o'tish"
+  }
+}
+
 }
