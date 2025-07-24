@@ -54,7 +54,8 @@
   "error": "Ro'yxatdan o'tishda xatolik yuz berdi.",
   "select_file": "Faylni tanlash",
   "no_file": "Fayl tanlanmagan",
-  "file_chosen": "Fayl tanlandi"
+  "file_chosen": "Fayl tanlandi",
+  "required": "Iltimos, bu maydonni to‘ldiring"
 }
 }
 
