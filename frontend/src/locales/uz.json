@@ -35,7 +35,7 @@
     "email": "Email",
     "password": "Parol",
     "button": "Kirish",
-    "no_account": "Hisobingiz yo‘qmi? ",
+    "no_account": "Akkauntingiz yo‘qmi? ",
     "error": "email yoki parol xato!"
 
   },
