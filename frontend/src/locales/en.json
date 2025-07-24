@@ -38,7 +38,7 @@
   "service_updated": "Service updated",
   "service_added": "Service added",
   "add_error": "Failed to add service",
-  "delete_error": "Failed to delete service"
+  "delete_error": "Failed to delete service",
 
 
   "login": {
