@@ -148,14 +148,25 @@ const Register = () => {
               </ul>
             )}
 
-            <label>{t("register.photo")}</label>
-            <input
-              name="photo"
-              type="file"
-              accept="image/*"
-              onChange={handleChange}
-              className="w-full border p-2 mb-4"
-            />
+            <div className="mb-4">
+  <label className="block font-medium mb-1">{t("register.photo")}</label>
+  <div className="flex items-center gap-4">
+    <label className="bg-orange-500 text-white py-2 px-4 rounded cursor-pointer hover:bg-orange-600">
+      {t("register.select_file")}
+      <input
+        type="file"
+        name="photo"
+        accept="image/*"
+        onChange={handleChange}
+        className="hidden"
+      />
+    </label>
+    <span className="text-sm text-gray-600">
+      {formData.photo ? t("register.file_chosen") : t("register.no_file")}
+    </span>
+  </div>
+</div>
+
           </div>
 
           <div>
