@@ -356,14 +356,25 @@ const Dashboard = () => {
         className="w-full border px-3 py-2 rounded mb-2"
       />
       <div className="mb-4">
-        <label className="block font-medium mb-1">{t("upload_images")}</label>
-        <input
+       <label className="block font-medium mb-1">{t("upload_images")}</label>
+       <div className="mb-2">
+        <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
+        {t("choose_files")}
+         <input
           type="file"
           accept="image/*"
           multiple
           onChange={handleImageUpload}
-          className="mb-2"
-        />
+          className="hidden"
+         />
+        </label>
+        <div className="mt-1 text-sm text-gray-600">
+        {images.length > 0
+        ? t("files_selected", { count: images.length })
+        : t("no_files_selected")}
+        </div>
+       </div>
+
         <div className="flex gap-2 flex-wrap">
           {images.map((img, idx) => (
             <div key={idx} className="relative">
