@@ -24,7 +24,7 @@ const registerProvider = async (req, res) => {
 
     const newProvider = await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, name, email`,
       [name, email, hashedPassword, type, [location], phone, social, photo, address]
     );
