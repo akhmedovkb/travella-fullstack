@@ -1,10 +1,10 @@
-// Register.jsx
-
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 const Register = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
@@ -18,7 +18,6 @@ const Register = () => {
   });
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
-
   let debounceTimeout = null;
 
   const fetchCities = async (query) => {
@@ -40,7 +39,6 @@ const Register = () => {
           },
         }
       );
-
       const cities = response.data.data.map((city) => city.city);
       setLocationSuggestions(cities);
     } catch (err) {
@@ -64,7 +62,6 @@ const Register = () => {
       reader.readAsDataURL(files[0]);
     } else if (name === "location") {
       setFormData((prev) => ({ ...prev, [name]: value }));
-
       if (debounceTimeout) clearTimeout(debounceTimeout);
       debounceTimeout = setTimeout(() => {
         fetchCities(value);
@@ -80,168 +77,96 @@ const Register = () => {
       await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
         formData,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+        { headers: { "Content-Type": "application/json" } }
       );
-      alert("Регистрация прошла успешно!");
+      alert(t("register.success"));
       navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error.response?.data || error.message);
-      alert("Ошибка при регистрации.");
+      alert(t("register.error"));
     }
   };
 
   return (
-    <div
-      style={{
-        fontFamily: "Manrope, sans-serif",
-        backgroundColor: "#F1F1F1",
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: "2rem"
-      }}
-    >
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
       <form
         onSubmit={handleSubmit}
-        style={{
-          backgroundColor: "#FFFFFF",
-          padding: "2.5rem",
-          borderRadius: "10px",
-          width: "100%",
-          maxWidth: "900px",
-          boxShadow: "0 0 20px rgba(0, 0, 0, 0.1)"
-        }}
+        className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
       >
-        <h2
-          style={{
-            fontWeight: "bold",
-            fontSize: "1.8rem",
-            color: "#FF5722",
-            textAlign: "center",
-            marginBottom: "2rem",
-            fontFamily: "Manrope Bold, sans-serif"
-          }}
-        >
-          Регистрация поставщика
+        <h2 className="text-2xl font-bold text-center text-orange-600 mb-8">
+          {t("register.title")}
         </h2>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Название</label>
-              <input name="name" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Тип поставщика</label>
-              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
-                <option value="гид">Гид</option>
-                <option value="транспорт">Транспорт</option>
-              </select>
-            </div>
-            <div style={{ marginBottom: "1.5rem", position: "relative" }}>
-              <label>Локация</label>
-              <input
-                name="location"
-                value={formData.location}
-                required
-                onChange={handleChange}
-                placeholder="например, Самарканд, Бухара"
-                className="w-full border p-2"
-              />
-              {locationSuggestions.length > 0 && (
-                <ul
-                  style={{
-                    position: "absolute",
-                    backgroundColor: "#fff",
-                    border: "1px solid #ccc",
-                    borderTop: "none",
-                    maxHeight: "150px",
-                    overflowY: "auto",
-                    zIndex: 1000,
-                    width: "100%",
-                    listStyle: "none",
-                    margin: 0,
-                    padding: "0",
-                  }}
-                >
-                  {locationSuggestions.map((city, index) => (
-                    <li
-                      key={index}
-                      onClick={() => handleLocationSelect(city)}
-                      style={{
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        borderBottom: "1px solid #eee",
-                      }}
-                    >
-                      {city}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Фото профиля</label>
-              <input
-                name="photo"
-                type="file"
-                accept="image/*"
-                onChange={handleChange}
-                className="w-full border p-2"
-              />
-            </div>
+            <label>{t("register.name")}</label>
+            <input name="name" required onChange={handleChange} className="w-full border p-2 mb-4" />
+
+            <label>{t("register.type")}</label>
+            <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2 mb-4">
+              <option value="гид">{t("guide")}</option>
+              <option value="транспорт">{t("transport")}</option>
+            </select>
+
+            <label>{t("location")}</label>
+            <input
+              name="location"
+              value={formData.location}
+              required
+              onChange={handleChange}
+              placeholder={t("register.location_placeholder")}
+              className="w-full border p-2 mb-4"
+            />
+            {locationSuggestions.length > 0 && (
+              <ul className="bg-white border mt-0 -mt-4 max-h-40 overflow-y-auto z-10 relative">
+                {locationSuggestions.map((city, index) => (
+                  <li
+                    key={index}
+                    onClick={() => handleLocationSelect(city)}
+                    className="p-2 border-b cursor-pointer hover:bg-gray-100"
+                  >
+                    {city}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <label>{t("register.photo")}</label>
+            <input
+              name="photo"
+              type="file"
+              accept="image/*"
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            />
           </div>
 
           <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Телефон</label>
-              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Email</label>
-              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Ссылка на соцсети</label>
-              <input name="social" onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Пароль</label>
-              <input
-                name="password"
-                type="password"
-                required
-                onChange={handleChange}
-                className="w-full border p-2"
-                style={{
-                  border: "2px solid #FF5722",
-                  fontWeight: "bold"
-                }}
-              />
-            </div>
+            <label>{t("register.phone")}</label>
+            <input name="phone" required onChange={handleChange} className="w-full border p-2 mb-4" />
+
+            <label>{t("register.email")}</label>
+            <input name="email" type="email" required onChange={handleChange} className="w-full border p-2 mb-4" />
+
+            <label>{t("register.social")}</label>
+            <input name="social" onChange={handleChange} className="w-full border p-2 mb-4" />
+
+            <label>{t("register.password")}</label>
+            <input
+              name="password"
+              type="password"
+              required
+              onChange={handleChange}
+              className="w-full border p-2 font-bold border-2 border-orange-500"
+            />
           </div>
         </div>
 
         <button
           type="submit"
-          style={{
-            backgroundColor: "#FF5722",
-            color: "#FFF",
-            padding: "0.75rem 1.5rem",
-            border: "none",
-            borderRadius: "5px",
-            width: "100%",
-            fontWeight: "bold",
-            marginTop: "1.5rem",
-            fontFamily: "Manrope Bold, sans-serif"
-          }}
+          className="mt-6 w-full bg-orange-600 text-white py-3 rounded font-bold"
         >
-          Зарегистрироваться
+          {t("register.button")}
         </button>
       </form>
     </div>
