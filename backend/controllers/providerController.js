@@ -26,7 +26,7 @@ const registerProvider = async (req, res) => {
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, name, email`,
-      [name, email, hashedPassword, type, [location], phone, social, photo, address]
+      [name, email, hashedPassword, type, location, phone, social, photo, address]
     );
 
     const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
