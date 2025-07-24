@@ -29,7 +29,17 @@
   "back": "← Orqaga",
   "save_service": "Xizmatni saqlash",
   "delete": "Oʻchirish",
-
+  "no_changes": "Saqlash uchun o‘zgarishlar yo‘q",
+  "profile_updated": "Profil yangilandi",
+  "update_error": "Yangilashda xatolik",
+  "password_changed": "Parol o‘zgartirildi",
+  "password_error": "Parolni o‘zgartirishda xatolik",
+  "fill_all_fields": "Iltimos, barcha maydonlarni to‘ldiring va sanalarni tanlang",
+  "service_updated": "Xizmat yangilandi",
+  "service_added": "Xizmat qo‘shildi",
+  "add_error": "Xizmatni qo‘shishda xatolik",
+  "delete_error": "Xizmatni o‘chirishda xatolik",
+  
   "login": {
     "title": "Ta'minotchilar uchun kirish",
     "email": "Email",
