@@ -201,7 +201,16 @@ const Dashboard = () => {
           className="w-24 h-24 rounded-full object-cover mb-2"
           alt="Фото"
         />
-        {isEditing && <input type="file" onChange={handlePhotoChange} className="text-sm mb-2" />}
+        {isEditing && <label className="inline-block bg-orange-500 text-white px-3 py-1 rounded cursor-pointer text-sm mt-2">
+  {t("choose_files")}
+  <input
+    type="file"
+    accept="image/*"
+    onChange={handlePhotoChange}
+    className="hidden"
+  />
+</label>
+}
       </div>
       <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
       {isEditing ? (
@@ -289,7 +298,16 @@ const Dashboard = () => {
       <div>
         <label className="block font-medium">{t("certificate")}</label>
         {isEditing ? (
-          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="border px-3 py-2 rounded w-full" />
+          <label className="inline-block bg-orange-500 text-white px-3 py-2 rounded cursor-pointer text-sm">
+  {t("choose_files")}
+  <input
+    type="file"
+    accept=".pdf,.jpg,.jpeg,.png"
+    onChange={handleCertificateChange}
+    className="hidden"
+  />
+</label>
+
         ) : profile.certificate ? (
           <a href={profile.certificate} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
             {t("view_certificate")}
