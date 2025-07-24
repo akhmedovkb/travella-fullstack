@@ -3,6 +3,7 @@ import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
+import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 
 const Dashboard = () => {
   const { t } = useTranslation();
