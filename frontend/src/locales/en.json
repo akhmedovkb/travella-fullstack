@@ -36,7 +36,7 @@
     "email": "Email",
     "password": "Password",
     "button": "Login",
-    "no_account": "No account? Register now"
+    "no_account": "No account? "
   },
   "register": {
     "title": "Supplier Registration",
