@@ -21,7 +21,7 @@ const Login = () => {
       localStorage.setItem("token", response.data.token);
       navigate("/dashboard");
     } catch (err) {
-      setError("Неверный email или пароль");
+      setError(t("login.error"));
     }
   };
 
