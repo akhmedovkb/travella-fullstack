@@ -1,0 +1,22 @@
+{
+  "profile_title": "Provider Profile",
+  "logout": "Logout",
+  "name": "Name",
+  "type": "Provider Type",
+  "location": "Location",
+  "social": "Social Media Link",
+  "certificate": "Certificate",
+  "view_certificate": "View Certificate",
+  "edit": "Edit",
+  "save": "Save",
+  "change_password": "Change Password",
+  "new_password": "New Password",
+  "services": "Services",
+  "price": "Price",
+  "back": "← Back",
+  "phone": "Phone",
+  "add_service_hint": "To create a new service, fill in all fields below and click on",
+  "save_service": "Save Service",
+  "delete": "Delete",
+  "upload_images": "Images (you can upload several):"
+}
