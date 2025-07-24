@@ -35,7 +35,7 @@
     "email": "Email",
     "password": "Parol",
     "button": "Kirish",
-    "no_account": "Hisobingiz yo‘qmi? Ro‘yxatdan o‘ting"
+    "no_account": "Hisobingiz yo‘qmi? "
   },
   "register": {
     "title": "Ta'minotchini ro'yxatdan o'tkazish",
