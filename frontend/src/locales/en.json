@@ -1,6 +1,7 @@
 {
   "provider_profile": "Provider Profile",
   "phone": "Phone",
+  "address": "Address",
   "logout": "Logout",
   "name": "Name",
   "type": "Provider Type",
