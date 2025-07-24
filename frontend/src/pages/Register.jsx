@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлено
+import i18n from "../i18n";
+import LanguageSelector from "../components/LanguageSelector";
 
 const Register = () => {
   const { t } = useTranslation();
@@ -98,16 +99,27 @@ const Register = () => {
           <h2 className="text-2xl font-bold text-orange-600">
             {t("register.title")}
           </h2>
-          <LanguageSelector /> {/* Языковой переключатель */}
+          <LanguageSelector />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label>{t("register.name")}</label>
-            <input name="name" required onChange={handleChange} className="w-full border p-2 mb-4" />
+            <input
+              name="name"
+              required
+              lang={i18n.language}
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            />
 
             <label>{t("register.type")}</label>
-            <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2 mb-4">
+            <select
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            >
               <option value="гид">{t("guide")}</option>
               <option value="транспорт">{t("transport")}</option>
             </select>
@@ -117,6 +129,7 @@ const Register = () => {
               name="location"
               value={formData.location}
               required
+              lang={i18n.language}
               onChange={handleChange}
               placeholder={t("register.location_placeholder")}
               className="w-full border p-2 mb-4"
@@ -147,19 +160,37 @@ const Register = () => {
 
           <div>
             <label>{t("register.phone")}</label>
-            <input name="phone" required onChange={handleChange} className="w-full border p-2 mb-4" />
+            <input
+              name="phone"
+              required
+              lang={i18n.language}
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            />
 
             <label>{t("register.email")}</label>
-            <input name="email" type="email" required onChange={handleChange} className="w-full border p-2 mb-4" />
+            <input
+              name="email"
+              type="email"
+              required
+              lang={i18n.language}
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            />
 
             <label>{t("register.social")}</label>
-            <input name="social" onChange={handleChange} className="w-full border p-2 mb-4" />
+            <input
+              name="social"
+              onChange={handleChange}
+              className="w-full border p-2 mb-4"
+            />
 
             <label>{t("register.password")}</label>
             <input
               name="password"
               type="password"
               required
+              lang={i18n.language}
               onChange={handleChange}
               className="w-full border p-2 font-bold border-2 border-orange-500"
             />
