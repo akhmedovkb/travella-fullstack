@@ -5,7 +5,7 @@ const pool = require("../db");
 const registerProvider = async (req, res) => {
   try {
     console.log("📦 Получено тело запроса:", req.body);
-    const { name, email, password, type, location, phone, social, photo } = req.body;
+    const { name, email, password, type, location, phone, social, photo, address } = req.body;
 
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
@@ -23,10 +23,10 @@ const registerProvider = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newProvider = await pool.query(
-      `INSERT INTO providers (name, email, password, type, location, phone, social, photo)
+      `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, name, email`,
-      [name, email, hashedPassword, type, [location], phone, social, photo]
+      [name, email, hashedPassword, type, [location], phone, social, photo, address]
     );
 
     const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
@@ -81,7 +81,7 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const result = await pool.query(
-      "SELECT id, name, email, type, location, phone, social, photo, certificate FROM providers WHERE id = $1",
+      "SELECT id, name, email, type, location, phone, social, photo, certificate, address FROM providers WHERE id = $1",
       [id]
     );
 
@@ -116,14 +116,15 @@ const updateProviderProfile = async (req, res) => {
      social: req.body.social ?? old.social,
      photo: req.body.photo ?? old.photo,
      certificate: req.body.certificate ?? old.certificate,
+     address: req.body.address ?? old.address
     };
 
 
     await pool.query(
      `UPDATE providers
-      SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6
-      WHERE id = $7`,
-      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, id]
+      SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6, address = $7
+      WHERE id = $8`,
+      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, updated.address, id]
     );
 
     res.status(200).json({ message: "Профиль обновлён успешно" });
