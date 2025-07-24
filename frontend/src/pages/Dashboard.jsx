@@ -20,9 +20,8 @@ const Dashboard = () => {
   const [messageService, setMessageService] = useState("");
   const [images, setImages] = useState([]);
   const handleRemoveImage = (index) => {
-  setImages((prev) => prev.filter((_, i) => i !== index));
-  
-};
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -79,7 +78,7 @@ const Dashboard = () => {
     if (newCertificate) updated.certificate = newCertificate;
 
     if (Object.keys(updated).length === 0) {
-      setMessageProfile("Нет изменений для сохранения");
+      setMessageProfile(t("no_changes"));
       return;
     }
 
@@ -88,9 +87,9 @@ const Dashboard = () => {
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
-        setMessageProfile("Профиль обновлён");
+        setMessageProfile(t("profile_updated"));
       })
-      .catch(() => setMessageProfile("Ошибка обновления"));
+      .catch(() => setMessageProfile(t("update_error")));
   };
 
   const handleChangePassword = () => {
@@ -101,14 +100,14 @@ const Dashboard = () => {
       )
       .then(() => {
         setNewPassword("");
-        setMessageProfile("Пароль обновлён");
+        setMessageProfile(t("password_changed"));
       })
-      .catch(() => setMessageProfile("Ошибка смены пароля"));
+      .catch(() => setMessageProfile(t("password_error")));
   };
 
   const handleSaveService = () => {
     if (!title || !description || !category || !price || availability.length === 0) {
-      setMessageService("Заполните все поля и выберите даты");
+      setMessageService(t("fill_all_fields"));
       return;
     }
 
@@ -128,9 +127,9 @@ const Dashboard = () => {
           setPrice("");
           setAvailability([]);
           setImages([]);
-          setMessageService("Услуга обновлена");
+          setMessageService(t("service_updated"));
         })
-        .catch(() => setMessageService("Ошибка обновления"));
+        .catch(() => setMessageService(t("update_error")));
     } else {
       axios
         .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
@@ -141,9 +140,9 @@ const Dashboard = () => {
           setCategory("");
           setPrice("");
           setAvailability([]);
-          setMessageService("Услуга добавлена");
+          setMessageService(t("service_added"));
         })
-        .catch(() => setMessageService("Ошибка добавления"));
+        .catch(() => setMessageService(t("add_error")));
     }
   };
 
@@ -154,7 +153,7 @@ const Dashboard = () => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
       })
-      .catch(() => setMessageService("Ошибка удаления"));
+      .catch(() => setMessageService(t("delete_error")));
   };
 
   const loadServiceToEdit = (service) => {
@@ -168,20 +167,20 @@ const Dashboard = () => {
     setImages(service.images || []);
   };
 
-const handleImageUpload = (e) => {
-  const files = Array.from(e.target.files);
-  const readers = files.map(file => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(file);
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const readers = files.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
     });
-  });
 
-  Promise.all(readers).then((base64Images) => {
-    setImages((prev) => [...prev, ...base64Images]);
-  });
-};
+    Promise.all(readers).then((base64Images) => {
+      setImages((prev) => [...prev, ...base64Images]);
+    });
+  };
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">
