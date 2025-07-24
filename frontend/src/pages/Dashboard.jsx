@@ -250,7 +250,6 @@ const Dashboard = () => {
   </div>
 )}
 
-      
       <button
         onClick={() => {
           localStorage.removeItem("token");
