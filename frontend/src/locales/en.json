@@ -39,16 +39,19 @@
     "no_account": "No account? "
   },
   "register": {
-    "title": "Supplier Registration",
-    "name": "Name",
-    "phone": "Phone",
-    "type": "Supplier Type",
-    "location_placeholder": "e.g. Samarkand, Bukhara",
-    "email": "Email",
-    "social": "Social media link",
-    "photo": "Profile photo",
-    "password": "Password",
-    "button": "Register"
-  }
+  "title": "Provider Registration",
+  "name": "Name",
+  "type": "Provider Type",
+  "location_placeholder": "e.g. Samarkand, Bukhara",
+  "email": "Email",
+  "social": "Social media link",
+  "photo": "Profile photo",
+  "phone": "Phone",
+  "password": "Password",
+  "button": "Register",
+  "success": "Registration successful!",
+  "error": "Registration failed."
+}
+
 }
 
