@@ -40,7 +40,7 @@
   "add_error": "Failed to add service",
   "delete_error": "Failed to delete service",
   "choose_files": "Choose files",
-  "no_files_chosen": "No files chosen",
+  "no_files_selected": "No files selected",
 
 
   "login": {
