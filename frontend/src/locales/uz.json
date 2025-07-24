@@ -39,6 +39,9 @@
   "service_added": "Xizmat qo‘shildi",
   "add_error": "Xizmatni qo‘shishda xatolik",
   "delete_error": "Xizmatni o‘chirishda xatolik",
+  "choose_files": "Fayllarni tanlash",
+  "no_files_chosen": "Fayl tanlanmagan"
+
   
   "login": {
     "title": "Ta'minotchilar uchun kirish",
