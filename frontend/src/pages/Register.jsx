@@ -1,246 +1,88 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 const Register = () => {
+  const { t } = useTranslation("register");
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
+
+  const [form, setForm] = useState({
     name: "",
-    type: "гид",
-    location: "",
-    photo: "",
     phone: "",
     email: "",
+    password: "",
+    type: "Гид",
+    location: "",
     social: "",
-    password: ""
+    photo: "",
   });
-
-  const [locationSuggestions, setLocationSuggestions] = useState([]);
-
-  let debounceTimeout = null;
-
-  const fetchCities = async (query) => {
-    if (!query) return setLocationSuggestions([]);
-
-    try {
-      const response = await axios.get(
-        `https://wft-geo-db.p.rapidapi.com/v1/geo/cities`,
-        {
-          params: {
-            namePrefix: query,
-            limit: 5,
-            sort: "-population",
-            countryIds: "UZ"
-          },
-          headers: {
-            "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
-            "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
-          },
-        }
-      );
-
-      const cities = response.data.data.map((city) => city.city);
-      setLocationSuggestions(cities);
-    } catch (err) {
-      console.error("Ошибка автоподсказки:", err);
-      setLocationSuggestions([]);
-    }
-  };
-
-  const handleLocationSelect = (city) => {
-    setFormData((prev) => ({ ...prev, location: city }));
-    setLocationSuggestions([]);
-  };
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    if (name === "photo" && files.length > 0) {
+    if (name === "photo") {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, photo: reader.result }));
+        setForm((prev) => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(files[0]);
-    } else if (name === "location") {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-
-      if (debounceTimeout) clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => {
-        fetchCities(value);
-      }, 300);
     } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      alert("Регистрация прошла успешно!");
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, form);
       navigate("/login");
-    } catch (error) {
-      console.error("Ошибка регистрации:", error.response?.data || error.message);
-      alert("Ошибка при регистрации.");
+    } catch (err) {
+      alert("Ошибка регистрации");
     }
   };
 
   return (
-    <div
-      style={{
-        fontFamily: "Manrope, sans-serif",
-        backgroundColor: "#F1F1F1",
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: "2rem"
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          backgroundColor: "#FFFFFF",
-          padding: "2.5rem",
-          borderRadius: "10px",
-          width: "100%",
-          maxWidth: "900px",
-          boxShadow: "0 0 20px rgba(0, 0, 0, 0.1)"
-        }}
-      >
-        <h2
-          style={{
-            fontWeight: "bold",
-            fontSize: "1.8rem",
-            color: "#FF5722",
-            textAlign: "center",
-            marginBottom: "2rem",
-            fontFamily: "Manrope Bold, sans-serif"
-          }}
-        >
-          Регистрация поставщика
-        </h2>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Название</label>
-              <input name="name" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Тип поставщика</label>
-              <select name="type" value={formData.type} onChange={handleChange} className="w-full border p-2">
-                <option value="гид">Гид</option>
-                <option value="транспорт">Транспорт</option>
-              </select>
-            </div>
-            <div style={{ marginBottom: "1.5rem", position: "relative" }}>
-              <label>Локация</label>
-              <input
-                name="location"
-                value={formData.location}
-                required
-                onChange={handleChange}
-                placeholder="например, Самарканд, Бухара"
-                className="w-full border p-2"
-              />
-              {locationSuggestions.length > 0 && (
-                <ul
-                  style={{
-                    position: "absolute",
-                    backgroundColor: "#fff",
-                    border: "1px solid #ccc",
-                    borderTop: "none",
-                    maxHeight: "150px",
-                    overflowY: "auto",
-                    zIndex: 1000,
-                    width: "100%",
-                    listStyle: "none",
-                    margin: 0,
-                    padding: "0",
-                  }}
-                >
-                  {locationSuggestions.map((city, index) => (
-                    <li
-                      key={index}
-                      onClick={() => handleLocationSelect(city)}
-                      style={{
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        borderBottom: "1px solid #eee",
-                      }}
-                    >
-                      {city}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Фото профиля</label>
-              <input
-                name="photo"
-                type="file"
-                accept="image/*"
-                onChange={handleChange}
-                className="w-full border p-2"
-              />
-            </div>
-          </div>
-
-          <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Телефон</label>
-              <input name="phone" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Email</label>
-              <input name="email" type="email" required onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Ссылка на соцсети</label>
-              <input name="social" onChange={handleChange} className="w-full border p-2" />
-            </div>
-            <div style={{ marginBottom: "1.5rem" }}>
-              <label>Пароль</label>
-              <input
-                name="password"
-                type="password"
-                required
-                onChange={handleChange}
-                className="w-full border p-2"
-                style={{
-                  border: "2px solid #FF5722",
-                  fontWeight: "bold"
-                }}
-              />
-            </div>
-          </div>
+    <div className="max-w-2xl mx-auto mt-12 bg-white p-8 rounded-xl shadow">
+      <h2 className="text-2xl font-bold text-center text-orange-600 mb-6">{t("title")}</h2>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-medium">{t("name")}</label>
+          <input type="text" name="name" value={form.name} onChange={handleChange} className="border px-3 py-2 rounded w-full" />
         </div>
-
-        <button
-          type="submit"
-          style={{
-            backgroundColor: "#FF5722",
-            color: "#FFF",
-            padding: "0.75rem 1.5rem",
-            border: "none",
-            borderRadius: "5px",
-            width: "100%",
-            fontWeight: "bold",
-            marginTop: "1.5rem",
-            fontFamily: "Manrope Bold, sans-serif"
-          }}
-        >
-          Зарегистрироваться
-        </button>
+        <div>
+          <label className="block font-medium">{t("phone")}</label>
+          <input type="text" name="phone" value={form.phone} onChange={handleChange} className="border px-3 py-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="block font-medium">{t("type")}</label>
+          <select name="type" value={form.type} onChange={handleChange} className="border px-3 py-2 rounded w-full">
+            <option value="Гид">{t("guide")}</option>
+            <option value="Транспорт">{t("transport")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block font-medium">Email</label>
+          <input type="email" name="email" value={form.email} onChange={handleChange} className="border px-3 py-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="block font-medium">{t("location")}</label>
+          <input type="text" name="location" value={form.location} onChange={handleChange} className="border px-3 py-2 rounded w-full" placeholder={t("location_placeholder")} />
+        </div>
+        <div>
+          <label className="block font-medium">{t("social")}</label>
+          <input type="text" name="social" value={form.social} onChange={handleChange} className="border px-3 py-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="block font-medium">{t("photo")}</label>
+          <input type="file" name="photo" accept="image/*" onChange={handleChange} className="w-full" />
+        </div>
+        <div>
+          <label className="block font-medium">{t("password")}</label>
+          <input type="password" name="password" value={form.password} onChange={handleChange} className="border px-3 py-2 rounded w-full" />
+        </div>
+        <div className="col-span-2 mt-4">
+          <button type="submit" className="w-full bg-orange-500 text-white py-2 rounded font-bold">{t("submit")}</button>
+        </div>
       </form>
     </div>
   );
