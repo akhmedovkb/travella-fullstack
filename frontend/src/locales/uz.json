@@ -1,0 +1,22 @@
+{
+  "profile_title": "Ta'minlovchi profili",
+  "logout": "Chiqish",
+  "name": "Nomi",
+  "type": "Ta'minlovchi turi",
+  "location": "Manzil",
+  "social": "Ijtimoiy tarmoq havolasi",
+  "certificate": "Sertifikat",
+  "view_certificate": "Sertifikatni ko‘rish",
+  "edit": "Tahrirlash",
+  "save": "Saqlash",
+  "change_password": "Parolni o‘zgartirish",
+  "new_password": "Yangi parol",
+  "services": "Xizmatlar",
+  "price": "Narxi",
+  "back": "← Orqaga",
+  "phone": "Telefon",
+  "add_service_hint": "Yangi xizmat yaratish uchun, barcha maydonlarni to‘ldirib, «Saqlash» tugmasini bosing.",
+  "save_service": "Xizmatni saqlash",
+  "delete": "O‘chirish",
+  "upload_images": "Rasmlar (bir nechta yuklash mumkin):"
+}
