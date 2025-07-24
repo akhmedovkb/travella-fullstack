@@ -40,7 +40,7 @@
   "add_error": "Xizmatni qo‘shishda xatolik",
   "delete_error": "Xizmatni o‘chirishda xatolik",
   "choose_files": "Fayllarni tanlash",
-  "no_files_chosen": "Fayl tanlanmagan",
+  "no_files_selected": "Fayl tanlanmagan",
 
   
   "login": {
