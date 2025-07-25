@@ -19,8 +19,10 @@
   "file_chosen": "Fayllar tanlandi",
   
   "services": "Xizmatlar",
-  "guide": "Gid",
-  "transport": "Avto",
+  ""guide": "Gid",
+  "transport": "Transport",
+  "agent": "Turagent",
+  "hotel": "Otel",
   "price": "Narxi",
   "new_service_tip": "Yangi xizmat qo‘shish uchun barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
   "title": "Nom",
