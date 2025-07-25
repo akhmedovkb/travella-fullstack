@@ -57,9 +57,8 @@ const MarketplaceBoard = () => {
       {activeBlock && (
         <div className="bg-white rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-semibold mb-4">
-            {t("marketplace.search_in")} {activeBlock}
+           {t("marketplace.search_in", { category: activeBlock })}
           </h2>
-
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.start_date")}</label>
