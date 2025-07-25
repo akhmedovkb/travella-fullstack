@@ -1,88 +1,110 @@
-// frontend/src/pages/Marketplace.jsx
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const Marketplace = () => {
+const boardBlocks = [
+  { id: "guide", label: "ГИД" },
+  { id: "transport", label: "ТРАНСПОРТ" },
+  { id: "tour", label: "ОТКАЗНОЙ ТУР" },
+  { id: "hotel", label: "ОТКАЗНОЙ ОТЕЛЬ" },
+  { id: "flight", label: "ОТКАЗНОЙ АВИАБИЛЕТ" },
+  { id: "event", label: "ОТКАЗНОЙ БИЛЕТ" },
+];
+
+const MarketplaceBoard = () => {
   const { t } = useTranslation();
-  const [services, setServices] = useState([]);
-  const [filter, setFilter] = useState({
-    type: "all", // guide, transport, hotel, agent
-    category: "",
-    location: "",
-  });
+  const [activeBlock, setActiveBlock] = useState(null);
+  const [filters, setFilters] = useState({ start: "", end: "", location: "", people: 1 });
 
-  useEffect(() => {
-    axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/marketplace`)
-      .then((res) => setServices(res.data))
-      .catch((err) => console.error("❌ Ошибка загрузки витрины:", err));
-  }, []);
+  const handleBlockClick = (id) => {
+    setActiveBlock(activeBlock === id ? null : id);
+  };
 
-  const filtered = services.filter((s) => {
-    const matchType = filter.type === "all" || s.provider_type === filter.type;
-    const matchCategory = !filter.category || s.category === filter.category;
-    const matchLocation = !filter.location || s.location.toLowerCase().includes(filter.location.toLowerCase());
-    return matchType && matchCategory && matchLocation;
-  });
+  const handleChange = (e) => {
+    setFilters({ ...filters, [e.target.name]: e.target.value });
+  };
+
+  const handleSearch = () => {
+    console.log("🔎 Search filters:", { category: activeBlock, ...filters });
+    // Добавим логику фильтрации
+  };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold mb-6">{t("marketplace.title")}</h1>
+    <div className="p-6 max-w-5xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-center">🎯 Доска объявлений</h2>
 
-      {/* Фильтры */}
-      <div className="flex flex-wrap gap-4 mb-6">
-        <select
-          value={filter.type}
-          onChange={(e) => setFilter({ ...filter, type: e.target.value })}
-          className="border px-3 py-2 rounded"
-        >
-          <option value="all">{t("marketplace.filters.all")}</option>
-          <option value="guide">{t("marketplace.filters.guide")}</option>
-          <option value="transport">{t("marketplace.filters.transport")}</option>
-          <option value="agent">{t("marketplace.filters.agent")}</option>
-          <option value="hotel">{t("marketplace.filters.hotel")}</option>
-        </select>
-        <input
-          type="text"
-          placeholder={t("marketplace.filters.category")}
-          value={filter.category}
-          onChange={(e) => setFilter({ ...filter, category: e.target.value })}
-          className="border px-3 py-2 rounded"
-        />
-        <input
-          type="text"
-          placeholder={t("marketplace.filters.location")}
-          value={filter.location}
-          onChange={(e) => setFilter({ ...filter, location: e.target.value })}
-          className="border px-3 py-2 rounded"
-        />
-      </div>
-
-      {/* Список услуг */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.length > 0 ? filtered.map((s) => (
-          <div key={s.id} className="bg-white rounded-xl shadow p-4">
-            <img
-              src={s.images?.[0] || "https://via.placeholder.com/400x200"}
-              alt={s.title}
-              className="w-full h-48 object-cover rounded mb-3"
-            />
-            <h2 className="text-xl font-semibold">{s.title}</h2>
-            <p className="text-sm text-gray-600">{s.category}</p>
-            <p className="text-sm text-gray-600">{s.location}</p>
-            <p className="text-lg font-bold mt-2">{s.price} сум</p>
-
-            {/* 👉 Предложить свою цену */}
-            <button className="mt-4 w-full bg-blue-600 text-white rounded py-2 font-semibold">
-              {t("marketplace.propose_price")}
-            </button>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+        {boardBlocks.map((block) => (
+          <div
+            key={block.id}
+            className={`cursor-pointer border rounded-xl py-4 px-2 text-center font-semibold shadow-sm hover:shadow-md transition-all duration-200 ${
+              activeBlock === block.id ? "bg-orange-500 text-white" : "bg-white"
+            }`}
+            onClick={() => handleBlockClick(block.id)}
+          >
+            {block.label}
           </div>
-        )) : (
-          <p>{t("marketplace.no_results")}</p>
-        )}
+        ))}
       </div>
+
+      {activeBlock && (
+        <div className="bg-white border rounded-xl p-4 shadow-md">
+          <h3 className="text-xl font-semibold mb-4">🔍 Поиск по категории: {boardBlocks.find(b => b.id === activeBlock)?.label}</h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium">Дата начала</label>
+              <input
+                type="date"
+                name="start"
+                value={filters.start}
+                onChange={handleChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Дата окончания</label>
+              <input
+                type="date"
+                name="end"
+                value={filters.end}
+                onChange={handleChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Локация</label>
+              <input
+                type="text"
+                name="location"
+                placeholder="Например: Самарканд"
+                value={filters.location}
+                onChange={handleChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Количество человек</label>
+              <input
+                type="number"
+                min={1}
+                name="people"
+                value={filters.people}
+                onChange={handleChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleSearch}
+            className="bg-orange-500 text-white px-6 py-2 rounded font-bold hover:bg-orange-600"
+          >
+            Искать
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
-export default Marketplace;
+export default MarketplaceBoard;
