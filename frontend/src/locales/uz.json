@@ -54,8 +54,9 @@
     "no_account": "Akkauntingiz yo‘qmi? ",
     "error": "email yoki parol xato!"
 
-  },
- "register": {
+           },
+ 
+  "register": {
   "title": "Ta'minotchini ro'yxatdan o'tkazish",
   "name": "Nomi",
   "type": "Ta'minotchi turi",
@@ -72,7 +73,8 @@
   "no_file": "Fayl tanlanmagan",
   "file_chosen": "Fayl tanlandi",
   "required": "Iltimos, bu maydonni to‘ldiring"
-}
+              },
+ 
   "marketplace": {
   "title": "Marketpleys",
   "filters": {
@@ -83,10 +85,10 @@
     "hotel": "Otel",
     "category": "Toifa",
     "location": "Hudud"
-  },
+             },
   "propose_price": "Narh taklif qilish",
   "no_results": "Hizmat turi topilmadi"
-}
+                 }
 
 }
 
