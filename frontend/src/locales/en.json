@@ -21,6 +21,8 @@
   "services": "Services",
   "guide": "Guide",
   "transport": "Transport",
+  "agent": "Touragent",
+  "hotel": "Hotel",
   "price": "Price",
   "new_service_tip": "To create a new service, fill in all the fields below and click «Save Service».",
   "title": "Title",
