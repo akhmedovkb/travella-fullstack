@@ -26,6 +26,8 @@ const MarketplaceBoard = () => {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 6;
 
   const handleInputChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -48,6 +50,7 @@ const MarketplaceBoard = () => {
         filters
       );
       setResults(res.data);
+      setCurrentPage(1);
     } catch (err) {
       setError("Ошибка при поиске");
       console.error("Поиск не удался", err);
@@ -55,6 +58,11 @@ const MarketplaceBoard = () => {
       setIsLoading(false);
     }
   };
+
+  const indexOfLast = currentPage * resultsPerPage;
+  const indexOfFirst = indexOfLast - resultsPerPage;
+  const currentResults = results.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil(results.length / resultsPerPage);
 
   return (
     <div className="p-6">
@@ -90,7 +98,6 @@ const MarketplaceBoard = () => {
           <h2 className="text-xl font-semibold mb-4">
             {t("marketplace.search_in", { category: activeBlock })}
           </h2>
-
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.start_date")}</label>
@@ -102,6 +109,7 @@ const MarketplaceBoard = () => {
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.end_date")}</label>
               <input
@@ -112,6 +120,7 @@ const MarketplaceBoard = () => {
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.location")}</label>
               <input
@@ -156,28 +165,50 @@ const MarketplaceBoard = () => {
             <button onClick={handleSearch} className="bg-orange-500 text-white px-6 py-2 rounded font-semibold">
               {isLoading ? t("marketplace.searching") : t("marketplace.search")}
             </button>
-
-            <pre className="mt-4 bg-gray-100 p-2 text-xs text-gray-700 rounded">
-              {JSON.stringify(filters, null, 2)}
-            </pre>
           </div>
 
           {error && <p className="text-red-500 mt-4">{error}</p>}
 
-          {results.length > 0 && (
+          {currentResults.length > 0 && (
             <div className="mt-6">
               <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
-              <ul className="space-y-2">
-                {results.map((item) => (
+              <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentResults.map((item) => (
                   <li key={item.id} className="border rounded p-4 bg-gray-50">
+                    {item.images && item.images.length > 0 && (
+                      <img
+                        src={item.images[0]}
+                        alt="preview"
+                        className="w-full h-40 object-cover rounded mb-2"
+                      />
+                    )}
                     <div className="font-bold">{item.title}</div>
                     <div>{item.description}</div>
                     <div className="text-sm text-gray-600">{item.category}</div>
                     <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
                     <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
+                    <button className="mt-2 text-orange-600 hover:underline">
+                      {t("marketplace.propose_price")}
+                    </button>
                   </li>
                 ))}
               </ul>
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex justify-center gap-2">
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`px-3 py-1 rounded border font-medium ${
+                        currentPage === i + 1 ? "bg-orange-500 text-white" : "bg-white text-gray-700"
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
