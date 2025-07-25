@@ -92,7 +92,12 @@
     "infants": "Infants (0–1)",
     "search": "Search",
     "search_in": "Search in {{category}}",
-    "location_placeholder": "Enter location..."
+    "location_placeholder": "Enter location...",
+    "searching": "Searching...",
+    "results": "Search Results",
+    "price": "Price"
+}
+
                }
 
 }
