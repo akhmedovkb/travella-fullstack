@@ -305,15 +305,21 @@ const Dashboard = () => {
       <div>
         <label className="block font-medium">{t("certificate")}</label>
         {isEditing ? (
-          <label className="inline-block bg-orange-500 text-white px-3 py-2 rounded cursor-pointer text-sm">
-  {t("choose_files")}
-  <input
-    type="file"
-    accept=".pdf,.jpg,.jpeg,.png"
-    onChange={handleCertificateChange}
-    className="hidden"
-  />
-</label>
+          <div className="flex flex-col">
+  <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
+    {t("choose_files")}
+    <input
+      type="file"
+      accept=".pdf,.jpg,.jpeg,.png"
+      onChange={handleCertificateChange}
+      className="hidden"
+    />
+  </label>
+  <div className="text-sm text-gray-600 mt-1">
+    {newCertificate ? t("file_chosen") : t("no_files_selected")}
+  </div>
+</div>
+
 
         ) : profile.certificate ? (
           <a href={profile.certificate} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
