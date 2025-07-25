@@ -4,6 +4,7 @@ import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
+import Marketplace from "./pages/Marketplace";
 
 function App() {
   return (
@@ -19,6 +20,8 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route path="/marketplace" element={<Marketplace />} />
+
       </Routes>
     </Router>
   );
