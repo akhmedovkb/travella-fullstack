@@ -563,7 +563,7 @@ const getCategoryOptions = () => {
         {t("new_service_tip")}
       </div>
 
-      <<select
+    <select
   value={category}
   onChange={(e) => setCategory(e.target.value)}
   className="w-full border px-3 py-2 rounded mb-2 bg-white"
