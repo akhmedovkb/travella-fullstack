@@ -44,6 +44,21 @@
   "delete_error": "Failed to delete service",
   "choose_files": "Choose files",
   "no_files_selected": "No files selected",
+  "select_category": "Select category",
+  "city_tour": "City tour",
+  "mountain_tour": "Mountain tour",
+  "one_way_transfer": "One-way transfer",
+  "dinner_transfer": "Dinner transfer",
+  "border_transfer": "Border transfer",
+  "refused_tour": "Refused tour",
+  "refused_hotel": "Refused hotel",
+  "refused_ticket": "Refused airline ticket",
+  "refused_event": "Refused event ticket",
+  "visa_support": "Visa support",
+  "authored_tour": "Authored tour",
+  "room_rent": "Room rental",
+  "hotel_transfer": "Hotel transfer",
+  "hall_rent": "Hall rental",
 
 
   "login": {
