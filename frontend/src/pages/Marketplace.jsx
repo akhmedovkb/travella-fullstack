@@ -14,13 +14,14 @@ const MarketplaceBoard = () => {
   const { t } = useTranslation();
   const [activeBlock, setActiveBlock] = useState(null);
   const [filters, setFilters] = useState({
-    startDate: "",
-    endDate: "",
-    location: "",
-    adults: 1,
-    children: 0,
-    infants: 0
-  });
+  startDate: "",
+  endDate: "",
+  location: "",
+  adults: 1,
+  children: 0,
+  infants: 0,
+  providerType: ""
+});
 
   const handleInputChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -47,7 +48,17 @@ const MarketplaceBoard = () => {
                 ? "bg-orange-500 text-white"
                 : "bg-white border border-gray-300 hover:bg-gray-100"
             }`}
-            onClick={() => setActiveBlock(block)}
+            onClick={() => {
+  setActiveBlock(block);
+  let providerType = "";
+  if (block === "ГИД") providerType = "guide";
+  else if (block === "ТРАНСПОРТ") providerType = "transport";
+  else if (["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(block)) {
+    providerType = "agent";
+  }
+  setFilters((prev) => ({ ...prev, providerType }));
+}}
+
           >
             {block}
           </button>
@@ -126,6 +137,11 @@ const MarketplaceBoard = () => {
             <button className="bg-orange-500 text-white px-6 py-2 rounded font-semibold">
               {t("marketplace.search")}
             </button>
+            {/* Отладка — покажем, что отправится */}
+             <pre className="mt-4 bg-gray-100 p-2 text-xs text-gray-700 rounded">
+             {JSON.stringify(filters, null, 2)}
+             </pre>
+
           </div>
         </div>
       )}
