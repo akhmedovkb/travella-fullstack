@@ -302,22 +302,48 @@ const Dashboard = () => {
           <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || t("not_specified")}</div>
         )}
       </div>
-      <div>
-        <label className="block font-medium">{t("certificate")}</label>
-        {isEditing ? (
-          <div className="flex flex-col">
-  <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
-    {t("choose_files")}
-    <input
-      type="file"
-      accept=".pdf,.jpg,.jpeg,.png"
-      onChange={handleCertificateChange}
-      className="hidden"
-    />
-  </label>
-  <div className="text-sm text-gray-600 mt-1">
-    {newCertificate ? t("file_chosen") : t("no_files_selected")}
-  </div>
+     <div>
+  <label className="block font-medium">{t("certificate")}</label>
+  {isEditing ? (
+    <div className="flex flex-col gap-2">
+      <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
+        {t("choose_files")}
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          onChange={handleCertificateChange}
+          className="hidden"
+        />
+      </label>
+
+      {newCertificate ? (
+        newCertificate.startsWith("data:image") ? (
+          <img
+            src={newCertificate}
+            alt="Certificate preview"
+            className="w-32 h-32 object-cover border rounded"
+          />
+        ) : (
+          <div className="text-sm text-gray-600">📄 {t("file_chosen")}</div>
+        )
+      ) : (
+        <div className="text-sm text-gray-600">{t("no_files_selected")}</div>
+      )}
+    </div>
+  ) : profile.certificate ? (
+    <a
+      href={profile.certificate}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 underline"
+    >
+      {t("view_certificate")}
+    </a>
+  ) : (
+    <div className="text-gray-500">{t("not_specified")}</div>
+  )}
+</div>
+
 </div>
 
 
