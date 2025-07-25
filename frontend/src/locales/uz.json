@@ -91,7 +91,9 @@
     "adults": "Kattalar (12+)",
     "children": "Bolalar (2–11)",
     "infants": "Chaqaloqlar (0–1)",
-    "search": "Qidirish"
+    "search": "Qidirish",
+    "search_in": "Search in {{category}}",
+    "location_placeholder": "Hududni kiriting ..."
                }
 
 }
