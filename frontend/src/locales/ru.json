@@ -91,6 +91,8 @@
     "children": "Дети (2–11)",
     "infants": "Младенцы (0–1)",
     "search": "Найти"
+    "search_in": "Search in {{category}}",
+    "location_placeholder": "Внесите локацию ..."
   }
 
 
