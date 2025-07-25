@@ -53,7 +53,8 @@
     "button": "Login",
     "no_account": "No account? ",
     "error": "email or password error!"
-  },
+           },
+  
   "register": {
   "title": "Provider Registration",
   "name": "Name",
@@ -71,8 +72,9 @@
   "no_file": "No file selected",
   "file_chosen": "File selected",
   "required": "Please fill out this field"
-}
-"marketplace": {
+              },
+
+  "marketplace": {
   "title": "Marketplace",
   "filters": {
     "all": "All types",
@@ -82,10 +84,10 @@
     "hotel": "Hotel",
     "category": "Category",
     "location": "Location"
-  },
+             },
   "propose_price": "Propose Your Price",
   "no_results": "No services found"
-}
+                 }
 
 }
 
