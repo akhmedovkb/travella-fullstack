@@ -72,6 +72,20 @@
   "file_chosen": "File selected",
   "required": "Please fill out this field"
 }
+"marketplace": {
+  "title": "Marketplace",
+  "filters": {
+    "all": "All types",
+    "guide": "Guide",
+    "transport": "Transport",
+    "agent": "Travel Agent",
+    "hotel": "Hotel",
+    "category": "Category",
+    "location": "Location"
+  },
+  "propose_price": "Propose Your Price",
+  "no_results": "No services found."
+}
 
 }
 
