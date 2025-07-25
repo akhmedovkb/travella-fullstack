@@ -195,30 +195,32 @@ const Dashboard = () => {
  </div>
   <div className="flex gap-4">
     <div className="flex flex-col items-center w-1/2">
-      <div className="relative">
-        <img
-          src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
-          className="w-24 h-24 rounded-full object-cover mb-2"
-          alt="Фото"
-        />
-        {isEditing && (
-  <div className="flex flex-col items-center">
-    <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
-      {t("choose_files")}
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handlePhotoChange}
-        className="hidden"
-      />
-    </label>
-    <div className="text-sm text-gray-600 mt-1">
-      {newPhoto ? t("file_chosen") : t("no_files_selected")}
-    </div>
-  </div>
-)}
+      <div className="relative flex flex-col items-center">
+  <img
+    src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
+    className="w-24 h-24 rounded-full object-cover mb-2"
+    alt="Фото"
+  />
 
+  {isEditing && (
+    <>
+      <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
+        {t("choose_files")}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handlePhotoChange}
+          className="hidden"
+        />
+      </label>
+
+      <div className="text-sm text-gray-600 mt-1">
+        {newPhoto ? t("file_chosen") : t("no_files_selected")}
       </div>
+    </>
+  )}
+</div>
+
       <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
       {isEditing ? (
         <input
