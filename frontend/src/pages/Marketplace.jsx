@@ -1,106 +1,133 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const boardBlocks = [
-  { id: "guide", label: "ГИД" },
-  { id: "transport", label: "ТРАНСПОРТ" },
-  { id: "tour", label: "ОТКАЗНОЙ ТУР" },
-  { id: "hotel", label: "ОТКАЗНОЙ ОТЕЛЬ" },
-  { id: "flight", label: "ОТКАЗНОЙ АВИАБИЛЕТ" },
-  { id: "event", label: "ОТКАЗНОЙ БИЛЕТ" },
+const blocks = [
+  "ГИД",
+  "ТРАНСПОРТ",
+  "ОТКАЗНОЙ ТУР",
+  "ОТКАЗНОЙ ОТЕЛЬ",
+  "ОТКАЗНОЙ АВИАБИЛЕТ",
+  "ОТКАЗНОЙ БИЛЕТ"
 ];
 
 const MarketplaceBoard = () => {
   const { t } = useTranslation();
   const [activeBlock, setActiveBlock] = useState(null);
-  const [filters, setFilters] = useState({ start: "", end: "", location: "", people: 1 });
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    location: "",
+    adults: 1,
+    children: 0,
+    infants: 0
+  });
 
-  const handleBlockClick = (id) => {
-    setActiveBlock(activeBlock === id ? null : id);
-  };
-
-  const handleChange = (e) => {
+  const handleInputChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
   };
 
-  const handleSearch = () => {
-    console.log("🔎 Search filters:", { category: activeBlock, ...filters });
-    // Добавим логику фильтрации
+  const handleIncrement = (field) => {
+    setFilters((prev) => ({ ...prev, [field]: prev[field] + 1 }));
+  };
+
+  const handleDecrement = (field) => {
+    setFilters((prev) => ({ ...prev, [field]: Math.max(0, prev[field] - 1) }));
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-center">🎯 Доска объявлений</h2>
+    <div className="p-6">
+      <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
-        {boardBlocks.map((block) => (
-          <div
-            key={block.id}
-            className={`cursor-pointer border rounded-xl py-4 px-2 text-center font-semibold shadow-sm hover:shadow-md transition-all duration-200 ${
-              activeBlock === block.id ? "bg-orange-500 text-white" : "bg-white"
+        {blocks.map((block, idx) => (
+          <button
+            key={idx}
+            className={`p-4 rounded-xl shadow text-center font-semibold transition ${
+              activeBlock === block
+                ? "bg-orange-500 text-white"
+                : "bg-white border border-gray-300 hover:bg-gray-100"
             }`}
-            onClick={() => handleBlockClick(block.id)}
+            onClick={() => setActiveBlock(block)}
           >
-            {block.label}
-          </div>
+            {block}
+          </button>
         ))}
       </div>
 
       {activeBlock && (
-        <div className="bg-white border rounded-xl p-4 shadow-md">
-          <h3 className="text-xl font-semibold mb-4">🔍 Поиск по категории: {boardBlocks.find(b => b.id === activeBlock)?.label}</h3>
+        <div className="bg-white rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-semibold mb-4">
+            {t("marketplace.search_in")} {activeBlock}
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium">Дата начала</label>
+              <label className="block text-sm font-medium mb-1">{t("marketplace.start_date")}</label>
               <input
                 type="date"
-                name="start"
-                value={filters.start}
-                onChange={handleChange}
+                name="startDate"
+                value={filters.startDate}
+                onChange={handleInputChange}
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium">Дата окончания</label>
+              <label className="block text-sm font-medium mb-1">{t("marketplace.end_date")}</label>
               <input
                 type="date"
-                name="end"
-                value={filters.end}
-                onChange={handleChange}
+                name="endDate"
+                value={filters.endDate}
+                onChange={handleInputChange}
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium">Локация</label>
+              <label className="block text-sm font-medium mb-1">{t("marketplace.location")}</label>
               <input
                 type="text"
                 name="location"
-                placeholder="Например: Самарканд"
+                placeholder={t("marketplace.location_placeholder")}
                 value={filters.location}
-                onChange={handleChange}
-                className="border px-3 py-2 rounded w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Количество человек</label>
-              <input
-                type="number"
-                min={1}
-                name="people"
-                value={filters.people}
-                onChange={handleChange}
+                onChange={handleInputChange}
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
           </div>
 
-          <button
-            onClick={handleSearch}
-            className="bg-orange-500 text-white px-6 py-2 rounded font-bold hover:bg-orange-600"
-          >
-            Искать
-          </button>
+          <div className="grid md:grid-cols-3 gap-4">
+            {[
+              { field: "adults", label: t("marketplace.adults") },
+              { field: "children", label: t("marketplace.children") },
+              { field: "infants", label: t("marketplace.infants") }
+            ].map(({ field, label }) => (
+              <div key={field} className="flex items-center justify-between">
+                <span className="font-medium">{label}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDecrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center">{filters[field]}</span>
+                  <button
+                    onClick={() => handleIncrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 text-right">
+            <button className="bg-orange-500 text-white px-6 py-2 rounded font-semibold">
+              {t("marketplace.search")}
+            </button>
+          </div>
         </div>
       )}
     </div>
