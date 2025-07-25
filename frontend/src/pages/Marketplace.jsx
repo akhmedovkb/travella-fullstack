@@ -2,10 +2,6 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
 
-const [results, setResults] = useState([]);
-const [isLoading, setIsLoading] = useState(false);
-const [error, setError] = useState("");
-
 const blocks = [
   "ГИД",
   "ТРАНСПОРТ",
@@ -19,14 +15,17 @@ const MarketplaceBoard = () => {
   const { t } = useTranslation();
   const [activeBlock, setActiveBlock] = useState(null);
   const [filters, setFilters] = useState({
-  startDate: "",
-  endDate: "",
-  location: "",
-  adults: 1,
-  children: 0,
-  infants: 0,
-  providerType: ""
-});
+    startDate: "",
+    endDate: "",
+    location: "",
+    adults: 1,
+    children: 0,
+    infants: 0,
+    providerType: ""
+  });
+  const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleInputChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -41,21 +40,21 @@ const MarketplaceBoard = () => {
   };
 
   const handleSearch = async () => {
-  setIsLoading(true);
-  setError("");
-  try {
-    const res = await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/marketplace/search`,
-      filters
-    );
-    setResults(res.data);
-  } catch (err) {
-    setError("Ошибка при поиске");
-    console.error("Поиск не удался", err);
-  } finally {
-    setIsLoading(false);
-  }
-};
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/marketplace/search`,
+        filters
+      );
+      setResults(res.data);
+    } catch (err) {
+      setError("Ошибка при поиске");
+      console.error("Поиск не удался", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="p-6">
@@ -71,16 +70,15 @@ const MarketplaceBoard = () => {
                 : "bg-white border border-gray-300 hover:bg-gray-100"
             }`}
             onClick={() => {
-  setActiveBlock(block);
-  let providerType = "";
-  if (block === "ГИД") providerType = "guide";
-  else if (block === "ТРАНСПОРТ") providerType = "transport";
-  else if (["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(block)) {
-    providerType = "agent";
-  }
-  setFilters((prev) => ({ ...prev, providerType }));
-}}
-
+              setActiveBlock(block);
+              let providerType = "";
+              if (block === "ГИД") providerType = "guide";
+              else if (block === "ТРАНСПОРТ") providerType = "transport";
+              else if (["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(block)) {
+                providerType = "agent";
+              }
+              setFilters((prev) => ({ ...prev, providerType }));
+            }}
           >
             {block}
           </button>
@@ -90,8 +88,9 @@ const MarketplaceBoard = () => {
       {activeBlock && (
         <div className="bg-white rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-semibold mb-4">
-           {t("marketplace.search_in", { category: activeBlock })}
+            {t("marketplace.search_in", { category: activeBlock })}
           </h2>
+
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.start_date")}</label>
@@ -103,7 +102,6 @@ const MarketplaceBoard = () => {
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.end_date")}</label>
               <input
@@ -114,7 +112,6 @@ const MarketplaceBoard = () => {
                 className="border px-3 py-2 rounded w-full"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-1">{t("marketplace.location")}</label>
               <input
@@ -160,32 +157,30 @@ const MarketplaceBoard = () => {
               {isLoading ? t("marketplace.searching") : t("marketplace.search")}
             </button>
 
-            {/* Отладка — покажем, что отправится */}
-             <pre className="mt-4 bg-gray-100 p-2 text-xs text-gray-700 rounded">
-             {JSON.stringify(filters, null, 2)}
-             </pre>
-
+            <pre className="mt-4 bg-gray-100 p-2 text-xs text-gray-700 rounded">
+              {JSON.stringify(filters, null, 2)}
+            </pre>
           </div>
+
+          {error && <p className="text-red-500 mt-4">{error}</p>}
+
+          {results.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
+              <ul className="space-y-2">
+                {results.map((item) => (
+                  <li key={item.id} className="border rounded p-4 bg-gray-50">
+                    <div className="font-bold">{item.title}</div>
+                    <div>{item.description}</div>
+                    <div className="text-sm text-gray-600">{item.category}</div>
+                    <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
+                    <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      {error && <p className="text-red-500 mt-4">{error}</p>}
-
-{results.length > 0 && (
-  <div className="mt-6">
-    <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
-    <ul className="space-y-2">
-      {results.map((item) => (
-        <li key={item.id} className="border rounded p-4 bg-gray-50">
-          <div className="font-bold">{item.title}</div>
-          <div>{item.description}</div>
-          <div className="text-sm text-gray-600">{item.category}</div>
-          <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
-          <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-
       )}
     </div>
   );
