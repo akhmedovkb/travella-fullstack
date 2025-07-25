@@ -44,6 +44,23 @@
   "delete_error": "Ошибка удаления",
   "choose_files": "Выбрать файлы",
   "no_files_selected": "Файлы не выбраны",
+  
+  "select_category": "Выберите категорию",
+  "city_tour": "Тур по городу",
+  "mountain_tour": "Тур по горам",
+  "one_way_transfer": "Трансфер в одну сторону",
+  "dinner_transfer": "Трансфер на ужин",
+  "border_transfer": "Пограничный трансфер",
+  "refused_tour": "Отказной тур",
+  "refused_hotel": "Отказной отель",
+  "refused_ticket": "Отказной авиабилет",
+  "refused_event": "Отказной билет на мероприятие",
+  "visa_support": "Визовая поддержка",
+  "authored_tour": "Авторский тур",
+  "room_rent": "Аренда номера",
+  "hotel_transfer": "Трансфер от отеля",
+  "hall_rent": "Аренда зала",
+
 
 
   "login": {
