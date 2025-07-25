@@ -92,7 +92,10 @@
     "infants": "Младенцы (0–1)",
     "search": "Найти",
     "search_in": "Поиск по {{category}}:",
-    "location_placeholder": "Внесите локацию ..."
+    "location_placeholder": "Внесите локацию ...",
+    "searching": "Идет поиск...",
+    "results": "Результаты поиска",
+    "price": "Цена"
   }
 
 
