@@ -93,7 +93,10 @@
     "infants": "Chaqaloqlar (0–1)",
     "search": "Qidirish",
     "search_in": "{{category}} bo`yicha qidirish:" ,
-    "location_placeholder": "Hududni kiriting ..."
+    "location_placeholder": "Hududni kiriting ...",
+    "searching": "Qidirilyabdi...",
+    "results": "Qidiruv natijasi",
+    "price": "Narh"
                }
 
 }
