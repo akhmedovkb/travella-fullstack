@@ -436,7 +436,7 @@ const Dashboard = () => {
         </label>
         <div className="mt-1 text-sm text-gray-600">
         {images.length > 0
-        ? t("files_selected", { count: images.length })
+        ? t("file_chosen", { count: images.length })
         : t("no_files_selected")}
         </div>
        </div>
@@ -526,7 +526,7 @@ const Dashboard = () => {
   </label>
   <div className="mt-1 text-sm text-gray-600">
     {images.length > 0
-      ? t("files_selected", { count: images.length })
+      ? t("file_chosen", { count: images.length })
       : t("no_files_selected")}
   </div>
 </div>
