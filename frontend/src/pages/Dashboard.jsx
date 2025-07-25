@@ -189,199 +189,196 @@ const Dashboard = () => {
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
       {/* Левый блок */}
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
-  <h2 className="text-2xl font-bold mb-4">{t("provider_profile")}</h2>
-  <div className="flex justify-end mb-2">
-  <LanguageSelector />
- </div>
-  <div className="flex gap-4">
-    <div className="flex flex-col items-center w-1/2">
-      <div className="relative flex flex-col items-center">
-  <img
-    src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
-    className="w-24 h-24 rounded-full object-cover mb-2"
-    alt="Фото"
-  />
-
-  {isEditing && (
-    <>
-      <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
-        {t("choose_files")}
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handlePhotoChange}
-          className="hidden"
-        />
-      </label>
-
-      <div className="text-sm text-gray-600 mt-1">
-        {newPhoto ? t("file_chosen") : t("no_files_selected")}
-      </div>
-    </>
-  )}
-</div>
-
-      <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
-      {isEditing ? (
-        <input
-          type="text"
-          placeholder={t("phone")}
-          value={newPhone}
-          onChange={(e) => setNewPhone(e.target.value)}
-          className="border px-3 py-2 mb-2 rounded w-full"
-        />
-      ) : (
-        <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-          {profile.phone || t("not_specified")}
-        </div>
-      )}
-
-<h3 className="font-semibold text-lg mb-2">{t("address")}</h3>
-{isEditing ? (
-  <input
-    type="text"
-    placeholder={t("address")}
-    value={newAddress}
-    onChange={(e) => setNewAddress(e.target.value)}
-    className="border px-3 py-2 mb-2 rounded w-full"
-  />
-) : (
-  <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
-    {profile.address || t("not_specified")}
-  </div>
-)}
-
-{/* Карта (только если адрес есть) */}
-{profile.address && !isEditing && (
-  <div className="w-full mb-4">
-    <iframe
-      title="provider-map"
-      width="100%"
-      height="200"
-      frameBorder="0"
-      scrolling="no"
-      marginHeight="0"
-      marginWidth="0"
-      className="rounded"
-      src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
-    ></iframe>
-  </div>
-)}
-
-      <button
-        onClick={() => {
-          localStorage.removeItem("token");
-          window.location.href = "/login";
-        }}
-        className="mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold w-full"
-      >
-        {t("logout")}
-      </button>
+    <div className="flex justify-between items-start mb-4">
+      <h2 className="text-2xl font-bold">{t("provider_profile")}</h2>
+      <LanguageSelector />
     </div>
 
-    <div className="w-1/2 space-y-3">
-      <div>
-        <label className="block font-medium">{t("name")}</label>
-        <div className="border px-3 py-2 rounded bg-gray-100">{profile.name}</div>
-      </div>
-      <div>
-        <label className="block font-medium">{t("type")}</label>
-        <div className="border px-3 py-2 rounded bg-gray-100">{profile.type}</div>
-      </div>
-      <div>
-        <label className="block font-medium">{t("location")}</label>
-        {isEditing ? (
-          <input value={newLocation} onChange={(e) => setNewLocation(e.target.value)} className="border px-3 py-2 rounded w-full" />
-        ) : (
-          <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
-        )}
-      </div>
-      <div>
-        <label className="block font-medium">{t("social")}</label>
-        {isEditing ? (
-          <input value={newSocial} onChange={(e) => setNewSocial(e.target.value)} className="border px-3 py-2 rounded w-full" />
-        ) : (
-          <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || t("not_specified")}</div>
-        )}
-      </div>
-     <div>
-  <label className="block font-medium">{t("certificate")}</label>
-  {isEditing ? (
-    <div className="flex flex-col gap-2">
-      <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
-        {t("choose_files")}
-        <input
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png"
-          onChange={handleCertificateChange}
-          className="hidden"
-        />
-      </label>
-
-      {newCertificate ? (
-        newCertificate.startsWith("data:image") ? (
+    <div className="flex gap-4">
+      <div className="flex flex-col items-center w-1/2">
+        {/* Фото */}
+        <div className="relative flex flex-col items-center">
           <img
-            src={newCertificate}
-            alt="Certificate preview"
-            className="w-32 h-32 object-cover border rounded"
+            src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
+            className="w-24 h-24 rounded-full object-cover mb-2"
+            alt="Фото"
+          />
+          {isEditing && (
+            <>
+              <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
+                {t("choose_files")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+              </label>
+              <div className="text-sm text-gray-600 mt-1">
+                {newPhoto ? t("file_chosen") : t("no_files_selected")}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Телефон */}
+        <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
+        {isEditing ? (
+          <input
+            type="text"
+            placeholder={t("phone")}
+            value={newPhone}
+            onChange={(e) => setNewPhone(e.target.value)}
+            className="border px-3 py-2 mb-2 rounded w-full"
           />
         ) : (
-          <div className="text-sm text-gray-600">📄 {t("file_chosen")}</div>
-        )
-      ) : (
-        <div className="text-sm text-gray-600">{t("no_files_selected")}</div>
-      )}
-    </div>
-  ) : profile.certificate ? (
-    <a
-      href={profile.certificate}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-blue-600 underline"
-    >
-      {t("view_certificate")}
-    </a>
-  ) : (
-    <div className="text-gray-500">{t("not_specified")}</div>
-  )}
-</div>
-
-</div>
-
-
-        ) : profile.certificate ? (
-          <a href={profile.certificate} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-            {t("view_certificate")}
-          </a>
-        ) : (
-          <div className="text-gray-500">{t("no_files_selected")}</div>
+          <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+            {profile.phone || t("not_specified")}
+          </div>
         )}
-      </div>
-      <button
-        onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
-        className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
-      >
-        {isEditing ? t("save") : t("edit")}
-      </button>
 
-      <div className="mt-4">
-        <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
-        <input
-          type="password"
-          placeholder={t("new_password")}
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          className="border px-3 py-2 mb-2 rounded w-full"
-        />
-        <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
-          {t("change")}
+        {/* Адрес */}
+        <h3 className="font-semibold text-lg mb-2">{t("address")}</h3>
+        {isEditing ? (
+          <input
+            type="text"
+            placeholder={t("address")}
+            value={newAddress}
+            onChange={(e) => setNewAddress(e.target.value)}
+            className="border px-3 py-2 mb-2 rounded w-full"
+          />
+        ) : (
+          <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+            {profile.address || t("not_specified")}
+          </div>
+        )}
+
+        {/* Карта */}
+        {profile.address && !isEditing && (
+          <div className="w-full mb-4">
+            <iframe
+              title="provider-map"
+              width="100%"
+              height="200"
+              frameBorder="0"
+              scrolling="no"
+              marginHeight="0"
+              marginWidth="0"
+              className="rounded"
+              src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+            ></iframe>
+          </div>
+        )}
+
+        {/* Выйти */}
+        <button
+          onClick={() => {
+            localStorage.removeItem("token");
+            window.location.href = "/login";
+          }}
+          className="mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold w-full"
+        >
+          {t("logout")}
         </button>
       </div>
-    </div>
-  </div>
-  {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
-</div>
 
+      {/* Правая часть профиля */}
+      <div className="w-1/2 space-y-3">
+        <div>
+          <label className="block font-medium">{t("name")}</label>
+          <div className="border px-3 py-2 rounded bg-gray-100">{profile.name}</div>
+        </div>
+        <div>
+          <label className="block font-medium">{t("type")}</label>
+          <div className="border px-3 py-2 rounded bg-gray-100">{profile.type}</div>
+        </div>
+        <div>
+          <label className="block font-medium">{t("location")}</label>
+          {isEditing ? (
+            <input value={newLocation} onChange={(e) => setNewLocation(e.target.value)} className="border px-3 py-2 rounded w-full" />
+          ) : (
+            <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
+          )}
+        </div>
+        <div>
+          <label className="block font-medium">{t("social")}</label>
+          {isEditing ? (
+            <input value={newSocial} onChange={(e) => setNewSocial(e.target.value)} className="border px-3 py-2 rounded w-full" />
+          ) : (
+            <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || t("not_specified")}</div>
+          )}
+        </div>
+
+        {/* Сертификат */}
+        <div>
+          <label className="block font-medium">{t("certificate")}</label>
+          {isEditing ? (
+            <div className="flex flex-col gap-2">
+              <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
+                {t("choose_files")}
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleCertificateChange}
+                  className="hidden"
+                />
+              </label>
+
+              {newCertificate ? (
+                newCertificate.startsWith("data:image") ? (
+                  <img
+                    src={newCertificate}
+                    alt="Certificate preview"
+                    className="w-32 h-32 object-cover border rounded"
+                  />
+                ) : (
+                  <div className="text-sm text-gray-600">📄 {t("file_chosen")}</div>
+                )
+              ) : (
+                <div className="text-sm text-gray-600">{t("no_files_selected")}</div>
+              )}
+            </div>
+          ) : profile.certificate ? (
+            <a
+              href={profile.certificate}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+            >
+              {t("view_certificate")}
+            </a>
+          ) : (
+            <div className="text-gray-500">{t("not_specified")}</div>
+          )}
+        </div>
+
+        {/* Кнопка сохранить/редактировать */}
+        <button
+          onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
+          className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-2"
+        >
+          {isEditing ? t("save") : t("edit")}
+        </button>
+
+        {/* Смена пароля */}
+        <div className="mt-4">
+          <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
+          <input
+            type="password"
+            placeholder={t("new_password")}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="border px-3 py-2 mb-2 rounded w-full"
+          />
+          <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
+            {t("change")}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
+  </div>
 {/* Правый блок */}
 {/* Правый блок */}
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
