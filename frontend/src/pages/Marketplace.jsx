@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
 
-const [filters, setFilters] = useState({ ... }); //для хранения результатов
 const [results, setResults] = useState([]);
 const [isLoading, setIsLoading] = useState(false);
 const [error, setError] = useState("");
