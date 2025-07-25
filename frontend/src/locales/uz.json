@@ -16,7 +16,8 @@
   "change": "O‘zgartirish",
   "not_specified": "Ko‘rsatilmagan",
   "photo": "Rasm",
-
+  "file_chosen": "Fayllar tanlandi",
+  
   "services": "Xizmatlar",
   "guide": "Gid",
   "transport": "Avto",
