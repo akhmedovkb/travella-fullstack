@@ -5,6 +5,10 @@ dotenv.config();
 
 const app = express();
 
+// Подключаем marketplace
+const marketplaceRoutes = require("./routes/marketplaceRoutes");
+app.use("/api/marketplace", marketplaceRoutes);
+
 // Разрешаем CORS
 app.use(
   cors({
