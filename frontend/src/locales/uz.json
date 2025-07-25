@@ -73,6 +73,21 @@
   "file_chosen": "Fayl tanlandi",
   "required": "Iltimos, bu maydonni to‘ldiring"
 }
+  "marketplace": {
+  "title": "Marketpleys",
+  "filters": {
+    "all": "Hamma turlari",
+    "guide": "Gid",
+    "transport": "Transport",
+    "agent": "Turgent",
+    "hotel": "Otel",
+    "category": "Toifa",
+    "location": "Hudud"
+  },
+  "propose_price": "Narh taklif qilish",
+  "no_results": "Hizmat turi topilmadi"
+}
+
 }
 
 
