@@ -184,6 +184,21 @@ const Dashboard = () => {
       setImages((prev) => [...prev, ...base64Images]);
     });
   };
+  
+const getCategoryOptions = () => {
+  switch (profile.type) {
+    case "guide":
+      return ["city_tour", "mountain_tour"];
+    case "transport":
+      return ["city_tour", "mountain_tour", "one_way_transfer", "dinner_transfer", "border_transfer"];
+    case "agent":
+      return ["refused_tour", "refused_hotel", "refused_ticket", "refused_event", "visa_support", "authored_tour"];
+    case "hotel":
+      return ["room_rent", "hotel_transfer", "hall_rent"];
+    default:
+      return [];
+  }
+};
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
@@ -379,8 +394,9 @@ const Dashboard = () => {
 
     {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
   </div>
+
 {/* Правый блок */}
-{/* Правый блок */}
+
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
   <div className="mb-6">
     <div className="flex justify-between items-center">
@@ -411,7 +427,7 @@ const Dashboard = () => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{s.category}</div>
+          <div className="text-sm text-gray-600">{t(s.category)}</div>
           <div className="text-sm text-gray-800">
             {t("price")}: {s.price} сум
           </div>
@@ -422,6 +438,19 @@ const Dashboard = () => {
 
   {selectedService ? (
     <>
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="w-full border px-3 py-2 rounded mb-2"
+      >
+        <option value="">{t("select_category")}</option>
+        {getCategoryOptions().map((option) => (
+          <option key={option} value={option}>
+            {t(option)}
+          </option>
+        ))}
+      </select>
+
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -432,12 +461,6 @@ const Dashboard = () => {
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder={t("description")}
-        className="w-full border px-3 py-2 rounded mb-2"
-      />
-      <input
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        placeholder={t("category")}
         className="w-full border px-3 py-2 rounded mb-2"
       />
       <input
@@ -512,6 +535,20 @@ const Dashboard = () => {
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
+
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="w-full border px-3 py-2 rounded mb-2"
+      >
+        <option value="">{t("select_category")}</option>
+        {getCategoryOptions().map((option) => (
+          <option key={option} value={option}>
+            {t(option)}
+          </option>
+        ))}
+      </select>
+
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -522,12 +559,6 @@ const Dashboard = () => {
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder={t("description")}
-        className="w-full border px-3 py-2 rounded mb-2"
-      />
-      <input
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        placeholder={t("category")}
         className="w-full border px-3 py-2 rounded mb-2"
       />
       <input
