@@ -76,19 +76,23 @@
               },
  
   "marketplace": {
-  "title": "Marketpleys",
-  "filters": {
-    "all": "Hamma turlari",
+    "title": "E'lonlar doskasi",
+    "select_category": "Kategoriya tanlang",
     "guide": "Gid",
     "transport": "Transport",
-    "agent": "Turgent",
-    "hotel": "Otel",
-    "category": "Toifa",
-    "location": "Hudud"
-             },
-  "propose_price": "Narh taklif qilish",
-  "no_results": "Hizmat turi topilmadi"
-                 }
+    "package": "Rad etilgan tur",
+    "hotel": "Rad etilgan mehmonxona",
+    "flight": "Rad etilgan aviachiptalar",
+    "event": "Rad etilgan tadbir chipta",
+    "search_filters": "Qidiruv filtrlari",
+    "start_date": "Boshlanish sanasi",
+    "end_date": "Tugash sanasi",
+    "location": "Manzil",
+    "adults": "Kattalar (12+)",
+    "children": "Bolalar (2–11)",
+    "infants": "Chaqaloqlar (0–1)",
+    "search": "Qidirish"
+               }
 
 }
 
