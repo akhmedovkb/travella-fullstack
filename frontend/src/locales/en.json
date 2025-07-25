@@ -90,7 +90,9 @@
     "adults": "Adults (12+)",
     "children": "Children (2–11)",
     "infants": "Infants (0–1)",
-    "search": "Search"
+    "search": "Search",
+    "search_in": "Search in {{category}}",
+    "location_placeholder": "Enter location..."
                }
 
 }
