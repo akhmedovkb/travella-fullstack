@@ -1,18 +1,30 @@
 const pool = require("../db");
 
 const searchListings = async (req, res) => {
-  const { category, startDate, endDate, location, adults, children, infants } = req.body;
+  const {
+    category,
+    startDate,
+    endDate,
+    location,
+    adults,
+    children,
+    infants,
+    providerType // 👈 новый параметр: 'guide', 'transport', 'agent', 'hotel'
+  } = req.body;
 
   try {
     const results = await pool.query(
-      `SELECT * FROM services 
-       WHERE category = $1 
+      `SELECT services.*, providers.name AS provider_name, providers.type AS provider_type
+       FROM services
+       JOIN providers ON services.provider_id = providers.id
+       WHERE services.category = $1
+         AND providers.type = $5
          AND ($2::DATE IS NULL OR NOT EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(availability) AS a
+              SELECT 1 FROM jsonb_array_elements_text(services.availability) AS a
               WHERE a::DATE BETWEEN $2::DATE AND $3::DATE
             ))
-         AND location ILIKE $4`,
-      [category, startDate, endDate, `%${location}%`]
+         AND providers.location ILIKE $4`,
+      [category, startDate, endDate, `%${location}%`, providerType]
     );
 
     res.json(results.rows);
