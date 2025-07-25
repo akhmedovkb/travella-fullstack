@@ -75,19 +75,23 @@
               },
 
   "marketplace": {
-  "title": "Marketplace",
-  "filters": {
-    "all": "All types",
+    "title": "Marketplace",
+    "select_category": "Select a category",
     "guide": "Guide",
     "transport": "Transport",
-    "agent": "Travel Agent",
+    "package": "Tour Package",
     "hotel": "Hotel",
-    "category": "Category",
-    "location": "Location"
-             },
-  "propose_price": "Propose Your Price",
-  "no_results": "No services found"
-                 }
+    "flight": "Flight",
+    "event": "Event Ticket",
+    "search_filters": "Search Filters",
+    "start_date": "Start Date",
+    "end_date": "End Date",
+    "location": "Location",
+    "adults": "Adults (12+)",
+    "children": "Children (2–11)",
+    "infants": "Infants (0–1)",
+    "search": "Search"
+               }
 
 }
 
