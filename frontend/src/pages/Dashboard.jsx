@@ -313,7 +313,7 @@ const Dashboard = () => {
             {t("view_certificate")}
           </a>
         ) : (
-          <div className="text-gray-500">{t("not_specified")}</div>
+          <div className="text-gray-500">{t("no_files_selected")}</div>
         )}
       </div>
       <button
