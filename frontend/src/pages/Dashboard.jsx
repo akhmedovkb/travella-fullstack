@@ -201,16 +201,23 @@ const Dashboard = () => {
           className="w-24 h-24 rounded-full object-cover mb-2"
           alt="Фото"
         />
-        {isEditing && <label className="inline-block bg-orange-500 text-white px-3 py-1 rounded cursor-pointer text-sm mt-2">
-  {t("choose_files")}
-  <input
-    type="file"
-    accept="image/*"
-    onChange={handlePhotoChange}
-    className="hidden"
-  />
-</label>
-}
+        {isEditing && (
+  <div className="flex flex-col items-center">
+    <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
+      {t("choose_files")}
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handlePhotoChange}
+        className="hidden"
+      />
+    </label>
+    <div className="text-sm text-gray-600 mt-1">
+      {newPhoto ? t("file_chosen") : t("no_files_selected")}
+    </div>
+  </div>
+)}
+
       </div>
       <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
       {isEditing ? (
