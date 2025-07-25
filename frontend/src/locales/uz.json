@@ -44,6 +44,21 @@
   "delete_error": "Xizmatni o‘chirishda xatolik",
   "choose_files": "Fayllarni tanlash",
   "no_files_selected": "Fayl tanlanmagan",
+  "select_category": "Kategoriya tanlang",
+  "city_tour": "Shahar bo'ylab sayohat",
+  "mountain_tour": "Tog'li sayohat",
+  "one_way_transfer": "Bir tomonga transfer",
+  "dinner_transfer": "Kechki ovqat uchun transfer",
+  "border_transfer": "Chegara transferi",
+  "refused_tour": "Rad etilgan tur",
+  "refused_hotel": "Rad etilgan mehmonxona",
+  "refused_ticket": "Rad etilgan aviachipta",
+  "refused_event": "Rad etilgan tadbir chiptasi",
+  "visa_support": "Visa qo‘llab-quvvatlash",
+  "authored_tour": "Mualliflik turi",
+  "room_rent": "Xona ijarasi",
+  "hotel_transfer": "Mehmonxonadan transfer",
+  "hall_rent": "Zal ijarasi",
 
   
   "login": {
