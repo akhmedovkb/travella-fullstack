@@ -516,7 +516,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={preview-${idx}}
+                alt={`preview-${idx}`}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
