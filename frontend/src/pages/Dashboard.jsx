@@ -319,7 +319,7 @@ const getCategoryOptions = (type) => {
               marginWidth="0"
               className="rounded"
               src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}`
-            ></iframe>
+            />
           </div>
         )}
 
