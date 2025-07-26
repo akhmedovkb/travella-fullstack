@@ -89,7 +89,15 @@
   "changeable": "O'zgartirish mumkin",
   "visa_included": "Visa kiritilgan",
   "net_price": "Netto narx",
-    
+
+  "category": {
+    "refused_tour": "Rad etilgan tur",
+    "refused_hotel": "Rad etilgan otel",
+    "refused_flight": "Rad etilgan aviachipta",
+    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
+    "visa_support": "Visa hizmati",
+    "author_tour": "Mualliflik turi"
+  },
 
   
   "login": {
