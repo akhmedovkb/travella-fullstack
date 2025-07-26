@@ -31,7 +31,7 @@ const Dashboard = () => {
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = { headers: { Authorization: Bearer ${token} } };
   const [details, setDetails] = useState({
   direction: "",
   startDate: "",
@@ -50,7 +50,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
@@ -61,7 +61,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -102,7 +102,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -113,7 +113,7 @@ const Dashboard = () => {
 
   const handleChangePassword = () => {
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
         { password: newPassword },
         config
       )
@@ -134,7 +134,7 @@ const Dashboard = () => {
 
     if (selectedService) {
       axios
-        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+        .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -151,7 +151,7 @@ const Dashboard = () => {
         .catch(() => setMessageService(t("update_error")));
     } else {
       axios
-        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -167,7 +167,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
@@ -318,7 +318,7 @@ const getCategoryOptions = (type) => {
               marginHeight="0"
               marginWidth="0"
               className="rounded"
-              src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+              src={https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}
             ></iframe>
           </div>
         )}
@@ -532,7 +532,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={`preview-${idx}`}
+                alt={preview-${idx}}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
@@ -575,7 +575,6 @@ const getCategoryOptions = (type) => {
       </div>
 
     {/* Выбор категории */}
-// Исправленный блок с <select>
 <select
   value={category}
   onChange={(e) => {
@@ -585,6 +584,7 @@ const getCategoryOptions = (type) => {
     setPrice("");
     setAvailability([]);
     setImages([]);
+    // Сбросить дополнительные поля
     setDetails({
       direction: "",
       startDate: "",
@@ -603,14 +603,12 @@ const getCategoryOptions = (type) => {
   className="w-full border px-3 py-2 rounded mb-4 bg-white"
 >
   <option value="">{t("select_category")}</option>
-
   {profile.type === "guide" && (
     <>
       <option value="city_tour_guide">{t("category.city_tour_guide")}</option>
       <option value="mountain_tour_guide">{t("category.mountain_tour_guide")}</option>
     </>
   )}
-
   {profile.type === "transport" && (
     <>
       <option value="city_tour_transport">{t("category.city_tour_transport")}</option>
@@ -620,7 +618,6 @@ const getCategoryOptions = (type) => {
       <option value="border_transfer">{t("category.border_transfer")}</option>
     </>
   )}
-
   {profile.type === "agent" && (
     <>
       <option value="refused_tour">{t("category.refused_tour")}</option>
@@ -631,7 +628,6 @@ const getCategoryOptions = (type) => {
       <option value="author_tour">{t("category.author_tour")}</option>
     </>
   )}
-
   {profile.type === "hotel" && (
     <>
       <option value="hotel_room">{t("category.hotel_room")}</option>
@@ -640,7 +636,6 @@ const getCategoryOptions = (type) => {
     </>
   )}
 </select>
-
 
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
@@ -813,7 +808,7 @@ const getCategoryOptions = (type) => {
               <div key={idx} className="relative">
                 <img
                   src={img}
-                  alt={`preview-${idx}`}
+                  alt={preview-${idx}}
                   className="w-20 h-20 object-cover rounded"
                 />
                 <button
