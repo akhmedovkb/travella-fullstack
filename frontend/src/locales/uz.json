@@ -72,14 +72,14 @@
       "fb": "Toʻliq pansiyon",
       "ai": "Hammasi ichida",
       "uai": "Ultra hammasi ichida",
-      "halal": "Halol",
+      "halal": "Halol"
     }
   "transfer": "Transfer",
     "transfer_options": {
       "select": "Transferni tanlang",
       "individual": "Individual",
       "group": "Guruhli",
-      "none": "Yo‘q",
+      "none": "Yo‘q"
     }
   "changeable": "O'zgartirish mumkin",
   "visa_included": "Visa kiritilgan",
