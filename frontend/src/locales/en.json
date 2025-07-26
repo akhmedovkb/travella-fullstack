@@ -89,6 +89,15 @@
   "changeable": "Changeable",
   "visa_included": "Visa included",
   "net_price": "Net price",
+
+  "category": {
+    "refused_tour": "Refused tour",
+    "refused_hotel": "Refused hotel",
+    "refused_flight": "Refused air ticket",
+    "refused_event_ticket": "Refused event ticket",
+    "visa_support": "Visa support",
+    "author_tour": "Tailor-made tour"
+  },
   
   "login": {
     "title": "Supplier Login",
