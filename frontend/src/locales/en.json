@@ -96,7 +96,9 @@
     "refused_flight": "Refused air ticket",
     "refused_event_ticket": "Refused event ticket",
     "visa_support": "Visa support",
-    "author_tour": "Tailor-made tour"
+    "author_tour": "Tailor-made tour",
+    "city_tour_guide: "City tour",
+    "mountain_tour_guide: "Mountain tour",
   },
   
   "login": {
