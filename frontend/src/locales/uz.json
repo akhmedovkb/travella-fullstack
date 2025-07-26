@@ -98,7 +98,12 @@
     "visa_support": "Visa hizmati",
     "author_tour": "Mualliflik turi",
     "city_tour_guide": "Shahar bo`ylab tur",
-    "mountain_tour_guide": "Tog`lar bo`ylab tur"
+    "mountain_tour_guide": "Tog`lar bo`ylab tur",
+    "city_tour_transport": "Shahar bo`ylab tur",
+    "mountain_tour_transport": "Tog`lar bo`ylab tur",
+    "one_way_transfer": "Bir tomonga transfer",
+    "dinner_transfer": "Tushlikga transfer",
+    "border_transfer": "Chegara transferi"
   },
 
   
