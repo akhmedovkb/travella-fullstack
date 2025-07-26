@@ -725,7 +725,7 @@ const getCategoryOptions = (type) => {
       />
       {t("visa_included")}
     </label>
-    &nbsp&nbsp
+    <br></br>
     <label className="inline-flex items-center mb-2">
       <input
         type="checkbox"
