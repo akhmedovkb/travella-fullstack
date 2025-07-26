@@ -218,12 +218,12 @@ const getCategoryOptions = (type) => {
       ];
     case "agent":
       return [
-        { value: "refused_tour", label: t("refused_tour") },
-        { value: "refused_hotel", label: t("refused_hotel") },
-        { value: "refused_ticket", label: t("refused_ticket") },
-        { value: "refused_event", label: t("refused_event") },
-        { value: "visa_support", label: t("visa_support") },
-        { value: "authored_tour", label: t("authored_tour") },
+        { value: "refused_tour", label: t("category.refused_tour") },
+        { value: "refused_hotel", label: t("category.refused_hotel") },
+        { value: "refused_ticket", label: t("category.refused_ticket") },
+        { value: "refused_event", label: t("category.refused_event") },
+        { value: "visa_support", label: t("category.visa_support") },
+        { value: "authored_tour", label: t("category.authored_tour") },
       ];
     case "hotel":
       return [
