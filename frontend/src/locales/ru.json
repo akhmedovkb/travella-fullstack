@@ -46,7 +46,9 @@
   "delete_error": "Ошибка удаления",
   "choose_files": "Выбрать файлы",
   "no_files_selected": "Файлы не выбраны",
-  
+  "expiration_timer": "Таймер актуальности",
+  "is_active": "Актуально"
+
   "select_category": "Выберите категорию",
   "city_tour": "Тур по городу",
   "mountain_tour": "Тур по горам",
