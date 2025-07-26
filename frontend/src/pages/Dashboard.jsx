@@ -118,7 +118,7 @@ const Dashboard = () => {
 
     if (selectedService) {
       axios
-        .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}, data, config)
+        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id`}, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -135,7 +135,7 @@ const Dashboard = () => {
         .catch(() => setMessageService(t("update_error")));
     } else {
       axios
-        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
+        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -151,7 +151,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
+      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
