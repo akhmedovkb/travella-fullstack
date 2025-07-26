@@ -318,7 +318,7 @@ const getCategoryOptions = (type) => {
               marginHeight="0"
               marginWidth="0"
               className="rounded"
-              src={https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}
+              src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}`
             ></iframe>
           </div>
         )}
