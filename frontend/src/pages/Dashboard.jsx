@@ -24,6 +24,7 @@ const Dashboard = () => {
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -31,6 +32,21 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  const [details, setDetails] = useState({
+  direction: "",
+  startDate: "",
+  endDate: "",
+  hotel: "",
+  accommodation: "",
+  food: "",
+  halal: false,
+  transfer: "",
+  changeable: false,
+  visaIncluded: false,
+  netPrice: "",
+  expiration: "",
+  isActive: true,
+  });
 
   useEffect(() => {
     axios
@@ -114,7 +130,7 @@ const Dashboard = () => {
       return;
     }
 
-    const data = { title, description, category, price, availability, images };
+    const data = { title, description, category, price, availability, images, details };
 
     if (selectedService) {
       axios
@@ -624,12 +640,131 @@ const getCategoryOptions = (type) => {
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
   <>
-    {["refused_tour", "author_tour"].includes(category) ? (
-      // Расширенная форма (будет добавлена отдельно — сообщи, если внедрять)
-      <div className="p-4 border rounded bg-yellow-50 text-sm">
-        <p>{t("Расширенная форма для отказных и авторских туров. В следующем шаге будет добавлена полная реализация.")}</p>
-      </div>
-    ) : (
+    {["refused_tour", "author_tour"].includes(category) ? ( <>
+    <input
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      placeholder={t("title")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <input
+      value={details.direction || ""}
+      onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+      placeholder={t("direction")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <div className="flex gap-4 mb-2">
+      <input
+        type="date"
+        value={details.startDate || ""}
+        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+        className="w-1/2 border px-3 py-2 rounded"
+      />
+      <input
+        type="date"
+        value={details.endDate || ""}
+        onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
+        className="w-1/2 border px-3 py-2 rounded"
+      />
+    </div>
+    <input
+      value={details.hotel || ""}
+      onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
+      placeholder={t("hotel")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <input
+      value={details.accommodation || ""}
+      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+      placeholder={t("accommodation")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <div className="mb-2">
+      <label className="block font-medium mb-1">{t("food")}</label>
+      <select
+        value={details.food || ""}
+        onChange={(e) => setDetails({ ...details, food: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      >
+        <option value="">{t("select")}</option>
+        <option value="BB">BB - {t("breakfast")}</option>
+        <option value="HB">HB - {t("half_board")}</option>
+        <option value="FB">FB - {t("full_board")}</option>
+        <option value="AI">AI - {t("all_inclusive")}</option>
+        <option value="UAI">UAI - {t("ultra_all_inclusive")}</option>
+      </select>
+      <label className="inline-flex items-center mt-2">
+        <input
+          type="checkbox"
+          checked={details.halal || false}
+          onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
+          className="mr-2"
+        />
+        {t("halal")}
+      </label>
+    </div>
+    <div className="mb-2">
+      <label className="block font-medium mb-1">{t("transfer")}</label>
+      <select
+        value={details.transfer || ""}
+        onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      >
+        <option value="">{t("select")}</option>
+        <option value="individual">{t("individual")}</option>
+        <option value="group">{t("group")}</option>
+        <option value="none">{t("none")}</option>
+      </select>
+    </div>
+    <label className="inline-flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={details.changeable || false}
+        onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+        className="mr-2"
+      />
+      {t("changeable")}
+    </label>
+    <label className="inline-flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={details.visaIncluded || false}
+        onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
+        className="mr-2"
+      />
+      {t("visa_included")}
+    </label>
+    <input
+      value={details.netPrice || ""}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <label className="block font-medium mt-2 mb-1">{t("expiration")}</label>
+    <input
+      type="datetime-local"
+      value={details.expiration || ""}
+      onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+    <label className="inline-flex items-center mb-4">
+      <input
+        type="checkbox"
+        checked={details.isActive || false}
+        onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+        className="mr-2"
+      />
+      {t("is_active")}
+    </label>
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>
+   </>
+        ) : (
       <>
         <input
           value={title}
