@@ -98,7 +98,12 @@
     "visa_support": "Visa support",
     "author_tour": "Tailor-made tour",
     "city_tour_guide": "City tour",
-    "mountain_tour_guide": "Mountain tour"
+    "mountain_tour_guide": "Mountain tour",
+    "city_tour_transport": "City tour",
+    "mountain_tour_transport": "Mountain tour",
+    "one_way_transfer": "One way transfer",
+    "dinner_transfer": "Dinner transfer",
+    "border_transfer": "Border transfer"
   },
   
   "login": {
