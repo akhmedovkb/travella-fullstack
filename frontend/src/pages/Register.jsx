@@ -76,11 +76,16 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-        formData,
-        { headers: { "Content-Type": "application/json" } }
-      );
+      const payload = {
+  ...formData,
+  location: [formData.location], // оборачиваем location в массив
+};
+
+await axios.post(
+  `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
+  payload,
+  { headers: { "Content-Type": "application/json" } }
+);
       alert(t("register.success"));
       navigate("/login");
     } catch (error) {
