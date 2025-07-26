@@ -61,7 +61,8 @@
   "room_rent": "Room rental",
   "hotel_transfer": "Hotel transfer",
   "hall_rent": "Hall rental",
-
+  "expiration_timer": "Таймер актуальности",
+  "is_active": "Актуально",
 
   "login": {
     "title": "Supplier Login",
