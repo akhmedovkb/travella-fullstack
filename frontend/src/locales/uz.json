@@ -64,6 +64,27 @@
   "expiration_timer": "Aktuallik taymeri",
   "is_active": "Aktual",
 
+  "food": "Ovqatlanish turi",
+    "food_options": {
+      "select": "Tanlang",
+      "bb": "Faqat nonushta",
+      "hb": "Nonushta va kechki ovqat",
+      "fb": "Toʻliq pansiyon",
+      "ai": "Hammasi ichida",
+      "uai": "Ultra hammasi ichida",
+      "halal": "Halol",
+
+  "transfer": "Transfer",
+    "transfer_options": {
+      "select": "Transferni tanlang",
+      "individual": "Individual",
+      "group": "Guruhli",
+      "none": "Yo‘q",
+
+  "changeable": "O'zgartirish mumkin",
+  "visa_included": "Visa kiritilgan",
+  "net_price": "Netto narx"
+
 
   
   "login": {
