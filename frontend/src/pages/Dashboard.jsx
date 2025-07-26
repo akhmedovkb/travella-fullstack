@@ -185,20 +185,42 @@ const Dashboard = () => {
     });
   };
   
-const getCategoryOptions = () => {
-  switch (profile.type) {
+const getCategoryOptions = (type) => {
+  switch (type) {
     case "guide":
-      return ["city_tour", "mountain_tour"];
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+      ];
     case "transport":
-      return ["city_tour", "mountain_tour", "one_way_transfer", "dinner_transfer", "border_transfer"];
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+        { value: "one_way_transfer", label: t("one_way_transfer") },
+        { value: "dinner_transfer", label: t("dinner_transfer") },
+        { value: "border_transfer", label: t("border_transfer") },
+      ];
     case "agent":
-      return ["refused_tour", "refused_hotel", "refused_ticket", "refused_event", "visa_support", "authored_tour"];
+      return [
+        { value: "refused_tour", label: t("refused_tour") },
+        { value: "refused_hotel", label: t("refused_hotel") },
+        { value: "refused_ticket", label: t("refused_ticket") },
+        { value: "refused_event", label: t("refused_event") },
+        { value: "visa_support", label: t("visa_support") },
+        { value: "authored_tour", label: t("authored_tour") },
+      ];
     case "hotel":
-      return ["room_rent", "hotel_transfer", "hall_rent"];
+      return [
+        { value: "room_rent", label: t("room_rent") },
+        { value: "hotel_transfer", label: t("hotel_transfer") },
+        { value: "hall_rent", label: t("hall_rent") },
+      ];
     default:
       return [];
   }
 };
+
+
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
@@ -444,38 +466,11 @@ const getCategoryOptions = () => {
   className="w-full border px-3 py-2 rounded mb-2 bg-white"
 >
   <option value="">{t("select_category")}</option>
-  {profile.type === "гид" && (
-    <>
-      <option value="city_tour_guide">{t("category.city_tour_guide")}</option>
-      <option value="mountain_tour_guide">{t("category.mountain_tour_guide")}</option>
-    </>
-  )}
-  {profile.type === "транспорт" && (
-    <>
-      <option value="city_tour_transport">{t("category.city_tour_transport")}</option>
-      <option value="mountain_tour_transport">{t("category.mountain_tour_transport")}</option>
-      <option value="one_way_transfer">{t("category.one_way_transfer")}</option>
-      <option value="dinner_transfer">{t("category.dinner_transfer")}</option>
-      <option value="border_transfer">{t("category.border_transfer")}</option>
-    </>
-  )}
-  {profile.type === "турагент" && (
-    <>
-      <option value="refused_tour">{t("category.refused_tour")}</option>
-      <option value="refused_hotel">{t("category.refused_hotel")}</option>
-      <option value="refused_flight">{t("category.refused_flight")}</option>
-      <option value="refused_event_ticket">{t("category.refused_event_ticket")}</option>
-      <option value="visa_support">{t("category.visa_support")}</option>
-      <option value="author_tour">{t("category.author_tour")}</option>
-    </>
-  )}
-  {profile.type === "отели" && (
-    <>
-      <option value="hotel_room">{t("category.hotel_room")}</option>
-      <option value="hotel_transfer">{t("category.hotel_transfer")}</option>
-      <option value="hall_rent">{t("category.hall_rent")}</option>
-    </>
-  )}
+  {getCategoryOptions(profile.type).map((option) => (
+    <option key={option.value} value={option.value}>
+      {option.label}
+    </option>
+  ))}
 </select>
 
       <input
@@ -569,40 +564,12 @@ const getCategoryOptions = () => {
   className="w-full border px-3 py-2 rounded mb-2 bg-white"
 >
   <option value="">{t("select_category")}</option>
-  {profile.type === "гид" && (
-    <>
-      <option value="city_tour_guide">{t("category.city_tour_guide")}</option>
-      <option value="mountain_tour_guide">{t("category.mountain_tour_guide")}</option>
-    </>
-  )}
-  {profile.type === "транспорт" && (
-    <>
-      <option value="city_tour_transport">{t("category.city_tour_transport")}</option>
-      <option value="mountain_tour_transport">{t("category.mountain_tour_transport")}</option>
-      <option value="one_way_transfer">{t("category.one_way_transfer")}</option>
-      <option value="dinner_transfer">{t("category.dinner_transfer")}</option>
-      <option value="border_transfer">{t("category.border_transfer")}</option>
-    </>
-  )}
-  {profile.type === "турагент" && (
-    <>
-      <option value="refused_tour">{t("category.refused_tour")}</option>
-      <option value="refused_hotel">{t("category.refused_hotel")}</option>
-      <option value="refused_flight">{t("category.refused_flight")}</option>
-      <option value="refused_event_ticket">{t("category.refused_event_ticket")}</option>
-      <option value="visa_support">{t("category.visa_support")}</option>
-      <option value="author_tour">{t("category.author_tour")}</option>
-    </>
-  )}
-  {profile.type === "отели" && (
-    <>
-      <option value="hotel_room">{t("category.hotel_room")}</option>
-      <option value="hotel_transfer">{t("category.hotel_transfer")}</option>
-      <option value="hall_rent">{t("category.hall_rent")}</option>
-    </>
-  )}
+  {getCategoryOptions(profile.type).map((option) => (
+    <option key={option.value} value={option.value}>
+      {option.label}
+    </option>
+  ))}
 </select>
-
 
       <input
         value={title}
