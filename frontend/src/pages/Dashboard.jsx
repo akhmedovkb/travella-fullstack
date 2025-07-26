@@ -719,21 +719,23 @@ const getCategoryOptions = (type) => {
     <label className="inline-flex items-center mb-2">
       <input
         type="checkbox"
-        checked={details.changeable || false}
-        onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
-        className="mr-2"
-      />
-      {t("changeable")}
-    </label>
-    <label className="inline-flex items-center mb-2">
-      <input
-        type="checkbox"
         checked={details.visaIncluded || false}
         onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
         className="mr-2"
       />
       {t("visa_included")}
     </label>
+    &nbsp&nbsp
+    <label className="inline-flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={details.changeable || false}
+        onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+        className="mr-2"
+      />
+      {t("changeable")}
+    </label>
+    
     <input
       value={details.netPrice || ""}
       onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
