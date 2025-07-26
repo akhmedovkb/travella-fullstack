@@ -99,7 +99,13 @@
     "visa_support": "Визовая поддержка",
     "author_tour": "Авторский тур",
     "city_tour_guide": "Тур по городу",
-    "mountain_tour_guide": "Тур в горы"
+    "mountain_tour_guide": "Тур в горы",
+    "city_tour_transport": "Тур по городу",
+    "mountain_tour_transport": "Тур в горы",
+    "one_way_transfer": "Трансфер в одну сторону",
+    "dinner_transfer": "Трансфер на ужин",
+    "border_transfer": "Трансфер из/до границы"
+    
   },
 
   "login": {
