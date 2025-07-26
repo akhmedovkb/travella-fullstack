@@ -1,5 +1,3 @@
-//dashboard
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DayPicker } from "react-day-picker";
@@ -32,11 +30,11 @@ const Dashboard = () => {
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = { headers: { Authorization: Bearer ${token} } };
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
@@ -47,7 +45,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -88,7 +86,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -99,7 +97,7 @@ const Dashboard = () => {
 
   const handleChangePassword = () => {
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
         { password: newPassword },
         config
       )
@@ -120,7 +118,7 @@ const Dashboard = () => {
 
     if (selectedService) {
       axios
-        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+        .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -137,7 +135,7 @@ const Dashboard = () => {
         .catch(() => setMessageService(t("update_error")));
     } else {
       axios
-        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -153,7 +151,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
@@ -304,7 +302,7 @@ const getCategoryOptions = (type) => {
               marginHeight="0"
               marginWidth="0"
               className="rounded"
-              src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+              src={https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}
             ></iframe>
           </div>
         )}
@@ -462,33 +460,10 @@ const getCategoryOptions = (type) => {
 
   {selectedService ? (
     <>
-      {/* Выбор категории */}
-<select
+      <select
   value={category}
-  onChange={(e) => {
-    setCategory(e.target.value);
-    setTitle("");
-    setDescription("");
-    setPrice("");
-    setAvailability([]);
-    setImages([]);
-    // Сбросить дополнительные поля
-    setDetails({
-      direction: "",
-      startDate: "",
-      endDate: "",
-      hotel: "",
-      accommodation: "",
-      food: "",
-      transfer: "",
-      changeable: false,
-      visaIncluded: false,
-      netPrice: "",
-      expiration: "",
-      isActive: true,
-    });
-  }}
-  className="w-full border px-3 py-2 rounded mb-4 bg-white"
+  onChange={(e) => setCategory(e.target.value)}
+  className="w-full border px-3 py-2 rounded mb-2 bg-white"
 >
   <option value="">{t("select_category")}</option>
   {profile.type === "гид" && (
@@ -524,94 +499,6 @@ const getCategoryOptions = (type) => {
     </>
   )}
 </select>
-
-{/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
-{category && (
-  <>
-    {["refused_tour", "author_tour"].includes(category) ? (
-      // Расширенная форма (будет добавлена отдельно — сообщи, если внедрять)
-      <div className="p-4 border rounded bg-yellow-50 text-sm">
-        <p>{t("Расширенная форма для отказных и авторских туров. В следующем шаге будет добавлена полная реализация.")}</p>
-      </div>
-    ) : (
-      <>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("title")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder={t("description")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder={t("price")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-
-        {/* Изображения */}
-        <div className="mb-4">
-          <label className="block font-medium mb-1">{t("upload_images")}</label>
-          <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
-            {t("choose_files")}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </label>
-          <div className="mt-1 text-sm text-gray-600">
-            {images.length > 0
-              ? t("file_chosen", { count: images.length })
-              : t("no_files_selected")}
-          </div>
-          <div className="flex gap-2 flex-wrap mt-2">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative">
-                <img
-                  src={img}
-                  alt={`preview-${idx}`}
-                  className="w-20 h-20 object-cover rounded"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(idx)}
-                  className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-                  title={t("delete")}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Календарь */}
-        <DayPicker
-          mode="multiple"
-          selected={availability}
-          onSelect={setAvailability}
-          className="border rounded-lg p-4 mb-4"
-        />
-
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
-      </>
-    )}
-  </>
-)}
-
 
       <input
         value={title}
@@ -656,7 +543,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={`preview-${idx}`}
+                alt={preview-${idx}}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
@@ -698,33 +585,10 @@ const getCategoryOptions = (type) => {
         {t("new_service_tip")}
       </div>
 
-    {/* Выбор категории */}
-<select
+    <select
   value={category}
-  onChange={(e) => {
-    setCategory(e.target.value);
-    setTitle("");
-    setDescription("");
-    setPrice("");
-    setAvailability([]);
-    setImages([]);
-    // Сбросить дополнительные поля
-    setDetails({
-      direction: "",
-      startDate: "",
-      endDate: "",
-      hotel: "",
-      accommodation: "",
-      food: "",
-      transfer: "",
-      changeable: false,
-      visaIncluded: false,
-      netPrice: "",
-      expiration: "",
-      isActive: true,
-    });
-  }}
-  className="w-full border px-3 py-2 rounded mb-4 bg-white"
+  onChange={(e) => setCategory(e.target.value)}
+  className="w-full border px-3 py-2 rounded mb-2 bg-white"
 >
   <option value="">{t("select_category")}</option>
   {profile.type === "гид" && (
@@ -760,93 +624,6 @@ const getCategoryOptions = (type) => {
     </>
   )}
 </select>
-
-{/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
-{category && (
-  <>
-    {["refused_tour", "author_tour"].includes(category) ? (
-      // Расширенная форма (будет добавлена отдельно — сообщи, если внедрять)
-      <div className="p-4 border rounded bg-yellow-50 text-sm">
-        <p>{t("Расширенная форма для отказных и авторских туров. В следующем шаге будет добавлена полная реализация.")}</p>
-      </div>
-    ) : (
-      <>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("title")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder={t("description")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder={t("price")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-
-        {/* Изображения */}
-        <div className="mb-4">
-          <label className="block font-medium mb-1">{t("upload_images")}</label>
-          <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
-            {t("choose_files")}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </label>
-          <div className="mt-1 text-sm text-gray-600">
-            {images.length > 0
-              ? t("file_chosen", { count: images.length })
-              : t("no_files_selected")}
-          </div>
-          <div className="flex gap-2 flex-wrap mt-2">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative">
-                <img
-                  src={img}
-                  alt={`preview-${idx}`}
-                  className="w-20 h-20 object-cover rounded"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(idx)}
-                  className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-                  title={t("delete")}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Календарь */}
-        <DayPicker
-          mode="multiple"
-          selected={availability}
-          onSelect={setAvailability}
-          className="border rounded-lg p-4 mb-4"
-        />
-
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
-      </>
-    )}
-  </>
-)}
 
 
       <input
@@ -892,7 +669,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={`preview-${idx}`}
+                alt={preview-${idx}}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
@@ -933,5 +710,3 @@ const getCategoryOptions = (type) => {
 };
 
 export default Dashboard;
-
-
