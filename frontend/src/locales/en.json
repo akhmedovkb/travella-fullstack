@@ -72,14 +72,14 @@
       "fb": "Full Board",
       "ai": "All Inclusive",
       "uai": "Ultra All Inclusive",
-      "halal": "Halal",
+      "halal": "Halal"
     }
   "transfer": "Transfer",
     "transfer_options": {
       "select": "Select transfer",
       "individual": "Individual",
       "group": "Group",
-      "none": "None",
+      "none": "None"
     }
   "changeable": "Changeable",
   "visa_included": "Visa included",
