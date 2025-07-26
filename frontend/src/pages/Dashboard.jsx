@@ -686,12 +686,12 @@ const getCategoryOptions = (type) => {
         onChange={(e) => setDetails({ ...details, food: e.target.value })}
         className="w-full border px-3 py-2 rounded"
       >
-        <option value="">{t("select")}</option>
-        <option value="BB">BB - {t("breakfast")}</option>
-        <option value="HB">HB - {t("half_board")}</option>
-        <option value="FB">FB - {t("full_board")}</option>
-        <option value="AI">AI - {t("all_inclusive")}</option>
-        <option value="UAI">UAI - {t("ultra_all_inclusive")}</option>
+        <option value="">{t("food_options.select")}</option>
+        <option value="BB">BB - {t("food_options.breakfast")}</option>
+        <option value="HB">HB - {t("food_options.half_board")}</option>
+        <option value="FB">FB - {t("food_options.full_board")}</option>
+        <option value="AI">AI - {t("food_options.all_inclusive")}</option>
+        <option value="UAI">UAI - {t("food_options.ultra_all_inclusive")}</option>
       </select>
       <label className="inline-flex items-center mt-2">
         <input
@@ -710,7 +710,7 @@ const getCategoryOptions = (type) => {
         onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
         className="w-full border px-3 py-2 rounded"
       >
-        <option value="">{t("select")}</option>
+        <option value="">{t("transport_options.select")}</option>
         <option value="individual">{t("individual")}</option>
         <option value="group">{t("group")}</option>
         <option value="none">{t("none")}</option>
