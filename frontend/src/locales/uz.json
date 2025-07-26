@@ -64,6 +64,9 @@
   "expiration_timer": "Aktuallik taymeri",
   "is_active": "Aktual",
 
+  "direction": "Yo`nalish",
+  "accomodation": "Joylashuv",
+  
   "food": "Ovqatlanish turi",
     "food_options": {
       "select": "Tanlang",
