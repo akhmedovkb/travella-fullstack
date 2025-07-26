@@ -575,6 +575,7 @@ const getCategoryOptions = (type) => {
       </div>
 
     {/* Выбор категории */}
+// Исправленный блок с <select>
 <select
   value={category}
   onChange={(e) => {
@@ -584,7 +585,6 @@ const getCategoryOptions = (type) => {
     setPrice("");
     setAvailability([]);
     setImages([]);
-    // Сбросить дополнительные поля
     setDetails({
       direction: "",
       startDate: "",
@@ -603,13 +603,15 @@ const getCategoryOptions = (type) => {
   className="w-full border px-3 py-2 rounded mb-4 bg-white"
 >
   <option value="">{t("select_category")}</option>
-  {profile.type === "гид" && (
+
+  {profile.type === "guide" && (
     <>
       <option value="city_tour_guide">{t("category.city_tour_guide")}</option>
       <option value="mountain_tour_guide">{t("category.mountain_tour_guide")}</option>
     </>
   )}
-  {profile.type === "транспорт" && (
+
+  {profile.type === "transport" && (
     <>
       <option value="city_tour_transport">{t("category.city_tour_transport")}</option>
       <option value="mountain_tour_transport">{t("category.mountain_tour_transport")}</option>
@@ -618,7 +620,8 @@ const getCategoryOptions = (type) => {
       <option value="border_transfer">{t("category.border_transfer")}</option>
     </>
   )}
-  {profile.type === "турагент" && (
+
+  {profile.type === "agent" && (
     <>
       <option value="refused_tour">{t("category.refused_tour")}</option>
       <option value="refused_hotel">{t("category.refused_hotel")}</option>
@@ -628,7 +631,8 @@ const getCategoryOptions = (type) => {
       <option value="author_tour">{t("category.author_tour")}</option>
     </>
   )}
-  {profile.type === "отели" && (
+
+  {profile.type === "hotel" && (
     <>
       <option value="hotel_room">{t("category.hotel_room")}</option>
       <option value="hotel_transfer">{t("category.hotel_transfer")}</option>
@@ -636,6 +640,7 @@ const getCategoryOptions = (type) => {
     </>
   )}
 </select>
+
 
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
