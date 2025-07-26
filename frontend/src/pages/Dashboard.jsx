@@ -118,7 +118,7 @@ const Dashboard = () => {
 
     if (selectedService) {
       axios
-        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id`}, data, config)
+        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
