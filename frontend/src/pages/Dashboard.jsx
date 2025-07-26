@@ -700,7 +700,7 @@ const getCategoryOptions = (type) => {
           onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
           className="mr-2"
         />
-        {t("halal")}
+        {t("food_options.halal")}
       </label>
     </div>
     <div className="mb-2">
