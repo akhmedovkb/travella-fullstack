@@ -305,7 +305,7 @@ const getCategoryOptions = () => {
         </div>
         <div>
           <label className="block font-medium">{t("type")}</label>
-          <div className="border px-3 py-2 rounded bg-gray-100">{profile.type}</div>
+          <div className="border px-3 py-2 rounded bg-gray-100">{t.(profile.type)}</div>
         </div>
         <div>
           <label className="block font-medium">{t("location")}</label>
