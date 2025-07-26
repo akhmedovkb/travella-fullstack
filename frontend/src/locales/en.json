@@ -63,6 +63,9 @@
   "hall_rent": "Hall rental",
   "expiration_timer": "Actuality timer",
   "is_active": "Actual",
+
+  "direction": "Direction",
+  "accomodation": "Accomodation",
   
   "food": "Meal plan",
     "food_options": {
