@@ -63,7 +63,28 @@
   "hall_rent": "Hall rental",
   "expiration_timer": "Actuality timer",
   "is_active": "Actual",
+  
+  "food": "Meal plan",
+    "food_options": {
+      "select": "Select option",
+      "bb": "Bed & Breakfast",
+      "hb": "Half Board",
+      "fb": "Full Board",
+      "ai": "All Inclusive",
+      "uai": "Ultra All Inclusive",
+      "halal": "Halal",
 
+  "transfer": "Transfer",
+    "transfer_options": {
+      "select": "Select transfer",
+      "individual": "Individual",
+      "group": "Group",
+      "none": "None",
+
+  "changeable": "Changeable",
+  "visa_included": "Visa included",
+  "net_price": "Net price"
+  
   "login": {
     "title": "Supplier Login",
     "email": "Email",
