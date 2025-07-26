@@ -27,7 +27,7 @@
   "new_service_tip": "Yangi xizmat qo‘shish uchun barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
   "title": "Nom",
   "description": "Tavsif",
-  "category": "Kategoriya",
+  "category": "Toifa",
   "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
   "select_files": "Fayllarni tanlash",
   "no_file_chosen": "Fayl tanlanmagan",
@@ -46,7 +46,7 @@
   "delete_error": "Xizmatni o‘chirishda xatolik",
   "choose_files": "Fayllarni tanlash",
   "no_files_selected": "Fayl tanlanmagan",
-  "select_category": "Kategoriya tanlang",
+  "select_category": "Toifani tanlang",
   "city_tour": "Shahar bo'ylab sayohat",
   "mountain_tour": "Tog'li sayohat",
   "one_way_transfer": "Bir tomonga transfer",
@@ -97,7 +97,7 @@
  
   "marketplace": {
     "title": "E'lonlar doskasi",
-    "select_category": "Kategoriya tanlang",
+    "select_category": "Toifani tanlang",
     "guide": "Gid",
     "transport": "Transport",
     "package": "Rad etilgan tur",
