@@ -29,6 +29,9 @@ const Dashboard = () => {
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
+  const [expiration, setExpiration] = useState(""); // формат: YYYY-MM-DDTHH:mm
+  const [isActive, setIsActive] = useState(true);
+
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -114,7 +117,7 @@ const Dashboard = () => {
       return;
     }
 
-    const data = { title, description, category, price, availability, images };
+    const data = { title, description, category, price, availability, images, expiration, isActive };
 
     if (selectedService) {
       axios
@@ -537,6 +540,30 @@ const getCategoryOptions = (type) => {
         onSelect={setAvailability}
         className="border rounded-lg p-4 mb-4"
       />
+      {/* Таймер актуальности */}
+<div className="mb-4">
+  <label className="block font-medium mb-1">{t("expiration_timer")}</label>
+  <input
+    type="datetime-local"
+    value={expiration}
+    onChange={(e) => setExpiration(e.target.value)}
+    className="w-full border px-3 py-2 rounded"
+  />
+</div>
+
+{/* Чекбокс актуальности */}
+<div className="mb-4">
+  <label className="inline-flex items-center">
+    <input
+      type="checkbox"
+      checked={isActive}
+      onChange={(e) => setIsActive(e.target.checked)}
+      className="mr-2"
+    />
+    {t("is_active")}
+  </label>
+</div>
+
       <div className="flex gap-4">
         <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
