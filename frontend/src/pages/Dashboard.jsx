@@ -32,13 +32,21 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  
   const [details, setDetails] = useState({
-  direction: "",
-  startDate: "",
-  endDate: "",
-  hotel: "",
-  accommodation: "",
-  food: "",
+  directionCountry: "",     // Страна направления
+  directionFrom: "",        // Город отправления
+  directionTo: "",          // Город прибытия
+  flightDepartureDate: "",  // Дата рейса вылета
+  flightReturnDate: "",     // Дата рейса обратно
+  flightDetails: "",        // Детали рейса
+  hotel: "",                // Отель
+  accommodationCategory: "",// Категория размещения
+  accommodation: "",        // Тип размещения
+  adt: "",                  // Взрослые
+  chd: "",                  // Дети
+  inf: "",                  // Младенцы
+  food: "",                 
   halal: false,
   transfer: "",
   changeable: false,
@@ -46,7 +54,8 @@ const Dashboard = () => {
   netPrice: "",
   expiration: "",
   isActive: true,
-  });
+});
+
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   const handleSaveBlockedDates = async () => {
   try {
