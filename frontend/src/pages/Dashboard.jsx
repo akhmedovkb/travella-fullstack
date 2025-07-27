@@ -876,7 +876,7 @@ const getCategoryOptions = (type) => {
       {t("calendar.save_blocked_dates")}
     </button>
   </div>
-)}
+): null}
   
     </div>
    </div>
