@@ -109,7 +109,7 @@
   },
 
   "direction_country": "Страна направления",
-  "direction_from": "Город вылета",
+  "direction_from": "Город отправления",
   "direction_to": "Город прибытия",
   "country_not_chosen": "Не выбрано",
   "direction_from_not_chosen": "Город вылета не выбран",
