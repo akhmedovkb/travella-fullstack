@@ -112,6 +112,8 @@
   "direction_from": "Departure city",
   "direction_to": "Arrival city",
   "country_not_chosen": "Not chosen",
+  "direction_from_not_chosen": "Departure city not chosen",
+  "direction_to_not_chosen": "Arrival city not chosen",
   
   "flight_departure_date": "Outbound flight date",
   "flight_return_date": "Return flight date",
