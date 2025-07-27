@@ -110,6 +110,8 @@
   "direction_from": "Jo`nab ketish shahri",
   "direction_to": "Tashrif shahri",
   "country_not_chosen": "Mamlakat tanlanmagan",
+  "direction_from_not_chosen": "Jo`nab ketish shahri tanlanmagan",
+  "direction_to_not_chosen": "Tashrif shahri tanlanmagan",
   
   "flight_departure_date": "Jo`nab ketish sanasi",
   "flight_return_date": "Qaytib kelish sanasi",
