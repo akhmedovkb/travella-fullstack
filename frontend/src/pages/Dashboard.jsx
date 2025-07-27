@@ -484,7 +484,9 @@ const getCategoryOptions = (type) => {
         </div>
       ))}
     </div>
-     {/* 📅 Новый отдельный календарь занятости поставщика */}
+  </div>
+  
+ {/* 📅 Новый отдельный календарь занятости поставщика */}
 {profile.type === "guide" || profile.type === "transport" ? (
   <div className="mt-10 bg-white p-6 rounded shadow border">
     <h3 className="text-lg font-semibold mb-4 text-orange-600">
@@ -510,8 +512,7 @@ const getCategoryOptions = (type) => {
     </button>
   </div>
 ) : null}
-  </div>
-
+  
   {selectedService ? (
     <>
       <select
