@@ -106,9 +106,11 @@
     "border_transfer": "Chegara transferi"
   },
 
-  "country": "Yo`nalish mamlakati",
-  "from_city": "Yo`nalish shahri",
-  "to_city": "Tashrif shahri",
+  "direction_country": "Yo`nalish mamlakati",
+  "direction_from": "Jo`nab ketish shahri",
+  "direction_to": "Tashrif shahri",
+  "country_not_chosen": "Mamlakat tanlanmagan",
+  
   "flight_departure_date": "Jo`nab ketish sanasi",
   "flight_return_date": "Qaytib kelish sanasi",
   "flight_details": "Parvoz haqida ma`lumot",
