@@ -106,14 +106,24 @@
     "border_transfer": "Chegara transferi"
   },
 
+  "country": "Yo`nalish mamlakati",
+  "from_city": "Yo`nalish shahri",
+  "to_city": "Tashrif shahri",
+  "flight_departure_date": "Jo`nab ketish sanasi",
+  "flight_return_date": "Qaytib kelish sanasi",
+  "flight_details": "Parvoz haqida ma`lumot,
+  "room_category": "Xona toifasi",
+  "adt": "Kattalar (ADT)",
+  "chd": "Bolalar  (CHD)",
+  "inf": "Go`daklar (INF)",
   
   "login": {
-    "title": "Ta'minotchilar uchun kirish",
-    "email": "Email",
-    "password": "Parol",
-    "button": "Kirish",
-    "no_account": "Akkauntingiz yo‘qmi? ",
-    "error": "email yoki parol xato!"
+  "title": "Ta'minotchilar uchun kirish",
+  "email": "Email",
+  "password": "Parol",
+  "button": "Kirish",
+  "no_account": "Akkauntingiz yo‘qmi? ",
+  "error": "email yoki parol xato!"
 
            },
  
