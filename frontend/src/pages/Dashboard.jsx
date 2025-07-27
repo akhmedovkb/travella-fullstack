@@ -5,6 +5,11 @@ import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 
+import Select from "react-select";
+import { countryOptions, cityOptions } from "../data/locationOptions";
+const { i18n } = useTranslation();
+const currentLang = i18n.language;
+
 const Dashboard = () => {
   const { t } = useTranslation();
   const [profile, setProfile] = useState({});
@@ -24,21 +29,29 @@ const Dashboard = () => {
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
-
+  
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = { headers: { Authorization: Bearer ${token} } };
+  
   const [details, setDetails] = useState({
-  direction: "",
-  startDate: "",
-  endDate: "",
-  hotel: "",
-  accommodation: "",
-  food: "",
+  directionCountry: "",     // Страна направления
+  directionFrom: "",        // Город отправления
+  directionTo: "",          // Город прибытия
+  flightDepartureDate: "",  // Дата рейса вылета
+  flightReturnDate: "",     // Дата рейса обратно
+  flightDetails: "",        // Детали рейса
+  hotel: "",                // Отель
+  accommodationCategory: "",// Категория размещения
+  accommodation: "",        // Тип размещения
+  adt: "",                  // Взрослые
+  chd: "",                  // Дети
+  inf: "",                  // Младенцы
+  food: "",                 
   halal: false,
   transfer: "",
   changeable: false,
@@ -46,11 +59,24 @@ const Dashboard = () => {
   netPrice: "",
   expiration: "",
   isActive: true,
-  });
+});
+
+  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
+  const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates, {
+      dates: blockedDates,
+    }, config);
+    alert(t("calendar.saved_successfully"));
+  } catch (err) {
+    console.error("Ошибка сохранения дат:", err);
+    alert(t("calendar.save_error"));
+  }
+      };
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
@@ -61,7 +87,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -100,19 +126,9 @@ const Dashboard = () => {
       setMessageProfile(t("no_changes"));
       return;
     }
-    
-const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Объявлен календарь для гида и трансп.
-const handleSaveBlockedDates = async () => {
-  try {
-    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, { dates: blockedDates }, config);
-    alert(t("calendar.saved"));
-  } catch (err) {
-    alert(t("calendar.error"));
-  }
-};
 
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -123,7 +139,7 @@ const handleSaveBlockedDates = async () => {
 
   const handleChangePassword = () => {
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
         { password: newPassword },
         config
       )
@@ -135,16 +151,16 @@ const handleSaveBlockedDates = async () => {
   };
 
   const handleSaveService = () => {
-    if (!title || !description || !category || !price || availability.length === 0) {
+    if (!title || !description || !category || !price || !length === 0) {
       setMessageService(t("fill_all_fields"));
       return;
     }
 
-    const data = { title, description, category, price, availability, images, details };
+    const data = { title, description, category, price, images, details };
 
     if (selectedService) {
       axios
-        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+        .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -161,7 +177,7 @@ const handleSaveBlockedDates = async () => {
         .catch(() => setMessageService(t("update_error")));
     } else {
       axios
-        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -177,7 +193,7 @@ const handleSaveBlockedDates = async () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
@@ -191,7 +207,7 @@ const handleSaveBlockedDates = async () => {
     setDescription(service.description);
     setCategory(service.category);
     setPrice(service.price);
-    setAvailability(service.availability.map((d) => new Date(d)));
+    setAvailability(service.map((d) => new Date(d)));
     setMessageService("");
     setImages(service.images || []);
   };
@@ -328,7 +344,7 @@ const getCategoryOptions = (type) => {
               marginHeight="0"
               marginWidth="0"
               className="rounded"
-              src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`}
+              src={https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed}
             />
           </div>
         )}
@@ -457,7 +473,7 @@ const getCategoryOptions = (type) => {
             setDescription("");
             setCategory("");
             setPrice("");
-            setAvailability([]);
+            set([]);
             setImages([]);
           }}
           className="text-sm text-orange-500 underline"
@@ -483,7 +499,7 @@ const getCategoryOptions = (type) => {
       ))}
     </div>
   </div>
-
+  
   {selectedService ? (
     <>
       <select
@@ -542,7 +558,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={`preview-${idx}`}
+                alt={preview-${idx}}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
@@ -557,12 +573,7 @@ const getCategoryOptions = (type) => {
           ))}
         </div>
       </div>
-      <DayPicker
-        mode="multiple"
-        selected={availability}
-        onSelect={setAvailability}
-        className="border rounded-lg p-4 mb-4"
-      />
+      
       <div className="flex gap-4">
         <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
@@ -657,38 +668,122 @@ const getCategoryOptions = (type) => {
       placeholder={t("title")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
+    {/* 1. Страна и города */}
+<label className="block font-medium mt-2 mb-1">{t("country")}</label>
+<input
+  value={details.country || ""}
+  onChange={(e) => setDetails({ ...details, country: e.target.value })}
+  placeholder={t("country")}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<div className="flex gap-4 mb-2">
+  <div className="w-1/2">
+    <label className="block font-medium mb-1">{t("from_city")}</label>
     <input
-      value={details.direction || ""}
-      onChange={(e) => setDetails({ ...details, direction: e.target.value })}
-      placeholder={t("direction")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      value={details.fromCity || ""}
+      onChange={(e) => setDetails({ ...details, fromCity: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
-    <div className="flex gap-4 mb-2">
-      <input
-        type="date"
-        value={details.startDate || ""}
-        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-      <input
-        type="date"
-        value={details.endDate || ""}
-        onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-    </div>
+  </div>
+  <div className="w-1/2">
+    <label className="block font-medium mb-1">{t("to_city")}</label>
     <input
-      value={details.hotel || ""}
-      onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
-      placeholder={t("hotel")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      value={details.toCity || ""}
+      onChange={(e) => setDetails({ ...details, toCity: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
+  </div>
+</div>
+
+{/* 2. Даты и детали рейсов */}
+<label className="block font-medium mt-2 mb-1">{t("flight_departure_date")}</label>
+<input
+  type="date"
+  value={details.flightStartDate || ""}
+  onChange={(e) => setDetails({ ...details, flightStartDate: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<input
+  value={details.flightStartDetails || ""}
+  onChange={(e) => setDetails({ ...details, flightStartDetails: e.target.value })}
+  placeholder={t("flight_details")}
+  className="w-full border px-3 py-2 rounded mb-4"
+/>
+
+<label className="block font-medium mb-1">{t("flight_return_date")}</label>
+<input
+  type="date"
+  value={details.flightEndDate || ""}
+  onChange={(e) => setDetails({ ...details, flightEndDate: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<input
+  value={details.flightEndDetails || ""}
+  onChange={(e) => setDetails({ ...details, flightEndDetails: e.target.value })}
+  placeholder={t("flight_details")}
+  className="w-full border px-3 py-2 rounded mb-4"
+/>
+
+{/* 3. Отель с автозаполнением */}
+<label className="block font-medium mb-1">{t("hotel")}</label>
+<input
+  list="hotelOptions"
+  value={details.hotel || ""}
+  onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<datalist id="hotelOptions">
+  <option value="Hyatt Regency" />
+  <option value="Radisson Blu" />
+  <option value="Hilton Tashkent" />
+</datalist>
+
+{/* 4. Размещение с категорией и ADT/CHD/INF */}
+<label className="block font-medium mb-1">{t("room_category")}</label>
+<input
+  value={details.roomCategory || ""}
+  onChange={(e) => setDetails({ ...details, roomCategory: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<label className="block font-medium mb-1">{t("accommodation")}</label>
+<input
+  value={details.accommodation || ""}
+  onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<div className="flex gap-4 mb-2">
+  <div className="w-1/3">
+    <label className="block text-sm">{t("adt")}</label>
     <input
-      value={details.accommodation || ""}
-      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-      placeholder={t("accommodation")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      type="number"
+      value={details.adt || ""}
+      onChange={(e) => setDetails({ ...details, adt: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
+  </div>
+  <div className="w-1/3">
+    <label className="block text-sm">{t("chd")}</label>
+    <input
+      type="number"
+      value={details.chd || ""}
+      onChange={(e) => setDetails({ ...details, chd: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+  <div className="w-1/3">
+    <label className="block text-sm">{t("inf")}</label>
+    <input
+      type="number"
+      value={details.inf || ""}
+      onChange={(e) => setDetails({ ...details, inf: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+</div>
+
     <div className="mb-2">
       <label className="block font-medium mb-1">{t("food")}</label>
       <select
@@ -820,7 +915,7 @@ const getCategoryOptions = (type) => {
               <div key={idx} className="relative">
                 <img
                   src={img}
-                  alt={`preview-${idx}`}
+                  alt={preview-${idx}}
                   className="w-20 h-20 object-cover rounded"
                 />
                 <button
@@ -836,7 +931,7 @@ const getCategoryOptions = (type) => {
           </div>
         </div>
 
-               <button
+            <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
           onClick={handleSaveService}
         >
@@ -853,7 +948,8 @@ const getCategoryOptions = (type) => {
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
-  {/* 📅 Новый отдельный календарь занятости поставщика */}
+
+ {/* 📅 Новый отдельный календарь занятости поставщика */}
 {profile.type === "guide" || profile.type === "transport" ? (
   <div className="mt-10 bg-white p-6 rounded shadow border">
     <h3 className="text-lg font-semibold mb-4 text-orange-600">
@@ -883,6 +979,6 @@ const getCategoryOptions = (type) => {
     </div>
    </div>
   );
- };
+};
 
 export default Dashboard;
