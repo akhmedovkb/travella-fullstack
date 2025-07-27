@@ -125,7 +125,7 @@ const Dashboard = () => {
   };
 
   const handleSaveService = () => {
-    if (!title || !description || !category || !price || .length === 0) {
+    if (!title || !description || !category || !price || !length === 0) {
       setMessageService(t("fill_all_fields"));
       return;
     }
