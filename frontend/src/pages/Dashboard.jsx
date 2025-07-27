@@ -254,12 +254,7 @@ const getCategoryOptions = (type) => {
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
       {/* Левый блок */}
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
-    <div className="flex justify-between items-start mb-4">
-      <h2 className="text-2xl font-bold">{t("provider_profile")}</h2>
-      <LanguageSelector />
-    </div>
-
-    <div className="flex gap-4">
+        <div className="flex gap-4">
       <div className="flex flex-col items-center w-1/2">
         {/* Фото */}
         <div className="relative flex flex-col items-center">
