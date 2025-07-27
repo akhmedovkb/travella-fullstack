@@ -24,7 +24,7 @@ const Dashboard = () => {
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
-
+  
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -47,6 +47,18 @@ const Dashboard = () => {
   expiration: "",
   isActive: true,
   });
+  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
+  const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
+      dates: blockedDates,
+    }, config);
+    alert(t("calendar.saved_successfully"));
+  } catch (err) {
+    console.error("Ошибка сохранения дат:", err);
+    alert(t("calendar.save_error"));
+  }
+      };
 
   useEffect(() => {
     axios
@@ -130,7 +142,7 @@ const Dashboard = () => {
       return;
     }
 
-    const data = { title, description, category, price, , images, details };
+    const data = { title, description, category, price, images, details };
 
     if (selectedService) {
       axios
@@ -854,6 +866,34 @@ const getCategoryOptions = (type) => {
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
+
+  {/* 📅 Новый отдельный календарь занятости поставщика */}
+{profile.type === "guide" || profile.type === "transport" ? (
+  <div className="mt-10 bg-white p-6 rounded shadow border">
+    <h3 className="text-lg font-semibold mb-4 text-orange-600">
+      {t("calendar.blocking_title")}
+    </h3>
+
+    <DayPicker
+      mode="multiple"
+      selected={blockedDates}
+      onSelect={setBlockedDates}
+      disabled={{ before: new Date() }}
+      modifiersClassNames={{
+        selected: "bg-red-400 text-white",
+      }}
+      className="border rounded p-4"
+    />
+
+    <button
+      onClick={handleSaveBlockedDates}
+      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+    >
+      {t("calendar.save_blocked_dates")}
+    </button>
+  </div>
+) : null}
+
 </div>
 
 </div>
