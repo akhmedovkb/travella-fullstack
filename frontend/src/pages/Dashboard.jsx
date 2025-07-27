@@ -851,6 +851,8 @@ const getCategoryOptions = (type) => {
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
 
+</div>
+
   {/* 📅 Новый отдельный календарь занятости поставщика */}
 {profile.type === "guide" || profile.type === "transport" ? (
   <div className="mt-10 bg-white p-6 rounded shadow border">
@@ -877,8 +879,6 @@ const getCategoryOptions = (type) => {
     </button>
   </div>
 ) : null}
-
-</div>
 
 </div>
  
