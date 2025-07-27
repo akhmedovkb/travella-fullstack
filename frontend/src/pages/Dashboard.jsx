@@ -647,34 +647,12 @@ const getCategoryOptions = (type) => {
       placeholder={t("title")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
-    <div className="space-y-4">
-            <label className="block text-gray-700">{t("country_of_direction")}</label>
-            <GeoSelect
-              options={countryOptions}
-              value={details.directionCountry}
-              onChange={(value) =>
-                setDetails((prev) => ({ ...prev, directionCountry: value }))
-              }
-            />
-
-            <label className="block text-gray-700">{t("city_of_departure")}</label>
-            <GeoSelect
-              options={cityOptions}
-              value={details.directionFrom}
-              onChange={(value) =>
-                setDetails((prev) => ({ ...prev, directionFrom: value }))
-              }
-            />
-
-            <label className="block text-gray-700">{t("city_of_arrival")}</label>
-            <GeoSelect
-              options={cityOptions}
-              value={details.directionTo}
-              onChange={(value) =>
-                setDetails((prev) => ({ ...prev, directionTo: value }))
-              }
-            />
-      </div>
+    <input
+      value={details.direction || ""}
+      onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+      placeholder={t("direction")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
     <div className="flex gap-4 mb-2">
       <input
         type="date"
