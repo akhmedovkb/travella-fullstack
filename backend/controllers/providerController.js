@@ -237,7 +237,7 @@ const changeProviderPassword = async (req, res) => {
 // 👇 Добавляем календарь для гида и транспортника
 const getBookedDates = async (req, res) => {
   try {
-    const providerId = req.provider.id;
+    const providerId = req.user.id;
 
     const result = await pool.query(
       `SELECT b.date, s.title 
