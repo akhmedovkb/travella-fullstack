@@ -4,6 +4,9 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
+import Select from "react-select";
+import { countryOptions, cityOptions } from "../data/locationOptions";
+import { useTranslation } from "react-i18next";
 
 const Dashboard = () => {
   const { t } = useTranslation();
