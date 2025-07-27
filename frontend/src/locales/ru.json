@@ -111,7 +111,7 @@
   "direction_country": "Страна направление",
   "direction_from": "Город вылета",
   "direction_to": "Город прибытия",
-  "no_options": "Не выбрано",
+  "country_not_chosen": "Не выбрано",
   
   "flight_departure_date": "Дата рейса вылета",
   "flight_return_date": "Дата рейса обратно",
