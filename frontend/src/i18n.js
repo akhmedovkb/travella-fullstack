@@ -1,23 +1,23 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
+// frontend/src/i18n.js
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import LanguageDetector from "i18next-browser-languagedetector";
 
-import translationRU from './locales/ru.json';
-import translationUZ from './locales/uz.json';
-import translationEN from './locales/en.json';
+import en from "./locales/en.json";
+import ru from "./locales/ru.json";
+import uz from "./locales/uz.json";
 
-const resources = {
-  ru: { translation: translationRU },
-  uz: { translation: translationUZ },
-  en: { translation: translationEN },
-};
-
-const savedLanguage = localStorage.getItem("lng") || "ru";
-
-i18n.use(initReactI18next).init({
-  resources,
-  lng: savedLanguage,
-  fallbackLng: 'ru',
-  interpolation: { escapeValue: false },
-});
+i18n
+  .use(LanguageDetector)
+  .use(initReactI18next) // 💥 обязательно
+  .init({
+    resources: {
+      en: { translation: en },
+      ru: { translation: ru },
+      uz: { translation: uz },
+    },
+    fallbackLng: "ru",
+    interpolation: { escapeValue: false },
+  });
 
 export default i18n;
