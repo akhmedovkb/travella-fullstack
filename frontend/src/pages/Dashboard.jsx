@@ -156,7 +156,7 @@ const Dashboard = () => {
           setDescription("");
           setCategory("");
           setPrice("");
-          set([]);
+          setAvailability([]);
           setImages([]);
           setMessageService(t("service_updated"));
         })
@@ -170,7 +170,7 @@ const Dashboard = () => {
           setDescription("");
           setCategory("");
           setPrice("");
-          set([]);
+          setAvailability([]);
           setMessageService(t("service_added"));
         })
         .catch(() => setMessageService(t("add_error")));
@@ -193,7 +193,7 @@ const Dashboard = () => {
     setDescription(service.description);
     setCategory(service.category);
     setPrice(service.price);
-    set(service.map((d) => new Date(d)));
+    setAvailability(service.map((d) => new Date(d)));
     setMessageService("");
     setImages(service.images || []);
   };
@@ -559,14 +559,6 @@ const getCategoryOptions = (type) => {
           ))}
         </div>
       </div>
-
-      {/* Старый Календарь убрали с услуг */}
-      /*<DayPicker
-        mode="multiple"
-        selected={}
-        onSelect={setAvailability}
-        className="border rounded-lg p-4 mb-4"
-      />*/
       
       <div className="flex gap-4">
         <button
@@ -841,15 +833,7 @@ const getCategoryOptions = (type) => {
           </div>
         </div>
 
-        {/* Старый Календарь убрали с услуг */}
-        /* <DayPicker
-          mode="multiple"
-          selected={availability}
-          onSelect={setAvailability}
-          className="border rounded-lg p-4 mb-4"
-        /> */
-
-        <button
+            <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
           onClick={handleSaveService}
         >
