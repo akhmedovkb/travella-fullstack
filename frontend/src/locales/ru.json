@@ -176,5 +176,20 @@
     "searching": "Идет поиск...",
     "results": "Результаты поиска",
     "price": "Цена"
-  }
+  },
+  
+  "country_names": {
+  "uzbekistan": "Узбекистан",
+  "india": "Индия",
+  "turkey": "Турция",
+  "uae": "ОАЭ"
+},
+"city_names": {
+  "tashkent": "Ташкент",
+  "samarkand": "Самарканд",
+  "delhi": "Дели",
+  "istanbul": "Стамбул",
+  "dubai": "Дубай"
+}
+
 }
