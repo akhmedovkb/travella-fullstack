@@ -826,15 +826,7 @@ const getCategoryOptions = (type) => {
           </div>
         </div>
 
-        {/* Календарь */}
-        <DayPicker
-          mode="multiple"
-          selected={availability}
-          onSelect={setAvailability}
-          className="border rounded-lg p-4 mb-4"
-        />
-
-        <button
+               <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
           onClick={handleSaveService}
         >
