@@ -108,6 +108,17 @@
     
   },
 
+  "country": "Страна направления",
+  "from_city": "Город отправления",
+  "to_city": "Город прибытия",
+  "flight_departure_date": "Дата рейса вылета",
+  "flight_return_date": "Дата рейса обратно",
+  "flight_details": "Детали рейса",
+  "room_category": "Категория",
+  "adt": "Взрослые (ADT)",
+  "chd": "Дети (CHD)",
+  "inf": "Младенцы (INF)",
+  
   "login": {
     "title": "Вход для поставщика",
     "email": "Email",
