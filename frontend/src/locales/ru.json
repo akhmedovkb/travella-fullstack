@@ -135,6 +135,13 @@
     "file_chosen": "Файл выбран",
     "required": "Заполните это поле"
   },
+  
+  "calendar": {
+  "blocking_title": "Календарь занятости",
+  "save_blocked_dates": "Сохранить занятые даты",
+  "saved_successfully": "Занятые даты сохранены",
+  "save_error": "Ошибка при сохранении дат"
+              },
 
   "marketplace": {
     "title": "Доска объявлений",
