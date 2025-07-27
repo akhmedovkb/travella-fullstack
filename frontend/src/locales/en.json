@@ -106,16 +106,16 @@
     "border_transfer": "Border transfer"
   },
 
-  "country": "Страна направления",
-  "from_city": "Город отправления",
-  "to_city": "Город прибытия",
-  "flight_departure_date": "Дата рейса вылета",
-  "flight_return_date": "Дата рейса обратно",
-  "flight_details": "Детали рейса",
-  "room_category": "Категория",
-  "adt": "Взрослые (ADT)",
-  "chd": "Дети (CHD)",
-  "inf": "Младенцы (INF)",
+  "country": "Destination country",
+  "from_city": "Departure city",
+  "to_city": "Arrival city",
+  "flight_departure_date": "Outbound flight date",
+  "flight_return_date": "Return flight date",
+  "flight_details": "Flight details",
+  "room_category": "Room category",
+  "adt": "Adults (ADT)",
+  "chd": "Children (CHD)",
+  "inf": "Infants (INF)",
   
   "login": {
     "title": "Supplier Login",
