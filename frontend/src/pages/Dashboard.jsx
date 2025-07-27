@@ -7,7 +7,7 @@ import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Доб�
 
 import Select from "react-select";
 import { countryOptions, cityOptions } from "../data/locationOptions";
-const { i18n } = useTranslation();
+const { t } = useTranslation();
 const currentLang = i18n.language;
 
 const Dashboard = () => {
