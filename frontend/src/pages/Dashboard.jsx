@@ -101,7 +101,7 @@ const Dashboard = () => {
               sort: "name",
             },
             headers: {
-              "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+              "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
               "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
             },
           }
