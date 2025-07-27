@@ -100,6 +100,16 @@ const Dashboard = () => {
       setMessageProfile(t("no_changes"));
       return;
     }
+    
+const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Объявлен календарь для гида и трансп.
+const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, { dates: blockedDates }, config);
+    alert(t("calendar.saved"));
+  } catch (err) {
+    alert(t("calendar.error"));
+  }
+};
 
     axios
       .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
