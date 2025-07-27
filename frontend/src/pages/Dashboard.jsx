@@ -721,12 +721,14 @@ const getCategoryOptions = (type) => {
       <Select
         options={cityOptions}
         placeholder={t("direction_from")}
+        noOptionsMessage={() => t("direction_from_not_chosen")}
         onChange={(value) => setDetails({ ...details, directionFrom: value?.value })}
         className="w-1/3"
       />
       <Select
         options={cityOptions}
         placeholder={t("direction_to")}
+        noOptionsMessage={() => t("direction_to_not_chosen")}
         onChange={(value) => setDetails({ ...details, directionTo: value?.value })}
         className="w-1/3"
       />
