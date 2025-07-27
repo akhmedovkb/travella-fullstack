@@ -31,4 +31,7 @@ router.get("/services", authenticateToken, getServices);        // Получи�
 router.put("/services/:id", authenticateToken, updateService);  // Обновить услугу
 router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
 
+// 👉 Календарь
+router.get("/booked-dates", authenticate, getBookedDates);
+
 module.exports = router;
