@@ -234,6 +234,32 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
+// 👇 Добавляем календарь для гида и транспортника
+const getBookedDates = async (req, res) => {
+  try {
+    const providerId = req.provider.id;
+
+    const result = await pool.query(
+      `SELECT b.date, s.title 
+       FROM bookings b 
+       JOIN services s ON b.service_id = s.id 
+       WHERE s.provider_id = $1`,
+      [providerId]
+    );
+
+    const bookedDates = result.rows.map((row) => ({
+      date: row.date.toISOString().split("T")[0],
+      serviceTitle: row.title,
+    }));
+
+    res.json(bookedDates);
+  } catch (err) {
+    console.error("Ошибка получения занятых дат:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+
 // 👇 Обновляем экспорт:
 module.exports = {
   registerProvider,
