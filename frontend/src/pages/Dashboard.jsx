@@ -7,7 +7,6 @@ import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Доб�
 
 import Select from "react-select";
 import { countryOptions, cityOptions } from "../data/locationOptions";
-import { useTranslation } from "react-i18next";
 const { i18n } = useTranslation();
 const currentLang = i18n.language;
 
