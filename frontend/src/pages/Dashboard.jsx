@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Select from "react-select";
 import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -32,6 +33,11 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+  
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [cityOptions, setCityOptions] = useState([]);
+  const [countryOptions, setCountryOptions] = useState([]);
+
   const [details, setDetails] = useState({
   direction: "",
   startDate: "",
@@ -46,7 +52,11 @@ const Dashboard = () => {
   netPrice: "",
   expiration: "",
   isActive: true,
+  directionCountry: "",
+  directionFrom: "",
+  directionTo: "",
   });
+  
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   const handleSaveBlockedDates = async () => {
   try {
@@ -60,6 +70,54 @@ const Dashboard = () => {
   }
       };
 
+  // Получить список стран с REST Countries API
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const response = await axios.get("https://restcountries.com/v3.1/all");
+        const countries = response.data.map((country) => ({
+          value: country.name.common,
+          label: country.name.common,
+        }));
+        setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+      } catch (error) {
+        console.error("Ошибка получения стран:", error);
+      }
+    };
+    fetchCountries();
+  }, []);
+
+// Получить города через GeoDB Cities API при выборе страны
+  useEffect(() => {
+    const fetchCities = async () => {
+      if (!selectedCountry) return;
+      try {
+        const response = await axios.get(
+          `https://wft-geo-db.p.rapidapi.com/v1/geo/cities`,
+          {
+            params: {
+              countryIds: selectedCountry.value,
+              limit: 50,
+              sort: "name",
+            },
+            headers: {
+              "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+              "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
+            },
+          }
+        );
+        const cities = response.data.data.map((city) => ({
+          value: city.city,
+          label: city.city,
+        }));
+        setCityOptions(cities);
+      } catch (error) {
+        console.error("Ошибка получения городов:", error);
+      }
+    };
+    fetchCities();
+  }, [selectedCountry]);
+  
   useEffect(() => {
     axios
       .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
@@ -137,7 +195,7 @@ const Dashboard = () => {
   };
 
   const handleSaveService = () => {
-    if (!title || !description || !category || !price || !length === 0) {
+    if (!title || !description || !category || !price || images.length === 0) {
       setMessageService(t("fill_all_fields"));
       return;
     }
@@ -540,7 +598,7 @@ const getCategoryOptions = (type) => {
             <div key={idx} className="relative">
               <img
                 src={img}
-                alt={preview-`${idx}`}
+                alt={`preview-${idx}`}
                 className="w-20 h-20 object-cover rounded"
               />
               <button
@@ -650,12 +708,30 @@ const getCategoryOptions = (type) => {
       placeholder={t("title")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
-    <input
-      value={details.direction || ""}
-      onChange={(e) => setDetails({ ...details, direction: e.target.value })}
-      placeholder={t("direction")}
-      className="w-full border px-3 py-2 rounded mb-2"
-    />
+
+      <div className="flex gap-4 mb-2">
+       <Select
+        options={countryOptions}
+        value={selectedCountry}
+        onChange={(value) => setSelectedCountry(value)}
+        placeholder={t("direction_country")}
+        className="w-1/3"
+       />
+      <Select
+        options={cityOptions}
+        placeholder={t("direction_from")}
+        onChange={(value) => setDetails({ ...details, directionFrom: value?.value })}
+        className="w-1/3"
+      />
+      <Select
+        options={cityOptions}
+        placeholder={t("direction_to")}
+        onChange={(value) => setDetails({ ...details, directionTo: value?.value })}
+        className="w-1/3"
+      />
+     </div>
+
+      
     <div className="flex gap-4 mb-2">
       <input
         type="date"
@@ -813,7 +889,7 @@ const getCategoryOptions = (type) => {
               <div key={idx} className="relative">
                 <img
                   src={img}
-                  alt={preview-`${idx}`}
+                  alt={`preview-${idx}`}
                   className="w-20 h-20 object-cover rounded"
                 />
                 <button
