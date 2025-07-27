@@ -106,9 +106,13 @@
     "border_transfer": "Border transfer"
   },
 
-  "country": "Destination country",
-  "from_city": "Departure city",
-  "to_city": "Arrival city",
+
+  
+  "direction_country": "Destination country",
+  "direction_from": "Departure city",
+  "direction_to": "Arrival city",
+  "country_not_chosen": "Not chosen",
+  
   "flight_departure_date": "Outbound flight date",
   "flight_return_date": "Return flight date",
   "flight_details": "Flight details",
