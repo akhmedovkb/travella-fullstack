@@ -31,7 +31,7 @@ const Dashboard = () => {
   const [price, setPrice] = useState("");
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: Bearer `${token}` } };
+  const config = { headers: { Authorization: `Bearer ${token}` } };
   const [details, setDetails] = useState({
   direction: "",
   startDate: "",
