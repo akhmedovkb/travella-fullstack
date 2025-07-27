@@ -48,33 +48,7 @@
   "no_files_selected": "Файлы не выбраны",
   "expiration_timer": "Таймер актуальности",
   "is_active": "Актуально",
-  
-  "direction": "Направление",
-  "accommodation": "Размещение",
-  
-  "food": "Питание",
-    "food_options": {
-      "select": "Выберите вариант",
-      "bb": "Только завтрак",
-      "hb": "Завтрак и ужин",
-      "fb": "Полный пансион",
-      "ai": "Всё включено",
-      "uai": "Ультра всё включено",
-      "halal": "Халяль"
-    },
-  
-  "transfer": "Трансфер",
-    "transfer_options": {
-      "select": "Выберите трансфер",
-      "individual": "Индивидуальный",
-      "group": "Групповой",
-      "none": "Отсутствует"
-    },
-  
-  "changeable": "Возможно изменение",
-  "visa_included": "Виза включена",
-  "net_price": "Цена нетто",
-  
+
   "select_category": "Выберите категорию",
   "city_tour": "Тур по городу",
   "mountain_tour": "Тур по горам",
@@ -91,21 +65,31 @@
   "hotel_transfer": "Трансфер от отеля",
   "hall_rent": "Аренда зала",
 
+  "direction_country": "Страна направления",
+  "departure_city": "Город отправления",
+  "arrival_city": "Город прибытия",
+
+  "flight_departure_date": "Дата рейса вылета",
+  "flight_return_date": "Дата рейса обратно",
+  "flight_number": "Номер рейса",
+  "flight_time": "Время рейса",
+  "flight_carrier": "Перевозчик",
+
+  "hotel_autocomplete": "Выберите отель из списка",
+
+  "accommodation_category": "Категория размещения",
+  "accommodation": "Размещение",
+  "adt": "Взрослые (ADT)",
+  "chd": "Дети (CHD)",
+  "inf": "Младенцы (INF)",
+
   "category": {
     "refused_tour": "Отказной тур",
     "refused_hotel": "Отказной отель",
     "refused_flight": "Отказной авиабилет",
     "refused_event_ticket": "Отказной билет на мероприятие",
     "visa_support": "Визовая поддержка",
-    "author_tour": "Авторский тур",
-    "city_tour_guide": "Тур по городу",
-    "mountain_tour_guide": "Тур в горы",
-    "city_tour_transport": "Тур по городу",
-    "mountain_tour_transport": "Тур в горы",
-    "one_way_transfer": "Трансфер в одну сторону",
-    "dinner_transfer": "Трансфер на ужин",
-    "border_transfer": "Трансфер из/до границы"
-    
+    "author_tour": "Авторский тур"
   },
 
   "login": {
@@ -135,13 +119,6 @@
     "file_chosen": "Файл выбран",
     "required": "Заполните это поле"
   },
-  
-  "calendar": {
-  "blocking_title": "Календарь занятости",
-  "save_blocked_dates": "Сохранить занятые даты",
-  "saved_successfully": "Занятые даты сохранены",
-  "save_error": "Ошибка при сохранении дат"
-              },
 
   "marketplace": {
     "title": "Доска объявлений",
