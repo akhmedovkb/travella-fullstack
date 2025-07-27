@@ -193,7 +193,7 @@ const Dashboard = () => {
     setDescription(service.description);
     setCategory(service.category);
     setPrice(service.price);
-    set(service..map((d) => new Date(d)));
+    set(service.map((d) => new Date(d)));
     setMessageService("");
     setImages(service.images || []);
   };
