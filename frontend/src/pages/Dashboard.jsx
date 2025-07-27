@@ -668,6 +668,7 @@ const getCategoryOptions = (type) => {
       placeholder={t("title")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
+      
     {/* 1. Страна и города */}
 <label className="block font-medium mt-2 mb-1">{t("country")}</label>
 <input
@@ -695,6 +696,7 @@ const getCategoryOptions = (type) => {
     />
   </div>
 </div>
+
 
 {/* 2. Даты и детали рейсов */}
 <label className="block font-medium mt-2 mb-1">{t("flight_departure_date")}</label>
