@@ -715,6 +715,7 @@ const getCategoryOptions = (type) => {
         value={selectedCountry}
         onChange={(value) => setSelectedCountry(value)}
         placeholder={t("direction_country")}
+        noOptionsMessage={() => t("country_not_chosen")}
         className="w-1/3"
        />
       <Select
