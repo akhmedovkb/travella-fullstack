@@ -125,12 +125,12 @@ const Dashboard = () => {
   };
 
   const handleSaveService = () => {
-    if (!title || !description || !category || !price || availability.length === 0) {
+    if (!title || !description || !category || !price || .length === 0) {
       setMessageService(t("fill_all_fields"));
       return;
     }
 
-    const data = { title, description, category, price, availability, images, details };
+    const data = { title, description, category, price, , images, details };
 
     if (selectedService) {
       axios
@@ -144,7 +144,7 @@ const Dashboard = () => {
           setDescription("");
           setCategory("");
           setPrice("");
-          setAvailability([]);
+          set([]);
           setImages([]);
           setMessageService(t("service_updated"));
         })
@@ -158,7 +158,7 @@ const Dashboard = () => {
           setDescription("");
           setCategory("");
           setPrice("");
-          setAvailability([]);
+          set([]);
           setMessageService(t("service_added"));
         })
         .catch(() => setMessageService(t("add_error")));
@@ -181,7 +181,7 @@ const Dashboard = () => {
     setDescription(service.description);
     setCategory(service.category);
     setPrice(service.price);
-    setAvailability(service.availability.map((d) => new Date(d)));
+    set(service..map((d) => new Date(d)));
     setMessageService("");
     setImages(service.images || []);
   };
@@ -447,7 +447,7 @@ const getCategoryOptions = (type) => {
             setDescription("");
             setCategory("");
             setPrice("");
-            setAvailability([]);
+            set([]);
             setImages([]);
           }}
           className="text-sm text-orange-500 underline"
@@ -547,12 +547,15 @@ const getCategoryOptions = (type) => {
           ))}
         </div>
       </div>
-      <DayPicker
+
+      {/* Старый Календарь убрали с услуг */}
+      /*<DayPicker
         mode="multiple"
-        selected={availability}
+        selected={}
         onSelect={setAvailability}
         className="border rounded-lg p-4 mb-4"
-      />
+      />*/
+      
       <div className="flex gap-4">
         <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
@@ -826,13 +829,13 @@ const getCategoryOptions = (type) => {
           </div>
         </div>
 
-        {/* Календарь */}
-        <DayPicker
+        {/* Старый Календарь убрали с услуг */}
+        /* <DayPicker
           mode="multiple"
           selected={availability}
           onSelect={setAvailability}
           className="border rounded-lg p-4 mb-4"
-        />
+        /> */
 
         <button
           className="w-full bg-orange-500 text-white py-2 rounded font-bold"
