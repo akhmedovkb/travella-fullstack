@@ -654,38 +654,122 @@ const getCategoryOptions = (type) => {
       placeholder={t("title")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
+    {/* 1. Страна и города */}
+<label className="block font-medium mt-2 mb-1">{t("country")}</label>
+<input
+  value={details.country || ""}
+  onChange={(e) => setDetails({ ...details, country: e.target.value })}
+  placeholder={t("country")}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<div className="flex gap-4 mb-2">
+  <div className="w-1/2">
+    <label className="block font-medium mb-1">{t("from_city")}</label>
     <input
-      value={details.direction || ""}
-      onChange={(e) => setDetails({ ...details, direction: e.target.value })}
-      placeholder={t("direction")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      value={details.fromCity || ""}
+      onChange={(e) => setDetails({ ...details, fromCity: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
-    <div className="flex gap-4 mb-2">
-      <input
-        type="date"
-        value={details.startDate || ""}
-        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-      <input
-        type="date"
-        value={details.endDate || ""}
-        onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-    </div>
+  </div>
+  <div className="w-1/2">
+    <label className="block font-medium mb-1">{t("to_city")}</label>
     <input
-      value={details.hotel || ""}
-      onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
-      placeholder={t("hotel")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      value={details.toCity || ""}
+      onChange={(e) => setDetails({ ...details, toCity: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
+  </div>
+</div>
+
+{/* 2. Даты и детали рейсов */}
+<label className="block font-medium mt-2 mb-1">{t("flight_departure_date")}</label>
+<input
+  type="date"
+  value={details.flightStartDate || ""}
+  onChange={(e) => setDetails({ ...details, flightStartDate: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<input
+  value={details.flightStartDetails || ""}
+  onChange={(e) => setDetails({ ...details, flightStartDetails: e.target.value })}
+  placeholder={t("flight_details")}
+  className="w-full border px-3 py-2 rounded mb-4"
+/>
+
+<label className="block font-medium mb-1">{t("flight_return_date")}</label>
+<input
+  type="date"
+  value={details.flightEndDate || ""}
+  onChange={(e) => setDetails({ ...details, flightEndDate: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<input
+  value={details.flightEndDetails || ""}
+  onChange={(e) => setDetails({ ...details, flightEndDetails: e.target.value })}
+  placeholder={t("flight_details")}
+  className="w-full border px-3 py-2 rounded mb-4"
+/>
+
+{/* 3. Отель с автозаполнением */}
+<label className="block font-medium mb-1">{t("hotel")}</label>
+<input
+  list="hotelOptions"
+  value={details.hotel || ""}
+  onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+<datalist id="hotelOptions">
+  <option value="Hyatt Regency" />
+  <option value="Radisson Blu" />
+  <option value="Hilton Tashkent" />
+</datalist>
+
+{/* 4. Размещение с категорией и ADT/CHD/INF */}
+<label className="block font-medium mb-1">{t("room_category")}</label>
+<input
+  value={details.roomCategory || ""}
+  onChange={(e) => setDetails({ ...details, roomCategory: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<label className="block font-medium mb-1">{t("accommodation")}</label>
+<input
+  value={details.accommodation || ""}
+  onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+  className="w-full border px-3 py-2 rounded mb-2"
+/>
+
+<div className="flex gap-4 mb-2">
+  <div className="w-1/3">
+    <label className="block text-sm">{t("adt")}</label>
     <input
-      value={details.accommodation || ""}
-      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-      placeholder={t("accommodation")}
-      className="w-full border px-3 py-2 rounded mb-2"
+      type="number"
+      value={details.adt || ""}
+      onChange={(e) => setDetails({ ...details, adt: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
     />
+  </div>
+  <div className="w-1/3">
+    <label className="block text-sm">{t("chd")}</label>
+    <input
+      type="number"
+      value={details.chd || ""}
+      onChange={(e) => setDetails({ ...details, chd: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+  <div className="w-1/3">
+    <label className="block text-sm">{t("inf")}</label>
+    <input
+      type="number"
+      value={details.inf || ""}
+      onChange={(e) => setDetails({ ...details, inf: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+</div>
+
     <div className="mb-2">
       <label className="block font-medium mb-1">{t("food")}</label>
       <select
