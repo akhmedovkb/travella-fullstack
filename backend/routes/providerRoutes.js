@@ -11,7 +11,8 @@ const {
   addService,
   getServices,
   updateService,
-  deleteService
+  deleteService,
+  getBookedDates
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
