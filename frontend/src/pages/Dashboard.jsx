@@ -669,33 +669,45 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-2"
     />
       
-    {/* 1. Страна и города */}
-<label className="block font-medium mt-2 mb-1">{t("country")}</label>
-<input
-  value={details.country || ""}
-  onChange={(e) => setDetails({ ...details, country: e.target.value })}
-  placeholder={t("country")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
+    {/* 1. Страна и города с автозаполнением */}
+<div className="mb-4">
+  <label className="block font-medium mb-1">{t("country")}</label>
+  <Select
+    options={countryOptions}
+    value={countryOptions.find(option => option.value === details.country)}
+    onChange={(selected) =>
+      setDetails({ ...details, country: selected?.value || "" })
+    }
+    placeholder={t("country")}
+    className="mb-2"
+  />
+</div>
 
-<div className="flex gap-4 mb-2">
+<div className="flex gap-4 mb-4">
   <div className="w-1/2">
     <label className="block font-medium mb-1">{t("from_city")}</label>
-    <input
-      value={details.fromCity || ""}
-      onChange={(e) => setDetails({ ...details, fromCity: e.target.value })}
-      className="w-full border px-3 py-2 rounded"
+    <Select
+      options={cityOptions}
+      value={cityOptions.find(option => option.value === details.fromCity)}
+      onChange={(selected) =>
+        setDetails({ ...details, fromCity: selected?.value || "" })
+      }
+      placeholder={t("from_city")}
     />
   </div>
   <div className="w-1/2">
     <label className="block font-medium mb-1">{t("to_city")}</label>
-    <input
-      value={details.toCity || ""}
-      onChange={(e) => setDetails({ ...details, toCity: e.target.value })}
-      className="w-full border px-3 py-2 rounded"
+    <Select
+      options={cityOptions}
+      value={cityOptions.find(option => option.value === details.toCity)}
+      onChange={(selected) =>
+        setDetails({ ...details, toCity: selected?.value || "" })
+      }
+      placeholder={t("to_city")}
     />
   </div>
 </div>
+
 
 
 {/* 2. Даты и детали рейсов */}
