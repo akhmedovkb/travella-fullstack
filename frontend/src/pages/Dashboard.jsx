@@ -64,7 +64,7 @@ const Dashboard = () => {
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   const handleSaveBlockedDates = async () => {
   try {
-    await axios.post(${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates, {
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
       dates: blockedDates,
     }, config);
     alert(t("calendar.saved_successfully"));
@@ -76,7 +76,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     axios
-      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, config)
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
       .then((res) => {
         setProfile(res.data);
         setNewLocation(res.data.location);
@@ -87,7 +87,7 @@ const Dashboard = () => {
       .catch((err) => console.error("Ошибка загрузки профиля", err));
 
     axios
-      .get(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, config)
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
       .then((res) => setServices(res.data))
       .catch((err) => console.error("Ошибка загрузки услуг", err));
   }, []);
@@ -128,7 +128,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/profile, updated, config)
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -139,7 +139,7 @@ const Dashboard = () => {
 
   const handleChangePassword = () => {
     axios
-      .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password,
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
         { password: newPassword },
         config
       )
@@ -160,7 +160,7 @@ const Dashboard = () => {
 
     if (selectedService) {
       axios
-        .put(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}, data, config)
+        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
         .then(() => {
           setServices((prev) =>
             prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -177,7 +177,7 @@ const Dashboard = () => {
         .catch(() => setMessageService(t("update_error")));
     } else {
       axios
-        .post(${import.meta.env.VITE_API_BASE_URL}/api/providers/services, data, config)
+        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
         .then((res) => {
           setServices((prev) => [...prev, res.data]);
           setTitle("");
@@ -193,7 +193,7 @@ const Dashboard = () => {
 
   const handleDeleteService = (id) => {
     axios
-      .delete(${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}, config)
+      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
