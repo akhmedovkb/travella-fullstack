@@ -108,10 +108,13 @@
     
   },
 
-  "direction_country": "Страна направление",
+  "direction_country": "Страна направления",
   "direction_from": "Город вылета",
   "direction_to": "Город прибытия",
   "country_not_chosen": "Не выбрано",
+  "direction_from_not_chosen": "Город вылета не выбран",
+  "direction_to_not_chosen": "Город прибытия не выбран",
+
   
   "flight_departure_date": "Дата рейса вылета",
   "flight_return_date": "Дата рейса обратно",
