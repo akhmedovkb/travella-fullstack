@@ -1,3 +1,5 @@
+//providerRoutes.js
+
 const express = require("express");
 const router = express.Router();
 const {
@@ -32,6 +34,6 @@ router.put("/services/:id", authenticateToken, updateService);  // Обнови�
 router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
 
 // 👉 Календарь
-router.get("/booked-dates", authenticate, getBookedDates);
+router.get("/booked-dates", authenticateToken, getBookedDates);
 
 module.exports = router;
