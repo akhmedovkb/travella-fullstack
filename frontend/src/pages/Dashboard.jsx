@@ -766,7 +766,7 @@ const getCategoryOptions = (type) => {
   </div>
   
   
-  {selectedService ? &&
+  {selectedService  &&
   ["refused_tour", "author_tour"].includes(selectedService.category) &&
   profile.type === "agent" ? (
   <>
