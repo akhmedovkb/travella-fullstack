@@ -683,7 +683,9 @@ const getCategoryOptions = (type) => {
     </div>
 
     <div className="mt-4 space-y-2">
-      {services.map((s) => (
+      {profile.type === "guide" && "transport" (
+      <> 
+        {services.map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -694,7 +696,10 @@ const getCategoryOptions = (type) => {
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
+      </>
+      )}
     </div>
+    
   </div>
   
   
