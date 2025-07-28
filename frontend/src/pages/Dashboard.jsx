@@ -818,6 +818,7 @@ const getCategoryOptions = (type) => {
 </div>
 
 
+      {/* тут вводим даты отпр и прил */}
       
     <div className="flex gap-4 mb-2">
       <input
@@ -833,6 +834,9 @@ const getCategoryOptions = (type) => {
         className="w-1/2 border px-3 py-2 rounded"
       />
     </div>
+
+
+        {/* тут вводим отель */}
     <input
       value={details.hotel || ""}
       onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
@@ -850,7 +854,7 @@ const getCategoryOptions = (type) => {
     className="w-full border px-3 py-2 rounded mb-2"
     placeholder={t("enter_category")}
   />
-
+       {/* тут вводим размешение */}
   <label className="block text-sm font-medium mb-1">{t("accommodation")}</label>
   <input
     type="text"
@@ -901,6 +905,8 @@ const getCategoryOptions = (type) => {
   </div>
 </div>
 
+        {/* тут вводим питание */}
+      
     <div className="mb-2">
       <label className="block font-medium mb-1">{t("food")}</label>
       <select
@@ -925,6 +931,9 @@ const getCategoryOptions = (type) => {
         {t("food_options.halal")}
       </label>
     </div>
+
+          {/* тут вводим трансфер */}
+      
     <div className="mb-2">
       <label className="block font-medium mb-1">{t("transfer")}</label>
       <select
