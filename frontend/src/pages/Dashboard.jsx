@@ -90,34 +90,38 @@ const Dashboard = () => {
 
 // Получить города через GeoDB Cities API при выборе страны
   useEffect(() => {
-    const fetchCities = async () => {
-      if (!selectedCountry) return;
-      try {
-        const response = await axios.get(
-          `https://wft-geo-db.p.rapidapi.com/v1/geo/cities`,
-          {
-            params: {
-              countryIds: selectedCountry.value,
-              limit: 50,
-              sort: "name",
-            },
-            headers: {
-              "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
-              "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
-            },
-          }
-        );
-        const cities = response.data.data.map((city) => ({
-          value: city.city,
-          label: city.city,
-        }));
-        setCityOptions(cities);
-      } catch (error) {
-        console.error("Ошибка получения городов:", error);
-      }
-    };
-    fetchCities();
-  }, [selectedCountry]);
+  const fetchCities = async () => {
+    if (!selectedCountry) return;
+
+    try {
+      const response = await axios.get(
+        "https://wft-geo-db.p.rapidapi.com/v1/geo/cities",
+        {
+          params: {
+            countryIds: selectedCountry.value, // ISO-код, например "TH"
+            limit: 50,
+            sort: "name",
+          },
+          headers: {
+            "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
+            "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
+          },
+        }
+      );
+
+      const cities = response.data.data.map((city) => ({
+        value: city.city,
+        label: city.city,
+      }));
+      setCityOptions(cities);
+    } catch (error) {
+      console.error("Ошибка получения городов:", error);
+    }
+  };
+
+  fetchCities();
+}, [selectedCountry]);
+
   
   useEffect(() => {
     axios
