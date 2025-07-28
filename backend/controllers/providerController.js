@@ -139,13 +139,13 @@ const updateProviderProfile = async (req, res) => {
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const { title, description, price, category, images, availability } = req.body;
+    const { title, description, price, category, images, availability, details } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO services (provider_id, title, description, price, category, images, availability)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [providerId, title, description, price, category, images, availability]
-    );
+  `INSERT INTO services (provider_id, title, description, price, category, images, availability, details)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+  [providerId, title, description, price, category, images, availability, details]
+);
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -174,13 +174,14 @@ const updateService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const { title, description, price, category, images, availability } = req.body;
+    const { title, description, price, category, images, availability, details } = req.body;
 
     const result = await pool.query(
-      `UPDATE services SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6
-       WHERE id=$7 AND provider_id=$8 RETURNING *`,
-      [title, description, price, category, images, availability, serviceId, providerId]
-    );
+  `UPDATE services 
+   SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
+   WHERE id=$8 AND provider_id=$9 RETURNING *`,
+  [title, description, price, category, images, availability, details, serviceId, providerId]
+);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Услуга не найдена" });
