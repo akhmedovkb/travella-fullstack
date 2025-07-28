@@ -89,32 +89,53 @@ useEffect(() => {
 }, []);
 
 
-// Загрузка городов по стране
+// Города отправления — независимо от страны
+useEffect(() => {
+  const fetchCities = async () => {
+    try {
+      const response = await axios.get("https://secure.geonames.org/searchJSON", {
+        params: {
+          featureClass: "P",
+          maxRows: 100,
+          orderby: "population",
+          username: import.meta.env.VITE_GEONAMES_USERNAME,
+        },
+      });
+      const cities = response.data.geonames.map((city) => ({
+        value: city.name,
+        label: city.name,
+      }));
+      setCityOptionsFrom(cities);
+    } catch (error) {
+      console.error("Ошибка загрузки городов отправления:", error);
+    }
+  };
+  fetchCities();
+}, []);
+
 useEffect(() => {
   if (!selectedCountry?.code) return;
   const fetchCities = async () => {
     try {
       const response = await axios.get("https://secure.geonames.org/searchJSON", {
         params: {
-          country: selectedCountry.code,  // ISO2
-          featureClass: "P",              // Населённые пункты
+          country: selectedCountry.code,
+          featureClass: "P",
           maxRows: 100,
           username: import.meta.env.VITE_GEONAMES_USERNAME,
         },
       });
-
       const cities = response.data.geonames.map((city) => ({
         value: city.name,
         label: city.name,
       }));
-      setCityOptions(cities);
+      setCityOptionsTo(cities);
     } catch (error) {
-      console.error("Ошибка загрузки городов с GeoNames:", error);
+      console.error("Ошибка загрузки городов прибытия:", error);
     }
   };
   fetchCities();
 }, [selectedCountry]);
-
 
   
   useEffect(() => {
@@ -717,21 +738,23 @@ const getCategoryOptions = (type) => {
     className="w-1/3"
   />
   <Select
-    options={cityOptions}
-    placeholder={t("direction_from")}
-    onChange={(value) =>
-      setDetails({ ...details, directionFrom: value?.value })
-    }
-    className="w-1/3"
-  />
-  <Select
-    options={cityOptions}
-    placeholder={t("direction_to")}
-    onChange={(value) =>
-      setDetails({ ...details, directionTo: value?.value })
-    }
-    className="w-1/3"
-  />
+  options={cityOptionsFrom}
+  placeholder={t("direction_from")}
+  onChange={(value) =>
+    setDetails({ ...details, directionFrom: value?.value })
+  }
+  className="w-1/3"
+/>
+
+<Select
+  options={cityOptionsTo}
+  placeholder={t("direction_to")}
+  onChange={(value) =>
+    setDetails({ ...details, directionTo: value?.value })
+  }
+  className="w-1/3"
+/>
+
 </div>
 
 
