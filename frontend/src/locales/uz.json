@@ -114,9 +114,10 @@
   "direction_from_not_chosen": "Jo`nab ketish shahri tanlanmagan",
   "direction_to_not_chosen": "Tashrif shahri tanlanmagan",
   
-  "flight_departure_date": "Jo`nab ketish sanasi",
-  "flight_return_date": "Qaytib kelish sanasi",
+  "start_flight_date": "Jo`nash parvosi sanasi",
+  "end_flight_date": "Qaytib kelish parvosi sanasi",
   "flight_details": "Parvoz haqida ma`lumot",
+  "enter_flight_details": "Parvoz haqida ma`lumotni kiriting",
   
   "accommodation_category": "Joylashuv toifasi",
   "enter_category": "Joylashuv toifasini kiriting",
