@@ -683,9 +683,10 @@ const getCategoryOptions = (type) => {
     </div>
 
     <div className="mt-4 space-y-2">
-      {profile.type === "guide" && (
-      <> 
-        {services.map((s) => (
+  {/* Услуги гида */}
+  {profile.type === "guide" && (
+    <>
+      {services.map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -696,9 +697,71 @@ const getCategoryOptions = (type) => {
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
-      </>
-      )}
-    </div>
+    </>
+  )}
+
+  {/* Услуги транспорта */}
+  {profile.type === "transport" && (
+    <>
+      {services.map((s) => (
+        <div
+          key={s.id}
+          className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+          onClick={() => loadServiceToEdit(s)}
+        >
+          <div className="font-bold text-lg">{s.title}</div>
+          <div className="text-sm text-gray-600">{t(s.category)}</div>
+          <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
+        </div>
+      ))}
+    </>
+  )}
+
+  {/* Услуги турагента */}
+  {profile.type === "agent" && (
+    <>
+      {services.map((s) => (
+        <div
+          key={s.id}
+          className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+          onClick={() => loadServiceToEdit(s)}
+        >
+          <div className="font-bold text-lg">{s.title}</div>
+          <div className="text-sm text-gray-600">{t(s.category)}</div>
+          <div className="text-sm text-gray-800">
+            {t("net_price")}: {s.details?.netPrice || 0} USD
+          </div>
+          {s.details?.hotel && (
+            <div className="text-xs text-gray-500">{s.details.hotel}</div>
+          )}
+          {s.details?.directionTo && (
+            <div className="text-xs text-gray-500">
+              {t("direction_to")}: {s.details.directionTo}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  )}
+
+  {/* Услуги отеля */}
+  {profile.type === "hotel" && (
+    <>
+      {services.map((s) => (
+        <div
+          key={s.id}
+          className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+          onClick={() => loadServiceToEdit(s)}
+        >
+          <div className="font-bold text-lg">{s.title}</div>
+          <div className="text-sm text-gray-600">{t(s.category)}</div>
+          <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
+        </div>
+      ))}
+    </>
+  )}
+</div>
+
     
   </div>
   
