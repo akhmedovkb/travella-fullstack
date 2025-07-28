@@ -282,43 +282,24 @@ useEffect(() => {
   };
 
   const handleSaveService = () => {
-  if (!title || !description || !category || !price || (category !== "refused_tour" && category !== "refused_hotel" && images.length === 0)) {
-  setMessageService(t("fill_all_fields"));
-  return;
-}
+  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel";
 
-  let finalDetails = {};
+  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
+  const isInvalidExtended = isExtendedCategory && (!title || !category); // можно добавить проверки деталей при необходимости
 
-  // 🔁 Формируем details для отказного тура
-  if (category === "refused_tour") {
-    finalDetails = {
-      directionCountry: selectedCountry?.label || "",
-      directionFrom: selectedCityFrom?.label || "",
-      directionTo: selectedCityTo?.label || "",
-      departureFlightDate,
-      returnFlightDate,
-      flightDetails,
-      hotelName,
-      roomCategory,
-      accommodation: `TWN (${adults} ADT / ${children} CHD / ${infants} INF)`,
-      food,
-      isHalal,
-      transfer,
-      visaIncluded,
-      changeable,
-      netPrice: parseFloat(price),
-      expiration,
-      isActive,
-    };
+  if (isInvalidStandard || isInvalidExtended) {
+    setMessageService(t("fill_all_fields"));
+    return;
   }
 
   const data = {
     title,
-    description,
     category,
-    price: parseFloat(price),
-    images,
-    details: finalDetails,
+    images: images || [],
+    price: isExtendedCategory ? undefined : price,
+    description: isExtendedCategory ? undefined : description,
+    availability: isExtendedCategory ? undefined : availability,
+    details: isExtendedCategory ? details : undefined
   };
 
   if (selectedService) {
@@ -328,13 +309,7 @@ useEffect(() => {
         setServices((prev) =>
           prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
         );
-        setSelectedService(null);
-        setTitle("");
-        setDescription("");
-        setCategory("");
-        setPrice("");
-        setAvailability([]);
-        setImages([]);
+        resetServiceForm();
         setMessageService(t("service_updated"));
       })
       .catch(() => setMessageService(t("update_error")));
@@ -343,17 +318,25 @@ useEffect(() => {
       .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
       .then((res) => {
         setServices((prev) => [...prev, res.data]);
-        setTitle("");
-        setDescription("");
-        setCategory("");
-        setPrice("");
-        setAvailability([]);
-        setImages([]);
+        resetServiceForm();
         setMessageService(t("service_added"));
       })
       .catch(() => setMessageService(t("add_error")));
   }
 };
+
+// 👇 добавь вспомогательную функцию для сброса
+const resetServiceForm = () => {
+  setSelectedService(null);
+  setTitle("");
+  setDescription("");
+  setCategory("");
+  setPrice("");
+  setAvailability([]);
+  setImages([]);
+  setDetails({});
+};
+
 
   const handleDeleteService = (id) => {
     axios
