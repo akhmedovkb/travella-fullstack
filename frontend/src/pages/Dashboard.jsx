@@ -5,6 +5,7 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
+import AsyncSelect from "react-select/async";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ const Dashboard = () => {
   
   const [countryOptions, setCountryOptions] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState(null);
+  const [departureCity, setDepartureCity] = useState(null);
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
@@ -89,7 +91,54 @@ useEffect(() => {
   fetchCountries();
 }, []);
 
+  const loadDepartureCities = async (inputValue) => {
+  if (!inputValue) return [];
 
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+
+  
+// 🔍 Функция загрузки городов по поиску
+const loadCitiesFromInput = async (inputValue) => {
+  if (!inputValue) return [];
+
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+  
 // Города отправления — независимо от страны
 useEffect(() => {
   const fetchCities = async () => {
@@ -738,14 +787,19 @@ const getCategoryOptions = (type) => {
     placeholder={t("direction_country")}
     className="w-1/3"
   />
-  <Select
-  options={cityOptionsFrom}
+  
+   <AsyncSelect
+  cacheOptions
+  defaultOptions
+  loadOptions={loadDepartureCities}
+  onChange={(selected) => {
+    setDepartureCity(selected);
+    setDetails((prev) => ({ ...prev, directionFrom: selected?.value }));
+  }}
   placeholder={t("direction_from")}
-  onChange={(value) =>
-    setDetails({ ...details, directionFrom: value?.value })
-  }
   className="w-1/3"
 />
+
 
 <Select
   options={cityOptionsTo}
