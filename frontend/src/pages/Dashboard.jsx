@@ -283,26 +283,12 @@ useEffect(() => {
 
 // тут поведение кнопки "Сохранить услугу"
 const handleSaveService = () => {
-  const isExtendedCategory =
-    category === "refused_tour" ||
-    category === "refused_hotel" ||
-    category === "author_tour";
+  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel" || category === "author_tour";
 
-  const isInvalidStandard =
-    !isExtendedCategory &&
-    (!title || !description || !category || !price || images.length === 0);
-
-  const isInvalidExtended =
-    isExtendedCategory &&
-    (!title || !category || !details || !details.netPrice || details.netPrice === "");
+  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
+  const isInvalidExtended = isExtendedCategory && (!title || !category);
 
   if (isInvalidStandard || isInvalidExtended) {
-    console.log("⛔ Валидация не пройдена:", {
-      title,
-      category,
-      price,
-      netPrice: details?.netPrice,
-    });
     setMessageService(t("fill_all_fields"));
     return;
   }
@@ -314,18 +300,19 @@ const handleSaveService = () => {
     price: isExtendedCategory ? undefined : price,
     description: isExtendedCategory ? undefined : description,
     availability: isExtendedCategory ? undefined : availability,
-    details: isExtendedCategory ? details : undefined,
+    details: isExtendedCategory ? details : undefined
   };
 
   if (selectedService) {
     axios
       .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
-      .then(() => {
+      .then((res) => {
         setServices((prev) =>
-          prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
+          prev.map((s) => (s.id === selectedService.id ? res.data : s))
         );
         resetServiceForm();
         setMessageService(t("service_updated"));
+        setTimeout(() => setMessageService(""), 3000);
       })
       .catch((err) => {
         console.error("Ошибка обновления:", err);
@@ -338,10 +325,7 @@ const handleSaveService = () => {
         setServices((prev) => [...prev, res.data]);
         resetServiceForm();
         setMessageService(t("service_added"));
-        // ⏳ Скрыть сообщение через 3 секунды:
-      setTimeout(() => {
-        setMessageService("");
-      }, 3000);
+        setTimeout(() => setMessageService(""), 3000);
       })
       .catch((err) => {
         console.error("Ошибка добавления:", err);
@@ -356,8 +340,8 @@ const resetServiceForm = () => {
   setDescription("");
   setPrice("");
   setCategory("");
-  setImages([]);
   setAvailability([]);
+  setImages([]);
   setDetails({
     directionCountry: "",
     directionFrom: "",
@@ -380,7 +364,6 @@ const resetServiceForm = () => {
   });
 };
 
-};
 
 
   const handleDeleteService = (id) => {
