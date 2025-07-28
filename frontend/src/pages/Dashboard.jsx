@@ -64,6 +64,18 @@ const Dashboard = () => {
   isActive: true,
 });
 
+  // 🔹 Загрузка отелей по запросу
+const loadHotelOptions = async (inputValue) => {
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
+    );
+    return res.data;
+  } catch (err) {
+    console.error("Ошибка загрузки отелей:", err);
+    return [];
+  }
+};
   
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   const handleSaveBlockedDates = async () => {
@@ -784,6 +796,7 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-2"
     />
 
+      {/* тут вводим направление */}
  <div className="flex gap-4 mb-2">
   <Select
     options={countryOptions}
@@ -837,12 +850,24 @@ const getCategoryOptions = (type) => {
 
 
         {/* тут вводим отель */}
-    <input
-      value={details.hotel || ""}
-      onChange={(e) => setDetails({ ...details, hotel: e.target.value })}
-      placeholder={t("hotel")}
-      className="w-full border px-3 py-2 rounded mb-2"
-    />
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+  {t("hotel")}
+</label>
+<AsyncSelect
+  cacheOptions
+  defaultOptions
+  loadOptions={loadHotelOptions}
+  value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
+  onChange={(selected) =>
+    setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))
+  }
+  placeholder={t("hotel")}
+  className="mb-3"
+/>
+
+
+
+      {/* тут вводим accommodation */}
     <div className="mb-4">
   <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
   <input
