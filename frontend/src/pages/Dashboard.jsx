@@ -834,19 +834,34 @@ const getCategoryOptions = (type) => {
       {/* тут вводим даты отпр и прил */}
       
     <div className="flex gap-4 mb-2">
-      <input
-        type="date"
-        value={details.startDate || ""}
-        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-      <input
-        type="date"
-        value={details.endDate || ""}
-        onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-        className="w-1/2 border px-3 py-2 rounded"
-      />
-    </div>
+  <div className="w-1/2">
+    <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
+    <input
+      type="date"
+      value={details.startFlightDate || ""}
+      onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+  <div className="w-1/2">
+    <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
+    <input
+      type="date"
+      value={details.endFlightDate || ""}
+      onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+</div>
+<div className="mb-2">
+  <label className="block text-sm font-medium text-gray-700 mb-1">{t("flight_details")}</label>
+  <textarea
+    value={details.flightDetails || ""}
+    onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
+    placeholder={t("enter_flight_details")}
+    className="w-full border px-3 py-2 rounded"
+  />
+</div>
 
 
         {/* тут вводим отель */}
