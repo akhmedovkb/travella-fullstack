@@ -115,9 +115,10 @@
   "direction_from_not_chosen": "Departure city not chosen",
   "direction_to_not_chosen": "Arrival city not chosen",
   
-  "flight_departure_date": "Outbound flight date",
-  "flight_return_date": "Return flight date",
+  "start_flight_date": "Outbound flight date",
+  "end_flight_date": "Return flight date",
   "flight_details": "Flight details",
+  "enter_flight_details": "Enter flight details",
   
   "accommodation_category": "Category of accommodation",
   "enter_category": "Enter category of accommodation",
