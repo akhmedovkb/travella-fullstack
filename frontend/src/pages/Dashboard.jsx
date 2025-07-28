@@ -285,32 +285,29 @@ useEffect(() => {
 
   const handleSaveService = () => {
   const isExtendedCategory =
-    category === "refused_tour" ||
-    category === "refused_hotel" ||
-    category === "author_tour";
+    category === "refused_tour" || category === "refused_hotel";
+
+  const netPriceValid =
+    isExtendedCategory && details?.netPrice !== undefined && details?.netPrice !== "";
 
   const isInvalidStandard =
     !isExtendedCategory &&
-    (!title || !description || !category || !price );
+    (!title || !description || !category || price === undefined || images.length === 0);
 
   const isInvalidExtended =
     isExtendedCategory &&
-    (!title || !category || !details.netPrice );
+    (!title || !category || !netPriceValid);
 
   if (isInvalidStandard || isInvalidExtended) {
     setMessageService(t("fill_all_fields"));
     return;
   }
 
-  const finalPrice = isExtendedCategory
-    ? parseFloat(details.netPrice)
-    : parseFloat(price);
-
   const data = {
     title,
     category,
     images: images || [],
-    price: finalPrice,
+    price: isExtendedCategory ? details.netPrice : price,
     description: isExtendedCategory ? undefined : description,
     availability: isExtendedCategory ? undefined : availability,
     details: isExtendedCategory ? details : undefined,
