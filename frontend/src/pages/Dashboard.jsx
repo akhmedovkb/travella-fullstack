@@ -70,57 +70,51 @@ const Dashboard = () => {
   }
       };
 
-  // Получить список стран с REST Countries API
-  useEffect(() => {
-    const fetchCountries = async () => {
-      try {
-        const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
-        const countries = response.data.map((country) => ({
-        value: country.cca2,       // ISO-код, например "UZ"
-        label: country.name.common // Название, например "Uzbekistan"
-        }));
-
-        setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
-      } catch (error) {
-        console.error("Ошибка получения стран:", error);
-      }
-    };
-    fetchCountries();
-  }, []);
-
-// Получить города через GeoDB Cities API при выборе страны
-  useEffect(() => {
-  const fetchCities = async () => {
-    if (!selectedCountry) return;
-
+  // Загрузка стран
+useEffect(() => {
+  const fetchCountries = async () => {
     try {
-      const response = await axios.get(
-        "https://wft-geo-db.p.rapidapi.com/v1/geo/cities",
-        {
-          params: {
-            countryIds: selectedCountry.value, // ISO-код, например "TH"
-            limit: 50,
-            sort: "name",
-          },
-          headers: {
-            "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
-            "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
-          },
-        }
-      );
+      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+      const countries = response.data.map((country) => ({
+        value: country.name.common,
+        label: country.name.common,
+        code: country.cca2, // ISO2 код
+      }));
+      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+    } catch (error) {
+      console.error("Ошибка загрузки стран:", error);
+    }
+  };
+  fetchCountries();
+}, []);
 
-      const cities = response.data.data.map((city) => ({
-        value: city.city,
-        label: city.city,
+
+// Загрузка городов по стране
+useEffect(() => {
+  if (!selectedCountry?.code) return;
+  const fetchCities = async () => {
+    try {
+      const response = await axios.get("https://secure.geonames.org/searchJSON", {
+        params: {
+          country: selectedCountry.code,  // ISO2
+          featureClass: "P",              // Населённые пункты
+          maxRows: 100,
+          username: import.meta.env.VITE_GEONAMES_USERNAME,
+        },
+      });
+
+      const cities = response.data.geonames.map((city) => ({
+        value: city.name,
+        label: city.name,
       }));
       setCityOptions(cities);
     } catch (error) {
-      console.error("Ошибка получения городов:", error);
+      console.error("Ошибка загрузки городов с GeoNames:", error);
     }
   };
-
   fetchCities();
 }, [selectedCountry]);
+
 
   
   useEffect(() => {
@@ -715,39 +709,31 @@ const getCategoryOptions = (type) => {
     />
 
  <div className="flex gap-4 mb-2">
-  {/* Страна */}
   <Select
     options={countryOptions}
     value={selectedCountry}
-    onChange={(value) => {
-      setSelectedCountry(value);
-      setDetails({ ...details, directionCountry: value?.label });
-    }}
+    onChange={(value) => setSelectedCountry(value)}
     placeholder={t("direction_country")}
-    noOptionsMessage={() => t("country_not_chosen")}
     className="w-1/3"
   />
-
-  {/* Город отправления */}
   <Select
     options={cityOptions}
-    value={cityOptions.find(city => city.value === details.directionFrom) || null}
     placeholder={t("direction_from")}
-    noOptionsMessage={() => t("direction_from_not_chosen")}
-    onChange={(value) => setDetails({ ...details, directionFrom: value?.value })}
+    onChange={(value) =>
+      setDetails({ ...details, directionFrom: value?.value })
+    }
     className="w-1/3"
   />
-
-  {/* Город прибытия */}
   <Select
     options={cityOptions}
-    value={cityOptions.find(city => city.value === details.directionTo) || null}
     placeholder={t("direction_to")}
-    noOptionsMessage={() => t("direction_to_not_chosen")}
-    onChange={(value) => setDetails({ ...details, directionTo: value?.value })}
+    onChange={(value) =>
+      setDetails({ ...details, directionTo: value?.value })
+    }
     className="w-1/3"
   />
 </div>
+
 
       
     <div className="flex gap-4 mb-2">
