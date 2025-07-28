@@ -64,6 +64,34 @@ const MarketplaceBoard = () => {
   const currentResults = results.slice(indexOfFirst, indexOfLast);
   const totalPages = Math.ceil(results.length / resultsPerPage);
 
+  const renderRefusedHotelCard = (item) => {
+    const d = item.details || {};
+    return (
+      <li key={item.id} className="border rounded p-4 bg-gray-50">
+        {item.images?.length > 0 && (
+          <img
+            src={item.images[0]}
+            alt="preview"
+            className="w-full h-40 object-cover rounded mb-2"
+          />
+        )}
+        <div className="font-bold text-lg">{d.hotelName || "—"}</div>
+        <div className="text-sm text-gray-600">
+          {d.directionCountry || "—"}, {d.directionTo || "—"}
+        </div>
+        <div className="text-sm">
+          🗓 {d.checkIn || "—"} → {d.checkOut || "—"}
+        </div>
+        <div className="text-sm">
+          💰 {d.netPrice ? `${d.netPrice} USD` : "—"}
+        </div>
+        <button className="mt-2 text-orange-600 hover:underline">
+          {t("marketplace.propose_price")}
+        </button>
+      </li>
+    );
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
@@ -82,7 +110,11 @@ const MarketplaceBoard = () => {
               let providerType = "";
               if (block === "ГИД") providerType = "guide";
               else if (block === "ТРАНСПОРТ") providerType = "transport";
-              else if (["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(block)) {
+              else if (
+                ["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(
+                  block
+                )
+              ) {
                 providerType = "agent";
               }
               setFilters((prev) => ({ ...prev, providerType }));
@@ -100,7 +132,9 @@ const MarketplaceBoard = () => {
           </h2>
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">{t("marketplace.start_date")}</label>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.start_date")}
+              </label>
               <input
                 type="date"
                 name="startDate"
@@ -111,7 +145,9 @@ const MarketplaceBoard = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">{t("marketplace.end_date")}</label>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.end_date")}
+              </label>
               <input
                 type="date"
                 name="endDate"
@@ -122,7 +158,9 @@ const MarketplaceBoard = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">{t("marketplace.location")}</label>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.location")}
+              </label>
               <input
                 type="text"
                 name="location"
@@ -162,7 +200,10 @@ const MarketplaceBoard = () => {
           </div>
 
           <div className="mt-6 text-right">
-            <button onClick={handleSearch} className="bg-orange-500 text-white px-6 py-2 rounded font-semibold">
+            <button
+              onClick={handleSearch}
+              className="bg-orange-500 text-white px-6 py-2 rounded font-semibold"
+            >
               {isLoading ? t("marketplace.searching") : t("marketplace.search")}
             </button>
           </div>
@@ -173,25 +214,29 @@ const MarketplaceBoard = () => {
             <div className="mt-6">
               <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
               <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {currentResults.map((item) => (
-                  <li key={item.id} className="border rounded p-4 bg-gray-50">
-                    {item.images && item.images.length > 0 && (
-                      <img
-                        src={item.images[0]}
-                        alt="preview"
-                        className="w-full h-40 object-cover rounded mb-2"
-                      />
-                    )}
-                    <div className="font-bold">{item.title}</div>
-                    <div>{item.description}</div>
-                    <div className="text-sm text-gray-600">{item.category}</div>
-                    <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
-                    <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
-                    <button className="mt-2 text-orange-600 hover:underline">
-                      {t("marketplace.propose_price")}
-                    </button>
-                  </li>
-                ))}
+                {currentResults.map((item) =>
+                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ"
+                    ? renderRefusedHotelCard(item)
+                    : (
+                      <li key={item.id} className="border rounded p-4 bg-gray-50">
+                        {item.images?.length > 0 && (
+                          <img
+                            src={item.images[0]}
+                            alt="preview"
+                            className="w-full h-40 object-cover rounded mb-2"
+                          />
+                        )}
+                        <div className="font-bold">{item.title}</div>
+                        <div>{item.description}</div>
+                        <div className="text-sm text-gray-600">{item.category}</div>
+                        <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
+                        <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
+                        <button className="mt-2 text-orange-600 hover:underline">
+                          {t("marketplace.propose_price")}
+                        </button>
+                      </li>
+                    )
+                )}
               </ul>
 
               {totalPages > 1 && (
@@ -201,7 +246,9 @@ const MarketplaceBoard = () => {
                       key={i}
                       onClick={() => setCurrentPage(i + 1)}
                       className={`px-3 py-1 rounded border font-medium ${
-                        currentPage === i + 1 ? "bg-orange-500 text-white" : "bg-white text-gray-700"
+                        currentPage === i + 1
+                          ? "bg-orange-500 text-white"
+                          : "bg-white text-gray-700"
                       }`}
                     >
                       {i + 1}
