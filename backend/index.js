@@ -23,6 +23,11 @@ app.use(express.urlencoded({ extended: true }));
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
 
+//Подключаем роуты отелей
+const hotelRoutes = require("./routes/hotelRoutes");
+app.use("/api/hotels", hotelRoutes);
+
+
 // Подключаем marketplace (⚠️ обязательно после express.json())
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
