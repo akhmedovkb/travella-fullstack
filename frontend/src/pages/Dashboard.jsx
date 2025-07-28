@@ -338,6 +338,10 @@ const handleSaveService = () => {
         setServices((prev) => [...prev, res.data]);
         resetServiceForm();
         setMessageService(t("service_added"));
+        // ⏳ Скрыть сообщение через 3 секунды:
+      setTimeout(() => {
+        setMessageService("");
+      }, 3000);
       })
       .catch((err) => {
         console.error("Ошибка добавления:", err);
