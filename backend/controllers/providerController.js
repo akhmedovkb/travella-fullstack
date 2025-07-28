@@ -76,7 +76,6 @@ const loginProvider = async (req, res) => {
   }
 };
 
-// 👇 ДОБАВЛЕНО:
 const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
@@ -100,7 +99,6 @@ const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
 
-    // Получаем текущие данные из базы
     const current = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
     if (current.rows.length === 0) {
       return res.status(404).json({ message: "Поставщик не найден" });
@@ -108,22 +106,20 @@ const updateProviderProfile = async (req, res) => {
 
     const old = current.rows[0];
 
-    // Обновляем поля, если они переданы
     const updated = {
-     name: req.body.name ?? old.name,
-     location: req.body.location ?? old.location,
-     phone: req.body.phone ?? old.phone,
-     social: req.body.social ?? old.social,
-     photo: req.body.photo ?? old.photo,
-     certificate: req.body.certificate ?? old.certificate,
-     address: req.body.address ?? old.address
+      name: req.body.name ?? old.name,
+      location: req.body.location ?? old.location,
+      phone: req.body.phone ?? old.phone,
+      social: req.body.social ?? old.social,
+      photo: req.body.photo ?? old.photo,
+      certificate: req.body.certificate ?? old.certificate,
+      address: req.body.address ?? old.address
     };
 
-
     await pool.query(
-     `UPDATE providers
-      SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6, address = $7
-      WHERE id = $8`,
+      `UPDATE providers
+       SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6, address = $7
+       WHERE id = $8`,
       [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, updated.address, id]
     );
 
@@ -134,18 +130,38 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
-
-// ДОБАВИТЬ УСЛУГУ
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { title, description, price, category, images, availability, details } = req.body;
 
+    const fields = ['provider_id', 'title', 'category', 'images', 'details'];
+    const values = [providerId, title, category, images, details];
+    let placeholders = ['$1', '$2', '$3', '$4', '$5'];
+    let index = 6;
+
+    if (description !== undefined) {
+      fields.push('description');
+      values.push(description);
+      placeholders.push(`$${index++}`);
+    }
+
+    if (price !== undefined) {
+      fields.push('price');
+      values.push(price);
+      placeholders.push(`$${index++}`);
+    }
+
+    if (availability !== undefined) {
+      fields.push('availability');
+      values.push(availability);
+      placeholders.push(`$${index++}`);
+    }
+
     const result = await pool.query(
-  `INSERT INTO services (provider_id, title, description, price, category, images, availability, details)
-   VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-  [providerId, title, description, price, category, images, availability, details]
-);
+      `INSERT INTO services (${fields.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
+      values
+    );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -154,7 +170,6 @@ const addService = async (req, res) => {
   }
 };
 
-// ПОЛУЧИТЬ УСЛУГИ ПОСТАВЩИКА
 const getServices = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -169,7 +184,6 @@ const getServices = async (req, res) => {
   }
 };
 
-// ОБНОВИТЬ УСЛУГУ
 const updateService = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -177,11 +191,11 @@ const updateService = async (req, res) => {
     const { title, description, price, category, images, availability, details } = req.body;
 
     const result = await pool.query(
-  `UPDATE services 
-   SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
-   WHERE id=$8 AND provider_id=$9 RETURNING *`,
-  [title, description, price, category, images, availability, details, serviceId, providerId]
-);
+      `UPDATE services 
+       SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
+       WHERE id=$8 AND provider_id=$9 RETURNING *`,
+      [title, description, price, category, images, availability, details, serviceId, providerId]
+    );
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Услуга не найдена" });
@@ -194,7 +208,6 @@ const updateService = async (req, res) => {
   }
 };
 
-// УДАЛИТЬ УСЛУГУ
 const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -235,7 +248,6 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// 👇 Добавляем календарь для гида и транспортника
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -260,8 +272,6 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-
-// 👇 Обновляем экспорт:
 module.exports = {
   registerProvider,
   loginProvider,
