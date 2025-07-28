@@ -282,10 +282,10 @@ useEffect(() => {
   };
 
   const handleSaveService = () => {
-  if (!title || !description || !category || !price === 0) {
-    setMessageService(t("fill_all_fields"));
-    return;
-  }
+  if (!title || !description || !category || !price || (category !== "refused_tour" && category !== "refused_hotel" && images.length === 0)) {
+  setMessageService(t("fill_all_fields"));
+  return;
+}
 
   let finalDetails = {};
 
