@@ -862,6 +862,7 @@ const getCategoryOptions = (type) => {
     setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))
   }
   placeholder={t("hotel")}
+  noOptionsMessage={() => t("hotel_not_found")}
   className="mb-3"
 />
 
