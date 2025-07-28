@@ -291,11 +291,11 @@ useEffect(() => {
 
   const isInvalidStandard =
     !isExtendedCategory &&
-    (!title || !description || !category || !price || images.length === 0);
+    (!title || !description || !category || !price );
 
   const isInvalidExtended =
     isExtendedCategory &&
-    (!title || !category || !details.netPrice || images.length === 0);
+    (!title || !category || !details.netPrice );
 
   if (isInvalidStandard || isInvalidExtended) {
     setMessageService(t("fill_all_fields"));
