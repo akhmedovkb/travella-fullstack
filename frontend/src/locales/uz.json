@@ -116,7 +116,12 @@
   "flight_departure_date": "Jo`nab ketish sanasi",
   "flight_return_date": "Qaytib kelish sanasi",
   "flight_details": "Parvoz haqida ma`lumot",
-  "room_category": "Xona toifasi",
+  
+  "accommodation_category": "Joylashuv toifasi",
+  "enter_category": "Joylashuv toifasini kiriting",
+  "accommodation": "Joylashuv",
+  "enter_accommodation": "Joylashuvni kiriting",
+  
   "adt": "Kattalar (ADT)",
   "chd": "Bolalar  (CHD)",
   "inf": "Go`daklar (INF)",
