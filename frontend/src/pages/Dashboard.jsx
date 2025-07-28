@@ -282,23 +282,27 @@ useEffect(() => {
   };
 
 // тут поведение кнопки "Сохранить услугу"
-
-  const handleSaveService = () => {
+const handleSaveService = () => {
   const isExtendedCategory =
-    category === "refused_tour" || category === "refused_hotel";
-
-  const netPriceValid =
-    isExtendedCategory && details?.netPrice !== undefined && details?.netPrice !== "";
+    category === "refused_tour" ||
+    category === "refused_hotel" ||
+    category === "author_tour";
 
   const isInvalidStandard =
     !isExtendedCategory &&
-    (!title || !description || !category || price === undefined || images.length === 0);
+    (!title || !description || !category || !price || images.length === 0);
 
   const isInvalidExtended =
     isExtendedCategory &&
-    (!title || !category || !netPriceValid);
+    (!title || !category || !details || !details.netPrice || details.netPrice === "");
 
   if (isInvalidStandard || isInvalidExtended) {
+    console.log("⛔ Валидация не пройдена:", {
+      title,
+      category,
+      price,
+      netPrice: details?.netPrice,
+    });
     setMessageService(t("fill_all_fields"));
     return;
   }
@@ -307,7 +311,7 @@ useEffect(() => {
     title,
     category,
     images: images || [],
-    price: isExtendedCategory ? details.netPrice : price,
+    price: isExtendedCategory ? undefined : price,
     description: isExtendedCategory ? undefined : description,
     availability: isExtendedCategory ? undefined : availability,
     details: isExtendedCategory ? details : undefined,
@@ -315,11 +319,7 @@ useEffect(() => {
 
   if (selectedService) {
     axios
-      .put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`,
-        data,
-        config
-      )
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
       .then(() => {
         setServices((prev) =>
           prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -327,35 +327,25 @@ useEffect(() => {
         resetServiceForm();
         setMessageService(t("service_updated"));
       })
-      .catch(() => setMessageService(t("update_error")));
+      .catch((err) => {
+        console.error("Ошибка обновления:", err);
+        setMessageService(t("update_error"));
+      });
   } else {
     axios
-      .post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
-        data,
-        config
-      )
+      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
       .then((res) => {
         setServices((prev) => [...prev, res.data]);
         resetServiceForm();
         setMessageService(t("service_added"));
       })
-      .catch(() => setMessageService(t("add_error")));
+      .catch((err) => {
+        console.error("Ошибка добавления:", err);
+        setMessageService(t("add_error"));
+      });
   }
 };
 
-
-// 👇 добавь вспомогательную функцию для сброса
-const resetServiceForm = () => {
-  setSelectedService(null);
-  setTitle("");
-  setDescription("");
-  setCategory("");
-  setPrice("");
-  setAvailability([]);
-  setImages([]);
-  setDetails({});
-};
 
 
   const handleDeleteService = (id) => {
