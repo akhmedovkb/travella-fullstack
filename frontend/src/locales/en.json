@@ -118,8 +118,8 @@
   "flight_return_date": "Return flight date",
   "flight_details": "Flight details",
   
-  "accommodation_category": "Category",
-  "enter_category": "Enter category",
+  "accommodation_category": "Category of accommodation",
+  "enter_category": "Enter category of accommodation",
   "accommodation": "Accommodation",
   "enter_accommodation": "Enter accommodation",
   
