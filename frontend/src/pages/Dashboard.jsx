@@ -34,9 +34,10 @@ const Dashboard = () => {
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
   
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [cityOptions, setCityOptions] = useState([]);
   const [countryOptions, setCountryOptions] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
+  const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
   const [details, setDetails] = useState({
   direction: "",
