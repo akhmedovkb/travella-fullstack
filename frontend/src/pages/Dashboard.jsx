@@ -282,45 +282,78 @@ useEffect(() => {
   };
 
   const handleSaveService = () => {
-    if (!title || !description || !category || !price || images.length === 0) {
-      setMessageService(t("fill_all_fields"));
-      return;
-    }
+  if (!title || !description || !category || !price || images.length === 0) {
+    setMessageService(t("fill_all_fields"));
+    return;
+  }
 
-    const data = { title, description, category, price, images, details };
+  let finalDetails = {};
 
-    if (selectedService) {
-      axios
-        .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
-        .then(() => {
-          setServices((prev) =>
-            prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
-          );
-          setSelectedService(null);
-          setTitle("");
-          setDescription("");
-          setCategory("");
-          setPrice("");
-          setAvailability([]);
-          setImages([]);
-          setMessageService(t("service_updated"));
-        })
-        .catch(() => setMessageService(t("update_error")));
-    } else {
-      axios
-        .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
-        .then((res) => {
-          setServices((prev) => [...prev, res.data]);
-          setTitle("");
-          setDescription("");
-          setCategory("");
-          setPrice("");
-          setAvailability([]);
-          setMessageService(t("service_added"));
-        })
-        .catch(() => setMessageService(t("add_error")));
-    }
+  // 🔁 Формируем details для отказного тура
+  if (category === "refused_tour") {
+    finalDetails = {
+      directionCountry: selectedCountry?.label || "",
+      directionFrom: selectedCityFrom?.label || "",
+      directionTo: selectedCityTo?.label || "",
+      departureFlightDate,
+      returnFlightDate,
+      flightDetails,
+      hotelName,
+      roomCategory,
+      accommodation: `TWN (${adults} ADT / ${children} CHD / ${infants} INF)`,
+      food,
+      isHalal,
+      transfer,
+      visaIncluded,
+      changeable,
+      netPrice: parseFloat(price),
+      expiration,
+      isActive,
+    };
+  }
+
+  const data = {
+    title,
+    description,
+    category,
+    price: parseFloat(price),
+    images,
+    details: finalDetails,
   };
+
+  if (selectedService) {
+    axios
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+      .then(() => {
+        setServices((prev) =>
+          prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
+        );
+        setSelectedService(null);
+        setTitle("");
+        setDescription("");
+        setCategory("");
+        setPrice("");
+        setAvailability([]);
+        setImages([]);
+        setMessageService(t("service_updated"));
+      })
+      .catch(() => setMessageService(t("update_error")));
+  } else {
+    axios
+      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+      .then((res) => {
+        setServices((prev) => [...prev, res.data]);
+        setTitle("");
+        setDescription("");
+        setCategory("");
+        setPrice("");
+        setAvailability([]);
+        setImages([]);
+        setMessageService(t("service_added"));
+      })
+      .catch(() => setMessageService(t("add_error")));
+  }
+};
 
   const handleDeleteService = (id) => {
     axios
