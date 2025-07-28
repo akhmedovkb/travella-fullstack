@@ -683,7 +683,7 @@ const getCategoryOptions = (type) => {
     </div>
 
     <div className="mt-4 space-y-2">
-      {profile.type === "guide" && "transport" (
+      {profile.type === "guide" && (
       <> 
         {services.map((s) => (
         <div
