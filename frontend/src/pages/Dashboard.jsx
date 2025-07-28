@@ -281,30 +281,48 @@ useEffect(() => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
-  const handleSaveService = () => {
-  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel";
+// тут поведение кнопки "Сохранить услугу"
 
-  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
-  const isInvalidExtended = isExtendedCategory && (!title || !category); // можно добавить проверки деталей при необходимости
+  const handleSaveService = () => {
+  const isExtendedCategory =
+    category === "refused_tour" ||
+    category === "refused_hotel" ||
+    category === "author_tour";
+
+  const isInvalidStandard =
+    !isExtendedCategory &&
+    (!title || !description || !category || !price || images.length === 0);
+
+  const isInvalidExtended =
+    isExtendedCategory &&
+    (!title || !category || !details.netPrice || images.length === 0);
 
   if (isInvalidStandard || isInvalidExtended) {
     setMessageService(t("fill_all_fields"));
     return;
   }
 
+  const finalPrice = isExtendedCategory
+    ? parseFloat(details.netPrice)
+    : parseFloat(price);
+
   const data = {
     title,
     category,
     images: images || [],
-    price: isExtendedCategory ? undefined : price,
+    price: finalPrice,
     description: isExtendedCategory ? undefined : description,
     availability: isExtendedCategory ? undefined : availability,
-    details: isExtendedCategory ? details : undefined
+    details: isExtendedCategory ? details : undefined,
   };
 
   if (selectedService) {
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+      .put(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`,
+        data,
+        config
+      )
       .then(() => {
         setServices((prev) =>
           prev.map((s) => (s.id === selectedService.id ? { ...s, ...data } : s))
@@ -315,7 +333,11 @@ useEffect(() => {
       .catch(() => setMessageService(t("update_error")));
   } else {
     axios
-      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+      .post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
+        data,
+        config
+      )
       .then((res) => {
         setServices((prev) => [...prev, res.data]);
         resetServiceForm();
@@ -324,6 +346,7 @@ useEffect(() => {
       .catch(() => setMessageService(t("add_error")));
   }
 };
+
 
 // 👇 добавь вспомогательную функцию для сброса
 const resetServiceForm = () => {
