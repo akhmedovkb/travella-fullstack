@@ -119,7 +119,12 @@
   "flight_departure_date": "Дата рейса вылета",
   "flight_return_date": "Дата рейса обратно",
   "flight_details": "Детали рейса",
-  "room_category": "Категория",
+  
+  "accommodation_category": "Категория",
+  "enter_category": "Внесите категорию",
+  "accommodation": "Размещение",
+  "enter_accommodation": "Внесите размещение",
+   
   "adt": "Взрослые (ADT)",
   "chd": "Дети (CHD)",
   "inf": "Младенцы (INF)",
