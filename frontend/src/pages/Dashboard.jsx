@@ -346,6 +346,16 @@ const handleSaveService = () => {
   }
 };
 
+const resetServiceForm = () => {
+  setTitle("");
+  setDescription("");
+  setCategory("");
+  setPrice("");
+  setAvailability([]);
+  setImages([]);
+  setDetails({});
+  setSelectedService(null);
+};
 
 
   const handleDeleteService = (id) => {
