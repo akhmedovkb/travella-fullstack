@@ -43,10 +43,17 @@ const Dashboard = () => {
 
   const [details, setDetails] = useState({
   direction: "",
+  directionCountry: "",
+  directionFrom: "",
+  directionTo: "",
   startDate: "",
   endDate: "",
   hotel: "",
   accommodation: "",
+  accommodationCategory: "",
+  adt: "",
+  chd: "",
+  inf: "",
   food: "",
   halal: false,
   transfer: "",
@@ -55,10 +62,8 @@ const Dashboard = () => {
   netPrice: "",
   expiration: "",
   isActive: true,
-  directionCountry: "",
-  directionFrom: "",
-  directionTo: "",
-  });
+});
+
   
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   const handleSaveBlockedDates = async () => {
@@ -834,12 +839,68 @@ const getCategoryOptions = (type) => {
       placeholder={t("hotel")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
-    <input
-      value={details.accommodation || ""}
-      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
-      placeholder={t("accommodation")}
-      className="w-full border px-3 py-2 rounded mb-2"
-    />
+    <div className="mb-4">
+  <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
+  <input
+    type="text"
+    value={details.accommodationCategory || ""}
+    onChange={(e) =>
+      setDetails({ ...details, accommodationCategory: e.target.value })
+    }
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_category")}
+  />
+
+  <label className="block text-sm font-medium mb-1">{t("accommodation")}</label>
+  <input
+    type="text"
+    value={details.accommodation || ""}
+    onChange={(e) =>
+      setDetails({ ...details, accommodation: e.target.value })
+    }
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_accommodation")}
+  />
+
+  <div className="flex gap-4">
+    <div className="flex flex-col">
+      <label className="text-sm font-medium">{t("adt")}</label>
+      <input
+        type="number"
+        value={details.adt || ""}
+        onChange={(e) =>
+          setDetails({ ...details, adt: e.target.value })
+        }
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+
+    <div className="flex flex-col">
+      <label className="text-sm font-medium">{t("chd")}</label>
+      <input
+        type="number"
+        value={details.chd || ""}
+        onChange={(e) =>
+          setDetails({ ...details, chd: e.target.value })
+        }
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+
+    <div className="flex flex-col">
+      <label className="text-sm font-medium">{t("inf")}</label>
+      <input
+        type="number"
+        value={details.inf || ""}
+        onChange={(e) =>
+          setDetails({ ...details, inf: e.target.value })
+        }
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+  </div>
+</div>
+
     <div className="mb-2">
       <label className="block font-medium mb-1">{t("food")}</label>
       <select
