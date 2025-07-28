@@ -351,14 +351,35 @@ const handleSaveService = () => {
 };
 
 const resetServiceForm = () => {
+  setSelectedService(null);
   setTitle("");
   setDescription("");
-  setCategory("");
   setPrice("");
-  setAvailability([]);
+  setCategory("");
   setImages([]);
-  setDetails({});
-  setSelectedService(null);
+  setAvailability([]);
+  setDetails({
+    directionCountry: "",
+    directionFrom: "",
+    directionTo: "",
+    startDate: "",
+    endDate: "",
+    hotel: "",
+    roomCategory: "",
+    accommodation: "",
+    food: "",
+    transfer: "",
+    changeable: false,
+    visaIncluded: false,
+    netPrice: "",
+    expiration: "",
+    isActive: true,
+    flightDateGo: "",
+    flightDateReturn: "",
+    flightDetails: "",
+  });
+};
+
 };
 
 
@@ -658,9 +679,7 @@ const getCategoryOptions = (type) => {
         >
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-600">{t(s.category)}</div>
-          <div className="text-sm text-gray-800">
-            {t("price")}: {s.price} сум
-          </div>
+          <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
     </div>
