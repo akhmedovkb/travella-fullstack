@@ -130,45 +130,37 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
+// ДОБАВИТЬ УСЛУГУ
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { title, description, price, category, images, availability, details } = req.body;
 
-    const fields = ['provider_id', 'title', 'category', 'images', 'details'];
-    const values = [providerId, title, category, images, details];
-    let placeholders = ['$1', '$2', '$3', '$4', '$5'];
-    let index = 6;
-
-    if (description !== undefined) {
-      fields.push('description');
-      values.push(description);
-      placeholders.push(`$${index++}`);
-    }
-
-    if (price !== undefined) {
-      fields.push('price');
-      values.push(price);
-      placeholders.push(`$${index++}`);
-    }
-
-    if (availability !== undefined) {
-      fields.push('availability');
-      values.push(availability);
-      placeholders.push(`$${index++}`);
-    }
+    const isExtended = category === "refused_tour" || category === "author_tour" || category === "refused_hotel";
 
     const result = await pool.query(
-      `INSERT INTO services (${fields.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
-      values
+      `INSERT INTO services 
+       (provider_id, title, description, price, category, images, availability, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        providerId,
+        title,
+        isExtended ? null : description,
+        isExtended ? null : price,
+        category,
+        images || [],
+        isExtended ? null : availability,
+        isExtended ? details : null
+      ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("❌ Ошибка добавления услуги:", error.message);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
+
 
 const getServices = async (req, res) => {
   try {
