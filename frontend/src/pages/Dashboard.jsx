@@ -282,7 +282,7 @@ useEffect(() => {
   };
 
   const handleSaveService = () => {
-  if (!title || !description || !category || !price || images.length === 0) {
+  if (!title || !description || !category || !price === 0) {
     setMessageService(t("fill_all_fields"));
     return;
   }
