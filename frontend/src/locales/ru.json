@@ -117,9 +117,11 @@
   "direction_to_not_chosen": "Город прибытия не выбран",
 
   
-  "flight_departure_date": "Дата рейса вылета",
-  "flight_return_date": "Дата рейса обратно",
+  "start_flight_date": "Дата рейса вылета",
+  "end_flight_date": "Дата рейса обратно",
   "flight_details": "Детали рейса",
+  "enter_flight_details": "Введите детали рейса",
+
   
   "accommodation_category": "Категория размещения",
   "enter_category": "Внесите категорию размещения",
