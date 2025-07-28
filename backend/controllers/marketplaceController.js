@@ -34,4 +34,10 @@ const searchListings = async (req, res) => {
   }
 };
 
+const direction = filters.details?.directionCountry;
+const city = filters.details?.directionTo;
+
+if (direction) conditions.push(`details->>'directionCountry' ILIKE $X`);
+if (city) conditions.push(`details->>'directionTo' ILIKE $Y`);
+
 module.exports = { searchListings };
