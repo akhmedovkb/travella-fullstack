@@ -377,15 +377,44 @@ const resetServiceForm = () => {
   };
 
   const loadServiceToEdit = (service) => {
-    setSelectedService(service);
-    setTitle(service.title);
-    setDescription(service.description);
-    setCategory(service.category);
-    setPrice(service.price);
-    setAvailability(service.map((d) => new Date(d)));
-    setMessageService("");
-    setImages(service.images || []);
-  };
+  setSelectedService(service);
+  setCategory(service.category);
+  setTitle(service.title);
+  setImages(service.images || []);
+  setMessageService("");
+
+  if (service.category === "refused_tour") {
+    const d = service.details || {};
+    setDetails({
+      direction: d.direction || "",
+      directionFrom: d.directionFrom || "",
+      directionTo: d.directionTo || "",
+      startDate: d.startDate || "",
+      endDate: d.endDate || "",
+      hotel: d.hotel || "",
+      accommodation: d.accommodation || "",
+      food: d.food || "",
+      transfer: d.transfer || "",
+      changeable: d.changeable || false,
+      visaIncluded: d.visaIncluded || false,
+      netPrice: d.netPrice || "",
+      expiration: d.expiration || "",
+      isActive: d.isActive ?? true,
+      startFlightDate: d.startFlightDate || "",
+      endFlightDate: d.endFlightDate || "",
+      flightDetails: d.flightDetails || "",
+      accommodationCategory: d.accommodationCategory || "",
+      adt: d.adt || "",
+      chd: d.chd || "",
+      inf: d.inf || ""
+    });
+  } else {
+    setDescription(service.description || "");
+    setPrice(service.price || "");
+    setAvailability(service.availability || []);
+  }
+};
+
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
