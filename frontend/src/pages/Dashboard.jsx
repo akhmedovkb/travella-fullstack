@@ -74,11 +74,12 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchCountries = async () => {
       try {
-        const response = await axios.get("https://restcountries.com/v3.1/all");
+        const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
         const countries = response.data.map((country) => ({
-          value: country.name.common,
-          label: country.name.common,
+        value: country.cca2,       // ISO-код, например "UZ"
+        label: country.name.common // Название, например "Uzbekistan"
         }));
+
         setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
       } catch (error) {
         console.error("Ошибка получения стран:", error);
