@@ -693,7 +693,7 @@ const getCategoryOptions = (type) => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t(category.${s.category})}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -710,7 +710,7 @@ const getCategoryOptions = (type) => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t(category.${s.category})}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
