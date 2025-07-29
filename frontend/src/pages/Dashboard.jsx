@@ -1012,7 +1012,8 @@ const getCategoryOptions = (type) => {
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
   <>
-    {["refused_tour", "author_tour"].includes(category) ? ( <>
+    {["refused_tour", "author_tour"].includes(category) ? ( 
+    <>
     <input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
@@ -1056,8 +1057,6 @@ const getCategoryOptions = (type) => {
 />
 
 </div>
-
-
       {/* тут вводим даты отпр и прил */}
       
     <div className="flex gap-4 mb-2">
@@ -1107,9 +1106,6 @@ const getCategoryOptions = (type) => {
   noOptionsMessage={() => t("hotel_not_found")}
   className="mb-3"
 />
-
-
-
       {/* тут вводим accommodation */}
     <div className="mb-4">
   <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
@@ -1172,7 +1168,6 @@ const getCategoryOptions = (type) => {
     </div>
   </div>
 </div>
-
         {/* тут вводим питание */}
       
     <div className="mb-2">
@@ -1440,9 +1435,10 @@ const getCategoryOptions = (type) => {
       </div>
     </div>
   </div>
-)}
+</>
+  )}
 
-    </>
+    
 ) : (
       <>
         <input
