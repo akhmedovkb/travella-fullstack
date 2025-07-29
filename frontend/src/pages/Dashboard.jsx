@@ -1525,7 +1525,7 @@ const getCategoryOptions = (type) => {
           {t("save_service")}
         </button>
       </>
-    )
+    )}
   </>
 )} 
   </>
