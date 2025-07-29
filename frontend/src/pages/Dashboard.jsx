@@ -1261,8 +1261,6 @@ const getCategoryOptions = (type) => {
       {option.label}
     </option>
   ))}
-</select>
-
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -1337,8 +1335,9 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-  ) : (
-    <>
+  )
+)} 
+    {/* Чтобы создать новую услугу, заполните все поля ниже и нажмите на «Сохранить услугу». */}
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
@@ -1769,7 +1768,4 @@ const getCategoryOptions = (type) => {
 </div>
 </div>
  
-);
-};
-
 export default Dashboard;
