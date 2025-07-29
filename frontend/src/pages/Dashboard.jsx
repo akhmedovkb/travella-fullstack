@@ -729,7 +729,7 @@ const getCategoryOptions = (type) => {
           <div className="text-sm text-gray-600">{t(s.category)}</div>
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-800">
-            {t("net_price")}: {s.details?.netPrice || 0} 
+            {t("net_price")}: {s.details?.netPrice || 0} USD
           </div>
           {s.details?.hotel && (
             <div className="text-xs text-gray-500">{s.details.hotel}</div>
@@ -768,18 +768,7 @@ const getCategoryOptions = (type) => {
   
   {selectedService ? (
     <>
-      <select
-  value={category}
-  onChange={(e) => setCategory(e.target.value)}
-  className="w-full border px-3 py-2 rounded mb-2 bg-white"
->
-  <option value="">{t("select_category")}</option>
-  {getCategoryOptions(profile.type).map((option) => (
-    <option key={option.value} value={option.value}>
-      {option.label}
-    </option>
-  ))}
-</select>
+      
 
       <input
         value={title}
