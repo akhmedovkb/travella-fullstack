@@ -1116,19 +1116,49 @@ const getCategoryOptions = (type) => {
         />
       </div>
 
-      <Select
-        options={foodOptions}
-        placeholder={t("food")}
-        value={foodOptions.find(opt => opt.value === details.food)}
-        onChange={(option) => setDetails({ ...details, food: option.value })}
-      />
+      {/* тут вводим питание */}
+      
+    <div className="mb-2">
+      <label className="block font-medium mb-1">{t("food")}</label>
+      <select
+        value={details.food || ""}
+        onChange={(e) => setDetails({ ...details, food: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      >
+        <option value="">{t("food_options.select")}</option>
+        <option value="BB">BB - {t("food_options.bb")}</option>
+        <option value="HB">HB - {t("food_options.hb")}</option>
+        <option value="FB">FB - {t("food_options.fb")}</option>
+        <option value="AI">AI - {t("food_options.ai")}</option>
+        <option value="UAI">UAI - {t("food_options.uai")}</option>
+      </select>
+      <label className="inline-flex items-center mt-2">
+        <input
+          type="checkbox"
+          checked={details.halal || false}
+          onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
+          className="mr-2"
+        />
+        {t("food_options.halal")}
+      </label>
+    </div>
 
-      <Select
-        options={transferOptions}
-        placeholder={t("transfer")}
-        value={transferOptions.find(opt => opt.value === details.transfer)}
-        onChange={(option) => setDetails({ ...details, transfer: option.value })}
-      />
+          {/* тут вводим трансфер */}
+      
+    <div className="mb-2">
+      <label className="block font-medium mb-1">{t("transfer")}</label>
+      <select
+        value={details.transfer || ""}
+        onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      >
+        <option value="">{t("transfer_options.select")}</option>
+        <option value="individual">{t("transfer_options.individual")}</option>
+        <option value="group">{t("transfer_options.group")}</option>
+        <option value="none">{t("transfer_options.none")}</option>
+      </select>
+    </div>
+
 
       <label className="flex items-center">
         <input
