@@ -767,6 +767,488 @@ const getCategoryOptions = (type) => {
   
   
   {selectedService ? (
+  selectedService.category === "refused_tour" && profile.type === "agent" ? (
+    // 🔶 Форма редактирования отказного тура
+    <>
+  <input
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    placeholder={t("title")}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  {/* Страна / Город отправления / Город прибытия */}
+  <div className="flex gap-4 mb-2">
+    <Select
+      options={countryOptions}
+      value={selectedCountry}
+      onChange={(value) => setSelectedCountry(value)}
+      placeholder={t("direction_country")}
+      noOptionsMessage={() => t("country_not_chosen")}
+      className="w-1/3"
+    />
+    <AsyncSelect
+      cacheOptions
+      defaultOptions
+      loadOptions={loadDepartureCities}
+      onChange={(selected) => {
+        setDepartureCity(selected);
+        setDetails((prev) => ({ ...prev, directionFrom: selected?.value }));
+      }}
+      placeholder={t("direction_from")}
+      noOptionsMessage={() => t("direction_from_not_chosen")}
+      className="w-1/3"
+    />
+    <Select
+      options={cityOptionsTo}
+      placeholder={t("direction_to")}
+      noOptionsMessage={() => t("direction_to_not_chosen")}
+      onChange={(value) =>
+        setDetails({ ...details, directionTo: value?.value })
+      }
+      className="w-1/3"
+    />
+  </div>
+
+  {/* Даты рейса */}
+  <div className="flex gap-4 mb-2">
+    <div className="w-1/2">
+      <label className="block text-sm mb-1">{t("start_flight_date")}</label>
+      <input
+        type="date"
+        value={details.startFlightDate || ""}
+        onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+    <div className="w-1/2">
+      <label className="block text-sm mb-1">{t("end_flight_date")}</label>
+      <input
+        type="date"
+        value={details.endFlightDate || ""}
+        onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+  </div>
+
+  {/* Детали рейса */}
+  <div className="mb-2">
+    <label className="block text-sm mb-1">{t("flight_details")}</label>
+    <textarea
+      value={details.flightDetails || ""}
+      onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
+      placeholder={t("enter_flight_details")}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  {/* Отель */}
+  <label className="block text-sm mb-1">{t("hotel")}</label>
+  <AsyncSelect
+    cacheOptions
+    defaultOptions
+    loadOptions={loadHotelOptions}
+    value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
+    onChange={(selected) =>
+      setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))
+    }
+    placeholder={t("hotel")}
+    noOptionsMessage={() => t("hotel_not_found")}
+    className="mb-3"
+  />
+
+  {/* Категория номера и размещение */}
+  <label className="block mb-1">{t("accommodation_category")}</label>
+  <input
+    type="text"
+    value={details.accommodationCategory || ""}
+    onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_category")}
+  />
+
+  <label className="block mb-1">{t("accommodation")}</label>
+  <input
+    type="text"
+    value={details.accommodation || ""}
+    onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_accommodation")}
+  />
+
+  {/* ADT / CHD / INF */}
+  <div className="flex gap-4 mb-4">
+    <div className="flex flex-col">
+      <label className="text-sm">{t("adt")}</label>
+      <input
+        type="number"
+        value={details.adt || ""}
+        onChange={(e) => setDetails({ ...details, adt: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+    <div className="flex flex-col">
+      <label className="text-sm">{t("chd")}</label>
+      <input
+        type="number"
+        value={details.chd || ""}
+        onChange={(e) => setDetails({ ...details, chd: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+    <div className="flex flex-col">
+      <label className="text-sm">{t("inf")}</label>
+      <input
+        type="number"
+        value={details.inf || ""}
+        onChange={(e) => setDetails({ ...details, inf: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+  </div>
+
+  {/* Питание */}
+  <label className="block font-medium mb-1">{t("food")}</label>
+  <select
+    value={details.food || ""}
+    onChange={(e) => setDetails({ ...details, food: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  >
+    <option value="">{t("food_options.select")}</option>
+    <option value="BB">BB - {t("food_options.bb")}</option>
+    <option value="HB">HB - {t("food_options.hb")}</option>
+    <option value="FB">FB - {t("food_options.fb")}</option>
+    <option value="AI">AI - {t("food_options.ai")}</option>
+    <option value="UAI">UAI - {t("food_options.uai")}</option>
+  </select>
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.halal || false}
+      onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
+      className="mr-2"
+    />
+    {t("food_options.halal")}
+  </label>
+
+  {/* Трансфер и опции */}
+  <label className="block font-medium mb-1 mt-2">{t("transfer")}</label>
+  <select
+    value={details.transfer || ""}
+    onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  >
+    <option value="">{t("transfer_options.select")}</option>
+    <option value="individual">{t("transfer_options.individual")}</option>
+    <option value="group">{t("transfer_options.group")}</option>
+    <option value="none">{t("transfer_options.none")}</option>
+  </select>
+
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.visaIncluded || false}
+      onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
+      className="mr-2"
+    />
+    {t("visa_included")}
+  </label>
+
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.changeable || false}
+      onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+      className="mr-2"
+    />
+    {t("changeable")}
+  </label>
+
+  {/* Цена, таймер, актуальность */}
+  <input
+    value={details.netPrice || ""}
+    onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+    placeholder={t("net_price")}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  <label className="block font-medium mb-1">{t("expiration_timer")}</label>
+  <input
+    type="datetime-local"
+    value={details.expiration || ""}
+    onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  <label className="inline-flex items-center mb-4">
+    <input
+      type="checkbox"
+      checked={details.isActive || false}
+      onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+      className="mr-2"
+    />
+    {t("is_active")}
+  </label>
+
+  {/* Кнопки */}
+  <div className="flex gap-4">
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save")}
+    </button>
+    <button
+      className="w-full bg-red-600 text-white py-2 rounded font-bold"
+      onClick={() => handleDeleteService(selectedService.id)}
+    >
+      {t("delete")}
+    </button>
+  </div>
+</>
+  ) : selectedService.category === "author_tour" && profile.type === "agent" ? (
+    // 🔷 Форма редактирования авторского тура
+    <>
+  <input
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    placeholder={t("title")}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  {/* Страна / Город отправления / Город прибытия */}
+  <div className="flex gap-4 mb-2">
+    <Select
+      options={countryOptions}
+      value={selectedCountry}
+      onChange={(value) => setSelectedCountry(value)}
+      placeholder={t("direction_country")}
+      noOptionsMessage={() => t("country_not_chosen")}
+      className="w-1/3"
+    />
+    <AsyncSelect
+      cacheOptions
+      defaultOptions
+      loadOptions={loadDepartureCities}
+      onChange={(selected) => {
+        setDepartureCity(selected);
+        setDetails((prev) => ({ ...prev, directionFrom: selected?.value }));
+      }}
+      placeholder={t("direction_from")}
+      noOptionsMessage={() => t("direction_from_not_chosen")}
+      className="w-1/3"
+    />
+    <Select
+      options={cityOptionsTo}
+      placeholder={t("direction_to")}
+      noOptionsMessage={() => t("direction_to_not_chosen")}
+      onChange={(value) =>
+        setDetails({ ...details, directionTo: value?.value })
+      }
+      className="w-1/3"
+    />
+  </div>
+
+  {/* Даты рейса */}
+  <div className="flex gap-4 mb-2">
+    <div className="w-1/2">
+      <label className="block text-sm mb-1">{t("start_flight_date")}</label>
+      <input
+        type="date"
+        value={details.startFlightDate || ""}
+        onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+    <div className="w-1/2">
+      <label className="block text-sm mb-1">{t("end_flight_date")}</label>
+      <input
+        type="date"
+        value={details.endFlightDate || ""}
+        onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+  </div>
+
+  {/* Детали рейса */}
+  <div className="mb-2">
+    <label className="block text-sm mb-1">{t("flight_details")}</label>
+    <textarea
+      value={details.flightDetails || ""}
+      onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
+      placeholder={t("enter_flight_details")}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  {/* Отель */}
+  <label className="block text-sm mb-1">{t("hotel")}</label>
+  <AsyncSelect
+    cacheOptions
+    defaultOptions
+    loadOptions={loadHotelOptions}
+    value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
+    onChange={(selected) =>
+      setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))
+    }
+    placeholder={t("hotel")}
+    noOptionsMessage={() => t("hotel_not_found")}
+    className="mb-3"
+  />
+
+  {/* Категория номера и размещение */}
+  <label className="block mb-1">{t("accommodation_category")}</label>
+  <input
+    type="text"
+    value={details.accommodationCategory || ""}
+    onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_category")}
+  />
+
+  <label className="block mb-1">{t("accommodation")}</label>
+  <input
+    type="text"
+    value={details.accommodation || ""}
+    onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+    placeholder={t("enter_accommodation")}
+  />
+
+  {/* ADT / CHD / INF */}
+  <div className="flex gap-4 mb-4">
+    <div className="flex flex-col">
+      <label className="text-sm">{t("adt")}</label>
+      <input
+        type="number"
+        value={details.adt || ""}
+        onChange={(e) => setDetails({ ...details, adt: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+    <div className="flex flex-col">
+      <label className="text-sm">{t("chd")}</label>
+      <input
+        type="number"
+        value={details.chd || ""}
+        onChange={(e) => setDetails({ ...details, chd: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+    <div className="flex flex-col">
+      <label className="text-sm">{t("inf")}</label>
+      <input
+        type="number"
+        value={details.inf || ""}
+        onChange={(e) => setDetails({ ...details, inf: e.target.value })}
+        className="w-24 border px-2 py-1 rounded"
+      />
+    </div>
+  </div>
+
+  {/* Питание */}
+  <label className="block font-medium mb-1">{t("food")}</label>
+  <select
+    value={details.food || ""}
+    onChange={(e) => setDetails({ ...details, food: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  >
+    <option value="">{t("food_options.select")}</option>
+    <option value="BB">BB - {t("food_options.bb")}</option>
+    <option value="HB">HB - {t("food_options.hb")}</option>
+    <option value="FB">FB - {t("food_options.fb")}</option>
+    <option value="AI">AI - {t("food_options.ai")}</option>
+    <option value="UAI">UAI - {t("food_options.uai")}</option>
+  </select>
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.halal || false}
+      onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
+      className="mr-2"
+    />
+    {t("food_options.halal")}
+  </label>
+
+  {/* Трансфер и опции */}
+  <label className="block font-medium mb-1 mt-2">{t("transfer")}</label>
+  <select
+    value={details.transfer || ""}
+    onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  >
+    <option value="">{t("transfer_options.select")}</option>
+    <option value="individual">{t("transfer_options.individual")}</option>
+    <option value="group">{t("transfer_options.group")}</option>
+    <option value="none">{t("transfer_options.none")}</option>
+  </select>
+
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.visaIncluded || false}
+      onChange={(e) => setDetails({ ...details, visaIncluded: e.target.checked })}
+      className="mr-2"
+    />
+    {t("visa_included")}
+  </label>
+
+  <label className="inline-flex items-center mb-2">
+    <input
+      type="checkbox"
+      checked={details.changeable || false}
+      onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+      className="mr-2"
+    />
+    {t("changeable")}
+  </label>
+
+  {/* Цена, таймер, актуальность */}
+  <input
+    value={details.netPrice || ""}
+    onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+    placeholder={t("net_price")}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  <label className="block font-medium mb-1">{t("expiration_timer")}</label>
+  <input
+    type="datetime-local"
+    value={details.expiration || ""}
+    onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  <label className="inline-flex items-center mb-4">
+    <input
+      type="checkbox"
+      checked={details.isActive || false}
+      onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+      className="mr-2"
+    />
+    {t("is_active")}
+  </label>
+
+  {/* Кнопки */}
+  <div className="flex gap-4">
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save")}
+    </button>
+    <button
+      className="w-full bg-red-600 text-white py-2 rounded font-bold"
+      onClick={() => handleDeleteService(selectedService.id)}
+    >
+      {t("delete")}
+    </button>
+  </div>
+</>
+
+  ) :{/* Услуги гида */}(
     <>
       <select
   value={category}
