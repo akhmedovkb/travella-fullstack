@@ -1528,7 +1528,8 @@ const getCategoryOptions = (type) => {
   </>
 )}
 
- 
+    </>
+  )} 
 
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
