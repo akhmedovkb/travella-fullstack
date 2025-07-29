@@ -1174,8 +1174,6 @@ const getCategoryOptions = (type) => {
     </div>
    </>
   )}
- </>
-)}
 
   <>
     {["refused_tour", "author_tour"].includes(category) ? ( <>
