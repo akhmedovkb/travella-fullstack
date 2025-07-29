@@ -1260,7 +1260,7 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
    </>
-        ) : {["refused_hotel"].includes(category) ?  (
+        ) : {profile.type === "agent" && selectedCategory === "refused_hotel" && (
     <>
   <div className="space-y-4">
     <input
@@ -1436,10 +1436,7 @@ const getCategoryOptions = (type) => {
     </div>
   </div>
 </>
-  )}
-
-    
-) : (
+  ) : (
       <>
         <input
           value={title}
