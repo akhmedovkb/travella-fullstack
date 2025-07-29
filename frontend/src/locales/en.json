@@ -125,6 +125,8 @@
   "enter_category": "Enter category of accommodation",
   "accommodation": "Accommodation",
   "enter_accommodation": "Enter accommodation",
+  "hotel_check_in": "Check-in date",
+  "hotel_check_out": "Check-out date",
   
   "adt": "Adults (ADT)",
   "chd": "Children (CHD)",
