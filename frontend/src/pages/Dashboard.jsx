@@ -1301,7 +1301,7 @@ const getCategoryOptions = (type) => {
       <div className="flex space-x-2">
         <input
           type="date"
-          placeholder={t("hotel_check_out")}
+          placeholder={t("hotel_check_in")}
           className="w-1/2 p-2 border rounded"
           value={details.checkIn || ""}
           placeholder={t("direction_to")}
@@ -1309,7 +1309,7 @@ const getCategoryOptions = (type) => {
         />
         <input
           type="date"
-          placeholder={t("hotel_check_in")}
+          placeholder={t("hotel_check_out")}
           className="w-1/2 p-2 border rounded"
           value={details.checkOut || ""}
           onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
