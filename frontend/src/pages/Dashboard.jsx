@@ -1009,7 +1009,7 @@ const getCategoryOptions = (type) => {
 
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
-
+<>
 {profile.type === "agent" && selectedCategory === "refused_hotel" && (
   <>
     <div className="space-y-4">
@@ -1172,7 +1172,9 @@ const getCategoryOptions = (type) => {
         {t("save_service")}
       </button>
     </div>
-  </>
+   </>
+  )}
+ </>
 )}
 
   <>
