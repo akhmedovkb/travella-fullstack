@@ -729,7 +729,7 @@ const getCategoryOptions = (type) => {
           <div className="text-sm text-gray-600">{t(s.category)}</div>
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-800">
-            {t("net_price")}: {s.details?.netPrice || 0} USD
+            {t("net_price")}: {s.details?.netPrice || 0} 
           </div>
           {s.details?.hotel && (
             <div className="text-xs text-gray-500">{s.details.hotel}</div>
