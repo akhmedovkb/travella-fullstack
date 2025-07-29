@@ -766,10 +766,35 @@ const getCategoryOptions = (type) => {
   </div>
   
   
-  {selectedService ? (
+  {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
-      
-
+      <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={t("title")}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+      {/* Остальная форма редактирования отказного/авторского тура — точно такая же, как при создании */}
+      {/* Можешь взять из блока создания (у тебя уже готов он выше) */}
+      {/* Например: направление, отель, питание, трансфер, чекбоксы, даты и т.д. */}
+      {/* Используй setDetails и details как обычно */}
+      {/* КНОПКА СОХРАНИТЬ */}
+      <button
+        className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-4"
+        onClick={handleSaveService}
+      >
+        {t("save_service")}
+      </button>
+      <button
+        className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
+        onClick={() => handleDeleteService(selectedService.id)}
+      >
+        {t("delete")}
+      </button>
+    </>
+  ) : (
+    <>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -844,6 +869,7 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
+   ) 
   ) : (
     <>
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
