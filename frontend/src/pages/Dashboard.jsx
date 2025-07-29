@@ -690,7 +690,9 @@ const getCategoryOptions = (type) => {
   {/* Услуги гида */}
   {profile.type === "guide" && (
     <>
-      {services.filter(isServiceActive).map((s) => (
+      {services
+        .filter(isServiceActive)
+        .map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -1263,7 +1265,185 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
    </>
-        ) : (
+        ) : {["refused_hotel"].includes(category) ?  (
+    <>
+  <div className="space-y-4">
+    <input
+      type="text"
+      placeholder={t("title")}
+      className="w-full p-2 border rounded"
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+    />
+
+    <div className="flex space-x-2">
+      <div className="w-1/3">
+        <Select
+          options={countryOptions}
+          placeholder={t("direction_country")}
+          value={countryOptions.find(opt => opt.value === details.directionCountry)}
+          onChange={(option) => setDetails({ ...details, directionCountry: option.value })}
+        />
+      </div>
+      <div className="w-1/3">
+        <AsyncSelect
+          cacheOptions
+          loadOptions={loadCityOptions}
+          defaultOptions
+          placeholder={t("direction_from")}
+          value={{ label: details.directionFrom, value: details.directionFrom }}
+          onChange={(option) => setDetails({ ...details, directionFrom: option.value })}
+        />
+      </div>
+      <div className="w-1/3">
+        <AsyncSelect
+          cacheOptions
+          loadOptions={loadCityOptions}
+          defaultOptions
+          placeholder={t("direction_to")}
+          value={{ label: details.directionTo, value: details.directionTo }}
+          onChange={(option) => setDetails({ ...details, directionTo: option.value })}
+        />
+      </div>
+    </div>
+
+    <div className="flex space-x-2">
+      <input
+        type="date"
+        className="w-1/2 p-2 border rounded"
+        value={details.checkIn || ""}
+        onChange={(e) => setDetails({ ...details, checkIn: e.target.value })}
+      />
+      <input
+        type="date"
+        className="w-1/2 p-2 border rounded"
+        value={details.checkOut || ""}
+        onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
+      />
+    </div>
+
+    <AsyncSelect
+      cacheOptions
+      loadOptions={loadHotelOptions}
+      defaultOptions
+      placeholder={t("hotel")}
+      value={{ label: details.hotel, value: details.hotel }}
+      onChange={(option) => setDetails({ ...details, hotel: option.value })}
+    />
+
+    <input
+      type="text"
+      placeholder={t("accommodation_category")}
+      className="w-full p-2 border rounded"
+      value={details.accommodationCategory || ""}
+      onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+    />
+
+    <input
+      type="text"
+      placeholder={t("accommodation")}
+      className="w-full p-2 border rounded"
+      value={details.accommodation || ""}
+      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+    />
+
+    <div className="flex space-x-2">
+      <input
+        type="number"
+        placeholder={t("adt")}
+        className="w-1/3 p-2 border rounded"
+        value={details.adt || ""}
+        onChange={(e) => setDetails({ ...details, adt: e.target.value })}
+      />
+      <input
+        type="number"
+        placeholder={t("chd")}
+        className="w-1/3 p-2 border rounded"
+        value={details.chd || ""}
+        onChange={(e) => setDetails({ ...details, chd: e.target.value })}
+      />
+      <input
+        type="number"
+        placeholder={t("inf")}
+        className="w-1/3 p-2 border rounded"
+        value={details.inf || ""}
+        onChange={(e) => setDetails({ ...details, inf: e.target.value })}
+      />
+    </div>
+
+    <Select
+      options={foodOptions}
+      placeholder={t("food")}
+      value={foodOptions.find(opt => opt.value === details.food)}
+      onChange={(option) => setDetails({ ...details, food: option.value })}
+    />
+
+    <Select
+      options={transferOptions}
+      placeholder={t("transfer")}
+      value={transferOptions.find(opt => opt.value === details.transfer)}
+      onChange={(option) => setDetails({ ...details, transfer: option.value })}
+    />
+
+    <div className="flex space-x-4">
+      <label className="flex items-center">
+        <input
+          type="checkbox"
+          checked={details.changeable || false}
+          onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+          className="mr-2"
+        />
+        {t("changeable")}
+      </label>
+      <label className="flex items-center">
+        <input
+          type="checkbox"
+          checked={details.isActive || false}
+          onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+          className="mr-2"
+        />
+        {t("is_active")}
+      </label>
+    </div>
+
+    <input
+      type="number"
+      placeholder={t("net_price")}
+      className="w-full p-2 border rounded"
+      value={details.netPrice || ""}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+    />
+
+    <input
+      type="datetime-local"
+      className="w-full p-2 border rounded"
+      value={details.expiration || ""}
+      onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+    />
+
+    <div>
+      <label className="block mb-1">{t("upload_images")}</label>
+      <input
+        type="file"
+        multiple
+        onChange={handleImageChange}
+        className="hidden"
+        id="imageInput"
+      />
+      <label htmlFor="imageInput" className="cursor-pointer inline-block px-4 py-2 bg-orange-500 text-white rounded">
+        {t("choose_files")}
+      </label>
+      <div className="text-sm text-gray-500 mt-1">
+        {images.length > 0
+          ? t("files_selected", { count: images.length })
+          : t("no_files_selected")}
+      </div>
+    </div>
+  </div>
+)}
+
+    </>
+) : (
       <>
         <input
           value={title}
