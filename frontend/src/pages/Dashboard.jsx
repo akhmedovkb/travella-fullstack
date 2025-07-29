@@ -1204,9 +1204,7 @@ const getCategoryOptions = (type) => {
     </div>
     
       </>
-    )}
-    
-    {["refused_tour", "author_tour"].includes(category) ? ( <>
+    )} : {["refused_tour", "author_tour"].includes(category) ? ( <>
     <input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
