@@ -1284,22 +1284,14 @@ const getCategoryOptions = (type) => {
             onChange={(option) => setDetails({ ...details, directionCountry: option.value })}
           />
         </div>
-        <div className="w-1/3">
-          <AsyncSelect
-            cacheOptions
-            loadOptions={loadDepartureCities}
-            defaultOptions
-            placeholder={t("direction_from")}
-            value={{ label: details.directionFrom, value: details.directionFrom }}
-            onChange={(option) => setDetails({ ...details, directionFrom: option.value })}
-          />
-        </div>
+       
         <div className="w-1/3">
           <AsyncSelect
             cacheOptions
             loadOptions={loadDepartureCities}
             defaultOptions
             placeholder={t("direction_to")}
+            noOptionsMessage={() => t("direction_to_not_chosen")}
             value={{ label: details.directionTo, value: details.directionTo }}
             onChange={(option) => setDetails({ ...details, directionTo: option.value })}
           />
@@ -1309,12 +1301,15 @@ const getCategoryOptions = (type) => {
       <div className="flex space-x-2">
         <input
           type="date"
+          placeholder={t("hotel_check_out")}
           className="w-1/2 p-2 border rounded"
           value={details.checkIn || ""}
+          placeholder={t("direction_to")}
           onChange={(e) => setDetails({ ...details, checkIn: e.target.value })}
         />
         <input
           type="date"
+          placeholder={t("hotel_check_in")}
           className="w-1/2 p-2 border rounded"
           value={details.checkOut || ""}
           onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
