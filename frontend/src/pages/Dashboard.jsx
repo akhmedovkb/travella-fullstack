@@ -63,7 +63,11 @@ const Dashboard = () => {
   expiration: "",
   isActive: true,
 });
-
+  
+  // 🔹 Фильтрация по активности услуг
+const isServiceActive = (s) =>
+  !s.details?.expiration || new Date(s.details.expiration) > new Date();
+  
   // 🔹 Загрузка отелей по запросу
 const loadHotelOptions = async (inputValue) => {
   try {
@@ -686,7 +690,7 @@ const getCategoryOptions = (type) => {
   {/* Услуги гида */}
   {profile.type === "guide" && (
     <>
-      {services.map((s) => (
+      {services.filter(isServiceActive).map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -703,7 +707,7 @@ const getCategoryOptions = (type) => {
   {/* Услуги транспорта */}
   {profile.type === "transport" && (
     <>
-      {services.map((s) => (
+      {services.filter(isServiceActive).map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -720,7 +724,7 @@ const getCategoryOptions = (type) => {
   {/* Услуги турагента */}
   {profile.type === "agent" && (
     <>
-      {services.map((s) => (
+      {services.filter(isServiceActive).map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
@@ -747,7 +751,7 @@ const getCategoryOptions = (type) => {
   {/* Услуги отеля */}
   {profile.type === "hotel" && (
     <>
-      {services.map((s) => (
+      {services.filter(isServiceActive).map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
