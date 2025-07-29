@@ -1033,7 +1033,7 @@ const getCategoryOptions = (type) => {
         <div className="w-1/3">
           <AsyncSelect
             cacheOptions
-            loadOptions={loadCityOptions}
+            loadOptions={loadArrivalCities}
             defaultOptions
             placeholder={t("direction_from")}
             value={{ label: details.directionFrom, value: details.directionFrom }}
@@ -1043,7 +1043,7 @@ const getCategoryOptions = (type) => {
         <div className="w-1/3">
           <AsyncSelect
             cacheOptions
-            loadOptions={loadCityOptions}
+            loadOptions={loadArrivalCities}
             defaultOptions
             placeholder={t("direction_to")}
             value={{ label: details.directionTo, value: details.directionTo }}
