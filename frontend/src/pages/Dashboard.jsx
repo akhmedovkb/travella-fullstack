@@ -1010,7 +1010,7 @@ const getCategoryOptions = (type) => {
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
   <>
-    {profile.type === "agent" && selectedCategory === "refused_hotel" && (
+    {profile.type === "agent" && selectedCategory === "refused_hotel" ? (
       <>
         <div className="space-y-4">
       <input
@@ -1204,7 +1204,8 @@ const getCategoryOptions = (type) => {
     </div>
     
       </>
-    )} : {["refused_tour", "author_tour"].includes(category) ? ( <>
+    ) : ["refused_tour", "author_tour"].includes(category) ? (
+    <>
     <input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
@@ -1457,7 +1458,7 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
    </>
-        )} : (
+        ) : (
       <>
         <input
           value={title}
