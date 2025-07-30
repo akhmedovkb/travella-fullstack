@@ -782,7 +782,7 @@ const getCategoryOptions = (type) => {
   
   
   {selectedService ? (
-  (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
+  (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ) ? (
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
       <input
