@@ -2025,44 +2025,38 @@ const getCategoryOptions = (type) => {
     )}
   </div>
 )}
-
-
-  </div>
-
-      
+  {/* Сообщение об успешном сохранении */}
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
-{/* Перенесённый календарь */}
-      
-{(profile.type === "guide" || profile.type === "transport") && (
-  <div className="mt-10 bg-white p-6 rounded shadow border">
-    <h3 className="text-lg font-semibold mb-4 text-orange-600">
-      {t("calendar.blocking_title")}
-    </h3>
 
-    <DayPicker
-      mode="multiple"
-      selected={blockedDates}
-      onSelect={setBlockedDates}
-      disabled={{ before: new Date() }}
-      modifiersClassNames={{
-        selected: "bg-red-400 text-white",
-      }}
-      className="border rounded p-4"
-    />
+  {/* Календарь занятости */}
+  {(profile.type === "guide" || profile.type === "transport") && (
+    <div className="mt-10 bg-white p-6 rounded shadow border">
+      <h3 className="text-lg font-semibold mb-4 text-orange-600">
+        {t("calendar.blocking_title")}
+      </h3>
 
-    <button
-      onClick={handleSaveBlockedDates}
-      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-    >
-      {t("calendar.save_blocked_dates")}
-    </button>
-  </div>
-)}
-  
-</div>
- 
+      <DayPicker
+        mode="multiple"
+        selected={blockedDates}
+        onSelect={setBlockedDates}
+        disabled={{ before: new Date() }}
+        modifiersClassNames={{
+          selected: "bg-red-400 text-white",
+        }}
+        className="border rounded p-4"
+      />
+
+      <button
+        onClick={handleSaveBlockedDates}
+        className="mt-4 bg-orange-500 text-white px-4 py-2 rounded"
+      >
+        {t("calendar.save_blocked_dates")}
+      </button>
+    </div>
+  )}
+</div> {/* Закрытие правого блока (w-full md:w-1/2) */} 
 );
 };
 
