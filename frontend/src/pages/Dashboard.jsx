@@ -1419,7 +1419,7 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-     ) : null)
+     ) : null
     )
   )
  ) : null}
