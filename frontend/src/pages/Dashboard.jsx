@@ -1092,12 +1092,18 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-   ) : {!selectedService && (
+   ) : (
     <>
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
-      {/* Выбор категории */}
+    </>
+      )
+    )
+  )
+) : null}
+  
+    {/* Выбор категории */}
 <select
   value={category}
   onChange={(e) => {
@@ -1688,13 +1694,6 @@ const getCategoryOptions = (type) => {
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
-    </>
-      )
-    )
-  )
-) : null}
-  
-    
 {/* Перенесённый календарь */}
       
 {(profile.type === "guide" || profile.type === "transport") && (
