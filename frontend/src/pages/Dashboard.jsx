@@ -1381,5 +1381,5 @@ return (
     )}
   </>
 );
-
+      };
 export default Dashboard;
