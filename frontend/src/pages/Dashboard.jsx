@@ -1015,10 +1015,7 @@ const getCategoryOptions = (type) => {
       </button>
     </div>
    </>
-  )
- )
-)
-) : (
+  ) : (
     <>
       <input
         value={title}
