@@ -1016,6 +1016,7 @@ const getCategoryOptions = (type) => {
     </div>
   </>
 )
+      )
        ) : (
     <>
       <input
