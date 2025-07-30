@@ -72,6 +72,7 @@ const Dashboard = () => {
 // редактирование отказного и авторского тура
   if (["refused_tour", "author_tour"].includes(category) && profile.type === "agent") {
     return (
+        <>
         <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
       <input
         value={title}
@@ -160,11 +161,13 @@ const Dashboard = () => {
       >
         {t("delete")}
       </button>
+    </>
           );
   }
         // редактирование отказного отеля
   if (profile.type === "agent" && selectedService.category === "refused_hotel") {
     return (
+        <>
       <div className="space-y-4">
       <input
         value={title}
@@ -304,11 +307,13 @@ const Dashboard = () => {
         {t("save_service")}
       </button>
     </div>
+    </>
     );
   }
 
   // По умолчанию — базовая форма редактирования
   return (
+       <>
    <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -382,68 +387,9 @@ const Dashboard = () => {
           {t("delete")}
         </button>
       </div>
+      </>
   );
 };
-
-
-  // Пример на основе отказного отеля
-  if (profile.type === "agent" && selectedService.category === "refused_hotel") {
-    return (
-      <div className="space-y-4">
-        <input
-          type="text"
-          placeholder={t("title")}
-          className="w-full p-2 border rounded"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-
-        {/* Дополнительные поля редактирования услуги (selectedService.details...) */}
-        {/* ... аналогично вашей текущей логике */}
-        
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
-      </div>
-    );
-  }
-
-  // По умолчанию — базовая форма редактирования
-  return (
-    <div className="space-y-4">
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={t("title")}
-        className="w-full p-2 border rounded"
-      />
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder={t("description")}
-        className="w-full p-2 border rounded"
-      />
-      <input
-        type="text"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder={t("price")}
-        className="w-full p-2 border rounded"
-      />
-      <button
-        className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-        onClick={handleSaveService}
-      >
-        {t("save_service")}
-      </button>
-    </div>
-  );
-};
-
     
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
