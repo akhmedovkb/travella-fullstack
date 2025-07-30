@@ -1688,7 +1688,7 @@ const getCategoryOptions = (type) => {
     )}
   </>
 )} 
-  </>
+  </div>
 )} 
       
   {messageService && (
