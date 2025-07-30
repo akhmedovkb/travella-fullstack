@@ -1016,6 +1016,7 @@ const getCategoryOptions = (type) => {
     </div>
    </>
   ) : (
+    (["guide", "transport"].includes(profile.type)) ?  (
     <>
       <input
         value={title}
@@ -1096,7 +1097,11 @@ const getCategoryOptions = (type) => {
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
-
+    </>
+      )
+    )
+  )
+) 
     {/* Выбор категории */}
 <select
   value={category}
