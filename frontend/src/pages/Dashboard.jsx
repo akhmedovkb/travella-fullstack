@@ -872,7 +872,149 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : (
+  ) : {profile.type === "agent" && selectedCategory === "refused_hotel" && (
+  <>
+    <div className="space-y-4">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={t("title")}
+        className="w-full border px-3 py-2 rounded"
+      />
+
+      <label className="block text-sm font-medium">{t("direction_country")}</label>
+      <Select
+        options={countryOptions}
+        value={selectedCountry}
+        onChange={(value) => setSelectedCountry(value)}
+        placeholder={t("direction_country")}
+        className="mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("direction_to")}</label>
+      <AsyncSelect
+        cacheOptions
+        loadOptions={loadDepartureCities}
+        defaultOptions
+        placeholder={t("direction_to")}
+        noOptionsMessage={() => t("direction_to_not_chosen")}
+        value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
+        onChange={(option) => setDetails({ ...details, directionTo: option.value })}
+        className="mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("hotel_name")}</label>
+      <AsyncSelect
+        cacheOptions
+        loadOptions={loadHotelOptions}
+        defaultOptions
+        placeholder={t("hotel")}
+        noOptionsMessage={() => t("hotel_not_found")}
+        value={details.hotel ? { label: details.hotel, value: details.hotel } : null}
+        onChange={(option) => setDetails({ ...details, hotel: option?.value })}
+        className="mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("check_in")}</label>
+      <input
+        type="date"
+        value={details.checkIn || ""}
+        onChange={(e) => setDetails({ ...details, checkIn: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("check_out")}</label>
+      <input
+        type="date"
+        value={details.checkOut || ""}
+        onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("room_category")}</label>
+      <input
+        value={details.accommodationCategory || ""}
+        onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("accommodation")}</label>
+      <input
+        value={details.accommodation || ""}
+        onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="block text-sm font-medium">{t("food")}</label>
+      <select
+        value={details.food || ""}
+        onChange={(e) => setDetails({ ...details, food: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      >
+        <option value="">{t("food_options.select")}</option>
+        <option value="BB">BB - {t("food_options.bb")}</option>
+        <option value="HB">HB - {t("food_options.hb")}</option>
+        <option value="FB">FB - {t("food_options.fb")}</option>
+        <option value="AI">AI - {t("food_options.ai")}</option>
+        <option value="UAI">UAI - {t("food_options.uai")}</option>
+      </select>
+
+      <label className="block text-sm font-medium">{t("transfer")}</label>
+      <select
+        value={details.transfer || ""}
+        onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      >
+        <option value="">{t("transfer_options.select")}</option>
+        <option value="individual">{t("transfer_options.individual")}</option>
+        <option value="group">{t("transfer_options.group")}</option>
+        <option value="none">{t("transfer_options.none")}</option>
+      </select>
+
+      <label className="inline-flex items-center mb-2">
+        <input
+          type="checkbox"
+          checked={details.changeable || false}
+          onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+          className="mr-2"
+        />
+        {t("changeable")}
+      </label>
+
+      <input
+        value={details.netPrice || ""}
+        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+        placeholder={t("net_price")}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
+      <input
+        type="datetime-local"
+        value={details.expiration || ""}
+        onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+        className="w-full border px-3 py-2 rounded mb-2"
+      />
+
+      <label className="inline-flex items-center mb-4">
+        <input
+          type="checkbox"
+          checked={details.isActive || false}
+          onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+          className="mr-2"
+        />
+        {t("is_active")}
+      </label>
+
+      <button
+        className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+        onClick={handleSaveService}
+      >
+        {t("save_service")}
+      </button>
+    </div>
+  </>
+)} : (
     <>
       <input
         value={title}
