@@ -1286,16 +1286,23 @@ const getCategoryOptions = (type) => {
         </div>
        
         <div className="w-1/3">
-          <AsyncSelect
-            cacheOptions
-            loadOptions={loadDepartureCities}
-            defaultOptions
-            placeholder={t("direction_to")}
-            noOptionsMessage={() => t("direction_to_not_chosen")}
-            value={{ label: details.directionTo, value: details.directionTo }}
-            onChange={(option) => setDetails({ ...details, directionTo: option.value })}
-          />
-        </div>
+  <AsyncSelect
+    cacheOptions
+    loadOptions={loadDepartureCities}
+    defaultOptions
+    placeholder={t("direction_to")}
+    noOptionsMessage={() => t("direction_to_not_chosen")}
+    value={
+      details.directionTo
+        ? { label: details.directionTo, value: details.directionTo }
+        : null
+    }
+    onChange={(option) =>
+      setDetails({ ...details, directionTo: option?.value || "" })
+    }
+  />
+</div>
+
       </div>
 
       <div className="flex space-x-4 mb-2">
@@ -1323,17 +1330,7 @@ const getCategoryOptions = (type) => {
     />
   </div>
 </div>
-
-
-      <AsyncSelect
-        cacheOptions
-        loadOptions={loadHotelOptions}
-        defaultOptions
-        placeholder={t("hotel")}
-        value={{ label: details.hotel, value: details.hotel }}
-        onChange={(option) => setDetails({ ...details, hotel: option.value })}
-      />
-
+          
       <input
         type="text"
         placeholder={t("accommodation_category")}
