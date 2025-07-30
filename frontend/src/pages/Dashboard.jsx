@@ -1165,7 +1165,7 @@ const getCategoryOptions = (type) => {
 </select>
 
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
-{category && (
+{!selectedService &&category && (
   <>
     {["refused_tour", "author_tour"].includes(category) ? (
     <>
