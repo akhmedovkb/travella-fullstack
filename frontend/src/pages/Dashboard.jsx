@@ -1689,12 +1689,13 @@ const getCategoryOptions = (type) => {
   </>
 )} 
   </div>
-)} 
+
       
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
 {/* Перенесённый календарь */}
+      
 {(profile.type === "guide" || profile.type === "transport") && (
   <div className="mt-10 bg-white p-6 rounded shadow border">
     <h3 className="text-lg font-semibold mb-4 text-orange-600">
