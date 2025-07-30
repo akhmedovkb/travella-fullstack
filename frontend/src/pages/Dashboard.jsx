@@ -1492,9 +1492,10 @@ const getCategoryOptions = (type) => {
 </select>
 
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
+
 {selectedService ? (
   <>{renderEditForm()}</>
-) : category && (
+) : category && !selectedService && (
   <>
     {/* форма создания */}
     {["refused_tour", "author_tour"].includes(category) && profile.type === "agent" && (
