@@ -2021,13 +2021,11 @@ const getCategoryOptions = (type) => {
         </button>
       </>
     )}
-  </>
-)} 
-  </div>
-      </>
+   </>
     )}
-  </>
+  </div>
 )}
+
 
   </div>
 
