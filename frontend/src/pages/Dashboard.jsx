@@ -2056,8 +2056,5 @@ const getCategoryOptions = (type) => {
       </button>
     </div>
   )}
-</div> {/* Закрытие правого блока (w-full md:w-1/2) */} 
-);
-};
-
+</div> 
 export default Dashboard;
