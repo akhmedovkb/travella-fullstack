@@ -1419,10 +1419,10 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-     ) 
+     ) : null}
     )
   )
- ): null}
+ ) : null}
 
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
