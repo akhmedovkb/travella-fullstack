@@ -873,7 +873,7 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : profile.type === "agent" && selectedCategory === "refused_hotel" && (
+  ) : ( profile.type === "agent" && selectedCategory === "refused_hotel" && (
   <>
     <div className="space-y-4">
       <input
