@@ -1101,7 +1101,7 @@ const getCategoryOptions = (type) => {
       )
     )
   )
-) 
+)}
     {/* Выбор категории */}
 <select
   value={category}
