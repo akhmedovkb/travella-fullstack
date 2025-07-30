@@ -2057,4 +2057,7 @@ const getCategoryOptions = (type) => {
     </div>
   )}
 </div> 
+);
+};
+
 export default Dashboard;
