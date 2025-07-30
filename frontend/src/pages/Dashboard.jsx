@@ -381,42 +381,53 @@ const resetServiceForm = () => {
   };
 
   const loadServiceToEdit = (service) => {
+  setIsEditing(true);
   setSelectedService(service);
-  setCategory(service.category);
-  setTitle(service.title);
+  setTitle(service.title || "");
+  setDescription(service.description || "");
+  setPrice(service.price || "");
+  setCategory(service.category || "");
   setImages(service.images || []);
-  setMessageService("");
+  setAvailability(service.availability || []);
 
-  if (service.category === "refused_tour") {
-    const d = service.details || {};
-    setDetails({
-      direction: d.direction || "",
-      directionFrom: d.directionFrom || "",
-      directionTo: d.directionTo || "",
-      startDate: d.startDate || "",
-      endDate: d.endDate || "",
-      hotel: d.hotel || "",
-      accommodation: d.accommodation || "",
-      food: d.food || "",
-      transfer: d.transfer || "",
-      changeable: d.changeable || false,
-      visaIncluded: d.visaIncluded || false,
-      netPrice: d.netPrice || "",
-      expiration: d.expiration || "",
-      isActive: d.isActive ?? true,
-      startFlightDate: d.startFlightDate || "",
-      endFlightDate: d.endFlightDate || "",
-      flightDetails: d.flightDetails || "",
-      accommodationCategory: d.accommodationCategory || "",
-      adt: d.adt || "",
-      chd: d.chd || "",
-      inf: d.inf || ""
-    });
-  } else {
-    setDescription(service.description || "");
-    setPrice(service.price || "");
-    setAvailability(service.availability || []);
-  }
+  const d = service.details || {};
+
+  setDetails({
+    directionCountry: d.directionCountry || "",
+    directionFrom: d.directionFrom || "",
+    directionTo: d.directionTo || "",
+    hotel: d.hotel || "",
+    checkIn: d.checkIn || "",
+    checkOut: d.checkOut || "",
+    accommodationCategory: d.accommodationCategory || "",
+    accommodation: d.accommodation || "",
+    adt: d.adt || "",
+    chd: d.chd || "",
+    inf: d.inf || "",
+    food: d.food || "",
+    halal: d.halal || false,
+    transfer: d.transfer || "",
+    visaIncluded: d.visaIncluded || false,
+    changeable: d.changeable || false,
+    netPrice: d.netPrice || "",
+    expiration: d.expiration || "",
+    isActive: d.isActive ?? true,
+    startFlightDate: d.startFlightDate || "",
+    endFlightDate: d.endFlightDate || "",
+    flightDetails: d.flightDetails || "",
+  });
+
+  setSelectedCountry(
+    d.directionCountry
+      ? { label: d.directionCountry, value: d.directionCountry }
+      : null
+  );
+
+  setDepartureCity(
+    d.directionFrom
+      ? { label: d.directionFrom, value: d.directionFrom }
+      : null
+  );
 };
 
 
