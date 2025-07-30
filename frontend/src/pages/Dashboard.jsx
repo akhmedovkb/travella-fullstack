@@ -1298,23 +1298,32 @@ const getCategoryOptions = (type) => {
         </div>
       </div>
 
-      <div className="flex space-x-2">
-        <input
-          type="date"
-          placeholder={t("hotel_check_in")}
-          className="w-1/2 p-2 border rounded"
-          value={details.checkIn || ""}
-          placeholder={t("direction_to")}
-          onChange={(e) => setDetails({ ...details, checkIn: e.target.value })}
-        />
-        <input
-          type="date"
-          placeholder={t("hotel_check_out")}
-          className="w-1/2 p-2 border rounded"
-          value={details.checkOut || ""}
-          onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
-        />
-      </div>
+      <div className="flex space-x-4 mb-2">
+  <div className="w-1/2">
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {t("hotel_check_in")}
+    </label>
+    <input
+      type="date"
+      className="w-full p-2 border rounded"
+      value={details.checkIn || ""}
+      onChange={(e) => setDetails({ ...details, checkIn: e.target.value })}
+    />
+  </div>
+
+  <div className="w-1/2">
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {t("hotel_check_out")}
+    </label>
+    <input
+      type="date"
+      className="w-full p-2 border rounded"
+      value={details.checkOut || ""}
+      onChange={(e) => setDetails({ ...details, checkOut: e.target.value })}
+    />
+  </div>
+</div>
+
 
       <AsyncSelect
         cacheOptions
