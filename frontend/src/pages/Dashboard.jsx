@@ -1722,7 +1722,6 @@ const getCategoryOptions = (type) => {
 )}
   
 </div>
-</div>
  
 );
 };
