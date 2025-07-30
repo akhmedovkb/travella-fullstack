@@ -1010,7 +1010,7 @@ const getCategoryOptions = (type) => {
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
   <>
-    {["refused_tour", "author_tour", "refused_hotel"].includes(category) ? (
+    {["refused_tour", "author_tour"].includes(category) ? (
     <>
     <input
       value={title}
