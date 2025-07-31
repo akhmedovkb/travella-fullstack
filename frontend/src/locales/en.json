@@ -70,6 +70,8 @@
   "new_refused_airtkt": "Add a new refused flight ticket:",
   "new_refused_tkt": "Add a new refused event ticket:",
   "new_visa_service": "Add a visa support service:",
+  "refused_hotel_city": "City",
+  "refused_hotel_select_city": "Enter the city",
 
   "direction": "Direction",
     
