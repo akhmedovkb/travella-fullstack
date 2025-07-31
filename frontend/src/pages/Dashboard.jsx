@@ -387,9 +387,14 @@ const resetServiceForm = () => {
   setImages(service.images || []);
   setMessageService("");
 
-  if (service.category === "refused_tour") {
+  if (
+    service.category === "refused_tour" ||
+    service.category === "author_tour" ||
+    service.category === "refused_hotel"
+  ) {
     const d = service.details || {};
     setDetails({
+      // Общие поля
       direction: d.direction || "",
       directionFrom: d.directionFrom || "",
       directionTo: d.directionTo || "",
@@ -404,9 +409,13 @@ const resetServiceForm = () => {
       netPrice: d.netPrice || "",
       expiration: d.expiration || "",
       isActive: d.isActive ?? true,
+
+      // Только для авиабилета (если планируешь)
       startFlightDate: d.startFlightDate || "",
       endFlightDate: d.endFlightDate || "",
       flightDetails: d.flightDetails || "",
+
+      // Только для отеля
       accommodationCategory: d.accommodationCategory || "",
       adt: d.adt || "",
       chd: d.chd || "",
@@ -418,6 +427,7 @@ const resetServiceForm = () => {
     setAvailability(service.availability || []);
   }
 };
+
 
 
   const handleImageUpload = (e) => {
