@@ -65,6 +65,13 @@
   "hall_rent": "Zal ijarasi",
   "expiration_timer": "Aktuallik taymeri",
   "is_active": "Aktual",
+  "new_refused_tour": "Yangi rad etilgan tur qo‘shish:",
+  "new_refused_hotel": "Yangi rad etilgan mehmonxona qo‘shish:",
+  "new_refused_airtkt": "Yangi rad etilgan aviachiptani qo‘shish:",
+  "new_refused_tkt": "Yangi tadbir chiptasini qo‘shish:",
+  "new_visa_service": "Viza xizmatini qo‘shish:",
+
+
 
   "direction": "Yo`nalish",
   "accommodation": "Joylashuv",
