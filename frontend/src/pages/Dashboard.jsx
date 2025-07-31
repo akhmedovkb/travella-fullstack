@@ -869,12 +869,15 @@ const getCategoryOptions = (type) => {
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
-      <input
+      <div className="mb-2">
+        <label className="block font-medium mb-1">{t("title")}</label>
+       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder={t("title")}
         className="w-full border px-3 py-2 rounded mb-2"
-      />
+       />
+      </div>
 
       <div className="mb-2">
         <label className="block font-medium mb-1">{t("direction_country")}</label>
