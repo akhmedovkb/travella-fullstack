@@ -1196,8 +1196,9 @@ const getCategoryOptions = (type) => {
 {/* 🟧 Показываем форму ТОЛЬКО если выбрана категория */}
 {category && (
   <>
-    {["refused_tour", "author_tour"].includes(category) ? ( <>
-    <input
+     {(category === "refused_tour" || category === "author_tour") && profile.type === "agent" ? (
+      <>
+        input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
       placeholder={t("title")}
@@ -1292,9 +1293,8 @@ const getCategoryOptions = (type) => {
   className="mb-3"
 />
 
+    {/* тут вводим accommodation */}
 
-
-      {/* тут вводим accommodation */}
     <div className="mb-4">
   <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
   <input
@@ -1448,8 +1448,292 @@ const getCategoryOptions = (type) => {
     >
       {t("save_service")}
     </button>
-   </>
-        ) : (
+      </>
+    ) : category === "refused_hotel" && profile.type === "agent" ? (
+      <>
+  <h3 className="text-xl font-semibold mb-2">{t("new_refused_hotel")}</h3>
+
+  <input
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    placeholder={t("title")}
+    className="w-full border px-3 py-2 rounded mb-2"
+  />
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("direction_country")}</label>
+    <Select
+      options={countryOptions}
+      value={countryOptions.find((c) => c.value === details.direction)}
+      onChange={(selected) => setDetails({ ...details, direction: selected?.value || "" })}
+      placeholder={t("select_country")}
+    />
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("city")}</label>
+    <AsyncSelect
+      cacheOptions
+      loadOptions={loadCityOptions}
+      defaultOptions
+      onChange={(selected) => setDetails({ ...details, directionTo: selected?.value || "" })}
+      placeholder={t("select_city")}
+    />
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("hotel_name")}</label>
+    <AsyncSelect
+      cacheOptions
+      loadOptions={loadHotelOptions}
+      defaultOptions
+      onChange={(selected) => setDetails({ ...details, hotel: selected?.value || "" })}
+      placeholder={t("select_hotel")}
+    />
+  </div>
+
+  <div className="flex gap-4 mb-2">
+    <div className="w-1/2">
+      <label className="block font-medium mb-1">{t("checkin_date")}</label>
+      <input
+        type="date"
+        value={details.startDate}
+        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+    <div className="w-1/2">
+      <label className="block font-medium mb-1">{t("checkout_date")}</label>
+      <input
+        type="date"
+        value={details.endDate}
+        onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("accommodation_category")}</label>
+    <input
+      type="text"
+      value={details.accommodationCategory || ""}
+      onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("accommodation")}</label>
+    <input
+      type="text"
+      value={details.accommodation || ""}
+      onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("food")}</label>
+    <select
+      value={details.food || ""}
+      onChange={(e) => setDetails({ ...details, food: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    >
+      <option value="">{t("select_food")}</option>
+      <option value="BB">BB</option>
+      <option value="HB">HB</option>
+      <option value="FB">FB</option>
+      <option value="AI">AI</option>
+      <option value="UAI">UAI</option>
+      <option value="HALAL">HALAL</option>
+    </select>
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("transfer")}</label>
+    <select
+      value={details.transfer || ""}
+      onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    >
+      <option value="">{t("select_transfer")}</option>
+      <option value="group">{t("group_transfer")}</option>
+      <option value="individual">{t("individual_transfer")}</option>
+      <option value="none">{t("no_transfer")}</option>
+    </select>
+  </div>
+
+  <div className="mb-2 flex items-center">
+    <input
+      type="checkbox"
+      checked={details.changeable || false}
+      onChange={(e) => setDetails({ ...details, changeable: e.target.checked })}
+      className="mr-2"
+    />
+    <label>{t("changeable")}</label>
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("net_price")}</label>
+    <input
+      type="number"
+      value={details.netPrice || ""}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  <div className="mb-2">
+    <label className="block font-medium mb-1">{t("expiration")}</label>
+    <input
+      type="datetime-local"
+      value={details.expiration || ""}
+      onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+      className="w-full border px-3 py-2 rounded"
+    />
+  </div>
+
+  <div className="mb-4 flex items-center">
+    <input
+      type="checkbox"
+      checked={details.isActive || false}
+      onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+      className="mr-2"
+    />
+    <label>{t("is_active")}</label>
+  </div>
+
+  <button
+    className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+    onClick={handleSaveService}
+  >
+    {t("save_service")}
+  </button>
+</>
+
+    ) : category === "refused_flight" && profile.type === "agent" ? (
+      <>
+        {/* ✈️ Форма отказного авиабилета */}
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("title")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <div className="mb-2">
+          <label>{t("direction")}</label>
+          <input
+            value={details.direction || ""}
+            onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div className="flex gap-4 mb-2">
+          <div className="w-1/2">
+            <label>{t("start_date")}</label>
+            <input
+              type="date"
+              value={details.startDate || ""}
+              onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+              className="w-full border px-3 py-2 rounded"
+            />
+          </div>
+          <div className="w-1/2">
+            <label>{t("end_date")}</label>
+            <input
+              type="date"
+              value={details.endDate || ""}
+              onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
+              className="w-full border px-3 py-2 rounded"
+            />
+          </div>
+        </div>
+        <input
+          value={details.netPrice || ""}
+          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+          placeholder={t("net_price")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <button
+          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+          onClick={handleSaveService}
+        >
+          {t("save_service")}
+        </button>
+      </>
+    ) : category === "refused_event_ticket" && profile.type === "agent" ? (
+      <>
+        {/* 🎫 Форма отказного билета на мероприятие */}
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("event_name")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          value={details.location || ""}
+          onChange={(e) => setDetails({ ...details, location: e.target.value })}
+          placeholder={t("location")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          type="date"
+          value={details.startDate || ""}
+          onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          value={details.netPrice || ""}
+          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+          placeholder={t("net_price")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <button
+          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+          onClick={handleSaveService}
+        >
+          {t("save_service")}
+        </button>
+      </>
+    ) : category === "visa_support" && profile.type === "agent" ? (
+      <>
+        {/* 🛂 Форма визовой поддержки */}
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("service_name")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <textarea
+          value={details.description || ""}
+          onChange={(e) => setDetails({ ...details, description: e.target.value })}
+          placeholder={t("enter_description")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          value={details.netPrice || ""}
+          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+          placeholder={t("net_price")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <label className="inline-flex items-center mb-2">
+          <input
+            type="checkbox"
+            checked={details.isActive || false}
+            onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+            className="mr-2"
+          />
+          {t("is_active")}
+        </label>
+        <button
+          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+          onClick={handleSaveService}
+        >
+          {t("save_service")}
+        </button>
+      </>
+    ) : (
       <>
         <input
           value={title}
@@ -1519,6 +1803,7 @@ const getCategoryOptions = (type) => {
     )}
   </>
 )}
+
 
     </>
   )}
