@@ -14,7 +14,7 @@ const Dashboard = () => {
   const [newPhoto, setNewPhoto] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [newPassword, setNewPassword] = useState("");
-  
+  const [messageProfile, setMessageProfile] = useState("");
   const [profile, setProfile] = useState({});
   const [services, setServices] = useState([]);
   const [title, setTitle] = useState("");
