@@ -888,7 +888,7 @@ const getCategoryOptions = (type) => {
           options={countryOptions}
           value={countryOptions.find((c) => c.value === details.direction)}
           onChange={(selected) => setDetails({ ...details, direction: selected?.value || "" })}
-          placeholder={t("select_country")}
+          placeholder={t("direction_country")}
         />
       </div>
 
@@ -1460,7 +1460,7 @@ const getCategoryOptions = (type) => {
       options={countryOptions}
       value={countryOptions.find((c) => c.value === details.direction)}
       onChange={(selected) => setDetails({ ...details, direction: selected?.value || "" })}
-      placeholder={t("select_country")}
+      placeholder={t("direction_country")}
     />
   </div>
 
