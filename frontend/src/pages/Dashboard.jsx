@@ -14,6 +14,7 @@ const Dashboard = () => {
   const [newPhoto, setNewPhoto] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  
   const [profile, setProfile] = useState({});
   const [services, setServices] = useState([]);
   const [title, setTitle] = useState("");
@@ -38,6 +39,29 @@ const Dashboard = () => {
       return [];
     }
   };
+
+  
+  const handleChangePassword = async () => {
+  if (!newPassword) {
+    alert("Введите новый пароль");
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    await axios.put(
+      `${import.meta.env.VITE_API_URL}/api/providers/profile`,
+      { password: newPassword },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    alert("Пароль успешно изменен");
+    setNewPassword(""); // очистка поля
+  } catch (err) {
+    console.error("Ошибка смены пароля:", err);
+    alert("Ошибка при смене пароля");
+  }
+};
 
   const loadDepartureCities = async (inputValue) => {
     try {
