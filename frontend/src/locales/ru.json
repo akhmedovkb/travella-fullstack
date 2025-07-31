@@ -134,7 +134,8 @@
   "enter_accommodation": "Внесите размещение",
   "hotel_check_in": "Дата заезда",
   "hotel_check_out": "Дата выезда",
-
+  "refused_hotel_name": "Название отказного отеля",
+  
   
   "adt": "Взрослые (ADT)",
   "chd": "Дети (CHD)",
