@@ -11,7 +11,7 @@ import LanguageSelector from "../components/LanguageSelector";
 
 const Dashboard = () => {
   const { t } = useTranslation();
-
+  const [newPhoto, setNewPhoto] = useState("");
   const [profile, setProfile] = useState({});
   const [services, setServices] = useState([]);
   const [title, setTitle] = useState("");
@@ -56,6 +56,8 @@ const Dashboard = () => {
       return [];
     }
   };
+  
+const [newPhoto, setNewPhoto] = useState("");
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
