@@ -64,7 +64,413 @@ const Dashboard = () => {
   isActive: true,
 });
 
-   // 🔹 renderCreateForm
+     // 🔹 Фильтрация по активности услуг
+const isServiceActive = (s) =>
+  !s.details?.expiration || new Date(s.details.expiration) > new Date();
+  
+  // 🔹 Загрузка отелей по запросу
+const loadHotelOptions = async (inputValue) => {
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
+    );
+    return res.data;
+  } catch (err) {
+    console.error("Ошибка загрузки отелей:", err);
+    return [];
+  }
+};
+  
+  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
+  const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
+      dates: blockedDates,
+    }, config);
+    alert(t("calendar.saved_successfully"));
+  } catch (err) {
+    console.error("Ошибка сохранения дат:", err);
+    alert(t("calendar.save_error"));
+  }
+      };
+
+  // Загрузка стран
+useEffect(() => {
+  const fetchCountries = async () => {
+    try {
+      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+      const countries = response.data.map((country) => ({
+        value: country.name.common,
+        label: country.name.common,
+        code: country.cca2, // ISO2 код
+      }));
+      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+    } catch (error) {
+      console.error("Ошибка загрузки стран:", error);
+    }
+  };
+  fetchCountries();
+}, []);
+
+  const loadDepartureCities = async (inputValue) => {
+  if (!inputValue) return [];
+
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+
+  
+// 🔍 Функция загрузки городов по поиску
+const loadCitiesFromInput = async (inputValue) => {
+  if (!inputValue) return [];
+
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+  
+// Города отправления — независимо от страны
+useEffect(() => {
+  const fetchCities = async () => {
+    try {
+      const response = await axios.get("https://secure.geonames.org/searchJSON", {
+        params: {
+          featureClass: "P",
+          maxRows: 100,
+          orderby: "population",
+          username: import.meta.env.VITE_GEONAMES_USERNAME,
+        },
+      });
+      const cities = response.data.geonames.map((city) => ({
+        value: city.name,
+        label: city.name,
+      }));
+      setCityOptionsFrom(cities);
+    } catch (error) {
+      console.error("Ошибка загрузки городов отправления:", error);
+    }
+  };
+  fetchCities();
+}, []);
+
+useEffect(() => {
+  if (!selectedCountry?.code) return;
+  const fetchCities = async () => {
+    try {
+      const response = await axios.get("https://secure.geonames.org/searchJSON", {
+        params: {
+          country: selectedCountry.code,
+          featureClass: "P",
+          maxRows: 100,
+          username: import.meta.env.VITE_GEONAMES_USERNAME,
+        },
+      });
+      const cities = response.data.geonames.map((city) => ({
+        value: city.name,
+        label: city.name,
+      }));
+      setCityOptionsTo(cities);
+    } catch (error) {
+      console.error("Ошибка загрузки городов прибытия:", error);
+    }
+  };
+  fetchCities();
+}, [selectedCountry]);
+
+  
+  useEffect(() => {
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .then((res) => {
+        setProfile(res.data);
+        setNewLocation(res.data.location);
+        setNewSocial(res.data.social);
+        setNewPhone(res.data.phone);
+        setNewAddress(res.data.address);
+      })
+      .catch((err) => console.error("Ошибка загрузки профиля", err));
+
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .then((res) => setServices(res.data))
+      .catch((err) => console.error("Ошибка загрузки услуг", err));
+  }, []);
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewPhoto(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCertificateChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewCertificate(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveProfile = () => {
+    const updated = {};
+    if (newLocation !== profile.location) updated.location = newLocation;
+    if (newSocial !== profile.social) updated.social = newSocial;
+    if (newPhone !== profile.phone) updated.phone = newPhone;
+    if (newPhoto) updated.photo = newPhoto;
+    if (newCertificate) updated.certificate = newCertificate;
+    if (newAddress !== profile.address) updated.address = newAddress;
+    if (Object.keys(updated).length === 0) {
+      setMessageProfile(t("no_changes"));
+      return;
+    }
+
+    axios
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .then(() => {
+        setProfile((prev) => ({ ...prev, ...updated }));
+        setIsEditing(false);
+        setMessageProfile(t("profile_updated"));
+      })
+      .catch(() => setMessageProfile(t("update_error")));
+  };
+
+  const handleChangePassword = () => {
+    axios
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+        { password: newPassword },
+        config
+      )
+      .then(() => {
+        setNewPassword("");
+        setMessageProfile(t("password_changed"));
+      })
+      .catch(() => setMessageProfile(t("password_error")));
+  };
+
+// тут поведение кнопки "Сохранить услугу"
+const handleSaveService = () => {
+  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel" || category === "author_tour";
+
+  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
+  const isInvalidExtended = isExtendedCategory && (!title || !category);
+
+  if (isInvalidStandard || isInvalidExtended) {
+    setMessageService(t("fill_all_fields"));
+    return;
+  }
+
+  const data = {
+    title,
+    category,
+    images: images || [],
+    price: isExtendedCategory ? undefined : price,
+    description: isExtendedCategory ? undefined : description,
+    availability: isExtendedCategory ? undefined : availability,
+    details: isExtendedCategory ? details : undefined
+  };
+
+  if (selectedService) {
+    axios
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+      .then((res) => {
+        setServices((prev) =>
+          prev.map((s) => (s.id === selectedService.id ? res.data : s))
+        );
+        resetServiceForm();
+        setMessageService(t("service_updated"));
+        setTimeout(() => setMessageService(""), 3000);
+      })
+      .catch((err) => {
+        console.error("Ошибка обновления:", err);
+        setMessageService(t("update_error"));
+      });
+  } else {
+    axios
+      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+      .then((res) => {
+        setServices((prev) => [...prev, res.data]);
+        resetServiceForm();
+        setMessageService(t("service_added"));
+        setTimeout(() => setMessageService(""), 3000);
+      })
+      .catch((err) => {
+        console.error("Ошибка добавления:", err);
+        setMessageService(t("add_error"));
+      });
+  }
+};
+
+const resetServiceForm = () => {
+  setSelectedService(null);
+  setTitle("");
+  setDescription("");
+  setPrice("");
+  setCategory("");
+  setAvailability([]);
+  setImages([]);
+  setDetails({
+    directionCountry: "",
+    directionFrom: "",
+    directionTo: "",
+    startDate: "",
+    endDate: "",
+    hotel: "",
+    roomCategory: "",
+    accommodation: "",
+    food: "",
+    transfer: "",
+    changeable: false,
+    visaIncluded: false,
+    netPrice: "",
+    expiration: "",
+    isActive: true,
+    flightDateGo: "",
+    flightDateReturn: "",
+    flightDetails: "",
+  });
+};
+
+
+
+  const handleDeleteService = (id) => {
+    axios
+      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+      .then(() => {
+        setServices((prev) => prev.filter((s) => s.id !== id));
+        setSelectedService(null);
+      })
+      .catch(() => setMessageService(t("delete_error")));
+  };
+
+  const loadServiceToEdit = (service) => {
+  setSelectedService(service);
+  setCategory(service.category);
+  setTitle(service.title);
+  setImages(service.images || []);
+  setMessageService("");
+
+  if (service.category === "refused_tour") {
+    const d = service.details || {};
+    setDetails({
+      direction: d.direction || "",
+      directionFrom: d.directionFrom || "",
+      directionTo: d.directionTo || "",
+      startDate: d.startDate || "",
+      endDate: d.endDate || "",
+      hotel: d.hotel || "",
+      accommodation: d.accommodation || "",
+      food: d.food || "",
+      transfer: d.transfer || "",
+      changeable: d.changeable || false,
+      visaIncluded: d.visaIncluded || false,
+      netPrice: d.netPrice || "",
+      expiration: d.expiration || "",
+      isActive: d.isActive ?? true,
+      startFlightDate: d.startFlightDate || "",
+      endFlightDate: d.endFlightDate || "",
+      flightDetails: d.flightDetails || "",
+      accommodationCategory: d.accommodationCategory || "",
+      adt: d.adt || "",
+      chd: d.chd || "",
+      inf: d.inf || ""
+    });
+  } else {
+    setDescription(service.description || "");
+    setPrice(service.price || "");
+    setAvailability(service.availability || []);
+  }
+};
+
+
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const readers = files.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readers).then((base64Images) => {
+      setImages((prev) => [...prev, ...base64Images]);
+    });
+  };
+  
+const getCategoryOptions = (type) => {
+  switch (type) {
+    case "guide":
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+      ];
+    case "transport":
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+        { value: "one_way_transfer", label: t("one_way_transfer") },
+        { value: "dinner_transfer", label: t("dinner_transfer") },
+        { value: "border_transfer", label: t("border_transfer") },
+      ];
+    case "agent":
+      return [
+        { value: "refused_tour", label: t("category.refused_tour") },
+        { value: "refused_hotel", label: t("category.refused_hotel") },
+        { value: "refused_ticket", label: t("category.refused_ticket") },
+        { value: "refused_event", label: t("category.refused_event") },
+        { value: "visa_support", label: t("category.visa_support") },
+        { value: "authored_tour", label: t("category.authored_tour") },
+      ];
+    case "hotel":
+      return [
+        { value: "room_rent", label: t("room_rent") },
+        { value: "hotel_transfer", label: t("hotel_transfer") },
+        { value: "hall_rent", label: t("hall_rent") },
+      ];
+    default:
+      return [];
+  }
+};
+
+  // 🔹 renderCreateForm
 
   const renderCreateForm = () => {
   if (!category) return null;
@@ -824,411 +1230,6 @@ const renderVisaSupportForm = (isEdit = false) => (
 );
 
   
-  // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) =>
-  !s.details?.expiration || new Date(s.details.expiration) > new Date();
-  
-  // 🔹 Загрузка отелей по запросу
-const loadHotelOptions = async (inputValue) => {
-  try {
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
-    );
-    return res.data;
-  } catch (err) {
-    console.error("Ошибка загрузки отелей:", err);
-    return [];
-  }
-};
-  
-  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
-  const handleSaveBlockedDates = async () => {
-  try {
-    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
-      dates: blockedDates,
-    }, config);
-    alert(t("calendar.saved_successfully"));
-  } catch (err) {
-    console.error("Ошибка сохранения дат:", err);
-    alert(t("calendar.save_error"));
-  }
-      };
-
-  // Загрузка стран
-useEffect(() => {
-  const fetchCountries = async () => {
-    try {
-      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
-      const countries = response.data.map((country) => ({
-        value: country.name.common,
-        label: country.name.common,
-        code: country.cca2, // ISO2 код
-      }));
-      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
-    } catch (error) {
-      console.error("Ошибка загрузки стран:", error);
-    }
-  };
-  fetchCountries();
-}, []);
-
-  const loadDepartureCities = async (inputValue) => {
-  if (!inputValue) return [];
-
-  try {
-    const response = await axios.get("https://secure.geonames.org/searchJSON", {
-      params: {
-        name_startsWith: inputValue,
-        featureClass: "P",
-        maxRows: 10,
-        username: import.meta.env.VITE_GEONAMES_USERNAME,
-      },
-    });
-
-    return response.data.geonames.map((city) => ({
-      value: city.name,
-      label: `${city.name}, ${city.countryName}`,
-    }));
-  } catch (error) {
-    console.error("Ошибка загрузки городов:", error);
-    return [];
-  }
-};
-
-  
-// 🔍 Функция загрузки городов по поиску
-const loadCitiesFromInput = async (inputValue) => {
-  if (!inputValue) return [];
-
-  try {
-    const response = await axios.get("https://secure.geonames.org/searchJSON", {
-      params: {
-        name_startsWith: inputValue,
-        featureClass: "P",
-        maxRows: 10,
-        username: import.meta.env.VITE_GEONAMES_USERNAME,
-      },
-    });
-
-    return response.data.geonames.map((city) => ({
-      value: city.name,
-      label: `${city.name}, ${city.countryName}`,
-    }));
-  } catch (error) {
-    console.error("Ошибка загрузки городов:", error);
-    return [];
-  }
-};
-  
-// Города отправления — независимо от страны
-useEffect(() => {
-  const fetchCities = async () => {
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          featureClass: "P",
-          maxRows: 100,
-          orderby: "population",
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      const cities = response.data.geonames.map((city) => ({
-        value: city.name,
-        label: city.name,
-      }));
-      setCityOptionsFrom(cities);
-    } catch (error) {
-      console.error("Ошибка загрузки городов отправления:", error);
-    }
-  };
-  fetchCities();
-}, []);
-
-useEffect(() => {
-  if (!selectedCountry?.code) return;
-  const fetchCities = async () => {
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          country: selectedCountry.code,
-          featureClass: "P",
-          maxRows: 100,
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      const cities = response.data.geonames.map((city) => ({
-        value: city.name,
-        label: city.name,
-      }));
-      setCityOptionsTo(cities);
-    } catch (error) {
-      console.error("Ошибка загрузки городов прибытия:", error);
-    }
-  };
-  fetchCities();
-}, [selectedCountry]);
-
-  
-  useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-      .then((res) => {
-        setProfile(res.data);
-        setNewLocation(res.data.location);
-        setNewSocial(res.data.social);
-        setNewPhone(res.data.phone);
-        setNewAddress(res.data.address);
-      })
-      .catch((err) => console.error("Ошибка загрузки профиля", err));
-
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-      .then((res) => setServices(res.data))
-      .catch((err) => console.error("Ошибка загрузки услуг", err));
-  }, []);
-
-  const handlePhotoChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewPhoto(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleCertificateChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewCertificate(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSaveProfile = () => {
-    const updated = {};
-    if (newLocation !== profile.location) updated.location = newLocation;
-    if (newSocial !== profile.social) updated.social = newSocial;
-    if (newPhone !== profile.phone) updated.phone = newPhone;
-    if (newPhoto) updated.photo = newPhoto;
-    if (newCertificate) updated.certificate = newCertificate;
-    if (newAddress !== profile.address) updated.address = newAddress;
-    if (Object.keys(updated).length === 0) {
-      setMessageProfile(t("no_changes"));
-      return;
-    }
-
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
-      .then(() => {
-        setProfile((prev) => ({ ...prev, ...updated }));
-        setIsEditing(false);
-        setMessageProfile(t("profile_updated"));
-      })
-      .catch(() => setMessageProfile(t("update_error")));
-  };
-
-  const handleChangePassword = () => {
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
-        { password: newPassword },
-        config
-      )
-      .then(() => {
-        setNewPassword("");
-        setMessageProfile(t("password_changed"));
-      })
-      .catch(() => setMessageProfile(t("password_error")));
-  };
-
-// тут поведение кнопки "Сохранить услугу"
-const handleSaveService = () => {
-  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel" || category === "author_tour";
-
-  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
-  const isInvalidExtended = isExtendedCategory && (!title || !category);
-
-  if (isInvalidStandard || isInvalidExtended) {
-    setMessageService(t("fill_all_fields"));
-    return;
-  }
-
-  const data = {
-    title,
-    category,
-    images: images || [],
-    price: isExtendedCategory ? undefined : price,
-    description: isExtendedCategory ? undefined : description,
-    availability: isExtendedCategory ? undefined : availability,
-    details: isExtendedCategory ? details : undefined
-  };
-
-  if (selectedService) {
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
-      .then((res) => {
-        setServices((prev) =>
-          prev.map((s) => (s.id === selectedService.id ? res.data : s))
-        );
-        resetServiceForm();
-        setMessageService(t("service_updated"));
-        setTimeout(() => setMessageService(""), 3000);
-      })
-      .catch((err) => {
-        console.error("Ошибка обновления:", err);
-        setMessageService(t("update_error"));
-      });
-  } else {
-    axios
-      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
-      .then((res) => {
-        setServices((prev) => [...prev, res.data]);
-        resetServiceForm();
-        setMessageService(t("service_added"));
-        setTimeout(() => setMessageService(""), 3000);
-      })
-      .catch((err) => {
-        console.error("Ошибка добавления:", err);
-        setMessageService(t("add_error"));
-      });
-  }
-};
-
-const resetServiceForm = () => {
-  setSelectedService(null);
-  setTitle("");
-  setDescription("");
-  setPrice("");
-  setCategory("");
-  setAvailability([]);
-  setImages([]);
-  setDetails({
-    directionCountry: "",
-    directionFrom: "",
-    directionTo: "",
-    startDate: "",
-    endDate: "",
-    hotel: "",
-    roomCategory: "",
-    accommodation: "",
-    food: "",
-    transfer: "",
-    changeable: false,
-    visaIncluded: false,
-    netPrice: "",
-    expiration: "",
-    isActive: true,
-    flightDateGo: "",
-    flightDateReturn: "",
-    flightDetails: "",
-  });
-};
-
-
-
-  const handleDeleteService = (id) => {
-    axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
-      .then(() => {
-        setServices((prev) => prev.filter((s) => s.id !== id));
-        setSelectedService(null);
-      })
-      .catch(() => setMessageService(t("delete_error")));
-  };
-
-  const loadServiceToEdit = (service) => {
-  setSelectedService(service);
-  setCategory(service.category);
-  setTitle(service.title);
-  setImages(service.images || []);
-  setMessageService("");
-
-  if (service.category === "refused_tour") {
-    const d = service.details || {};
-    setDetails({
-      direction: d.direction || "",
-      directionFrom: d.directionFrom || "",
-      directionTo: d.directionTo || "",
-      startDate: d.startDate || "",
-      endDate: d.endDate || "",
-      hotel: d.hotel || "",
-      accommodation: d.accommodation || "",
-      food: d.food || "",
-      transfer: d.transfer || "",
-      changeable: d.changeable || false,
-      visaIncluded: d.visaIncluded || false,
-      netPrice: d.netPrice || "",
-      expiration: d.expiration || "",
-      isActive: d.isActive ?? true,
-      startFlightDate: d.startFlightDate || "",
-      endFlightDate: d.endFlightDate || "",
-      flightDetails: d.flightDetails || "",
-      accommodationCategory: d.accommodationCategory || "",
-      adt: d.adt || "",
-      chd: d.chd || "",
-      inf: d.inf || ""
-    });
-  } else {
-    setDescription(service.description || "");
-    setPrice(service.price || "");
-    setAvailability(service.availability || []);
-  }
-};
-
-
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const readers = files.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(readers).then((base64Images) => {
-      setImages((prev) => [...prev, ...base64Images]);
-    });
-  };
-  
-const getCategoryOptions = (type) => {
-  switch (type) {
-    case "guide":
-      return [
-        { value: "city_tour", label: t("city_tour") },
-        { value: "mountain_tour", label: t("mountain_tour") },
-      ];
-    case "transport":
-      return [
-        { value: "city_tour", label: t("city_tour") },
-        { value: "mountain_tour", label: t("mountain_tour") },
-        { value: "one_way_transfer", label: t("one_way_transfer") },
-        { value: "dinner_transfer", label: t("dinner_transfer") },
-        { value: "border_transfer", label: t("border_transfer") },
-      ];
-    case "agent":
-      return [
-        { value: "refused_tour", label: t("category.refused_tour") },
-        { value: "refused_hotel", label: t("category.refused_hotel") },
-        { value: "refused_ticket", label: t("category.refused_ticket") },
-        { value: "refused_event", label: t("category.refused_event") },
-        { value: "visa_support", label: t("category.visa_support") },
-        { value: "authored_tour", label: t("category.authored_tour") },
-      ];
-    case "hotel":
-      return [
-        { value: "room_rent", label: t("room_rent") },
-        { value: "hotel_transfer", label: t("hotel_transfer") },
-        { value: "hall_rent", label: t("hall_rent") },
-      ];
-    default:
-      return [];
-  }
-};
 
 
 
