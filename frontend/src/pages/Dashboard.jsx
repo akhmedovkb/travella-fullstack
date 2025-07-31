@@ -1482,7 +1482,7 @@ const getCategoryOptions = (type) => {
       loadOptions={loadHotelOptions}
       defaultOptions
       onChange={(selected) => setDetails({ ...details, hotel: selected?.value || "" })}
-      placeholder={t("select_hotel")}
+      placeholder={t("refused_hotel_select")}
     />
   </div>
 
