@@ -57,7 +57,6 @@ const Dashboard = () => {
     }
   };
   
-const [newPhoto, setNewPhoto] = useState("");
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
