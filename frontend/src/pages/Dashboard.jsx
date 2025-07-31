@@ -896,7 +896,7 @@ const getCategoryOptions = (type) => {
         <label className="block font-medium mb-1">{t("city")}</label>
         <AsyncSelect
           cacheOptions
-          loadOptions={loadCityOptions}
+          loadOptions={loadCitiesFromInput}
           defaultOptions
           value={{ label: details.directionTo, value: details.directionTo }}
           onChange={(selected) => setDetails({ ...details, directionTo: selected?.value || "" })}
