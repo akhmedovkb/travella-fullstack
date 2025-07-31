@@ -975,25 +975,7 @@ return (
           </div>
         </div>
 
-        {/* Список услуг */}
-        <div>
-          {services
-            .filter((s) => s.status === "approved" || s.status === "draft")
-            .map((service) => (
-              <div
-                key={service.id}
-                onClick={() => handleSelectService(service)}
-                className={`cursor-pointer p-3 rounded border mb-2 ${
-                  selectedService?.id === service.id ? "bg-orange-100 border-orange-400" : "hover:bg-gray-50"
-                }`}
-              >
-                <div className="font-bold">{service.title}</div>
-                <div className="text-sm text-gray-600">{t("category")}: {service.category}</div>
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
+       
   );
 };
 
