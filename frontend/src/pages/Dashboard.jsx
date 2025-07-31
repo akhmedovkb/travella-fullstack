@@ -1465,13 +1465,13 @@ const getCategoryOptions = (type) => {
   </div>
 
   <div className="mb-2">
-    <label className="block font-medium mb-1">{t("city")}</label>
+    <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
     <AsyncSelect
       cacheOptions
       loadOptions={loadCitiesFromInput}
       defaultOptions
       onChange={(selected) => setDetails({ ...details, directionTo: selected?.value || "" })}
-      placeholder={t("select_city")}
+      placeholder={t("refused_hotel_select_city")}
     />
   </div>
 
