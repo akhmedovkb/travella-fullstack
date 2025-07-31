@@ -874,7 +874,6 @@ const getCategoryOptions = (type) => {
   ) : (category === "refused_hotel" && profile.type === "agent") ? (
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
     <>
-      <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
