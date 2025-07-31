@@ -12,6 +12,7 @@ import LanguageSelector from "../components/LanguageSelector";
 const Dashboard = () => {
   const { t } = useTranslation();
   const [newPhoto, setNewPhoto] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({});
   const [services, setServices] = useState([]);
   const [title, setTitle] = useState("");
