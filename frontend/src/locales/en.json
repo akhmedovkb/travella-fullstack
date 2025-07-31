@@ -65,6 +65,11 @@
   "hall_rent": "Hall rental",
   "expiration_timer": "Actuality timer",
   "is_active": "Actual",
+  "new_refused_tour": "Add a new refused tour:",
+  "new_refused_hotel": "Add a new refused hotel:",
+  "new_refused_airtkt": "Add a new refused flight ticket:",
+  "new_refused_tkt": "Add a new refused event ticket:",
+  "new_visa_service": "Add a visa support service:",
 
   "direction": "Direction",
     
