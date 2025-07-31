@@ -1192,7 +1192,7 @@ const getCategoryOptions = (type) => {
   <>
      {(category === "refused_tour" || category === "author_tour") && profile.type === "agent" ? (
       <>
-        input
+      <input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
       placeholder={t("title")}
