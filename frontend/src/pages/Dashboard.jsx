@@ -783,13 +783,7 @@ const getCategoryOptions = (type) => {
   {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={t("title")}
-        className="w-full border px-3 py-2 rounded mb-2"
-      />
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("title")} className="w-full border px-3 py-2 rounded mb-2" />
+       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("title")} className="w-full border px-3 py-2 rounded mb-2" />
         <div className="flex gap-4 mb-2">
           <Select options={countryOptions} value={selectedCountry} onChange={(value) => setSelectedCountry(value)} placeholder={t("direction_country")} noOptionsMessage={() => t("country_not_chosen")} className="w-1/3" />
           <AsyncSelect cacheOptions defaultOptions loadOptions={loadDepartureCities} onChange={(selected) => setDepartureCity(selected)} placeholder={t("direction_from")} noOptionsMessage={() => t("direction_from_not_chosen")} className="w-1/3" />
