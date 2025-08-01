@@ -1729,8 +1729,8 @@ const getCategoryOptions = (type) => {
         <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
         <input
           type="date"
-          value={details.departureDate || ""}
-          onChange={(e) => setDetails({ ...details, departureDate: e.target.value })}
+          value={details.startDate || ""}
+          onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
           className="w-full border px-3 py-2 rounded"
         />
       </div>
