@@ -292,7 +292,7 @@ useEffect(() => {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
-    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.endDate", "details.netPrice"],
+    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
     refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
     visa_support: ["title", "category", "details.description", "details.netPrice"]
   };
@@ -300,13 +300,28 @@ useEffect(() => {
   const isExtendedCategory = category in requiredFieldsByCategory;
   const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
 
+  const getFieldValue = (path) => {
+    return path.split(".").reduce((obj, key) => obj?.[key], {
+      title,
+      description,
+      category,
+      price,
+      details,
+    });
+  };
+
   const hasEmpty = requiredFields.some((field) => {
-    const keys = field.split(".");
-    return keys.reduce((obj, key) => (obj ? obj[key] : undefined), { title, description, category, price, details }) === "" ||
-           keys.reduce((obj, key) => (obj ? obj[key] : undefined), { title, description, category, price, details }) === undefined;
+    const value = getFieldValue(field);
+    return value === "" || value === undefined;
   });
 
-  if (hasEmpty) {
+  // 🔁 Дополнительная проверка для returnDate если рейс туда-обратно
+  const needsReturnDate =
+    category === "refused_flight" &&
+    details.flightType === "round_trip" &&
+    (!details.returnDate || details.returnDate === "");
+
+  if (hasEmpty || needsReturnDate) {
     setMessageService(t("fill_all_fields"));
     return;
   }
@@ -351,6 +366,7 @@ useEffect(() => {
       });
   }
 };
+
 
 // сбрасываем все поля 
 
