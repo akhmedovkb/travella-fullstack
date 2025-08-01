@@ -115,14 +115,18 @@
     "border_transfer": "Border transfer"
   },
 
-
-  
   "direction_country": "Destination country",
   "direction_from": "Departure city",
   "direction_to": "Arrival city",
   "country_not_chosen": "Not chosen",
   "direction_from_not_chosen": "Departure city not chosen",
   "direction_to_not_chosen": "Arrival city not chosen",
+  "flight_type": "Flight type",
+  "one_way": "One way",
+  "round_trip": "Round trip",
+  "departure_date": "Departure date",
+  "return_date": "Return date",
+
   
   "start_flight_date": "Outbound flight date",
   "end_flight_date": "Return flight date",
