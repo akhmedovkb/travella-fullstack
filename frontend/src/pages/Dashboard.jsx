@@ -1632,53 +1632,126 @@ const getCategoryOptions = (type) => {
     ) : category === "refused_flight" && profile.type === "agent" ? (
       <>
         {/* ✈️ Форма отказного авиабилета */}
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("title")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <div className="mb-2">
-          <label>{t("direction")}</label>
+    <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
+
+    <input
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      placeholder={t("title")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    {/* Направление */}
+    <div className="mb-2">
+      <label className="block text-sm font-medium mb-1">{t("direction")}</label>
+      <input
+        type="text"
+        value={details.direction || ""}
+        onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+        placeholder={t("enter_direction")}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+
+    {/* Радиокнопки: В одну сторону / туда-обратно */}
+    <div className="mb-3">
+      <label className="block font-medium mb-1">{t("flight_type")}</label>
+      <div className="flex gap-4">
+        <label className="inline-flex items-center">
           <input
-            value={details.direction || ""}
-            onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+            type="radio"
+            checked={details.oneWay !== false}
+            onChange={() => setDetails({ ...details, oneWay: true, returnDate: "" })}
+            className="mr-2"
+          />
+          {t("one_way")}
+        </label>
+        <label className="inline-flex items-center">
+          <input
+            type="radio"
+            checked={details.oneWay === false}
+            onChange={() => setDetails({ ...details, oneWay: false })}
+            className="mr-2"
+          />
+          {t("round_trip")}
+        </label>
+      </div>
+    </div>
+
+    {/* Даты */}
+    <div className="flex gap-4 mb-3">
+      <div className="w-1/2">
+        <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
+        <input
+          type="date"
+          value={details.departureDate || ""}
+          onChange={(e) => setDetails({ ...details, departureDate: e.target.value })}
+          className="w-full border px-3 py-2 rounded"
+        />
+      </div>
+
+      {details.oneWay === false && (
+        <div className="w-1/2">
+          <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
+          <input
+            type="date"
+            value={details.returnDate || ""}
+            onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
             className="w-full border px-3 py-2 rounded"
           />
         </div>
-        <div className="flex gap-4 mb-2">
-          <div className="w-1/2">
-            <label>{t("start_date")}</label>
-            <input
-              type="date"
-              value={details.startDate || ""}
-              onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-              className="w-full border px-3 py-2 rounded"
-            />
-          </div>
-          <div className="w-1/2">
-            <label>{t("end_date")}</label>
-            <input
-              type="date"
-              value={details.endDate || ""}
-              onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
-              className="w-full border px-3 py-2 rounded"
-            />
-          </div>
-        </div>
-        <input
-          value={details.netPrice || ""}
-          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-          placeholder={t("net_price")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
-      </>
+      )}
+    </div>
+
+    {/* Авиакомпания */}
+    <div className="mb-2">
+      <label className="block text-sm font-medium mb-1">{t("airline")}</label>
+      <input
+        type="text"
+        value={details.airline || ""}
+        onChange={(e) => setDetails({ ...details, airline: e.target.value })}
+        placeholder={t("enter_airline")}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+
+    {/* Детали рейса */}
+    <div className="mb-2">
+      <label className="block text-sm font-medium mb-1">{t("flight_details")}</label>
+      <textarea
+        value={details.flightDetails || ""}
+        onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
+        placeholder={t("enter_flight_details")}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+
+    {/* Цена */}
+    <input
+      value={details.netPrice || ""}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-3"
+    />
+
+    {/* Актуальность */}
+    <label className="inline-flex items-center mb-4">
+      <input
+        type="checkbox"
+        checked={details.isActive || false}
+        onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+        className="mr-2"
+      />
+      {t("is_active")}
+    </label>
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>
+  </>
     ) : category === "refused_event_ticket" && profile.type === "agent" ? (
       <>
         {/* 🎫 Форма отказного билета на мероприятие */}
