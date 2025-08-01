@@ -964,14 +964,12 @@ const getCategoryOptions = (type) => {
           onChange={(e) => setDetails({ ...details, food: e.target.value })}
           className="w-full border px-3 py-2 rounded"
         >
-          <option value="">{t("food")}</option>
-          <option value="BB">BB</option>
-          <option value="HB">HB</option>
-          <option value="FB">FB</option>
-          <option value="AI">AI</option>
-          <option value="UAI">UAI</option>
-          <option value="HALAL">HALAL</option>
-        </select>
+          <option value="">{t("food_options.bb")}</option>
+          <option value="BB">{t("food_options.hb")}</option>
+          <option value="HB">{t("food_options.fb")}</option>
+          <option value="FB">{t("food_options.ai")}</option>
+          <option value="AI">{t("food_options.uai")}</option>
+         </select>
       </div>
 
       <div className="mb-2">
