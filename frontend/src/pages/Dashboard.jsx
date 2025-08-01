@@ -285,14 +285,26 @@ useEffect(() => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
-// тут поведение кнопки "Сохранить услугу"
-const handleSaveService = () => {
-  const isExtendedCategory = category === "refused_tour" || category === "refused_hotel" || category === "author_tour";
+/const handleSaveService = () => {
+  const requiredFieldsByCategory = {
+    refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
+    author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
+    refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
+    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.endDate", "details.netPrice"],
+    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
+    visa_support: ["title", "category", "details.description", "details.netPrice"]
+  };
 
-  const isInvalidStandard = !isExtendedCategory && (!title || !description || !category || !price || images.length === 0);
-  const isInvalidExtended = isExtendedCategory && (!title || !category);
+  const isExtendedCategory = category in requiredFieldsByCategory;
+  const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
 
-  if (isInvalidStandard || isInvalidExtended) {
+  const hasEmpty = requiredFields.some((field) => {
+    const keys = field.split(".");
+    return keys.reduce((obj, key) => (obj ? obj[key] : undefined), { title, description, category, price, details }) === "" ||
+           keys.reduce((obj, key) => (obj ? obj[key] : undefined), { title, description, category, price, details }) === undefined;
+  });
+
+  if (hasEmpty) {
     setMessageService(t("fill_all_fields"));
     return;
   }
@@ -337,6 +349,8 @@ const handleSaveService = () => {
       });
   }
 };
+
+// сбрасываем все поля 
 
 const resetServiceForm = () => {
   setSelectedService(null);
