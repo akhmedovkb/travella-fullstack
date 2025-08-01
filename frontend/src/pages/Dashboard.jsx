@@ -980,10 +980,10 @@ const getCategoryOptions = (type) => {
           onChange={(e) => setDetails({ ...details, transfer: e.target.value })}
           className="w-full border px-3 py-2 rounded"
         >
-          <option value="">{t("select_transfer")}</option>
-          <option value="group">{t("group_transfer")}</option>
-          <option value="individual">{t("individual_transfer")}</option>
-          <option value="none">{t("no_transfer")}</option>
+          <option value="">{t("transfer_options.select")}</option>
+          <option value="group">{t("transfer_options.individual")}</option>
+          <option value="individual">{t("transfer_options.group")}</option>
+          <option value="none">{t("transfer_options.none")}</option>
         </select>
       </div>
 
