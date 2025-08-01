@@ -1586,7 +1586,7 @@ const getCategoryOptions = (type) => {
   </div>
 
   <div className="mb-2">
-    <label className="block font-medium mb-1">{t("expiration")}</label>
+    <label className="block font-medium mb-1">{t("expiration_timer")}</label>
     <input
       type="datetime-local"
       value={details.expiration || ""}
