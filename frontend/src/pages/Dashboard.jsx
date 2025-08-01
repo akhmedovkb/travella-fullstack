@@ -321,6 +321,22 @@ useEffect(() => {
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
+  console.log("📋 Проверка обязательных полей для категории:", category);
+console.log("🎯 Обязательные поля:", requiredFields);
+
+requiredFields.forEach((field) => {
+  const keys = field.split(".");
+  const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
+    title,
+    description,
+    category,
+    price,
+    details,
+  });
+  console.log(`⛳ ${field}:`, value);
+});
+
+    
   if (hasEmpty || needsReturnDate) {
     setMessageService(t("fill_all_fields"));
     return;
