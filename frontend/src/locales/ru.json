@@ -108,7 +108,11 @@
   "one_way": "One way",
   "round_trip": "Round trip",
   "departure_date": "Departure date",
-  "return_date": "Return date"
+  "return_date": "Return date",
+  "flight_type": "Parvoz turi",
+  "one_way": "Bir tomonga",
+  "round_trip": "Qaytish bilan"
+
 
 
 
