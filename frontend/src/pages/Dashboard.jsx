@@ -1487,7 +1487,7 @@ const getCategoryOptions = (type) => {
 
   <div className="flex gap-4 mb-2">
     <div className="w-1/2">
-      <label className="block font-medium mb-1">{t("checkin_date")}</label>
+      <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
       <input
         type="date"
         value={details.startDate}
@@ -1496,7 +1496,7 @@ const getCategoryOptions = (type) => {
       />
     </div>
     <div className="w-1/2">
-      <label className="block font-medium mb-1">{t("checkout_date")}</label>
+      <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
       <input
         type="date"
         value={details.endDate}
