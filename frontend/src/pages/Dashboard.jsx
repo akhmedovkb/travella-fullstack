@@ -1692,13 +1692,13 @@ const getCategoryOptions = (type) => {
     <label className="inline-flex items-center">
       <input
         type="radio"
-        checked={details.oneWay !== false}
+        checked={details.flightType === "one_way"}
         onChange={() =>
           setDetails({
             ...details,
+            flightType: "one_way",
             oneWay: true,
-            returnDate: "",
-            flightType: "one_way"  // ⬅️ обязательно добавляем
+            returnDate: ""
           })
         }
         className="mr-2"
@@ -1708,12 +1708,12 @@ const getCategoryOptions = (type) => {
     <label className="inline-flex items-center">
       <input
         type="radio"
-        checked={details.oneWay === false}
+        checked={details.flightType === "round_trip"}
         onChange={() =>
           setDetails({
             ...details,
-            oneWay: false,
-            flightType: "round_trip"  // ⬅️ обязательно добавляем
+            flightType: "round_trip",
+            oneWay: false
           })
         }
         className="mr-2"
@@ -1722,6 +1722,7 @@ const getCategoryOptions = (type) => {
     </label>
   </div>
 </div>
+
 
     {/* Даты */}
     <div className="flex gap-4 mb-3">
