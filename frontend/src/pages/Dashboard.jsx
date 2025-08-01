@@ -1533,14 +1533,22 @@ const getCategoryOptions = (type) => {
       onChange={(e) => setDetails({ ...details, food: e.target.value })}
       className="w-full border px-3 py-2 rounded"
     >
-      <option value="">{t("select_food")}</option>
-      <option value="BB">BB</option>
-      <option value="HB">HB</option>
-      <option value="FB">FB</option>
-      <option value="AI">AI</option>
-      <option value="UAI">UAI</option>
-      <option value="HALAL">HALAL</option>
-    </select>
+      <option value="">{t("food_options.select")}</option>
+      <option value="BB">{t("food_options.bb")}</option>
+      <option value="HB">{t("food_options.hb")}</option>
+      <option value="FB">{t("food_options.fb")}</option>
+      <option value="AI">{t("food_options.ai")}</option>
+      <option value="UAI">{t("food_options.uai")}</option>
+     </select>
+    <label className="inline-flex items-center mt-2">
+        <input
+          type="checkbox"
+          checked={details.halal || false}
+          onChange={(e) => setDetails({ ...details, halal: e.target.checked })}
+          className="mr-2"
+        />
+        {t("food_options.halal")}
+      </label>
   </div>
 
   <div className="mb-2">
