@@ -740,7 +740,7 @@ const getCategoryOptions = (type) => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="text-sm text-gray-600">{t(s.category)}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-800">
             {t("net_price")}: {s.details?.netPrice || 0} USD
