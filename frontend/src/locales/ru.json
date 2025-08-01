@@ -99,6 +99,12 @@
   "room_rent": "Аренда номера",
   "hotel_transfer": "Трансфер от отеля",
   "hall_rent": "Аренда зала",
+  "flight_type": "Тип перелёта",
+  "one_way": "В одну сторону",
+  "round_trip": "Туда-обратно",
+  "departure_date": "Дата вылета",
+  "return_date": "Дата возвращения"
+
 
   "category": {
     "refused_tour": "Отказной тур",
