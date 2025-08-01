@@ -1685,30 +1685,43 @@ const getCategoryOptions = (type) => {
       />
     </div>
 
-    {/* Радиокнопки: В одну сторону / туда-обратно */}
-    <div className="mb-3">
-      <label className="block font-medium mb-1">{t("flight_type")}</label>
-      <div className="flex gap-4">
-        <label className="inline-flex items-center">
-          <input
-            type="radio"
-            checked={details.oneWay !== false}
-            onChange={() => setDetails({ ...details, oneWay: true, returnDate: "" })}
-            className="mr-2"
-          />
-          {t("one_way")}
-        </label>
-        <label className="inline-flex items-center">
-          <input
-            type="radio"
-            checked={details.oneWay === false}
-            onChange={() => setDetails({ ...details, oneWay: false })}
-            className="mr-2"
-          />
-          {t("round_trip")}
-        </label>
-      </div>
-    </div>
+   {/* Радиокнопки: В одну сторону / туда-обратно */}
+<div className="mb-3">
+  <label className="block font-medium mb-1">{t("flight_type")}</label>
+  <div className="flex gap-4">
+    <label className="inline-flex items-center">
+      <input
+        type="radio"
+        checked={details.oneWay !== false}
+        onChange={() =>
+          setDetails({
+            ...details,
+            oneWay: true,
+            returnDate: "",
+            flightType: "one_way"  // ⬅️ обязательно добавляем
+          })
+        }
+        className="mr-2"
+      />
+      {t("one_way")}
+    </label>
+    <label className="inline-flex items-center">
+      <input
+        type="radio"
+        checked={details.oneWay === false}
+        onChange={() =>
+          setDetails({
+            ...details,
+            oneWay: false,
+            flightType: "round_trip"  // ⬅️ обязательно добавляем
+          })
+        }
+        className="mr-2"
+      />
+      {t("round_trip")}
+    </label>
+  </div>
+</div>
 
     {/* Даты */}
     <div className="flex gap-4 mb-3">
