@@ -285,7 +285,9 @@ useEffect(() => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
-/const handleSaveService = () => {
+// Тут поведение кнопки Сохранить услугу
+
+  const handleSaveService = () => {
   const requiredFieldsByCategory = {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
