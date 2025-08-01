@@ -104,6 +104,12 @@
   "round_trip": "Туда-обратно",
   "departure_date": "Дата вылета",
   "return_date": "Дата возвращения"
+  "flight_type": "Flight type",
+  "one_way": "One way",
+  "round_trip": "Round trip",
+  "departure_date": "Departure date",
+  "return_date": "Return date"
+
 
 
   "category": {
