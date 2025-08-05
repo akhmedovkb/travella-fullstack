@@ -288,6 +288,8 @@ useEffect(() => {
 // Тут поведение кнопки Сохранить услугу
 
   const handleSaveService = () => {
+    // ✅ Показываем текущее состояние details
+  console.log("📦 Текущее состояние details:", details);
   const requiredFieldsByCategory = {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
@@ -321,7 +323,7 @@ useEffect(() => {
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
-  console.log("📋 Проверка обязательных полей для категории:", category);
+console.log("📋 Проверка обязательных полей для категории:", category);
 console.log("🎯 Обязательные поля:", requiredFields);
 
 requiredFields.forEach((field) => {
@@ -1103,32 +1105,40 @@ const getCategoryOptions = (type) => {
 
     {/* Направление */}
     <div className="flex gap-4 mb-2">
-         <Select 
-           options={countryOptions} 
-           value={selectedCountry} 
-           onChange={(value) => setSelectedCountry(value)} 
-           placeholder={t("direction_country")} 
-           noOptionsMessage={() => t("country_not_chosen")} 
-           className="w-1/3" />
-          <AsyncSelect 
-           cacheOptions 
-           defaultOptions 
-           loadOptions={loadDepartureCities} 
-           onChange={(selected) => {
-               setDepartureCity(selected);
-               setDetails({ ...details, directionFrom: selected?.value }); // 👈 обязательно!
-              }}
-          placeholder={t("direction_from")} 
-          noOptionsMessage={() => t("direction_from_not_chosen")} 
-          className="w-1/3" />
-     
-         <Select 
-          options={cityOptionsTo} 
-          placeholder={t("direction_to")} 
-          noOptionsMessage={() => t("direction_to_not_chosen")} 
-          onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
-          className="w-1/3" />
-         </div>
+  <Select 
+    options={countryOptions} 
+    value={selectedCountry} 
+    onChange={(value) => setSelectedCountry(value)} 
+    placeholder={t("direction_country")} 
+    noOptionsMessage={() => t("country_not_chosen")} 
+    className="w-1/3" 
+  />
+
+  <AsyncSelect 
+    cacheOptions 
+    defaultOptions 
+    loadOptions={loadDepartureCities} 
+    onChange={(selected) => {
+      setDepartureCity(selected);
+      setDetails({ ...details, directionFrom: selected?.value });
+    }}
+    placeholder={t("direction_from")} 
+    noOptionsMessage={() => t("direction_from_not_chosen")} 
+    className="w-1/3" 
+  />
+
+  <Select 
+    options={cityOptionsTo} 
+    value={cityOptionsTo.find(opt => opt.value === details.directionTo) || null}
+    onChange={(selected) => {
+      setDetails({ ...details, directionTo: selected?.value });
+    }}
+    placeholder={t("direction_to")} 
+    noOptionsMessage={() => t("direction_to_not_chosen")} 
+    className="w-1/3" 
+  />
+</div>
+
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
