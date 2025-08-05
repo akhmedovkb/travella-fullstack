@@ -2353,10 +2353,10 @@ const getCategoryOptions = (type) => {
     )}
   </>
 )}
-)
+
 
     </>
-  )}
+  )} {/* тут закрывается 835 строка {selectedService */}
 
   {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
@@ -2390,8 +2390,6 @@ const getCategoryOptions = (type) => {
   
 </div>
 </div>
-
 );
-};
 
 export default Dashboard;
