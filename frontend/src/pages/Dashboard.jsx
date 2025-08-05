@@ -1159,9 +1159,6 @@ const getCategoryOptions = (type) => {
   />
 </div>
 
-</div>
-
-
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
   <label className="block font-medium mb-1">{t("flight_type")}</label>
