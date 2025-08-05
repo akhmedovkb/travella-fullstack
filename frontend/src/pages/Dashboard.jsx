@@ -1380,10 +1380,10 @@ const getCategoryOptions = (type) => {
 >
   {t("save_service")}
 </button>
-
-         
+        
        </>               
-              ) : (
+
+             ) : (
     <>
       <input
         value={title}
