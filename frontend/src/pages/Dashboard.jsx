@@ -2391,5 +2391,5 @@ const getCategoryOptions = (type) => {
 </div> {/* правая колонка */}
 </div> 
 
-)}; // ✅ Закрытие самой функции Dashboard
+); // ✅ Закрытие самой функции Dashboard
 export default Dashboard;
