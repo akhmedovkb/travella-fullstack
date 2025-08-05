@@ -94,6 +94,9 @@
       "group": "Group",
       "none": "None"
     },
+
+  "airline": "Airline",
+  "enter_airline": "Enter Airline",
   
   "changeable": "Changeable",
   "visa_included": "Visa included",
@@ -197,4 +200,5 @@
 }
 
 }
+
 
