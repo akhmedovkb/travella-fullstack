@@ -827,7 +827,8 @@ const getCategoryOptions = (type) => {
     
   </div>
   
-  
+  // ЗДЕСЬ НАЧИНАЕТСЯ РЕДАКТИРОВАНИЕ УСЛУГ
+
   {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
@@ -1103,7 +1104,14 @@ const getCategoryOptions = (type) => {
 
     {/* Направление */}
     <div className="flex gap-4 mb-2">
-         <AsyncSelect 
+         <Select 
+           options={countryOptions} 
+           value={selectedCountry} 
+           onChange={(value) => setSelectedCountry(value)} 
+           placeholder={t("direction_country")} 
+           noOptionsMessage={() => t("country_not_chosen")} 
+           className="w-1/3" />
+          <AsyncSelect 
            cacheOptions 
            defaultOptions 
            loadOptions={loadDepartureCities} 
@@ -1821,6 +1829,14 @@ const getCategoryOptions = (type) => {
 
     {/* Направление */}
     <div className="flex gap-4 mb-2">
+         <Select 
+           options={countryOptions} 
+           value={selectedCountry} 
+           onChange={(value) => setSelectedCountry(value)} 
+           placeholder={t("direction_country")} 
+           noOptionsMessage={() => t("country_not_chosen")} 
+           className="w-1/3" />
+      
          <AsyncSelect 
            cacheOptions 
            defaultOptions 
@@ -1829,6 +1845,7 @@ const getCategoryOptions = (type) => {
            placeholder={t("direction_from")} 
            noOptionsMessage={() => t("direction_from_not_chosen")} 
            className="w-1/3" />
+      
          <Select 
            options={cityOptionsTo} 
            placeholder={t("direction_to")} 
