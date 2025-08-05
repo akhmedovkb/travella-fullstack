@@ -2390,7 +2390,7 @@ const getCategoryOptions = (type) => {
   
 </div>
 </div>
- 
+</div>
 );
 };
 
