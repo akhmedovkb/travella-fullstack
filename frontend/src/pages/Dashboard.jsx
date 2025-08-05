@@ -1637,6 +1637,7 @@ const getCategoryOptions = (type) => {
       </>
     ) : category === "refused_hotel" && profile.type === "agent" ? (
       <>
+        // 🔶  Форма отказного отеля:
   <h3 className="text-xl font-semibold mb-2">{t("new_refused_hotel")}</h3>
 
   <input
