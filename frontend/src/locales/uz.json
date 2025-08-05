@@ -176,7 +176,6 @@
   "required": "Iltimos, bu maydonni to‘ldiring"
               },
 
-  {
   "new_refused_event_ticket": "Отказной билет на мероприятие",
   "event_name": "Название мероприятия",
   "select_event_category": "Выберите категорию события",
@@ -192,8 +191,8 @@
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "expiration_timer": "Таймер актуальности",
   "is_active": "Актуально",
-  "save_service": "Сохранить услугу"
-},
+  "save_service": "Сохранить услугу",
+
  
   "marketplace": {
     "title": "E'lonlar doskasi",
@@ -220,6 +219,7 @@
                }
 
 }
+
 
 
 
