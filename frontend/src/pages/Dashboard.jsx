@@ -1102,16 +1102,22 @@ const getCategoryOptions = (type) => {
     />
 
     {/* Направление */}
-    <div className="mb-2">
-      <label className="block text-sm font-medium mb-1">{t("direction")}</label>
-      <input
-        type="text"
-        value={details.direction || ""}
-        onChange={(e) => setDetails({ ...details, direction: e.target.value })}
-        placeholder={t("enter_direction")}
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
+    <div className="flex gap-4 mb-2">
+         <AsyncSelect 
+           cacheOptions 
+           defaultOptions 
+           loadOptions={loadDepartureCities} 
+           onChange={(selected) => setDepartureCity(selected)} 
+           placeholder={t("direction_from")} 
+           noOptionsMessage={() => t("direction_from_not_chosen")} 
+           className="w-1/3" />
+         <Select 
+           options={cityOptionsTo} 
+           placeholder={t("direction_to")} 
+           noOptionsMessage={() => t("direction_to_not_chosen")} 
+           onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
+           className="w-1/3" />
+        </div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
@@ -1813,16 +1819,22 @@ const getCategoryOptions = (type) => {
     />
 
     {/* Направление */}
-    <div className="mb-2">
-      <label className="block text-sm font-medium mb-1">{t("direction")}</label>
-      <input
-        type="text"
-        value={details.direction || ""}
-        onChange={(e) => setDetails({ ...details, direction: e.target.value })}
-        placeholder={t("enter_direction")}
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
+    <div className="flex gap-4 mb-2">
+         <AsyncSelect 
+           cacheOptions 
+           defaultOptions 
+           loadOptions={loadDepartureCities} 
+           onChange={(selected) => setDepartureCity(selected)} 
+           placeholder={t("direction_from")} 
+           noOptionsMessage={() => t("direction_from_not_chosen")} 
+           className="w-1/3" />
+         <Select 
+           options={cityOptionsTo} 
+           placeholder={t("direction_to")} 
+           noOptionsMessage={() => t("direction_to_not_chosen")} 
+           onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
+           className="w-1/3" />
+        </div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
