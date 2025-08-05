@@ -1115,17 +1115,21 @@ const getCategoryOptions = (type) => {
            cacheOptions 
            defaultOptions 
            loadOptions={loadDepartureCities} 
-           onChange={(selected) => setDepartureCity(selected)} 
-           placeholder={t("direction_from")} 
-           noOptionsMessage={() => t("direction_from_not_chosen")} 
-           className="w-1/3" />
+           onChange={(selected) => {
+               setDepartureCity(selected);
+               setDetails({ ...details, directionFrom: selected?.value }); // 👈 обязательно!
+              }}
+          placeholder={t("direction_from")} 
+          noOptionsMessage={() => t("direction_from_not_chosen")} 
+          className="w-1/3" />
+     
          <Select 
-           options={cityOptionsTo} 
-           placeholder={t("direction_to")} 
-           noOptionsMessage={() => t("direction_to_not_chosen")} 
-           onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
-           className="w-1/3" />
-        </div>
+          options={cityOptionsTo} 
+          placeholder={t("direction_to")} 
+          noOptionsMessage={() => t("direction_to_not_chosen")} 
+          onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
+          className="w-1/3" />
+         </div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
