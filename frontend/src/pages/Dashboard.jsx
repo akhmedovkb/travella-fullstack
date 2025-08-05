@@ -295,8 +295,9 @@ useEffect(() => {
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
     refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
-    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
-    visa_support: ["title", "category", "details.description", "details.netPrice"]
+    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice", "details.eventName", "details.eventCategory"],
+    visa_support: ["title", "category", "details.description", "details.netPrice"],
+}
   };
 
   const isExtendedCategory = category in requiredFieldsByCategory;
