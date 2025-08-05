@@ -827,7 +827,7 @@ const getCategoryOptions = (type) => {
     
   </div>
   
-  // ЗДЕСЬ НАЧИНАЕТСЯ РЕДАКТИРОВАНИЕ УСЛУГ
+  {/* ЗДЕСЬ НАЧИНАЕТСЯ РЕДАКТИРОВАНИЕ УСЛУГ */}
 
   {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
