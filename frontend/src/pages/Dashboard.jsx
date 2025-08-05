@@ -2352,11 +2352,12 @@ const getCategoryOptions = (type) => {
         </button>
       </>
     )}
-  </>
-)} {/* тут закрывается 1534 строка {category && ( */}
-
+  {/* тут закрывается 1534 строка {category && ( */}
+</>
+)} 
+{/* тут закрывается 835 строка {selectedService */}
     </>
-  )} {/* тут закрывается 835 строка {selectedService */}
+  )} 
 
     {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
@@ -2389,7 +2390,8 @@ const getCategoryOptions = (type) => {
   )}
 
 </div>
- 
+</div>
+</div>    
 );
 };
 
