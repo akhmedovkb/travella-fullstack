@@ -1090,8 +1090,7 @@ const getCategoryOptions = (type) => {
       </button>
     </>
   ) : (category === "refused_flight" && profile.type === "agent") ? (
-    // 🔶 ВСТАВЬ СЮДА ✈️ Форму отказного авиабилета:
-    <>
+       <>
     {/* ✈️ Форма отказного авиабилета */}
     <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
 
@@ -1840,23 +1839,25 @@ const getCategoryOptions = (type) => {
            placeholder={t("direction_country")} 
            noOptionsMessage={() => t("country_not_chosen")} 
            className="w-1/3" />
-      
-         <AsyncSelect 
+          <AsyncSelect 
            cacheOptions 
            defaultOptions 
            loadOptions={loadDepartureCities} 
-           onChange={(selected) => setDepartureCity(selected)} 
-           placeholder={t("direction_from")} 
-           noOptionsMessage={() => t("direction_from_not_chosen")} 
-           className="w-1/3" />
-      
+           onChange={(selected) => {
+               setDepartureCity(selected);
+               setDetails({ ...details, directionFrom: selected?.value }); // 👈 обязательно!
+              }}
+          placeholder={t("direction_from")} 
+          noOptionsMessage={() => t("direction_from_not_chosen")} 
+          className="w-1/3" />
+     
          <Select 
-           options={cityOptionsTo} 
-           placeholder={t("direction_to")} 
-           noOptionsMessage={() => t("direction_to_not_chosen")} 
-           onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
-           className="w-1/3" />
-        </div>
+          options={cityOptionsTo} 
+          placeholder={t("direction_to")} 
+          noOptionsMessage={() => t("direction_to_not_chosen")} 
+          onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
+          className="w-1/3" />
+         </div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
