@@ -2353,8 +2353,7 @@ const getCategoryOptions = (type) => {
       </>
     )}
   </>
-)}
-
+)} {/* тут закрывается 1534 строка {category && ( */}
 
     </>
   )} {/* тут закрывается 835 строка {selectedService */}
@@ -2389,10 +2388,10 @@ const getCategoryOptions = (type) => {
     </div>
   )}
   
-</div> 
-
-
+</div>
+</div>
+ 
 );
 };
-      
+
 export default Dashboard;
