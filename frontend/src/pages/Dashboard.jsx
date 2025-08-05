@@ -1253,7 +1253,20 @@ const getCategoryOptions = (type) => {
       placeholder={t("net_price")}
       className="w-full border px-3 py-2 rounded mb-3"
     />
-
+         
+   {/* ⏳ Таймер актуальности */}
+    <div className="mb-3">
+      <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
+      <input
+        type="datetime-local"
+        value={details.expiration || ""}
+        onChange={(e) =>
+          setDetails({ ...details, expiration: e.target.value })
+        }
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+         
     {/* Актуальность */}
     <label className="inline-flex items-center mb-4">
       <input
@@ -2010,6 +2023,19 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-3"
     />
 
+     {/* ⏳ Таймер актуальности */}
+    <div className="mb-3">
+      <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
+      <input
+        type="datetime-local"
+        value={details.expiration || ""}
+        onChange={(e) =>
+          setDetails({ ...details, expiration: e.target.value })
+        }
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+    
     {/* Актуальность */}
     <label className="inline-flex items-center mb-4">
       <input
