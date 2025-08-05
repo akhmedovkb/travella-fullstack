@@ -922,7 +922,7 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : (category === "refused_hotel" && profile.type === "agent") ? (
+  ) : category === "refused_hotel" && profile.type === "agent" ? (
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
@@ -1094,7 +1094,7 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : (category === "refused_flight" && profile.type === "agent") ? (
+  ) : category === "refused_flight" && profile.type === "agent" ? (
        <>
     {/* ✈️ Форма отказного авиабилета */}
     <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
@@ -1288,7 +1288,7 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
     </>              
-) : (category === "refused_event_ticket" && profile.type === "agent") ? (
+) : category === "refused_event_ticket" && profile.type === "agent" ? (
        <>
    
         {/* 🟪 Форма отказного билета на мероприятие */}
@@ -1459,10 +1459,10 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-   )
-                      </>                    
+   )}
+   </>                    
   ) : (
-    <>
+   <>
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
