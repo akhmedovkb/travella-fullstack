@@ -1105,38 +1105,60 @@ const getCategoryOptions = (type) => {
 
     {/* Направление */}
     <div className="flex gap-4 mb-2">
-  <Select 
-    options={countryOptions} 
-    value={selectedCountry} 
-    onChange={(value) => setSelectedCountry(value)} 
-    placeholder={t("direction_country")} 
-    noOptionsMessage={() => t("country_not_chosen")} 
-    className="w-1/3" 
+  {/* Страна направления */}
+  <Select
+    options={countryOptions}
+    value={selectedCountry}
+    onChange={(value) => {
+      setSelectedCountry(value);
+      setDetails((prev) => ({
+        ...prev,
+        directionCountry: value?.value || "",
+        direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
+      }));
+    }}
+    placeholder={t("direction_country")}
+    noOptionsMessage={() => t("country_not_found")}
+    className="w-1/3"
   />
 
-  <AsyncSelect 
-    cacheOptions 
-    defaultOptions 
-    loadOptions={loadDepartureCities} 
+  {/* Город отправления (AsyncSelect) */}
+  <AsyncSelect
+    cacheOptions
+    defaultOptions
+    loadOptions={loadDepartureCities}
     onChange={(selected) => {
       setDepartureCity(selected);
-      setDetails({ ...details, directionFrom: selected?.value });
+      setDetails((prev) => ({
+        ...prev,
+        directionFrom: selected?.value || "",
+        direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
+      }));
     }}
-    placeholder={t("direction_from")} 
-    noOptionsMessage={() => t("direction_from_not_chosen")} 
-    className="w-1/3" 
+    placeholder={t("direction_from")}
+    noOptionsMessage={() => t("direction_from_not_found")}
+    className="w-1/3"
   />
 
-  <Select 
-    options={cityOptionsTo} 
-    value={cityOptionsTo.find(opt => opt.value === details.directionTo) || null}
-    onChange={(selected) => {
-      setDetails({ ...details, directionTo: selected?.value });
+  {/* Город прибытия */}
+  <Select
+    options={cityOptionsTo}
+    value={
+      cityOptionsTo.find((opt) => opt.value === details.directionTo) || null
+    }
+    onChange={(value) => {
+      setDetails((prev) => ({
+        ...prev,
+        directionTo: value?.value || "",
+        direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
+      }));
     }}
-    placeholder={t("direction_to")} 
-    noOptionsMessage={() => t("direction_to_not_chosen")} 
-    className="w-1/3" 
+    placeholder={t("direction_to")}
+    noOptionsMessage={() => t("direction_to_not_found")}
+    className="w-1/3"
   />
+</div>
+
 </div>
 
 
@@ -1842,32 +1864,59 @@ const getCategoryOptions = (type) => {
 
     {/* Направление */}
     <div className="flex gap-4 mb-2">
-         <Select 
-           options={countryOptions} 
-           value={selectedCountry} 
-           onChange={(value) => setSelectedCountry(value)} 
-           placeholder={t("direction_country")} 
-           noOptionsMessage={() => t("country_not_chosen")} 
-           className="w-1/3" />
-          <AsyncSelect 
-           cacheOptions 
-           defaultOptions 
-           loadOptions={loadDepartureCities} 
-           onChange={(selected) => {
-               setDepartureCity(selected);
-               setDetails({ ...details, directionFrom: selected?.value }); // 👈 обязательно!
-              }}
-          placeholder={t("direction_from")} 
-          noOptionsMessage={() => t("direction_from_not_chosen")} 
-          className="w-1/3" />
-     
-         <Select 
-          options={cityOptionsTo} 
-          placeholder={t("direction_to")} 
-          noOptionsMessage={() => t("direction_to_not_chosen")} 
-          onChange={(value) => setDetails({ ...details, directionTo: value?.value })} 
-          className="w-1/3" />
-         </div>
+  {/* Страна направления */}
+  <Select
+    options={countryOptions}
+    value={selectedCountry}
+    onChange={(value) => {
+      setSelectedCountry(value);
+      setDetails((prev) => ({
+        ...prev,
+        directionCountry: value?.value || "",
+        direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
+      }));
+    }}
+    placeholder={t("direction_country")}
+    noOptionsMessage={() => t("country_not_found")}
+    className="w-1/3"
+  />
+
+  {/* Город отправления (AsyncSelect) */}
+  <AsyncSelect
+    cacheOptions
+    defaultOptions
+    loadOptions={loadDepartureCities}
+    onChange={(selected) => {
+      setDepartureCity(selected);
+      setDetails((prev) => ({
+        ...prev,
+        directionFrom: selected?.value || "",
+        direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
+      }));
+    }}
+    placeholder={t("direction_from")}
+    noOptionsMessage={() => t("direction_from_not_found")}
+    className="w-1/3"
+  />
+
+  {/* Город прибытия */}
+  <Select
+    options={cityOptionsTo}
+    value={
+      cityOptionsTo.find((opt) => opt.value === details.directionTo) || null
+    }
+    onChange={(value) => {
+      setDetails((prev) => ({
+        ...prev,
+        directionTo: value?.value || "",
+        direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
+      }));
+    }}
+    placeholder={t("direction_to")}
+    noOptionsMessage={() => t("direction_to_not_found")}
+    className="w-1/3"
+  />
+</div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
