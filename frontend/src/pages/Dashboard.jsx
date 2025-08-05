@@ -832,7 +832,9 @@ const getCategoryOptions = (type) => {
   
   {/* ЗДЕСЬ НАЧИНАЕТСЯ РЕДАКТИРОВАНИЕ УСЛУГ */}
 
-  {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
+  {selectedService ? (
+  <>
+    {["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
       <div className="mb-2">
@@ -1285,9 +1287,8 @@ const getCategoryOptions = (type) => {
     >
       {t("save_service")}
     </button>
-    </>
-                    
- ) : (category === "refused_event_ticket" && profile.type === "agent") ? (
+    </>              
+) : (category === "refused_event_ticket" && profile.type === "agent") ? (
        <>
    
         {/* 🟪 Форма отказного билета на мероприятие */}
@@ -1382,9 +1383,8 @@ const getCategoryOptions = (type) => {
 </button>
         
        </>               
-
-             ) : (
-    <>
+  ) : (
+       <>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -1460,6 +1460,7 @@ const getCategoryOptions = (type) => {
       </div>
     </>
    )
+                      </>                    
   ) : (
     <>
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
