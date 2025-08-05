@@ -2388,10 +2388,11 @@ const getCategoryOptions = (type) => {
       </button>
     </div>
   )}
-</div> {/* ← закрыл правый блок */}
-</div> {/* ← закрыл главный контейнер */}
+  
+</div> 
+</div> 
 
-); // ← завершил return
+); 
 
 };
 
