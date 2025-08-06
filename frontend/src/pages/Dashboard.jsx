@@ -414,6 +414,7 @@ const resetServiceForm = () => {
     flightDateGo: "",
     flightDateReturn: "",
     flightDetails: "",
+    visaCountry: d.visaCountry || "",
   });
 };
 
@@ -480,6 +481,7 @@ const resetServiceForm = () => {
 
       // Виза
       description: d.description || "",
+      visaCountry: d.visaCountry || "",
     });
   } else {
     setDescription(service.description || "");
