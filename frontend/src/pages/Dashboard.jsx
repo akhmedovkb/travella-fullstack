@@ -1088,7 +1088,7 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : (category === "refused_hotel" && profile.type === "agent") ? (
+  ) : (category === "refused_flight" && profile.type === "agent") ? (
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
     <>
         {/* ✈️ Форма отказного авиабилета */}
