@@ -36,5 +36,6 @@ router.delete("/services/:id", authenticateToken, deleteService); // Удали�
 
 // 👉 Календарь
 router.get("/booked-dates", authenticateToken, getBookedDates);
+router.post("/blocked-dates", authenticateToken, saveBlockedDates);
 
 module.exports = router;
