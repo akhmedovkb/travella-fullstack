@@ -2559,56 +2559,56 @@ const getCategoryOptions = (type) => {
   </h3>
 
   <DayPicker
-    mode="multiple"
-    selected={blockedDates}
-    onSelect={(dates) => {
-      const date = Array.isArray(dates) ? dates[dates.length - 1] : dates;
-      const dateStr = date.toISOString().split("T")[0];
+  mode="multiple"
+  selected={blockedDates}
+  onDayClick={(date, modifiers) => {
+    const dateStr = date.toISOString().split("T")[0];
 
-      const isBooked = bookedDates.some(
-        (d) => d.toISOString().split("T")[0] === dateStr
-      );
-      const isBlocked = blockedDates.some(
-        (d) => d.toISOString().split("T")[0] === dateStr
-      );
+    const isBooked = bookedDates.some(
+      (d) => d.toISOString().split("T")[0] === dateStr
+    );
+    const isBlocked = blockedDates.some(
+      (d) => d.toISOString().split("T")[0] === dateStr
+    );
 
-      // ⛔️ Нельзя снимать или ставить блокировку на забронированные даты
-      if (isBooked) return;
+    // 🚫 Нельзя менять забронированные клиентами даты
+    if (isBooked) return;
 
-      if (isBlocked) {
-        const confirmUnblock = window.confirm(t("calendar.confirm_unblock"));
-        if (confirmUnblock) {
-          setBlockedDates((prev) =>
-            prev.filter((d) => d.toISOString().split("T")[0] !== dateStr)
-          );
-        }
-      } else {
-        setBlockedDates((prev) => [...prev, date]);
+    if (isBlocked) {
+      const confirmUnblock = window.confirm(t("calendar.confirm_unblock"));
+      if (confirmUnblock) {
+        setBlockedDates((prev) =>
+          prev.filter((d) => d.toISOString().split("T")[0] !== dateStr)
+        );
       }
-    }}
-    disabled={{
-      before: new Date(),
-      dates: bookedDates,
-    }}
-    modifiers={{
-      booked: bookedDates,
-      blocked: blockedDates,
-    }}
-    modifiersClassNames={{
-      booked: "bg-blue-500 text-white",
-      blocked: "bg-red-400 text-white",
-    }}
-    modifiersStyles={{
-      booked: { cursor: "not-allowed" },
-      blocked: { cursor: "pointer" },
-    }}
-    onDayMouseEnter={(day) => {
-      const text = bookedDateMap[day.toDateString()];
-      setHoveredDateLabel(text || "");
-    }}
-    onDayMouseLeave={() => setHoveredDateLabel("")}
-    className="border rounded p-4"
-  />
+    } else {
+      setBlockedDates((prev) => [...prev, date]);
+    }
+  }}
+  disabled={{
+    before: new Date(),
+    dates: bookedDates,
+  }}
+  modifiers={{
+    booked: bookedDates,
+    blocked: blockedDates,
+  }}
+  modifiersClassNames={{
+    booked: "bg-blue-500 text-white",
+    blocked: "bg-red-400 text-white",
+  }}
+  modifiersStyles={{
+    booked: { cursor: "not-allowed" },
+    blocked: { cursor: "pointer" },
+  }}
+  onDayMouseEnter={(day) => {
+    const text = bookedDateMap[day.toDateString()];
+    setHoveredDateLabel(text || "");
+  }}
+  onDayMouseLeave={() => setHoveredDateLabel("")}
+  className="border rounded p-4"
+/>
+
 
   {/* 🔎 Легенда */}
   <div className="mt-2 text-sm text-gray-600 flex gap-4">
