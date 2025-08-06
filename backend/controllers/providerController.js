@@ -281,6 +281,26 @@ const getBookedDates = async (req, res) => {
   }
 };
 
+// ⬇️ Получение вручную заблокированных дат (без бронирований)
+const getBlockedDates = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
+      [providerId]
+    );
+
+    const blockedDates = result.rows.map((row) => ({
+      date: new Date(row.date).toISOString().split("T")[0],
+    }));
+
+    res.json(blockedDates);
+  } catch (error) {
+    console.error("❌ Ошибка получения заблокированных дат:", error);
+    res.status(500).json({ message: "calendar.load_error" });
+  }
+};
 
 // ⬇️ Сохранение вручную заблокированных дат
 const saveBlockedDates = async (req, res) => {
