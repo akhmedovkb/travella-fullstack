@@ -436,9 +436,7 @@ const resetServiceForm = () => {
   setMessageService("");
 
   if (
-    service.category === "refused_tour" ||
-    service.category === "author_tour" ||
-    service.category === "refused_hotel"
+    ["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket", "visa_support"].includes(service.category)
   ) {
     const d = service.details || {};
     setDetails({
@@ -458,16 +456,29 @@ const resetServiceForm = () => {
       expiration: d.expiration || "",
       isActive: d.isActive ?? true,
 
-      // Только для авиабилета (если планируешь)
+      // Авиабилет
+      flightType: d.flightType || "one_way",
+      airline: d.airline || "",
+      returnDate: d.returnDate || "",
       startFlightDate: d.startFlightDate || "",
       endFlightDate: d.endFlightDate || "",
       flightDetails: d.flightDetails || "",
+      flightDetailsText: d.flightDetailsText || "",
 
-      // Только для отеля
+      // Отель
       accommodationCategory: d.accommodationCategory || "",
       adt: d.adt || "",
       chd: d.chd || "",
-      inf: d.inf || ""
+      inf: d.inf || "",
+
+      // Мероприятие
+      location: d.location || "",
+      eventName: d.eventName || "",
+      eventCategory: d.eventCategory || "",
+      ticketDetails: d.ticketDetails || "",
+
+      // Виза
+      description: d.description || "",
     });
   } else {
     setDescription(service.description || "");
@@ -475,6 +486,7 @@ const resetServiceForm = () => {
     setAvailability(service.availability || []);
   }
 };
+
 
 
 
