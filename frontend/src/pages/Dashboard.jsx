@@ -2054,36 +2054,104 @@ const getCategoryOptions = (type) => {
     ) : category === "refused_event_ticket" && profile.type === "agent" ? (
       <>
         {/* 🎫 Форма отказного билета на мероприятие */}
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("event_name")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          value={details.location || ""}
-          onChange={(e) => setDetails({ ...details, location: e.target.value })}
-          placeholder={t("location")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          type="date"
-          value={details.startDate || ""}
-          onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          value={details.netPrice || ""}
-          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-          placeholder={t("net_price")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
+         <input
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      placeholder={t("title")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      value={details.eventName || ""}
+      onChange={(e) =>
+        setDetails({ ...details, eventName: e.target.value })
+      }
+      placeholder={t("event_name")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <Select
+      options={[
+        { value: "concert", label: t("event_type.concert") },
+        { value: "exhibition", label: t("event_type.exhibition") },
+        { value: "show", label: t("event_type.show") },
+        { value: "masterclass", label: t("event_type.masterclass") },
+        { value: "football", label: t("event_type.football") },
+        { value: "fight", label: t("event_type.fight") },
+      ]}
+      value={
+        [
+          { value: "concert", label: t("event_type.concert") },
+          { value: "exhibition", label: t("event_type.exhibition") },
+          { value: "show", label: t("event_type.show") },
+          { value: "masterclass", label: t("event_type.masterclass") },
+          { value: "football", label: t("event_type.football") },
+          { value: "fight", label: t("event_type.fight") },
+        ].find((opt) => opt.value === details.eventCategory)
+      }
+      onChange={(selected) =>
+        setDetails({ ...details, eventCategory: selected.value })
+      }
+      placeholder={t("event_category")}
+      className="mb-2"
+    />
+
+    <input
+      type="text"
+      value={details.location || ""}
+      onChange={(e) =>
+        setDetails({ ...details, location: e.target.value })
+      }
+      placeholder={t("event_location")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="date"
+      value={details.startDate || ""}
+      onChange={(e) =>
+        setDetails({ ...details, startDate: e.target.value })
+      }
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="number"
+      value={details.netPrice || ""}
+      onChange={(e) =>
+        setDetails({ ...details, netPrice: e.target.value })
+      }
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <label className="inline-flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={details.isActive || false}
+        onChange={(e) =>
+          setDetails({ ...details, isActive: e.target.checked })
+        }
+        className="mr-2"
+      />
+      {t("is_active")}
+    </label>
+
+    <input
+      type="datetime-local"
+      value={details.expiration || ""}
+      onChange={(e) =>
+        setDetails({ ...details, expiration: e.target.value })
+      }
+      className="w-full border px-3 py-2 rounded mb-4"
+    />
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>
       </>
     ) : category === "visa_support" && profile.type === "agent" ? (
       <>
