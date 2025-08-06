@@ -269,24 +269,6 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-
-    console.log("📅 Результат запроса на занятые даты:", result.rows);
-
-    const bookedDates = result.rows
-      .filter((row) => row.date)
-      .map((row) => ({
-        date: new Date(row.date).toISOString().split("T")[0],
-        serviceTitle: row.title,
-      }));
-
-    res.json(bookedDates);
-  } catch (error) {
-    console.error("❌ Ошибка при получении занятых дат:", error);
-    res.status(500).json({ message: "Ошибка сервера", error: error.message });
-  }
-};
-
-
 // ⬇️ Сохранение вручную заблокированных дат
 const saveBlockedDates = async (req, res) => {
   try {
