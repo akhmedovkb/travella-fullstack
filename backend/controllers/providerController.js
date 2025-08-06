@@ -240,6 +240,7 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
+// ⬇️ Получение всех занятых дат (бронирования)
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -263,34 +264,60 @@ const getBookedDates = async (req, res) => {
 
     res.json(bookedDates);
   } catch (error) {
+    console.error("❌ Ошибка получения занятых дат:", error);
+    res.status(500).json({ message: "calendar.load_error" });
+  }
+};
+
+
+    console.log("📅 Результат запроса на занятые даты:", result.rows);
+
+    const bookedDates = result.rows
+      .filter((row) => row.date)
+      .map((row) => ({
+        date: new Date(row.date).toISOString().split("T")[0],
+        serviceTitle: row.title,
+      }));
+
+    res.json(bookedDates);
+  } catch (error) {
     console.error("❌ Ошибка при получении занятых дат:", error);
     res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
 
 
+// ⬇️ Сохранение вручную заблокированных дат
 const saveBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { dates } = req.body;
 
     if (!Array.isArray(dates)) {
-      return res.status(400).json({ message: "Неверный формат дат" });
+      return res.status(400).json({ message: "Некорректные даты" });
     }
 
-    // Удаляем старые даты
+    console.log("📥 Получены даты для сохранения:", dates);
+
+    // Удаляем старые записи
     await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
 
-    // Вставляем новые даты
-    for (const date of dates) {
-      // Внутри saveBlockedDates
-      await pool.query(
-        'INSERT INTO blocked_dates (provider_id, date, service_id) VALUES ($1, $2, $3)',
-        [providerId, date, serviceId] // serviceId берётся из клиента
+    // Добавляем новые
+    const insertPromises = dates.map((date) => {
+      return pool.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
+        [providerId, date]
       );
+    });
 
-    }
+    await Promise.all(insertPromises);
 
+    res.json({ message: "calendar.saved_successfully" });
+  } catch (error) {
+    console.error("❌ Ошибка сохранения занятых дат:", error);
+    res.status(500).json({ message: "calendar.save_error" });
+  }
+};
     res.json({ message: "calendar.saved_successfully" });
   } catch (err) {
     console.error("Ошибка сохранения дат:", err);
