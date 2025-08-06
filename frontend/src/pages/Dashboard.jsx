@@ -237,10 +237,14 @@ useEffect(() => {
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => new Date(item.date));
+            // 📅 Приводим к дате без времени
+            const formatted = response.data.map((item) => {
+              const date = new Date(item.date);
+              return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            });
             setBookedDates(formatted);
 
-            // ✅ Создаем карту для tooltip'ов
+            // 🧠 Создаем карту для tooltip
             const map = {};
             response.data.forEach((item) => {
               const dateKey = new Date(item.date).toDateString();
@@ -259,6 +263,7 @@ useEffect(() => {
     .then((res) => setServices(res.data))
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
+
 
 
 
