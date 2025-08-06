@@ -216,9 +216,18 @@
     "searching": "Qidirilyabdi...",
     "results": "Qidiruv natijasi",
     "price": "Narh"
-               }
+               },
+
+  "new_visa_support": "Viza yordami",
+  "select_country": "Viza uchun mamlakatni tanlang",
+  "description": "Tavsif",
+  "net_price": "Netto narx",
+  "is_active": "Faol",
+  "save_service": "Xizmatni saqlash",
+  "country_not_chosen": "Mamlakatlar topilmadi"
 
 }
+
 
 
 
