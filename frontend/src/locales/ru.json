@@ -189,6 +189,14 @@
   "save_error": "Ошибка сохранения дат"
   },
 
+  "calendar.blocking_title": "Блокировка дат",
+  "calendar.label_blocked_manual": "Ручная блокировка",
+  "calendar.label_booked_by_clients": "Занято клиентами",
+  "calendar.save_blocked_dates": "Сохранить даты",
+  "calendar.saved_successfully": "Даты сохранены",
+  "calendar.save_error": "Ошибка при сохранении"
+
+
   "marketplace": {
     "title": "Доска объявлений",
     "select_category": "Выберите категорию",
@@ -253,6 +261,7 @@
   "country_not_chosen": "Страны не найдены"
 
 }
+
 
 
 
