@@ -214,9 +214,19 @@
     "searching": "Searching...",
     "results": "Search Results",
     "price": "Price"
-}
+},
+  
+  "new_visa_support": "Visa support",
+  "select_country": "Select country for visa",
+  "description": "Description",
+  "net_price": "Net price",
+  "is_active": "Active",
+  "save_service": "Save service",
+  "country_not_chosen": "No countries found"
+
 
 }
+
 
 
 
