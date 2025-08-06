@@ -246,7 +246,7 @@ const getBookedDates = async (req, res) => {
 
     const result = await pool.query(
       `SELECT b.date, s.title 
-       FROM bookings b 
+       FROM blocked_dates b 
        JOIN services s ON b.service_id = s.id 
        WHERE s.provider_id = $1`,
       [providerId]
@@ -282,10 +282,12 @@ const saveBlockedDates = async (req, res) => {
 
     // Вставляем новые даты
     for (const date of dates) {
+      // Внутри saveBlockedDates
       await pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
-        [providerId, date]
+        'INSERT INTO blocked_dates (provider_id, date, service_id) VALUES ($1, $2, $3)',
+        [providerId, date, serviceId] // serviceId берётся из клиента
       );
+
     }
 
     res.json({ message: "calendar.saved_successfully" });
