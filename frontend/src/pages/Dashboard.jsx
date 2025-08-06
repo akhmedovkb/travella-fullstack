@@ -2497,24 +2497,36 @@ const getCategoryOptions = (type) => {
     </h3>
 
     <DayPicker
-  mode="multiple"
-  selected={blockedDates}
-  onSelect={setBlockedDates}
-  disabled={{
-    before: new Date(),
-    dates: bookedDates.map((dateStr) => new Date(dateStr)),
-  }}
-  modifiers={{
-    booked: bookedDates.map((dateStr) => new Date(dateStr)),
-  }}
-  modifiersClassNames={{
-    selected: "bg-red-400 text-white",   // вручную заблокированные
-    booked: "bg-blue-500 text-white",    // забронированные
-  }}
-  className="border rounded p-4"
-/>
+      mode="multiple"
+      selected={blockedDates}
+      onSelect={setBlockedDates}
+      disabled={{
+        before: new Date(),
+        dates: bookedDates.map((d) => new Date(d.date)),
+      }}
+      modifiers={{
+        booked: bookedDates.map((d) => new Date(d.date)),
+      }}
+      modifiersClassNames={{
+        selected: "bg-red-400 text-white", // вручную заблокированные
+        booked: "bg-blue-500 text-white", // занятые бронированиями
+      }}
+      className="border rounded p-4"
+    />
 
+    {/* 🔎 Подписи */}
+    <div className="mt-2 text-sm text-gray-600 flex gap-4">
+      <div className="flex items-center gap-1">
+        <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
+        <span>{t("calendar.label_blocked_manual")}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="w-3 h-3 rounded bg-blue-500 inline-block"></span>
+        <span>{t("calendar.label_booked_by_clients")}</span>
+      </div>
+    </div>
 
+    {/* 🔘 Кнопка сохранения */}
     <button
       onClick={handleSaveBlockedDates}
       className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
@@ -2523,6 +2535,7 @@ const getCategoryOptions = (type) => {
     </button>
   </div>
 )}
+
   
 </div>
 </div>
