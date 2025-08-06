@@ -288,16 +288,13 @@ useEffect(() => {
 // Тут поведение кнопки Сохранить услугу
 
   const handleSaveService = () => {
-    // ✅ Показываем текущее состояние details
-  console.log("📦 Текущее состояние details:", details);
   const requiredFieldsByCategory = {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
     refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
-    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice", "details.eventName", "details.eventCategory"],
-    visa_support: ["title", "category", "details.description", "details.netPrice"],
-}
+    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
+    visa_support: ["title", "category", "details.description", "details.netPrice"]
   };
 
   const isExtendedCategory = category in requiredFieldsByCategory;
@@ -324,7 +321,7 @@ useEffect(() => {
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
-console.log("📋 Проверка обязательных полей для категории:", category);
+  console.log("📋 Проверка обязательных полей для категории:", category);
 console.log("🎯 Обязательные поля:", requiredFields);
 
 requiredFields.forEach((field) => {
@@ -830,11 +827,8 @@ const getCategoryOptions = (type) => {
     
   </div>
   
-  {/* ЗДЕСЬ НАЧИНАЕТСЯ РЕДАКТИРОВАНИЕ УСЛУГ */}
-
-  {selectedService ? (
-  <>
-    {["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
+  
+  {selectedService ? (["refused_tour", "author_tour"].includes(category) && profile.type === "agent" ? (
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
       <div className="mb-2">
@@ -922,7 +916,7 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : category === "refused_hotel" && profile.type === "agent" ? (
+  ) : (category === "refused_hotel" && profile.type === "agent") ? (
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
     <>
       <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
@@ -1094,297 +1088,8 @@ const getCategoryOptions = (type) => {
         {t("delete")}
       </button>
     </>
-  ) : category === "refused_flight" && profile.type === "agent" ? (
-       <>
-    {/* ✈️ Форма отказного авиабилета */}
-    <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
-
-    <input
-      value={title}
-      onChange={(e) => setTitle(e.target.value)}
-      placeholder={t("title")}
-      className="w-full border px-3 py-2 rounded mb-2"
-    />
-
-    {/* Направление */}
-    <div className="flex gap-4 mb-2">
-  {/* Страна направления */}
-  <Select
-    options={countryOptions}
-    value={selectedCountry}
-    onChange={(value) => {
-      setSelectedCountry(value);
-      setDetails((prev) => ({
-        ...prev,
-        directionCountry: value?.value || "",
-        direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
-      }));
-    }}
-    placeholder={t("direction_country")}
-    noOptionsMessage={() => t("country_not_found")}
-    className="w-1/3"
-  />
-
-  {/* Город отправления (AsyncSelect) */}
-  <AsyncSelect
-    cacheOptions
-    defaultOptions
-    loadOptions={loadDepartureCities}
-    onChange={(selected) => {
-      setDepartureCity(selected);
-      setDetails((prev) => ({
-        ...prev,
-        directionFrom: selected?.value || "",
-        direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
-      }));
-    }}
-    placeholder={t("direction_from")}
-    noOptionsMessage={() => t("direction_from_not_found")}
-    className="w-1/3"
-  />
-
-  {/* Город прибытия */}
-  <Select
-    options={cityOptionsTo}
-    value={
-      cityOptionsTo.find((opt) => opt.value === details.directionTo) || null
-    }
-    onChange={(value) => {
-      setDetails((prev) => ({
-        ...prev,
-        directionTo: value?.value || "",
-        direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
-      }));
-    }}
-    placeholder={t("direction_to")}
-    noOptionsMessage={() => t("direction_to_not_found")}
-    className="w-1/3"
-  />
-</div>
-
-   {/* Радиокнопки: В одну сторону / туда-обратно */}
-<div className="mb-3">
-  <label className="block font-medium mb-1">{t("flight_type")}</label>
-  <div className="flex gap-4">
-    <label className="inline-flex items-center">
-      <input
-        type="radio"
-        checked={details.flightType === "one_way"}
-        onChange={() =>
-          setDetails({
-            ...details,
-            flightType: "one_way",
-            oneWay: true,
-            returnDate: ""
-          })
-        }
-        className="mr-2"
-      />
-      {t("one_way")}
-    </label>
-    <label className="inline-flex items-center">
-      <input
-        type="radio"
-        checked={details.flightType === "round_trip"}
-        onChange={() =>
-          setDetails({
-            ...details,
-            flightType: "round_trip",
-            oneWay: false
-          })
-        }
-        className="mr-2"
-      />
-      {t("round_trip")}
-    </label>
-  </div>
-</div>
-
-
-    {/* Даты */}
-    <div className="flex gap-4 mb-3">
-      <div className="w-1/2">
-        <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
-        <input
-          type="date"
-          value={details.startDate || ""}
-          onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
-          className="w-full border px-3 py-2 rounded"
-        />
-      </div>
-
-      {details.oneWay === false && (
-        <div className="w-1/2">
-          <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
-          <input
-            type="date"
-            value={details.returnDate || ""}
-            onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
-            className="w-full border px-3 py-2 rounded"
-          />
-        </div>
-      )}
-    </div>
-
-    {/* Авиакомпания */}
-    <div className="mb-2">
-      <label className="block text-sm font-medium mb-1">{t("airline")}</label>
-      <input
-        type="text"
-        value={details.airline || ""}
-        onChange={(e) => setDetails({ ...details, airline: e.target.value })}
-        placeholder={t("enter_airline")}
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
-
-    {/* Детали рейса */}
-    <div className="mb-2">
-      <label className="block text-sm font-medium mb-1">{t("flight_details")}</label>
-      <textarea
-        value={details.flightDetails || ""}
-        onChange={(e) => setDetails({ ...details, flightDetails: e.target.value })}
-        placeholder={t("enter_flight_details")}
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
-
-    {/* Цена */}
-    <input
-      value={details.netPrice || ""}
-      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-      placeholder={t("net_price")}
-      className="w-full border px-3 py-2 rounded mb-3"
-    />
-         
-   {/* ⏳ Таймер актуальности */}
-    <div className="mb-3">
-      <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
-      <input
-        type="datetime-local"
-        value={details.expiration || ""}
-        onChange={(e) =>
-          setDetails({ ...details, expiration: e.target.value })
-        }
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
-         
-    {/* Актуальность */}
-    <label className="inline-flex items-center mb-4">
-      <input
-        type="checkbox"
-        checked={details.isActive || false}
-        onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-        className="mr-2"
-      />
-      {t("is_active")}
-    </label>
-
-    <button
-      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-      onClick={handleSaveService}
-    >
-      {t("save_service")}
-    </button>
-    </>              
-) : category === "refused_event_ticket" && profile.type === "agent" ? (
-       <>
-   
-        {/* 🟪 Форма отказного билета на мероприятие */}
-<h3 className="text-xl font-semibold mb-2">{t("new_refused_event_ticket")}</h3>
-
-{/* Название мероприятия */}
-<input
-  value={details.eventName || ""}
-  onChange={(e) => setDetails({ ...details, eventName: e.target.value })}
-  placeholder={t("event_name")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Категория события */}
-<select
-  value={details.eventCategory || ""}
-  onChange={(e) => setDetails({ ...details, eventCategory: e.target.value })}
-  className="w-full border px-3 py-2 rounded mb-2"
->
-  <option value="">{t("select_event_category")}</option>
-  <option value="concert">{t("event_category_concert")}</option>
-  <option value="exhibition">{t("event_category_exhibition")}</option>
-  <option value="show">{t("event_category_show")}</option>
-  <option value="masterclass">{t("event_category_masterclass")}</option>
-  <option value="football">{t("event_category_football")}</option>
-  <option value="fight">{t("event_category_fight")}</option>
-</select>
-
-{/* Регион / локация */}
-<input
-  value={details.location || ""}
-  onChange={(e) => setDetails({ ...details, location: e.target.value })}
-  placeholder={t("location")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Дата мероприятия */}
-<input
-  type="date"
-  value={details.eventDate || ""}
-  onChange={(e) => setDetails({ ...details, eventDate: e.target.value })}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Цена */}
-<input
-  value={details.netPrice || ""}
-  onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-  placeholder={t("net_price")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Детали билета */}
-<textarea
-  value={details.ticketDetails || ""}
-  onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
-  placeholder={t("ticket_details")}
-  className="w-full border px-3 py-2 rounded mb-3"
-/>
-
-{/* Таймер актуальности */}
-<div className="mb-3">
-  <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
-  <input
-    type="datetime-local"
-    value={details.expiration || ""}
-    onChange={(e) =>
-      setDetails({ ...details, expiration: e.target.value })
-    }
-    className="w-full border px-3 py-2 rounded"
-  />
-</div>
-
-{/* Актуальность */}
-<label className="inline-flex items-center mb-4">
-  <input
-    type="checkbox"
-    checked={details.isActive || false}
-    onChange={(e) =>
-      setDetails({ ...details, isActive: e.target.checked })
-    }
-    className="mr-2"
-  />
-  {t("is_active")}
-</label>
-
-<button
-  className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-  onClick={handleSaveService}
->
-  {t("save_service")}
-</button>
-        
-       </>               
   ) : (
-       <>
+    <>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -1459,10 +1164,9 @@ const getCategoryOptions = (type) => {
         </button>
       </div>
     </>
-   )}
-   </>                    
+   ) 
   ) : (
-   <>
+    <>
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-4">
         {t("new_service_tip")}
       </div>
@@ -1788,7 +1492,6 @@ const getCategoryOptions = (type) => {
       </>
     ) : category === "refused_hotel" && profile.type === "agent" ? (
       <>
-        {/* 🔶  Форма отказного отеля: */}
   <h3 className="text-xl font-semibold mb-2">{t("new_refused_hotel")}</h3>
 
   <input
@@ -1971,60 +1674,16 @@ const getCategoryOptions = (type) => {
     />
 
     {/* Направление */}
-    <div className="flex gap-4 mb-2">
-  {/* Страна направления */}
-  <Select
-    options={countryOptions}
-    value={selectedCountry}
-    onChange={(value) => {
-      setSelectedCountry(value);
-      setDetails((prev) => ({
-        ...prev,
-        directionCountry: value?.value || "",
-        direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
-      }));
-    }}
-    placeholder={t("direction_country")}
-    noOptionsMessage={() => t("country_not_found")}
-    className="w-1/3"
-  />
-
-  {/* Город отправления (AsyncSelect) */}
-  <AsyncSelect
-    cacheOptions
-    defaultOptions
-    loadOptions={loadDepartureCities}
-    onChange={(selected) => {
-      setDepartureCity(selected);
-      setDetails((prev) => ({
-        ...prev,
-        directionFrom: selected?.value || "",
-        direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
-      }));
-    }}
-    placeholder={t("direction_from")}
-    noOptionsMessage={() => t("direction_from_not_found")}
-    className="w-1/3"
-  />
-
-  {/* Город прибытия */}
-  <Select
-    options={cityOptionsTo}
-    value={
-      cityOptionsTo.find((opt) => opt.value === details.directionTo) || null
-    }
-    onChange={(value) => {
-      setDetails((prev) => ({
-        ...prev,
-        directionTo: value?.value || "",
-        direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
-      }));
-    }}
-    placeholder={t("direction_to")}
-    noOptionsMessage={() => t("direction_to_not_found")}
-    className="w-1/3"
-  />
-</div>
+    <div className="mb-2">
+      <label className="block text-sm font-medium mb-1">{t("direction")}</label>
+      <input
+        type="text"
+        value={details.direction || ""}
+        onChange={(e) => setDetails({ ...details, direction: e.target.value })}
+        placeholder={t("enter_direction")}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
 
    {/* Радиокнопки: В одну сторону / туда-обратно */}
 <div className="mb-3">
@@ -2121,19 +1780,6 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-3"
     />
 
-     {/* ⏳ Таймер актуальности */}
-    <div className="mb-3">
-      <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
-      <input
-        type="datetime-local"
-        value={details.expiration || ""}
-        onChange={(e) =>
-          setDetails({ ...details, expiration: e.target.value })
-        }
-        className="w-full border px-3 py-2 rounded"
-      />
-    </div>
-    
     {/* Актуальность */}
     <label className="inline-flex items-center mb-4">
       <input
@@ -2154,98 +1800,37 @@ const getCategoryOptions = (type) => {
   </>
     ) : category === "refused_event_ticket" && profile.type === "agent" ? (
       <>
-        {/* 🟪 Форма отказного билета на мероприятие */}
-        
-<h3 className="text-xl font-semibold mb-2">{t("new_refused_event_ticket")}</h3>
-
-{/* Название мероприятия */}
-<input
-  value={details.eventName || ""}
-  onChange={(e) => setDetails({ ...details, eventName: e.target.value })}
-  placeholder={t("event_name")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Категория события */}
-<select
-  value={details.eventCategory || ""}
-  onChange={(e) => setDetails({ ...details, eventCategory: e.target.value })}
-  className="w-full border px-3 py-2 rounded mb-2"
->
-  <option value="">{t("select_event_category")}</option>
-  <option value="concert">{t("event_category_concert")}</option>
-  <option value="exhibition">{t("event_category_exhibition")}</option>
-  <option value="show">{t("event_category_show")}</option>
-  <option value="masterclass">{t("event_category_masterclass")}</option>
-  <option value="football">{t("event_category_football")}</option>
-  <option value="fight">{t("event_category_fight")}</option>
-</select>
-
-{/* Регион / локация */}
-<input
-  value={details.location || ""}
-  onChange={(e) => setDetails({ ...details, location: e.target.value })}
-  placeholder={t("location")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Дата мероприятия */}
-<input
-  type="date"
-  value={details.eventDate || ""}
-  onChange={(e) => setDetails({ ...details, eventDate: e.target.value })}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Цена */}
-<input
-  value={details.netPrice || ""}
-  onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-  placeholder={t("net_price")}
-  className="w-full border px-3 py-2 rounded mb-2"
-/>
-
-{/* Детали билета */}
-<textarea
-  value={details.ticketDetails || ""}
-  onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
-  placeholder={t("ticket_details")}
-  className="w-full border px-3 py-2 rounded mb-3"
-/>
-
-{/* Таймер актуальности */}
-<div className="mb-3">
-  <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
-  <input
-    type="datetime-local"
-    value={details.expiration || ""}
-    onChange={(e) =>
-      setDetails({ ...details, expiration: e.target.value })
-    }
-    className="w-full border px-3 py-2 rounded"
-  />
-</div>
-
-{/* Актуальность */}
-<label className="inline-flex items-center mb-4">
-  <input
-    type="checkbox"
-    checked={details.isActive || false}
-    onChange={(e) =>
-      setDetails({ ...details, isActive: e.target.checked })
-    }
-    className="mr-2"
-  />
-  {t("is_active")}
-</label>
-
-<button
-  className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-  onClick={handleSaveService}
->
-  {t("save_service")}
-</button>
-
+        {/* 🎫 Форма отказного билета на мероприятие */}
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("event_name")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          value={details.location || ""}
+          onChange={(e) => setDetails({ ...details, location: e.target.value })}
+          placeholder={t("location")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          type="date"
+          value={details.startDate || ""}
+          onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <input
+          value={details.netPrice || ""}
+          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+          placeholder={t("net_price")}
+          className="w-full border px-3 py-2 rounded mb-2"
+        />
+        <button
+          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+          onClick={handleSaveService}
+        >
+          {t("save_service")}
+        </button>
       </>
     ) : category === "visa_support" && profile.type === "agent" ? (
       <>
@@ -2352,46 +1937,47 @@ const getCategoryOptions = (type) => {
         </button>
       </>
     )}
-  {/* тут закрывается 1534 строка {category && ( */}
-</>
-)} 
-{/* тут закрывается 835 строка {selectedService */}
-    </>
-  )} 
+  </>
+)}
 
-    {messageService && (
+
+    </>
+  )}
+
+  {messageService && (
     <p className="text-sm text-center text-gray-600 mt-4">{messageService}</p>
   )}
+{/* Перенесённый календарь */}
+{(profile.type === "guide" || profile.type === "transport") && (
+  <div className="mt-10 bg-white p-6 rounded shadow border">
+    <h3 className="text-lg font-semibold mb-4 text-orange-600">
+      {t("calendar.blocking_title")}
+    </h3>
 
-  {(profile.type === "guide" || profile.type === "transport") && (
-    <div className="mt-10 bg-white p-6 rounded shadow border">
-      <h3 className="text-lg font-semibold mb-4 text-orange-600">
-        {t("calendar.blocking_title")}
-      </h3>
+    <DayPicker
+      mode="multiple"
+      selected={blockedDates}
+      onSelect={setBlockedDates}
+      disabled={{ before: new Date() }}
+      modifiersClassNames={{
+        selected: "bg-red-400 text-white",
+      }}
+      className="border rounded p-4"
+    />
 
-      <DayPicker
-        mode="multiple"
-        selected={blockedDates}
-        onSelect={setBlockedDates}
-        disabled={{ before: new Date() }}
-        modifiersClassNames={{
-          selected: "bg-red-400 text-white",
-        }}
-        className="border rounded p-4"
-      />
-
-      <button
-        onClick={handleSaveBlockedDates}
-        className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-      >
-        {t("calendar.save_blocked_dates")}
-      </button>
-    </div>
-  )}
-
+    <button
+      onClick={handleSaveBlockedDates}
+      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+    >
+      {t("calendar.save_blocked_dates")}
+    </button>
+  </div>
+)}
+  
 </div>
 </div>
-   
+ 
 );
 };
+
 export default Dashboard;
