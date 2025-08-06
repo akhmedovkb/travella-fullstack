@@ -279,6 +279,27 @@ useEffect(() => {
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
 
+const handleSaveBlockedDates = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      { dates: blockedDates },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log("✅ Заблокированные даты сохранены:", response.data);
+    alert(t("calendar.saved_successfully")); // или showToast, если используешь
+  } catch (error) {
+    console.error("❌ Ошибка при сохранении заблокированных дат:", error);
+    alert(t("calendar.save_error"));
+  }
+};
 
 
 
