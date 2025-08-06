@@ -2561,18 +2561,25 @@ const getCategoryOptions = (type) => {
     mode="multiple"
     selected={blockedDates}
     onSelect={(date) => {
-      const dateStr = date.toISOString().split("T")[0];
+  const dateStr = date.toISOString().split("T")[0];
 
-      // Если дата уже занята клиентами — не даём менять
-      if (bookedDates.find(d => d.toISOString().split("T")[0] === dateStr)) return;
+  const isBooked = bookedDates.find(d => d.toISOString().split("T")[0] === dateStr);
+  const isBlocked = blockedDates.find(d => d.toISOString().split("T")[0] === dateStr);
 
-      // Если дата уже заблокирована вручную — разблокируем
-      if (blockedDates.find(d => d.toISOString().split("T")[0] === dateStr)) {
-        setBlockedDates(blockedDates.filter(d => d.toISOString().split("T")[0] !== dateStr));
-      } else {
-        setBlockedDates([...blockedDates, date]);
-      }
-    }}
+  // 🟦 Нельзя трогать забронированные клиентами
+  if (isBooked) return;
+
+  // 🔴 Если дата уже заблокирована — спрашиваем подтверждение
+  if (isBlocked) {
+    const confirmUnblock = window.confirm("Разблокировать эту дату?");
+    if (confirmUnblock) {
+      setBlockedDates(blockedDates.filter(d => d.toISOString().split("T")[0] !== dateStr));
+    }
+  } else {
+    setBlockedDates([...blockedDates, date]);
+  }
+}}
+
     disabled={{
       before: new Date(), // запрещаем выбор прошлых дат
       dates: bookedDates, // клиентские бронирования — некликабельны
