@@ -12,7 +12,8 @@ const {
   getServices,
   updateService,
   deleteService,
-  getBookedDates
+  getBookedDates,
+  saveBlockedDates
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
