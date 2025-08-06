@@ -65,6 +65,9 @@ const Dashboard = () => {
   visaCountry: "",
 });
   
+  // 🔹 Календарь услуг
+  const [bookedDates, setBookedDates] = useState([]);
+  
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
   !s.details?.expiration || new Date(s.details.expiration) > new Date();
@@ -161,7 +164,7 @@ const loadCitiesFromInput = async (inputValue) => {
   }
 };
   
-// Города отправления — независимо от страны
+// 🔍 Города отправления — независимо от страны
 useEffect(() => {
   const fetchCities = async () => {
     try {
@@ -185,6 +188,24 @@ useEffect(() => {
   fetchCities();
 }, []);
 
+  // 🔍 календарь занятости
+  const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      { dates: blockedDates },
+      config
+    );
+    setMessageProfile(t("calendar.dates_saved"));
+  } catch (error) {
+    console.error("Ошибка сохранения дат:", error);
+    setMessageProfile(t("calendar.save_error"));
+  }
+};
+
+  
+
+  
 useEffect(() => {
   if (!selectedCountry?.code) return;
   const fetchCities = async () => {
@@ -209,24 +230,34 @@ useEffect(() => {
   fetchCities();
 }, [selectedCountry]);
 
-  
+  // 📌 загружаем profile
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-      .then((res) => {
-        setProfile(res.data);
-        setNewLocation(res.data.location);
-        setNewSocial(res.data.social);
-        setNewPhone(res.data.phone);
-        setNewAddress(res.data.address);
-      })
-      .catch((err) => console.error("Ошибка загрузки профиля", err));
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+    .then((res) => {
+      setProfile(res.data);
+      setNewLocation(res.data.location);
+      setNewSocial(res.data.social);
+      setNewPhone(res.data.phone);
+      setNewAddress(res.data.address);
 
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-      .then((res) => setServices(res.data))
-      .catch((err) => console.error("Ошибка загрузки услуг", err));
-  }, []);
+      // 📌 Загружаем занятые даты только для гида или транспорта
+      if (["guide", "transport"].includes(res.data.type)) {
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+          .then((response) => {
+            setBookedDates(response.data || []);
+          })
+          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+      }
+    })
+    .catch((err) => console.error("Ошибка загрузки профиля", err));
+
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+    .then((res) => setServices(res.data))
+    .catch((err) => console.error("Ошибка загрузки услуг", err));
+}, []);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
