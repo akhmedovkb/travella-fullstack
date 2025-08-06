@@ -73,7 +73,14 @@ const [bookedDates, setBookedDates] = useState([]);
 const [blockedDates, setBlockedDates] = useState([]);
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
+const CalendarBlocker = ({ t, bookedDates, blockedDates, setBlockedDates, handleSaveBlockedDates }) => {
+  const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 
+  const bookedDateMap = {};
+  bookedDates.forEach((d) => {
+    const key = new Date(d).toDateString();
+    bookedDateMap[key] = "Забронировано клиентом";
+  });
 
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
