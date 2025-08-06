@@ -245,28 +245,29 @@ const getBookedDates = async (req, res) => {
     const providerId = req.user.id;
 
     const result = await pool.query(
-      `SELECT b.date, s.title 
-       FROM blocked_dates b 
-       JOIN services s ON b.service_id = s.id 
+      `SELECT b.date, s.title
+       FROM blocked_dates b
+       JOIN services s ON b.service_id = s.id
        WHERE s.provider_id = $1`,
       [providerId]
     );
 
-    console.log("📦 Результат запроса на занятые даты:", result.rows);
+    console.log("📅 Результат запроса на занятые даты:", result.rows);
 
     const bookedDates = result.rows
-      .filter(row => row.date)
+      .filter((row) => row.date)
       .map((row) => ({
         date: new Date(row.date).toISOString().split("T")[0],
         serviceTitle: row.title,
       }));
 
     res.json(bookedDates);
-  } catch (err) {
-    console.error("❌ Ошибка получения занятых дат:", err.message);
-    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  } catch (error) {
+    console.error("❌ Ошибка при получении занятых дат:", error);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
+
 
 const saveBlockedDates = async (req, res) => {
   try {
