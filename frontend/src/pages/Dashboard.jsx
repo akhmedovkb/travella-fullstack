@@ -2054,45 +2054,38 @@ const getCategoryOptions = (type) => {
     ) : category === "refused_event_ticket" && profile.type === "agent" ? (
       <>
         {/* 🎫 Форма отказного билета на мероприятие */}
-         <input
-      value={title}
-      onChange={(e) => setTitle(e.target.value)}
-      placeholder={t("title")}
-      className="w-full border px-3 py-2 rounded mb-2"
-    />
+         <h3 className="text-xl font-semibold mb-2">{t("new_refused_event_ticket")}</h3>
 
     <input
-      value={details.eventName || ""}
-      onChange={(e) =>
-        setDetails({ ...details, eventName: e.target.value })
-      }
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
       placeholder={t("event_name")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
 
     <Select
       options={[
-        { value: "concert", label: t("event_type.concert") },
-        { value: "exhibition", label: t("event_type.exhibition") },
-        { value: "show", label: t("event_type.show") },
-        { value: "masterclass", label: t("event_type.masterclass") },
-        { value: "football", label: t("event_type.football") },
-        { value: "fight", label: t("event_type.fight") },
+        { value: "concert", label: t("event_category_concert") },
+        { value: "exhibition", label: t("event_category_exhibition") },
+        { value: "show", label: t("event_category_show") },
+        { value: "masterclass", label: t("event_category_masterclass") },
+        { value: "football", label: t("event_category_football") },
+        { value: "fight", label: t("event_category_fight") },
       ]}
       value={
         [
-          { value: "concert", label: t("event_type.concert") },
-          { value: "exhibition", label: t("event_type.exhibition") },
-          { value: "show", label: t("event_type.show") },
-          { value: "masterclass", label: t("event_type.masterclass") },
-          { value: "football", label: t("event_type.football") },
-          { value: "fight", label: t("event_type.fight") },
+          { value: "concert", label: t("event_category_concert") },
+          { value: "exhibition", label: t("event_category_exhibition") },
+          { value: "show", label: t("event_category_show") },
+          { value: "masterclass", label: t("event_category_masterclass") },
+          { value: "football", label: t("event_category_football") },
+          { value: "fight", label: t("event_category_fight") },
         ].find((opt) => opt.value === details.eventCategory)
       }
       onChange={(selected) =>
         setDetails({ ...details, eventCategory: selected.value })
       }
-      placeholder={t("event_category")}
+      placeholder={t("select_event_category")}
       className="mb-2"
     />
 
@@ -2102,7 +2095,7 @@ const getCategoryOptions = (type) => {
       onChange={(e) =>
         setDetails({ ...details, location: e.target.value })
       }
-      placeholder={t("event_location")}
+      placeholder={t("location")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
 
@@ -2112,6 +2105,17 @@ const getCategoryOptions = (type) => {
       onChange={(e) =>
         setDetails({ ...details, startDate: e.target.value })
       }
+      placeholder={t("event_date")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="text"
+      value={details.ticketDetails || ""}
+      onChange={(e) =>
+        setDetails({ ...details, ticketDetails: e.target.value })
+      }
+      placeholder={t("ticket_details")}
       className="w-full border px-3 py-2 rounded mb-2"
     />
 
@@ -2143,6 +2147,7 @@ const getCategoryOptions = (type) => {
       onChange={(e) =>
         setDetails({ ...details, expiration: e.target.value })
       }
+      placeholder={t("expiration_timer")}
       className="w-full border px-3 py-2 rounded mb-4"
     />
 
