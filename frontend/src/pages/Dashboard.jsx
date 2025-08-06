@@ -1298,7 +1298,7 @@ const getCategoryOptions = (type) => {
     </>  
   
   ) : (category === "refused_event_ticket" && profile.type === "agent") ? (
-    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
+    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного билета на мероприятие:
     <>
     <input
       value={title}
@@ -1402,7 +1402,58 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
     </>  
-      ) : (
+      ) : (category === "visa_support"" && profile.type === "agent") ? (
+    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного билета на мероприятие:
+    <>
+        <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
+
+    {/* Выбор страны */}
+    <Select
+      options={countryOptions}
+      value={countryOptions.find((option) => option.value === details.visaCountry)}
+      onChange={(selected) => {
+        setDetails({ ...details, visaCountry: selected?.value });
+      }}
+      placeholder={t("select_country")}
+      noOptionsMessage={() => t("country_not_chosen")}
+      className="mb-2"
+    />
+
+    {/* Описание визовой поддержки */}
+    <textarea
+      value={details.description}
+      onChange={(e) => setDetails({ ...details, description: e.target.value })}
+      placeholder={t("description")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    {/* Цена */}
+    <input
+      type="number"
+      value={details.netPrice}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    {/* Чекбокс актуальности */}
+    <label className="flex items-center space-x-2 mb-2">
+      <input
+        type="checkbox"
+        checked={details.isActive}
+        onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+      />
+      <span>{t("is_active")}</span>
+    </label>
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>                                
+    </>                  
+                     ) : (
     <>
       <input
         value={title}
@@ -2279,39 +2330,53 @@ const getCategoryOptions = (type) => {
     ) : category === "visa_support" && profile.type === "agent" ? (
       <>
         {/* 🛂 Форма визовой поддержки */}
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={t("service_name")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <textarea
-          value={details.description || ""}
-          onChange={(e) => setDetails({ ...details, description: e.target.value })}
-          placeholder={t("enter_description")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <input
-          value={details.netPrice || ""}
-          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-          placeholder={t("net_price")}
-          className="w-full border px-3 py-2 rounded mb-2"
-        />
-        <label className="inline-flex items-center mb-2">
-          <input
-            type="checkbox"
-            checked={details.isActive || false}
-            onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
-            className="mr-2"
-          />
-          {t("is_active")}
-        </label>
-        <button
-          className="w-full bg-orange-500 text-white py-2 rounded font-bold"
-          onClick={handleSaveService}
-        >
-          {t("save_service")}
-        </button>
+        <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
+
+    {/* Выбор страны */}
+    <Select
+      options={countryOptions}
+      value={countryOptions.find((option) => option.value === details.visaCountry)}
+      onChange={(selected) => {
+        setDetails({ ...details, visaCountry: selected?.value });
+      }}
+      placeholder={t("select_country")}
+      noOptionsMessage={() => t("country_not_chosen")}
+      className="mb-2"
+    />
+
+    {/* Описание визовой поддержки */}
+    <textarea
+      value={details.description}
+      onChange={(e) => setDetails({ ...details, description: e.target.value })}
+      placeholder={t("description")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    {/* Цена */}
+    <input
+      type="number"
+      value={details.netPrice}
+      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    {/* Чекбокс актуальности */}
+    <label className="flex items-center space-x-2 mb-2">
+      <input
+        type="checkbox"
+        checked={details.isActive}
+        onChange={(e) => setDetails({ ...details, isActive: e.target.checked })}
+      />
+      <span>{t("is_active")}</span>
+    </label>
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>
       </>
     ) : (
       <>
