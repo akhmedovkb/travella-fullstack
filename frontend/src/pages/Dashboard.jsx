@@ -2497,15 +2497,23 @@ const getCategoryOptions = (type) => {
     </h3>
 
     <DayPicker
-      mode="multiple"
-      selected={blockedDates}
-      onSelect={setBlockedDates}
-      disabled={{ before: new Date() }}
-      modifiersClassNames={{
-        selected: "bg-red-400 text-white",
-      }}
-      className="border rounded p-4"
-    />
+  mode="multiple"
+  selected={blockedDates}
+  onSelect={setBlockedDates}
+  disabled={{
+    before: new Date(),
+    dates: bookedDates.map((dateStr) => new Date(dateStr)),
+  }}
+  modifiers={{
+    booked: bookedDates.map((dateStr) => new Date(dateStr)),
+  }}
+  modifiersClassNames={{
+    selected: "bg-red-400 text-white",   // вручную заблокированные
+    booked: "bg-blue-500 text-white",    // забронированные
+  }}
+  className="border rounded p-4"
+/>
+
 
     <button
       onClick={handleSaveBlockedDates}
