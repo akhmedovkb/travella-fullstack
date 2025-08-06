@@ -182,10 +182,12 @@
   
   "calendar": {
   "blocking_title": "Календарь занятости",
+  "label_blocked_manual": "Заблокировано вручную",
+  "label_booked_by_clients": "Занято по бронированиям",
   "save_blocked_dates": "Сохранить занятые даты",
-  "saved_successfully": "Занятые даты сохранены",
-  "save_error": "Ошибка при сохранении дат"
-              },
+  "dates_saved": "Занятые даты сохранены",
+  "save_error": "Ошибка сохранения дат"
+  },
 
   "marketplace": {
     "title": "Доска объявлений",
@@ -251,6 +253,7 @@
   "country_not_chosen": "Страны не найдены"
 
 }
+
 
 
 
