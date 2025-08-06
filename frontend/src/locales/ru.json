@@ -194,7 +194,7 @@
   "calendar.label_booked_by_clients": "Занято клиентами",
   "calendar.save_blocked_dates": "Сохранить даты",
   "calendar.saved_successfully": "Даты сохранены",
-  "calendar.save_error": "Ошибка при сохранении"
+  "calendar.save_error": "Ошибка при сохранении",
 
 
   "marketplace": {
@@ -261,6 +261,7 @@
   "country_not_chosen": "Страны не найдены"
 
 }
+
 
 
 
