@@ -240,28 +240,39 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// ⬇️ Получение всех занятых дат (бронирования)
+// ⬇️ Получение всех занятых дат (вручную + бронирования)
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
 
-    const result = await pool.query(
+    // 1. Вручную заблокированные даты (без привязки к услуге)
+    const manual = await pool.query(
+      `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
+      [providerId]
+    );
+
+    // 2. Даты с бронированиями по конкретным услугам
+    const booked = await pool.query(
       `SELECT b.date, s.title
        FROM blocked_dates b
        JOIN services s ON b.service_id = s.id
-       WHERE s.provider_id = $1`,
+       WHERE b.provider_id = $1 AND b.service_id IS NOT NULL`,
       [providerId]
     );
-    
-    console.log("📌 providerId", providerId);
-    console.log("📅 Результат запроса на занятые даты:", result.rows);
 
-    const bookedDates = result.rows
-      .filter((row) => row.date)
-      .map((row) => ({
-        date: new Date(row.date).toISOString().split("T")[0],
-        serviceTitle: row.title,
-      }));
+    // 3. Объединяем обе группы
+    const bookedDates = [
+      ...manual.rows.map((r) => ({
+        date: new Date(r.date).toISOString().split("T")[0],
+        serviceTitle: null,
+      })),
+      ...booked.rows.map((r) => ({
+        date: new Date(r.date).toISOString().split("T")[0],
+        serviceTitle: r.title,
+      })),
+    ];
+
+    console.log("📌 Заблокированные даты:", bookedDates);
 
     res.json(bookedDates);
   } catch (error) {
@@ -269,6 +280,7 @@ const getBookedDates = async (req, res) => {
     res.status(500).json({ message: "calendar.load_error" });
   }
 };
+
 
 // ⬇️ Сохранение вручную заблокированных дат
 const saveBlockedDates = async (req, res) => {
