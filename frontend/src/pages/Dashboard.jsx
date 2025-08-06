@@ -1408,8 +1408,16 @@ const getCategoryOptions = (type) => {
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного билета на мероприятие:
     <>
         <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
-
-    {/* Выбор страны */}
+     
+      <input
+    type="text"
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    placeholder={t("title")}
+    className="w-full border px-3 py-2 rounded mb-2"
+      />
+    
+      {/* Выбор страны */}
     <Select
       options={countryOptions}
       value={countryOptions.find((option) => option.value === details.visaCountry)}
@@ -2333,6 +2341,15 @@ const getCategoryOptions = (type) => {
       <>
         {/* 🛂 Форма визовой поддержки */}
         <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
+
+        <input
+    type="text"
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    placeholder={t("title")}
+    className="w-full border px-3 py-2 rounded mb-2"
+      />
+        
 
     {/* Выбор страны */}
     <Select
