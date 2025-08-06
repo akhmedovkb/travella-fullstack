@@ -325,5 +325,6 @@ module.exports = {
   deleteService,
   changeProviderPassword,
   getBookedDates,
+  getBlockedDates,
   saveBlockedDates
 };
