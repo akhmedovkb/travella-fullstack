@@ -1284,7 +1284,112 @@ const getCategoryOptions = (type) => {
     </button>              
     </>  
   
-  ) : (
+  ) : (category === "refused_event_ticket" && profile.type === "agent") ? (
+    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
+    <>
+    <input
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      placeholder={t("event_name")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <Select
+      options={[
+        { value: "concert", label: t("event_category_concert") },
+        { value: "exhibition", label: t("event_category_exhibition") },
+        { value: "show", label: t("event_category_show") },
+        { value: "masterclass", label: t("event_category_masterclass") },
+        { value: "football", label: t("event_category_football") },
+        { value: "fight", label: t("event_category_fight") },
+      ]}
+      value={
+        [
+          { value: "concert", label: t("event_category_concert") },
+          { value: "exhibition", label: t("event_category_exhibition") },
+          { value: "show", label: t("event_category_show") },
+          { value: "masterclass", label: t("event_category_masterclass") },
+          { value: "football", label: t("event_category_football") },
+          { value: "fight", label: t("event_category_fight") },
+        ].find((opt) => opt.value === details.eventCategory)
+      }
+      onChange={(selected) =>
+        setDetails({ ...details, eventCategory: selected.value })
+      }
+      placeholder={t("select_event_category")}
+      className="mb-2"
+    />
+
+    <input
+      type="text"
+      value={details.location || ""}
+      onChange={(e) =>
+        setDetails({ ...details, location: e.target.value })
+      }
+      placeholder={t("location")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="date"
+      value={details.startDate || ""}
+      onChange={(e) =>
+        setDetails({ ...details, startDate: e.target.value })
+      }
+      placeholder={t("event_date")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="text"
+      value={details.ticketDetails || ""}
+      onChange={(e) =>
+        setDetails({ ...details, ticketDetails: e.target.value })
+      }
+      placeholder={t("ticket_details")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <input
+      type="number"
+      value={details.netPrice || ""}
+      onChange={(e) =>
+        setDetails({ ...details, netPrice: e.target.value })
+      }
+      placeholder={t("net_price")}
+      className="w-full border px-3 py-2 rounded mb-2"
+    />
+
+    <label className="inline-flex items-center mb-2">
+      <input
+        type="checkbox"
+        checked={details.isActive || false}
+        onChange={(e) =>
+          setDetails({ ...details, isActive: e.target.checked })
+        }
+        className="mr-2"
+      />
+      {t("is_active")}
+    </label>
+
+    <input
+      type="datetime-local"
+      value={details.expiration || ""}
+      onChange={(e) =>
+        setDetails({ ...details, expiration: e.target.value })
+      }
+      placeholder={t("expiration_timer")}
+      className="w-full border px-3 py-2 rounded mb-4"
+    />
+
+    <button
+      className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+      onClick={handleSaveService}
+    >
+      {t("save_service")}
+    </button>
+    </>  
+      ) : (
     <>
       <input
         value={title}
