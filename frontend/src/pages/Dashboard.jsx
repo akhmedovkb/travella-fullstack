@@ -215,6 +215,12 @@ useEffect(() => {
 
   // 📌 загружаем profile
   useEffect(() => {
+  const token = localStorage.getItem("token");
+  const config = {
+    headers: { Authorization: `Bearer ${token}` },
+  };
+
+  // Загружаем профиль
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
     .then((res) => {
@@ -224,24 +230,26 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
-      // 📌 Загружаем занятые даты только для гида или транспорта
+      // Загружаем занятые даты только для guide и transport
       if (["guide", "transport"].includes(res.data.type)) {
         axios
-         .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
             const formatted = response.data.map((item) => new Date(item.date));
-            setBookedDates(formatted); // 👈 важно!
+            setBookedDates(formatted);
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
       }
     })
     .catch((err) => console.error("Ошибка загрузки профиля", err));
 
+  // Загружаем услуги
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
     .then((res) => setServices(res.data))
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
+
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
