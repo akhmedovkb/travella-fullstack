@@ -252,15 +252,19 @@ const getBookedDates = async (req, res) => {
       [providerId]
     );
 
-    const bookedDates = result.rows.map((row) => ({
-      date: row.date.toISOString().split("T")[0],
-      serviceTitle: row.title,
-    }));
+    console.log("📦 Результат запроса на занятые даты:", result.rows);
+
+    const bookedDates = result.rows
+      .filter(row => row.date)
+      .map((row) => ({
+        date: new Date(row.date).toISOString().split("T")[0],
+        serviceTitle: row.title,
+      }));
 
     res.json(bookedDates);
   } catch (err) {
-    console.error("Ошибка получения занятых дат:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("❌ Ошибка получения занятых дат:", err.message);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 };
 
