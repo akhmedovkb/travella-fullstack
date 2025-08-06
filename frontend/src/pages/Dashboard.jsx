@@ -241,7 +241,7 @@ useEffect(() => {
             const map = {};
             response.data.forEach((item) => {
               const dateKey = new Date(item.date).toDateString();
-              map[dateKey] = item.serviceTitle || "Дата забронирована";
+              map[dateKey] = item.serviceTitle || "Дата забронирована поставщиком";
             });
             setBookedDateMap(map);
           })
