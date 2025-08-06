@@ -2522,34 +2522,32 @@ const getCategoryOptions = (type) => {
     </h3>
 
     <DayPicker
-  mode="multiple"
-  selected={blockedDates}
-  onSelect={setBlockedDates}
-  disabled={{
-    before: new Date(),
-    dates: bookedDates.map((d) => new Date(d.date)),
-  }}
-  modifiers={{
-    booked: bookedDates.map((d) => new Date(d.date)),
-  }}
-  modifiersClassNames={{
-    selected: "bg-red-400 text-white", // вручную заблокированные
-    booked: "bg-blue-500 text-white", // занятые бронированиями
-  }}
-  components={{
-    DayContent: ({ date }) => {
-      const dateKey = date.toDateString();
-      const tooltip = bookedDateMap[dateKey];
-      return (
-        <div title={tooltip || undefined}>
-          {date.getDate()}
-        </div>
-      );
-    },
-  }}
-  className="border rounded p-4"
-/>
-
+      mode="multiple"
+      selected={blockedDates}
+      onSelect={setBlockedDates}
+      disabled={{
+        before: new Date(),
+        dates: [...bookedDates, ...blockedDates],
+      }}
+      modifiers={{
+        booked: bookedDates,
+        blocked: blockedDates,
+      }}
+      modifiersClassNames={{
+        booked: "bg-blue-500 text-white",
+        blocked: "bg-red-400 text-white",
+      }}
+      modifiersStyles={{
+        booked: { cursor: "not-allowed" },
+        blocked: { cursor: "not-allowed" },
+      }}
+      onDayMouseEnter={(day) => {
+        const text = bookedDateMap[day.toDateString()];
+        setHoveredDateLabel(text || "");
+      }}
+      onDayMouseLeave={() => setHoveredDateLabel("")}
+      className="border rounded p-4"
+    />
 
     {/* 🔎 Подписи */}
     <div className="mt-2 text-sm text-gray-600 flex gap-4">
@@ -2562,6 +2560,13 @@ const getCategoryOptions = (type) => {
         <span>{t("calendar.label_booked_by_clients")}</span>
       </div>
     </div>
+
+    {/* 🧠 Tooltip */}
+    {hoveredDateLabel && (
+      <div className="mt-2 text-sm italic text-gray-600">
+        {hoveredDateLabel}
+      </div>
+    )}
 
     {/* 🔘 Кнопка сохранения */}
     <button
