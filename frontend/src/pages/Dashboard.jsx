@@ -2561,24 +2561,33 @@ const getCategoryOptions = (type) => {
     mode="multiple"
     selected={blockedDates}
     onSelect={(date) => {
+  if (!date) return; // 🛑 Защита от null/undefined
+
   const dateStr = date.toISOString().split("T")[0];
 
-  const isBooked = bookedDates.find(d => d.toISOString().split("T")[0] === dateStr);
-  const isBlocked = blockedDates.find(d => d.toISOString().split("T")[0] === dateStr);
+  const isBooked = bookedDates.some(
+    (d) => d.toISOString().split("T")[0] === dateStr
+  );
+  const isBlocked = blockedDates.some(
+    (d) => d.toISOString().split("T")[0] === dateStr
+  );
 
-  // 🟦 Нельзя трогать забронированные клиентами
-  if (isBooked) return;
+  if (isBooked) return; // ⛔ Нельзя трогать даты с бронированиями
 
-  // 🔴 Если дата уже заблокирована — спрашиваем подтверждение
   if (isBlocked) {
     const confirmUnblock = window.confirm("Разблокировать эту дату?");
     if (confirmUnblock) {
-      setBlockedDates(blockedDates.filter(d => d.toISOString().split("T")[0] !== dateStr));
+      setBlockedDates(
+        blockedDates.filter(
+          (d) => d.toISOString().split("T")[0] !== dateStr
+        )
+      );
     }
   } else {
     setBlockedDates([...blockedDates, date]);
   }
 }}
+
 
     disabled={{
       before: new Date(), // запрещаем выбор прошлых дат
