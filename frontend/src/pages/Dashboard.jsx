@@ -62,6 +62,7 @@ const Dashboard = () => {
   netPrice: "",
   expiration: "",
   isActive: true,
+  visaCountry: "",
 });
   
   // 🔹 Фильтрация по активности услуг
