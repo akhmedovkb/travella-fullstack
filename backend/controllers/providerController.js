@@ -300,13 +300,7 @@ const saveBlockedDates = async (req, res) => {
     res.status(500).json({ message: "calendar.save_error" });
   }
 };
-    res.json({ message: "calendar.saved_successfully" });
-  } catch (err) {
-    console.error("Ошибка сохранения дат:", err);
-    res.status(500).json({ message: "calendar.save_error" });
-  }
-};
-
+    
 module.exports = {
   registerProvider,
   loginProvider,
