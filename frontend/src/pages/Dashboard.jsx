@@ -2562,93 +2562,103 @@ const getCategoryOptions = (type) => {
 {/* Перенесённый календарь */}
 {(profile.type === "guide" || profile.type === "transport") && (
   <div className="mt-10 bg-white p-6 rounded shadow border">
-  <h3 className="text-lg font-semibold mb-4 text-orange-600">
-    {t("calendar.blocking_title")}
-  </h3>
+      <h3 className="text-lg font-semibold mb-4 text-orange-600">
+        {t("calendar.blocking_title")}
+      </h3>
 
-  <DayPicker
-    mode="multiple"
-    selected={blockedDates}
-    onSelect={(date) => {
-  if (!date) return; // 🛑 Защита от null/undefined
+      <DayPicker
+        mode="multiple"
+        selected={blockedDates}
+        onSelect={(date) => {
+          if (!date) return;
 
-  const dateStr = date.toISOString().split("T")[0];
+          const dateStr = date.toISOString().split("T")[0];
 
-  const isBooked = bookedDates.some(
-    (d) => d.toISOString().split("T")[0] === dateStr
-  );
-  const isBlocked = blockedDates.some(
-    (d) => d.toISOString().split("T")[0] === dateStr
-  );
+          const isBooked = bookedDates.some(
+            (d) => d.toISOString().split("T")[0] === dateStr
+          );
+          const isBlocked = blockedDates.some(
+            (d) => d.toISOString().split("T")[0] === dateStr
+          );
 
-  if (isBooked) return; // ⛔ Нельзя трогать даты с бронированиями
+          if (isBooked) return;
 
-  if (isBlocked) {
-    const confirmUnblock = window.confirm("Разблокировать эту дату?");
-    if (confirmUnblock) {
-      setBlockedDates(
-        blockedDates.filter(
-          (d) => d.toISOString().split("T")[0] !== dateStr
-        )
-      );
-    }
-  } else {
-    setBlockedDates([...blockedDates, date]);
-  }
-}}
+          if (isBlocked) {
+            confirmAlert({
+              title: t("calendar.confirm_title"),
+              message: t("calendar.confirm_unblock"),
+              buttons: [
+                {
+                  label: t("calendar.confirm_yes"),
+                  onClick: () => {
+                    setBlockedDates(
+                      blockedDates.filter(
+                        (d) => d.toISOString().split("T")[0] !== dateStr
+                      )
+                    );
+                  },
+                },
+                {
+                  label: t("calendar.confirm_no"),
+                  onClick: () => {},
+                },
+              ],
+            });
+          } else {
+            setBlockedDates([...blockedDates, date]);
+          }
+        }}
+        disabled={{
+          before: new Date(),
+          dates: bookedDates,
+        }}
+        modifiers={{
+          booked: bookedDates,
+          blocked: blockedDates,
+        }}
+        modifiersClassNames={{
+          booked: "bg-blue-500 text-white",
+          blocked: "bg-red-400 text-white",
+        }}
+        modifiersStyles={{
+          booked: { cursor: "not-allowed" },
+          blocked: { cursor: "pointer" },
+        }}
+        onDayMouseEnter={(day) => {
+          const text = bookedDateMap[day.toDateString()];
+          setHoveredDateLabel(text || "");
+        }}
+        onDayMouseLeave={() => setHoveredDateLabel("")}
+        className="border rounded p-4"
+      />
 
+      {/* 🔎 Легенда */}
+      <div className="mt-2 text-sm text-gray-600 flex gap-4">
+        <div className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
+          <span>{t("calendar.label_blocked_manual")}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded bg-blue-500 inline-block"></span>
+          <span>{t("calendar.label_booked_by_clients")}</span>
+        </div>
+      </div>
 
-    disabled={{
-      before: new Date(), // запрещаем выбор прошлых дат
-      dates: bookedDates, // клиентские бронирования — некликабельны
-    }}
-    modifiers={{
-      booked: bookedDates,
-      blocked: blockedDates,
-    }}
-    modifiersClassNames={{
-      booked: "bg-blue-500 text-white",
-      blocked: "bg-red-400 text-white",
-    }}
-    modifiersStyles={{
-      booked: { cursor: "not-allowed" },
-      blocked: { cursor: "pointer" },
-    }}
-    onDayMouseEnter={(day) => {
-      const text = bookedDateMap[day.toDateString()];
-      setHoveredDateLabel(text || "");
-    }}
-    onDayMouseLeave={() => setHoveredDateLabel("")}
-    className="border rounded p-4"
-  />
+      {/* 🧠 Tooltip */}
+      {hoveredDateLabel && (
+        <div className="mt-2 text-sm italic text-gray-600">
+          {hoveredDateLabel}
+        </div>
+      )}
 
-  {/* 🔎 Подписи */}
-  <div className="mt-2 text-sm text-gray-600 flex gap-4">
-    <div className="flex items-center gap-1">
-      <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
-      <span>{t("calendar.label_blocked_manual")}</span>
+      {/* 🔘 Сохранение */}
+      <button
+        onClick={handleSaveBlockedDates}
+        className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+      >
+        {t("calendar.save_blocked_dates")}
+      </button>
     </div>
-    <div className="flex items-center gap-1">
-      <span className="w-3 h-3 rounded bg-blue-500 inline-block"></span>
-      <span>{t("calendar.label_booked_by_clients")}</span>
-    </div>
-  </div>
-
-  {/* 🧠 Tooltip */}
-  {hoveredDateLabel && (
-    <div className="mt-2 text-sm italic text-gray-600">
-      {hoveredDateLabel}
-    </div>
-  )}
-
-  {/* 🔘 Кнопка сохранения */}
-  <button
-    onClick={handleSaveBlockedDates}
-    className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-  >
-    {t("calendar.save_blocked_dates")}
-  </button>
-</div>
 )}
 
   
