@@ -241,9 +241,17 @@
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "expiration_timer": "Таймер актуальности",
   "is_active": "Актуально",
-  "save_service": "Сохранить услугу"
+  "save_service": "Сохранить услугу",
+  "new_visa_support": "Визовая поддержка",
+  "select_country": "Выберите страну для визы",
+  "description": "Описание",
+  "net_price": "Цена нетто",
+  "is_active": "Актуально",
+  "save_service": "Сохранить услугу",
+  "country_not_chosen": "Страны не найдены"
 
 }
+
 
 
 
