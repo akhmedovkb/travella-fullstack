@@ -16,8 +16,8 @@ const Dashboard = () => {
   const [newCertificate, setNewCertificate] = useState(null);
   const [newLocation, setNewLocation] = useState("");
   const [newSocial, setNewSocial] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+   [newPhone, setNewPhone] = useState("");
+   [newPassword, setNewPassword] = useState("");
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [messageProfile, setMessageProfile] = useState("");
@@ -288,14 +288,60 @@ useEffect(() => {
 // Тут поведение кнопки Сохранить услугу
 
   const handleSaveService = () => {
-  const requiredFieldsByCategory = {
-    refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
-    author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
-    refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
-    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
-    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
-    visa_support: ["title", "category", "details.description", "details.netPrice"]
-  };
+  
+    const requiredFieldsByCategory = {
+  refused_tour: [
+    "title",
+    "category",
+    "details.directionFrom",
+    "details.directionTo",
+    "details.netPrice"
+  ],
+  author_tour: [
+    "title",
+    "category",
+    "details.directionFrom",
+    "details.directionTo",
+    "details.netPrice"
+  ],
+  refused_hotel: [
+    "title",
+    "category",
+    "details.direction",
+    "details.directionTo",
+    "details.startDate",
+    "details.endDate",
+    "details.netPrice"
+  ],
+  refused_flight: [
+    "title",
+    "category",
+    "details.direction",
+    "details.startDate",
+    "details.netPrice",
+    "details.airline",
+    "details.flightDetails",
+    "details.flightType"
+    // returnDate — отдельно проверяется ниже
+  ],
+  refused_event_ticket: [
+    "title",
+    "category",
+    "details.location",
+    "details.startDate",
+    "details.netPrice",
+    "details.eventName",
+    "details.eventCategory",
+    "details.ticketDetails"
+  ],
+  visa_support: [
+    "title",
+    "category",
+    "details.description",
+    "details.netPrice"
+  ]
+};
+
 
   const isExtendedCategory = category in requiredFieldsByCategory;
   const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
@@ -436,9 +482,7 @@ const resetServiceForm = () => {
   setMessageService("");
 
   if (
-    service.category === "refused_tour" ||
-    service.category === "author_tour" ||
-    service.category === "refused_hotel"
+    ["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket", "visa_support"].includes(service.category)
   ) {
     const d = service.details || {};
     setDetails({
@@ -458,16 +502,29 @@ const resetServiceForm = () => {
       expiration: d.expiration || "",
       isActive: d.isActive ?? true,
 
-      // Только для авиабилета (если планируешь)
+      // Авиабилет
+      flightType: d.flightType || "one_way",
+      airline: d.airline || "",
+      returnDate: d.returnDate || "",
       startFlightDate: d.startFlightDate || "",
       endFlightDate: d.endFlightDate || "",
       flightDetails: d.flightDetails || "",
+      flightDetailsText: d.flightDetailsText || "",
 
-      // Только для отеля
+      // Отель
       accommodationCategory: d.accommodationCategory || "",
       adt: d.adt || "",
       chd: d.chd || "",
-      inf: d.inf || ""
+      inf: d.inf || "",
+
+      // Мероприятие
+      location: d.location || "",
+      eventName: d.eventName || "",
+      eventCategory: d.eventCategory || "",
+      ticketDetails: d.ticketDetails || "",
+
+      // Виза
+      description: d.description || "",
     });
   } else {
     setDescription(service.description || "");
@@ -475,6 +532,7 @@ const resetServiceForm = () => {
     setAvailability(service.availability || []);
   }
 };
+
 
 
 
