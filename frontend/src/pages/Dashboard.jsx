@@ -1402,7 +1402,7 @@ const getCategoryOptions = (type) => {
       {t("save_service")}
     </button>
     </>  
-      ) : (category === "visa_support"" && profile.type === "agent") ? (
+      ) : (category === "visa_support" && profile.type === "agent") ? (
     // 🔶 ВСТАВЬ СЮДА форму редактирования отказного билета на мероприятие:
     <>
         <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
