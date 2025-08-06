@@ -252,7 +252,8 @@ const getBookedDates = async (req, res) => {
        WHERE s.provider_id = $1`,
       [providerId]
     );
-
+    
+    console.log("📌 providerId", providerId);
     console.log("📅 Результат запроса на занятые даты:", result.rows);
 
     const bookedDates = result.rows
