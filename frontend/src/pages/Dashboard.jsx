@@ -66,8 +66,12 @@ const Dashboard = () => {
 });
   
   // 🔹 Календарь услуг
-  const [bookedDates, setBookedDates] = useState([]);
-  const [bookedDateMap, setBookedDateMap] = useState({});
+  
+const [bookedDates, setBookedDates] = useState([]);
+const [blockedDates, setBlockedDates] = useState([]);
+const [bookedDateMap, setBookedDateMap] = useState({});
+const [hoveredDateLabel, setHoveredDateLabel] = useState("");
+
 
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
@@ -232,32 +236,54 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
-      // Загружаем занятые даты только для guide и transport
+      // Только для гида и транспорта — загрузка дат
       if (["guide", "transport"].includes(res.data.type)) {
+        // 🟦 1. Загрузка дат бронирований
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            // 📅 Приводим к дате без времени
             const formatted = response.data.map((item) => {
               const date = new Date(item.date);
               return new Date(date.getFullYear(), date.getMonth(), date.getDate());
             });
             setBookedDates(formatted);
 
-            // 🧠 Создаем карту для tooltip
+            // 🧠 Карта для tooltip
             const map = {};
             response.data.forEach((item) => {
               const dateKey = new Date(item.date).toDateString();
-              map[dateKey] = item.serviceTitle || "Дата заблокирована поставщиком";
+              map[dateKey] = item.serviceTitle || "Дата забронирована";
             });
             setBookedDateMap(map);
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+
+        // 🔴 2. Загрузка вручную заблокированных дат
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
+          .then((response) => {
+            const manual = response.data.map((item) => {
+              const date = new Date(item.date);
+              return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            });
+            setBlockedDates(manual);
+
+            // Добавляем в tooltip
+            setBookedDateMap((prev) => {
+              const updated = { ...prev };
+              response.data.forEach((item) => {
+                const dateKey = new Date(item.date).toDateString();
+                updated[dateKey] = "Дата заблокирована поставщиком";
+              });
+              return updated;
+            });
+          })
+          .catch((err) => console.error("Ошибка загрузки блокировок", err));
       }
     })
     .catch((err) => console.error("Ошибка загрузки профиля", err));
 
-  // Загружаем услуги
+  // Услуги
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
     .then((res) => setServices(res.data))
