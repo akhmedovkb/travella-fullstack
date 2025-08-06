@@ -227,9 +227,10 @@ useEffect(() => {
       // 📌 Загружаем занятые даты только для гида или транспорта
       if (["guide", "transport"].includes(res.data.type)) {
         axios
-          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+         .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            setBookedDates(response.data || []);
+            const formatted = response.data.map((item) => new Date(item.date));
+            setBookedDates(formatted); // 👈 важно!
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
       }
