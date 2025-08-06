@@ -67,7 +67,8 @@ const Dashboard = () => {
   
   // 🔹 Календарь услуг
   const [bookedDates, setBookedDates] = useState([]);
-  
+  const [bookedDateMap, setBookedDateMap] = useState({});
+
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
   !s.details?.expiration || new Date(s.details.expiration) > new Date();
@@ -214,6 +215,7 @@ useEffect(() => {
 }, [selectedCountry]);
 
   // 📌 загружаем profile
+  
   useEffect(() => {
   const token = localStorage.getItem("token");
   const config = {
@@ -237,6 +239,14 @@ useEffect(() => {
           .then((response) => {
             const formatted = response.data.map((item) => new Date(item.date));
             setBookedDates(formatted);
+
+            // ✅ Создаем карту для tooltip'ов
+            const map = {};
+            response.data.forEach((item) => {
+              const dateKey = new Date(item.date).toDateString();
+              map[dateKey] = item.serviceTitle || "Дата заблокирована поставщиком";
+            });
+            setBookedDateMap(map);
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
       }
@@ -249,6 +259,7 @@ useEffect(() => {
     .then((res) => setServices(res.data))
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
+
 
 
   const handlePhotoChange = (e) => {
@@ -2506,22 +2517,34 @@ const getCategoryOptions = (type) => {
     </h3>
 
     <DayPicker
-      mode="multiple"
-      selected={blockedDates}
-      onSelect={setBlockedDates}
-      disabled={{
-        before: new Date(),
-        dates: bookedDates.map((d) => new Date(d.date)),
-      }}
-      modifiers={{
-        booked: bookedDates.map((d) => new Date(d.date)),
-      }}
-      modifiersClassNames={{
-        selected: "bg-red-400 text-white", // вручную заблокированные
-        booked: "bg-blue-500 text-white", // занятые бронированиями
-      }}
-      className="border rounded p-4"
-    />
+  mode="multiple"
+  selected={blockedDates}
+  onSelect={setBlockedDates}
+  disabled={{
+    before: new Date(),
+    dates: bookedDates.map((d) => new Date(d.date)),
+  }}
+  modifiers={{
+    booked: bookedDates.map((d) => new Date(d.date)),
+  }}
+  modifiersClassNames={{
+    selected: "bg-red-400 text-white", // вручную заблокированные
+    booked: "bg-blue-500 text-white", // занятые бронированиями
+  }}
+  components={{
+    DayContent: ({ date }) => {
+      const dateKey = date.toDateString();
+      const tooltip = bookedDateMap[dateKey];
+      return (
+        <div title={tooltip || undefined}>
+          {date.getDate()}
+        </div>
+      );
+    },
+  }}
+  className="border rounded p-4"
+/>
+
 
     {/* 🔎 Подписи */}
     <div className="mt-2 text-sm text-gray-600 flex gap-4">
