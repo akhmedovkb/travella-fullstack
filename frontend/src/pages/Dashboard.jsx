@@ -188,24 +188,7 @@ useEffect(() => {
   fetchCities();
 }, []);
 
-  // 🔍 календарь занятости
-  const handleSaveBlockedDates = async () => {
-  try {
-    await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDates },
-      config
-    );
-    setMessageProfile(t("calendar.dates_saved"));
-  } catch (error) {
-    console.error("Ошибка сохранения дат:", error);
-    setMessageProfile(t("calendar.save_error"));
-  }
-};
-
-  
-
-  
+ 
 useEffect(() => {
   if (!selectedCountry?.code) return;
   const fetchCities = async () => {
