@@ -264,6 +264,33 @@ const getBookedDates = async (req, res) => {
   }
 };
 
+const saveBlockedDates = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const { dates } = req.body;
+
+    if (!Array.isArray(dates)) {
+      return res.status(400).json({ message: "Неверный формат дат" });
+    }
+
+    // Удаляем старые даты
+    await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
+
+    // Вставляем новые даты
+    for (const date of dates) {
+      await pool.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
+        [providerId, date]
+      );
+    }
+
+    res.json({ message: "calendar.saved_successfully" });
+  } catch (err) {
+    console.error("Ошибка сохранения дат:", err);
+    res.status(500).json({ message: "calendar.save_error" });
+  }
+};
+
 module.exports = {
   registerProvider,
   loginProvider,
