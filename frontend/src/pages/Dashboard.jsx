@@ -91,20 +91,22 @@ const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
-  // Обрезаем время
+  // 📌 Обрезаем до YYYY-MM-DD без смещения по времени
+  const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const clickedStr = `${clicked.getFullYear()}-${String(clicked.getMonth() + 1).padStart(2, "0")}-${String(clicked.getDate()).padStart(2, "0")}`;
 
-  // Нельзя трогать занятые клиентами даты
-  if (bookedDates.some((d) => toLocalDate(d).getTime() === clicked.getTime())) return;
+  // 🔒 Забронированные — не трогаем
+  const isBooked = bookedDates.some(
+    (d) => toLocalDate(d).getTime() === clicked.getTime()
+  );
+  if (isBooked) return;
 
-  // Если дата уже была заблокирована на сервере
+  // 🔴 Если дата была заблокирована на сервере — снимаем
   const isServerBlocked = blockedDatesFromServer.some((d) => {
-  const dObj = toLocalDate(d.date || d);
-  const dStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
-  return dStr === clickedStr;
-});
-
+    const dObj = toLocalDate(d.date || d);
+    const dStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
+    return dStr === clickedStr;
+  });
 
   if (isServerBlocked) {
     setDatesToRemove((prev) =>
@@ -115,14 +117,13 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // Если дата уже локально добавлена — убрать
+  // 🟢 Если уже локально добавлена — убираем
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
     setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
-
 
   
   // 🔹 Фильтрация по активности услуг
