@@ -306,7 +306,7 @@ const getBlockedDates = async (req, res) => {
     // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
 
 const unblockDate = async (req, res) => {
-  const providerId = req.provider.id;
+  const providerId = req.user.id;
   const { date } = req.body;
 
   try {
@@ -324,7 +324,7 @@ const unblockDate = async (req, res) => {
    // ⬇️ Разблокировка заблокированных поставщиком в ручную дат(маркировка removeDates)
 const updateBlockedDates = async (req, res) => {
   const { addDates = [], removeDates = [] } = req.body;
-  const providerId = req.provider.id;
+  const providerId = req.user.id;
 
   try {
     // Удаляем
