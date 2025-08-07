@@ -252,6 +252,9 @@ useEffect(() => {
               return new Date(date.getFullYear(), date.getMonth(), date.getDate());
             });
             setBookedDates(formatted);
+            
+            // ⬇️ Проверь что получаем:
+    console.log("📅 bookedDates (из базы):", formatted);
 
             // 🧠 Карта для tooltip
             const map = {};
@@ -273,6 +276,8 @@ useEffect(() => {
             });
             setBlockedDatesFromServer(manual);
             
+            console.log("🚫 blockedDatesFromServer (из базы):", manual);
+
             // Добавляем в tooltip
             setBookedDateMap((prev) => {
               const updated = { ...prev };
