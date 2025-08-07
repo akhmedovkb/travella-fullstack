@@ -119,16 +119,19 @@ const handleDateClick = (date) => {
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
+  // Обрезаем время
   const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const clickedStr = clicked.toISOString().split("T")[0];
 
-  const isBooked = bookedDates.some(
-    (d) => toLocalDate(d).getTime() === clicked.getTime()
-  );
-  if (isBooked) return;
+  // Нельзя трогать занятые клиентами даты
+  if (bookedDates.some((d) => toLocalDate(d).getTime() === clicked.getTime())) return;
 
-  // Был на сервере? Удаляем
-  if (blockedDatesFromServer.some((d) => (d.date || d) === clickedStr)) {
+  // Если дата уже была заблокирована на сервере
+  const isServerBlocked = blockedDatesFromServer.some(
+    (d) => toLocalDate(d.date || d).getTime() === clicked.getTime()
+  );
+
+  if (isServerBlocked) {
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
         ? prev.filter((d) => d !== clickedStr)
@@ -137,13 +140,14 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // Локально добавлен — удалить
+  // Если дата уже локально добавлена — убрать
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
     setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
+
 
 
 
@@ -380,10 +384,14 @@ const handleSaveBlockedDates = () => {
           setBlockedDatesFromServer(formatted);
           console.log("🔄 Обновленные заблокированные даты:", formatted);
         })
-        .catch((err) => console.error("❌ Ошибка загрузки новых дат", err));
+        .catch((err) => {
+          console.error("❌ Ошибка загрузки новых дат", err);
+          setBlockedDatesFromServer([]); // сбрасываем на всякий случай
+        });
     })
     .catch((err) => console.error("❌ Ошибка сохранения дат", err));
 };
+
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
