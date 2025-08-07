@@ -280,6 +280,7 @@ useEffect(() => {
               return new Date(date.getFullYear(), date.getMonth(), date.getDate());
             });
             setBlockedDatesFromServer(manual);
+            setBlockedDatesLocal(manual);
             
             console.log("🚫 blockedDatesFromServer (из базы):", manual);
 
