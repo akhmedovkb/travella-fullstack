@@ -70,7 +70,9 @@ const Dashboard = () => {
   // 🔹 Календарь услуг
   
 const [bookedDates, setBookedDates] = useState([]);
-const [blockedDates, setBlockedDates] = useState([]);
+const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
+const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+const allBlockedDates = [...blockedDatesFromServer, ...blockedDatesLocal];
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 
