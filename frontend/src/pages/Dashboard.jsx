@@ -2562,54 +2562,44 @@ const getCategoryOptions = (type) => {
 
   <DayPicker
   mode="multiple"
-  selected={blockedDates}
-  onDayClick={(date, modifiers) => {
-    const dateStr = date.toISOString().split("T")[0];
+  selected={allBlockedDates}
+  onSelect={(date) => {
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dateStr = dateOnly.toDateString();
 
-    const isBooked = bookedDates.some(
-      (d) => d.toISOString().split("T")[0] === dateStr
-    );
-    const isBlocked = blockedDates.some(
-      (d) => d.toISOString().split("T")[0] === dateStr
-    );
-
-    // 🚫 Нельзя менять забронированные клиентами даты
-    if (isBooked) return;
-
-    if (isBlocked) {
-      const confirmUnblock = window.confirm(t("calendar.confirm_unblock"));
-      if (confirmUnblock) {
-        setBlockedDates((prev) =>
-          prev.filter((d) => d.toISOString().split("T")[0] !== dateStr)
-        );
-      }
-    } else {
-      setBlockedDates((prev) => [...prev, date]);
+    // 🔁 Если уже была заблокирована локально — удалить
+    if (blockedDatesLocal.some(d => d.toDateString() === dateStr)) {
+      setBlockedDatesLocal(prev => prev.filter(d => d.toDateString() !== dateStr));
+    } 
+    // 🔁 Если она из сервера — не трогаем (нужно удалить через бэкенд)
+    else if (!blockedDatesFromServer.some(d => d.toDateString() === dateStr)) {
+      setBlockedDatesLocal(prev => [...prev, dateOnly]);
     }
-  }}
-  disabled={{
-    before: new Date(),
-    dates: bookedDates,
   }}
   modifiers={{
     booked: bookedDates,
-    blocked: blockedDates,
-  }}
-  modifiersClassNames={{
-    booked: "bg-blue-500 text-white",
-    blocked: "bg-red-400 text-white",
   }}
   modifiersStyles={{
-    booked: { cursor: "not-allowed" },
-    blocked: { cursor: "pointer" },
+    booked: { backgroundColor: "#e53e3e", color: "white" },
+    selected: { backgroundColor: "#3182ce", color: "white" },
   }}
-  onDayMouseEnter={(day) => {
-    const text = bookedDateMap[day.toDateString()];
-    setHoveredDateLabel(text || "");
+  onDayMouseEnter={(date) => {
+    const key = date.toDateString();
+    setHoveredDateLabel(bookedDateMap[key] || "");
   }}
   onDayMouseLeave={() => setHoveredDateLabel("")}
-  className="border rounded p-4"
 />
+
+{hoveredDateLabel && (
+  <div className="mt-2 text-sm italic text-gray-600">{hoveredDateLabel}</div>
+)}
+
+<button
+  onClick={handleSaveBlockedDates}
+  className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+>
+  {t("calendar.save_blocked_dates")}
+</button>
 
 
   {/* 🔎 Легенда */}
