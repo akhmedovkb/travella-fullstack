@@ -2629,10 +2629,13 @@ console.log("✅ allBlockedDates", allBlockedDates);
       );
       console.log("🔓 Разблокировано. Новый массив:", updated);
       setBlockedDatesLocal(updated);
-    } else if (!isBlockedFromServer) {
-      const newDate = dateOnly.toISOString().split("T")[0];
-      console.log("🔒 Добавляем в блокировку:", newDate);
-      setBlockedDatesLocal((prev) => [...prev, newDate]);
+    } else {
+       const newDate = dateOnly.toISOString().split("T")[0];
+       console.log("🔒 Добавляем в блокировку:", newDate);
+       setBlockedDatesLocal((prev) => {
+         if (prev.includes(newDate)) return prev;
+          return [...prev, newDate];
+  });
     }
   }}
 />
