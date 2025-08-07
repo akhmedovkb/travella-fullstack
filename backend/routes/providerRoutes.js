@@ -40,5 +40,6 @@ router.delete("/services/:id", authenticateToken, deleteService); // Удали�
 router.get("/booked-dates", authenticateToken, getBookedDates);
 router.post("/blocked-dates", authenticateToken, saveBlockedDates);
 router.get("/blocked-dates", authenticateToken, getBlockedDates);
+router.post("/unblock-date", authenticateToken, unblockDate);
 
 module.exports = router;
