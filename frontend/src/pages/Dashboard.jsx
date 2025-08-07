@@ -71,8 +71,7 @@ const Dashboard = () => {
   // 🔹 Календарь услуг
   
 const [bookedDates, setBookedDates] = useState([]);
-const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
-const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+const [manualBlockedDates, setManualBlockedDates] = useState([]);
 
 const allBlockedDates = useMemo(() => {
   return [...blockedDatesFromServer, ...blockedDatesLocal].map(
@@ -273,28 +272,18 @@ useEffect(() => {
 
         // 🔴 2. Загрузка вручную заблокированных дат
         axios
-          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
-          .then((response) => {
-            const manual = response.data.map((item) => {
-              const date = new Date(item.date);
-              return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            });
-            setBlockedDatesFromServer(manual);
-            setBlockedDatesLocal(manual);
-            
-            console.log("🚫 blockedDatesFromServer (из базы):", manual);
+  .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
+  .then((response) => {
+    const dates = response.data.map((item) => {
+      const d = new Date(item.date);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    });
+    setManualBlockedDates(dates);
 
-            // Добавляем в tooltip
-            setBookedDateMap((prev) => {
-              const updated = { ...prev };
-              response.data.forEach((item) => {
-                const dateKey = new Date(item.date).toDateString();
-                updated[dateKey] = "Дата заблокирована поставщиком";
-              });
-              return updated;
-            });
-          })
-          .catch((err) => console.error("Ошибка загрузки блокировок", err));
+    console.log("🔴 Заблокированные вручную даты:", dates);
+  })
+  .catch((err) => console.error("Ошибка загрузки блокировок", err));
+
       }
     })
     .catch((err) => console.error("Ошибка загрузки профиля", err));
