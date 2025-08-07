@@ -2587,10 +2587,10 @@ console.log("✅ allBlockedDates", allBlockedDates);
     
     <DayPicker
       mode="multiple"
-      selected={allBlockedDates.map((d) => new Date(d))} // ✅ Исправлено!
+      selected={[...new Set(allBlockedDates)].map((d) => new Date(d))} // ✅ Исправлено!
       disabled={bookedDates}
       modifiers={{
-        blocked: allBlockedDates.map((d) => new Date(d)),
+        blocked: [...new Set(allBlockedDates)].map((d) => new Date(d)),
         booked: bookedDates,
       }}
       modifiersClassNames={{
@@ -2624,7 +2624,7 @@ console.log("✅ allBlockedDates", allBlockedDates);
           );
         } else if (!isBlockedFromServer) {
           // 🔒 Блокируем новую
-          setBlockedDatesLocal((prev) => [...prev, dateOnly]);
+          setBlockedDatesLocal((prev) => [...prev, dateOnly.toISOString().split("T")[0]]);
         }
       }}
       onDayMouseEnter={(date) => {
