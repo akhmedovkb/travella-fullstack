@@ -80,22 +80,9 @@ const formattedToRemove = datesToRemove.map((d) => toLocalDate(d));
 const formattedToAdd = datesToAdd.map((d) => toLocalDate(d));
   
 const allBlockedDates = useMemo(() => {
-  const server = blockedDatesFromServer
-    .map((d) => {
-      const str = d.date || d;
-      return toLocalDate(str);
-    })
-    .filter((d) => {
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return !datesToRemove.includes(dStr);
-    });
-
-  const added = datesToAdd.map((d) => toLocalDate(d));
-
-  return [...server, ...added];
+  const server = blockedDatesFromServer.filter((d) => !datesToRemove.includes(d));
+  return [...server, ...datesToAdd].map(toLocalDate);
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
-
-
 
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
@@ -317,10 +304,11 @@ useEffect(() => {
   .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
   .then((response) => {
     const dates = response.data.map((item) => {
-      const d = new Date(item.date);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const d = new Date(item.date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     });
-    setBlockedDatesFromServer(dates);
+         setBlockedDatesFromServer(dates);
+
 
     console.log("🔴 Заблокированные вручную даты:", dates);
   })
