@@ -2602,43 +2602,41 @@ const getCategoryOptions = (type) => {
     booked: "bg-blue-500 text-white",
   }}
   onSelect={(date) => {
-  console.log("⏱️ Выбрана дата:", date);
-  if (!(date instanceof Date) || isNaN(date)) return;
+    console.log("⏱️ Выбрана дата:", date);
+    if (!(date instanceof Date) || isNaN(date)) return;
 
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dateStr = dateOnly.toDateString();
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dateStr = dateOnly.toDateString();
 
-  const isBlockedLocally = blockedDatesLocal.some(
-    (d) => new Date(d).toDateString() === dateStr
-  );
-  const isBlockedFromServer = blockedDatesFromServer.some(
-    (d) => new Date(d.date || d).toDateString() === dateStr
-  );
-  const isBooked = bookedDates.some(
-    (d) => new Date(d).toDateString() === dateStr
-  );
+    const isBlockedLocally = blockedDatesLocal.some(
+      (d) => new Date(d).toDateString() === dateStr
+    );
+    const isBlockedFromServer = blockedDatesFromServer.some(
+      (d) => new Date(d).toDateString() === dateStr
+    );
+    const isBooked = bookedDates.some(
+      (d) => new Date(d).toDateString() === dateStr
+    );
 
-  console.log("🔍 Локально заблокирована?", isBlockedLocally);
-  console.log("🔍 С сервера заблокирована?", isBlockedFromServer);
-  console.log("🔍 Забронирована?", isBooked);
+    console.log("🔍 Локально?", isBlockedLocally);
+    console.log("🔍 С сервера?", isBlockedFromServer);
+    console.log("🔍 Забронирована?", isBooked);
 
-  if (isBooked) return;
+    if (isBooked) return;
 
-  if (isBlockedLocally) {
-  const updated = blockedDatesLocal.filter(
-    (d) => new Date(d).toDateString() !== dateStr
-  );
-  console.log("🔓 Разблокировано. Новый массив:", updated);
-  setBlockedDatesLocal(updated);
-} else {
-  const newDateStr = dateOnly.toISOString().split("T")[0];
-  console.log("🔒 Добавляем в блокировку:", newDateStr);
-  setBlockedDatesLocal((prev) => [...prev, newDateStr]);
-}
-
-}}
+    if (isBlockedLocally) {
+      const updated = blockedDatesLocal.filter(
+        (d) => new Date(d).toDateString() !== dateStr
+      );
+      console.log("🔓 Удаляем:", dateStr);
+      setBlockedDatesLocal(updated);
+    } else {
+      const newDateStr = dateOnly.toISOString().split("T")[0];
+      console.log("🔒 Добавляем:", newDateStr);
+      setBlockedDatesLocal((prev) => [...prev, newDateStr]);
+    }
+  }}
 />
-
 
     {/* 💾 Кнопка сохранения */}
     <button
