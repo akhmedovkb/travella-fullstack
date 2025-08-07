@@ -297,7 +297,7 @@ useEffect(() => {
       const d = new Date(item.date);
       return new Date(d.getFullYear(), d.getMonth(), d.getDate());
     });
-    setManualBlockedDates(dates);
+    setBlockedDatesFromServer(dates);
 
     console.log("🔴 Заблокированные вручную даты:", dates);
   })
