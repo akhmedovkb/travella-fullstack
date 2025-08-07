@@ -92,64 +92,38 @@ const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
+  // 📆 Преобразуем дату в строку YYYY-MM-DD
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  console.log("🖱️ Клик по дате:", clickedStr);
 
+  console.log("📌 Клик по дате:", clickedStr);
+
+  // 🔒 Если дата забронирована — игнорируем
   const isBooked = bookedDates.some(
     (d) => toLocalDate(d).getTime() === date.getTime()
   );
-  if (isBooked) {
-    console.log("🔒 Дата забронирована, игнорируем:", clickedStr);
-    return;
-  }
+  if (isBooked) return;
 
-  const wasServerBlocked = blockedDatesFromServer.some((d) => {
-    const dStr = typeof d === "string" ? d : d.date || "";
-    return dStr === clickedStr;
-  });
-
-  if (wasServerBlocked) {
-    setDatesToRemove((prev) => {
-      const updated = prev.includes(clickedStr)
+  // 🔴 Если дата уже заблокирована сервером — удалим
+  if (blockedDatesFromServer.includes(clickedStr)) {
+    console.log("❌ Удалим из serverBlocked:", clickedStr);
+    setDatesToRemove((prev) =>
+      prev.includes(clickedStr)
         ? prev.filter((d) => d !== clickedStr)
-        : [...prev, clickedStr];
-      console.log("🧹 Обновлён datesToRemove:", updated);
-      return updated;
-    });
+        : [...prev, clickedStr]
+    );
     return;
   }
 
+  // 🟢 Если дата уже в локально добавленных — удалим
   if (datesToAdd.includes(clickedStr)) {
-    setDatesToAdd((prev) => {
-      const updated = prev.filter((d) => d !== clickedStr);
-      console.log("❌ Убрали из datesToAdd:", updated);
-      return updated;
-    });
+    console.log("✂️ Убрали из datesToAdd:", clickedStr);
+    setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
-    setDatesToAdd((prev) => {
-      const updated = [...prev, clickedStr];
-      console.log("➕ Добавили в datesToAdd:", updated);
-      return updated;
-    });
+    console.log("➕ Добавили в datesToAdd:", clickedStr);
+    setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
-  
-  // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) =>
-  !s.details?.expiration || new Date(s.details.expiration) > new Date();
-  
-  // 🔹 Загрузка отелей по запросу
-const loadHotelOptions = async (inputValue) => {
-  try {
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
-    );
-    return res.data;
-  } catch (err) {
-    console.error("Ошибка загрузки отелей:", err);
-    return [];
-  }
-};
+
   
   
 
@@ -2625,23 +2599,26 @@ const getCategoryOptions = (type) => {
 
 <DayPicker
   mode="multiple"
-  selected={allBlockedDates}
-  fromDate={new Date()}
-  onDayClick={handleCalendarClick}
+  selected={[
+    ...blockedDatesLocal,
+    ...blockedDatesFromServer
+  ].map((d) => new Date(d.date || d))}
+
+  disabled={bookedDates.map((d) => new Date(d))}
+
   modifiers={{
-    blocked: allBlockedDates,
-    booked: bookedDates.map(toLocalDate),
+    blocked: [...blockedDatesLocal, ...blockedDatesFromServer].map(
+      (d) => new Date(d.date || d)
+    ),
+    booked: bookedDates.map((d) => new Date(d)),
   }}
+
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
-  disabled={bookedDates
-    .map(toLocalDate)
-    .filter((d) => {
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return !datesToRemove.includes(dStr); // можно снять
-    })}
+
+  onDayClick={handleCalendarClick}
 />
 
 
