@@ -71,7 +71,8 @@ const Dashboard = () => {
   // 🔹 Календарь услуг
   
 const [bookedDates, setBookedDates] = useState([]);
-const [manualBlockedDates, setManualBlockedDates] = useState([]);
+const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
+const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
 
 const allBlockedDates = useMemo(() => {
   return [...blockedDatesFromServer, ...blockedDatesLocal].map(
@@ -319,10 +320,6 @@ const handleSaveBlockedDates = async () => {
     alert(t("calendar.save_error"));
   }
 };
-
-
-
-
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
