@@ -2593,7 +2593,7 @@ const getCategoryOptions = (type) => {
 {hoveredDateLabel && (
   <div className="mt-2 text-sm italic text-gray-600">{hoveredDateLabel}</div>
 )}
-
+{/* 💾 Кнопка сохранения */}
 <button
   onClick={handleSaveBlockedDates}
   className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
@@ -2620,14 +2620,7 @@ const getCategoryOptions = (type) => {
       {hoveredDateLabel}
     </div>
   )}
-
-  {/* 💾 Кнопка сохранения */}
-  <button
-    onClick={handleSaveBlockedDates}
-    className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-  >
-    {t("calendar.save_blocked_dates")}
-  </button>
+    
 </div>
 
 )}
