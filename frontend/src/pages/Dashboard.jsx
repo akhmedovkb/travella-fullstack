@@ -2611,9 +2611,6 @@ const getCategoryOptions = (type) => {
   onDayMouseLeave={() => setHoveredDateLabel("")}
 />
 
-{hoveredDateLabel && (
-  <div className="mt-2 text-sm italic text-gray-600">{hoveredDateLabel}</div>
-)}
 {/* 💾 Кнопка сохранения */}
 <button
   onClick={handleSaveBlockedDates}
