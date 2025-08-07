@@ -2624,15 +2624,17 @@ const getCategoryOptions = (type) => {
   if (isBooked) return;
 
   if (isBlockedLocally) {
-    const updated = blockedDatesLocal.filter(
-      (d) => new Date(d).toDateString() !== dateStr
-    );
-    console.log("🔓 Разблокировано. Новый массив:", updated);
-    setBlockedDatesLocal(updated);
-  } else {
-    console.log("🔒 Добавляем в блокировку:", dateOnly);
-    setBlockedDatesLocal((prev) => [...prev, dateOnly]);
-  }
+  const updated = blockedDatesLocal.filter(
+    (d) => new Date(d).toDateString() !== dateStr
+  );
+  console.log("🔓 Разблокировано. Новый массив:", updated);
+  setBlockedDatesLocal(updated);
+} else {
+  const newDateStr = dateOnly.toISOString().split("T")[0];
+  console.log("🔒 Добавляем в блокировку:", newDateStr);
+  setBlockedDatesLocal((prev) => [...prev, newDateStr]);
+}
+
 }}
 />
 
