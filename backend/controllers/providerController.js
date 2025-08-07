@@ -333,7 +333,24 @@ const saveBlockedDates = async (req, res) => {
     res.status(500).json({ message: "calendar.save_error" });
   }
 };
-    
+    // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
+
+const unblockDate = async (req, res) => {
+  const providerId = req.provider.id;
+  const { date } = req.body;
+
+  try {
+    await pool.query(
+      "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2 AND service_id IS NULL",
+      [providerId, date]
+    );
+    res.json({ message: "Дата разблокирована" });
+  } catch (err) {
+    console.error("Ошибка при разблокировке даты", err);
+    res.status(500).json({ message: "Ошибка при разблокировке даты" });
+  }
+};
+
 module.exports = {
   registerProvider,
   loginProvider,
@@ -346,5 +363,6 @@ module.exports = {
   changeProviderPassword,
   getBookedDates,
   getBlockedDates,
-  saveBlockedDates
+  saveBlockedDates,
+  unblockDate
 };
