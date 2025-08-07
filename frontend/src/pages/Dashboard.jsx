@@ -75,6 +75,17 @@ const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
 const allBlockedDates = [...blockedDatesFromServer, ...blockedDatesLocal];
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
+const handleDateClick = (date) => {
+  const dateStr = date.toISOString().split("T")[0];
+
+  // Если уже добавлена — ничего не делаем
+  if (blockedDatesLocal.includes(dateStr) || blockedDatesFromServer.some(d => {
+    const dStr = new Date(d.date || d).toISOString().split("T")[0];
+    return dStr === dateStr;
+  })) return;
+
+  setBlockedDatesLocal((prev) => [...prev, dateStr]);
+};
 
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
