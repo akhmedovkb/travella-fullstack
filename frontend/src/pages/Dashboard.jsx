@@ -8,6 +8,7 @@ import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Доб�
 import AsyncSelect from "react-select/async";
 import { confirmAlert } from "react-confirm-alert";
 import "react-confirm-alert/src/react-confirm-alert.css";
+import { useMemo } from "react";
 
 const Dashboard = () => {
   const { t } = useTranslation();
