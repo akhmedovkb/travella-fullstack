@@ -79,10 +79,19 @@ const [messageCalendar, setMessageCalendar] = useState("");
   
 const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer
-    .map((d) => d.date || d)
-    .filter((d) => !datesToRemove.includes(d));
-  return [...server, ...datesToAdd].map(toLocalDate);
+    .map((d) => {
+      const local = toLocalDate(d.date || d);
+      const dStr = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
+      return { date: local, str: dStr };
+    })
+    .filter((d) => !datesToRemove.includes(d.str))
+    .map((d) => d.date);
+
+  const localAdded = datesToAdd.map((d) => toLocalDate(d));
+
+  return [...server, ...localAdded];
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
+
 
 
 const [bookedDateMap, setBookedDateMap] = useState({});
