@@ -302,48 +302,6 @@ const getBlockedDates = async (req, res) => {
   }
 };
 
-// ⬇️ Сохранение вручную заблокированных дат
-const saveBlockedDates = async (req, res) => {
-  try {
-    const providerId = req.user.id;
-    const { dates } = req.body;
-
-    if (!Array.isArray(dates)) {
-      return res.status(400).json({ message: "Некорректные даты" });
-    }
-
-    console.log("📥 Получены даты для сохранения:", dates);
-
-    const formattedDates = dates.map((d) => new Date(d).toISOString().split("T")[0]);
-
-    // Загружаем уже существующие блокировки
-    const existing = await pool.query(
-      "SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL",
-      [providerId]
-    );
-    const existingDates = existing.rows.map((r) => r.date.toISOString().split("T")[0]);
-
-    // Фильтруем только новые даты
-    const newDates = formattedDates.filter((d) => !existingDates.includes(d));
-
-    console.log("🆕 Новые даты для добавления:", newDates);
-
-    if (newDates.length > 0) {
-      const insertQuery = `
-        INSERT INTO blocked_dates (provider_id, date)
-        VALUES ${newDates.map((_, i) => `($1, $${i + 2})`).join(", ")}
-      `;
-      const insertParams = [providerId, ...newDates];
-      await pool.query(insertQuery, insertParams);
-    }
-
-    res.json({ message: "calendar.saved_successfully" });
-  } catch (error) {
-    console.error("❌ Ошибка сохранения занятых дат:", error);
-    res.status(500).json({ message: "calendar.save_error" });
-  }
-};
-
 
     // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
 
