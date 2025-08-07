@@ -297,6 +297,7 @@ useEffect(() => {
 }, []);
 
 const handleSaveBlockedDates = async () => {
+  console.log("💾 Сохраняем блокировки:", blockedDatesLocal);
   try {
     const token = localStorage.getItem("token");
 
