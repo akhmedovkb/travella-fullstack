@@ -348,7 +348,7 @@ const handleSaveBlockedDates = () => {
       // Очищаем локальные состояния
       setDatesToAdd([]);
       setDatesToRemove([]);
-      setMessageCalendar("✅ Даты успешно сохранены!");
+      setMessageCalendar(t("calendar.saved"));
       setTimeout(() => setMessageCalendar(""), 3000); // Автоудаление через 3 сек
 
       // Загружаем обновлённые заблокированные даты
