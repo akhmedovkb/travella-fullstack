@@ -73,6 +73,8 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+const [datesToAdd, setDatesToAdd] = useState([]);
+const [datesToRemove, setDatesToRemove] = useState([]);
   
 const toLocalDate = (strOrDate) => {
   if (strOrDate instanceof Date) return strOrDate;
@@ -89,8 +91,12 @@ const toLocalDate = (strOrDate) => {
 
 
 const allBlockedDates = useMemo(() => {
-  return [...blockedDatesFromServer, ...blockedDatesLocal].map(toLocalDate);
-}, [blockedDatesFromServer, blockedDatesLocal]);
+  const server = blockedDatesFromServer
+    .map((d) => d.date || d)
+    .filter((d) => !datesToRemove.includes(d));
+  return [...server, ...datesToAdd].map(toLocalDate);
+}, [blockedDatesFromServer, datesToAdd, datesToRemove]);
+
 
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
@@ -126,30 +132,32 @@ const handleDateClick = (date) => {
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
-  // Создаём "чистую" локальную дату без времени
   const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const clickedTime = clicked.getTime();
+  const clickedStr = clicked.toISOString().split("T")[0];
 
-  const isBlockedLocally = blockedDatesLocal.some(
-    (d) => toLocalDate(d).getTime() === clickedTime
-  );
-  const isBlockedFromServer = blockedDatesFromServer.some(
-    (d) => toLocalDate(d).getTime() === clickedTime
-  );
   const isBooked = bookedDates.some(
-    (d) => toLocalDate(d).getTime() === clickedTime
+    (d) => toLocalDate(d).getTime() === clicked.getTime()
   );
-
   if (isBooked) return;
 
-  if (isBlockedLocally) {
-    setBlockedDatesLocal((prev) =>
-      prev.filter((d) => toLocalDate(d).getTime() !== clickedTime)
+  // Был на сервере? Удаляем
+  if (blockedDatesFromServer.some((d) => (d.date || d) === clickedStr)) {
+    setDatesToRemove((prev) =>
+      prev.includes(clickedStr)
+        ? prev.filter((d) => d !== clickedStr)
+        : [...prev, clickedStr]
     );
+    return;
+  }
+
+  // Локально добавлен — удалить
+  if (datesToAdd.includes(clickedStr)) {
+    setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
-    setBlockedDatesLocal((prev) => [...prev, clicked]);
+    setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
+
 
 
   
@@ -355,30 +363,42 @@ useEffect(() => {
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
 
-const handleSaveBlockedDates = async () => {
-  console.log("💾 Сохраняем блокировки:", blockedDatesLocal);
-  try {
-    const token = localStorage.getItem("token");
+const handleSaveBlockedDates = () => {
+  const token = localStorage.getItem("token");
+  const config = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
 
-    const response = await axios.post(
+  axios
+    .post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDatesLocal },
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+        addDates: datesToAdd,
+        removeDates: datesToRemove,
+      },
+      config
+    )
+    .then(() => {
+      // Очищаем локальные стейты
+      setDatesToAdd([]);
+      setDatesToRemove([]);
 
-    console.log("✅ Заблокированные даты сохранены:", response.data);
-    alert(t("calendar.saved_successfully"));
-    setBlockedDatesFromServer([...blockedDatesFromServer, ...blockedDatesLocal]);
-    setBlockedDatesLocal([]); // очищаем после сохранения
-  } catch (error) {
-    console.error("❌ Ошибка при сохранении:", error);
-    alert(t("calendar.save_error"));
-  }
+      // Обновляем данные с сервера
+      axios
+        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+        .then((res) => {
+          const formatted = res.data.map((item) => ({
+            date: item.date,
+          }));
+          setBlockedDatesFromServer(formatted);
+        })
+        .catch((err) => console.error("Ошибка загрузки новых дат", err));
+    })
+    .catch((err) => console.error("Ошибка сохранения дат", err));
 };
+
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
