@@ -2607,38 +2607,33 @@ const getCategoryOptions = (type) => {
     booked: "bg-blue-500 text-white",
   }}
   onSelect={(date) => {
-    console.log("⏱️ Выбрана дата:", date);
+    console.log("🟠 Клик по дате:", date);
+
     if (!(date instanceof Date) || isNaN(date)) return;
 
     const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const dateStr = dateOnly.toDateString();
+    const dateStr = dateOnly.toISOString().split("T")[0]; // 📅 '2025-08-18'
 
-    const isBlockedLocally = blockedDatesLocal.some(
-      (d) => new Date(d).toDateString() === dateStr
-    );
-    const isBlockedFromServer = blockedDatesFromServer.some(
-      (d) => new Date(d).toDateString() === dateStr
-    );
     const isBooked = bookedDates.some(
-      (d) => new Date(d).toDateString() === dateStr
+      (d) => new Date(d).toDateString() === dateOnly.toDateString()
+    );
+    if (isBooked) return; // Нельзя кликать на забронированные
+
+    const isBlockedLocally = blockedDatesLocal.includes(dateStr);
+    const isBlockedFromServer = blockedDatesFromServer.some(
+      (d) => new Date(d.date || d).toDateString() === dateOnly.toDateString()
     );
 
-    console.log("🔍 Локально?", isBlockedLocally);
-    console.log("🔍 С сервера?", isBlockedFromServer);
-    console.log("🔍 Забронирована?", isBooked);
-
-    if (isBooked) return;
-
+    // 🔁 Если уже заблокирована — снять
     if (isBlockedLocally) {
-      const updated = blockedDatesLocal.filter(
-        (d) => new Date(d).toDateString() !== dateStr
+      setBlockedDatesLocal((prev) =>
+        prev.filter((d) => d !== dateStr)
       );
-      console.log("🔓 Удаляем:", dateStr);
-      setBlockedDatesLocal(updated);
-    } else {
-      const newDateStr = dateOnly.toISOString().split("T")[0];
-      console.log("🔒 Добавляем:", newDateStr);
-      setBlockedDatesLocal((prev) => [...prev, newDateStr]);
+      console.log("🔓 Убрали локальную блокировку:", dateStr);
+    } else if (!isBlockedFromServer) {
+      // ✅ Добавить только если нет в серверных
+      setBlockedDatesLocal((prev) => [...prev, dateStr]);
+      console.log("🔒 Добавили локальную блокировку:", dateStr);
     }
   }}
 />
