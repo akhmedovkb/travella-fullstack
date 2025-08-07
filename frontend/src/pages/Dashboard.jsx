@@ -2626,28 +2626,28 @@ const getCategoryOptions = (type) => {
     
 
 <DayPicker
-  mode="multiple"
-  selected={allBlockedDates}
-  
-  disabled={bookedDates
-  .map(toLocalDate)
-  .filter(
-    (d) => !datesToRemove.includes(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    )
-  )}
-
-  modifiers={{
-    blocked: allBlockedDates,
-    booked: bookedDates.map(toLocalDate),
-  }}
-  modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
-    booked: "bg-blue-500 text-white",
-  }}
-  onDayClick={handleCalendarClick}
-  fromDate={new Date()}
-/>
+      mode="multiple"
+      selected={allBlockedDates}
+      fromDate={new Date()} // ⛔ запрещаем выбор в прошлом
+      onDayClick={handleCalendarClick}
+      modifiers={{
+        blocked: allBlockedDates,
+        booked: bookedDates.map(toLocalDate),
+      }}
+      modifiersClassNames={{
+        blocked: "bg-red-500 text-white",  // 🔴 заблокировано вручную
+        booked: "bg-blue-500 text-white", // 🔵 забронировано клиентами
+      }}
+      disabled={bookedDates
+        .map(toLocalDate)
+        .filter(
+          (d) =>
+            !datesToRemove.includes(
+              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+            )
+        )
+      }
+    />
 
 
     {/* 💾 Кнопка сохранения */}
@@ -2667,9 +2667,9 @@ const getCategoryOptions = (type) => {
 
 
     {/* 🔎 Легенда */}
-    <div className="mt-2 text-sm text-gray-600 flex gap-4">
+    <div className="mt-3 text-sm text-gray-600 flex gap-6 flex-wrap">
       <div className="flex items-center gap-1">
-        <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
+        <span className="w-3 h-3 rounded bg-red-500 inline-block"></span>
         <span>{t("calendar.label_blocked_manual")}</span>
       </div>
       <div className="flex items-center gap-1">
@@ -2678,7 +2678,7 @@ const getCategoryOptions = (type) => {
       </div>
     </div>
 
-    {/* 🧠 Tooltip */}
+    {/* 🧠 Подсказка при наведении */}
     {hoveredDateLabel && (
       <div className="mt-2 text-sm italic text-gray-600">
         {hoveredDateLabel}
