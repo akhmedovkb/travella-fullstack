@@ -42,5 +42,6 @@ router.get("/booked-dates", authenticateToken, getBookedDates);
 router.post("/blocked-dates", authenticateToken, saveBlockedDates);
 router.get("/blocked-dates", authenticateToken, getBlockedDates);
 router.post("/unblock-date", authenticateToken, unblockDate);
+router.post("/blocked-dates", authenticate, updateBlockedDates);
 
 module.exports = router;
