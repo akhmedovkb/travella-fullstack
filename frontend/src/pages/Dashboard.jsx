@@ -2596,10 +2596,14 @@ const getCategoryOptions = (type) => {
 
 <DayPicker
   mode="multiple"
-  selected={allBlockedDates}
+  selected={[...blockedDatesLocal, ...blockedDatesFromServer].map(
+    (d) => new Date(d.date || d)
+  )}
   disabled={bookedDates.map((d) => new Date(d))}
   modifiers={{
-    blocked: allBlockedDates,
+    blocked: [...blockedDatesLocal, ...blockedDatesFromServer].map(
+      (d) => new Date(d.date || d)
+    ),
     booked: bookedDates.map((d) => new Date(d)),
   }}
   modifiersClassNames={{
@@ -2607,33 +2611,34 @@ const getCategoryOptions = (type) => {
     booked: "bg-blue-500 text-white",
   }}
   onSelect={(date) => {
-    console.log("🟠 Клик по дате:", date);
-
     if (!(date instanceof Date) || isNaN(date)) return;
 
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const dateStr = dateOnly.toISOString().split("T")[0]; // 📅 '2025-08-18'
+    const selectedStr = date.toISOString().split("T")[0];
 
     const isBooked = bookedDates.some(
-      (d) => new Date(d).toDateString() === dateOnly.toDateString()
+      (d) => new Date(d).toISOString().split("T")[0] === selectedStr
     );
-    if (isBooked) return; // Нельзя кликать на забронированные
+    if (isBooked) return;
 
-    const isBlockedLocally = blockedDatesLocal.includes(dateStr);
-    const isBlockedFromServer = blockedDatesFromServer.some(
-      (d) => new Date(d.date || d).toDateString() === dateOnly.toDateString()
+    const isLocalBlocked = blockedDatesLocal.includes(selectedStr);
+    const isServerBlocked = blockedDatesFromServer.some(
+      (d) => new Date(d.date || d).toISOString().split("T")[0] === selectedStr
     );
 
-    // 🔁 Если уже заблокирована — снять
-    if (isBlockedLocally) {
+    if (isLocalBlocked) {
       setBlockedDatesLocal((prev) =>
-        prev.filter((d) => d !== dateStr)
+        prev.filter((d) => d !== selectedStr)
       );
-      console.log("🔓 Убрали локальную блокировку:", dateStr);
-    } else if (!isBlockedFromServer) {
-      // ✅ Добавить только если нет в серверных
-      setBlockedDatesLocal((prev) => [...prev, dateStr]);
-      console.log("🔒 Добавили локальную блокировку:", dateStr);
+    } else {
+      setBlockedDatesLocal((prev) => [...prev, selectedStr]);
+    }
+
+    if (isServerBlocked) {
+      setBlockedDatesFromServer((prev) =>
+        prev.filter(
+          (d) => new Date(d.date || d).toISOString().split("T")[0] !== selectedStr
+        )
+      );
     }
   }}
 />
