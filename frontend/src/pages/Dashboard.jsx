@@ -75,6 +75,7 @@ const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [datesToAdd, setDatesToAdd] = useState([]);
 const [datesToRemove, setDatesToRemove] = useState([]);
+const [messageCalendar, setMessageCalendar] = useState("");
   
 const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer
@@ -347,6 +348,8 @@ const handleSaveBlockedDates = () => {
       // Очищаем локальные состояния
       setDatesToAdd([]);
       setDatesToRemove([]);
+      setMessageCalendar("✅ Даты успешно сохранены!");
+      setTimeout(() => setMessageCalendar(""), 3000); // Автоудаление через 3 сек
 
       // Загружаем обновлённые заблокированные даты
       axios
@@ -2640,12 +2643,20 @@ const getCategoryOptions = (type) => {
 
 
     {/* 💾 Кнопка сохранения */}
-    <button
-      onClick={handleSaveBlockedDates}
-      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-    >
-      {t("calendar.save_blocked_dates")}
-    </button>
+<button
+  onClick={handleSaveBlockedDates}
+  className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+>
+  {t("calendar.save_blocked_dates")}
+</button>
+
+{/* ✅ Сообщение после сохранения */}
+{messageCalendar && (
+  <div className="mt-2 text-green-600 font-medium">
+    {messageCalendar}
+  </div>
+)}
+
 
     {/* 🔎 Легенда */}
     <div className="mt-2 text-sm text-gray-600 flex gap-4">
