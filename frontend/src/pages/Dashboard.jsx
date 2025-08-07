@@ -73,6 +73,7 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+  
 const toLocalDate = (strOrDate) => {
   if (strOrDate instanceof Date) return strOrDate;
   if (typeof strOrDate === "string") {
@@ -86,7 +87,6 @@ const toLocalDate = (strOrDate) => {
   return new Date(strOrDate); // fallback
 };
 
-  
 
 const allBlockedDates = useMemo(() => {
   return [...blockedDatesFromServer, ...blockedDatesLocal].map(toLocalDate);
@@ -123,34 +123,34 @@ const handleDateClick = (date) => {
   setBlockedDatesLocal(prev => [...prev, dateStr]);
 };
     // 🔹 тут handleCalendarClick
-const handleCalendarClick = (date) => {
+cconst handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dateStr = dateOnly.toISOString().split("T")[0];
+  // Создаём "чистую" локальную дату без времени
+  const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const clickedTime = clicked.getTime();
 
   const isBlockedLocally = blockedDatesLocal.some(
-    (d) => new Date(d).toISOString().split("T")[0] === dateStr
+    (d) => toLocalDate(d).getTime() === clickedTime
   );
   const isBlockedFromServer = blockedDatesFromServer.some(
-    (d) => new Date(d.date || d).toISOString().split("T")[0] === dateStr
+    (d) => toLocalDate(d).getTime() === clickedTime
   );
   const isBooked = bookedDates.some(
-    (d) => new Date(d).toISOString().split("T")[0] === dateStr
+    (d) => toLocalDate(d).getTime() === clickedTime
   );
 
   if (isBooked) return;
 
   if (isBlockedLocally) {
     setBlockedDatesLocal((prev) =>
-      prev.filter(
-        (d) => new Date(d).toISOString().split("T")[0] !== dateStr
-      )
+      prev.filter((d) => toLocalDate(d).getTime() !== clickedTime)
     );
   } else {
-    setBlockedDatesLocal((prev) => [...prev, dateStr]);
+    setBlockedDatesLocal((prev) => [...prev, clicked]);
   }
 };
+
 
   
   // 🔹 Фильтрация по активности услуг
