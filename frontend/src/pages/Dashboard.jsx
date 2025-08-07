@@ -9,6 +9,7 @@ import AsyncSelect from "react-select/async";
 import { confirmAlert } from "react-confirm-alert";
 import "react-confirm-alert/src/react-confirm-alert.css";
 import { useMemo } from "react";
+import { toLocalDate } from "../utils/dateUtils";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -76,20 +77,6 @@ const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
 const [datesToAdd, setDatesToAdd] = useState([]);
 const [datesToRemove, setDatesToRemove] = useState([]);
   
-const toLocalDate = (strOrDate) => {
-  if (strOrDate instanceof Date) return new Date(strOrDate.getFullYear(), strOrDate.getMonth(), strOrDate.getDate());
-  if (typeof strOrDate === "string") {
-    const [year, month, day] = strOrDate.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }
-  if (typeof strOrDate === "object" && strOrDate.date) {
-    const [year, month, day] = strOrDate.date.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }
-  return new Date(strOrDate);
-};
-
-
 const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer
     .map((d) => d.date || d)
