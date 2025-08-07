@@ -72,9 +72,13 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
-const allBlockedDates = [...blockedDatesFromServer, ...blockedDatesLocal].map(
-  (d) => new Date(d.date || d)
-);
+
+const allBlockedDates = useMemo(() => {
+  return [...blockedDatesFromServer, ...blockedDatesLocal].map(
+    (d) => new Date(d.date || d)
+  );
+}, [blockedDatesFromServer, blockedDatesLocal]);
+
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleDateClick = (date) => {
