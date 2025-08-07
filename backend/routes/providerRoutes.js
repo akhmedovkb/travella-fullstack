@@ -14,7 +14,8 @@ const {
   deleteService,
   getBookedDates,
   getBlockedDates,
-  saveBlockedDates
+  saveBlockedDates,
+  unblockDate
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
