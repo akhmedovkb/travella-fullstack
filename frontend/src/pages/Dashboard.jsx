@@ -73,11 +73,35 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+const toLocalDate = (strOrDate) => {
+  if (strOrDate instanceof Date) return strOrDate;
+  if (typeof strOrDate === "string") {
+    const [year, month, day] = strOrDate.split("-").map(Number);
+    return new Date(year, month - 1, day); // Локальная дата без UTC-сдвига
+  }
+  if (typeof strOrDate === "object" && strOrDate.date) {
+    const [year, month, day] = strOrDate.date.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(strOrDate); // fallback
+};
+
+  
+const toLocalDate = (strOrDate) => {
+  if (strOrDate instanceof Date) return strOrDate;
+  if (typeof strOrDate === "string") {
+    const [year, month, day] = strOrDate.split("-").map(Number);
+    return new Date(year, month - 1, day); // Локальная дата без UTC-сдвига
+  }
+  if (typeof strOrDate === "object" && strOrDate.date) {
+    const [year, month, day] = strOrDate.date.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(strOrDate); // fallback
+};
 
 const allBlockedDates = useMemo(() => {
-  return [...blockedDatesFromServer, ...blockedDatesLocal].map(
-    (d) => new Date(d.date || d)
-  );
+  return [...blockedDatesFromServer, ...blockedDatesLocal].map(toLocalDate);
 }, [blockedDatesFromServer, blockedDatesLocal]);
 
 const [bookedDateMap, setBookedDateMap] = useState({});
@@ -2626,17 +2650,19 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   selected={allBlockedDates}
-  disabled={bookedDates.map((d) => new Date(d))}
+  disabled={bookedDates.map(toLocalDate)}
   modifiers={{
     blocked: allBlockedDates,
-    booked: bookedDates.map((d) => new Date(d)),
+    booked: bookedDates.map(toLocalDate),
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
   onDayClick={handleCalendarClick}
+  fromDate={new Date()}
 />
+
 
     {/* 💾 Кнопка сохранения */}
     <button
