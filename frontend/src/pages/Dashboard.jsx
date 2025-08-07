@@ -87,18 +87,6 @@ const toLocalDate = (strOrDate) => {
 };
 
   
-const toLocalDate = (strOrDate) => {
-  if (strOrDate instanceof Date) return strOrDate;
-  if (typeof strOrDate === "string") {
-    const [year, month, day] = strOrDate.split("-").map(Number);
-    return new Date(year, month - 1, day); // Локальная дата без UTC-сдвига
-  }
-  if (typeof strOrDate === "object" && strOrDate.date) {
-    const [year, month, day] = strOrDate.date.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }
-  return new Date(strOrDate); // fallback
-};
 
 const allBlockedDates = useMemo(() => {
   return [...blockedDatesFromServer, ...blockedDatesLocal].map(toLocalDate);
