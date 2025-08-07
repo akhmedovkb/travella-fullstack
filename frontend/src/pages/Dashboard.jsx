@@ -2583,10 +2583,6 @@ const getCategoryOptions = (type) => {
       {t("calendar.blocking_title")}
     </h3>
     
-console.log("✅ blockedDatesLocal", blockedDatesLocal);
-console.log("✅ blockedDatesFromServer", blockedDatesFromServer);
-console.log("✅ bookedDates", bookedDates);
-console.log("✅ allBlockedDates", allBlockedDates);
 
 <DayPicker
   mode="multiple"
