@@ -288,7 +288,7 @@ const handleSaveBlockedDates = async () => {
 
     const response = await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDatesLocal },
+      { dates: blockedDatesLocal }, // ⬅️ только новые!
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -297,12 +297,15 @@ const handleSaveBlockedDates = async () => {
     );
 
     console.log("✅ Заблокированные даты сохранены:", response.data);
-    alert(t("calendar.saved_successfully")); // или showToast, если используешь
+    alert(t("calendar.saved_successfully"));
+    setBlockedDatesFromServer([...blockedDatesFromServer, ...blockedDatesLocal]);
+    setBlockedDatesLocal([]); // очищаем после сохранения
   } catch (error) {
-    console.error("❌ Ошибка при сохранении заблокированных дат:", error);
+    console.error("❌ Ошибка при сохранении:", error);
     alert(t("calendar.save_error"));
   }
 };
+
 
 
 
@@ -2562,27 +2565,45 @@ const getCategoryOptions = (type) => {
 
   <DayPicker
   mode="multiple"
-  selected={allBlockedDates}
-  onSelect={(date) => {
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const dateStr = dateOnly.toDateString();
-
-    // 🔁 Если уже была заблокирована локально — удалить
-    if (blockedDatesLocal.some(d => d.toDateString() === dateStr)) {
-      setBlockedDatesLocal(prev => prev.filter(d => d.toDateString() !== dateStr));
-    } 
-    // 🔁 Если она из сервера — не трогаем (нужно удалить через бэкенд)
-    else if (!blockedDatesFromServer.some(d => d.toDateString() === dateStr)) {
-      setBlockedDatesLocal(prev => [...prev, dateOnly]);
-    }
-  }}
+ selected={blockedDatesLocal}
+  disabled={bookedDates}
   modifiers={{
+    blocked: allBlockedDates,
     booked: bookedDates,
   }}
-  modifiersStyles={{
-    booked: { backgroundColor: "#e53e3e", color: "white" },
-    selected: { backgroundColor: "#3182ce", color: "white" },
+  modifiersClassNames={{
+    blocked: "bg-red-500 text-white",
+    booked: "bg-blue-500 text-white",
   }}
+  onSelect={(date) => {
+  if (!(date instanceof Date) || isNaN(date)) return;
+
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dateStr = dateOnly.toDateString();
+
+  const isBlockedLocally = blockedDatesLocal.some(
+    (d) => d.toDateString() === dateStr
+  );
+  const isBlockedFromServer = blockedDatesFromServer.some(
+    (d) => d.toDateString() === dateStr
+  );
+  const isBooked = bookedDates.some(
+    (d) => d.toDateString() === dateStr
+  );
+
+  // Если уже забронирована — ничего не делаем
+  if (isBooked) return;
+
+  if (isBlockedLocally) {
+    // 🔓 Разблокируем — удаляем из локального
+    setBlockedDatesLocal((prev) =>
+      prev.filter((d) => d.toDateString() !== dateStr)
+    );
+  } else if (!isBlockedFromServer) {
+    // 🔒 Блокируем новую
+    setBlockedDatesLocal((prev) => [...prev, dateOnly]);
+  }
+}}
   onDayMouseEnter={(date) => {
     const key = date.toDateString();
     setHoveredDateLabel(bookedDateMap[key] || "");
