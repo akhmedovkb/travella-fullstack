@@ -2583,8 +2583,7 @@ console.log("✅ blockedDatesFromServer", blockedDatesFromServer);
 console.log("✅ bookedDates", bookedDates);
 console.log("✅ allBlockedDates", allBlockedDates);
 
-    
-    <DayPicker
+<DayPicker
       mode="multiple"
       selected={[...new Set(allBlockedDates)].map((d) => new Date(d))} // ✅ Исправлено!
       disabled={bookedDates}
@@ -2597,7 +2596,7 @@ console.log("✅ allBlockedDates", allBlockedDates);
         booked: "bg-blue-500 text-white",
       }}
       
-      onSelect={(date) => {
+ onSelect={(date) => {
   console.log("⏱️ Выбрана дата:", date); 
   console.log("✅ До:", blockedDatesLocal);
   if (!(date instanceof Date) || isNaN(date)) return;
@@ -2630,7 +2629,7 @@ console.log("✅ allBlockedDates", allBlockedDates);
     setBlockedDatesLocal(updated);
   } else if (!isBlockedFromServer) {
     // 🔒 Блокируем новую
-    const newDate = dateOnly.toISOString().split("T")[0];
+    const newDate = dateOnly;
     console.log("🔒 Добавляем в блокировку:", newDate);
     setBlockedDatesLocal((prev) => [...prev, newDate]);
   }
