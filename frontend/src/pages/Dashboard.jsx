@@ -318,27 +318,22 @@ useEffect(() => {
       if (["guide", "transport"].includes(res.data.type)) {
         // 🟦 1. Загрузка дат бронирований
         axios
-          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
-          .then((response) => {
-            const formatted = response.data.map((item) => {
-              const date = new Date(item.date);
-              return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            });
-            const formatted = response.data.map((item) => toLocalDate(item.date));
-            setBookedDates(formatted);
-            
-            // ⬇️ Проверь что получаем:
+  .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+  .then((response) => {
+    const formatted = response.data.map((item) => toLocalDate(item.date));
+    setBookedDates(formatted);
+
     console.log("📅 bookedDates (из базы):", formatted);
 
-            // 🧠 Карта для tooltip
-            const map = {};
-            response.data.forEach((item) => {
-              const dateKey = new Date(item.date).toDateString();
-              map[dateKey] = item.serviceTitle || "Дата забронирована поставщиком";
-            });
-            setBookedDateMap(map);
-          })
-          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+    const map = {};
+    response.data.forEach((item) => {
+      const dateKey = toLocalDate(item.date).toDateString();
+      map[dateKey] = item.serviceTitle || "Дата забронирована поставщиком";
+    });
+    setBookedDateMap(map);
+  })
+  .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+
 
         // 🔴 2. Загрузка вручную заблокированных дат
         axios
