@@ -99,9 +99,12 @@ const handleCalendarClick = (date) => {
   if (bookedDates.some((d) => toLocalDate(d).getTime() === clicked.getTime())) return;
 
   // Если дата уже была заблокирована на сервере
-  const isServerBlocked = blockedDatesFromServer.some(
-    (d) => toLocalDate(d.date || d).getTime() === clicked.getTime()
-  );
+  const isServerBlocked = blockedDatesFromServer.some((d) => {
+  const dObj = toLocalDate(d.date || d);
+  const dStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
+  return dStr === clickedStr;
+});
+
 
   if (isServerBlocked) {
     setDatesToRemove((prev) =>
