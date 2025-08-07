@@ -121,8 +121,6 @@ const handleCalendarClick = (date) => {
 };
 
 
-
-
   
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
