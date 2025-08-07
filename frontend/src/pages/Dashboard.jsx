@@ -2574,7 +2574,9 @@ const getCategoryOptions = (type) => {
     <h3 className="text-lg font-semibold mb-4 text-orange-600">
       {t("calendar.blocking_title")}
     </h3>
-
+    
+ console.log(allBlockedDates) 
+    
     <DayPicker
       mode="multiple"
       selected={allBlockedDates.map((d) => new Date(d))} // ✅ Исправлено!
@@ -2588,6 +2590,7 @@ const getCategoryOptions = (type) => {
         booked: "bg-blue-500 text-white",
       }}
       onSelect={(date) => {
+        console.log("⏱️ Клик по дате:", date.toDateString());
         if (!(date instanceof Date) || isNaN(date)) return;
 
         const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
