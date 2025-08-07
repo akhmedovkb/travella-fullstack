@@ -80,10 +80,21 @@ const formattedToRemove = datesToRemove.map((d) => toLocalDate(d));
 const formattedToAdd = datesToAdd.map((d) => toLocalDate(d));
   
 const allBlockedDates = useMemo(() => {
-  const serverDates = blockedDatesFromServer.map((d) => toLocalDate(d.date || d));
-  const localDates = datesToAdd.map((d) => toLocalDate(d));
-  return [...serverDates, ...localDates];
-}, [blockedDatesFromServer, datesToAdd]);
+  const server = blockedDatesFromServer
+    .map((d) => {
+      const str = d.date || d;
+      return toLocalDate(str);
+    })
+    .filter((d) => {
+      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return !datesToRemove.includes(dStr);
+    });
+
+  const added = datesToAdd.map((d) => toLocalDate(d));
+
+  return [...server, ...added];
+}, [blockedDatesFromServer, datesToAdd, datesToRemove]);
+
 
 
 const [bookedDateMap, setBookedDateMap] = useState({});
@@ -93,24 +104,23 @@ const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
-  // 📌 Обрезаем до YYYY-MM-DD без смещения по времени
+  // 📌 Обрезаем до строки YYYY-MM-DD
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
   // 🔒 Забронированные — не трогаем
   const isBooked = bookedDates.some(
-    (d) => toLocalDate(d).getTime() === clicked.getTime()
+    (d) => toLocalDate(d).getTime() === date.getTime()
   );
   if (isBooked) return;
 
-  // 🔴 Если дата была заблокирована на сервере — снимаем
-  const isServerBlocked = blockedDatesFromServer.some((d) => {
-    const dObj = toLocalDate(d.date || d);
-    const dStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, "0")}-${String(dObj.getDate()).padStart(2, "0")}`;
+  // 🔴 Если дата была заблокирована на сервере
+  const wasServerBlocked = blockedDatesFromServer.some((d) => {
+    const dStr = typeof d === "string" ? d : d.date || "";
     return dStr === clickedStr;
   });
 
-  if (isServerBlocked) {
+  if (wasServerBlocked) {
+    // Снять блокировку
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
         ? prev.filter((d) => d !== clickedStr)
@@ -119,13 +129,14 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // 🟢 Если уже локально добавлена — убираем
+  // 🟢 Если уже локально добавлена — убрать
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
     setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
+
 
   
   // 🔹 Фильтрация по активности услуг
