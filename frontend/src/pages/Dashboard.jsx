@@ -85,14 +85,32 @@ const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleDateClick = (date) => {
   const dateStr = date.toISOString().split("T")[0];
 
-  // Если уже добавлена — ничего не делаем
-  if (blockedDatesLocal.includes(dateStr) || blockedDatesFromServer.some(d => {
+  // Если уже в базе или локальном списке — снять блокировку
+  if (blockedDatesLocal.includes(dateStr)) {
+    setBlockedDatesLocal(prev => prev.filter(d => d !== dateStr));
+    return;
+  }
+
+  // Если уже в серверных — убрать (отображается, но можно снять)
+  const serverMatch = blockedDatesFromServer.some(d => {
     const dStr = new Date(d.date || d).toISOString().split("T")[0];
     return dStr === dateStr;
-  })) return;
+  });
 
-  setBlockedDatesLocal((prev) => [...prev, dateStr]);
+  if (serverMatch) {
+    setBlockedDatesFromServer(prev =>
+      prev.filter(d => {
+        const dStr = new Date(d.date || d).toISOString().split("T")[0];
+        return dStr !== dateStr;
+      })
+    );
+    return;
+  }
+
+  // Иначе — добавить в локальные блокировки
+  setBlockedDatesLocal(prev => [...prev, dateStr]);
 };
+
 
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
