@@ -77,16 +77,16 @@ const [datesToAdd, setDatesToAdd] = useState([]);
 const [datesToRemove, setDatesToRemove] = useState([]);
   
 const toLocalDate = (strOrDate) => {
-  if (strOrDate instanceof Date) return strOrDate;
+  if (strOrDate instanceof Date) return new Date(strOrDate.getFullYear(), strOrDate.getMonth(), strOrDate.getDate());
   if (typeof strOrDate === "string") {
     const [year, month, day] = strOrDate.split("-").map(Number);
-    return new Date(year, month - 1, day); // Локальная дата без UTC-сдвига
+    return new Date(year, month - 1, day);
   }
   if (typeof strOrDate === "object" && strOrDate.date) {
     const [year, month, day] = strOrDate.date.split("-").map(Number);
     return new Date(year, month - 1, day);
   }
-  return new Date(strOrDate); // fallback
+  return new Date(strOrDate);
 };
 
 
@@ -94,6 +94,7 @@ const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer
     .map((d) => d.date || d)
     .filter((d) => !datesToRemove.includes(d));
+
   return [...server, ...datesToAdd].map(toLocalDate);
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
 
@@ -323,6 +324,7 @@ useEffect(() => {
               const date = new Date(item.date);
               return new Date(date.getFullYear(), date.getMonth(), date.getDate());
             });
+            const formatted = response.data.map((item) => toLocalDate(item.date));
             setBookedDates(formatted);
             
             // ⬇️ Проверь что получаем:
@@ -363,7 +365,9 @@ useEffect(() => {
     .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
 
-const handleSaveBlockedDates = () => {
+
+  
+const handleSaveBlockedDates = async () => {
   const token = localStorage.getItem("token");
   const config = {
     headers: {
@@ -371,32 +375,34 @@ const handleSaveBlockedDates = () => {
     },
   };
 
-  axios
-    .post(
+  const format = (arr) =>
+    arr.map((date) => new Date(date).toISOString().split("T")[0]);
+
+  try {
+    await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
       {
-        addDates: datesToAdd,
+        addDates: format(datesToAdd),
         removeDates: datesToRemove,
       },
       config
-    )
-    .then(() => {
-      // Очищаем локальные стейты
-      setDatesToAdd([]);
-      setDatesToRemove([]);
+    );
 
-      // Обновляем данные с сервера
-      axios
-        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
-        .then((res) => {
-          const formatted = res.data.map((item) => ({
-            date: item.date,
-          }));
-          setBlockedDatesFromServer(formatted);
-        })
-        .catch((err) => console.error("Ошибка загрузки новых дат", err));
-    })
-    .catch((err) => console.error("Ошибка сохранения дат", err));
+    setDatesToAdd([]);
+    setDatesToRemove([]);
+
+    // Обновляем вручную заблокированные (не booked)
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      config
+    );
+    const dates = res.data.map((item) => toLocalDate(item.date));
+    setBlockedDatesFromServer(dates);
+
+    console.log("✅ Обновлены заблокированные даты:", dates);
+  } catch (err) {
+    console.error("❌ Ошибка сохранения заблокированных дат:", err);
+  }
 };
 
 
@@ -2661,7 +2667,7 @@ const getCategoryOptions = (type) => {
   disabled={bookedDates.map(toLocalDate)}
   modifiers={{
     blocked: allBlockedDates,
-    booked: bookedDates.map(toLocalDate),
+    booked: bookedDates.map(toLocalDate), // ✅ важно!
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
@@ -2670,6 +2676,7 @@ const getCategoryOptions = (type) => {
   onDayClick={handleCalendarClick}
   fromDate={new Date()}
 />
+
 
 
     {/* 💾 Кнопка сохранения */}
