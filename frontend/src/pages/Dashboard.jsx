@@ -76,22 +76,14 @@ const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [datesToAdd, setDatesToAdd] = useState([]);
 const [datesToRemove, setDatesToRemove] = useState([]);
 const [messageCalendar, setMessageCalendar] = useState("");
+const formattedToRemove = datesToRemove.map((d) => toLocalDate(d));
+const formattedToAdd = datesToAdd.map((d) => toLocalDate(d));
   
 const allBlockedDates = useMemo(() => {
-  const server = blockedDatesFromServer
-    .map((d) => {
-      const local = toLocalDate(d.date || d);
-      const dStr = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
-      return { date: local, str: dStr };
-    })
-    .filter((d) => !datesToRemove.includes(d.str))
-    .map((d) => d.date);
-
-  const localAdded = datesToAdd.map((d) => toLocalDate(d));
-
-  return [...server, ...localAdded];
-}, [blockedDatesFromServer, datesToAdd, datesToRemove]);
-
+  const serverDates = blockedDatesFromServer.map((d) => toLocalDate(d.date || d));
+  const localDates = datesToAdd.map((d) => toLocalDate(d));
+  return [...serverDates, ...localDates];
+}, [blockedDatesFromServer, datesToAdd]);
 
 
 const [bookedDateMap, setBookedDateMap] = useState({});
@@ -2640,20 +2632,29 @@ const getCategoryOptions = (type) => {
   fromDate={new Date()}
   onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: allBlockedDates,
+    blockedFromServer: blockedDatesFromServer
+      .map((d) => toLocalDate(d.date || d))
+      .filter((d) =>
+        !datesToRemove.some((r) => toLocalDate(r).getTime() === d.getTime())
+      ),
+    removedFromServer: formattedToRemove,
+    addedLocally: formattedToAdd,
     booked: bookedDates.map(toLocalDate),
   }}
   modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
+    blockedFromServer: "bg-red-500 text-white",
+    removedFromServer: "bg-gray-400 text-white",
+    addedLocally: "bg-orange-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
   disabled={bookedDates
     .map(toLocalDate)
     .filter((d) => {
       const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return !datesToRemove.includes(dStr); // ⛔ Только если не стоит на удаление
+      return !datesToRemove.includes(dStr); // ⛔ Только если не помечена на удаление
     })}
 />
+
 
 
     {/* 💾 Кнопка сохранения */}
