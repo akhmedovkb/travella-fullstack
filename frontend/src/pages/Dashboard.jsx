@@ -73,7 +73,6 @@ const Dashboard = () => {
   
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
-const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
 const [datesToAdd, setDatesToAdd] = useState([]);
 const [datesToRemove, setDatesToRemove] = useState([]);
   
@@ -2649,13 +2648,12 @@ const getCategoryOptions = (type) => {
     
 
 <DayPicker
-  onDayMouseDown={(e) => e.preventDefault()}
   mode="multiple"
   selected={allBlockedDates}
   disabled={bookedDates.map(toLocalDate)}
   modifiers={{
     blocked: allBlockedDates,
-    booked: bookedDates.map(toLocalDate), // ✅ важно!
+    booked: bookedDates.map(toLocalDate),
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
@@ -2664,7 +2662,6 @@ const getCategoryOptions = (type) => {
   onDayClick={handleCalendarClick}
   fromDate={new Date()}
 />
-
 
 
     {/* 💾 Кнопка сохранения */}
