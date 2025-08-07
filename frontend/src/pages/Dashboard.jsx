@@ -72,7 +72,10 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
-const allBlockedDates = [...blockedDatesFromServer, ...blockedDatesLocal];
+const allBlockedDates = [
+  ...blockedDatesFromServer.map(d => new Date(d.date || d)),
+  ...blockedDatesLocal.map(d => new Date(d))
+];
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleDateClick = (date) => {
@@ -2575,7 +2578,11 @@ const getCategoryOptions = (type) => {
       {t("calendar.blocking_title")}
     </h3>
     
- console.log(allBlockedDates) 
+console.log("✅ blockedDatesLocal", blockedDatesLocal);
+console.log("✅ blockedDatesFromServer", blockedDatesFromServer);
+console.log("✅ bookedDates", bookedDates);
+console.log("✅ allBlockedDates", allBlockedDates);
+
     
     <DayPicker
       mode="multiple"
@@ -2590,7 +2597,7 @@ const getCategoryOptions = (type) => {
         booked: "bg-blue-500 text-white",
       }}
       onSelect={(date) => {
-        console.log("⏱️ Клик по дате:", date.toDateString());
+        console.log("⏱️ Выбрана дата:", date); 
         if (!(date instanceof Date) || isNaN(date)) return;
 
         const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
