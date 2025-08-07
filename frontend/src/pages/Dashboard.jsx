@@ -2585,16 +2585,16 @@ console.log("✅ allBlockedDates", allBlockedDates);
 
 <DayPicker
       mode="multiple"
-      selected={[...new Set(allBlockedDates)].map((d) => new Date(d))} // ✅ Исправлено!
-      disabled={bookedDates}
-      modifiers={{
-        blocked: [...new Set(allBlockedDates)].map((d) => new Date(d)),
-        booked: bookedDates,
-      }}
-      modifiersClassNames={{
-        blocked: "bg-red-500 text-white",
-        booked: "bg-blue-500 text-white",
-      }}
+      selected={[...new Set(allBlockedDates)].map((d) => new Date(d))}
+  disabled={bookedDates.map((d) => new Date(d))} // ⬅️ Исправлено!
+  modifiers={{
+    blocked: [...new Set(allBlockedDates)].map((d) => new Date(d)),
+    booked: bookedDates.map((d) => new Date(d)), // ⬅️ Исправлено!
+  }}
+  modifiersClassNames={{
+    blocked: "bg-red-500 text-white",
+    booked: "bg-blue-500 text-white",
+  }}
       
  onSelect={(date) => {
   console.log("⏱️ Выбрана дата:", date); 
