@@ -94,7 +94,6 @@ const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer
     .map((d) => d.date || d)
     .filter((d) => !datesToRemove.includes(d));
-
   return [...server, ...datesToAdd].map(toLocalDate);
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
 
@@ -362,7 +361,7 @@ useEffect(() => {
 
 
   
-const handleSaveBlockedDates = async () => {
+const handleSaveBlockedDates = () => {
   const token = localStorage.getItem("token");
   const config = {
     headers: {
@@ -370,36 +369,34 @@ const handleSaveBlockedDates = async () => {
     },
   };
 
-  const format = (arr) =>
-    arr.map((date) => new Date(date).toISOString().split("T")[0]);
-
-  try {
-    await axios.post(
+  axios
+    .post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
       {
-        addDates: format(datesToAdd),
+        addDates: datesToAdd,
         removeDates: datesToRemove,
       },
       config
-    );
+    )
+    .then(() => {
+      // Очищаем локальные состояния
+      setDatesToAdd([]);
+      setDatesToRemove([]);
 
-    setDatesToAdd([]);
-    setDatesToRemove([]);
-
-    // Обновляем вручную заблокированные (не booked)
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      config
-    );
-    const dates = res.data.map((item) => toLocalDate(item.date));
-    setBlockedDatesFromServer(dates);
-
-    console.log("✅ Обновлены заблокированные даты:", dates);
-  } catch (err) {
-    console.error("❌ Ошибка сохранения заблокированных дат:", err);
-  }
+      // Загружаем обновлённые заблокированные даты
+      axios
+        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
+        .then((res) => {
+          const formatted = res.data.map((item) =>
+            toLocalDate(item.date || item)
+          );
+          setBlockedDatesFromServer(formatted);
+          console.log("🔄 Обновленные заблокированные даты:", formatted);
+        })
+        .catch((err) => console.error("❌ Ошибка загрузки новых дат", err));
+    })
+    .catch((err) => console.error("❌ Ошибка сохранения дат", err));
 };
-
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -2657,6 +2654,7 @@ const getCategoryOptions = (type) => {
     
 
 <DayPicker
+  onDayMouseDown={(e) => e.preventDefault()}
   mode="multiple"
   selected={allBlockedDates}
   disabled={bookedDates.map(toLocalDate)}
