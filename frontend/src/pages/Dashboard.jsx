@@ -72,10 +72,9 @@ const Dashboard = () => {
 const [bookedDates, setBookedDates] = useState([]);
 const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
 const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
-const allBlockedDates = [
-  ...blockedDatesFromServer.map(d => new Date(d.date || d)),
-  ...blockedDatesLocal.map(d => new Date(d))
-];
+const allBlockedDates = [...blockedDatesFromServer, ...blockedDatesLocal].map(
+  (d) => new Date(d.date || d)
+);
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
 const handleDateClick = (date) => {
@@ -303,7 +302,7 @@ const handleSaveBlockedDates = async () => {
 
     const response = await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDatesLocal }, // ⬅️ только новые!
+      { dates: blockedDatesLocal },
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -320,6 +319,7 @@ const handleSaveBlockedDates = async () => {
     alert(t("calendar.save_error"));
   }
 };
+
 
 
 
@@ -2584,63 +2584,54 @@ console.log("✅ bookedDates", bookedDates);
 console.log("✅ allBlockedDates", allBlockedDates);
 
 <DayPicker
-      mode="multiple"
-      selected={[...new Set(allBlockedDates)].map((d) => new Date(d))}
-  disabled={bookedDates.map((d) => new Date(d))} // ⬅️ Исправлено!
+  mode="multiple"
+  selected={allBlockedDates}
+  disabled={bookedDates.map((d) => new Date(d))}
   modifiers={{
-    blocked: [...new Set(allBlockedDates)].map((d) => new Date(d)),
-    booked: bookedDates.map((d) => new Date(d)), // ⬅️ Исправлено!
+    blocked: allBlockedDates,
+    booked: bookedDates.map((d) => new Date(d)),
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
-      
- onSelect={(date) => {
-  console.log("⏱️ Выбрана дата:", date); 
-  console.log("✅ До:", blockedDatesLocal);
-  if (!(date instanceof Date) || isNaN(date)) return;
+  onSelect={(date) => {
+    console.log("⏱️ Выбрана дата:", date);
+    if (!(date instanceof Date) || isNaN(date)) return;
 
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dateStr = dateOnly.toDateString();
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dateStr = dateOnly.toDateString();
 
-  const isBlockedLocally = blockedDatesLocal.some(
-    (d) => new Date(d).toDateString() === dateStr
-  );
-  const isBlockedFromServer = blockedDatesFromServer.some(
-    (d) => new Date(d.date || d).toDateString() === dateStr
-  );
-  const isBooked = bookedDates.some(
-    (d) => new Date(d).toDateString() === dateStr
-  );
-
-  console.log("🔍 Локально заблокирована?", isBlockedLocally);
-  console.log("🔍 С сервера заблокирована?", isBlockedFromServer);
-  console.log("🔍 Забронирована?", isBooked);
-
-  if (isBooked) return;
-
-  if (isBlockedLocally) {
-    // 🔓 Разблокируем — удаляем из локального
-    const updated = blockedDatesLocal.filter(
-      (d) => new Date(d).toDateString() !== dateStr
+    const isBlockedLocally = blockedDatesLocal.some(
+      (d) => new Date(d).toDateString() === dateStr
     );
-    console.log("🔓 Разблокировано. Новый массив:", updated);
-    setBlockedDatesLocal(updated);
-  } else if (!isBlockedFromServer) {
-    // 🔒 Блокируем новую
-    const newDate = dateOnly;
-    console.log("🔒 Добавляем в блокировку:", newDate);
-    setBlockedDatesLocal((prev) => [...prev, newDate]);
-  }
-}}
+    const isBlockedFromServer = blockedDatesFromServer.some(
+      (d) => new Date(d.date || d).toDateString() === dateStr
+    );
+    const isBooked = bookedDates.some(
+      (d) => new Date(d).toDateString() === dateStr
+    );
 
-      onDayMouseEnter={(date) => {
-        const key = date.toDateString();
-        setHoveredDateLabel(bookedDateMap[key] || "");
-      }}
-      onDayMouseLeave={() => setHoveredDateLabel("")}
-    />
+    console.log("🔍 Локально заблокирована?", isBlockedLocally);
+    console.log("🔍 С сервера заблокирована?", isBlockedFromServer);
+    console.log("🔍 Забронирована?", isBooked);
+
+    if (isBooked) return;
+
+    if (isBlockedLocally) {
+      const updated = blockedDatesLocal.filter(
+        (d) => new Date(d).toDateString() !== dateStr
+      );
+      console.log("🔓 Разблокировано. Новый массив:", updated);
+      setBlockedDatesLocal(updated);
+    } else if (!isBlockedFromServer) {
+      const newDate = dateOnly.toISOString().split("T")[0];
+      console.log("🔒 Добавляем в блокировку:", newDate);
+      setBlockedDatesLocal((prev) => [...prev, newDate]);
+    }
+  }}
+/>
+
 
     {/* 💾 Кнопка сохранения */}
     <button
