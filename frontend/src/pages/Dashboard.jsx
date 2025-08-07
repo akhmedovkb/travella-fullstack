@@ -123,7 +123,7 @@ const handleDateClick = (date) => {
   setBlockedDatesLocal(prev => [...prev, dateStr]);
 };
     // 🔹 тут handleCalendarClick
-cconst handleCalendarClick = (date) => {
+const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
   // Создаём "чистую" локальную дату без времени
