@@ -110,8 +110,37 @@ const handleDateClick = (date) => {
   // Иначе — добавить в локальные блокировки
   setBlockedDatesLocal(prev => [...prev, dateStr]);
 };
+    // 🔹 тут handleCalendarClick
+const handleCalendarClick = (date) => {
+  if (!(date instanceof Date) || isNaN(date)) return;
 
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dateStr = dateOnly.toISOString().split("T")[0];
 
+  const isBlockedLocally = blockedDatesLocal.some(
+    (d) => new Date(d).toISOString().split("T")[0] === dateStr
+  );
+  const isBlockedFromServer = blockedDatesFromServer.some(
+    (d) => new Date(d.date || d).toISOString().split("T")[0] === dateStr
+  );
+  const isBooked = bookedDates.some(
+    (d) => new Date(d).toISOString().split("T")[0] === dateStr
+  );
+
+  if (isBooked) return;
+
+  if (isBlockedLocally) {
+    setBlockedDatesLocal((prev) =>
+      prev.filter(
+        (d) => new Date(d).toISOString().split("T")[0] !== dateStr
+      )
+    );
+  } else {
+    setBlockedDatesLocal((prev) => [...prev, dateStr]);
+  }
+};
+
+  
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
   !s.details?.expiration || new Date(s.details.expiration) > new Date();
@@ -2596,51 +2625,17 @@ const getCategoryOptions = (type) => {
 
 <DayPicker
   mode="multiple"
-  selected={[...blockedDatesLocal, ...blockedDatesFromServer].map(
-    (d) => new Date(d.date || d)
-  )}
+  selected={allBlockedDates}
   disabled={bookedDates.map((d) => new Date(d))}
   modifiers={{
-    blocked: [...blockedDatesLocal, ...blockedDatesFromServer].map(
-      (d) => new Date(d.date || d)
-    ),
+    blocked: allBlockedDates,
     booked: bookedDates.map((d) => new Date(d)),
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
-  onSelect={(date) => {
-    if (!(date instanceof Date) || isNaN(date)) return;
-
-    const selectedStr = date.toISOString().split("T")[0];
-
-    const isBooked = bookedDates.some(
-      (d) => new Date(d).toISOString().split("T")[0] === selectedStr
-    );
-    if (isBooked) return;
-
-    const isLocalBlocked = blockedDatesLocal.includes(selectedStr);
-    const isServerBlocked = blockedDatesFromServer.some(
-      (d) => new Date(d.date || d).toISOString().split("T")[0] === selectedStr
-    );
-
-    if (isLocalBlocked) {
-      setBlockedDatesLocal((prev) =>
-        prev.filter((d) => d !== selectedStr)
-      );
-    } else {
-      setBlockedDatesLocal((prev) => [...prev, selectedStr]);
-    }
-
-    if (isServerBlocked) {
-      setBlockedDatesFromServer((prev) =>
-        prev.filter(
-          (d) => new Date(d.date || d).toISOString().split("T")[0] !== selectedStr
-        )
-      );
-    }
-  }}
+  onDayClick={handleCalendarClick}
 />
 
     {/* 💾 Кнопка сохранения */}
@@ -2671,9 +2666,7 @@ const getCategoryOptions = (type) => {
     )}
   </div>
 )}
-
-
-  
+ 
 </div>
 </div>
  
