@@ -258,8 +258,8 @@ useEffect(() => {
               const date = new Date(item.date);
               return new Date(date.getFullYear(), date.getMonth(), date.getDate());
             });
-            setBlockedDates(manual);
-
+            setBlockedDatesFromServer(manual);
+            
             // Добавляем в tooltip
             setBookedDateMap((prev) => {
               const updated = { ...prev };
@@ -288,7 +288,7 @@ const handleSaveBlockedDates = async () => {
 
     const response = await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDates },
+      { dates: blockedDatesLocal },
       {
         headers: {
           Authorization: `Bearer ${token}`,
