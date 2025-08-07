@@ -404,6 +404,6 @@ module.exports = {
   changeProviderPassword,
   getBookedDates,
   getBlockedDates,
-  saveBlockedDates,
+  updateBlockedDates,
   unblockDate
 };
