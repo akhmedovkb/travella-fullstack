@@ -2626,28 +2626,25 @@ const getCategoryOptions = (type) => {
     
 
 <DayPicker
-      mode="multiple"
-      selected={allBlockedDates}
-      fromDate={new Date()} // ⛔ запрещаем выбор в прошлом
-      onDayClick={handleCalendarClick}
-      modifiers={{
-        blocked: allBlockedDates,
-        booked: bookedDates.map(toLocalDate),
-      }}
-      modifiersClassNames={{
-        blocked: "bg-red-500 text-white",  // 🔴 заблокировано вручную
-        booked: "bg-blue-500 text-white", // 🔵 забронировано клиентами
-      }}
-      disabled={bookedDates
-        .map(toLocalDate)
-        .filter(
-          (d) =>
-            !datesToRemove.includes(
-              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-            )
-        )
-      }
-    />
+  mode="multiple"
+  selected={allBlockedDates}
+  fromDate={new Date()}
+  onDayClick={handleCalendarClick}
+  modifiers={{
+    blocked: allBlockedDates,
+    booked: bookedDates.map(toLocalDate),
+  }}
+  modifiersClassNames={{
+    blocked: "bg-red-500 text-white",
+    booked: "bg-blue-500 text-white",
+  }}
+  disabled={bookedDates
+    .map(toLocalDate)
+    .filter((d) => {
+      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return !datesToRemove.includes(dStr); // ⛔ Только если не стоит на удаление
+    })}
+/>
 
 
     {/* 💾 Кнопка сохранения */}
