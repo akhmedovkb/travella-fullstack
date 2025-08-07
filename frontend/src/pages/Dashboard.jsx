@@ -79,14 +79,9 @@ const [messageCalendar, setMessageCalendar] = useState("");
 const formattedToRemove = datesToRemove.map((d) => toLocalDate(d));
 const formattedToAdd = datesToAdd.map((d) => toLocalDate(d));
   
-cconst allBlockedDates = useMemo(() => {
-  const server = blockedDatesFromServer.filter(
-    (d) => !datesToRemove.includes(d)
-  );
-  return [...server, ...datesToAdd].map((d) => {
-    const parts = d.split("-");
-    return new Date(parts[0], parts[1] - 1, parts[2]);
-  });
+const allBlockedDates = useMemo(() => {
+  const server = blockedDatesFromServer.filter((d) => !datesToRemove.includes(d));
+  return [...server, ...datesToAdd].map(toLocalDate);
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
 
 
