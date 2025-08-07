@@ -93,7 +93,7 @@ const handleCalendarClick = (date) => {
 
   // Обрезаем время
   const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const clickedStr = clicked.toISOString().split("T")[0];
+  const clickedStr = `${clicked.getFullYear()}-${String(clicked.getMonth() + 1).padStart(2, "0")}-${String(clicked.getDate()).padStart(2, "0")}`;
 
   // Нельзя трогать занятые клиентами даты
   if (bookedDates.some((d) => toLocalDate(d).getTime() === clicked.getTime())) return;
