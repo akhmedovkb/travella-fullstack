@@ -314,18 +314,20 @@ const saveBlockedDates = async (req, res) => {
 
     console.log("📥 Получены даты для сохранения:", dates);
 
-    // Удаляем старые записи
-    await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
+    // Удаляем ТОЛЬКО вручную заблокированные даты (service_id IS NULL)
+    await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL", [providerId]);
 
-    // Добавляем новые
-    const insertPromises = dates.map((date) => {
-      return pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
-        [providerId, date]
+    // Преобразуем к формату YYYY-MM-DD
+    const formattedDates = dates.map((d) => new Date(d).toISOString().split("T")[0]);
+
+    // Вставляем новые
+    const insertValues = formattedDates.map((d) => `('${providerId}', '${d}')`).join(",");
+
+    if (insertValues.length > 0) {
+      await pool.query(
+        `INSERT INTO blocked_dates (provider_id, date) VALUES ${insertValues}`
       );
-    });
-
-    await Promise.all(insertPromises);
+    }
 
     res.json({ message: "calendar.saved_successfully" });
   } catch (error) {
@@ -333,6 +335,7 @@ const saveBlockedDates = async (req, res) => {
     res.status(500).json({ message: "calendar.save_error" });
   }
 };
+
     // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
 
 const unblockDate = async (req, res) => {
