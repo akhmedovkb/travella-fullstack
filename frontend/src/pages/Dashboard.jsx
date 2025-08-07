@@ -276,7 +276,6 @@ useEffect(() => {
     headers: { Authorization: `Bearer ${token}` },
   };
 
-  // Загрузка профиля
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
     .then((res) => {
@@ -286,54 +285,41 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
-      // Только для guide / transport
       if (["guide", "transport"].includes(res.data.type)) {
-        // 🟦 1. Забронированные даты
+        // 📅 bookedDates
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => {
-              const d = new Date(item.date);
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            });
+            const formatted = response.data.map((item) => toLocalDate(item.date));
             setBookedDates(formatted);
-
-            // Карта для подписей (если используешь)
             const map = {};
             response.data.forEach((item) => {
-              const key = new Date(item.date).toDateString();
-              map[key] = item.serviceTitle || "Дата забронирована клиентом";
+              const dateKey = toLocalDate(item.date).toDateString();
+              map[dateKey] = item.serviceTitle || "Дата забронирована";
             });
             setBookedDateMap(map);
           })
-          .catch((err) => console.error("❌ Ошибка загрузки бронирований", err));
+          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
 
-        // 🔴 2. Заблокированные вручную
+        // 🔴 blockedDatesFromServer
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => {
+            const dates = response.data.map((item) => {
               const d = new Date(item.date);
               return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
             });
-            setBlockedDatesFromServer(formatted);
-
-            // 💡 Обнуляем локальные добавленные/удалённые
-            setDatesToAdd([]);
-            setDatesToRemove([]);
-
-            console.log("🔴 Заблокированные вручную даты:", formatted);
+            setBlockedDatesFromServer(dates);
           })
-          .catch((err) => console.error("❌ Ошибка загрузки блокировок", err));
+          .catch((err) => console.error("Ошибка загрузки блокировок", err));
       }
     })
-    .catch((err) => console.error("❌ Ошибка загрузки профиля", err));
+    .catch((err) => console.error("Ошибка загрузки профиля", err));
 
-  // Загрузка услуг
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
     .then((res) => setServices(res.data))
-    .catch((err) => console.error("❌ Ошибка загрузки услуг", err));
+    .catch((err) => console.error("Ошибка загрузки услуг", err));
 }, []);
 
 
