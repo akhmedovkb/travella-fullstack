@@ -83,21 +83,21 @@ const formattedToAdd = datesToAdd.map((d) => toLocalDate(d));
   
 const allBlockedDates = useMemo(() => {
   const server = blockedDatesFromServer.filter(
-    (d) => !datesToRemove.includes(d)
+    (d) => !datesToRemove.some((r) => r.getTime() === d.getTime())
   );
-  return [...server, ...datesToAdd].map((d) => {
-    const parts = d.split("-");
-    return new Date(parts[0], parts[1] - 1, parts[2]);
-  });
+
+  return [...server, ...datesToAdd];
 }, [blockedDatesFromServer, datesToAdd, datesToRemove]);
+
 
 
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
   
 const effectiveBlockedDates = blockedDatesFromServer.filter(
-  (d) => !datesToRemove.includes(d)
+  (d) => !datesToRemove.some((r) => r.getTime() === d.getTime())
 ).concat(datesToAdd);
+
 
     // 🔹 тут handleCalendarClick
 const handleCalendarClick = (date) => {
@@ -105,7 +105,7 @@ const handleCalendarClick = (date) => {
 
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-  // 🟦 Забронированные — игнорируем
+  // 📌 Если дата уже занята — ничего не делать
   const isBooked = bookedDates.some(
     (d) =>
       d.getFullYear() === date.getFullYear() &&
@@ -114,8 +114,9 @@ const handleCalendarClick = (date) => {
   );
   if (isBooked) return;
 
-  // 🔴 Если дата уже была заблокирована на сервере
-  if (blockedDatesFromServer.includes(clickedStr)) {
+  // 🟥 Если дата была заблокирована на сервере — снять блокировку
+  const isBlocked = blockedDatesFromServer.some((item) => item.date === clickedStr);
+  if (isBlocked) {
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
         ? prev.filter((d) => d !== clickedStr)
@@ -124,13 +125,14 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // 🟢 Если дата локально добавлена — убираем
+  // 🟩 Если дата уже была добавлена локально — убрать
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
     setDatesToAdd((prev) => [...prev, clickedStr]);
   }
 };
+
 
   
   // 🔹 Фильтрация по активности услуг
@@ -297,7 +299,7 @@ useEffect(() => {
             });
             setBookedDates(formatted);
 
-            // Карта для подписей (если используешь)
+            // Карта для подписей
             const map = {};
             response.data.forEach((item) => {
               const key = new Date(item.date).toDateString();
@@ -313,7 +315,7 @@ useEffect(() => {
           .then((response) => {
             const formatted = response.data.map((item) => {
               const d = new Date(item.date);
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
             });
             setBlockedDatesFromServer(formatted);
 
@@ -2630,21 +2632,20 @@ const getCategoryOptions = (type) => {
 
 <DayPicker
   mode="multiple"
-  selected={[
-    ...datesToAdd.map((d) => new Date(d)),
-    ...blockedDatesFromServer.map((d) => new Date(d)),
-  ]}
-  disabled={bookedDates.map((d) => new Date(d))} // ❗ только бронированные!
+  fromDate={new Date()}
+  selected={allBlockedDates}
+  onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: blockedDatesFromServer.map((d) => new Date(d)),
-    toRemove: datesToRemove.map((d) => new Date(d)),
+    blocked: allBlockedDates,
+    booked: bookedDates,
   }}
   modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
-    toRemove: "bg-yellow-500 text-black",
+    blocked: effectiveBlockedDates.map((d) => new Date(d)),
+    booked: bookedDates.map((d) => new Date(d)),
   }}
-  onDayClick={handleCalendarClick}
+  disabled={bookedDates}
 />
+
 
 
     {/* 💾 Кнопка сохранения */}
