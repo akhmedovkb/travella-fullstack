@@ -350,6 +350,23 @@ const updateBlockedDates = async (req, res) => {
   }
 };
 
+// ⬇️ Удаление одной вручную заблокированной даты
+const deleteBlockedDate = async (req, res) => {
+  const providerId = req.user.id;
+  const { date } = req.body;
+
+  try {
+    await pool.query(
+      "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2 AND service_id IS NULL",
+      [providerId, date]
+    );
+    res.status(200).json({ message: "Дата удалена успешно" });
+  } catch (err) {
+    console.error("❌ Ошибка при удалении даты", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 module.exports = {
   registerProvider,
   loginProvider,
@@ -363,5 +380,6 @@ module.exports = {
   getBookedDates,
   getBlockedDates,
   updateBlockedDates,
-  unblockDate
+  unblockDate,
+  deleteBlockedDate,
 };
