@@ -2621,23 +2621,30 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   fromDate={new Date()}
-  selected={effectiveBlockedDates} // ✅ Исправлено
+  selected={[...new Set([...blockedDatesFromServer, ...datesToAdd].filter(d => !datesToRemove.includes(d)))]
+    .map((d) => new Date(d))}
   onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: allBlockedDates,
+    blocked: [...new Set([...blockedDatesFromServer, ...datesToAdd].filter(d => !datesToRemove.includes(d)))].map(
+      (d) => new Date(d)
+    ),
     booked: bookedDates,
   }}
   modifiersClassNames={{
-    blocked: effectiveBlockedDates.map((d) => new Date(d)),
-    booked: bookedDates.map((d) => new Date(d)),
+    blocked: "bg-red-500 text-white",
+    booked: "bg-blue-500 text-white",
   }}
-  disabled={bookedDates.filter((d) => {
-    const dstr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return !datesToRemove.includes(dstr);
-  })}
+  disabled={(date) => {
+    const dStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    // ❗ Блокируем только синие даты (bookedDates), если они не сняты вручную (в будущем, если такое будет)
+    return bookedDates.some(
+      (d) =>
+        d.getFullYear() === date.getFullYear() &&
+        d.getMonth() === date.getMonth() &&
+        d.getDate() === date.getDate()
+    );
+  }}
 />
-
-
 
     {/* 💾 Кнопка сохранения */}
 <button
