@@ -29,7 +29,7 @@ const Dashboard = () => {
   const [messageProfile, setMessageProfile] = useState("");
   const [messageService, setMessageService] = useState("");
   const [images, setImages] = useState([]);
-  const handleRemoveImage = (index) => {
+  const RemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
   
@@ -99,13 +99,12 @@ const effectiveBlockedDates = blockedDatesFromServer.filter(
 ).concat(datesToAdd);
 
 
-    // 🔹 тут handleCalendarClick
-const handleCalendarClick = (date) => {
+    // 🔹 тут CalendarClick
+const CalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-  // 📌 Если дата уже занята — ничего не делать
   const isBooked = bookedDates.some(
     (d) =>
       d.getFullYear() === date.getFullYear() &&
@@ -114,9 +113,9 @@ const handleCalendarClick = (date) => {
   );
   if (isBooked) return;
 
-  // 🟥 Если дата была заблокирована на сервере — снять блокировку
-  const isBlocked = blockedDatesFromServer.some((item) => item.date === clickedStr);
-  if (isBlocked) {
+  const isCurrentlyBlocked = blockedDatesFromServer.includes(clickedStr) && !datesToRemove.includes(clickedStr);
+
+  if (isCurrentlyBlocked) {
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
         ? prev.filter((d) => d !== clickedStr)
@@ -125,11 +124,41 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // 🟩 Если дата уже была добавлена локально — убрать
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
     setDatesToAdd((prev) => [...prev, clickedStr]);
+  }
+};
+
+ // 🔹 тут handleSaveBlockedDates for Calendar
+const handleSaveBlockedDates = async () => {
+  try {
+    const config = {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    };
+
+    await axios.post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      {
+        addDates: datesToAdd,
+        removeDates: datesToRemove,
+      },
+      config
+    );
+
+    setBlockedDatesFromServer((prev) => [
+      ...prev.filter((d) => !datesToRemove.includes(d)),
+      ...datesToAdd,
+    ]);
+    setDatesToAdd([]);
+    setDatesToRemove([]);
+    alert("✅ Изменения сохранены");
+  } catch (error) {
+    console.error("❌ Ошибка при сохранении дат:", error);
+    alert("❌ Ошибка при сохранении дат");
   }
 };
 
@@ -277,7 +306,6 @@ useEffect(() => {
     headers: { Authorization: `Bearer ${token}` },
   };
 
-  // Загрузка профиля
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
     .then((res) => {
@@ -287,9 +315,8 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
-      // Только для guide / transport
       if (["guide", "transport"].includes(res.data.type)) {
-        // 🟦 1. Забронированные даты
+        // 🟦 Забронированные даты
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
@@ -298,84 +325,25 @@ useEffect(() => {
               return new Date(d.getFullYear(), d.getMonth(), d.getDate());
             });
             setBookedDates(formatted);
+          });
 
-            // Карта для подписей
-            const map = {};
-            response.data.forEach((item) => {
-              const key = new Date(item.date).toDateString();
-              map[key] = item.serviceTitle || "Дата забронирована клиентом";
-            });
-            setBookedDateMap(map);
-          })
-          .catch((err) => console.error("❌ Ошибка загрузки бронирований", err));
-
-        // 🔴 2. Заблокированные вручную
+        // 🔴 Заблокированные вручную
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
           .then((response) => {
             const formatted = response.data.map((item) => {
               const d = new Date(item.date);
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
             });
             setBlockedDatesFromServer(formatted);
-
-            // 💡 Обнуляем локальные добавленные/удалённые
             setDatesToAdd([]);
             setDatesToRemove([]);
-
-            console.log("🔴 Заблокированные вручную даты:", formatted);
-          })
-          .catch((err) => console.error("❌ Ошибка загрузки блокировок", err));
+          });
       }
-    })
-    .catch((err) => console.error("❌ Ошибка загрузки профиля", err));
-
-  // Загрузка услуг
-  axios
-    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-    .then((res) => setServices(res.data))
-    .catch((err) => console.error("❌ Ошибка загрузки услуг", err));
+    });
 }, []);
 
-
-const handleSaveBlockedDates = async () => {
-  try {
-    const config = {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    };
-
-    await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      {
-        addDates: datesToAdd,
-        removeDates: datesToRemove,
-      },
-      config
-    );
-
-    // ✅ Обновляем блокировки после сохранения
-    setBlockedDatesFromServer((prev) => [
-      ...prev.filter((d) => !datesToRemove.includes(d)),
-      ...datesToAdd,
-    ]);
-
-    // ✅ Очищаем локальные изменения
-    setDatesToAdd([]);
-    setDatesToRemove([]);
-
-    // ✅ Показываем уведомление
-    toast.success("Даты успешно сохранены!");
-  } catch (error) {
-    console.error("❌ Ошибка при сохранении дат:", error);
-    toast.error("Ошибка при сохранении дат");
-  }
-};
-
-
-
-  const handlePhotoChange = (e) => {
+  const PhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -386,7 +354,7 @@ const handleSaveBlockedDates = async () => {
     }
   };
 
-  const handleCertificateChange = (e) => {
+  const CertificateChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -397,7 +365,7 @@ const handleSaveBlockedDates = async () => {
     }
   };
 
-  const handleSaveProfile = () => {
+  const SaveProfile = () => {
     const updated = {};
     if (newLocation !== profile.location) updated.location = newLocation;
     if (newSocial !== profile.social) updated.social = newSocial;
@@ -420,7 +388,7 @@ const handleSaveBlockedDates = async () => {
       .catch(() => setMessageProfile(t("update_error")));
   };
 
-  const handleChangePassword = () => {
+  const ChangePassword = () => {
     axios
       .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
         { password: newPassword },
@@ -435,7 +403,7 @@ const handleSaveBlockedDates = async () => {
 
 // Тут поведение кнопки Сохранить услугу
 
-  const handleSaveService = () => {
+  const SaveService = () => {
   const requiredFieldsByCategory = {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
@@ -567,7 +535,7 @@ const resetServiceForm = () => {
 
 
 
-  const handleDeleteService = (id) => {
+  const DeleteService = (id) => {
     axios
       .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => {
@@ -637,10 +605,7 @@ const resetServiceForm = () => {
   }
 };
 
-
-
-
-  const handleImageUpload = (e) => {
+  const ImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const readers = files.map(file => {
       return new Promise((resolve) => {
@@ -2651,7 +2616,7 @@ const getCategoryOptions = (type) => {
     {/* 💾 Кнопка сохранения */}
 <button
   className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded"
-  onClick={handleSaveBlockedDates}
+  onClick={SaveBlockedDates}
 >
   Сохранить даты
 </button>
