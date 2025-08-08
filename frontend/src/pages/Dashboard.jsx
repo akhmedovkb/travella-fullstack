@@ -333,37 +333,34 @@ useEffect(() => {
 }, []);
 
 
-const handleSaveBlockedDates = () => {
-  const token = localStorage.getItem("token");
-  const config = {
-    headers: { Authorization: `Bearer ${token}` },
-  };
+const handleSaveBlockedDates = async () => {
+  try {
+    const config = {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    };
 
-  axios
-    .post(
+    await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
       {
         addDates: datesToAdd,
         removeDates: datesToRemove,
       },
       config
-    )
-    .then(() => {
-      setDatesToAdd([]);
-      setDatesToRemove([]);
+    );
 
-      // Перезагрузка заблокированных дат
-      axios
-        .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
-        .then((response) => {
-          const formatted = response.data.map((item) => {
-            const d = new Date(item.date);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          });
-          setBlockedDatesFromServer(formatted);
-        });
-    });
+    setBlockedDatesFromServer((prev) => [
+      ...prev.filter((d) => !datesToRemove.includes(d)),
+      ...datesToAdd,
+    ]);
+    setDatesToAdd([]);
+    setDatesToRemove([]);
+  } catch (error) {
+    console.error("❌ Ошибка при сохранении дат:", error);
+  }
 };
+
 
 
   const handlePhotoChange = (e) => {
