@@ -43,7 +43,6 @@ const Dashboard = () => {
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
-  const [profile, setProfile] = useState({});
   const [bookedDates, setBookedDates] = useState([]);
   const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
   const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
