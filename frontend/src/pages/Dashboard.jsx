@@ -317,50 +317,46 @@ useEffect(() => {
     return value === "" || value === undefined;
   });
 
-  // 🔁 Дополнительная проверка для returnDate если рейс туда-обратно
+  // 🔁 Проверка возвратного рейса
   const needsReturnDate =
     category === "refused_flight" &&
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
   console.log("📋 Проверка обязательных полей для категории:", category);
-console.log("🎯 Обязательные поля:", requiredFields);
+  console.log("🎯 Обязательные поля:", requiredFields);
 
-requiredFields.forEach((field) => {
-  const keys = field.split(".");
-  const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
-    title,
-    description,
-    category,
-    price,
-    details,
+  requiredFields.forEach((field) => {
+    const keys = field.split(".");
+    const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
+      title,
+      description,
+      category,
+      price,
+      details,
+    });
+    console.log(`⛳ ${field}:`, value);
   });
-  console.log(`⛳ ${field}:`, value);
-});
 
-    
   if (hasEmpty || needsReturnDate) {
     setMessageService(t("fill_all_fields"));
     return;
   }
 
   const data = {
-  title,
-  category,
-  images: images || [],
-  price: isExtendedCategory ? undefined : price,
-  description: isExtendedCategory ? undefined : description,
-  availability: isExtendedCategory
-    ? undefined
-    : availability.map((date) => {
-        const d = new Date(date);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-          d.getDate()
-        ).padStart(2, "0")}`;
-      }),
-  details: isExtendedCategory ? details : undefined,
-};
-
+    title,
+    category,
+    images: images || [],
+    price: isExtendedCategory ? undefined : price,
+    description: isExtendedCategory ? undefined : description,
+    availability: isExtendedCategory
+      ? undefined
+      : availability.map((d) => {
+          const date = new Date(d);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+        }),
+    details: isExtendedCategory ? details : undefined,
+  };
 
   if (selectedService) {
     axios
@@ -392,6 +388,7 @@ requiredFields.forEach((field) => {
       });
   }
 };
+
 
 
 // сбрасываем все поля 
