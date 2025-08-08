@@ -350,15 +350,17 @@ const handleSaveBlockedDates = async () => {
       config
     );
 
-    // Обновляем локально
     setBlockedDatesFromServer((prev) => [
       ...prev.filter((d) => !datesToRemove.includes(d)),
       ...datesToAdd,
     ]);
     setDatesToAdd([]);
     setDatesToRemove([]);
+
+    alert("✅ Даты успешно сохранены!");
   } catch (error) {
     console.error("❌ Ошибка при сохранении дат:", error);
+    alert("❌ Не удалось сохранить даты");
   }
 };
 
@@ -2621,18 +2623,10 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   fromDate={new Date()}
-  selected={[
-    ...new Set(
-      [...blockedDatesFromServer, ...datesToAdd].filter((d) => !datesToRemove.includes(d))
-    ),
-  ].map((d) => new Date(d))}
+  selected={[...blockedDatesFromServer, ...datesToAdd].map((d) => new Date(d))}
   onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: [
-      ...new Set(
-        [...blockedDatesFromServer, ...datesToAdd].filter((d) => !datesToRemove.includes(d))
-      ),
-    ].map((d) => new Date(d)),
+    blocked: [...blockedDatesFromServer, ...datesToAdd].map((d) => new Date(d)),
     booked: bookedDates,
   }}
   modifiersClassNames={{
@@ -2640,9 +2634,6 @@ const getCategoryOptions = (type) => {
     booked: "bg-blue-500 text-white",
   }}
   disabled={(date) => {
-    const dStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-      date.getDate()
-    ).padStart(2, "0")}`;
     return bookedDates.some(
       (d) =>
         d.getFullYear() === date.getFullYear() &&
@@ -2651,7 +2642,6 @@ const getCategoryOptions = (type) => {
     );
   }}
 />
-
 
     {/* 💾 Кнопка сохранения */}
 <button
