@@ -97,14 +97,15 @@ const [hoveredDateLabel, setHoveredDateLabel] = useState("");
   
 const effectiveBlockedDates = blockedDatesFromServer.filter(
   (d) => !datesToRemove.includes(d)
-);
+).concat(datesToAdd);
+
     // 🔹 тут handleCalendarClick
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
 
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-  // ❌ Забронированные (синие) — не трогаем
+  // 🟦 Забронированные — игнорируем
   const isBooked = bookedDates.some(
     (d) =>
       d.getFullYear() === date.getFullYear() &&
@@ -113,7 +114,7 @@ const handleCalendarClick = (date) => {
   );
   if (isBooked) return;
 
-  // 🔴 Если уже есть в server-блокировках — добавим в удаление
+  // 🔴 Если дата уже была заблокирована на сервере
   if (blockedDatesFromServer.includes(clickedStr)) {
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
@@ -123,7 +124,7 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // 🟢 Если уже есть в локальном добавлении — уберем
+  // 🟢 Если дата локально добавлена — убираем
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
@@ -352,19 +353,24 @@ const handleSaveBlockedDates = async () => {
       config
     );
 
+    // ✅ Обновляем блокировки после сохранения
     setBlockedDatesFromServer((prev) => [
       ...prev.filter((d) => !datesToRemove.includes(d)),
       ...datesToAdd,
     ]);
+
+    // ✅ Очищаем локальные изменения
     setDatesToAdd([]);
     setDatesToRemove([]);
 
-    toast.success("✅ Даты успешно сохранены!");
+    // ✅ Показываем уведомление
+    toast.success("Даты успешно сохранены!");
   } catch (error) {
     console.error("❌ Ошибка при сохранении дат:", error);
-    alert("❌ Не удалось сохранить даты");
+    toast.error("Ошибка при сохранении дат");
   }
 };
+
 
 
   const handlePhotoChange = (e) => {
@@ -2625,19 +2631,17 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   fromDate={new Date()}
-  selected={[...effectiveBlockedDates.map((d) => new Date(d)), ...bookedDates]}
+  selected={[...bookedDates, ...effectiveBlockedDates.map((d) => new Date(d))]}
   onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: effectiveBlockedDates.map((d) => new Date(d)),
     booked: bookedDates,
+    blocked: effectiveBlockedDates.map((d) => new Date(d)),
   }}
   modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
+    blocked: "bg-red-500 text-white",
   }}
-  disabled={bookedDates.map(
-    (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  )}
+  disabled={bookedDates}
 />
 
     {/* 💾 Кнопка сохранения */}
