@@ -2493,16 +2493,12 @@ const getCategoryOptions = (type) => {
 />
 
 
-    const handleSaveBlockedDates = () => {
-  axios
-    .post(`${API_URL}/api/providers/blocked-dates`, { dates: blockedDates }, config)
-    .then(() => {
-      toast.success("Заблокированные даты сохранены");
-    })
-    .catch(() => {
-      toast.error("Ошибка при сохранении дат");
-    });
-};
+    <button
+      onClick={handleSaveBlockedDates}
+      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+    >
+      {t("calendar.save_blocked_dates")}
+    </button>
 
   </div>
 )}
