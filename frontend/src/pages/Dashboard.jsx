@@ -590,19 +590,31 @@ const getCategoryOptions = (type) => {
   // ТУТ КАЛЕНДАРЬ
   
 const handleCalendarClick = (day) => {
-  const dateStr = day.toISOString().split("T")[0];
+  if (!(day instanceof Date)) return;
 
-  if (bookedDates.some((d) => d.toISOString().split("T")[0] === dateStr)) {
+  const dateStr = day.toISOString().split("T")[0]; // ✅ здесь точно Date
+
+  const isBooked = bookedDates.some(
+    (d) => new Date(d).toISOString().split("T")[0] === dateStr
+  );
+  if (isBooked) {
     alert("Эта дата уже забронирована и не может быть изменена.");
     return;
   }
 
-  setBlockedDatesLocal((prev) =>
-    prev.some((d) => (d.date || d).startsWith(dateStr))
-      ? prev.filter((d) => !(d.date || d).startsWith(dateStr))
-      : [...prev, dateStr]
-  );
+  setBlockedDatesLocal((prev) => {
+    const alreadySelected = prev.some(
+      (d) => new Date(d.date || d).toISOString().split("T")[0] === dateStr
+    );
+    return alreadySelected
+      ? prev.filter(
+          (d) =>
+            new Date(d.date || d).toISOString().split("T")[0] !== dateStr
+        )
+      : [...prev, dateStr];
+  });
 };
+
 
 
 const handleSaveBlockedDates = async () => {
