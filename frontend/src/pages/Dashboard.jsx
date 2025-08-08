@@ -2630,19 +2630,22 @@ const getCategoryOptions = (type) => {
 
 <DayPicker
   mode="multiple"
-  fromDate={new Date()}
-  selected={[...bookedDates, ...effectiveBlockedDates.map((d) => new Date(d))]}
-  onDayClick={handleCalendarClick}
+  selected={[
+    ...datesToAdd.map((d) => new Date(d)),
+    ...blockedDatesFromServer.map((d) => new Date(d)),
+  ]}
+  disabled={bookedDates.map((d) => new Date(d))} // ❗ только бронированные!
   modifiers={{
-    booked: bookedDates,
-    blocked: effectiveBlockedDates.map((d) => new Date(d)),
+    blocked: blockedDatesFromServer.map((d) => new Date(d)),
+    toRemove: datesToRemove.map((d) => new Date(d)),
   }}
   modifiersClassNames={{
-    booked: "bg-blue-500 text-white",
     blocked: "bg-red-500 text-white",
+    toRemove: "bg-yellow-500 text-black",
   }}
-  disabled={bookedDates}
+  onDayClick={handleCalendarClick}
 />
+
 
     {/* 💾 Кнопка сохранения */}
 <button
