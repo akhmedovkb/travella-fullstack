@@ -350,6 +350,38 @@ const updateBlockedDates = async (req, res) => {
   }
 };
 
+// ⬇️ сохраение одной вручную заблокированной даты
+const saveBlockedDates = async (req, res) => {
+  const providerId = req.provider.id;
+  const { add = [], remove = [] } = req.body;
+
+  try {
+    const client = await pool.connect();
+
+    // 👉 Добавление новых дат
+    for (const date of add) {
+      await client.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        [providerId, date]
+      );
+    }
+
+    // 👉 Удаление дат
+    for (const date of remove) {
+      await client.query(
+        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2",
+        [providerId, date]
+      );
+    }
+
+    client.release();
+    res.status(200).json({ message: "Даты успешно обновлены." });
+  } catch (error) {
+    console.error("Ошибка сохранения дат:", error);
+    res.status(500).json({ message: "Ошибка сервера при сохранении дат" });
+  }
+};
+
 // ⬇️ Удаление одной вручную заблокированной даты
 const deleteBlockedDate = async (req, res) => {
   const providerId = req.user.id;
