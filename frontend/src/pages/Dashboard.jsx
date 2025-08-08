@@ -10,6 +10,8 @@ import { confirmAlert } from "react-confirm-alert";
 import "react-confirm-alert/src/react-confirm-alert.css";
 import { useMemo } from "react";
 import { toLocalDate } from "../utils/dateUtils";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -357,7 +359,7 @@ const handleSaveBlockedDates = async () => {
     setDatesToAdd([]);
     setDatesToRemove([]);
 
-    alert("✅ Даты успешно сохранены!");
+    toast.success("✅ Даты успешно сохранены!");
   } catch (error) {
     console.error("❌ Ошибка при сохранении дат:", error);
     alert("❌ Не удалось сохранить даты");
