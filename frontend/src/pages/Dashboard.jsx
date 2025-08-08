@@ -415,7 +415,7 @@ const resetServiceForm = () => {
     flightDateGo: "",
     flightDateReturn: "",
     flightDetails: "",
-    visaCountry: d.visaCountry || "",
+    visaCountry: "",
   });
 };
 
