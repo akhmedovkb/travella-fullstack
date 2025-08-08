@@ -41,6 +41,15 @@ const Dashboard = () => {
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
+  const [profile, setProfile] = useState({});
+  const [bookedDates, setBookedDates] = useState([]);
+  const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
+  const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
+  const [datesToAdd, setDatesToAdd] = useState([]);
+  const [datesToRemove, setDatesToRemove] = useState([]);
+  const [bookedDateMap, setBookedDateMap] = useState({});
+
+
   const [details, setDetails] = useState({
   direction: "",
   directionCountry: "",
@@ -197,24 +206,72 @@ useEffect(() => {
   fetchCities();
 }, [selectedCountry]);
 
-  
-  useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-      .then((res) => {
-        setProfile(res.data);
-        setNewLocation(res.data.location);
-        setNewSocial(res.data.social);
-        setNewPhone(res.data.phone);
-        setNewAddress(res.data.address);
-      })
-      .catch((err) => console.error("Ошибка загрузки профиля", err));
+   // тут профиль
 
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-      .then((res) => setServices(res.data))
-      .catch((err) => console.error("Ошибка загрузки услуг", err));
-  }, []);
+  useEffect(() => {
+  const token = localStorage.getItem("token");
+  const config = {
+    headers: { Authorization: `Bearer ${token}` },
+  };
+
+  // 1. Загрузка профиля
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+    .then((res) => {
+      setProfile(res.data);
+      setNewLocation(res.data.location);
+      setNewSocial(res.data.social);
+      setNewPhone(res.data.phone);
+      setNewAddress(res.data.address);
+
+      // 2. Только если тип "guide" или "transport"
+      if (["guide", "transport"].includes(res.data.type)) {
+        // 2.1 Занятые даты
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+          .then((response) => {
+            const formatted = response.data.map((item) => {
+              const d = new Date(item.date);
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            });
+            setBookedDates(formatted);
+
+            // (опционально) — подписи к датам
+            const map = {};
+            response.data.forEach((item) => {
+              const key = new Date(item.date).toDateString();
+              map[key] = item.serviceTitle || "Дата занята";
+            });
+            setBookedDateMap(map);
+          })
+          .catch((err) => console.error("❌ Ошибка загрузки бронирований", err));
+
+        // 2.2 Заблокированные вручную
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
+          .then((response) => {
+            const formatted = response.data.map((item) => {
+              const d = new Date(item.date);
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            });
+            setBlockedDatesFromServer(formatted);
+            setBlockedDatesLocal([]); // 💥 очистить локальные, чтобы всё синхронизировалось
+            setDatesToAdd([]);
+            setDatesToRemove([]);
+            console.log("🔴 Загруженные блокировки:", formatted);
+          })
+          .catch((err) => console.error("❌ Ошибка загрузки блокировок", err));
+      }
+    })
+    .catch((err) => console.error("❌ Ошибка загрузки профиля", err));
+
+  // 3. Загрузка услуг
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+    .then((res) => setServices(res.data))
+    .catch((err) => console.error("❌ Ошибка загрузки услуг", err));
+}, []);
+
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -274,6 +331,7 @@ useEffect(() => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
+  
 // Тут поведение кнопки Сохранить услугу
 
   const handleSaveService = () => {
@@ -478,9 +536,6 @@ const resetServiceForm = () => {
   }
 };
 
-
-
-
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const readers = files.map(file => {
@@ -531,8 +586,43 @@ const getCategoryOptions = (type) => {
   }
 };
 
+  // ТУТ КАЛЕНДАРЬ
+  
+const handleCalendarClick = (date) => {
+  const dateStr = date.toISOString().split("T")[0];
+
+  // Забронированные даты нельзя трогать
+  if (bookedDates.includes(dateStr)) return;
+
+  // Если дата уже выбрана — снять выбор
+  if (
+    blockedDatesLocal.includes(dateStr) ||
+    blockedDatesFromServer.find((d) => d.date === dateStr)
+  ) {
+    setBlockedDatesLocal((prev) => prev.filter((d) => d !== dateStr));
+    setBlockedDatesFromServer((prev) => prev.filter((d) => d.date !== dateStr));
+  } else {
+    setBlockedDatesLocal((prev) => [...prev, dateStr]);
+  }
+};
+
+const handleSaveBlockedDates = () => {
+  axios
+    .post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      { dates: blockedDatesLocal },
+      config
+    )
+    .then(() => {
+      toast.success("Блокированные даты сохранены");
+      setBlockedDatesFromServer(blockedDatesLocal.map((d) => ({ date: d })));
+      setBlockedDatesLocal([]);
+    })
+    .catch(() => toast.error("Ошибка при сохранении"));
+};
 
 
+  
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
       {/* Левый блок */}
