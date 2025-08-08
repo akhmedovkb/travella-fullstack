@@ -2484,22 +2484,39 @@ const getCategoryOptions = (type) => {
     </h3>
 
     <DayPicker
-      mode="multiple"
-      selected={blockedDates}
-      onSelect={setBlockedDates}
-      disabled={{ before: new Date() }}
-      modifiersClassNames={{
-        selected: "bg-red-400 text-white",
-      }}
-      className="border rounded p-4"
-    />
+  mode="multiple"
+  selected={blockedDates.map(d => new Date(d))}
+  onSelect={(dates) => {
+    // Преобразуем в строки без времени: 'YYYY-MM-DD'
+    const formatted = (dates || []).map(date =>
+      date.toISOString().split("T")[0]
+    );
+    setBlockedDates(formatted);
+  }}
+  disabled={{ before: new Date() }}
+  modifiers={{
+    blocked: blockedDates.map(d => new Date(d)),
+    booked: bookedDates.map(d => new Date(d)),
+  }}
+  modifiersClassNames={{
+    blocked: "bg-red-500 text-white",
+    booked: "bg-blue-500 text-white",
+  }}
+  className="border rounded p-4"
+/>
 
-    <button
-      onClick={handleSaveBlockedDates}
-      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-    >
-      {t("calendar.save_blocked_dates")}
-    </button>
+
+    const handleSaveBlockedDates = () => {
+  axios
+    .post(`${API_URL}/api/providers/blocked-dates`, { dates: blockedDates }, config)
+    .then(() => {
+      toast.success("Заблокированные даты сохранены");
+    })
+    .catch(() => {
+      toast.error("Ошибка при сохранении дат");
+    });
+};
+
   </div>
 )}
   
