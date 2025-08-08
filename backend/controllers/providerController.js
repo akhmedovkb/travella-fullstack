@@ -98,7 +98,6 @@ const getProviderProfile = async (req, res) => {
 const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
-
     const current = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
     if (current.rows.length === 0) {
       return res.status(404).json({ message: "Поставщик не найден" });
@@ -130,7 +129,6 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
-// ДОБАВИТЬ УСЛУГУ
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -160,7 +158,6 @@ const addService = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
-
 
 const getServices = async (req, res) => {
   try {
@@ -240,27 +237,20 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// ⬇️ Получение всех занятых дат (вручную + бронирования)
+// ⬇️ Добавлено:
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-
-    // 1. Вручную заблокированные даты (без привязки к услуге)
     const manual = await pool.query(
       `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
       [providerId]
     );
-
-    // 2. Даты с бронированиями по конкретным услугам
     const booked = await pool.query(
-      `SELECT b.date, s.title
-       FROM blocked_dates b
+      `SELECT b.date, s.title FROM blocked_dates b
        JOIN services s ON b.service_id = s.id
        WHERE b.provider_id = $1 AND b.service_id IS NOT NULL`,
       [providerId]
     );
-
-    // 3. Объединяем обе группы
     const bookedDates = [
       ...manual.rows.map((r) => ({
         date: new Date(r.date).toISOString().split("T")[0],
@@ -271,9 +261,6 @@ const getBookedDates = async (req, res) => {
         serviceTitle: r.title,
       })),
     ];
-
-    console.log("📌 Заблокированные даты:", bookedDates);
-
     res.json(bookedDates);
   } catch (error) {
     console.error("❌ Ошибка получения занятых дат:", error);
@@ -281,20 +268,16 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-// ⬇️ Получение вручную заблокированных дат (без бронирований)
 const getBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-
     const result = await pool.query(
       `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
       [providerId]
     );
-
     const blockedDates = result.rows.map((row) => ({
       date: new Date(row.date).toISOString().split("T")[0],
     }));
-
     res.json(blockedDates);
   } catch (error) {
     console.error("❌ Ошибка получения заблокированных дат:", error);
@@ -302,8 +285,60 @@ const getBlockedDates = async (req, res) => {
   }
 };
 
+const updateBlockedDates = async (req, res) => {
+  const { addDates = [], removeDates = [] } = req.body;
+  const providerId = req.user.id;
 
-    // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
+  try {
+    if (removeDates.length > 0) {
+      await pool.query(
+        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
+        [providerId, removeDates]
+      );
+    }
+
+    for (const date of addDates) {
+      await pool.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        [providerId, date]
+      );
+    }
+
+    res.status(200).json({ message: "Dates updated" });
+  } catch (err) {
+    console.error("❌ Ошибка при обновлении дат", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const saveBlockedDates = async (req, res) => {
+  const providerId = req.user.id;
+  const { add = [], remove = [] } = req.body;
+
+  try {
+    const client = await pool.connect();
+
+    for (const date of add) {
+      await client.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        [providerId, date]
+      );
+    }
+
+    for (const date of remove) {
+      await client.query(
+        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2",
+        [providerId, date]
+      );
+    }
+
+    client.release();
+    res.status(200).json({ message: "Даты успешно обновлены." });
+  } catch (error) {
+    console.error("Ошибка сохранения дат:", error);
+    res.status(500).json({ message: "Ошибка сервера при сохранении дат" });
+  }
+};
 
 const unblockDate = async (req, res) => {
   const providerId = req.user.id;
@@ -321,68 +356,6 @@ const unblockDate = async (req, res) => {
   }
 };
 
-   // ⬇️ Разблокировка заблокированных поставщиком в ручную дат(маркировка removeDates)
-const updateBlockedDates = async (req, res) => {
-  const { addDates = [], removeDates = [] } = req.body;
-  const providerId = req.user.id;
-
-  try {
-    // Удаляем
-    if (removeDates.length > 0) {
-      await pool.query(
-        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
-        [providerId, removeDates]
-      );
-    }
-
-    // Добавляем (с проверкой уникальности)
-    for (const date of addDates) {
-      await pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [providerId, date]
-      );
-    }
-
-    res.status(200).json({ message: "Dates updated" });
-  } catch (err) {
-    console.error("❌ Ошибка при обновлении дат", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ⬇️ сохраение одной вручную заблокированной даты
-const saveBlockedDates = async (req, res) => {
-  const providerId = req.provider.id;
-  const { add = [], remove = [] } = req.body;
-
-  try {
-    const client = await pool.connect();
-
-    // 👉 Добавление новых дат
-    for (const date of add) {
-      await client.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [providerId, date]
-      );
-    }
-
-    // 👉 Удаление дат
-    for (const date of remove) {
-      await client.query(
-        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2",
-        [providerId, date]
-      );
-    }
-
-    client.release();
-    res.status(200).json({ message: "Даты успешно обновлены." });
-  } catch (error) {
-    console.error("Ошибка сохранения дат:", error);
-    res.status(500).json({ message: "Ошибка сервера при сохранении дат" });
-  }
-};
-
-// ⬇️ Удаление одной вручную заблокированной даты
 const deleteBlockedDate = async (req, res) => {
   const providerId = req.user.id;
   const { date } = req.body;
@@ -414,4 +387,5 @@ module.exports = {
   updateBlockedDates,
   unblockDate,
   deleteBlockedDate,
+  saveBlockedDates, // ✅ ДОБАВЛЕНО
 };
