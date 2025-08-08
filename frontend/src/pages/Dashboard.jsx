@@ -345,14 +345,22 @@ requiredFields.forEach((field) => {
   }
 
   const data = {
-    title,
-    category,
-    images: images || [],
-    price: isExtendedCategory ? undefined : price,
-    description: isExtendedCategory ? undefined : description,
-    availability: isExtendedCategory ? undefined : availability,
-    details: isExtendedCategory ? details : undefined
-  };
+  title,
+  category,
+  images: images || [],
+  price: isExtendedCategory ? undefined : price,
+  description: isExtendedCategory ? undefined : description,
+  availability: isExtendedCategory
+    ? undefined
+    : availability.map((date) => {
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+          d.getDate()
+        ).padStart(2, "0")}`;
+      }),
+  details: isExtendedCategory ? details : undefined,
+};
+
 
   if (selectedService) {
     axios
