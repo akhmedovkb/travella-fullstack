@@ -102,7 +102,7 @@ const handleCalendarClick = (date) => {
 
   const clickedStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-  // 🔒 Если дата забронирована — ничего не делаем
+  // ❌ Забронированные (синие) — не трогаем
   const isBooked = bookedDates.some(
     (d) =>
       d.getFullYear() === date.getFullYear() &&
@@ -111,7 +111,7 @@ const handleCalendarClick = (date) => {
   );
   if (isBooked) return;
 
-  // 🔴 Если дата уже была заблокирована на сервере — снимаем блокировку
+  // 🔴 Если уже есть в server-блокировках — добавим в удаление
   if (blockedDatesFromServer.includes(clickedStr)) {
     setDatesToRemove((prev) =>
       prev.includes(clickedStr)
@@ -121,7 +121,7 @@ const handleCalendarClick = (date) => {
     return;
   }
 
-  // 🟢 Если дата уже локально добавлена — убираем
+  // 🟢 Если уже есть в локальном добавлении — уберем
   if (datesToAdd.includes(clickedStr)) {
     setDatesToAdd((prev) => prev.filter((d) => d !== clickedStr));
   } else {
@@ -350,6 +350,7 @@ const handleSaveBlockedDates = async () => {
       config
     );
 
+    // Обновляем локально
     setBlockedDatesFromServer((prev) => [
       ...prev.filter((d) => !datesToRemove.includes(d)),
       ...datesToAdd,
@@ -360,7 +361,6 @@ const handleSaveBlockedDates = async () => {
     console.error("❌ Ошибка при сохранении дат:", error);
   }
 };
-
 
 
   const handlePhotoChange = (e) => {
