@@ -210,9 +210,8 @@ useEffect(() => {
    // тут профиль
 
   useEffect(() => {
-  const token = localStorage.getItem("token");
   const config = {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   };
 
   axios
@@ -224,46 +223,28 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
+      // Загружаем даты только если guide или transport
       if (["guide", "transport"].includes(res.data.type)) {
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => {
-              const d = new Date(item.date);
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            });
+            const formatted = response.data.map((item) => new Date(item.date));
             setBookedDates(formatted);
-
-            const map = {};
-            response.data.forEach((item) => {
-              const key = new Date(item.date).toDateString();
-              map[key] = item.serviceTitle || "Забронировано";
-            });
-            setBookedDateMap(map);
           })
-          .catch((err) => console.error("❌ Ошибка загрузки бронирований", err));
+          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
 
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => {
-              const d = new Date(item.date);
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            });
-            setBlockedDatesFromServer(formatted);
-            setDatesToAdd([]);
-            setDatesToRemove([]);
+            const dates = response.data.map((item) => item.date); // оставляем строки YYYY-MM-DD
+            setBlockedDatesFromServer(dates);
           })
-          .catch((err) => console.error("❌ Ошибка загрузки блокировок", err));
+          .catch((err) => console.error("Ошибка загрузки заблокированных дат", err));
       }
     })
-    .catch((err) => console.error("❌ Ошибка загрузки профиля", err));
-
-  axios
-    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-    .then((res) => setServices(res.data))
-    .catch((err) => console.error("❌ Ошибка загрузки услуг", err));
+    .catch((err) => console.error("Ошибка загрузки профиля", err));
 }, []);
+
 
 
   const handlePhotoChange = (e) => {
@@ -581,62 +562,67 @@ const getCategoryOptions = (type) => {
 
   // ТУТ КАЛЕНДАРЬ
   
-const handleCalendarClick = (date) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const clicked = new Date(date);
-  clicked.setHours(0, 0, 0, 0);
+const handleCalendarClick = (day) => {
+  const dayStr = day.toISOString().split("T")[0];
 
   // ⛔ Запрет выбора прошедших дат
-  if (clicked < today) {
-    toast.info("Вы не можете выбрать прошедшую дату.");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (day < today) return;
+
+  // ⛔ Запрет отмены забронированных дат (синие)
+  if (bookedDates.some((d) => isSameDay(new Date(d), day))) {
     return;
   }
 
-  // ⛔ Запрет блокировки забронированных дат
-  const isBooked = bookedDates.some(
-    (booked) => new Date(booked).toDateString() === clicked.toDateString()
-  );
-  if (isBooked) {
-    toast.info("Эта дата уже забронирована и не может быть изменена.");
-    return;
-  }
+  // ✅ Проверка: уже есть ли дата среди всех заблокированных (локальные + с сервера)
+  const isAlreadyBlocked =
+    blockedDatesLocal.some((d) => isSameDay(new Date(d), day)) ||
+    blockedDatesFromServer.some((d) => isSameDay(new Date(d), day));
 
-  // 🔁 Переключение даты в blockedDatesLocal
-  const alreadySelected = blockedDatesLocal.some(
-    (d) => new Date(d).toDateString() === clicked.toDateString()
-  );
-
-  if (alreadySelected) {
-    // Убираем из local
-    setBlockedDatesLocal((prev) =>
-      prev.filter((d) => new Date(d).toDateString() !== clicked.toDateString())
-    );
+  if (isAlreadyBlocked) {
+    // Удалить из локальных + серверных
+    const updated = [
+      ...blockedDatesLocal.filter((d) => !isSameDay(new Date(d), day)),
+      ...blockedDatesFromServer.filter((d) => !isSameDay(new Date(d), day)),
+    ];
+    setBlockedDatesLocal(updated.map((d) => new Date(d)));
   } else {
-    // Добавляем
-    setBlockedDatesLocal((prev) => [...prev, clicked.toISOString()]);
+    // Добавить в локальные
+    setBlockedDatesLocal([...blockedDatesLocal, day]);
   }
 };
-
-
 
 
 
 const handleSaveBlockedDates = () => {
+  const finalBlockedDates = [
+    ...blockedDatesFromServer.filter((d) => !datesToRemove.includes(d)),
+    ...datesToAdd,
+  ];
+
+  const config = {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  };
+
   axios
     .post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDatesLocal },
+      { dates: finalBlockedDates },
       config
     )
     .then(() => {
-      alert("Даты сохранены");
-      setBlockedDatesFromServer((prev) => [...prev, ...blockedDatesLocal]);
-      setBlockedDatesLocal([]);
+      toast.success("Даты успешно сохранены");
+      setBlockedDatesFromServer(finalBlockedDates); // обновить локальный список с сервера
+      setDatesToAdd([]);
+      setDatesToRemove([]);
     })
-    .catch(() => alert("Ошибка при сохранении"));
+    .catch((err) => {
+      toast.error("Ошибка при сохранении дат");
+      console.error("Ошибка сохранения:", err);
+    });
 };
+
 
 
   
@@ -2580,10 +2566,11 @@ const handleSaveBlockedDates = () => {
     <DayPicker
   mode="multiple"
   selected={
-    [...blockedDatesFromServer.filter((d) => !datesToRemove.includes(d)), ...datesToAdd].map((d) => {
-      const parts = d.split("-");
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    })
+    [...blockedDatesFromServer.filter((d) => !datesToRemove.includes(d)), ...datesToAdd]
+      .map((d) => {
+        const parts = d.split("-");
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+      })
   }
   onDayClick={(day) => {
     const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
@@ -2624,6 +2611,7 @@ const handleSaveBlockedDates = () => {
   }}
   className="rounded border p-4"
 />
+
 
 
    <button
