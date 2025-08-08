@@ -13,7 +13,10 @@ const {
   updateService,
   deleteService,
   getBookedDates,
-  saveBlockedDates
+  getBlockedDates,
+  updateBlockedDates,
+  unblockDate,
+  deleteBlockedDate,
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -37,6 +40,9 @@ router.delete("/services/:id", authenticateToken, deleteService); // Удали�
 
 // 👉 Календарь
 router.get("/booked-dates", authenticateToken, getBookedDates);
-router.post("/blocked-dates", authenticateToken, saveBlockedDates);
+router.get("/blocked-dates", authenticateToken, getBlockedDates);
+router.post("/unblock-date", authenticateToken, unblockDate);
+router.post("/blocked-dates", authenticateToken, updateBlockedDates);
+router.delete("/blocked-dates", authenticateToken, deleteBlockedDate);
 
 module.exports = router;

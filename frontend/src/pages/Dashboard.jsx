@@ -64,9 +64,7 @@ const Dashboard = () => {
   isActive: true,
   visaCountry: "",
 });
-  
-  // 🔹 Календарь услуг
-  const [bookedDates, setBookedDates] = useState([]);
+
   
   // 🔹 Фильтрация по активности услуг
 const isServiceActive = (s) =>
@@ -164,7 +162,7 @@ const loadCitiesFromInput = async (inputValue) => {
   }
 };
   
-// 🔍 Города отправления — независимо от страны
+// Города отправления — независимо от страны
 useEffect(() => {
   const fetchCities = async () => {
     try {
@@ -188,7 +186,6 @@ useEffect(() => {
   fetchCities();
 }, []);
 
- 
 useEffect(() => {
   if (!selectedCountry?.code) return;
   const fetchCities = async () => {
@@ -213,43 +210,24 @@ useEffect(() => {
   fetchCities();
 }, [selectedCountry]);
 
-  // 📌 загружаем profile
+  
   useEffect(() => {
-  const token = localStorage.getItem("token");
-  const config = {
-    headers: { Authorization: `Bearer ${token}` },
-  };
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .then((res) => {
+        setProfile(res.data);
+        setNewLocation(res.data.location);
+        setNewSocial(res.data.social);
+        setNewPhone(res.data.phone);
+        setNewAddress(res.data.address);
+      })
+      .catch((err) => console.error("Ошибка загрузки профиля", err));
 
-  // Загружаем профиль
-  axios
-    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-    .then((res) => {
-      setProfile(res.data);
-      setNewLocation(res.data.location);
-      setNewSocial(res.data.social);
-      setNewPhone(res.data.phone);
-      setNewAddress(res.data.address);
-
-      // Загружаем занятые даты только для guide и transport
-      if (["guide", "transport"].includes(res.data.type)) {
-        axios
-          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
-          .then((response) => {
-            const formatted = response.data.map((item) => new Date(item.date));
-            setBookedDates(formatted);
-          })
-          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
-      }
-    })
-    .catch((err) => console.error("Ошибка загрузки профиля", err));
-
-  // Загружаем услуги
-  axios
-    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
-    .then((res) => setServices(res.data))
-    .catch((err) => console.error("Ошибка загрузки услуг", err));
-}, []);
-
+    axios
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .then((res) => setServices(res.data))
+      .catch((err) => console.error("Ошибка загрузки услуг", err));
+  }, []);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -2509,33 +2487,13 @@ const getCategoryOptions = (type) => {
       mode="multiple"
       selected={blockedDates}
       onSelect={setBlockedDates}
-      disabled={{
-        before: new Date(),
-        dates: bookedDates.map((d) => new Date(d.date)),
-      }}
-      modifiers={{
-        booked: bookedDates.map((d) => new Date(d.date)),
-      }}
+      disabled={{ before: new Date() }}
       modifiersClassNames={{
-        selected: "bg-red-400 text-white", // вручную заблокированные
-        booked: "bg-blue-500 text-white", // занятые бронированиями
+        selected: "bg-red-400 text-white",
       }}
       className="border rounded p-4"
     />
 
-    {/* 🔎 Подписи */}
-    <div className="mt-2 text-sm text-gray-600 flex gap-4">
-      <div className="flex items-center gap-1">
-        <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
-        <span>{t("calendar.label_blocked_manual")}</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <span className="w-3 h-3 rounded bg-blue-500 inline-block"></span>
-        <span>{t("calendar.label_booked_by_clients")}</span>
-      </div>
-    </div>
-
-    {/* 🔘 Кнопка сохранения */}
     <button
       onClick={handleSaveBlockedDates}
       className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
@@ -2544,7 +2502,6 @@ const getCategoryOptions = (type) => {
     </button>
   </div>
 )}
-
   
 </div>
 </div>

@@ -181,13 +181,20 @@
   },
   
   "calendar": {
-  "blocking_title": "Календарь занятости",
-  "label_blocked_manual": "Заблокировано вручную",
-  "label_booked_by_clients": "Занято по бронированиям",
-  "save_blocked_dates": "Сохранить занятые даты",
-  "dates_saved": "Занятые даты сохранены",
-  "save_error": "Ошибка сохранения дат"
-  },
+  "save_button": "Сохранить занятые даты",
+  "manual_blocked": "Заблокировано вручную",
+  "booked": "Занято по бронированиям",
+  "save_error": "Ошибка при сохранении дат",
+  "saved_successfully": "Даты успешно сохранены"
+},
+
+
+  "calendar.blocking_title": "Блокировка дат",
+  "calendar.label_blocked_manual": "Ручная блокировка",
+  "calendar.label_booked_by_clients": "Занято клиентами",
+  "calendar.save_blocked_dates": "Сохранить даты",
+  
+
 
   "marketplace": {
     "title": "Доска объявлений",
@@ -253,8 +260,4 @@
   "country_not_chosen": "Страны не найдены"
 
 }
-
-
-
-
 

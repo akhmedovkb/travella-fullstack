@@ -281,39 +281,92 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-
-// ⬇️ Сохранение вручную заблокированных дат
-const saveBlockedDates = async (req, res) => {
+// ⬇️ Получение вручную заблокированных дат (без бронирований)
+const getBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const { dates } = req.body;
 
-    if (!Array.isArray(dates)) {
-      return res.status(400).json({ message: "Некорректные даты" });
-    }
+    const result = await pool.query(
+      `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
+      [providerId]
+    );
 
-    console.log("📥 Получены даты для сохранения:", dates);
+    const blockedDates = result.rows.map((row) => ({
+      date: new Date(row.date).toISOString().split("T")[0],
+    }));
 
-    // Удаляем старые записи
-    await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
-
-    // Добавляем новые
-    const insertPromises = dates.map((date) => {
-      return pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
-        [providerId, date]
-      );
-    });
-
-    await Promise.all(insertPromises);
-
-    res.json({ message: "calendar.saved_successfully" });
+    res.json(blockedDates);
   } catch (error) {
-    console.error("❌ Ошибка сохранения занятых дат:", error);
-    res.status(500).json({ message: "calendar.save_error" });
+    console.error("❌ Ошибка получения заблокированных дат:", error);
+    res.status(500).json({ message: "calendar.load_error" });
   }
 };
-    
+
+
+    // ⬇️ Разблокировка заблокированных поставщиком в ручную дат
+
+const unblockDate = async (req, res) => {
+  const providerId = req.user.id;
+  const { date } = req.body;
+
+  try {
+    await pool.query(
+      "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2 AND service_id IS NULL",
+      [providerId, date]
+    );
+    res.json({ message: "Дата разблокирована" });
+  } catch (err) {
+    console.error("Ошибка при разблокировке даты", err);
+    res.status(500).json({ message: "Ошибка при разблокировке даты" });
+  }
+};
+
+   // ⬇️ Разблокировка заблокированных поставщиком в ручную дат(маркировка removeDates)
+const updateBlockedDates = async (req, res) => {
+  const { addDates = [], removeDates = [] } = req.body;
+  const providerId = req.user.id;
+
+  try {
+    // Удаляем
+    if (removeDates.length > 0) {
+      await pool.query(
+        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
+        [providerId, removeDates]
+      );
+    }
+
+    // Добавляем (с проверкой уникальности)
+    for (const date of addDates) {
+      await pool.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        [providerId, date]
+      );
+    }
+
+    res.status(200).json({ message: "Dates updated" });
+  } catch (err) {
+    console.error("❌ Ошибка при обновлении дат", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ⬇️ Удаление одной вручную заблокированной даты
+const deleteBlockedDate = async (req, res) => {
+  const providerId = req.user.id;
+  const { date } = req.body;
+
+  try {
+    await pool.query(
+      "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2 AND service_id IS NULL",
+      [providerId, date]
+    );
+    res.status(200).json({ message: "Дата удалена успешно" });
+  } catch (err) {
+    console.error("❌ Ошибка при удалении даты", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 module.exports = {
   registerProvider,
   loginProvider,
@@ -325,5 +378,8 @@ module.exports = {
   deleteService,
   changeProviderPassword,
   getBookedDates,
-  saveBlockedDates
+  getBlockedDates,
+  updateBlockedDates,
+  unblockDate,
+  deleteBlockedDate,
 };
