@@ -40,11 +40,9 @@ router.put("/services/:id", authenticateToken, updateService);  // Обнови�
 router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
 
 // 👉 Календарь
-router.get("/booked-dates", authenticateToken, getBookedDates);
 router.get("/blocked-dates", authenticateToken, getBlockedDates);
-router.post("/unblock-date", authenticateToken, unblockDate);
-router.post("/blocked-dates", authenticateToken, updateBlockedDates);
+router.post("/blocked-dates", authenticateToken, saveBlockedDates); // 👈 этот используешь
 router.delete("/blocked-dates", authenticateToken, deleteBlockedDate);
-router.post('/blocked-dates', authenticateToken, saveBlockedDates);
+router.post("/unblock-date", authenticateToken, unblockDate);
 
 module.exports = router;
