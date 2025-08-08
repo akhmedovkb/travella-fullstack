@@ -15,7 +15,8 @@ const {
   getBookedDates,
   getBlockedDates,
   updateBlockedDates,
-  unblockDate
+  unblockDate,
+  deleteBlockedDate,
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -42,5 +43,6 @@ router.get("/booked-dates", authenticateToken, getBookedDates);
 router.get("/blocked-dates", authenticateToken, getBlockedDates);
 router.post("/unblock-date", authenticateToken, unblockDate);
 router.post("/blocked-dates", authenticateToken, updateBlockedDates);
+router.delete("/blocked-dates", authenticateToken, deleteBlockedDate);
 
 module.exports = router;
