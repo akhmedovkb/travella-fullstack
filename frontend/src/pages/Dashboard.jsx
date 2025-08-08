@@ -83,20 +83,7 @@ const loadHotelOptions = async (inputValue) => {
   }
 };
   
-  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
-  const handleSaveBlockedDates = async () => {
-  try {
-    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
-      dates: blockedDates,
-    }, config);
-    alert(t("calendar.saved_successfully"));
-  } catch (err) {
-    console.error("Ошибка сохранения дат:", err);
-    alert(t("calendar.save_error"));
-  }
-      };
-
-  // Загрузка стран
+// Загрузка стран
 useEffect(() => {
   const fetchCountries = async () => {
     try {
