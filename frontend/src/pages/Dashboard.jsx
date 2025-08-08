@@ -2621,7 +2621,7 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   fromDate={new Date()}
-  selected={allBlockedDates}
+  selected={effectiveBlockedDates} // ✅ Исправлено
   onDayClick={handleCalendarClick}
   modifiers={{
     blocked: allBlockedDates,
@@ -2631,12 +2631,12 @@ const getCategoryOptions = (type) => {
     blocked: effectiveBlockedDates.map((d) => new Date(d)),
     booked: bookedDates.map((d) => new Date(d)),
   }}
-  disabled={bookedDates
-    .filter((d) => {
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return !datesToRemove.includes(dStr);
-    })}
-  />
+  disabled={bookedDates.filter((d) => {
+    const dstr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return !datesToRemove.includes(dstr);
+  })}
+/>
+
 
 
     {/* 💾 Кнопка сохранения */}
