@@ -42,5 +42,6 @@ router.get("/booked-dates", authenticateToken, getBookedDates);
 router.get("/blocked-dates", authenticateToken, getBlockedDates);
 router.post("/unblock-date", authenticateToken, unblockDate);
 router.post("/blocked-dates", authenticateToken, updateBlockedDates);
+router.post("/cancel-booking", authenticateToken, cancelBookingByProvider);
 
 module.exports = router;
