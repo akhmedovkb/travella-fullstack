@@ -17,6 +17,7 @@ const {
   updateBlockedDates,
   unblockDate,
   deleteBlockedDate,
+  saveBlockedDates,
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
