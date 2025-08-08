@@ -2623,24 +2623,19 @@ const getCategoryOptions = (type) => {
 <DayPicker
   mode="multiple"
   fromDate={new Date()}
-  selected={[...blockedDatesFromServer, ...datesToAdd].map((d) => new Date(d))}
+  selected={[...effectiveBlockedDates.map((d) => new Date(d)), ...bookedDates]}
   onDayClick={handleCalendarClick}
   modifiers={{
-    blocked: [...blockedDatesFromServer, ...datesToAdd].map((d) => new Date(d)),
+    blocked: effectiveBlockedDates.map((d) => new Date(d)),
     booked: bookedDates,
   }}
   modifiersClassNames={{
     blocked: "bg-red-500 text-white",
     booked: "bg-blue-500 text-white",
   }}
-  disabled={(date) => {
-    return bookedDates.some(
-      (d) =>
-        d.getFullYear() === date.getFullYear() &&
-        d.getMonth() === date.getMonth() &&
-        d.getDate() === date.getDate()
-    );
-  }}
+  disabled={bookedDates.map(
+    (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  )}
 />
 
     {/* 💾 Кнопка сохранения */}
