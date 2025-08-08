@@ -92,7 +92,10 @@ const allBlockedDates = useMemo(() => {
 
 const [bookedDateMap, setBookedDateMap] = useState({});
 const [hoveredDateLabel, setHoveredDateLabel] = useState("");
-
+  
+const effectiveBlockedDates = blockedDatesFromServer.filter(
+  (d) => !datesToRemove.includes(d)
+);
     // 🔹 тут handleCalendarClick
 const handleCalendarClick = (date) => {
   if (!(date instanceof Date) || isNaN(date)) return;
@@ -2628,8 +2631,8 @@ const getCategoryOptions = (type) => {
     booked: bookedDates,
   }}
   modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
-    booked: "bg-blue-500 text-white",
+    blocked: effectiveBlockedDates.map((d) => new Date(d)),
+    booked: bookedDates.map((d) => new Date(d)),
   }}
   disabled={bookedDates
     .filter((d) => {
