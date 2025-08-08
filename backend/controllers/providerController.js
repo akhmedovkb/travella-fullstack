@@ -285,32 +285,6 @@ const getBlockedDates = async (req, res) => {
   }
 };
 
-const updateBlockedDates = async (req, res) => {
-  const { addDates = [], removeDates = [] } = req.body;
-  const providerId = req.user.id;
-
-  try {
-    if (removeDates.length > 0) {
-      await pool.query(
-        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
-        [providerId, removeDates]
-      );
-    }
-
-    for (const date of addDates) {
-      await pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [providerId, date]
-      );
-    }
-
-    res.status(200).json({ message: "Dates updated" });
-  } catch (err) {
-    console.error("❌ Ошибка при обновлении дат", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
 
 const saveBlockedDates = async (req, res) => {
   const providerId = req.user.id;
