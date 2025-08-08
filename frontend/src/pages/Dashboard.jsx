@@ -317,27 +317,28 @@ useEffect(() => {
     return value === "" || value === undefined;
   });
 
-  // 🔁 Проверка возвратного рейса
+  // 🔁 Дополнительная проверка для returnDate если рейс туда-обратно
   const needsReturnDate =
     category === "refused_flight" &&
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
   console.log("📋 Проверка обязательных полей для категории:", category);
-  console.log("🎯 Обязательные поля:", requiredFields);
+console.log("🎯 Обязательные поля:", requiredFields);
 
-  requiredFields.forEach((field) => {
-    const keys = field.split(".");
-    const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
-      title,
-      description,
-      category,
-      price,
-      details,
-    });
-    console.log(`⛳ ${field}:`, value);
+requiredFields.forEach((field) => {
+  const keys = field.split(".");
+  const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
+    title,
+    description,
+    category,
+    price,
+    details,
   });
+  console.log(`⛳ ${field}:`, value);
+});
 
+    
   if (hasEmpty || needsReturnDate) {
     setMessageService(t("fill_all_fields"));
     return;
@@ -349,13 +350,8 @@ useEffect(() => {
     images: images || [],
     price: isExtendedCategory ? undefined : price,
     description: isExtendedCategory ? undefined : description,
-    availability: isExtendedCategory
-      ? undefined
-      : availability.map((d) => {
-          const date = new Date(d);
-          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-        }),
-    details: isExtendedCategory ? details : undefined,
+    availability: isExtendedCategory ? undefined : availability,
+    details: isExtendedCategory ? details : undefined
   };
 
   if (selectedService) {
@@ -388,7 +384,6 @@ useEffect(() => {
       });
   }
 };
-
 
 
 // сбрасываем все поля 
