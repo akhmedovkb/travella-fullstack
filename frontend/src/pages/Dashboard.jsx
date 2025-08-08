@@ -589,65 +589,62 @@ const getCategoryOptions = (type) => {
 
   // ТУТ КАЛЕНДАРЬ
   
-const handleCalendarClick = (day) => {
-  if (!(day instanceof Date)) return;
+const handleCalendarClick = (date) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const dateStr = day.toISOString().split("T")[0]; // ✅ здесь точно Date
+  const clicked = new Date(date);
+  clicked.setHours(0, 0, 0, 0);
 
-  const isBooked = bookedDates.some(
-    (d) => new Date(d).toISOString().split("T")[0] === dateStr
-  );
-  if (isBooked) {
-    alert("Эта дата уже забронирована и не может быть изменена.");
+  // ⛔ Запрет выбора прошедших дат
+  if (clicked < today) {
+    toast.info("Вы не можете выбрать прошедшую дату.");
     return;
   }
 
-  setBlockedDatesLocal((prev) => {
-    const alreadySelected = prev.some(
-      (d) => new Date(d.date || d).toISOString().split("T")[0] === dateStr
+  // ⛔ Запрет блокировки забронированных дат
+  const isBooked = bookedDates.some(
+    (booked) => new Date(booked).toDateString() === clicked.toDateString()
+  );
+  if (isBooked) {
+    toast.info("Эта дата уже забронирована и не может быть изменена.");
+    return;
+  }
+
+  // 🔁 Переключение даты в blockedDatesLocal
+  const alreadySelected = blockedDatesLocal.some(
+    (d) => new Date(d).toDateString() === clicked.toDateString()
+  );
+
+  if (alreadySelected) {
+    // Убираем из local
+    setBlockedDatesLocal((prev) =>
+      prev.filter((d) => new Date(d).toDateString() !== clicked.toDateString())
     );
-    return alreadySelected
-      ? prev.filter(
-          (d) =>
-            new Date(d.date || d).toISOString().split("T")[0] !== dateStr
-        )
-      : [...prev, dateStr];
-  });
-};
-
-
-
-const handleSaveBlockedDates = async () => {
-  try {
-    const config = {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    };
-
-    await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      {
-        addDates: datesToAdd,
-        removeDates: datesToRemove,
-      },
-      config
-    );
-
-    setBlockedDatesFromServer((prev) => [
-      ...prev.filter((d) => !datesToRemove.includes(d)),
-      ...datesToAdd,
-    ]);
-    setDatesToAdd([]);
-    setDatesToRemove([]);
-
-    toast.success("✅ Даты успешно сохранены");
-  } catch (error) {
-    console.error("❌ Ошибка при сохранении дат:", error);
-    toast.error("Ошибка при сохранении дат");
+  } else {
+    // Добавляем
+    setBlockedDatesLocal((prev) => [...prev, clicked.toISOString()]);
   }
 };
 
+
+
+
+
+const handleSaveBlockedDates = () => {
+  axios
+    .post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      { dates: blockedDatesLocal },
+      config
+    )
+    .then(() => {
+      alert("Даты сохранены");
+      setBlockedDatesFromServer((prev) => [...prev, ...blockedDatesLocal]);
+      setBlockedDatesLocal([]);
+    })
+    .catch(() => alert("Ошибка при сохранении"));
+};
 
 
   
@@ -2590,25 +2587,27 @@ const handleSaveBlockedDates = async () => {
 
     <DayPicker
   mode="multiple"
-  selected={[...blockedDatesLocal, ...blockedDatesFromServer].map(
-    (d) => new Date(d.date || d)
-  )}
-  onSelect={handleCalendarClick}
-  disabled={{ before: new Date() }}
+  selected={[
+    ...blockedDatesLocal.map((d) => new Date(d)),
+    ...blockedDatesFromServer.map((d) => new Date(d))
+  ]}
+  disabled={[
+    ...bookedDates,
+    { before: new Date() } // запрет на прошедшие даты
+  ]}
   modifiers={{
-    blocked: [...blockedDatesLocal, ...blockedDatesFromServer].map(
-      (d) => new Date(d.date || d)
-    ),
-    booked: bookedDates.map((d) => new Date(d)),
+    blocked: blockedDatesLocal.map((d) => new Date(d)),
+    serverBlocked: blockedDatesFromServer.map((d) => new Date(d)),
+    booked: bookedDates,
   }}
   modifiersClassNames={{
-    blocked: "bg-red-500 text-white",
-    booked: "bg-blue-500 text-white",
+    blocked: "bg-red-400 text-white",
+    serverBlocked: "bg-red-700 text-white",
+    booked: "bg-blue-400 text-white",
   }}
+  onDayClick={handleCalendarClick}
   className="border rounded p-4"
 />
-
-
 
     <button
       onClick={handleSaveBlockedDates}
