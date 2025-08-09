@@ -4,7 +4,7 @@ import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 import AsyncSelect from "react-select/async";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -28,7 +28,7 @@ const Dashboard = () => {
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
-
+  
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -36,247 +36,213 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]);
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
-
+  
   const [countryOptions, setCountryOptions] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState(null);
   const [departureCity, setDepartureCity] = useState(null);
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
-  // ---- Календарь (твоя базовая логика + фишки) ----
-  const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]); // ["YYYY-MM-DD"]
-  const [datesToAdd, setDatesToAdd] = useState([]); // ["YYYY-MM-DD"]
-  const [datesToRemove, setDatesToRemove] = useState([]); // ["YYYY-MM-DD"]
-  const [bookedDates, setBookedDates] = useState([]); // Date[]
-
-  // Фишки:
-  const [month, setMonth] = useState(new Date()); // навигация по месяцам
-  const [showBooked, setShowBooked] = useState(true); // слой синих
-  const [showBlocked, setShowBlocked] = useState(true); // слой красных
-
-  // Причина блокировки (при добавлении)
-  const [reasonModal, setReasonModal] = useState(null); // { date: "YYYY-MM-DD" }
-  const [reasonText, setReasonText] = useState("");
-
-  // История
-  const [history, setHistory] = useState([]); // [{date, action, reason, created_at}]
+  const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
+  const [datesToAdd, setDatesToAdd] = useState([]);
+  const [datesToRemove, setDatesToRemove] = useState([]);
+  const [bookedDates, setBookedDates] = useState([]);
 
   const [details, setDetails] = useState({
-    direction: "",
-    directionCountry: "",
-    directionFrom: "",
-    directionTo: "",
-    startDate: "",
-    endDate: "",
-    hotel: "",
-    accommodation: "",
-    accommodationCategory: "",
-    adt: "",
-    chd: "",
-    inf: "",
-    food: "",
-    halal: false,
-    transfer: "",
-    changeable: false,
-    visaIncluded: false,
-    netPrice: "",
-    expiration: "",
-    isActive: true,
-    visaCountry: "",
-  });
+  direction: "",
+  directionCountry: "",
+  directionFrom: "",
+  directionTo: "",
+  startDate: "",
+  endDate: "",
+  hotel: "",
+  accommodation: "",
+  accommodationCategory: "",
+  adt: "",
+  chd: "",
+  inf: "",
+  food: "",
+  halal: false,
+  transfer: "",
+  changeable: false,
+  visaIncluded: false,
+  netPrice: "",
+  expiration: "",
+  isActive: true,
+  visaCountry: "",
+});
 
+  
   // 🔹 Фильтрация по активности услуг
-  const isServiceActive = (s) =>
-    !s.details?.expiration || new Date(s.details.expiration) > new Date();
-
+const isServiceActive = (s) =>
+  !s.details?.expiration || new Date(s.details.expiration) > new Date();
+  
   // 🔹 Загрузка отелей по запросу
-  const loadHotelOptions = async (inputValue) => {
+const loadHotelOptions = async (inputValue) => {
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
+    );
+    return res.data;
+  } catch (err) {
+    console.error("Ошибка загрузки отелей:", err);
+    return [];
+  }
+};
+  
+// Загрузка стран
+useEffect(() => {
+  const fetchCountries = async () => {
     try {
-      const res = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${inputValue}`
-      );
-      return res.data;
-    } catch (err) {
-      console.error("Ошибка загрузки отелей:", err);
-      return [];
+      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+      const countries = response.data.map((country) => ({
+        value: country.name.common,
+        label: country.name.common,
+        code: country.cca2, // ISO2 код
+      }));
+      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+    } catch (error) {
+      console.error("Ошибка загрузки стран:", error);
     }
   };
-
-  // Загрузка стран
-  useEffect(() => {
-    const fetchCountries = async () => {
-      try {
-        const response = await axios.get(
-          "https://restcountries.com/v3.1/all?fields=name,cca2"
-        );
-        const countries = response.data.map((country) => ({
-          value: country.name.common,
-          label: country.name.common,
-          code: country.cca2,
-        }));
-        setCountryOptions(
-          countries.sort((a, b) => a.label.localeCompare(b.label))
-        );
-      } catch (error) {
-        console.error("Ошибка загрузки стран:", error);
-      }
-    };
-    fetchCountries();
-  }, []);
+  fetchCountries();
+}, []);
 
   const loadDepartureCities = async (inputValue) => {
-    if (!inputValue) return [];
+  if (!inputValue) return [];
+
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+
+  
+// 🔍 Функция загрузки городов по поиску
+const loadCitiesFromInput = async (inputValue) => {
+  if (!inputValue) return [];
+
+  try {
+    const response = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+    });
+
+    return response.data.geonames.map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+};
+  
+// Города отправления — независимо от страны
+useEffect(() => {
+  const fetchCities = async () => {
     try {
       const response = await axios.get("https://secure.geonames.org/searchJSON", {
         params: {
-          name_startsWith: inputValue,
           featureClass: "P",
-          maxRows: 10,
+          maxRows: 100,
+          orderby: "population",
           username: import.meta.env.VITE_GEONAMES_USERNAME,
         },
       });
-      return response.data.geonames.map((city) => ({
+      const cities = response.data.geonames.map((city) => ({
         value: city.name,
-        label: `${city.name}, ${city.countryName}`,
+        label: city.name,
       }));
+      setCityOptionsFrom(cities);
     } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
+      console.error("Ошибка загрузки городов отправления:", error);
     }
   };
+  fetchCities();
+}, []);
 
-  // 🔍 Функция загрузки городов по поиску
-  const loadCitiesFromInput = async (inputValue) => {
-    if (!inputValue) return [];
+useEffect(() => {
+  if (!selectedCountry?.code) return;
+  const fetchCities = async () => {
     try {
       const response = await axios.get("https://secure.geonames.org/searchJSON", {
         params: {
-          name_startsWith: inputValue,
+          country: selectedCountry.code,
           featureClass: "P",
-          maxRows: 10,
+          maxRows: 100,
           username: import.meta.env.VITE_GEONAMES_USERNAME,
         },
       });
-      return response.data.geonames.map((city) => ({
+      const cities = response.data.geonames.map((city) => ({
         value: city.name,
-        label: `${city.name}, ${city.countryName}`,
+        label: city.name,
       }));
+      setCityOptionsTo(cities);
     } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
+      console.error("Ошибка загрузки городов прибытия:", error);
     }
   };
+  fetchCities();
+}, [selectedCountry]);
 
-  // Города отправления — независимо от страны
+   // тут профиль
+
   useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const response = await axios.get(
-          "https://secure.geonames.org/searchJSON",
-          {
-            params: {
-              featureClass: "P",
-              maxRows: 100,
-              orderby: "population",
-              username: import.meta.env.VITE_GEONAMES_USERNAME,
-            },
-          }
-        );
-        const cities = response.data.geonames.map((city) => ({
-          value: city.name,
-          label: city.name,
-        }));
-        setCityOptionsFrom(cities);
-      } catch (error) {
-        console.error("Ошибка загрузки городов отправления:", error);
+  const token = localStorage.getItem("token");
+  const config = {
+    headers: { Authorization: `Bearer ${token}` },
+  };
+
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+    .then((res) => {
+      setProfile(res.data);
+      setNewLocation(res.data.location);
+      setNewSocial(res.data.social);
+      setNewPhone(res.data.phone);
+      setNewAddress(res.data.address);
+
+      if (["guide", "transport"].includes(res.data.type)) {
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+          .then((response) => {
+            const formatted = response.data.map((item) => new Date(item));
+            setBookedDates(formatted);
+          })
+          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+
+        axios
+          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
+          .then((response) => {
+            setBlockedDatesFromServer(response.data); // строки в формате YYYY-MM-DD
+          })
+          .catch((err) => console.error("Ошибка загрузки заблокированных дат", err));
       }
-    };
-    fetchCities();
-  }, []);
+    })
+    .catch((err) => console.error("Ошибка загрузки профиля", err));
+}, []);
 
-  useEffect(() => {
-    if (!selectedCountry?.code) return;
-    const fetchCities = async () => {
-      try {
-        const response = await axios.get(
-          "https://secure.geonames.org/searchJSON",
-          {
-            params: {
-              country: selectedCountry.code,
-              featureClass: "P",
-              maxRows: 100,
-              username: import.meta.env.VITE_GEONAMES_USERNAME,
-            },
-          }
-        );
-        const cities = response.data.geonames.map((city) => ({
-          value: city.name,
-          label: city.name,
-        }));
-        setCityOptionsTo(cities);
-      } catch (error) {
-        console.error("Ошибка загрузки городов прибытия:", error);
-      }
-    };
-    fetchCities();
-  }, [selectedCountry]);
 
-  // ---- Профиль + календарь (загрузка) ----
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const config = { headers: { Authorization: `Bearer ${token}` } };
 
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
-      .then((res) => {
-        setProfile(res.data);
-        setNewLocation(res.data.location);
-        setNewSocial(res.data.social);
-        setNewPhone(res.data.phone);
-        setNewAddress(res.data.address);
-
-        if (["guide", "transport"].includes(res.data.type)) {
-          // 🔵 Забронированные
-          axios
-            .get(
-              `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
-              config
-            )
-            .then((response) => {
-              const formatted = response.data.map((item) => new Date(item));
-              setBookedDates(formatted);
-            })
-            .catch((err) =>
-              console.error("Ошибка загрузки занятых дат", err)
-            );
-
-          // 🔴 Заблокированные (строки)
-          axios
-            .get(
-              `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-              config
-            )
-            .then((response) => {
-              setBlockedDatesFromServer(response.data);
-            })
-            .catch((err) =>
-              console.error("Ошибка загрузки заблокированных дат", err)
-            );
-
-          // 📜 История
-          axios
-            .get(
-              `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates/history`,
-              config
-            )
-            .then((response) => setHistory(response.data))
-            .catch(() => {});
-        }
-      })
-      .catch((err) => console.error("Ошибка загрузки профиля", err));
-  }, []);
-
-  // ---- Изменение фото/сертификата/профиля (как у тебя) ----
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -313,11 +279,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`,
-        updated,
-        config
-      )
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -328,8 +290,7 @@ const Dashboard = () => {
 
   const handleChangePassword = () => {
     axios
-      .put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
         { password: newPassword },
         config
       )
@@ -340,175 +301,144 @@ const Dashboard = () => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
-  // ---- Услуги (как у тебя) ----
+  
+// Тут поведение кнопки Сохранить услугу
+
   const handleSaveService = () => {
-    const requiredFieldsByCategory = {
-      refused_tour: [
-        "title",
-        "category",
-        "details.directionFrom",
-        "details.directionTo",
-        "details.netPrice",
-      ],
-      author_tour: [
-        "title",
-        "category",
-        "details.directionFrom",
-        "details.directionTo",
-        "details.netPrice",
-      ],
-      refused_hotel: [
-        "title",
-        "category",
-        "details.direction",
-        "details.directionTo",
-        "details.startDate",
-        "details.endDate",
-        "details.netPrice",
-      ],
-      refused_flight: [
-        "title",
-        "category",
-        "details.direction",
-        "details.startDate",
-        "details.netPrice",
-        "details.airline",
-        "details.flightDetails",
-        "details.flightType",
-      ],
-      refused_event_ticket: [
-        "title",
-        "category",
-        "details.location",
-        "details.startDate",
-        "details.netPrice",
-      ],
-      visa_support: ["title", "category", "details.description", "details.netPrice"],
-    };
+  const requiredFieldsByCategory = {
+    refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
+    author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
+    refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
+    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
+    refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
+    visa_support: ["title", "category", "details.description", "details.netPrice"]
+  };
 
-    const isExtendedCategory = category in requiredFieldsByCategory;
-    const requiredFields =
-      requiredFieldsByCategory[category] || [
-        "title",
-        "description",
-        "category",
-        "price",
-      ];
+  const isExtendedCategory = category in requiredFieldsByCategory;
+  const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
 
-    const getFieldValue = (path) => {
-      return path.split(".").reduce(
-        (obj, key) => obj?.[key],
-        {
-          title,
-          description,
-          category,
-          price,
-          details,
-        }
-      );
-    };
-
-    const hasEmpty = requiredFields.some((field) => {
-      const value = getFieldValue(field);
-      return value === "" || value === undefined;
-    });
-
-    const needsReturnDate =
-      category === "refused_flight" &&
-      details.flightType === "round_trip" &&
-      (!details.returnDate || details.returnDate === "");
-
-    if (hasEmpty || needsReturnDate) {
-      setMessageService(t("fill_all_fields"));
-      return;
-    }
-
-    const data = {
+  const getFieldValue = (path) => {
+    return path.split(".").reduce((obj, key) => obj?.[key], {
       title,
+      description,
       category,
-      images: images || [],
-      price: isExtendedCategory ? undefined : price,
-      description: isExtendedCategory ? undefined : description,
-      availability: isExtendedCategory ? undefined : availability,
-      details: isExtendedCategory ? details : undefined,
-    };
-
-    if (selectedService) {
-      axios
-        .put(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`,
-          data,
-          config
-        )
-        .then((res) => {
-          setServices((prev) =>
-            prev.map((s) => (s.id === selectedService.id ? res.data : s))
-          );
-          resetServiceForm();
-          setMessageService(t("service_updated"));
-          setTimeout(() => setMessageService(""), 3000);
-        })
-        .catch((err) => {
-          console.error("Ошибка обновления:", err);
-          setMessageService(t("update_error"));
-        });
-    } else {
-      axios
-        .post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
-          data,
-          config
-        )
-        .then((res) => {
-          setServices((prev) => [...prev, res.data]);
-          resetServiceForm();
-          setMessageService(t("service_added"));
-          setTimeout(() => setMessageService(""), 3000);
-        })
-        .catch((err) => {
-          console.error("Ошибка добавления:", err);
-          setMessageService(t("add_error"));
-        });
-    }
-  };
-
-  const resetServiceForm = () => {
-    setSelectedService(null);
-    setTitle("");
-    setDescription("");
-    setPrice("");
-    setCategory("");
-    setAvailability([]);
-    setImages([]);
-    setDetails({
-      directionCountry: "",
-      directionFrom: "",
-      directionTo: "",
-      startDate: "",
-      endDate: "",
-      hotel: "",
-      roomCategory: "",
-      accommodation: "",
-      food: "",
-      transfer: "",
-      changeable: false,
-      visaIncluded: false,
-      netPrice: "",
-      expiration: "",
-      isActive: true,
-      flightDateGo: "",
-      flightDateReturn: "",
-      flightDetails: "",
-      visaCountry: "",
+      price,
+      details,
     });
   };
+
+  const hasEmpty = requiredFields.some((field) => {
+    const value = getFieldValue(field);
+    return value === "" || value === undefined;
+  });
+
+  // 🔁 Дополнительная проверка для returnDate если рейс туда-обратно
+  const needsReturnDate =
+    category === "refused_flight" &&
+    details.flightType === "round_trip" &&
+    (!details.returnDate || details.returnDate === "");
+
+  console.log("📋 Проверка обязательных полей для категории:", category);
+console.log("🎯 Обязательные поля:", requiredFields);
+
+requiredFields.forEach((field) => {
+  const keys = field.split(".");
+  const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
+    title,
+    description,
+    category,
+    price,
+    details,
+  });
+  console.log(`⛳ ${field}:`, value);
+});
+
+    
+  if (hasEmpty || needsReturnDate) {
+    setMessageService(t("fill_all_fields"));
+    return;
+  }
+
+  const data = {
+    title,
+    category,
+    images: images || [],
+    price: isExtendedCategory ? undefined : price,
+    description: isExtendedCategory ? undefined : description,
+    availability: isExtendedCategory ? undefined : availability,
+    details: isExtendedCategory ? details : undefined
+  };
+
+  if (selectedService) {
+    axios
+      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
+      .then((res) => {
+        setServices((prev) =>
+          prev.map((s) => (s.id === selectedService.id ? res.data : s))
+        );
+        resetServiceForm();
+        setMessageService(t("service_updated"));
+        setTimeout(() => setMessageService(""), 3000);
+      })
+      .catch((err) => {
+        console.error("Ошибка обновления:", err);
+        setMessageService(t("update_error"));
+      });
+  } else {
+    axios
+      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
+      .then((res) => {
+        setServices((prev) => [...prev, res.data]);
+        resetServiceForm();
+        setMessageService(t("service_added"));
+        setTimeout(() => setMessageService(""), 3000);
+      })
+      .catch((err) => {
+        console.error("Ошибка добавления:", err);
+        setMessageService(t("add_error"));
+      });
+  }
+};
+
+
+// сбрасываем все поля 
+
+const resetServiceForm = () => {
+  setSelectedService(null);
+  setTitle("");
+  setDescription("");
+  setPrice("");
+  setCategory("");
+  setAvailability([]);
+  setImages([]);
+  setDetails({
+    directionCountry: "",
+    directionFrom: "",
+    directionTo: "",
+    startDate: "",
+    endDate: "",
+    hotel: "",
+    roomCategory: "",
+    accommodation: "",
+    food: "",
+    transfer: "",
+    changeable: false,
+    visaIncluded: false,
+    netPrice: "",
+    expiration: "",
+    isActive: true,
+    flightDateGo: "",
+    flightDateReturn: "",
+    flightDetails: "",
+    visaCountry: "",
+  });
+};
+
+
 
   const handleDeleteService = (id) => {
     axios
-      .delete(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`,
-        config
-      )
+      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== id));
         setSelectedService(null);
@@ -517,66 +447,68 @@ const Dashboard = () => {
   };
 
   const loadServiceToEdit = (service) => {
-    setSelectedService(service);
-    setCategory(service.category);
-    setTitle(service.title);
-    setImages(service.images || []);
-    setMessageService("");
+  setSelectedService(service);
+  setCategory(service.category);
+  setTitle(service.title);
+  setImages(service.images || []);
+  setMessageService("");
 
-    if (
-      [
-        "refused_tour",
-        "author_tour",
-        "refused_hotel",
-        "refused_flight",
-        "refused_event_ticket",
-        "visa_support",
-      ].includes(service.category)
-    ) {
-      const d = service.details || {};
-      setDetails({
-        direction: d.direction || "",
-        directionFrom: d.directionFrom || "",
-        directionTo: d.directionTo || "",
-        startDate: d.startDate || "",
-        endDate: d.endDate || "",
-        hotel: d.hotel || "",
-        accommodation: d.accommodation || "",
-        food: d.food || "",
-        transfer: d.transfer || "",
-        changeable: d.changeable || false,
-        visaIncluded: d.visaIncluded || false,
-        netPrice: d.netPrice || "",
-        expiration: d.expiration || "",
-        isActive: d.isActive ?? true,
-        flightType: d.flightType || "one_way",
-        airline: d.airline || "",
-        returnDate: d.returnDate || "",
-        startFlightDate: d.startFlightDate || "",
-        endFlightDate: d.endFlightDate || "",
-        flightDetails: d.flightDetails || "",
-        flightDetailsText: d.flightDetailsText || "",
-        accommodationCategory: d.accommodationCategory || "",
-        adt: d.adt || "",
-        chd: d.chd || "",
-        inf: d.inf || "",
-        location: d.location || "",
-        eventName: d.eventName || "",
-        eventCategory: d.eventCategory || "",
-        ticketDetails: d.ticketDetails || "",
-        description: d.description || "",
-        visaCountry: d.visaCountry || "",
-      });
-    } else {
-      setDescription(service.description || "");
-      setPrice(service.price || "");
-      setAvailability(service.availability || []);
-    }
-  };
+  if (
+    ["refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket", "visa_support"].includes(service.category)
+  ) {
+    const d = service.details || {};
+    setDetails({
+      // Общие поля
+      direction: d.direction || "",
+      directionFrom: d.directionFrom || "",
+      directionTo: d.directionTo || "",
+      startDate: d.startDate || "",
+      endDate: d.endDate || "",
+      hotel: d.hotel || "",
+      accommodation: d.accommodation || "",
+      food: d.food || "",
+      transfer: d.transfer || "",
+      changeable: d.changeable || false,
+      visaIncluded: d.visaIncluded || false,
+      netPrice: d.netPrice || "",
+      expiration: d.expiration || "",
+      isActive: d.isActive ?? true,
+
+      // Авиабилет
+      flightType: d.flightType || "one_way",
+      airline: d.airline || "",
+      returnDate: d.returnDate || "",
+      startFlightDate: d.startFlightDate || "",
+      endFlightDate: d.endFlightDate || "",
+      flightDetails: d.flightDetails || "",
+      flightDetailsText: d.flightDetailsText || "",
+
+      // Отель
+      accommodationCategory: d.accommodationCategory || "",
+      adt: d.adt || "",
+      chd: d.chd || "",
+      inf: d.inf || "",
+
+      // Мероприятие
+      location: d.location || "",
+      eventName: d.eventName || "",
+      eventCategory: d.eventCategory || "",
+      ticketDetails: d.ticketDetails || "",
+
+      // Виза
+      description: d.description || "",
+      visaCountry: d.visaCountry || "",
+    });
+  } else {
+    setDescription(service.description || "");
+    setPrice(service.price || "");
+    setAvailability(service.availability || []);
+  }
+};
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
-    const readers = files.map((file) => {
+    const readers = files.map(file => {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result);
@@ -588,161 +520,105 @@ const Dashboard = () => {
       setImages((prev) => [...prev, ...base64Images]);
     });
   };
+  
+const getCategoryOptions = (type) => {
+  switch (type) {
+    case "guide":
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+      ];
+    case "transport":
+      return [
+        { value: "city_tour", label: t("city_tour") },
+        { value: "mountain_tour", label: t("mountain_tour") },
+        { value: "one_way_transfer", label: t("one_way_transfer") },
+        { value: "dinner_transfer", label: t("dinner_transfer") },
+        { value: "border_transfer", label: t("border_transfer") },
+      ];
+    case "agent":
+      return [
+        { value: "refused_tour", label: t("category.refused_tour") },
+        { value: "refused_hotel", label: t("category.refused_hotel") },
+        { value: "refused_ticket", label: t("category.refused_ticket") },
+        { value: "refused_event", label: t("category.refused_event") },
+        { value: "visa_support", label: t("category.visa_support") },
+        { value: "authored_tour", label: t("category.authored_tour") },
+      ];
+    case "hotel":
+      return [
+        { value: "room_rent", label: t("room_rent") },
+        { value: "hotel_transfer", label: t("hotel_transfer") },
+        { value: "hall_rent", label: t("hall_rent") },
+      ];
+    default:
+      return [];
+  }
+};
 
-  const getCategoryOptions = (type) => {
-    switch (type) {
-      case "guide":
-        return [
-          { value: "city_tour", label: t("city_tour") },
-          { value: "mountain_tour", label: t("mountain_tour") },
-        ];
-      case "transport":
-        return [
-          { value: "city_tour", label: t("city_tour") },
-          { value: "mountain_tour", label: t("mountain_tour") },
-          { value: "one_way_transfer", label: t("one_way_transfer") },
-          { value: "dinner_transfer", label: t("dinner_transfer") },
-          { value: "border_transfer", label: t("border_transfer") },
-        ];
-      case "agent":
-        return [
-          { value: "refused_tour", label: t("category.refused_tour") },
-          { value: "refused_hotel", label: t("category.refused_hotel") },
-          { value: "refused_ticket", label: t("category.refused_ticket") },
-          { value: "refused_event", label: t("category.refused_event") },
-          { value: "visa_support", label: t("category.visa_support") },
-          { value: "authored_tour", label: t("category.authored_tour") },
-        ];
-      case "hotel":
-        return [
-          { value: "room_rent", label: t("room_rent") },
-          { value: "hotel_transfer", label: t("hotel_transfer") },
-          { value: "hall_rent", label: t("hall_rent") },
-        ];
-      default:
-        return [];
-    }
+  // ТУТ КАЛЕНДАРЬ
+  
+const handleCalendarClick = (day) => {
+  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+
+  // ⛔ Запрет выбора прошедших дат
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (day < today) return;
+
+  // ⛔ Запрет снятия забронированных дат
+  if (bookedDates.some((d) => d.toDateString() === day.toDateString())) {
+    toast.warn("Эта дата уже забронирована и не может быть изменена.");
+    return;
+  }
+
+  const isInBlockedServer = blockedDatesFromServer.includes(dateStr);
+  const isInAdd = datesToAdd.includes(dateStr);
+  const isInRemove = datesToRemove.includes(dateStr);
+
+  if (isInBlockedServer && !isInRemove) {
+    setDatesToRemove((prev) => [...prev, dateStr]);
+  } else if (isInBlockedServer && isInRemove) {
+    setDatesToRemove((prev) => prev.filter((d) => d !== dateStr));
+  } else if (!isInBlockedServer && !isInAdd) {
+    setDatesToAdd((prev) => [...prev, dateStr]);
+  } else if (!isInBlockedServer && isInAdd) {
+    setDatesToAdd((prev) => prev.filter((d) => d !== dateStr));
+  }
+};
+
+const handleSaveBlockedDates = () => {
+  const config = {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   };
 
-  // ====== КАЛЕНДАРЬ (твоя логика + доработки) ======
-
-  const handleCalendarClick = (day) => {
-    const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(day.getDate()).padStart(2, "0")}`;
-
-    // ⛔ Запрет прошедших дат
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (day < today) return;
-
-    // ⛔ Запрет изменения забронированных
-    if (bookedDates.some((d) => d.toDateString() === day.toDateString())) {
-      toast.warn("Эта дата уже забронирована и не может быть изменена.");
-      return;
-    }
-
-    const isInBlockedServer = blockedDatesFromServer.includes(dateStr);
-    const isInAdd = datesToAdd.includes(dateStr);
-    const isInRemove = datesToRemove.includes(dateStr);
-
-    // Если дата уже заблокирована на сервере — снимаем без причины (оставляем твою логику)
-    if (isInBlockedServer && !isInRemove) {
-      setDatesToRemove((prev) => [...prev, dateStr]);
-      return;
-    }
-    if (isInBlockedServer && isInRemove) {
-      setDatesToRemove((prev) => prev.filter((d) => d !== dateStr));
-      return;
-    }
-
-    // Если даты нет — добавляем, но сначала спросим причину
-    if (!isInBlockedServer && !isInAdd) {
-      setReasonModal({ date: dateStr });
-      return;
-    }
-    if (!isInBlockedServer && isInAdd) {
-      setDatesToAdd((prev) => prev.filter((d) => d !== dateStr));
-      return;
-    }
-  };
-
-  const confirmReasonAdd = () => {
-    if (!reasonModal) return;
-    if (!reasonText.trim()) {
-      toast.error("Укажите причину");
-      return;
-    }
-    // твоя базовая логика хранит даты как строки (оставляем), причину отправим отдельно при сохранении
-    setDatesToAdd((prev) => [...prev, reasonModal.date]);
-    // сохраним локально причины добавления, чтобы отправить в POST
-    setLocalAddReasons((prev) => ({ ...prev, [reasonModal.date]: reasonText.trim() }));
-    setReasonModal(null);
-    setReasonText("");
-  };
-
-  // локальное хранилище причин для add (формат { 'YYYY-MM-DD': '...' })
-  const [localAddReasons, setLocalAddReasons] = useState({});
-
-  const handleSaveBlockedDates = () => {
-    const token = localStorage.getItem("token");
-    const config = { headers: { Authorization: `Bearer ${token}` } };
-
-    // Готовим payload под наш backend:
-    // add -> массив объектов { date, reason }
-    const addPayload = datesToAdd.map((d) => ({
-      date: d,
-      reason: localAddReasons[d] || null,
-    }));
-
-    axios
-      .post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-        {
-          add: addPayload,
-          remove: datesToRemove, // как и прежде — строки
-        },
-        config
-      )
-      .then(() => {
-        toast.success("Изменения успешно сохранены.");
-
-        // Обновляем локально список с сервера (оставляем строки)
-        setBlockedDatesFromServer((prev) => {
-          const removed = prev.filter((d) => !datesToRemove.includes(d));
-          return [...removed, ...datesToAdd];
-        });
-
-        // Сброс локальных буферов
-        setDatesToAdd([]);
-        setDatesToRemove([]);
-        setLocalAddReasons({});
-
-        // Перезагрузим историю
-        axios
-          .get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates/history`,
-            config
-          )
-          .then((response) => setHistory(response.data))
-          .catch(() => {});
-      })
-      .catch((err) => {
-        console.error("Ошибка сохранения:", err);
-        toast.error("Ошибка при сохранении дат");
+  axios
+    .post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      {
+        add: datesToAdd,
+        remove: datesToRemove,
+      },
+      config
+    )
+    .then(() => {
+      toast.success("Изменения успешно сохранены.");
+      setBlockedDatesFromServer((prev) => {
+        const removed = prev.filter((d) => !datesToRemove.includes(d));
+        return [...removed, ...datesToAdd];
       });
-  };
+      setDatesToAdd([]);
+      setDatesToRemove([]);
+    })
+    .catch((err) => {
+      toast.error("Ошибка при сохранении дат");
+      console.error("Ошибка сохранения:", err);
+    });
+};
 
-  // Экспорт .ics (интеграция с внешним календарём)
-  const exportICS = () => {
-    const token = localStorage.getItem("token");
-    const url = `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates/export`;
-    // Откроем в новой вкладке (бекенд вернёт файл)
-    window.open(url + `?token=${token}`, "_blank");
-  };
 
-          // ====== RENDER ======
+
+  
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
       {/* Левый блок */}
@@ -2675,196 +2551,96 @@ const Dashboard = () => {
   )}
 {/* Перенесённый календарь */}
 {(profile.type === "guide" || profile.type === "transport") && (
-          <div className="mt-8 border rounded p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-orange-600">
-                {t("calendar.blocking_title") || "Календарь блокировок"}
-              </h3>
+  <div className="mt-10 bg-white p-6 rounded shadow border">
+    <h3 className="text-lg font-semibold mb-4 text-orange-600">
+      {t("calendar.blocking_title")}
+    </h3>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    setMonth(
-                      new Date(month.getFullYear(), month.getMonth() - 1, 1)
-                    )
-                  }
-                  className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-                  title="Предыдущий месяц"
-                >
-                  ⏮
-                </button>
-                <button
-                  onClick={() => setMonth(new Date())}
-                  className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-                  title="Сегодня"
-                >
-                  Сегодня
-                </button>
-                <button
-                  onClick={() =>
-                    setMonth(
-                      new Date(month.getFullYear(), month.getMonth() + 1, 1)
-                    )
-                  }
-                  className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-                  title="Следующий месяц"
-                >
-                  ⏭
-                </button>
-              </div>
-            </div>
+   <DayPicker
+      mode="multiple"
+      selected={
+        [...blockedDatesFromServer.filter((d) => !datesToRemove.includes(d)), ...datesToAdd]
+          .map((d) => {
+            const parts = d.split("-");
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+          })
+      }
+      onDayClick={(day) => {
+        const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+        const isBooked = bookedDates.some((d) => d.toDateString() === day.toDateString());
 
-            {/* Фильтры слоёв */}
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={showBooked}
-                  onChange={(e) => setShowBooked(e.target.checked)}
-                />
-                <span>Показывать забронированные</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={showBlocked}
-                  onChange={(e) => setShowBlocked(e.target.checked)}
-                />
-                <span>Показывать заблокированные</span>
-              </label>
-            </div>
+        if (isBooked) {
+          toast.warn(t("calendar.booked_warning"));
+          return;
+        }
 
-            <DayPicker
-              mode="multiple"
-              month={month}
-              onMonthChange={setMonth}
-              selected={
-                [
-                  // итоговый набор выделенных красных дат: серверные + добавленные - удалённые
-                  ...blockedDatesFromServer
-                    .filter((d) => !datesToRemove.includes(d))
-                    .map((d) => {
-                      const [y, m, dd] = d.split("-");
-                      return new Date(+y, +m - 1, +dd);
-                    }),
-                  ...datesToAdd.map((d) => {
-                    const [y, m, dd] = d.split("-");
-                    return new Date(+y, +m - 1, +dd);
-                  }),
-                  // (не делаем selected для booked, у них своя подсветка через modifiers)
-                ]
-              }
-              disabled={{ before: new Date() }}
-              onDayClick={handleCalendarClick}
-              modifiers={{
-                booked: showBooked ? bookedDates : [],
-                blocked: showBlocked
-                  ? [
-                      ...blockedDatesFromServer
-                        .filter((d) => !datesToRemove.includes(d))
-                        .map((d) => {
-                          const [y, m, dd] = d.split("-");
-                          return new Date(+y, +m - 1, +dd);
-                        }),
-                      ...datesToAdd.map((d) => {
-                        const [y, m, dd] = d.split("-");
-                        return new Date(+y, +m - 1, +dd);
-                      }),
-                    ]
-                  : [],
-                past: { before: new Date() },
-              }}
-              modifiersClassNames={{
-                booked: "bg-blue-500 text-white",
-                blocked: "bg-red-500 text-white",
-                past: "bg-gray-200 text-gray-500",
-              }}
-              className="rounded border p-4"
-            />
+        const isInBlockedServer = blockedDatesFromServer.includes(dateStr);
+        const isInAdd = datesToAdd.includes(dateStr);
+        const isInRemove = datesToRemove.includes(dateStr);
 
-            <div className="flex items-center gap-3 mt-4">
-              <button
-                onClick={handleSaveBlockedDates}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                💾 Сохранить изменения
-              </button>
-              <button
-                onClick={exportICS}
-                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-              >
-                📤 Экспорт .ics
-              </button>
-            </div>
+        if (isInBlockedServer && !isInRemove) {
+          setDatesToRemove((prev) => [...prev, dateStr]);
+        } else if (isInBlockedServer && isInRemove) {
+          setDatesToRemove((prev) => prev.filter((d) => d !== dateStr));
+        } else if (!isInBlockedServer && !isInAdd) {
+          setDatesToAdd((prev) => [...prev, dateStr]);
+        } else if (!isInBlockedServer && isInAdd) {
+          setDatesToAdd((prev) => prev.filter((d) => d !== dateStr));
+        }
+      }}
+      disabled={{ before: new Date() }}
+      modifiers={{
+        booked: bookedDates,
+        blocked: [...blockedDatesFromServer, ...datesToAdd]
+          .filter((d) => !datesToRemove.includes(d))
+          .map((d) => {
+            const parts = d.split("-");
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+          }),
+      }}
+      modifiersClassNames={{
+        booked: "bg-blue-500 text-white",
+        blocked: "bg-red-500 text-white",
+      }}
+      className="rounded border p-4"
+    />
 
-            {/* История */}
-            {history?.length > 0 && (
-              <div className="mt-6">
-                <h4 className="font-semibold mb-2">История изменений</h4>
-                <div className="max-h-48 overflow-auto border rounded">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="p-2 text-left">Дата</th>
-                        <th className="p-2 text-left">Действие</th>
-                        <th className="p-2 text-left">Причина</th>
-                        <th className="p-2 text-left">Когда</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((h, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="p-2">{h.date?.slice(0, 10)}</td>
-                          <td className="p-2">{h.action}</td>
-                          <td className="p-2">{h.reason || "-"}</td>
-                          <td className="p-2">
-                            {new Date(h.created_at).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* Модалка причины (только при добавлении блокировки) */}
-      {reasonModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded shadow p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-3">
-              Причина блокировки для {reasonModal.date}
-            </h3>
-            <textarea
-              value={reasonText}
-              onChange={(e) => setReasonText(e.target.value)}
-              rows={3}
-              className="w-full border rounded p-2"
-              placeholder="Опишите причину..."
-            />
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => {
-                  setReasonModal(null);
-                  setReasonText("");
-                }}
-                className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={confirmReasonAdd}
-                className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700"
-              >
-                Подтвердить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
+   <button
+      onClick={() => {
+        const token = localStorage.getItem("token");
+        const config = {
+          headers: { Authorization: `Bearer ${token}` },
+        };
+
+        axios
+          .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
+            add: datesToAdd,
+            remove: datesToRemove,
+          }, config)
+          .then(() => {
+            toast.success(t("calendar.save_success"));
+            // Обновляем локальные состояния
+            setBlockedDatesFromServer((prev) => {
+              const removed = prev.filter((d) => !datesToRemove.includes(d));
+              return [...removed, ...datesToAdd];
+            });
+            setDatesToAdd([]);
+            setDatesToRemove([]);
+          })
+          .catch(() => {
+            toast.error(t("calendar.save_error"));
+          });
+      }}
+      className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+    >
+      💾 {t("calendar.save_button")}
+    </button>
+
+
+  </div>
+)}
   
 </div>
 </div>
@@ -2872,4 +2648,4 @@ const Dashboard = () => {
 );
 };
 
-export default Dashboard;     
+export default Dashboard;
