@@ -74,8 +74,12 @@ const Dashboard = () => {
 
   
   // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) =>
-  !s.details?.expiration || new Date(s.details.expiration) > new Date();
+const isServiceActive = (s) => {
+  if (!s.details || !s.details.expiration) return true;
+  const exp = new Date(s.details.expiration);
+  return exp.toString() !== "Invalid Date" && exp > new Date();
+};
+
   
   // 🔹 Загрузка отелей по запросу
 const loadHotelOptions = async (inputValue) => {
@@ -207,6 +211,7 @@ useEffect(() => {
    // тут профиль
 
   useEffect(() => {
+    console.log("PROFILE:", profile);
   const token = localStorage.getItem("token");
   const config = {
     headers: { Authorization: `Bearer ${token}` },
