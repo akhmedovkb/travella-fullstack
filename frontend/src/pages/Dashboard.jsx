@@ -400,14 +400,18 @@ useEffect(() => {
     return;
   }
 
+  // availability отправляем только для guide/transport и только если массив не пуст
+  const shouldSendAvailability =
+    (profile.type === "guide" || profile.type === "transport") &&
+    Array.isArray(availability) &&
+    availability.length > 0;
+
   const data = {
     title,
     category,
-    images: images || [],
-    price: isExtendedCategory ? undefined : price,
-    description: isExtendedCategory ? undefined : description,
-    availability: isExtendedCategory ? undefined : availability,
-    details: isExtendedCategory ? details : undefined
+    ...(images && images.length ? { images } : {}),
+    ...(isExtendedCategory ? { details } : { price, description }),
+    ...(shouldSendAvailability ? { availability: availability.map(toIso) } : {})
   };
 
   if (selectedService) {
@@ -436,7 +440,6 @@ useEffect(() => {
       });
   }
 };
-
 
 // сбрасываем все поля 
 
@@ -528,7 +531,12 @@ const resetServiceForm = () => {
   } else {
     setDescription(service.description || "");
     setPrice(service.price || "");
-    setAvailability(service.availability || []);
+    setAvailability(
+       Array.isArray(service.availability)
+        ? service.availability.map(toDate) // превратим "2025-08-10" -> Date
+        : []
+    );
+
   }
 };
 
