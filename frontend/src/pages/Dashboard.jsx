@@ -6,8 +6,7 @@ import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 import AsyncSelect from "react-select/async";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -125,9 +124,15 @@ const loadHotelOptions = async (inputValue) => {
   
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
   
-  const handleSaveBlockedDates = async () => {
+  const [saving, setSaving] = useState(false);
+
+const handleSaveBlockedDates = async () => {
+  if (!Array.isArray(blockedDates)) return;
+  setSaving(true);
   try {
-    const payload = blockedDates.map(toIso); // ["2025-08-10", ...]
+    const payload = blockedDates.map((d) =>
+      typeof d === "string" ? d : new Date(d).toISOString().split("T")[0]
+    );
     await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
       { dates: payload },
@@ -136,9 +141,13 @@ const loadHotelOptions = async (inputValue) => {
     toast.success(t("calendar.saved_successfully") || "Даты сохранены");
   } catch (err) {
     console.error("Ошибка сохранения дат", err);
-    toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
+    const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
+    toast.error(msg);
+  } finally {
+    setSaving(false);
   }
 };
+
 
 
   // Загрузка стран
@@ -2620,12 +2629,10 @@ const getCategoryOptions = (type) => {
     </div>
 
     {/* 🔘 Кнопка сохранения */}
-    <button
-      onClick={handleSaveBlockedDates}
-      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
-    >
-      {t("calendar.save_blocked_dates")}
+    <button onClick={handleSaveBlockedDates} disabled={saving}>
+  {saving ? t("saving") || "Сохраняю..." : t("calendar.save_blocked_dates")}
     </button>
+
   </div>
 )}
 
