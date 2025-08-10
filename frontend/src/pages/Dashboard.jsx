@@ -754,8 +754,6 @@ const getCategoryOptions = (type) => {
         </div>
       </div>
     </div>
-
-    {messageProfile && <p className="text-sm text-center text-gray-600 mt-4">{messageProfile}</p>}
   </div>
 
 {/* Правый блок */}
