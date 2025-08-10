@@ -527,8 +527,9 @@ const resetServiceForm = () => {
     });
 
     Promise.all(readers).then((base64Images) => {
-  setImages((prev) => [...prev, ...base64Images]);
-});
+      setImages((prev) => [...prev, ...base64Images]);
+    });
+  };
   
 const getCategoryOptions = (type) => {
   switch (type) {
@@ -1125,7 +1126,8 @@ const getCategoryOptions = (type) => {
       </button>
     </>
   ) : (category === "refused_flight" && profile.type === "agent") ? (
-      <>
+    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного отеля:
+    <>
         {/* ✈️ Форма отказного авиабилета */}
     <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
 
@@ -1316,13 +1318,7 @@ const getCategoryOptions = (type) => {
       onClick={handleSaveService}
     >
       {t("save_service")}
-    </button>
-    <button
-        className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
-    >
-        {t("delete")}
-    </button>
+    </button>              
     </>  
   
   ) : (category === "refused_event_ticket" && profile.type === "agent") ? (
@@ -1429,15 +1425,9 @@ const getCategoryOptions = (type) => {
     >
       {t("save_service")}
     </button>
-    <button
-        className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
-    >
-        {t("delete")}
-    </button>
     </>  
       ) : (category === "visa_support" && profile.type === "agent") ? (
-    // 🔶 ВСТАВЬ СЮДА форму редактирования visa support:
+    // 🔶 ВСТАВЬ СЮДА форму редактирования отказного билета на мероприятие:
     <>
         <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
      
@@ -1493,13 +1483,7 @@ const getCategoryOptions = (type) => {
       onClick={handleSaveService}
     >
       {t("save_service")}
-    </button>  
-    <button
-          className="w-full bg-red-600 text-white py-2 rounded font-bold"
-          onClick={() => handleDeleteService(selectedService.id)}
-        >
-          {t("delete")}
-    </button>
+    </button>                                
     </>                  
                      ) : (
     <>
@@ -1568,6 +1552,12 @@ const getCategoryOptions = (type) => {
           onClick={handleSaveService}
         >
           {t("save")}
+        </button>
+        <button
+          className="w-full bg-red-600 text-white py-2 rounded font-bold"
+          onClick={() => handleDeleteService(selectedService.id)}
+        >
+          {t("delete")}
         </button>
       </div>
     </>
