@@ -60,7 +60,7 @@ const handleConfirmDelete = () => {
 
   const toIso = (d) => (d instanceof Date ? d.toISOString().split("T")[0] : d);
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
-
+  const safeDate = (v) => (v ? new Date(v) : undefined);
   
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -259,11 +259,9 @@ useEffect(() => {
   // 📌 загружаем profile
   useEffect(() => {
   const token = localStorage.getItem("token");
-  const config = {
-    headers: { Authorization: `Bearer ${token}` },
-  };
+  const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  // Загружаем профиль
+  // Профиль
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
     .then((res) => {
@@ -273,7 +271,6 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
-      // Загружаем занятые даты только для guide и transport
       if (["guide", "transport"].includes(res.data.type)) {
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
@@ -281,19 +278,25 @@ useEffect(() => {
             const formatted = response.data.map((item) => new Date(item.date));
             setBookedDates(formatted);
           })
-          .catch((err) => console.error("Ошибка загрузки занятых дат", err));
-          toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+          .catch((err) => {
+            console.error("Ошибка загрузки занятых дат", err);
+            toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+          });
       }
     })
-    .catch((err) => console.error("Ошибка загрузки профиля", err));
-    toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
+    .catch((err) => {
+      console.error("Ошибка загрузки профиля", err);
+      toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
+    });
 
-  // Загружаем услуги
+  // Услуги
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
     .then((res) => setServices(res.data))
-    .catch((err) => console.error("Ошибка загрузки услуг", err));
-    toast.error(t("services_load_error") || "Не удалось загрузить услуги");
+    .catch((err) => {
+      console.error("Ошибка загрузки услуг", err);
+      toast.error(t("services_load_error") || "Не удалось загрузить услуги");
+    });
 }, []);
 
 
@@ -469,24 +472,6 @@ const resetServiceForm = () => {
 };
 
 
-
-  const handleDeleteService = (id) => {
-  if (!confirm(t("confirm_delete") || "Удалить услугу?")) return;
-
-  axios
-    .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
-    .then(() => {
-      setServices((prev) => prev.filter((s) => s.id !== id));
-      setSelectedService(null);
-      toast.success(t("service_deleted") || "Услуга удалена");
-    })
-    .catch((err) => {
-      console.error("Ошибка удаления услуги", err);
-      toast.error(t("delete_error") || "Ошибка удаления услуги");
-    });
-};
-
-
   const loadServiceToEdit = (service) => {
   setSelectedService(service);
   setCategory(service.category);
@@ -585,7 +570,7 @@ const getCategoryOptions = (type) => {
         { value: "refused_tour", label: t("category.refused_tour") },
         { value: "refused_hotel", label: t("category.refused_hotel") },
         { value: "refused_ticket", label: t("category.refused_ticket") },
-        { value: "refused_event", label: t("category.refused_event") },
+        { value: "refused_event_ticket", label: t("category.refused_event") },
         { value: "visa_support", label: t("category.visa_support") },
         { value: "authored_tour", label: t("category.authored_tour") },
       ];
@@ -1099,8 +1084,8 @@ const getCategoryOptions = (type) => {
           className="w-full border px-3 py-2 rounded"
         >
           <option value="">{t("transfer_options.select")}</option>
-          <option value="group">{t("transfer_options.individual")}</option>
-          <option value="individual">{t("transfer_options.group")}</option>
+          <option value="individual">{t("transfer_options.individual")}</option>
+          <option value="group">{t("transfer_options.group")}</option>
           <option value="none">{t("transfer_options.none")}</option>
         </select>
       </div>
@@ -2577,8 +2562,7 @@ const getCategoryOptions = (type) => {
       {t("calendar.blocking_title")}
     </h3>
 
-    const safeDate = (v) => (v ? new Date(v) : undefined);
-    <DayPicker
+   <DayPicker
   mode="multiple"
   // selected/disabled ожидают Date[], подаём как есть
   selected={blockedDates}
