@@ -2620,7 +2620,7 @@ const handleSaveBlockedDates = () => {
             remove: datesToRemove,
           }, config)
           .then(() => {
-            toast.success(t("calendar.save_success"));
+            toast.success(t("calendar.saved_successfully"));
             // Обновляем локальные состояния
             setBlockedDatesFromServer((prev) => {
               const removed = prev.filter((d) => !datesToRemove.includes(d));
