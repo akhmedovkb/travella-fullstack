@@ -100,7 +100,7 @@ const changeProviderPassword = async (req, res) => {
 };
 
 // 👉 Добавить услугу
-// addService
+
 const addService = async (req, res) => {
   try {
     const {
@@ -110,28 +110,34 @@ const addService = async (req, res) => {
       category,
       images,
       availability,
-      details, // <- если колонка details jsonb — оставим stringify ТОЛЬКО для нее
+      details
     } = req.body;
 
-    // гарантируем корректные типы для ARRAY-колонок
-    const imgs = Array.isArray(images) ? images : [];
-    const avail = Array.isArray(availability) ? availability : [];
-
-    await pool.query(
+    // Вставка в базу
+    const result = await pool.query(
       `INSERT INTO services 
-       (provider_id, title, description, price, category, images, availability, details)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        (provider_id, title, description, price, category, images, availability, details) 
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::date[], $8::jsonb) 
+       RETURNING *`,
       [
-        req.user.id,
+        req.user.id,                           // provider_id
         title,
         description,
         price,
         category,
-        imgs,            // <-- JS-массив, БЕЗ stringify
-        avail,           // <-- JS-массив, БЕЗ stringify
-        details ? JSON.stringify(details) : null // если details -> jsonb
+        JSON.stringify(images || []),          // images — JSONB
+        availability || [],                    // массив дат
+        details ? JSON.stringify(details) : null
       ]
     );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Ошибка при добавлении услуги:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 
     res.status(201).json({ message: "Услуга добавлена" });
   } catch (error) {
