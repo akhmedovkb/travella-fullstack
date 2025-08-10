@@ -1,7 +1,75 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+// ========= helpers =========
+const isExtendedCategory = (cat) =>
+  [
+    "refused_tour",
+    "author_tour",
+    "refused_hotel",
+    "refused_flight",
+    "refused_event_ticket",
+    "visa_support",
+  ].includes(cat);
 
+/**
+ * Приводим поля к ожидаемым типам
+ * - images/availability -> массив
+ * - details -> объект или null
+ * - price -> число либо null
+ * - description -> строка либо null
+ */
+function normalizeServicePayload(body) {
+  const {
+    title,
+    description,
+    price,
+    category,
+    images,
+    availability,
+    details,
+  } = body;
+
+  const imagesArr =
+    Array.isArray(images) ? images : images ? [images] : [];
+  const availabilityArr =
+    Array.isArray(availability) ? availability : [];
+
+  // details может быть объектом или строкой JSON
+  let detailsObj = null;
+  if (details && isExtendedCategory(category)) {
+    if (typeof details === "string") {
+      try {
+        detailsObj = JSON.parse(details);
+      } catch {
+        // если пришла строка, но не JSON — оборачиваем в объект
+        detailsObj = { value: String(details) };
+      }
+    } else if (typeof details === "object") {
+      detailsObj = details;
+    }
+  }
+
+  // price может прийти строкой
+  const priceNum =
+    price === undefined || price === null || price === ""
+      ? null
+      : Number(price);
+
+  return {
+    title: title ?? "",
+    category: category ?? "",
+    imagesArr,
+    availabilityArr,
+    // для “простых” категорий храним price/description, для расширенных — null
+    priceNum,
+    descriptionStr:
+      description === undefined || description === null
+        ? null
+        : String(description),
+    detailsObj,
+  };
+}
 // =====================
 // Регистрация поставщика
 // =====================
@@ -145,36 +213,41 @@ const updateProviderProfile = async (req, res) => {
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const { title, description, price, category, images, availability, details } = req.body;
 
-    const isExtended = [
-      "refused_tour",
-      "author_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_event_ticket",
-      "visa_support"
-    ].includes(category);
+    const {
+      title,
+      category,
+      imagesArr,
+      availabilityArr,
+      priceNum,
+      descriptionStr,
+      detailsObj,
+    } = normalizeServicePayload(req.body);
 
+    const extended = isExtendedCategory(category);
+
+    // Для jsonb ВСЕГДА передаём валидную строку JSON и явно кастуем ::jsonb
     const result = await pool.query(
-      `INSERT INTO services 
-       (provider_id, title, description, price, category, images, availability, details)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO services
+         (provider_id, title, description, price, category, images, availability, details)
+       VALUES
+         ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)
+       RETURNING *`,
       [
         providerId,
         title,
-        isExtended ? null : description,
-        isExtended ? null : price,
+        extended ? null : descriptionStr,
+        extended ? null : priceNum,
         category,
-        images || [],
-        isExtended ? null : availability,
-        isExtended ? details : null
+        JSON.stringify(imagesArr),        // -> []
+        JSON.stringify(extended ? [] : availabilityArr), // simple cat: [], extended: []
+        extended ? JSON.stringify(detailsObj ?? {}) : null, // extended: {} или то, что пришло; simple: null
       ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error("❌ Ошибка добавления услуги:", error.message);
+    console.error("❌ Ошибка добавления услуги:", error);
     res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
@@ -197,31 +270,40 @@ const updateService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const { title, description, price, category, images, availability, details } = req.body;
 
-    const isExtended = [
-      "refused_tour",
-      "author_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_event_ticket",
-      "visa_support"
-    ].includes(category);
+    const {
+      title,
+      category,
+      imagesArr,
+      availabilityArr,
+      priceNum,
+      descriptionStr,
+      detailsObj,
+    } = normalizeServicePayload(req.body);
+
+    const extended = isExtendedCategory(category);
 
     const result = await pool.query(
-      `UPDATE services 
-       SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
-       WHERE id=$8 AND provider_id=$9 RETURNING *`,
+      `UPDATE services
+         SET title = $1,
+             description = $2,
+             price = $3,
+             category = $4,
+             images = $5::jsonb,
+             availability = $6::jsonb,
+             details = $7::jsonb
+       WHERE id = $8 AND provider_id = $9
+       RETURNING *`,
       [
         title,
-        isExtended ? null : description,
-        isExtended ? null : price,
+        extended ? null : descriptionStr,
+        extended ? null : priceNum,
         category,
-        images,
-        isExtended ? null : availability,
-        isExtended ? details : null,
+        JSON.stringify(imagesArr),
+        JSON.stringify(extended ? [] : availabilityArr),
+        extended ? JSON.stringify(detailsObj ?? {}) : null,
         serviceId,
-        providerId
+        providerId,
       ]
     );
 
@@ -231,8 +313,8 @@ const updateService = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error("❌ Ошибка обновления услуги:", error.message);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("❌ Ошибка обновления услуги:", error);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
 
