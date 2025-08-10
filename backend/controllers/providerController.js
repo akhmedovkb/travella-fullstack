@@ -161,6 +161,7 @@ const getServices = async (req, res) => {
 
 // 👉 Обновить услугу
 // updateService
+// Обновление услуги
 const updateService = async (req, res) => {
   try {
     const { id } = req.params;
@@ -171,41 +172,45 @@ const updateService = async (req, res) => {
       category,
       images,
       availability,
-      details,
+      details
     } = req.body;
 
-    const imgs = Array.isArray(images) ? images : [];
-    const avail = Array.isArray(availability) ? availability : [];
-
-    await pool.query(
-      `UPDATE services SET
-         title = $1,
-         description = $2,
-         price = $3,
-         category = $4,
-         images = $5,
-         availability = $6,
-         details = $7
-       WHERE id = $8 AND provider_id = $9`,
+    const result = await pool.query(
+      `UPDATE services 
+       SET title = $1,
+           description = $2,
+           price = $3,
+           category = $4,
+           images = $5::jsonb,
+           availability = $6::date[],
+           details = $7::jsonb
+       WHERE id = $8 AND provider_id = $9
+       RETURNING *`,
       [
         title,
         description,
         price,
         category,
-        imgs,                            // массив
-        avail,                           // массив
-        details ? JSON.stringify(details) : null, // jsonb
+        JSON.stringify(images || []),          // images — JSONB
+        availability || [],                    // массив дат
+        details ? JSON.stringify(details) : null,
         id,
-        req.user.id,
+        req.user.id
       ]
     );
 
-    res.json({ message: "Услуга обновлена" });
-  } catch (error) {
-    console.error("Ошибка при обновлении услуги:", error);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Ошибка при обновлении услуги:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
+
 // 👉 Удалить услугу
 const deleteService = async (req, res) => {
   try {
