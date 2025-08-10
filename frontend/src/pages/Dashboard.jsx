@@ -837,7 +837,7 @@ const handleSaveBlockedDates = () => {
   {/* Услуги гида */}
   {profile.type === "guide" && (
     <>
-      {services.map((s) => (
+      {services.filter(isServiceActive)map((s) => (
         <div
           key={s.id}
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
