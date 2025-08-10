@@ -74,8 +74,13 @@ const Dashboard = () => {
 
   
   // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) =>
-  !s.details?.expiration || new Date(s.details.expiration) > new Date();
+const isServiceActive = (s) => {
+  const exp = s?.details?.expiration;
+  if (!exp) return true;                 // нет даты — активна
+  const d = new Date(exp);
+  if (Number.isNaN(+d)) return true;     // невалидная дата — активна
+  return d > new Date();                 // сравнение даты
+};
   
   // 🔹 Загрузка отелей по запросу
 const loadHotelOptions = async (inputValue) => {
@@ -823,7 +828,6 @@ const handleSaveBlockedDates = () => {
             setDescription("");
             setCategory("");
             setPrice("");
-            set([]);
             setImages([]);
           }}
           className="text-sm text-orange-500 underline"
@@ -844,7 +848,7 @@ const handleSaveBlockedDates = () => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
+          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -861,7 +865,7 @@ const handleSaveBlockedDates = () => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
+          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -877,7 +881,7 @@ const handleSaveBlockedDates = () => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
+          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-800">
             {t("net_price")}: {s.details?.netPrice || 0} USD
@@ -904,8 +908,8 @@ const handleSaveBlockedDates = () => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="font-bold text-lg">{t(`category.${s.category}`)}</div>
-          <div className="text-sm text-gray-600">{t(s.category)}</div>
+          <div className="font-bold text-lg">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
+          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
