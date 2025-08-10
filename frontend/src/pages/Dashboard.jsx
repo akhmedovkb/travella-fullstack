@@ -815,7 +815,7 @@ const handleSaveBlockedDates = () => {
   </div>
 
 {/* Правый блок */}
-
+console.log("Все услуги с бэкенда:", services);
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
   <div className="mb-6">
     <div className="flex justify-between items-center">
