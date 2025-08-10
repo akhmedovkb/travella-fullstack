@@ -58,6 +58,10 @@ const handleConfirmDelete = () => {
 };
 
 
+  const toIso = (d) => (d instanceof Date ? d.toISOString().split("T")[0] : d);
+  const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
+
+  
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -123,9 +127,10 @@ const loadHotelOptions = async (inputValue) => {
   
   const handleSaveBlockedDates = async () => {
   try {
+    const payload = blockedDates.map(toIso); // ["2025-08-10", ...]
     await axios.post(
       `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      { dates: blockedDates },
+      { dates: payload },
       config
     );
     toast.success(t("calendar.saved_successfully") || "Даты сохранены");
@@ -134,6 +139,7 @@ const loadHotelOptions = async (inputValue) => {
     toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
   }
 };
+
 
   // Загрузка стран
 useEffect(() => {
@@ -2540,7 +2546,7 @@ const getCategoryOptions = (type) => {
 
 {/* МОДАЛКА УДАЛЕНИЯ УСЛУГИ */}
 
-{/* {deleteConfirmOpen && (
+{deleteConfirmOpen && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div className="bg-white rounded-xl p-6 shadow-xl w-[90%] max-w-sm">
       <h2 className="text-lg font-bold mb-4">
@@ -2562,7 +2568,7 @@ const getCategoryOptions = (type) => {
       </div>
     </div>
   </div>
-)} */}
+)} 
 
 {/* Перенесённый календарь */}
 {(profile.type === "guide" || profile.type === "transport") && (
@@ -2571,23 +2577,26 @@ const getCategoryOptions = (type) => {
       {t("calendar.blocking_title")}
     </h3>
 
+    const safeDate = (v) => (v ? new Date(v) : undefined);
     <DayPicker
-      mode="multiple"
-      selected={blockedDates}
-      onSelect={setBlockedDates}
-      disabled={{
-        before: new Date(),
-        dates: bookedDates.map((d) => new Date(d.date)),
-      }}
-      modifiers={{
-        booked: bookedDates.map((d) => new Date(d.date)),
-      }}
-      modifiersClassNames={{
-        selected: "bg-red-400 text-white", // вручную заблокированные
-        booked: "bg-blue-500 text-white", // занятые бронированиями
-      }}
-      className="border rounded p-4"
-    />
+  mode="multiple"
+  // selected/disabled ожидают Date[], подаём как есть
+  selected={blockedDates}
+  onSelect={(dates) => setBlockedDates(dates || [])}
+  disabled={{
+    before: new Date(),
+    dates: bookedDates, // bookedDates уже Date[]
+  }}
+  modifiers={{
+    booked: bookedDates, // подсветка занятых (из бронирований)
+  }}
+  modifiersClassNames={{
+    selected: "bg-red-400 text-white",  // вручную заблокированные
+    booked: "bg-blue-500 text-white",   // занятые бронированиями
+  }}
+  className="border rounded p-4"
+/>
+
 
     {/* 🔎 Подписи */}
     <div className="mt-2 text-sm text-gray-600 flex gap-4">
