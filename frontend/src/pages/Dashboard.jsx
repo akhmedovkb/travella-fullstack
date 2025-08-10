@@ -904,7 +904,7 @@ const handleSaveBlockedDates = () => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="font-bold text-lg">{s.title}</div>
+          <div className="font-bold text-lg">{t(`category.${s.category}`)}</div>
           <div className="text-sm text-gray-600">{t(s.category)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
