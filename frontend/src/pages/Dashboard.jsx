@@ -437,7 +437,7 @@ const resetServiceForm = () => {
     flightDateGo: "",
     flightDateReturn: "",
     flightDetails: "",
-    visaCountry: d.visaCountry || "",
+    visaCountry: "",
   });
 };
 
@@ -772,7 +772,6 @@ const getCategoryOptions = (type) => {
             setDescription("");
             setCategory("");
             setPrice("");
-            set([]);
             setImages([]);
           }}
           className="text-sm text-orange-500 underline"
