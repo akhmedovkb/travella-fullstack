@@ -435,7 +435,7 @@ const resetServiceForm = () => {
 
 
 
-  cconst handleDeleteService = (id) => {
+  const handleDeleteService = (id) => {
   if (!confirm(t("confirm_delete") || "Удалить услугу?")) return;
 
   axios
