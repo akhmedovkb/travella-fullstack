@@ -241,7 +241,7 @@ const addService = async (req, res) => {
         category,
         JSON.stringify(imagesArr),        // -> []
         JSON.stringify(extended ? [] : availabilityArr), // simple cat: [], extended: []
-        extended ? JSON.stringify(detailsObj ?? {}) : null, // extended: {} или то, что пришло; simple: null
+        JSON.stringify(extended ? (detailsObj ?? {}) : {}), // extended: {} или то, что пришло; simple: null
       ]
     );
 
@@ -301,7 +301,7 @@ const updateService = async (req, res) => {
         category,
         JSON.stringify(imagesArr),
         JSON.stringify(extended ? [] : availabilityArr),
-        extended ? JSON.stringify(detailsObj ?? {}) : null,
+        JSON.stringify(extended ? (detailsObj ?? {}) : {}),
         serviceId,
         providerId,
       ]
