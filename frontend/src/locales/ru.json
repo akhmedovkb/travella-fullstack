@@ -96,7 +96,6 @@
   "refused_tour": "Отказной тур",
   "refused_hotel": "Отказной отель",
   "refused_ticket": "Отказной авиабилет",
-  "refused_event": "Отказной билет на мероприятие",
   "visa_support": "Визовая поддержка",
   "authored_tour": "Авторский тур",
   "room_rent": "Аренда номера",
@@ -253,3 +252,4 @@
   "country_not_chosen": "Страны не найдены"
 
 }
+
