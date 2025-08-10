@@ -2538,6 +2538,32 @@ const getCategoryOptions = (type) => {
     </>
   )}
 
+{/* МОДАЛКА УДАЛЕНИЯ УСЛУГИ */}
+
+{deleteConfirmOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-xl p-6 shadow-xl w-[90%] max-w-sm">
+      <h2 className="text-lg font-bold mb-4">
+        {t("confirm_delete", { defaultValue: "Удалить услугу?" })}
+      </h2>
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={() => setDeleteConfirmOpen(false)}
+          className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300"
+        >
+          {t("cancel", { defaultValue: "Отмена" })}
+        </button>
+        <button
+          onClick={handleConfirmDelete}
+          className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700"
+        >
+          {t("ok", { defaultValue: "Удалить" })}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {/* Перенесённый календарь */}
 {(profile.type === "guide" || profile.type === "transport") && (
   <div className="mt-10 bg-white p-6 rounded shadow border">
