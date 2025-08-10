@@ -101,38 +101,49 @@ const changeProviderPassword = async (req, res) => {
 
 // 👉 Добавить услугу
 
+// 👉 Добавить услугу (jsonb: images/availability/details)
 const addService = async (req, res) => {
   try {
     const {
-      title,
-      description,
-      price,
-      category,
+      title = "",
+      description = "",
+      price = 0,
+      category = "",
       images,
       availability,
-      details
+      details,
     } = req.body;
 
-    // Вставка в базу
-    const result = await pool.query(
-  `INSERT INTO services
-   (provider_id, title, description, price, category, images, availability, details)
-   VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)`,
-  [
-    req.user.id,
-    title,
-    description,
-    price,
-    category,
-    JSON.stringify(images || []),
-    JSON.stringify(availability || []),   // <— JSONB
-    details ? JSON.stringify(details) : null
-  ]
-);
+    // Нормализация входных данных
+    const imgs = Array.isArray(images)
+      ? images
+      : images ? [images] : []; // допускаем одиночную строку base64
 
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("Ошибка при добавлении услуги:", err);
+    const avail = Array.isArray(availability) ? availability : [];
+    const det = details && typeof details === "object" ? details : {};
+
+    await pool.query(
+      `
+      INSERT INTO services
+        (provider_id, title, description, price, category, images, availability, details)
+      VALUES
+        ($1,         $2,    $3,          $4,   $5,       $6::jsonb, $7::jsonb,  $8::jsonb)
+      `,
+      [
+        req.user.id,
+        title,
+        description,
+        price,
+        category,
+        JSON.stringify(imgs),   // -> jsonb
+        JSON.stringify(avail),  // -> jsonb
+        JSON.stringify(det),    // -> jsonb
+      ]
+    );
+
+    res.status(201).json({ message: "Услуга добавлена" });
+  } catch (error) {
+    console.error("Ошибка при добавлении услуги:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
