@@ -115,21 +115,20 @@ const addService = async (req, res) => {
 
     // Вставка в базу
     const result = await pool.query(
-      `INSERT INTO services 
-        (provider_id, title, description, price, category, images, availability, details) 
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::date[], $8::jsonb) 
-       RETURNING *`,
-      [
-        req.user.id,                           // provider_id
-        title,
-        description,
-        price,
-        category,
-        JSON.stringify(images || []),          // images — JSONB
-        availability || [],                    // массив дат
-        details ? JSON.stringify(details) : null
-      ]
-    );
+  `INSERT INTO services
+   (provider_id, title, description, price, category, images, availability, details)
+   VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)`,
+  [
+    req.user.id,
+    title,
+    description,
+    price,
+    category,
+    JSON.stringify(images || []),
+    JSON.stringify(availability || []),   // <— JSONB
+    details ? JSON.stringify(details) : null
+  ]
+);
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -176,28 +175,22 @@ const updateService = async (req, res) => {
     } = req.body;
 
     const result = await pool.query(
-      `UPDATE services 
-       SET title = $1,
-           description = $2,
-           price = $3,
-           category = $4,
-           images = $5::jsonb,
-           availability = $6::date[],
-           details = $7::jsonb
-       WHERE id = $8 AND provider_id = $9
-       RETURNING *`,
-      [
-        title,
-        description,
-        price,
-        category,
-        JSON.stringify(images || []),          // images — JSONB
-        availability || [],                    // массив дат
-        details ? JSON.stringify(details) : null,
-        id,
-        req.user.id
-      ]
-    );
+  `UPDATE services SET
+     title=$1, description=$2, price=$3, category=$4,
+     images=$5::jsonb, availability=$6::jsonb, details=$7::jsonb
+   WHERE id=$8 AND provider_id=$9`,
+  [
+    title,
+    description,
+    price,
+    category,
+    JSON.stringify(images || []),
+    JSON.stringify(availability || []),   // <— JSONB
+    details ? JSON.stringify(details) : null,
+    id,
+    req.user.id
+  ]
+);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Услуга не найдена" });
