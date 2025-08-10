@@ -29,7 +29,7 @@
   "new_service_tip": "Чтобы создать новую услугу, заполните все поля ниже и нажмите на «Сохранить услугу».",
   "title": "Название",
   "description": "Описание",
-  "category_label": "Категория",
+  "category": "Категория",
   "upload_images": "Изображения (можно несколько):",
   "select_files": "Выбрать файлы",
   "no_file_chosen": "Файл не выбран",
@@ -249,8 +249,29 @@
   "net_price": "Цена нетто",
   "is_active": "Актуально",
   "save_service": "Сохранить услугу",
-  "country_not_chosen": "Страны не найдены"
+  "country_not_chosen": "Страны не найдены",
+
+  "hotels_load_error": "Не удалось загрузить отели",
+  "profile_load_error": "Не удалось загрузить профиль",
+  "services_load_error": "Не удалось загрузить услуги",
+
+  "calendar": {
+    "blocking_title": "Календарь занятости",
+    "label_blocked_manual": "Заблокировано вручную",
+    "label_booked_by_clients": "Занято по бронированиям",
+    "save_blocked_dates": "Сохранить занятые даты",
+    "dates_saved": "Занятые даты сохранены",
+    "save_error": "Ошибка сохранения дат",
+    "load_error": "Не удалось загрузить занятые даты",
+    "saved_successfully": "Даты сохранены"
+   },
+
+  "country_not_found": "Страны не найдены",
+  "direction_from_not_found": "Город вылета не найден",
+  "direction_to_not_found": "Город прибытия не найден"
+
 
 }
+
 
 
