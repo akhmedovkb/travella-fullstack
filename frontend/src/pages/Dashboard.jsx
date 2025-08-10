@@ -400,19 +400,19 @@ useEffect(() => {
     return;
   }
 
-  // availability отправляем только для guide/transport и только если массив не пуст
-  const shouldSendAvailability =
-    (profile.type === "guide" || profile.type === "transport") &&
-    Array.isArray(availability) &&
-    availability.length > 0;
-
+  // ⚠️ КЛЮЧЕВОЙ ФИКС: details/availability всегда валидные JSON-значения
   const data = {
     title,
     category,
-    ...(images && images.length ? { images } : {}),
-    ...(isExtendedCategory ? { details } : { price, description }),
-    ...(shouldSendAvailability ? { availability: availability.map(toIso) } : {})
+    images: images || [],
+    price: isExtendedCategory ? undefined : price,
+    description: isExtendedCategory ? undefined : description,
+    availability: isExtendedCategory ? undefined : (availability || []),
+    details: isExtendedCategory ? (details || {}) : {} // никогда не undefined
   };
+
+  // (необязательно) удобно увидеть, что реально уходит
+  // console.log("payload", data);
 
   if (selectedService) {
     axios
