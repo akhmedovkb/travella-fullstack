@@ -28,7 +28,36 @@ const Dashboard = () => {
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
-  
+
+  // ✅ Модалка подтверждения удаления
+const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+const [serviceToDelete, setServiceToDelete] = useState(null);
+
+const confirmDeleteService = (id) => {
+  setServiceToDelete(id);
+  setDeleteConfirmOpen(true);
+};
+
+const handleConfirmDelete = () => {
+  if (!serviceToDelete) return;
+  axios
+    .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${serviceToDelete}`, config)
+    .then(() => {
+      setServices((prev) => prev.filter((s) => s.id !== serviceToDelete));
+      setSelectedService(null);
+      toast.success(t("service_deleted", { defaultValue: "Услуга удалена" }));
+    })
+    .catch((err) => {
+      console.error("Ошибка удаления услуги", err);
+      toast.error(t("delete_error", { defaultValue: "Ошибка удаления услуги" }));
+    })
+    .finally(() => {
+      setDeleteConfirmOpen(false);
+      setServiceToDelete(null);
+    });
+};
+
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -946,7 +975,7 @@ const getCategoryOptions = (type) => {
       </button>
       <button
         className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
+        onClick={() => confirmDeleteService(selectedService.id)}
       >
         {t("delete")}
       </button>
@@ -1118,7 +1147,7 @@ const getCategoryOptions = (type) => {
       </button>
       <button
         className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
+        onClick={() => confirmDeleteService(selectedService.id)}
       >
         {t("delete")}
       </button>
@@ -1318,7 +1347,7 @@ const getCategoryOptions = (type) => {
     </button>
     <button
         className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
+        onClick={() => confirmDeleteService(selectedService.id)}
       >
         {t("delete")}
       </button>
@@ -1430,7 +1459,7 @@ const getCategoryOptions = (type) => {
     </button>
     <button
         className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
+        onClick={() => confirmDeleteService(selectedService.id)}
     >
         {t("delete")}
     </button>
@@ -1495,7 +1524,7 @@ const getCategoryOptions = (type) => {
     </button>
     <button
         className="w-full bg-red-600 text-white py-2 rounded font-bold mt-2"
-        onClick={() => handleDeleteService(selectedService.id)}
+        onClick={() => confirmDeleteService(selectedService.id)}
       >
         {t("delete")}
       </button>
@@ -1570,7 +1599,7 @@ const getCategoryOptions = (type) => {
         </button>
         <button
           className="w-full bg-red-600 text-white py-2 rounded font-bold"
-          onClick={() => handleDeleteService(selectedService.id)}
+          onClick={() => confirmDeleteService(selectedService.id)}
         >
           {t("delete")}
         </button>
