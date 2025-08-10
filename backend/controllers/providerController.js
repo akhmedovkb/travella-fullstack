@@ -99,55 +99,41 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// 👉 Добавить услугу
-
-// 👉 Добавить услугу (jsonb: images/availability/details)
+// 👉 Добавить услугу 
 const addService = async (req, res) => {
   try {
     const {
-      title = "",
-      description = "",
-      price = 0,
-      category = "",
-      images,
-      availability,
-      details,
+      title,
+      description,
+      price,
+      category,
+      images = [],
+      availability = [],
+      details = {},
     } = req.body;
 
-    // Нормализация входных данных
-    const imgs = Array.isArray(images)
-      ? images
-      : images ? [images] : []; // допускаем одиночную строку base64
-
-    const avail = Array.isArray(availability) ? availability : [];
-    const det = details && typeof details === "object" ? details : {};
-
     await pool.query(
-      `
-      INSERT INTO services
+      `INSERT INTO services
         (provider_id, title, description, price, category, images, availability, details)
-      VALUES
-        ($1,         $2,    $3,          $4,   $5,       $6::jsonb, $7::jsonb,  $8::jsonb)
-      `,
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)`,
       [
         req.user.id,
         title,
         description,
         price,
         category,
-        JSON.stringify(imgs),   // -> jsonb
-        JSON.stringify(avail),  // -> jsonb
-        JSON.stringify(det),    // -> jsonb
+        JSON.stringify(images),
+        JSON.stringify(availability),
+        JSON.stringify(details || {}),
       ]
     );
 
-    res.status(201).json({ message: "Услуга добавлена" });
+    return res.status(201).json({ message: "Услуга добавлена" });
   } catch (error) {
     console.error("Ошибка при добавлении услуги:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
 
     res.status(201).json({ message: "Услуга добавлена" });
   } catch (error) {
@@ -172,75 +158,45 @@ const getServices = async (req, res) => {
 const updateService = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // что прислал клиент (могут быть undefined — тогда не трогаем поле)
     const {
       title,
       description,
       price,
       category,
-      images,
-      availability,
-      details,
+      images = [],
+      availability = [],
+      details = {},
     } = req.body;
 
-    // флаги «поле прислали»
-    const hasImages = typeof images !== "undefined";
-    const hasAvailability = typeof availability !== "undefined";
-    const hasDetails = typeof details !== "undefined";
-
-    // нормализация тех, что прислали
-    const imgs = hasImages
-      ? (Array.isArray(images) ? images : images ? [images] : [])
-      : null;
-
-    const avail = hasAvailability
-      ? (Array.isArray(availability) ? availability : [])
-      : null;
-
-    const det = hasDetails
-      ? (details && typeof details === "object" ? details : {})
-      : null;
-
-    const result = await pool.query(
-      `
-      UPDATE services
-      SET
-        title        = COALESCE($2, title),
-        description  = COALESCE($3, description),
-        price        = COALESCE($4, price),
-        category     = COALESCE($5, category),
-        images       = COALESCE($6::jsonb, images),
-        availability = COALESCE($7::jsonb, availability),
-        details      = COALESCE($8::jsonb, details)
-      WHERE id = $1 AND provider_id = $9
-      `,
+    await pool.query(
+      `UPDATE services
+       SET title = $1,
+           description = $2,
+           price = $3,
+           category = $4,
+           images = $5::jsonb,
+           availability = $6::jsonb,
+           details = $7::jsonb
+       WHERE id = $8 AND provider_id = $9`,
       [
+        title,
+        description,
+        price,
+        category,
+        JSON.stringify(images),
+        JSON.stringify(availability),
+        JSON.stringify(details || {}),
         id,
-        title ?? null,
-        description ?? null,
-        typeof price !== "undefined" ? price : null,
-        category ?? null,
-        hasImages ? JSON.stringify(imgs) : null,
-        hasAvailability ? JSON.stringify(avail) : null,
-        hasDetails ? JSON.stringify(det) : null,
         req.user.id,
       ]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "Услуга не найдена" });
-    }
-
-    res.json({ message: "Услуга обновлена" });
+    return res.json({ message: "Услуга обновлена" });
   } catch (error) {
     console.error("Ошибка при обновлении услуги:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
-
-
 // 👉 Удалить услугу
 const deleteService = async (req, res) => {
   try {
