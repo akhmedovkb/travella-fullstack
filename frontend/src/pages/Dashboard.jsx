@@ -527,9 +527,8 @@ const resetServiceForm = () => {
     });
 
     Promise.all(readers).then((base64Images) => {
-      setImages((prev) => [...prev, ...base64Images]);
-    });
-  };
+  setImages((prev) => [...prev, ...base64Images]);
+});
   
 const getCategoryOptions = (type) => {
   switch (type) {
@@ -1494,7 +1493,13 @@ const getCategoryOptions = (type) => {
       onClick={handleSaveService}
     >
       {t("save_service")}
-    </button>                                
+    </button>  
+    <button
+          className="w-full bg-red-600 text-white py-2 rounded font-bold"
+          onClick={() => handleDeleteService(selectedService.id)}
+        >
+          {t("delete")}
+    </button>
     </>                  
                      ) : (
     <>
@@ -1563,12 +1568,6 @@ const getCategoryOptions = (type) => {
           onClick={handleSaveService}
         >
           {t("save")}
-        </button>
-        <button
-          className="w-full bg-red-600 text-white py-2 rounded font-bold"
-          onClick={() => handleDeleteService(selectedService.id)}
-        >
-          {t("delete")}
         </button>
       </div>
     </>
