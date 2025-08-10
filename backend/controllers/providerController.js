@@ -136,8 +136,15 @@ const addService = async (req, res) => {
     const providerId = req.user.id;
     const { title, description, price, category, images, availability, details } = req.body;
 
-    const isExtended = category === "refused_tour" || category === "author_tour" || category === "refused_hotel";
-
+      const isExtended = [
+        "refused_tour",
+        "author_tour",
+        "refused_hotel",
+        "refused_flight",
+        "refused_event_ticket",
+        "visa_support"
+      ].includes(category);
+    
     const result = await pool.query(
       `INSERT INTO services 
        (provider_id, title, description, price, category, images, availability, details)
