@@ -6,8 +6,6 @@ import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
 import Marketplace from "./pages/Marketplace";
 import LanguageSelector from "./components/LanguageSelector";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 function App() {
   return (
@@ -27,9 +25,7 @@ function App() {
           />
           <Route path="/marketplace" element={<Marketplace />} />
         </Routes>
-
-        {/* ✅ Контейнер для уведомлений */}
-        <ToastContainer />
+      
       </div>
     </Router>
   );
