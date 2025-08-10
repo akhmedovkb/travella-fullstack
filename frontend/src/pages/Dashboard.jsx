@@ -74,12 +74,8 @@ const Dashboard = () => {
 
   
   // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) => {
-  if (!s.details || !s.details.expiration) return true;
-  const exp = new Date(s.details.expiration);
-  return exp.toString() !== "Invalid Date" && exp > new Date();
-};
-
+const isServiceActive = (s) =>
+  !s.details?.expiration || new Date(s.details.expiration) > new Date();
   
   // 🔹 Загрузка отелей по запросу
 const loadHotelOptions = async (inputValue) => {
@@ -211,7 +207,6 @@ useEffect(() => {
    // тут профиль
 
   useEffect(() => {
-    console.log("PROFILE:", profile);
   const token = localStorage.getItem("token");
   const config = {
     headers: { Authorization: `Bearer ${token}` },
@@ -815,7 +810,7 @@ const handleSaveBlockedDates = () => {
   </div>
 
 {/* Правый блок */}
-console.log("Все услуги с бэкенда:", services);
+
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
   <div className="mb-6">
     <div className="flex justify-between items-center">
