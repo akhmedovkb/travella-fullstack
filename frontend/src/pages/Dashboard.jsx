@@ -2540,7 +2540,7 @@ const getCategoryOptions = (type) => {
 
 {/* МОДАЛКА УДАЛЕНИЯ УСЛУГИ */}
 
-{deleteConfirmOpen && (
+{/* {deleteConfirmOpen && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div className="bg-white rounded-xl p-6 shadow-xl w-[90%] max-w-sm">
       <h2 className="text-lg font-bold mb-4">
@@ -2562,7 +2562,7 @@ const getCategoryOptions = (type) => {
       </div>
     </div>
   </div>
-)}
+)} */}
 
 {/* Перенесённый календарь */}
 {(profile.type === "guide" || profile.type === "transport") && (
