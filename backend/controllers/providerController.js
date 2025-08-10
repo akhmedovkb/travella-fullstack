@@ -170,11 +170,11 @@ const getServices = async (req, res) => {
 };
 
 // 👉 Обновить услугу
-// updateService
-// Обновление услуги
 const updateService = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // что прислал клиент (могут быть undefined — тогда не трогаем поле)
     const {
       title,
       description,
@@ -182,37 +182,64 @@ const updateService = async (req, res) => {
       category,
       images,
       availability,
-      details
+      details,
     } = req.body;
 
-    const result = await pool.query(
-  `UPDATE services SET
-     title=$1, description=$2, price=$3, category=$4,
-     images=$5::jsonb, availability=$6::jsonb, details=$7::jsonb
-   WHERE id=$8 AND provider_id=$9`,
-  [
-    title,
-    description,
-    price,
-    category,
-    JSON.stringify(images || []),
-    JSON.stringify(availability || []),   // <— JSONB
-    details ? JSON.stringify(details) : null,
-    id,
-    req.user.id
-  ]
-);
+    // флаги «поле прислали»
+    const hasImages = typeof images !== "undefined";
+    const hasAvailability = typeof availability !== "undefined";
+    const hasDetails = typeof details !== "undefined";
 
-    if (result.rows.length === 0) {
+    // нормализация тех, что прислали
+    const imgs = hasImages
+      ? (Array.isArray(images) ? images : images ? [images] : [])
+      : null;
+
+    const avail = hasAvailability
+      ? (Array.isArray(availability) ? availability : [])
+      : null;
+
+    const det = hasDetails
+      ? (details && typeof details === "object" ? details : {})
+      : null;
+
+    const result = await pool.query(
+      `
+      UPDATE services
+      SET
+        title        = COALESCE($2, title),
+        description  = COALESCE($3, description),
+        price        = COALESCE($4, price),
+        category     = COALESCE($5, category),
+        images       = COALESCE($6::jsonb, images),
+        availability = COALESCE($7::jsonb, availability),
+        details      = COALESCE($8::jsonb, details)
+      WHERE id = $1 AND provider_id = $9
+      `,
+      [
+        id,
+        title ?? null,
+        description ?? null,
+        typeof price !== "undefined" ? price : null,
+        category ?? null,
+        hasImages ? JSON.stringify(imgs) : null,
+        hasAvailability ? JSON.stringify(avail) : null,
+        hasDetails ? JSON.stringify(det) : null,
+        req.user.id,
+      ]
+    );
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Услуга не найдена" });
     }
 
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Ошибка при обновлении услуги:", err);
+    res.json({ message: "Услуга обновлена" });
+  } catch (error) {
+    console.error("Ошибка при обновлении услуги:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 
 // 👉 Удалить услугу
