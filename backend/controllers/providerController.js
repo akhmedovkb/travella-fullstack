@@ -2,17 +2,21 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
-// 👉 Регистрация
 const registerProvider = async (req, res) => {
   try {
+    console.log("📦 Получено тело запроса:", req.body);
     const { name, email, password, type, location, phone, social, photo, address } = req.body;
 
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
 
-    const existing = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
-    if (existing.rows.length > 0) {
+    if (photo && typeof photo !== "string") {
+      return res.status(400).json({ message: "Некорректный формат изображения" });
+    }
+
+    const existingProvider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    if (existingProvider.rows.length > 0) {
       return res.status(400).json({ message: "Email уже используется" });
     }
 
@@ -20,253 +24,306 @@ const registerProvider = async (req, res) => {
 
     const newProvider = await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [name, email, hashedPassword, type, location, phone, social, photo || null, address || null]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, name, email`,
+      [name, email, hashedPassword, type, location, phone, social, photo, address]
     );
 
-    const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET);
-    res.status(201).json({ token });
+    const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(201).json({
+      message: "Регистрация прошла успешно",
+      provider: newProvider.rows[0],
+      token,
+    });
+
   } catch (error) {
-    console.error("Ошибка регистрации:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("❌ Ошибка регистрации:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
 
-// 👉 Логин
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const provider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
 
-    const result = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: "Неверные учетные данные" });
+    if (provider.rows.length === 0) {
+      return res.status(400).json({ message: "Пользователь не найден" });
     }
 
-    const provider = result.rows[0];
-    const valid = await bcrypt.compare(password, provider.password);
-    if (!valid) {
-      return res.status(400).json({ message: "Неверные учетные данные" });
+    const isMatch = await bcrypt.compare(password, provider.rows[0].password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Неверный пароль" });
     }
 
-    const token = jwt.sign({ id: provider.id }, process.env.JWT_SECRET);
-    res.json({ token });
+    const token = jwt.sign({ id: provider.rows[0].id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      message: "Вход успешен",
+      provider: {
+        id: provider.rows[0].id,
+        name: provider.rows[0].name,
+        email: provider.rows[0].email,
+      },
+      token,
+    });
   } catch (error) {
-    console.error("Ошибка входа:", error);
+    console.error("❌ Ошибка входа:", error.message);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Получить профиль
 const getProviderProfile = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM providers WHERE id = $1", [req.user.id]);
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ message: "Ошибка загрузки профиля" });
-  }
-};
-
-// 👉 Обновить профиль
-const updateProviderProfile = async (req, res) => {
-  try {
-    const { name, location, phone, social, photo, address } = req.body;
-    await pool.query(
-      `UPDATE providers SET name = $1, location = $2, phone = $3, social = $4, photo = $5, address = $6 WHERE id = $7`,
-      [name, location, phone, social, photo, address, req.user.id]
+    const id = req.user.id;
+    const result = await pool.query(
+      "SELECT id, name, email, type, location, phone, social, photo, certificate, address FROM providers WHERE id = $1",
+      [id]
     );
-    res.json({ message: "Профиль обновлён" });
-  } catch (error) {
-    res.status(500).json({ message: "Ошибка обновления профиля" });
-  }
-};
 
-// 👉 Смена пароля
-const changeProviderPassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    const result = await pool.query("SELECT * FROM providers WHERE id = $1", [req.user.id]);
-
-    const valid = await bcrypt.compare(currentPassword, result.rows[0].password);
-    if (!valid) {
-      return res.status(400).json({ message: "Неверный текущий пароль" });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Поставщик не найден" });
     }
 
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await pool.query("UPDATE providers SET password = $1 WHERE id = $2", [hashed, req.user.id]);
-    res.json({ message: "Пароль обновлён" });
+    res.status(200).json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ message: "Ошибка при смене пароля" });
+    console.error("❌ Ошибка получения профиля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Добавить услугу
+const updateProviderProfile = async (req, res) => {
+  try {
+    const id = req.user.id;
+
+    const current = await pool.query("SELECT * FROM providers WHERE id = $1", [id]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ message: "Поставщик не найден" });
+    }
+
+    const old = current.rows[0];
+
+    const updated = {
+      name: req.body.name ?? old.name,
+      location: req.body.location ?? old.location,
+      phone: req.body.phone ?? old.phone,
+      social: req.body.social ?? old.social,
+      photo: req.body.photo ?? old.photo,
+      certificate: req.body.certificate ?? old.certificate,
+      address: req.body.address ?? old.address
+    };
+
+    await pool.query(
+      `UPDATE providers
+       SET name = $1, location = $2, phone = $3, social = $4, photo = $5, certificate = $6, address = $7
+       WHERE id = $8`,
+      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, updated.address, id]
+    );
+
+    res.status(200).json({ message: "Профиль обновлён успешно" });
+  } catch (error) {
+    console.error("❌ Ошибка обновления профиля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
+};
+
+// ДОБАВИТЬ УСЛУГУ
 const addService = async (req, res) => {
   try {
-    const {
-      title,
-      description,
-      price,
-      category,
-      images,
-      availability,
-      details,
-    } = req.body;
+    const providerId = req.user.id;
+    const { title, description, price, category, images, availability, details } = req.body;
 
-    await pool.query(
+    const isExtended = category === "refused_tour" || category === "author_tour" || category === "refused_hotel";
+
+    const result = await pool.query(
       `INSERT INTO services 
-      (provider_id, title, description, price, category, images, availability, details)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (provider_id, title, description, price, category, images, availability, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
-        req.user.id,
+        providerId,
         title,
-        description,
-        price,
+        isExtended ? null : description,
+        isExtended ? null : price,
         category,
-        JSON.stringify(images || []),
-        JSON.stringify(availability || []),
-        details ? JSON.stringify(details) : null,
+        images || [],
+        isExtended ? null : availability,
+        isExtended ? details : null
       ]
     );
 
-    res.status(201).json({ message: "Услуга добавлена" });
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error("Ошибка при добавлении услуги:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("❌ Ошибка добавления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
   }
 };
 
-// 👉 Получить услуги
+
 const getServices = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM services WHERE provider_id = $1", [req.user.id]);
+    const providerId = req.user.id;
+    const result = await pool.query(
+      "SELECT * FROM services WHERE provider_id = $1",
+      [providerId]
+    );
     res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ message: "Ошибка загрузки услуг" });
-  }
-};
-
-// 👉 Обновить услугу
-const updateService = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      title,
-      description,
-      price,
-      category,
-      images,
-      availability,
-      details,
-    } = req.body;
-
-    await pool.query(
-      `UPDATE services SET title = $1, description = $2, price = $3, category = $4,
-       images = $5, availability = $6, details = $7 WHERE id = $8 AND provider_id = $9`,
-      [
-        title,
-        description,
-        price,
-        category,
-        JSON.stringify(images || []),
-        JSON.stringify(availability || []),
-        details ? JSON.stringify(details) : null,
-        id,
-        req.user.id,
-      ]
-    );
-
-    res.json({ message: "Услуга обновлена" });
-  } catch (error) {
-    console.error("Ошибка при обновлении услуги:", error);
+    console.error("❌ Ошибка получения услуг:", error.message);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Удалить услугу
-const deleteService = async (req, res) => {
+const updateService = async (req, res) => {
   try {
-    const { id } = req.params;
-    await pool.query("DELETE FROM services WHERE id = $1 AND provider_id = $2", [
-      id,
-      req.user.id,
-    ]);
-    res.json({ message: "Услуга удалена" });
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+    const { title, description, price, category, images, availability, details } = req.body;
+
+    const result = await pool.query(
+      `UPDATE services 
+       SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
+       WHERE id=$8 AND provider_id=$9 RETURNING *`,
+      [title, description, price, category, images, availability, details, serviceId, providerId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ message: "Ошибка при удалении услуги" });
+    console.error("❌ Ошибка обновления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Получить занятые даты (бронирования)
+const deleteService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+
+    const result = await pool.query(
+      "DELETE FROM services WHERE id=$1 AND provider_id=$2 RETURNING *",
+      [serviceId, providerId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    res.json({ message: "Услуга удалена" });
+  } catch (error) {
+    console.error("❌ Ошибка удаления услуги:", error.message);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const changeProviderPassword = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Пароль должен содержать минимум 6 символов" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.query("UPDATE providers SET password = $1 WHERE id = $2", [hashedPassword, id]);
+
+    res.status(200).json({ message: "Пароль обновлён успешно" });
+  } catch (error) {
+    console.error("❌ Ошибка смены пароля:", error.message);
+    res.status(500).json({ message: "Ошибка сервера", error: error.message });
+  }
+};
+
+// ⬇️ Получение всех занятых дат (вручную + бронирования)
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const result = await pool.query(
-      "SELECT date FROM bookings WHERE provider_id = $1",
+
+    // 1. Вручную заблокированные даты (без привязки к услуге)
+    const manual = await pool.query(
+      `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
       [providerId]
     );
 
-    const bookedDates = result.rows.map((row) => new Date(row.date));
+    // 2. Даты с бронированиями по конкретным услугам
+    const booked = await pool.query(
+      `SELECT b.date, s.title
+       FROM blocked_dates b
+       JOIN services s ON b.service_id = s.id
+       WHERE b.provider_id = $1 AND b.service_id IS NOT NULL`,
+      [providerId]
+    );
+
+    // 3. Объединяем обе группы
+    const bookedDates = [
+      ...manual.rows.map((r) => ({
+        date: new Date(r.date).toISOString().split("T")[0],
+        serviceTitle: null,
+      })),
+      ...booked.rows.map((r) => ({
+        date: new Date(r.date).toISOString().split("T")[0],
+        serviceTitle: r.title,
+      })),
+    ];
+
+    console.log("📌 Заблокированные даты:", bookedDates);
+
     res.json(bookedDates);
   } catch (error) {
-    console.error("Ошибка получения занятых дат:", error);
-    res.status(500).json({ message: "Ошибка загрузки" });
-  }
-};
-
-// 👉 Получить заблокированные вручную даты
-const getBlockedDates = async (req, res) => {
-  try {
-    const providerId = req.user.id;
-    const result = await pool.query(
-      "SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL",
-      [providerId]
-    );
-    const blockedDates = result.rows.map((row) => row.date.toISOString().split("T")[0]);
-    res.json(blockedDates);
-  } catch (error) {
-    console.error("Ошибка получения заблокированных дат:", error);
+    console.error("❌ Ошибка получения занятых дат:", error);
     res.status(500).json({ message: "calendar.load_error" });
   }
 };
 
-// ✅ Сохранить вручную заблокированные даты (add/remove)
-const saveBlockedDates = async (req, res) => {
-  const providerId = req.user.id;
-  const { add = [], remove = [] } = req.body;
 
+// ⬇️ Сохранение вручную заблокированных дат
+const saveBlockedDates = async (req, res) => {
   try {
-    if (remove.length > 0) {
-      await pool.query(
-        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
-        [providerId, remove]
-      );
+    const providerId = req.user.id;
+    const { dates } = req.body;
+
+    if (!Array.isArray(dates)) {
+      return res.status(400).json({ message: "Некорректные даты" });
     }
 
-    for (const date of add) {
-      await pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    console.log("📥 Получены даты для сохранения:", dates);
+
+    // Удаляем старые записи
+    await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
+
+    // Добавляем новые
+    const insertPromises = dates.map((date) => {
+      return pool.query(
+        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
         [providerId, date]
       );
-    }
+    });
 
-    res.status(200).json({ message: "Даты успешно обновлены." });
+    await Promise.all(insertPromises);
+
+    res.json({ message: "calendar.saved_successfully" });
   } catch (error) {
-    console.error("Ошибка сохранения дат:", error);
-    res.status(500).json({ message: "Ошибка при сохранении дат." });
+    console.error("❌ Ошибка сохранения занятых дат:", error);
+    res.status(500).json({ message: "calendar.save_error" });
   }
 };
-
+    
 module.exports = {
   registerProvider,
   loginProvider,
   getProviderProfile,
   updateProviderProfile,
-  changeProviderPassword,
   addService,
   getServices,
   updateService,
   deleteService,
+  changeProviderPassword,
   getBookedDates,
-  getBlockedDates,
-  saveBlockedDates,
+  saveBlockedDates
 };
