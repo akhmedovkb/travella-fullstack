@@ -1,8 +1,9 @@
+// backend/controllers/providerController.js
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
-// 👉 Регистрация
+// 📌 Регистрация поставщика
 const registerProvider = async (req, res) => {
   try {
     const { name, email, password, type, location, phone, social, photo, address } = req.body;
@@ -20,239 +21,209 @@ const registerProvider = async (req, res) => {
 
     const newProvider = await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [name, email, hashedPassword, type, location, phone, social, photo || null, address || null]
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [name, email, hashedPassword, type, location, phone, social || null, photo || null, address || null]
     );
 
-    const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET);
-    res.status(201).json({ token });
+    const token = jwt.sign({ id: newProvider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.json({ token, provider: newProvider.rows[0] });
   } catch (error) {
     console.error("Ошибка регистрации:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Логин
+// 📌 Логин поставщика
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const result = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: "Неверные учетные данные" });
+    const provider = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    if (provider.rows.length === 0) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
     }
 
-    const provider = result.rows[0];
-    const valid = await bcrypt.compare(password, provider.password);
-    if (!valid) {
-      return res.status(400).json({ message: "Неверные учетные данные" });
+    const validPassword = await bcrypt.compare(password, provider.rows[0].password);
+    if (!validPassword) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
     }
 
-    const token = jwt.sign({ id: provider.id }, process.env.JWT_SECRET);
-    res.json({ token });
+    const token = jwt.sign({ id: provider.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.json({ token, provider: provider.rows[0] });
   } catch (error) {
-    console.error("Ошибка входа:", error);
+    console.error("Ошибка логина:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Получить профиль
+// 📌 Получить профиль поставщика
 const getProviderProfile = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM providers WHERE id = $1", [req.user.id]);
-    res.json(result.rows[0]);
+    const provider = await pool.query("SELECT * FROM providers WHERE id = $1", [req.user.id]);
+    if (provider.rows.length === 0) {
+      return res.status(404).json({ message: "Провайдер не найден" });
+    }
+    res.json(provider.rows[0]);
   } catch (error) {
-    res.status(500).json({ message: "Ошибка загрузки профиля" });
+    console.error("Ошибка загрузки профиля:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Обновить профиль
+// 📌 Обновить профиль поставщика
 const updateProviderProfile = async (req, res) => {
   try {
-    const { name, location, phone, social, photo, address } = req.body;
-    await pool.query(
-      `UPDATE providers SET name = $1, location = $2, phone = $3, social = $4, photo = $5, address = $6 WHERE id = $7`,
-      [name, location, phone, social, photo, address, req.user.id]
-    );
-    res.json({ message: "Профиль обновлён" });
-  } catch (error) {
-    res.status(500).json({ message: "Ошибка обновления профиля" });
-  }
-};
+    const { name, location, phone, social, photo, address, password } = req.body;
 
-// 👉 Смена пароля
-const changeProviderPassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    const result = await pool.query("SELECT * FROM providers WHERE id = $1", [req.user.id]);
+    let updateFields = { name, location, phone, social, photo, address };
+    let queryParts = [];
+    let values = [];
+    let index = 1;
 
-    const valid = await bcrypt.compare(currentPassword, result.rows[0].password);
-    if (!valid) {
-      return res.status(400).json({ message: "Неверный текущий пароль" });
+    for (let key in updateFields) {
+      if (updateFields[key] !== undefined) {
+        queryParts.push(`${key} = $${index}`);
+        values.push(updateFields[key]);
+        index++;
+      }
     }
 
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await pool.query("UPDATE providers SET password = $1 WHERE id = $2", [hashed, req.user.id]);
-    res.json({ message: "Пароль обновлён" });
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      queryParts.push(`password = $${index}`);
+      values.push(hashedPassword);
+      index++;
+    }
+
+    if (queryParts.length === 0) {
+      return res.status(400).json({ message: "Нет данных для обновления" });
+    }
+
+    values.push(req.user.id);
+
+    const updated = await pool.query(
+      `UPDATE providers SET ${queryParts.join(", ")} WHERE id = $${index} RETURNING *`,
+      values
+    );
+
+    res.json(updated.rows[0]);
   } catch (error) {
-    res.status(500).json({ message: "Ошибка при смене пароля" });
+    console.error("Ошибка обновления профиля:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Добавить услугу
+// 📌 Получить все услуги поставщика
+const getProviderServices = async (req, res) => {
+  try {
+    const services = await pool.query("SELECT * FROM services WHERE provider_id = $1", [req.user.id]);
+    res.json(services.rows);
+  } catch (error) {
+    console.error("Ошибка получения услуг:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// 📌 Добавить услугу
 const addService = async (req, res) => {
   try {
-    const {
-      title,
-      description,
-      price,
-      category,
-      images,
-      availability,
-      details,
-    } = req.body;
+    const { title, description, category, price, images, details, availability } = req.body;
 
-    await pool.query(
-      `INSERT INTO services 
-      (provider_id, title, description, price, category, images, availability, details)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    const newService = await pool.query(
+      `INSERT INTO services (provider_id, title, description, category, price, images, details, availability, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [
         req.user.id,
         title,
         description,
-        price,
         category,
-        JSON.stringify(images || []),
-        JSON.stringify(availability || []),
-        details ? JSON.stringify(details) : null,
+        price,
+        images || [],
+        details || {},
+        availability || [],
+        "draft"
       ]
     );
 
-    res.status(201).json({ message: "Услуга добавлена" });
+    res.json(newService.rows[0]);
   } catch (error) {
-    console.error("Ошибка при добавлении услуги:", error);
+    console.error("Ошибка добавления услуги:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Получить услуги
-const getServices = async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM services WHERE provider_id = $1", [req.user.id]);
-    res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ message: "Ошибка загрузки услуг" });
-  }
-};
-
-// 👉 Обновить услугу
+// 📌 Обновить услугу
 const updateService = async (req, res) => {
   try {
-    const { id } = req.params;
-    const {
-      title,
-      description,
-      price,
-      category,
-      images,
-      availability,
-      details,
-    } = req.body;
+    const { title, description, category, price, images, details, availability, status } = req.body;
 
-    await pool.query(
-      `UPDATE services SET title = $1, description = $2, price = $3, category = $4,
-       images = $5, availability = $6, details = $7 WHERE id = $8 AND provider_id = $9`,
+    const updated = await pool.query(
+      `UPDATE services SET title=$1, description=$2, category=$3, price=$4, images=$5, details=$6, availability=$7, status=$8
+       WHERE id = $9 AND provider_id = $10 RETURNING *`,
       [
         title,
         description,
-        price,
         category,
-        JSON.stringify(images || []),
-        JSON.stringify(availability || []),
-        details ? JSON.stringify(details) : null,
-        id,
-        req.user.id,
+        price,
+        images || [],
+        details || {},
+        availability || [],
+        status || "draft",
+        req.params.id,
+        req.user.id
       ]
     );
 
-    res.json({ message: "Услуга обновлена" });
+    res.json(updated.rows[0]);
   } catch (error) {
-    console.error("Ошибка при обновлении услуги:", error);
+    console.error("Ошибка обновления услуги:", error);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Удалить услугу
+// 📌 Удалить услугу
 const deleteService = async (req, res) => {
   try {
-    const { id } = req.params;
     await pool.query("DELETE FROM services WHERE id = $1 AND provider_id = $2", [
-      id,
-      req.user.id,
+      req.params.id,
+      req.user.id
     ]);
     res.json({ message: "Услуга удалена" });
   } catch (error) {
-    res.status(500).json({ message: "Ошибка при удалении услуги" });
+    console.error("Ошибка удаления услуги:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// 👉 Получить занятые даты (бронирования)
-const getBookedDates = async (req, res) => {
+// 📌 Заблокированные даты
+const updateBlockedDates = async (req, res) => {
   try {
-    const providerId = req.user.id;
-    const result = await pool.query(
-      "SELECT date FROM bookings WHERE provider_id = $1",
-      [providerId]
-    );
+    const { add, remove } = req.body;
 
-    const bookedDates = result.rows.map((row) => new Date(row.date));
-    res.json(bookedDates);
-  } catch (error) {
-    console.error("Ошибка получения занятых дат:", error);
-    res.status(500).json({ message: "Ошибка загрузки" });
-  }
-};
-
-// 👉 Получить заблокированные вручную даты
-const getBlockedDates = async (req, res) => {
-  try {
-    const providerId = req.user.id;
-    const result = await pool.query(
-      "SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL",
-      [providerId]
-    );
-    const blockedDates = result.rows.map((row) => row.date.toISOString().split("T")[0]);
-    res.json(blockedDates);
-  } catch (error) {
-    console.error("Ошибка получения заблокированных дат:", error);
-    res.status(500).json({ message: "calendar.load_error" });
-  }
-};
-
-// ✅ Сохранить вручную заблокированные даты (add/remove)
-const saveBlockedDates = async (req, res) => {
-  const providerId = req.user.id;
-  const { add = [], remove = [] } = req.body;
-
-  try {
-    if (remove.length > 0) {
-      await pool.query(
-        "DELETE FROM blocked_dates WHERE provider_id = $1 AND date = ANY($2::date[])",
-        [providerId, remove]
-      );
+    if (add && add.length > 0) {
+      for (let date of add) {
+        await pool.query(
+          `INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [req.user.id, date]
+        );
+      }
     }
 
-    for (const date of add) {
-      await pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [providerId, date]
-      );
+    if (remove && remove.length > 0) {
+      for (let date of remove) {
+        await pool.query(`DELETE FROM blocked_dates WHERE provider_id = $1 AND date = $2`, [
+          req.user.id,
+          date
+        ]);
+      }
     }
 
-    res.status(200).json({ message: "Даты успешно обновлены." });
+    res.json({ message: "Даты обновлены" });
   } catch (error) {
-    console.error("Ошибка сохранения дат:", error);
-    res.status(500).json({ message: "Ошибка при сохранении дат." });
+    console.error("Ошибка обновления дат:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
@@ -261,12 +232,9 @@ module.exports = {
   loginProvider,
   getProviderProfile,
   updateProviderProfile,
-  changeProviderPassword,
+  getProviderServices,
   addService,
-  getServices,
   updateService,
   deleteService,
-  getBookedDates,
-  getBlockedDates,
-  saveBlockedDates,
+  updateBlockedDates
 };
