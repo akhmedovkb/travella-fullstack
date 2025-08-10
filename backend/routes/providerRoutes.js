@@ -1,3 +1,5 @@
+//providerRoutes.js
+
 const express = require("express");
 const router = express.Router();
 const {
@@ -5,14 +7,13 @@ const {
   loginProvider,
   getProviderProfile,
   updateProviderProfile,
-  changeProviderPassword,
+  changeProviderPassword, // ✅ добавлено сюда
   addService,
   getServices,
   updateService,
   deleteService,
   getBookedDates,
-  getBlockedDates,
-  saveBlockedDates, // ✅ используем только его
+  saveBlockedDates
 } = require("../controllers/providerController");
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -24,17 +25,18 @@ router.post("/login", loginProvider);
 // 👉 Профиль
 router.get("/profile", authenticateToken, getProviderProfile);
 router.put("/profile", authenticateToken, updateProviderProfile);
+
+// 👉 Смена пароля поставщика
 router.put("/change-password", authenticateToken, changeProviderPassword);
 
 // 👉 Услуги
-router.post("/services", authenticateToken, addService);
-router.get("/services", authenticateToken, getServices);
-router.put("/services/:id", authenticateToken, updateService);
-router.delete("/services/:id", authenticateToken, deleteService);
+router.post("/services", authenticateToken, addService);        // Добавить услугу
+router.get("/services", authenticateToken, getServices);        // Получить все услуги
+router.put("/services/:id", authenticateToken, updateService);  // Обновить услугу
+router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
 
 // 👉 Календарь
 router.get("/booked-dates", authenticateToken, getBookedDates);
-router.get("/blocked-dates", authenticateToken, getBlockedDates);
-router.post("/blocked-dates", authenticateToken, saveBlockedDates); // ✅ актуальный маршрут
+router.post("/blocked-dates", authenticateToken, saveBlockedDates);
 
 module.exports = router;
