@@ -6,8 +6,6 @@ import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 import AsyncSelect from "react-select/async";
-import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -43,11 +41,6 @@ const Dashboard = () => {
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
-  const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
-  const [datesToAdd, setDatesToAdd] = useState([]);
-  const [datesToRemove, setDatesToRemove] = useState([]);
-  const [bookedDates, setBookedDates] = useState([]);
-
   const [details, setDetails] = useState({
   direction: "",
   directionCountry: "",
@@ -71,16 +64,13 @@ const Dashboard = () => {
   isActive: true,
   visaCountry: "",
 });
-
+  
+  // 🔹 Календарь услуг
+  const [bookedDates, setBookedDates] = useState([]);
   
   // 🔹 Фильтрация по активности услуг
-const isServiceActive = (s) => {
-  const exp = s?.details?.expiration;
-  if (!exp) return true;                 // нет даты — активна
-  const d = new Date(exp);
-  if (Number.isNaN(+d)) return true;     // невалидная дата — активна
-  return d > new Date();                 // сравнение даты
-};
+const isServiceActive = (s) =>
+  !s.details?.expiration || new Date(s.details.expiration) > new Date();
   
   // 🔹 Загрузка отелей по запросу
 const loadHotelOptions = async (inputValue) => {
@@ -95,7 +85,20 @@ const loadHotelOptions = async (inputValue) => {
   }
 };
   
-// Загрузка стран
+  const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
+  const handleSaveBlockedDates = async () => {
+  try {
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
+      dates: blockedDates,
+    }, config);
+    alert(t("calendar.saved_successfully"));
+  } catch (err) {
+    console.error("Ошибка сохранения дат:", err);
+    alert(t("calendar.save_error"));
+  }
+      };
+
+  // Загрузка стран
 useEffect(() => {
   const fetchCountries = async () => {
     try {
@@ -161,7 +164,7 @@ const loadCitiesFromInput = async (inputValue) => {
   }
 };
   
-// Города отправления — независимо от страны
+// 🔍 Города отправления — независимо от страны
 useEffect(() => {
   const fetchCities = async () => {
     try {
@@ -185,6 +188,7 @@ useEffect(() => {
   fetchCities();
 }, []);
 
+ 
 useEffect(() => {
   if (!selectedCountry?.code) return;
   const fetchCities = async () => {
@@ -209,14 +213,14 @@ useEffect(() => {
   fetchCities();
 }, [selectedCountry]);
 
-   // тут профиль
-
+  // 📌 загружаем profile
   useEffect(() => {
   const token = localStorage.getItem("token");
   const config = {
     headers: { Authorization: `Bearer ${token}` },
   };
 
+  // Загружаем профиль
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
     .then((res) => {
@@ -226,26 +230,25 @@ useEffect(() => {
       setNewPhone(res.data.phone);
       setNewAddress(res.data.address);
 
+      // Загружаем занятые даты только для guide и transport
       if (["guide", "transport"].includes(res.data.type)) {
         axios
           .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
           .then((response) => {
-            const formatted = response.data.map((item) => new Date(item));
+            const formatted = response.data.map((item) => new Date(item.date));
             setBookedDates(formatted);
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
-
-        axios
-          .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
-          .then((response) => {
-            setBlockedDatesFromServer(response.data); // строки в формате YYYY-MM-DD
-          })
-          .catch((err) => console.error("Ошибка загрузки заблокированных дат", err));
       }
     })
     .catch((err) => console.error("Ошибка загрузки профиля", err));
-}, []);
 
+  // Загружаем услуги
+  axios
+    .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+    .then((res) => setServices(res.data))
+    .catch((err) => console.error("Ошибка загрузки услуг", err));
+}, []);
 
 
   const handlePhotoChange = (e) => {
@@ -306,7 +309,6 @@ useEffect(() => {
       .catch(() => setMessageProfile(t("password_error")));
   };
 
-  
 // Тут поведение кнопки Сохранить услугу
 
   const handleSaveService = () => {
@@ -435,7 +437,7 @@ const resetServiceForm = () => {
     flightDateGo: "",
     flightDateReturn: "",
     flightDetails: "",
-    visaCountry: "",
+    visaCountry: d.visaCountry || "",
   });
 };
 
@@ -511,6 +513,9 @@ const resetServiceForm = () => {
   }
 };
 
+
+
+
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const readers = files.map(file => {
@@ -561,69 +566,8 @@ const getCategoryOptions = (type) => {
   }
 };
 
-  // ТУТ КАЛЕНДАРЬ
-  
-const handleCalendarClick = (day) => {
-  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-
-  // ⛔ Запрет выбора прошедших дат
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (day < today) return;
-
-  // ⛔ Запрет снятия забронированных дат
-  if (bookedDates.some((d) => d.toDateString() === day.toDateString())) {
-    toast.warn("Эта дата уже забронирована и не может быть изменена.");
-    return;
-  }
-
-  const isInBlockedServer = blockedDatesFromServer.includes(dateStr);
-  const isInAdd = datesToAdd.includes(dateStr);
-  const isInRemove = datesToRemove.includes(dateStr);
-
-  if (isInBlockedServer && !isInRemove) {
-    setDatesToRemove((prev) => [...prev, dateStr]);
-  } else if (isInBlockedServer && isInRemove) {
-    setDatesToRemove((prev) => prev.filter((d) => d !== dateStr));
-  } else if (!isInBlockedServer && !isInAdd) {
-    setDatesToAdd((prev) => [...prev, dateStr]);
-  } else if (!isInBlockedServer && isInAdd) {
-    setDatesToAdd((prev) => prev.filter((d) => d !== dateStr));
-  }
-};
-
-const handleSaveBlockedDates = () => {
-  const config = {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  };
-
-  axios
-    .post(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-      {
-        add: datesToAdd,
-        remove: datesToRemove,
-      },
-      config
-    )
-    .then(() => {
-      toast.success("Изменения успешно сохранены.");
-      setBlockedDatesFromServer((prev) => {
-        const removed = prev.filter((d) => !datesToRemove.includes(d));
-        return [...removed, ...datesToAdd];
-      });
-      setDatesToAdd([]);
-      setDatesToRemove([]);
-    })
-    .catch((err) => {
-      toast.error("Ошибка при сохранении дат");
-      console.error("Ошибка сохранения:", err);
-    });
-};
 
 
-
-  
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">     
       {/* Левый блок */}
@@ -828,6 +772,7 @@ const handleSaveBlockedDates = () => {
             setDescription("");
             setCategory("");
             setPrice("");
+            set([]);
             setImages([]);
           }}
           className="text-sm text-orange-500 underline"
@@ -848,7 +793,7 @@ const handleSaveBlockedDates = () => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -865,7 +810,7 @@ const handleSaveBlockedDates = () => {
           onClick={() => loadServiceToEdit(s)}
         >
           <div className="font-bold text-lg">{s.title}</div>
-          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -881,7 +826,7 @@ const handleSaveBlockedDates = () => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
+          <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
           <div className="font-bold text-lg">{s.title}</div>
           <div className="text-sm text-gray-800">
             {t("net_price")}: {s.details?.netPrice || 0} USD
@@ -908,8 +853,8 @@ const handleSaveBlockedDates = () => {
           className="border rounded-lg p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
           onClick={() => loadServiceToEdit(s)}
         >
-          <div className="font-bold text-lg">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
-          <div className="text-sm text-gray-600">{t?.(`category.${s?.category}`) || s?.category || "—"}</div>
+          <div className="font-bold text-lg">{s.title}</div>
+          <div className="text-sm text-gray-600">{t(s.category)}</div>
           <div className="text-sm text-gray-800">{t("price")}: {s.price} USD </div>
         </div>
       ))}
@@ -2560,91 +2505,46 @@ const handleSaveBlockedDates = () => {
       {t("calendar.blocking_title")}
     </h3>
 
-   <DayPicker
+    <DayPicker
       mode="multiple"
-      selected={
-        [...blockedDatesFromServer.filter((d) => !datesToRemove.includes(d)), ...datesToAdd]
-          .map((d) => {
-            const parts = d.split("-");
-            return new Date(parts[0], parts[1] - 1, parts[2]);
-          })
-      }
-      onDayClick={(day) => {
-        const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-        const isBooked = bookedDates.some((d) => d.toDateString() === day.toDateString());
-
-        if (isBooked) {
-          toast.warn(t("calendar.booked_warning"));
-          return;
-        }
-
-        const isInBlockedServer = blockedDatesFromServer.includes(dateStr);
-        const isInAdd = datesToAdd.includes(dateStr);
-        const isInRemove = datesToRemove.includes(dateStr);
-
-        if (isInBlockedServer && !isInRemove) {
-          setDatesToRemove((prev) => [...prev, dateStr]);
-        } else if (isInBlockedServer && isInRemove) {
-          setDatesToRemove((prev) => prev.filter((d) => d !== dateStr));
-        } else if (!isInBlockedServer && !isInAdd) {
-          setDatesToAdd((prev) => [...prev, dateStr]);
-        } else if (!isInBlockedServer && isInAdd) {
-          setDatesToAdd((prev) => prev.filter((d) => d !== dateStr));
-        }
+      selected={blockedDates}
+      onSelect={setBlockedDates}
+      disabled={{
+        before: new Date(),
+        dates: bookedDates.map((d) => new Date(d.date)),
       }}
-      disabled={{ before: new Date() }}
       modifiers={{
-        booked: bookedDates,
-        blocked: [...blockedDatesFromServer, ...datesToAdd]
-          .filter((d) => !datesToRemove.includes(d))
-          .map((d) => {
-            const parts = d.split("-");
-            return new Date(parts[0], parts[1] - 1, parts[2]);
-          }),
+        booked: bookedDates.map((d) => new Date(d.date)),
       }}
       modifiersClassNames={{
-        booked: "bg-blue-500 text-white",
-        blocked: "bg-red-500 text-white",
+        selected: "bg-red-400 text-white", // вручную заблокированные
+        booked: "bg-blue-500 text-white", // занятые бронированиями
       }}
-      className="rounded border p-4"
+      className="border rounded p-4"
     />
 
+    {/* 🔎 Подписи */}
+    <div className="mt-2 text-sm text-gray-600 flex gap-4">
+      <div className="flex items-center gap-1">
+        <span className="w-3 h-3 rounded bg-red-400 inline-block"></span>
+        <span>{t("calendar.label_blocked_manual")}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="w-3 h-3 rounded bg-blue-500 inline-block"></span>
+        <span>{t("calendar.label_booked_by_clients")}</span>
+      </div>
+    </div>
 
-
-   <button
-      onClick={() => {
-        const token = localStorage.getItem("token");
-        const config = {
-          headers: { Authorization: `Bearer ${token}` },
-        };
-
-        axios
-          .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
-            add: datesToAdd,
-            remove: datesToRemove,
-          }, config)
-          .then(() => {
-            toast.success(t("calendar.saved_successfully"));
-            // Обновляем локальные состояния
-            setBlockedDatesFromServer((prev) => {
-              const removed = prev.filter((d) => !datesToRemove.includes(d));
-              return [...removed, ...datesToAdd];
-            });
-            setDatesToAdd([]);
-            setDatesToRemove([]);
-          })
-          .catch(() => {
-            toast.error(t("calendar.save_error"));
-          });
-      }}
-      className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+    {/* 🔘 Кнопка сохранения */}
+    <button
+      onClick={handleSaveBlockedDates}
+      className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
     >
-      💾 {t("calendar.save_button")}
+      {t("calendar.save_blocked_dates")}
     </button>
-
-
   </div>
 )}
+
   
 </div>
 </div>
