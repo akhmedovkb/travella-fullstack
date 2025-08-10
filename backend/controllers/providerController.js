@@ -2,6 +2,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
+// =====================
+// Регистрация поставщика
+// =====================
 const registerProvider = async (req, res) => {
   try {
     console.log("📦 Получено тело запроса:", req.body);
@@ -43,6 +46,9 @@ const registerProvider = async (req, res) => {
   }
 };
 
+// =====================
+// Логин поставщика
+// =====================
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -76,6 +82,9 @@ const loginProvider = async (req, res) => {
   }
 };
 
+// =====================
+// Профиль
+// =====================
 const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
@@ -130,21 +139,23 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
-// ДОБАВИТЬ УСЛУГУ
+// =====================
+// Услуги
+// =====================
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { title, description, price, category, images, availability, details } = req.body;
 
-      const isExtended = [
-        "refused_tour",
-        "author_tour",
-        "refused_hotel",
-        "refused_flight",
-        "refused_event_ticket",
-        "visa_support"
-      ].includes(category);
-    
+    const isExtended = [
+      "refused_tour",
+      "author_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_event_ticket",
+      "visa_support"
+    ].includes(category);
+
     const result = await pool.query(
       `INSERT INTO services 
        (provider_id, title, description, price, category, images, availability, details)
@@ -168,7 +179,6 @@ const addService = async (req, res) => {
   }
 };
 
-
 const getServices = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -189,11 +199,30 @@ const updateService = async (req, res) => {
     const serviceId = req.params.id;
     const { title, description, price, category, images, availability, details } = req.body;
 
+    const isExtended = [
+      "refused_tour",
+      "author_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_event_ticket",
+      "visa_support"
+    ].includes(category);
+
     const result = await pool.query(
       `UPDATE services 
        SET title=$1, description=$2, price=$3, category=$4, images=$5, availability=$6, details=$7
        WHERE id=$8 AND provider_id=$9 RETURNING *`,
-      [title, description, price, category, images, availability, details, serviceId, providerId]
+      [
+        title,
+        isExtended ? null : description,
+        isExtended ? null : price,
+        category,
+        images,
+        isExtended ? null : availability,
+        isExtended ? details : null,
+        serviceId,
+        providerId
+      ]
     );
 
     if (result.rowCount === 0) {
@@ -228,6 +257,9 @@ const deleteService = async (req, res) => {
   }
 };
 
+// =====================
+// Пароль
+// =====================
 const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
@@ -247,18 +279,18 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// ⬇️ Получение всех занятых дат (вручную + бронирования)
+// =====================
+// Календарь
+// =====================
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
 
-    // 1. Вручную заблокированные даты (без привязки к услуге)
     const manual = await pool.query(
       `SELECT date FROM blocked_dates WHERE provider_id = $1 AND service_id IS NULL`,
       [providerId]
     );
 
-    // 2. Даты с бронированиями по конкретным услугам
     const booked = await pool.query(
       `SELECT b.date, s.title
        FROM blocked_dates b
@@ -267,7 +299,6 @@ const getBookedDates = async (req, res) => {
       [providerId]
     );
 
-    // 3. Объединяем обе группы
     const bookedDates = [
       ...manual.rows.map((r) => ({
         date: new Date(r.date).toISOString().split("T")[0],
@@ -277,9 +308,7 @@ const getBookedDates = async (req, res) => {
         date: new Date(r.date).toISOString().split("T")[0],
         serviceTitle: r.title,
       })),
-    ];
-
-    console.log("📌 Заблокированные даты:", bookedDates);
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     res.json(bookedDates);
   } catch (error) {
@@ -288,8 +317,6 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-
-// ⬇️ Сохранение вручную заблокированных дат
 const saveBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -299,18 +326,11 @@ const saveBlockedDates = async (req, res) => {
       return res.status(400).json({ message: "Некорректные даты" });
     }
 
-    console.log("📥 Получены даты для сохранения:", dates);
-
-    // Удаляем старые записи
     await pool.query("DELETE FROM blocked_dates WHERE provider_id = $1", [providerId]);
 
-    // Добавляем новые
-    const insertPromises = dates.map((date) => {
-      return pool.query(
-        "INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)",
-        [providerId, date]
-      );
-    });
+    const insertPromises = dates.map((date) =>
+      pool.query("INSERT INTO blocked_dates (provider_id, date) VALUES ($1, $2)", [providerId, date])
+    );
 
     await Promise.all(insertPromises);
 
@@ -320,7 +340,7 @@ const saveBlockedDates = async (req, res) => {
     res.status(500).json({ message: "calendar.save_error" });
   }
 };
-    
+
 module.exports = {
   registerProvider,
   loginProvider,
