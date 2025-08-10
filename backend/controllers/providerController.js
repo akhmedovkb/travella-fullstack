@@ -99,7 +99,7 @@ const changeProviderPassword = async (req, res) => {
   }
 };
 
-// 👉 Добавить услугу 
+// 👉 Добавить услугу
 const addService = async (req, res) => {
   try {
     const {
@@ -107,33 +107,26 @@ const addService = async (req, res) => {
       description,
       price,
       category,
-      images = [],
-      availability = [],
-      details = {},
+      images,
+      availability,
+      details,
     } = req.body;
 
     await pool.query(
-      `INSERT INTO services
-        (provider_id, title, description, price, category, images, availability, details)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)`,
+      `INSERT INTO services 
+      (provider_id, title, description, price, category, images, availability, details)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         req.user.id,
         title,
         description,
         price,
         category,
-        JSON.stringify(images),
-        JSON.stringify(availability),
-        JSON.stringify(details || {}),
+        JSON.stringify(images || []),
+        JSON.stringify(availability || []),
+        details ? JSON.stringify(details) : null,
       ]
     );
-
-    return res.status(201).json({ message: "Услуга добавлена" });
-  } catch (error) {
-    console.error("Ошибка при добавлении услуги:", error);
-    return res.status(500).json({ message: "Ошибка сервера" });
-  }
-};
 
     res.status(201).json({ message: "Услуга добавлена" });
   } catch (error) {
@@ -141,8 +134,6 @@ const addService = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
-
 
 // 👉 Получить услуги
 const getServices = async (req, res) => {
@@ -163,40 +154,34 @@ const updateService = async (req, res) => {
       description,
       price,
       category,
-      images = [],
-      availability = [],
-      details = {},
+      images,
+      availability,
+      details,
     } = req.body;
 
     await pool.query(
-      `UPDATE services
-       SET title = $1,
-           description = $2,
-           price = $3,
-           category = $4,
-           images = $5::jsonb,
-           availability = $6::jsonb,
-           details = $7::jsonb
-       WHERE id = $8 AND provider_id = $9`,
+      `UPDATE services SET title = $1, description = $2, price = $3, category = $4,
+       images = $5, availability = $6, details = $7 WHERE id = $8 AND provider_id = $9`,
       [
         title,
         description,
         price,
         category,
-        JSON.stringify(images),
-        JSON.stringify(availability),
-        JSON.stringify(details || {}),
+        JSON.stringify(images || []),
+        JSON.stringify(availability || []),
+        details ? JSON.stringify(details) : null,
         id,
         req.user.id,
       ]
     );
 
-    return res.json({ message: "Услуга обновлена" });
+    res.json({ message: "Услуга обновлена" });
   } catch (error) {
     console.error("Ошибка при обновлении услуги:", error);
-    return res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 // 👉 Удалить услугу
 const deleteService = async (req, res) => {
   try {
