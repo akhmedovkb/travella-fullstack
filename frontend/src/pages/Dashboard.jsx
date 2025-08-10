@@ -75,6 +75,7 @@ const isServiceActive = (s) =>
   !s.details?.expiration || new Date(s.details.expiration) > new Date();
   
   // 🔹 Загрузка отелей по запросу
+// Загрузка отелей
 const loadHotelOptions = async (inputValue) => {
   try {
     const res = await axios.get(
@@ -83,22 +84,27 @@ const loadHotelOptions = async (inputValue) => {
     return res.data;
   } catch (err) {
     console.error("Ошибка загрузки отелей:", err);
+    toast.error(t("hotels_load_error") || "Не удалось загрузить отели");
     return [];
   }
 };
+
   
   const [blockedDates, setBlockedDates] = useState([]); // ⬅️ Календарь объявлен
+  
   const handleSaveBlockedDates = async () => {
   try {
-    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, {
-      dates: blockedDates,
-    }, config);
-    alert(t("calendar.saved_successfully"));
+    await axios.post(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+      { dates: blockedDates },
+      config
+    );
+    toast.success(t("calendar.saved_successfully") || "Даты сохранены");
   } catch (err) {
-    console.error("Ошибка сохранения дат:", err);
-    alert(t("calendar.save_error"));
+    console.error("Ошибка сохранения дат", err);
+    toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
   }
-      };
+};
 
   // Загрузка стран
 useEffect(() => {
@@ -279,40 +285,49 @@ useEffect(() => {
   };
 
   const handleSaveProfile = () => {
-    const updated = {};
-    if (newLocation !== profile.location) updated.location = newLocation;
-    if (newSocial !== profile.social) updated.social = newSocial;
-    if (newPhone !== profile.phone) updated.phone = newPhone;
-    if (newPhoto) updated.photo = newPhoto;
-    if (newCertificate) updated.certificate = newCertificate;
-    if (newAddress !== profile.address) updated.address = newAddress;
-    if (Object.keys(updated).length === 0) {
-      setMessageProfile(t("no_changes"));
-      return;
-    }
+  const updated = {};
+  if (newLocation !== profile.location) updated.location = newLocation;
+  if (newSocial !== profile.social) updated.social = newSocial;
+  if (newPhone !== profile.phone) updated.phone = newPhone;
+  if (newPhoto) updated.photo = newPhoto;
+  if (newCertificate) updated.certificate = newCertificate;
+  if (newAddress !== profile.address) updated.address = newAddress;
 
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
-      .then(() => {
-        setProfile((prev) => ({ ...prev, ...updated }));
-        setIsEditing(false);
-        setMessageProfile(t("profile_updated"));
-      })
-      .catch(() => setMessageProfile(t("update_error")));
-  };
+  if (Object.keys(updated).length === 0) {
+    toast.info(t("no_changes") || "Изменений нет");
+    return;
+  }
+
+  axios
+    .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+    .then(() => {
+      setProfile((prev) => ({ ...prev, ...updated }));
+      setIsEditing(false);
+      toast.success(t("profile_updated") || "Профиль обновлён");
+    })
+    .catch((err) => {
+      console.error("Ошибка обновления профиля", err);
+      toast.error(t("update_error") || "Ошибка обновления профиля");
+    });
+};
+
 
   const handleChangePassword = () => {
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
-        { password: newPassword },
-        config
-      )
-      .then(() => {
-        setNewPassword("");
-        setMessageProfile(t("password_changed"));
-      })
-      .catch(() => setMessageProfile(t("password_error")));
-  };
+  axios
+    .put(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`,
+      { password: newPassword },
+      config
+    )
+    .then(() => {
+      setNewPassword("");
+      toast.success(t("password_changed") || "Пароль обновлён");
+    })
+    .catch((err) => {
+      console.error("Ошибка смены пароля", err);
+      toast.error(t("password_error") || "Ошибка смены пароля");
+    });
+};
 
 // Тут поведение кнопки Сохранить услугу
 
@@ -329,45 +344,21 @@ useEffect(() => {
   const isExtendedCategory = category in requiredFieldsByCategory;
   const requiredFields = requiredFieldsByCategory[category] || ["title", "description", "category", "price"];
 
-  const getFieldValue = (path) => {
-    return path.split(".").reduce((obj, key) => obj?.[key], {
-      title,
-      description,
-      category,
-      price,
-      details,
-    });
-  };
+  const getFieldValue = (path) =>
+    path.split(".").reduce((obj, key) => obj?.[key], { title, description, category, price, details });
 
   const hasEmpty = requiredFields.some((field) => {
     const value = getFieldValue(field);
     return value === "" || value === undefined;
   });
 
-  // 🔁 Дополнительная проверка для returnDate если рейс туда-обратно
   const needsReturnDate =
     category === "refused_flight" &&
     details.flightType === "round_trip" &&
     (!details.returnDate || details.returnDate === "");
 
-  console.log("📋 Проверка обязательных полей для категории:", category);
-console.log("🎯 Обязательные поля:", requiredFields);
-
-requiredFields.forEach((field) => {
-  const keys = field.split(".");
-  const value = keys.reduce((obj, key) => (obj ? obj[key] : undefined), {
-    title,
-    description,
-    category,
-    price,
-    details,
-  });
-  console.log(`⛳ ${field}:`, value);
-});
-
-    
   if (hasEmpty || needsReturnDate) {
-    setMessageService(t("fill_all_fields"));
+    toast.warn(t("fill_all_fields") || "Заполните все обязательные поля");
     return;
   }
 
@@ -385,16 +376,13 @@ requiredFields.forEach((field) => {
     axios
       .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
       .then((res) => {
-        setServices((prev) =>
-          prev.map((s) => (s.id === selectedService.id ? res.data : s))
-        );
+        setServices((prev) => prev.map((s) => (s.id === selectedService.id ? res.data : s)));
         resetServiceForm();
-        setMessageService(t("service_updated"));
-        setTimeout(() => setMessageService(""), 3000);
+        toast.success(t("service_updated") || "Услуга обновлена");
       })
       .catch((err) => {
-        console.error("Ошибка обновления:", err);
-        setMessageService(t("update_error"));
+        console.error("Ошибка обновления услуги", err);
+        toast.error(t("update_error") || "Ошибка обновления услуги");
       });
   } else {
     axios
@@ -402,12 +390,11 @@ requiredFields.forEach((field) => {
       .then((res) => {
         setServices((prev) => [...prev, res.data]);
         resetServiceForm();
-        setMessageService(t("service_added"));
-        setTimeout(() => setMessageService(""), 3000);
+        toast.success(t("service_added") || "Услуга добавлена");
       })
       .catch((err) => {
-        console.error("Ошибка добавления:", err);
-        setMessageService(t("add_error"));
+        console.error("Ошибка добавления услуги", err);
+        toast.error(t("add_error") || "Ошибка добавления услуги");
       });
   }
 };
@@ -448,15 +435,22 @@ const resetServiceForm = () => {
 
 
 
-  const handleDeleteService = (id) => {
-    axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
-      .then(() => {
-        setServices((prev) => prev.filter((s) => s.id !== id));
-        setSelectedService(null);
-      })
-      .catch(() => setMessageService(t("delete_error")));
-  };
+  cconst handleDeleteService = (id) => {
+  if (!confirm(t("confirm_delete") || "Удалить услугу?")) return;
+
+  axios
+    .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${id}`, config)
+    .then(() => {
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      setSelectedService(null);
+      toast.success(t("service_deleted") || "Услуга удалена");
+    })
+    .catch((err) => {
+      console.error("Ошибка удаления услуги", err);
+      toast.error(t("delete_error") || "Ошибка удаления услуги");
+    });
+};
+
 
   const loadServiceToEdit = (service) => {
   setSelectedService(service);
