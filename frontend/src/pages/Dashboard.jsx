@@ -623,7 +623,7 @@ const getCategoryOptions = (type) => {
 
   return (
     <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50 min-h-screen">  
-      <ToastContainer position="top-right" autoClose={3000} />
+    
       {/* Левый блок */}
 <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
         <div className="flex gap-4">
