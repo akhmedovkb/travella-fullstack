@@ -241,15 +241,18 @@ useEffect(() => {
             setBookedDates(formatted);
           })
           .catch((err) => console.error("Ошибка загрузки занятых дат", err));
+          toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
       }
     })
     .catch((err) => console.error("Ошибка загрузки профиля", err));
+    toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
 
   // Загружаем услуги
   axios
     .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
     .then((res) => setServices(res.data))
     .catch((err) => console.error("Ошибка загрузки услуг", err));
+    toast.error(t("services_load_error") || "Не удалось загрузить услуги");
 }, []);
 
 
