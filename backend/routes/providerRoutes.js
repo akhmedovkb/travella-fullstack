@@ -1,5 +1,3 @@
-//providerRoutes.js
-
 const express = require("express");
 const router = express.Router();
 const {
@@ -7,7 +5,7 @@ const {
   loginProvider,
   getProviderProfile,
   updateProviderProfile,
-  changeProviderPassword, // ✅ добавлено сюда
+  changeProviderPassword,
   addService,
   getServices,
   updateService,
@@ -18,24 +16,22 @@ const {
 
 const authenticateToken = require("../middleware/authenticateToken");
 
-// 👉 Аутентификация
+// Auth
 router.post("/register", registerProvider);
 router.post("/login", loginProvider);
 
-// 👉 Профиль
+// Profile
 router.get("/profile", authenticateToken, getProviderProfile);
 router.put("/profile", authenticateToken, updateProviderProfile);
-
-// 👉 Смена пароля поставщика
 router.put("/change-password", authenticateToken, changeProviderPassword);
 
-// 👉 Услуги
-router.post("/services", authenticateToken, addService);        // Добавить услугу
-router.get("/services", authenticateToken, getServices);        // Получить все услуги
-router.put("/services/:id", authenticateToken, updateService);  // Обновить услугу
-router.delete("/services/:id", authenticateToken, deleteService); // Удалить услугу
+// Services
+router.post("/services", authenticateToken, addService);
+router.get("/services", authenticateToken, getServices);
+router.put("/services/:id", authenticateToken, updateService);
+router.delete("/services/:id", authenticateToken, deleteService);
 
-// 👉 Календарь
+// Calendar
 router.get("/booked-dates", authenticateToken, getBookedDates);
 router.post("/blocked-dates", authenticateToken, saveBlockedDates);
 
