@@ -374,9 +374,12 @@ useEffect(() => {
     refused_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     author_tour: ["title", "category", "details.directionFrom", "details.directionTo", "details.netPrice"],
     refused_hotel: ["title", "category", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
-    refused_flight: ["title", "category", "details.direction", "details.startDate", "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"],
+    refused_flight: [
+      "title", "category", "details.direction", "details.startDate",
+      "details.netPrice", "details.airline", "details.flightDetails", "details.flightType"
+    ],
     refused_event_ticket: ["title", "category", "details.location", "details.startDate", "details.netPrice"],
-    visa_support: ["title", "category", "details.description", "details.netPrice"]
+    visa_support: ["title", "category", "details.description", "details.netPrice"],
   };
 
   const isExtendedCategory = category in requiredFieldsByCategory;
@@ -400,45 +403,59 @@ useEffect(() => {
     return;
   }
 
-  // ⚠️ КЛЮЧЕВОЙ ФИКС: details/availability всегда валидные JSON-значения
-  const data = {
+  // утилита: выкидываем пустые массивы/объекты и undefined/null
+  const compact = (obj) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(([_, v]) => {
+        if (v === undefined || v === null) return false;
+        if (Array.isArray(v)) return v.length > 0;
+        if (typeof v === "object") return Object.keys(v).length > 0;
+        return true;
+      })
+    );
+
+  // собираем сырые данные
+  const raw = {
     title,
     category,
-    images: images || [],
+    images: images, // массив dataURL ок
     price: isExtendedCategory ? undefined : price,
     description: isExtendedCategory ? undefined : description,
-    availability: isExtendedCategory ? undefined : (availability || []),
-    details: isExtendedCategory ? (details || {}) : {} // никогда не undefined
+    // availability/details отправляем только если НЕ пустые
+    availability: isExtendedCategory ? undefined : availability,
+    details: isExtendedCategory ? details : undefined,
   };
 
-  // (необязательно) удобно увидеть, что реально уходит
-  // console.log("payload", data);
+  // финальный payload без пустых полей
+  const data = compact(raw);
 
-  if (selectedService) {
-    axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`, data, config)
-      .then((res) => {
+  const req = selectedService
+    ? axios.put(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`,
+        data,
+        config
+      )
+    : axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/services`,
+        data,
+        config
+      );
+
+  req
+    .then((res) => {
+      if (selectedService) {
         setServices((prev) => prev.map((s) => (s.id === selectedService.id ? res.data : s)));
-        resetServiceForm();
         toast.success(t("service_updated") || "Услуга обновлена");
-      })
-      .catch((err) => {
-        console.error("Ошибка обновления услуги", err);
-        toast.error(t("update_error") || "Ошибка обновления услуги");
-      });
-  } else {
-    axios
-      .post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config)
-      .then((res) => {
+      } else {
         setServices((prev) => [...prev, res.data]);
-        resetServiceForm();
         toast.success(t("service_added") || "Услуга добавлена");
-      })
-      .catch((err) => {
-        console.error("Ошибка добавления услуги", err);
-        toast.error(t("add_error") || "Ошибка добавления услуги");
-      });
-  }
+      }
+      resetServiceForm();
+    })
+    .catch((err) => {
+      console.error(selectedService ? "Ошибка обновления услуги" : "Ошибка добавления услуги", err);
+      toast.error(t(selectedService ? "update_error" : "add_error") || "Ошибка");
+    });
 };
 
 // сбрасываем все поля 
