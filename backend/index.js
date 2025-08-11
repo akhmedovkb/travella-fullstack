@@ -74,6 +74,10 @@ app.get("/", (req, res) => {
 
 // Запуск сервера
 const PORT = process.env.PORT || 5000;
+
+const authenticateToken = require("./middleware/authenticateToken");
+app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
+
 app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
