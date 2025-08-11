@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 export default function Header() {
   const clientToken = localStorage.getItem("clientToken");
-  const providerToken = localStorage.getItem("token") || localStorage.getItem("providerToken"); // на случай разных имен
+  const providerToken = localStorage.getItem("token") || localStorage.getItem("providerToken");
   const role = useMemo(() => (clientToken ? "client" : providerToken ? "provider" : null), [clientToken, providerToken]);
 
   const [counts, setCounts] = useState(null);
@@ -17,14 +17,11 @@ export default function Header() {
     try {
       const token = role === "client" ? clientToken : providerToken;
       const res = await fetch(`${API_URL}/api/notifications/counts`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) setCounts(data.counts || null);
-    } catch (e) {
+    } catch (_) {
       // no-op
     } finally {
       setLoading(false);
@@ -33,9 +30,8 @@ export default function Header() {
 
   useEffect(() => {
     fetchCounts();
-    const id = setInterval(fetchCounts, 30000); // обновление каждые 30 сек
+    const id = setInterval(fetchCounts, 30000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   return (
@@ -45,15 +41,15 @@ export default function Header() {
 
         {role === "client" && (
           <div className="flex items-center gap-2">
-            <BadgeLink href="/client/dashboard" label="Requests" value={counts?.requests_open + counts?.requests_proposed} loading={loading} />
-            <BadgeLink href="/client/dashboard" label="Bookings" value={counts?.bookings_pending} loading={loading} />
+            <BadgeLink href="/client/dashboard" label="Requests" value={(counts?.requests_open || 0) + (counts?.requests_proposed || 0)} loading={loading} />
+            <BadgeLink href="/client/dashboard" label="Bookings" value={counts?.bookings_pending || 0} loading={loading} />
           </div>
         )}
 
         {role === "provider" && (
           <div className="flex items-center gap-2">
-            <BadgeLink href="/dashboard" label="Requests" value={counts?.requests_open + counts?.requests_accepted} loading={loading} />
-            <BadgeLink href="/dashboard" label="Bookings" value={counts?.bookings_pending} loading={loading} />
+            <BadgeLink href="/dashboard/requests" label="Requests" value={(counts?.requests_open || 0) + (counts?.requests_accepted || 0)} loading={loading} />
+            <BadgeLink href="/dashboard/bookings" label="Bookings" value={counts?.bookings_pending || 0} loading={loading} />
           </div>
         )}
       </div>
