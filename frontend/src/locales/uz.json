@@ -260,11 +260,11 @@
       "refresh": "Yangilash",
       "noResults": "ma’lumot yo‘q",
       "tabs": {
-        "myRequests": "so‘rovlarim",
-        "myBookings": "bronlarim"
+        "myRequests": "So‘rovlarim",
+        "myBookings": "Bronlarim"
       },
-      "noRequests": "so‘rovlar yo‘q",
-      "noBookings": "bronlar yo‘q"
+      "noRequests": "So‘rovlar yo‘q",
+      "noBookings": "Bronlar yo‘q"
     }
   },
   
@@ -295,6 +295,7 @@
   }
   
 }
+
 
 
 
