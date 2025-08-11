@@ -270,7 +270,7 @@
   "direction_from_not_found": "Город вылета не найден",
   "direction_to_not_found": "Город прибытия не найден",
 
-  {
+  
   "nav": {
     "dashboard": "Dashboard",
     "requests": "Requests",
@@ -279,30 +279,30 @@
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
-      "noItems": "No requests.",
-      "messagePlaceholder": "Message to client…",
-      "send": "Send",
-      "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-      "sendProposal": "Send proposal",
-      "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking."
+      "noItems": "Нет заявок.",
+      "messagePlaceholder": "Сообщение клиенту…",
+      "send": "Отправить",
+      "proposalPlaceholder": "JSON-предложение (напр. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+      "sendProposal": "Отправить предложение",
+      "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование."
     },
     "bookings": {
       "title": "Bookings (Provider)",
-      "noItems": "No bookings.",
-      "details": "Details",
-      "confirm": "Confirm",
-      "reject": "Reject",
-      "cancel": "Cancel",
-      "status": "Status"
+      "noItems": "Нет бронирований.",
+      "details": "Детали",
+      "confirm": "Подтвердить",
+      "reject": "Отклонить",
+      "cancel": "Отменить",
+      "status": "Статус"
     }
   },
   "common": {
-    "loading": "Loading…"
+    "loading": "Загрузка…"
   }
-}
 
 
 }
+
 
 
 
