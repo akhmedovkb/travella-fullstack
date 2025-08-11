@@ -301,11 +301,14 @@
 
   
   "common": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "backToDashboard": "Back to Dashboard"
+  
   }
 
 
 }
+
 
 
 
