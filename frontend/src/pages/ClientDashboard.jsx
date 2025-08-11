@@ -591,8 +591,8 @@ function FavoritesList() {
   const end = start + PAGE_SIZE;
   const pageItems = (items || []).slice(start, end);
 
- if (!items) return <div className="text-sm text-gray-500">{t("common.loading")}</div>;
- if (items.length === 0) return <EmptyFavorites />
+  if (!items) return <div className="text-sm text-gray-500">{t("common.loading")}</div>;
+  if (items.length === 0) return <EmptyFavorites />;
 
   return (
     <div className="space-y-4">
@@ -721,6 +721,52 @@ function FavoritesList() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Пустой стейт «Избранного» */
+function EmptyFavorites() {
+  const { t } = useTranslation();
+  return (
+    <div className="w-full flex flex-col items-center justify-center py-14">
+      <div className="w-20 h-20 rounded-full bg-orange-50 flex items-center justify-center mb-4 ring-1 ring-orange-100">
+        {/* Heart icon */}
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a4.998 4.998 0 0 1 6.573.33L12 9.08l2.547-1.55a4.998 4.998 0 0 1 6.573-.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z"
+            stroke="#f97316"
+            strokeWidth="1.6"
+            fill="none"
+          />
+        </svg>
+      </div>
+
+      <div className="text-lg font-semibold text-gray-900">
+        {t("client.dashboard.favEmptyTitle", "В избранном пока пусто")}
+      </div>
+      <div className="text-sm text-gray-500 mt-1 text-center max-w-sm">
+        {t(
+          "client.dashboard.favEmptySub",
+          "Поставьте «лайк» на понравившихся услугах — мы соберём их здесь для быстрого доступа."
+        )}
+      </div>
+
+      <a
+        href="/marketplace"
+        className="mt-5 inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600"
+      >
+        {t("client.dashboard.goToMarketplace", "Перейти на витрину")}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M5 12h14M13 5l7 7-7 7"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </a>
     </div>
   );
 }
