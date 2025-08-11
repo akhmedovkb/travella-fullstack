@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector"; // ⬅️ Добавлен импорт
 import AsyncSelect from "react-select/async";
 import { toast } from "react-toastify";
+import ImageUploader from "../components/ImageUploader";
 
 const Dashboard = () => {
   const { t } = useTranslation();
