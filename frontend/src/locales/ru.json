@@ -268,10 +268,43 @@
 
   "country_not_found": "Страны не найдены",
   "direction_from_not_found": "Город вылета не найден",
-  "direction_to_not_found": "Город прибытия не найден"
+  "direction_to_not_found": "Город прибытия не найден",
+
+  {
+  "nav": {
+    "dashboard": "Dashboard",
+    "requests": "Requests",
+    "bookings": "Bookings"
+  },
+  "provider": {
+    "requests": {
+      "title": "Requests (Provider)",
+      "noItems": "No requests.",
+      "messagePlaceholder": "Message to client…",
+      "send": "Send",
+      "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+      "sendProposal": "Send proposal",
+      "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking."
+    },
+    "bookings": {
+      "title": "Bookings (Provider)",
+      "noItems": "No bookings.",
+      "details": "Details",
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "cancel": "Cancel",
+      "status": "Status"
+    }
+  },
+  "common": {
+    "loading": "Loading…"
+  }
+}
+
 
 
 }
+
 
 
 
