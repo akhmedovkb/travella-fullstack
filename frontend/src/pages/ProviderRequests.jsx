@@ -11,7 +11,8 @@ export default function ProviderRequests() {
   async function load() {
     setLoading(true);
     try {
-      const rows = await apiGet("/api/requests/my"); // для провайдера вернёт по его услугам
+      // ⬇️ добавлена роль "provider"
+      const rows = await apiGet("/api/requests/my", "provider"); // для провайдера вернёт по его услугам
       setItems(rows || []);
     } catch (e) {
       console.error(e);
@@ -27,7 +28,8 @@ export default function ProviderRequests() {
     const text = (replyTextById[id] || "").trim();
     if (!text) return;
     try {
-      await apiPost(`/api/requests/${id}/reply`, { text });
+      // ⬇️ добавлена роль "provider"
+      await apiPost(`/api/requests/${id}/reply`, { text }, "provider");
       setReplyTextById((p) => ({ ...p, [id]: "" }));
       await load();
     } catch (e) {
@@ -44,7 +46,8 @@ export default function ProviderRequests() {
     let json;
     try { json = JSON.parse(raw); } catch { alert("Неверный JSON"); return; }
     try {
-      await apiPost(`/api/requests/${id}/proposal`, { proposal: json });
+      // ⬇️ добавлена роль "provider"
+      await apiPost(`/api/requests/${id}/proposal`, { proposal: json }, "provider");
       setProposalById((p) => ({ ...p, [id]: "" }));
       await load();
     } catch (e) {
