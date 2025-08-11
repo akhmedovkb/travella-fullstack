@@ -1,14 +1,16 @@
 // backend/routes/clientRoutes.js
 const express = require("express");
 const router = express.Router();
+
 const {
   register,
   login,
   getProfile,
   updateProfile,
   getStats,
-  changePassword, // ← добавили
+  changePassword,
 } = require("../controllers/clientController");
+
 const authenticateToken = require("../middleware/authenticateToken");
 
 // Public
