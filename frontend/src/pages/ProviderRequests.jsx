@@ -119,4 +119,27 @@ export default function ProviderRequests() {
                     className="w-full border px-3 py-2 rounded text-sm"
                     rows={3}
                     placeholder='JSON-предложение (напр. {"price":1200,"hotel":"Taj","room":"TRPL"})'
-                    value={proposalById[r.id] |
+                    value={proposalById[r.id] || ""}
+                    onChange={(e) => setProposalById((p) => ({ ...p, [r.id]: e.target.value }))}
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      className="w-44 border border-gray-800 text-gray-900 py-2 rounded font-bold"
+                      onClick={() => sendProposal(r.id)}
+                    >
+                      Отправить предложение
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 text-xs text-gray-500">
+                После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
