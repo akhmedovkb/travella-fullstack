@@ -293,6 +293,23 @@
       "loginBtn": "Войти",
       "noAccount": "Нет аккаунта?",
       "registerLink": "Регистрация"
+    },
+    "dashboard": {
+      "profileTitle": "Профиль",
+      "name": "Наименование",
+      "phone": "Телефон",
+      "avatarUrl": "Ссылка на аву",
+      "languagesCsv": "languages_csv",
+      "saveBtn": "Сохранить",
+      "refusedTours": "Отказные туры",
+      "refresh": "Обновить",
+      "noResults": "Нет данных",
+      "tabs": {
+        "myRequests": "Мои запросы",
+        "myBookings": "Мои бронирования"
+      },
+      "noRequests": "Запросов нет",
+      "noBookings": "Бронирований нет"
     }
   },
   
@@ -322,5 +339,6 @@
   }
 
 }
+
 
 
