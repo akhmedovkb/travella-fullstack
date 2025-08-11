@@ -1,88 +1,87 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useNavigate, Link } from "react-router-dom";
 import { apiPost } from "../api";
 import LanguageSelector from "../components/LanguageSelector";
+import { useTranslation } from "react-i18next";
 
 export default function ClientRegister() {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+  const nav = useNavigate();
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const handleSubmit = async (e) => {
+  async function submit(e) {
     e.preventDefault();
     setErr("");
     setLoading(true);
     try {
-      const { token, client } = await apiPost("/api/clients/register", {
-        name, email, phone, password,
-      }, false);
-      localStorage.setItem("clientToken", token);
-      localStorage.setItem("client", JSON.stringify(client));
-      window.location.href = "/client/dashboard";
-    } catch (error) {
-      setErr(error.message);
+      await apiPost("/api/clients/register", form, false); // без токена
+      nav("/client/login");
+    } catch (e2) {
+      setErr(e2.message || "Error");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white p-6 rounded-xl shadow">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">{t("client.register") || "Client Registration"}</h1>
-          <LanguageSelector />
-        </div>
+    <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">{t("client.register.title")}</h1>
+        <div className="scale-90"><LanguageSelector /></div>
+      </div>
 
-        {err && <div className="mb-3 text-red-600 text-sm">{err}</div>}
+      {err && (
+        <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">{err}</div>
+      )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("name") || "Name"}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("email") || "Email"}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-          />
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("phone") || "Phone"}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("password") || "Password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-          />
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          className="w-full border rounded px-3 py-2"
+          placeholder={t("client.register.name")}
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
+        />
+        <input
+          type="email"
+          className="w-full border rounded px-3 py-2"
+          placeholder="email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          required
+        />
+        <input
+          className="w-full border rounded px-3 py-2"
+          placeholder={t("client.register.phone")}
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          required
+        />
+        <input
+          type="password"
+          className="w-full border rounded px-3 py-2"
+          placeholder={t("client.register.password")}
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          required
+        />
 
-          <button
-            className="w-full bg-orange-500 text-white py-2 rounded font-bold disabled:opacity-60"
-            disabled={loading}
-            type="submit"
-          >
-            {loading ? (t("loading") || "Loading...") : (t("register") || "Register")}
-          </button>
-        </form>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded transition"
+        >
+          {loading ? t("common.loading") : t("client.register.registerBtn")}
+        </button>
+      </form>
 
-        <div className="mt-4 text-sm text-center">
-          {t("already_have_account") || "Already have an account?"}{" "}
-          <a className="text-orange-600 underline" href="/client/login">
-            {t("login") || "Login"}
-          </a>
-        </div>
+      <div className="mt-3 text-sm text-gray-600">
+        {t("client.register.haveAccount")}{" "}
+        <Link to="/client/login" className="text-orange-600 font-semibold hover:underline">
+          {t("client.register.loginLink")}
+        </Link>
       </div>
     </div>
   );
