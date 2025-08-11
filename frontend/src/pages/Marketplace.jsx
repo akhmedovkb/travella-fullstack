@@ -1,3 +1,4 @@
+// frontend/src/pages/Marketplace.jsx
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
@@ -7,21 +8,26 @@ import { Link } from "react-router-dom";
 import WishHeart from "../components/WishHeart";
 import { useWishlist } from "../hooks/useWishlist";
 
-const hasClient = !!localStorage.getItem("clientToken");
-const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
-const dashboardPath = hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
-
 const blocks = [
   "ГИД",
   "ТРАНСПОРТ",
   "ОТКАЗНОЙ ТУР",
   "ОТКАЗНОЙ ОТЕЛЬ",
   "ОТКАЗНОЙ АВИАБИЛЕТ",
-  "ОТКАЗНОЙ БИЛЕТ"
+  "ОТКАЗНОЙ БИЛЕТ",
 ];
 
 const MarketplaceBoard = () => {
   const { t } = useTranslation();
+
+  // вычисляем актуальный путь в кабинет на каждом рендере
+  const dashboardPath = (() => {
+    const hasClient = !!localStorage.getItem("clientToken");
+    const hasProvider =
+      !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+    return hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
+  })();
+
   const [activeBlock, setActiveBlock] = useState(null);
   const [filters, setFilters] = useState({
     startDate: "",
@@ -30,7 +36,7 @@ const MarketplaceBoard = () => {
     adults: 1,
     children: 0,
     infants: 0,
-    providerType: ""
+    providerType: "",
   });
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,19 +126,28 @@ const MarketplaceBoard = () => {
 
   return (
     <div className="p-6">
+      {/* назад в кабинет — только на мобилках */}
       {dashboardPath && (
         <Link
           to={dashboardPath}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-orange-600 mb-4 md:hidden"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M15 19l-7-7 7-7"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           <span>{t("common.backToDashboard")}</span>
         </Link>
       )}
 
-      <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
+      <h1 className="text-3xl font-bold mb-6 text-center">
+        {t("marketplace.title")}
+      </h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
         {blocks.map((block, idx) => (
@@ -168,6 +183,7 @@ const MarketplaceBoard = () => {
           <h2 className="text-xl font-semibold mb-4">
             {t("marketplace.search_in", { category: activeBlock })}
           </h2>
+
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -214,7 +230,7 @@ const MarketplaceBoard = () => {
             {[
               { field: "adults", label: t("marketplace.adults") },
               { field: "children", label: t("marketplace.children") },
-              { field: "infants", label: t("marketplace.infants") }
+              { field: "infants", label: t("marketplace.infants") },
             ].map(({ field, label }) => (
               <div key={field} className="flex items-center justify-between">
                 <span className="font-medium">{label}</span>
@@ -250,35 +266,47 @@ const MarketplaceBoard = () => {
 
           {currentResults.length > 0 && (
             <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                {t("marketplace.results")}:
+              </h3>
               <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {currentResults.map((item) =>
-                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ"
-                    ? renderRefusedHotelCard(item)
-                    : (
-                      <li key={item.id} className="border rounded p-4 bg-gray-50 relative">
-                        {/* ♥ избранное */}
-                        <div className="absolute top-2 right-2">
-                          <WishHeart active={ids.has(item.id)} onClick={() => onHeart(item.id)} />
-                        </div>
+                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ" ? (
+                    renderRefusedHotelCard(item)
+                  ) : (
+                    <li
+                      key={item.id}
+                      className="border rounded p-4 bg-gray-50 relative"
+                    >
+                      {/* ♥ избранное */}
+                      <div className="absolute top-2 right-2">
+                        <WishHeart
+                          active={ids.has(item.id)}
+                          onClick={() => onHeart(item.id)}
+                        />
+                      </div>
 
-                        {item.images?.length > 0 && (
-                          <img
-                            src={item.images[0]}
-                            alt="preview"
-                            className="w-full h-40 object-cover rounded mb-2"
-                          />
-                        )}
-                        <div className="font-bold">{item.title}</div>
-                        <div>{item.description}</div>
-                        <div className="text-sm text-gray-600">{item.category}</div>
-                        <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
-                        <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
-                        <button className="mt-2 text-orange-600 hover:underline">
-                          {t("marketplace.propose_price")}
-                        </button>
-                      </li>
-                    )
+                      {item.images?.length > 0 && (
+                        <img
+                          src={item.images[0]}
+                          alt="preview"
+                          className="w-full h-40 object-cover rounded mb-2"
+                        />
+                      )}
+                      <div className="font-bold">{item.title}</div>
+                      <div>{item.description}</div>
+                      <div className="text-sm text-gray-600">{item.category}</div>
+                      <div className="text-sm">
+                        {t("marketplace.price")}: {item.price} сум
+                      </div>
+                      <div className="text-sm">
+                        {t("marketplace.location")}: {item.location}
+                      </div>
+                      <button className="mt-2 text-orange-600 hover:underline">
+                        {t("marketplace.propose_price")}
+                      </button>
+                    </li>
+                  )
                 )}
               </ul>
 
