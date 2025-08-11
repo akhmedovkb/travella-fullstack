@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import LanguageSelector from "./LanguageSelector";
-
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+import { apiGet } from "../api";
 
 export default function Header() {
-  const clientToken = localStorage.getItem("clientToken");
-  const providerToken = localStorage.getItem("token") || localStorage.getItem("providerToken");
-  const role = useMemo(() => (clientToken ? "client" : providerToken ? "provider" : null), [clientToken, providerToken]);
+  const hasClient = !!localStorage.getItem("clientToken");
+  const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+  const role = useMemo(() => (hasClient ? "client" : hasProvider ? "provider" : null), [hasClient, hasProvider]);
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,14 +14,10 @@ export default function Header() {
     if (!role) return;
     setLoading(true);
     try {
-      const token = role === "client" ? clientToken : providerToken;
-      const res = await fetch(`${API_URL}/api/notifications/counts`, {
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) setCounts(data.counts || null);
+      const data = await apiGet("/api/notifications/counts");
+      setCounts(data?.counts || null);
     } catch (_) {
-      // no-op
+      setCounts(null); // важно: не падать
     } finally {
       setLoading(false);
     }
@@ -60,7 +55,7 @@ export default function Header() {
 }
 
 function BadgeLink({ href, label, value, loading }) {
-  const show = typeof value === "number" && value > 0;
+  const show = Number.isFinite(value) && value > 0;
   return (
     <a href={href} className="relative inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900">
       <span>{label}</span>
