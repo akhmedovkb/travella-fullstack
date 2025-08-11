@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import axios from "axios";
 import { Link } from "react-router-dom";
 
+// ♥ избранное
+import WishHeart from "../components/WishHeart";
+import { useWishlist } from "../hooks/useWishlist";
+
 const hasClient = !!localStorage.getItem("clientToken");
 const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
 const dashboardPath = hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
@@ -33,6 +37,18 @@ const MarketplaceBoard = () => {
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const resultsPerPage = 6;
+
+  // ♥ избранное
+  const { ids, toggle } = useWishlist();
+  const onHeart = (id) => {
+    // проверяем актуальный токен в момент клика
+    const token = localStorage.getItem("clientToken");
+    if (!token) {
+      window.location.href = "/client/login";
+      return;
+    }
+    toggle(id);
+  };
 
   const handleInputChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -72,7 +88,12 @@ const MarketplaceBoard = () => {
   const renderRefusedHotelCard = (item) => {
     const d = item.details || {};
     return (
-      <li key={item.id} className="border rounded p-4 bg-gray-50">
+      <li key={item.id} className="border rounded p-4 bg-gray-50 relative">
+        {/* ♥ избранное */}
+        <div className="absolute top-2 right-2">
+          <WishHeart active={ids.has(item.id)} onClick={() => onHeart(item.id)} />
+        </div>
+
         {item.images?.length > 0 && (
           <img
             src={item.images[0]}
@@ -98,7 +119,6 @@ const MarketplaceBoard = () => {
   };
 
   return (
-    
     <div className="p-6">
       {dashboardPath && (
         <Link
@@ -110,7 +130,7 @@ const MarketplaceBoard = () => {
           </svg>
           <span>{t("common.backToDashboard")}</span>
         </Link>
-       )}
+      )}
 
       <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
 
@@ -236,7 +256,12 @@ const MarketplaceBoard = () => {
                   activeBlock === "ОТКАЗНОЙ ОТЕЛЬ"
                     ? renderRefusedHotelCard(item)
                     : (
-                      <li key={item.id} className="border rounded p-4 bg-gray-50">
+                      <li key={item.id} className="border rounded p-4 bg-gray-50 relative">
+                        {/* ♥ избранное */}
+                        <div className="absolute top-2 right-2">
+                          <WishHeart active={ids.has(item.id)} onClick={() => onHeart(item.id)} />
+                        </div>
+
                         {item.images?.length > 0 && (
                           <img
                             src={item.images[0]}
