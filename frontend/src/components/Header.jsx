@@ -58,7 +58,14 @@ export default function Header() {
   return (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <div className="text-xl font-bold text-gray-800">Travella</div>
+        <Link
+          to="/marketplace"
+          className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors
+             focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
+          aria-label="Go to marketplace"
+        >
+          Travella
+        </Link>
 
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
