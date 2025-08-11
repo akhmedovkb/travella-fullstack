@@ -1,20 +1,42 @@
+// backend/middleware/authenticateToken.js
 const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Нет токена. Доступ запрещен." });
-  }
-
-  const token = authHeader.split(" ")[1];
-
+module.exports = function authenticateToken(req, res, next) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(403).json({ message: "Неверный токен" });
+    const hdr = req.headers["authorization"];
+    if (!hdr) return res.status(401).json({ message: "Missing Authorization" });
+
+    // "Bearer xxx" или просто "xxx"
+    const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : hdr;
+
+    jwt.verify(token, JWT_SECRET, (err, payload) => {
+      if (err) return res.status(401).json({ message: "Invalid token" });
+
+      // Нормализация id
+      const id =
+        payload.id ??
+        payload.userId ??
+        payload.uid ??
+        payload.clientId ??
+        payload.providerId ??
+        payload.sub ??
+        null;
+
+      // Нормализация role
+      let role = payload.role ?? payload.type ?? null;
+      if (!role) {
+        if (payload.providerId || payload.isProvider === true || payload.roleId === "provider")
+          role = "provider";
+        else if (payload.clientId || payload.isClient === true || payload.roleId === "client")
+          role = "client";
+      }
+
+      req.user = { ...payload, id, role };
+      next();
+    });
+  } catch (e) {
+    console.error("auth middleware error:", e);
+    return res.status(401).json({ message: "Unauthorized" });
   }
 };
-
-module.exports = authenticateToken;
