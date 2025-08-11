@@ -1,27 +1,35 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPut } from "../api";
+import { apiGet, apiPut, apiPost } from "../api";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
+  const [params] = useSearchParams();
 
+  // профиль
   const [profile, setProfile] = useState({
     name: "",
     phone: "",
-    avatar_url: "",
-    languages_csv: "",
+    avatar_url: ""
   });
   const [saving, setSaving] = useState(false);
 
+  // смена пароля
+  const [newPass, setNewPass] = useState("");
+  const [changing, setChanging] = useState(false);
+
+  // отказные туры
   const [refused, setRefused] = useState([]);
   const [loadingRefused, setLoadingRefused] = useState(false);
 
-  // ✅ без TS-дженериков
+  // вкладки
   const [tab, setTab] = useState("req"); // "req" | "book"
   const [myRequests, setMyRequests] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
+  // ----- loaders -----
   async function loadProfile() {
     try {
       const me = await apiGet("/api/clients/me");
@@ -30,8 +38,7 @@ export default function ClientDashboard() {
           ...p,
           name: me.name ?? "",
           phone: me.phone ?? "",
-          avatar_url: me.avatar_url ?? "",
-          languages_csv: me.languages_csv ?? "",
+          avatar_url: me.avatar_url ?? ""
         }));
       }
     } catch (e) {
@@ -64,12 +71,19 @@ export default function ClientDashboard() {
     }
   }
 
+  // init
   useEffect(() => {
+    // стартовая вкладка из URL
+    const t = params.get("tab");
+    setTab(t === "book" ? "book" : "req");
+
     loadProfile();
     loadRefused();
-    loadTab("req");
+    loadTab(t === "book" ? "book" : "req");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // переключение вкладок — лениво подгружаем
   useEffect(() => {
     if (tab === "req" && myRequests.length === 0) loadTab("req");
     if (tab === "book" && myBookings.length === 0) loadTab("book");
@@ -88,9 +102,33 @@ export default function ClientDashboard() {
     }
   }
 
+  async function changePassword() {
+    if (!newPass || newPass.length < 6) {
+      alert(t("client.dashboard.passwordTooShort"));
+      return;
+    }
+    setChanging(true);
+    try {
+      // если на бэке другой путь — скажи, поменяю
+      await apiPost("/api/clients/change-password", { password: newPass }, "client");
+      setNewPass("");
+      alert(t("client.dashboard.passwordChanged"));
+    } catch (e) {
+      alert(e.message || "Error");
+    } finally {
+      setChanging(false);
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem("clientToken");
+    window.location.href = "/client/login";
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Профиль + смена пароля + выход */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-4">{t("client.dashboard.profileTitle")}</h2>
           <form onSubmit={saveProfile} className="space-y-3">
@@ -112,12 +150,7 @@ export default function ClientDashboard() {
               value={profile.avatar_url}
               onChange={(e) => setProfile({ ...profile, avatar_url: e.target.value })}
             />
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder={t("client.dashboard.languagesCsv")}
-              value={profile.languages_csv}
-              onChange={(e) => setProfile({ ...profile, languages_csv: e.target.value })}
-            />
+
             <button
               type="submit"
               disabled={saving}
@@ -126,8 +159,40 @@ export default function ClientDashboard() {
               {saving ? t("common.loading") : t("client.dashboard.saveBtn")}
             </button>
           </form>
+
+          {/* Смена пароля */}
+          <div className="mt-6 pt-6 border-t">
+            <div className="font-semibold mb-2">{t("client.dashboard.changePassword")}</div>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                className="flex-1 border rounded px-3 py-2"
+                placeholder={t("client.dashboard.newPassword")}
+                value={newPass}
+                onChange={(e) => setNewPass(e.target.value)}
+              />
+              <button
+                onClick={changePassword}
+                disabled={changing}
+                className="px-4 bg-gray-900 text-white rounded font-semibold"
+              >
+                {changing ? t("common.loading") : t("client.dashboard.changeBtn")}
+              </button>
+            </div>
+          </div>
+
+          {/* Выйти */}
+          <div className="mt-6">
+            <button
+              onClick={logout}
+              className="w-full border border-red-300 text-red-700 hover:bg-red-50 rounded py-2 font-semibold"
+            >
+              {t("client.dashboard.logout")}
+            </button>
+          </div>
         </div>
 
+        {/* Отказные туры */}
         <div className="bg-white p-6 rounded-xl shadow">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">{t("client.dashboard.refusedTours")}</h2>
@@ -157,6 +222,7 @@ export default function ClientDashboard() {
         </div>
       </div>
 
+      {/* нижние вкладки */}
       <div className="bg-white p-6 rounded-xl shadow mt-6">
         <div className="flex gap-2 mb-3">
           <button
