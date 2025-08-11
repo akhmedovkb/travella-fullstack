@@ -1,5 +1,6 @@
 const db = require("../db"); // замени при необходимости
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 // ============ AUTH (register/login) как было у тебя ============
 // оставь твою реализацию register/login, ниже — новый функционал
