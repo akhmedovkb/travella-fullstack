@@ -231,7 +231,23 @@
     "requests": "So‘rovlar",
     "bookings": "Bronlar"
   },
-  
+  "client": {
+    "register": {
+      "title": "Mijoz ro‘yxatdan o‘tishi",
+      "name": "Nom",
+      "phone": "Telefon",
+      "password": "parol",
+      "registerBtn": "Ro‘yxatdan o‘tish",
+      "haveAccount": "Hisobingiz bormi?",
+      "loginLink": "Kirish"
+    },
+    "login": {
+      "title": "Mijoz kirishi",
+      "password": "parol",
+      "loginBtn": "Kirish",
+      "noAccount": "Hisob yo‘qmi?",
+      "registerLink": "Ro‘yxatdan o‘tish"
+    },
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -257,6 +273,7 @@
   }
   
 }
+
 
 
 
