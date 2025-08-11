@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
+import { useTranslation } from "react-i18next";
 
 /* --- Inline SVG иконки --- */
 const IconDashboard = (p) => (
@@ -23,6 +24,8 @@ const IconBookings = (p) => (
 );
 
 export default function Header() {
+  const { t } = useTranslation();
+
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = useMemo(() => (hasClient ? "client" : hasProvider ? "provider" : null), [hasClient, hasProvider]);
@@ -60,20 +63,19 @@ export default function Header() {
           Travella
         </NavLink>
 
-        {/* навигация в одну линию */}
         {role && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
             {role === "client" ? (
               <>
-                <NavItem to="/client/dashboard" label="Dashboard" icon={<IconDashboard />} />
-                <NavBadge to="/client/dashboard" label="Requests" value={clientRequests} loading={loading} icon={<IconRequests />} />
-                <NavBadge to="/client/dashboard" label="Bookings" value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+                <NavItem to="/client/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                <NavBadge to="/client/dashboard" label={t("nav.requests")} value={clientRequests} loading={loading} icon={<IconRequests />} />
+                <NavBadge to="/client/dashboard" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
               </>
             ) : (
               <>
-                <NavItem to="/dashboard" label="Dashboard" icon={<IconDashboard />} />
-                <NavBadge to="/dashboard/requests" label="Requests" value={providerRequests} loading={loading} icon={<IconRequests />} />
-                <NavBadge to="/dashboard/bookings" label="Bookings" value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+                <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+                <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
               </>
             )}
           </nav>
@@ -85,10 +87,11 @@ export default function Header() {
   );
 }
 
-function NavItem({ to, label, icon }) {
+function NavItem({ to, label, icon, end }) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         [
           "inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors",
