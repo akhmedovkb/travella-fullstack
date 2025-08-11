@@ -65,7 +65,7 @@ export default function Header() {
              focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
           aria-label="Go to marketplace"
         >
-          Travella
+          TRAVELLA.UZ MARKETPLACE
         </Link>
 
         {role === "provider" && (
