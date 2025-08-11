@@ -9,6 +9,9 @@ const clientRoutes = require("./routes/clientRoutes");
 const requestRoutes = require("./routes/requestRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 
+const notificationsRoutes = require("./routes/notificationsRoutes");
+app.use("/api/notifications", notificationsRoutes);
+
 app.use("/api/requests", requestRoutes);
 app.use("/api/bookings", bookingRoutes);
 
