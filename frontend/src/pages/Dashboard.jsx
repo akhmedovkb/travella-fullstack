@@ -28,6 +28,19 @@ const Dashboard = () => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const dragItem = useRef(null);
+  const dragOverItem = useRef(null);
+
+  const handleReorderImages = () => {
+    const arr = [...images];
+    const dragged = arr.splice(dragItem.current, 1)[0];
+    arr.splice(dragOverItem.current, 0, dragged);
+    setImages(arr);
+    dragItem.current = null;
+    dragOverItem.current = null;
+   };
+
+  
   // ✅ Модалка подтверждения удаления
 const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 const [serviceToDelete, setServiceToDelete] = useState(null);
