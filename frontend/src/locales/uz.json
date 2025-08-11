@@ -224,6 +224,39 @@
   "net_price": "Netto narx",
   "is_active": "Faol",
   "save_service": "Xizmatni saqlash",
-  "country_not_chosen": "Mamlakatlar topilmadi"
+  "country_not_chosen": "Mamlakatlar topilmadi",
+
+  {
+  "nav": {
+    "dashboard": "Boshqaruv",
+    "requests": "So‘rovlar",
+    "bookings": "Bronlar"
+  },
+  "provider": {
+    "requests": {
+      "title": "So‘rovlar (Provayder)",
+      "noItems": "So‘rovlar yo‘q.",
+      "messagePlaceholder": "Mijozga xabar…",
+      "send": "Yuborish",
+      "proposalPlaceholder": "JSON taklif (masalan {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+      "sendProposal": "Taklif yuborish",
+      "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi."
+    },
+    "bookings": {
+      "title": "Bronlar (Provayder)",
+      "noItems": "Bronlar yo‘q.",
+      "details": "Tafsilotlar",
+      "confirm": "Tasdiqlash",
+      "reject": "Rad etish",
+      "cancel": "Bekor qilish",
+      "status": "Holat"
+    }
+  },
+  "common": {
+    "loading": "Yuklanmoqda…"
+  }
+}
+
 
 }
+
