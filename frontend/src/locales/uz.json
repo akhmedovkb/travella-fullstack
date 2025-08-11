@@ -253,7 +253,7 @@
       "profileTitle": "Profil",
       "name": "Nom",
       "phone": "Telefon",
-      "avatarUrl": "avatar_url",
+      "avatarUrl": "Avatarga havola",
       "languagesCsv": "languages_csv",
       "saveBtn": "Saqlash",
       "refusedTours": "Rad etilgan turlar",
@@ -295,6 +295,7 @@
   }
   
 }
+
 
 
 
