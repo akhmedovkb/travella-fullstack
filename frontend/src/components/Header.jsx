@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
+
 
 /* --- Inline SVG иконки --- */
 const IconDashboard = (p) => (
