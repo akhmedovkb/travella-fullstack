@@ -1,70 +1,63 @@
 // frontend/src/api.js
-
-// Поддерживаем оба варианта .env: VITE_API_BASE_URL или VITE_API_URL
 const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
 
-// Берём любой доступный токен (клиент / провайдер)
-function getAnyToken() {
+function getTokenByRole(role) {
+  if (role === "client")   return localStorage.getItem("clientToken");
+  if (role === "provider") return localStorage.getItem("token") || localStorage.getItem("providerToken");
+  // fallback: любой
   return (
     localStorage.getItem("clientToken") ||
-    localStorage.getItem("token") ||           // провайдерский (как у тебя было)
+    localStorage.getItem("token") ||
     localStorage.getItem("providerToken")
   );
 }
 
-export function getAuthHeaders() {
-  const token = getAnyToken();
+export function getAuthHeaders(role = null) {
+  const token = getTokenByRole(role);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function handle(res) {
-  let data;
-  try { data = await res.json(); } catch { data = {}; }
+  let data; try { data = await res.json(); } catch { data = {}; }
   if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
   return data;
 }
 
-export async function apiPost(path, body, withAuth = true) {
+// withAuthOrRole: true | false | "client" | "provider"
+function buildHeaders(withAuthOrRole) {
+  const base = { "Content-Type": "application/json" };
+  if (withAuthOrRole === false) return base;
+  const role = withAuthOrRole === "client" || withAuthOrRole === "provider" ? withAuthOrRole : null;
+  return { ...base, ...getAuthHeaders(role) };
+}
+
+export async function apiGet(path, withAuthOrRole = true) {
+  const res = await fetch(`${API_URL}${path}`, { headers: buildHeaders(withAuthOrRole) });
+  return handle(res);
+}
+
+export async function apiPost(path, body, withAuthOrRole = true) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(withAuth ? getAuthHeaders() : {}),
-    },
+    headers: buildHeaders(withAuthOrRole),
     body: JSON.stringify(body ?? {}),
   });
   return handle(res);
 }
 
-export async function apiGet(path, withAuth = true) {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(withAuth ? getAuthHeaders() : {}),
-    },
-  });
-  return handle(res);
-}
-
-export async function apiPut(path, body, withAuth = true) {
+export async function apiPut(path, body, withAuthOrRole = true) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...(withAuth ? getAuthHeaders() : {}),
-    },
+    headers: buildHeaders(withAuthOrRole),
     body: JSON.stringify(body ?? {}),
   });
   return handle(res);
 }
 
-export async function apiDelete(path, body, withAuth = true) {
+export async function apiDelete(path, body, withAuthOrRole = true) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...(withAuth ? getAuthHeaders() : {}),
-    },
+    headers: buildHeaders(withAuthOrRole),
     body: body ? JSON.stringify(body) : undefined,
   });
   return handle(res);
