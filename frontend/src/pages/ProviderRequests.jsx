@@ -1,6 +1,7 @@
 // frontend/src/pages/ProviderRequests.jsx
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
+import { Link } from "react-router-dom";
 
 export default function ProviderRequests() {
   const [items, setItems] = useState([]);
@@ -60,6 +61,15 @@ export default function ProviderRequests() {
   const list = Array.isArray(items) ? items : [];
 
   return (
+    <div className="max-w-6xl mx-auto mb-3">
+     <Link
+      to="/dashboard"
+      className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+     >
+     <span className="text-lg">←</span> <span>Dashboard</span>
+     </Link>
+    </div>
+    
     <div className="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow">
       <h1 className="text-2xl font-bold mb-4">Requests (Provider)</h1>
 
