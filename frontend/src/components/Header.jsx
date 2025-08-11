@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Link } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
-
 
 /* --- Inline SVG иконки --- */
 const IconDashboard = (p) => (
@@ -23,8 +22,13 @@ const IconBookings = (p) => (
     <path d="M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+const IconHeart = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M12 21s-7-4.35-9.33-7.67C.83 10.5 2.04 7 5.2 7c2.06 0 3.13 1.22 3.8 2 .67-.78 1.74-2 3.8-2 3.16 0 4.37 3.5 2.53 6.33C19 16.65 12 21 12 21Z"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
 
-// ... импорты те же
 export default function Header() {
   const { t } = useTranslation();
 
@@ -32,24 +36,47 @@ export default function Header() {
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = hasClient ? "client" : hasProvider ? "provider" : null;
 
-  const [counts, setCounts] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [counts, setCounts] = useState(null);         // провайдерские счётчики
+  const [favCount, setFavCount] = useState(null);     // клиентское избранное
+  const [loadingProv, setLoadingProv] = useState(false);
+  const [loadingFav, setLoadingFav] = useState(false);
 
+  // провайдерские счётчики
   useEffect(() => {
-    if (role !== "provider") return;     // ← для клиента не дергаем счётчики и не рисуем навигацию
+    if (role !== "provider") return;
     const fetchCounts = async () => {
-      setLoading(true);
+      setLoadingProv(true);
       try {
-        const data = await apiGet("/api/notifications/counts", role);
+        const data = await apiGet("/api/notifications/counts");
         setCounts(data?.counts || null);
       } catch {
         setCounts(null);
       } finally {
-        setLoading(false);
+        setLoadingProv(false);
       }
     };
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
+    return () => clearInterval(id);
+  }, [role]);
+
+  // клиентский счётчик избранного
+  useEffect(() => {
+    if (role !== "client") return;
+    const fetchFav = async () => {
+      setLoadingFav(true);
+      try {
+        const data = await apiGet("/api/wishlist?expand=service");
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        setFavCount(arr.length);
+      } catch {
+        setFavCount(0);
+      } finally {
+        setLoadingFav(false);
+      }
+    };
+    fetchFav();
+    const id = setInterval(fetchFav, 30000);
     return () => clearInterval(id);
   }, [role]);
 
@@ -59,30 +86,38 @@ export default function Header() {
   return (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-6">
+        {/* Логотип → маркетплейс */}
         <Link
           to="/marketplace"
           className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors
              focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
           aria-label="Go to marketplace"
         >
-          TRAVELLA.UZ MARKETPLACE
+          Travella
         </Link>
 
+        {/* Провайдерская навигация */}
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
             <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
-            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loadingProv} icon={<IconRequests />} />
+            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loadingProv} icon={<IconBookings />} />
           </nav>
         )}
-        {/* для клиента навигацию скрываем */}
+
+        {/* Клиентский мини-набор: Кабинет + Избранное */}
+        {role === "client" && (
+          <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
+            <NavItem to="/client/dashboard" label={t("nav.clientDashboard", "Кабинет")} icon={<IconDashboard />} end />
+            <NavBadge to="/client/dashboard?tab=fav" label={t("nav.favorites", "Избранное")} value={favCount ?? 0} loading={loadingFav} icon={<IconHeart />} />
+          </nav>
+        )}
       </div>
 
       <LanguageSelector />
     </div>
   );
 }
-
 
 function NavItem({ to, label, icon, end }) {
   return (
