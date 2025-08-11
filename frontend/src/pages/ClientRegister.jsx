@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiPost } from "../api";
-import LanguageSelector from "../components/LanguageSelector"; // если уже есть
+import LanguageSelector from "../components/LanguageSelector";
 
 export default function ClientRegister() {
   const { t } = useTranslation();
