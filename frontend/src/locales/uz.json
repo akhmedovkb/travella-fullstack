@@ -226,7 +226,6 @@
   "save_service": "Xizmatni saqlash",
   "country_not_chosen": "Mamlakatlar topilmadi",
 
-  {
   "nav": {
     "dashboard": "Boshqaruv",
     "requests": "So‘rovlar",
@@ -257,6 +256,4 @@
   }
 }
 
-
-}
 
