@@ -265,9 +265,8 @@
       "confirm": "Confirm",
       "reject": "Reject",
       "cancel": "Cancel",
-      "status": "Status"
-    }
-  },
+      "status": "Status"  
+    },
   
   "common": {
     "loading": "Loading…"
@@ -275,12 +274,3 @@
 
 
 }
-
-
-
-
-
-
-
-
-
