@@ -14,7 +14,7 @@ export default function Header() {
     if (!role) return;
     setLoading(true);
     try {
-      const data = await apiGet("/api/notifications/counts");
+      const data = await apiGet("/api/notifications/counts", role); // role = "client" | "provider"
       setCounts(data?.counts || null);
     } catch (_) {
       setCounts(null); // важно: не падать
