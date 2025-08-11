@@ -7,13 +7,13 @@ module.exports = function authenticateToken(req, res, next) {
     const hdr = req.headers["authorization"];
     if (!hdr) return res.status(401).json({ message: "Missing Authorization" });
 
-    // "Bearer xxx" или просто "xxx"
+    // Принимаем "Bearer xxx" или просто "xxx"
     const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : hdr;
 
     jwt.verify(token, JWT_SECRET, (err, payload) => {
       if (err) return res.status(401).json({ message: "Invalid token" });
 
-      // Нормализация id
+      // Нормализуем id из разных возможных названий полей
       const id =
         payload.id ??
         payload.userId ??
@@ -23,7 +23,7 @@ module.exports = function authenticateToken(req, res, next) {
         payload.sub ??
         null;
 
-      // Нормализация role
+      // Нормализуем role
       let role = payload.role ?? payload.type ?? null;
       if (!role) {
         if (payload.providerId || payload.isProvider === true || payload.roleId === "provider")
