@@ -310,6 +310,10 @@
       "logout": "Выйти",
       "passwordTooShort": "Минимум 6 символов",
       "passwordChanged": "Пароль обновлён",
+      "uploadPhoto": "Загрузить фото",
+      "changePhoto": "Сменить фото",
+      "removePhoto": "Удалить фото",
+      "photoHint": "JPEG/PNG, квадрат 512×512. Подрезка и сжатие выполняются автоматически.",
       "tabs": {
         "myRequests": "Мои запросы",
         "myBookings": "Мои бронирования"
@@ -345,6 +349,7 @@
   }
 
 }
+
 
 
 
