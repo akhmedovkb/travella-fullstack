@@ -1,3 +1,4 @@
+// frontend/src/pages/ProviderBookings.jsx
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
 
@@ -8,10 +9,12 @@ export default function ProviderBookings() {
   async function load() {
     setLoading(true);
     try {
-      const rows = await apiGet("/api/bookings/provider"); // бронирования по услугам провайдера
+      // ⬇️ добавлена роль "provider"
+      const rows = await apiGet("/api/bookings/provider", "provider"); // бронирования по услугам провайдера
       setItems(rows || []);
     } catch (e) {
       console.error(e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -21,7 +24,8 @@ export default function ProviderBookings() {
 
   async function confirm(id) {
     try {
-      await apiPost(`/api/bookings/${id}/confirm`, {});
+      // ⬇️ добавлена роль "provider"
+      await apiPost(`/api/bookings/${id}/confirm`, {}, "provider");
       await load();
     } catch (e) {
       alert(e.message);
@@ -30,7 +34,8 @@ export default function ProviderBookings() {
 
   async function reject(id) {
     try {
-      await apiPost(`/api/bookings/${id}/reject`, {});
+      // ⬇️ добавлена роль "provider"
+      await apiPost(`/api/bookings/${id}/reject`, {}, "provider");
       await load();
     } catch (e) {
       alert(e.message);
@@ -40,7 +45,8 @@ export default function ProviderBookings() {
   async function cancel(id) {
     const reason = prompt("Причина отмены (необязательно):") || undefined;
     try {
-      await apiPost(`/api/bookings/${id}/cancel`, { reason });
+      // ⬇️ добавлена роль "provider"
+      await apiPost(`/api/bookings/${id}/cancel`, { reason }, "provider");
       await load();
     } catch (e) {
       alert(e.message);
@@ -49,15 +55,17 @@ export default function ProviderBookings() {
 
   if (loading) return <div className="p-4">Loading...</div>;
 
+  const list = Array.isArray(items) ? items : [];
+
   return (
     <div className="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow">
       <h1 className="text-2xl font-bold mb-4">Bookings (Provider)</h1>
 
-      {(!items || items.length === 0) ? (
+      {list.length === 0 ? (
         <div className="text-sm text-gray-500">Нет бронирований.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {items.map((b) => {
+          {list.map((b) => {
             const created = b.created_at ? new Date(b.created_at).toLocaleString() : "";
             const details = b.details || null;
 
