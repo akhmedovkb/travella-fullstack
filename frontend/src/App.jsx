@@ -12,6 +12,10 @@ import ClientRegister from "./pages/ClientRegister";
 import ClientLogin from "./pages/ClientLogin";
 import ClientDashboard from "./pages/ClientDashboard";
 
+// Провайдерские новые страницы
+import ProviderRequests from "./pages/ProviderRequests";
+import ProviderBookings from "./pages/ProviderBookings";
+
 import Header from "./components/Header";
 
 function ClientPrivateRoute({ children }) {
@@ -19,7 +23,7 @@ function ClientPrivateRoute({ children }) {
   return token ? children : <Navigate to="/client/login" replace />;
 }
 
-function App() {
+export default function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-100 p-4">
@@ -37,6 +41,24 @@ function App() {
               </PrivateRoute>
             }
           />
+          {/* Новые провайдерские страницы */}
+          <Route
+            path="/dashboard/requests"
+            element={
+              <PrivateRoute>
+                <ProviderRequests />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/bookings"
+            element={
+              <PrivateRoute>
+                <ProviderBookings />
+              </PrivateRoute>
+            }
+          />
+
           <Route path="/marketplace" element={<Marketplace />} />
 
           {/* Клиент */}
@@ -57,5 +79,3 @@ function App() {
     </Router>
   );
 }
-
-export default App;
