@@ -1587,62 +1587,8 @@ const getCategoryOptions = (type) => {
         placeholder={t("price")}
         className="w-full border px-3 py-2 rounded mb-2"
       />
-      <div className="mb-4">
-  <label className="block font-medium mb-1">{t("upload_images")}</label>
-  <div className="mb-2">
-    <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
-      {t("choose_files")}
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={handleImageUpload}
-        className="hidden"
-      />
-    </label>
-    <div className="mt-1 text-sm text-gray-600">
-      {images.length > 0
-        ? t("file_chosen", { count: images.length })
-        : t("no_files_selected")}
-    </div>
-  </div>
 
-  {/* Превью с drag&drop */}
-  {images.length > 0 && (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-      {images.map((src, idx) => (
-        <div
-          key={idx}
-          className="relative group border rounded-lg overflow-hidden bg-white"
-          draggable
-          onDragStart={() => (dragItem.current = idx)}
-          onDragEnter={() => (dragOverItem.current = idx)}
-          onDragEnd={handleReorderImages}
-          onDragOver={(e) => e.preventDefault()}
-          title={t("drag_to_reorder")}
-        >
-          <img
-            src={src}
-            alt={`preview-${idx}`}
-            className="h-24 w-full object-cover select-none pointer-events-none"
-          />
-          <div className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">
-            {idx + 1}
-          </div>
-          <button
-            type="button"
-            onClick={() => handleRemoveImage(idx)}
-            className="absolute right-1 top-1 h-6 w-6 rounded-full bg-red-600 text-white text-xs hidden group-hover:flex items-center justify-center shadow"
-            aria-label="Удалить"
-            title={t("delete")}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  )}
-</div>
+<ImageUploader images={images} setImages={setImages} t={t} />
 
       
       <div className="flex gap-4">
