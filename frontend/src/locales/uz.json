@@ -249,7 +249,8 @@
       "noAccount": "Hisob yo‘qmi?",
       "registerLink": "Ro‘yxatdan o‘tish"
     }
-  }
+  },
+  
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -260,6 +261,7 @@
       "sendProposal": "Taklif yuborish",
       "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi."
     },
+
     "bookings": {
       "title": "Bronlar (Provayder)",
       "noItems": "Bronlar yo‘q.",
@@ -276,4 +278,5 @@
   }
   
 }
+
 
