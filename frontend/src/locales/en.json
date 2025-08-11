@@ -222,10 +222,43 @@
   "net_price": "Net price",
   "is_active": "Active",
   "save_service": "Save service",
-  "country_not_chosen": "No countries found"
+  "country_not_chosen": "No countries found",
+
+  {
+  "nav": {
+    "dashboard": "Dashboard",
+    "requests": "Requests",
+    "bookings": "Bookings"
+  },
+  "provider": {
+    "requests": {
+      "title": "Requests (Provider)",
+      "noItems": "No requests.",
+      "messagePlaceholder": "Message to client…",
+      "send": "Send",
+      "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+      "sendProposal": "Send proposal",
+      "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking."
+    },
+    "bookings": {
+      "title": "Bookings (Provider)",
+      "noItems": "No bookings.",
+      "details": "Details",
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "cancel": "Cancel",
+      "status": "Status"
+    }
+  },
+  "common": {
+    "loading": "Loading…"
+  }
+}
+
 
 
 }
+
 
 
 
