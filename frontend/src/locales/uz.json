@@ -248,6 +248,23 @@
       "loginBtn": "Kirish",
       "noAccount": "Hisob yo‘qmi?",
       "registerLink": "Ro‘yxatdan o‘tish"
+    },
+    "dashboard": {
+      "profileTitle": "Profil",
+      "name": "Nom",
+      "phone": "Telefon",
+      "avatarUrl": "avatar_url",
+      "languagesCsv": "languages_csv",
+      "saveBtn": "Saqlash",
+      "refusedTours": "Rad etilgan turlar",
+      "refresh": "yangilash",
+      "noResults": "ma’lumot yo‘q",
+      "tabs": {
+        "myRequests": "so‘rovlarim",
+        "myBookings": "bronlarim"
+      },
+      "noRequests": "so‘rovlar yo‘q",
+      "noBookings": "bronlar yo‘q"
     }
   },
   
@@ -278,5 +295,6 @@
   }
   
 }
+
 
 
