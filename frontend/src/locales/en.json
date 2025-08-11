@@ -224,12 +224,13 @@
   "save_service": "Save service",
   "country_not_chosen": "No countries found",
 
-  {
+  
   "nav": {
     "dashboard": "Dashboard",
     "requests": "Requests",
     "bookings": "Bookings"
   },
+  
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -240,6 +241,7 @@
       "sendProposal": "Send proposal",
       "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking."
     },
+    
     "bookings": {
       "title": "Bookings (Provider)",
       "noItems": "No bookings.",
@@ -250,14 +252,16 @@
       "status": "Status"
     }
   },
+  
   "common": {
     "loading": "Loading…"
   }
+
+
+
+
 }
 
-
-
-}
 
 
 
