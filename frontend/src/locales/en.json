@@ -230,6 +230,7 @@
     "requests": "Requests",
     "bookings": "Bookings"
   },
+  
   "client": {
     "register": {
       "title": "Client registration",
@@ -268,7 +269,7 @@
       "reject": "Reject",
       "cancel": "Cancel",
       "status": "Status"  
-    }
+     }
     },
 
   
@@ -278,4 +279,5 @@
 
 
 }
+
 
