@@ -246,9 +246,6 @@ export default function ClientDashboard() {
                   {t("client.dashboard.removePhoto")}
                 </button>
               )}
-              <div className="text-xs text-gray-500">
-                {t("client.dashboard.photoHint")}
-              </div>
             </div>
           </div>
 
