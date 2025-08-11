@@ -1,221 +1,136 @@
-// backend/controllers/clientController.js
-const pool = require("../db");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const db = require("../db"); // замени при необходимости
+const bcrypt = require("bcrypt");
 
-function int(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-async function safeCount(sql, params = []) {
+// ============ AUTH (register/login) как было у тебя ============
+// оставь твою реализацию register/login, ниже — новый функционал
+
+// GET /api/clients/me
+exports.getMe = async (req, res) => {
   try {
-    const r = await pool.query(sql, params);
-    const v = r?.rows?.[0];
-    const n = v ? Number(v.count ?? v.n ?? Object.values(v)[0]) : 0;
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** ========== AUTH ========== */
-exports.register = async (req, res) => {
-  try {
-    const { name, email, phone, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ message: "email & password required" });
-
-    const exists = await pool.query("SELECT id FROM clients WHERE email=$1 LIMIT 1", [email]);
-    if (exists.rows.length) return res.status(409).json({ message: "Email already registered" });
-
-    const hash = await bcrypt.hash(password, 10);
-    const ins = await pool.query(
-      `INSERT INTO clients (name, email, phone, password_hash, created_at)
-       VALUES ($1,$2,$3,$4, NOW()) RETURNING id`,
-      [name || "", email, phone || "", hash]
+    if (req.user?.role !== "client") {
+      return res.status(403).json({ message: "Only client" });
+    }
+    const { rows } = await db.query(
+      "SELECT id, name, phone, avatar_url FROM clients WHERE id = $1",
+      [req.user.id]
     );
-
-    return res.json({ id: ins.rows[0].id });
+    return res.json(rows[0] || {});
   } catch (e) {
-    console.error("register error:", e);
-    return res.status(500).json({ message: "Register failed" });
+    console.error(e);
+    res.status(500).json({ message: "Failed to get profile" });
   }
 };
 
-exports.login = async (req, res) => {
+// PUT /api/clients/me  { name?, phone?, avatar_base64?, remove_avatar? }
+exports.updateMe = async (req, res) => {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ message: "email & password required" });
+    if (req.user?.role !== "client") {
+      return res.status(403).json({ message: "Only client" });
+    }
+    const { name, phone, avatar_base64, remove_avatar } = req.body;
 
-    const r = await pool.query("SELECT id, password_hash FROM clients WHERE email=$1 LIMIT 1", [email]);
-    if (!r.rows.length) return res.status(401).json({ message: "Invalid credentials" });
+    // на простом этапе пишем dataURL прямо в колонку avatar_url
+    let avatarUrlSql = "";
+    let params = [name || null, phone || null, req.user.id];
 
-    const row = r.rows[0];
-    const ok = await bcrypt.compare(password, row.password_hash);
-    if (!ok) return res.status(401).json({ message: "Invalid credentials" });
-
-    const token = jwt.sign({ id: row.id, role: "client" }, process.env.JWT_SECRET, { expiresIn: "30d" });
-    return res.json({ token });
-  } catch (e) {
-    console.error("login error:", e);
-    return res.status(500).json({ message: "Login failed" });
-  }
-};
-
-/** ========== PROFILE ========== */
-exports.getProfile = async (req, res) => {
-  try {
-    const id = req.user?.id;
-    if (!id) return res.status(401).json({ message: "Unauthorized" });
-
-    const r = await pool.query(
-      "SELECT id, name, email, phone, avatar_url, created_at FROM clients WHERE id=$1 LIMIT 1",
-      [id]
-    );
-    if (!r.rows.length) return res.status(404).json({ message: "Client not found" });
-
-    return res.json(r.rows[0]);
-  } catch (e) {
-    console.error("getProfile error:", e);
-    return res.status(500).json({ message: "Failed to load profile" });
-  }
-};
-
-exports.updateProfile = async (req, res) => {
-  try {
-    const id = req.user?.id;
-    if (!id) return res.status(401).json({ message: "Unauthorized" });
-
-    const { name, phone, avatar_base64, remove_avatar } = req.body || {};
-
-    let avatarUrlSet = null;
-    if (remove_avatar === true) {
-      avatarUrlSet = null;
+    if (remove_avatar) {
+      avatarUrlSql = ", avatar_url = NULL";
     } else if (avatar_base64) {
-      avatarUrlSet = `data:image/jpeg;base64,${avatar_base64}`;
+      avatarUrlSql = ", avatar_url = $4";
+      params = [name || null, phone || null, req.user.id, `data:image/jpeg;base64,${avatar_base64}`];
     }
 
-    const fields = [];
-    const params = [];
-    let idx = 1;
+    const sql = `
+      UPDATE clients
+         SET name = COALESCE($1, name),
+             phone = COALESCE($2, phone)
+             ${avatarUrlSql}
+       WHERE id = $3
+       RETURNING id, name, phone, avatar_url`;
+    const { rows } = await db.query(sql, params);
 
-    if (typeof name === "string") {
-      fields.push(`name=$${idx++}`);
-      params.push(name);
-    }
-    if (typeof phone === "string") {
-      fields.push(`phone=$${idx++}`);
-      params.push(phone);
-    }
-    if (remove_avatar === true) {
-      fields.push(`avatar_url=NULL`);
-    } else if (avatarUrlSet) {
-      fields.push(`avatar_url=$${idx++}`);
-      params.push(avatarUrlSet);
-    }
-
-    if (!fields.length) return res.json({ ok: true });
-
-    params.push(id);
-    const sql = `UPDATE clients SET ${fields.join(", ")}, updated_at=NOW() WHERE id=$${idx} RETURNING id`;
-    await pool.query(sql, params);
-
-    return res.json({ ok: true });
+    return res.json(rows[0] || {});
   } catch (e) {
-    console.error("updateProfile error:", e);
-    return res.status(500).json({ message: "Failed to update profile" });
+    console.error(e);
+    res.status(500).json({ message: "Failed to update profile" });
   }
 };
 
-/** ========== STATS / PROGRESS ========== */
-exports.getStats = async (req, res) => {
-  try {
-    const clientId = req.user?.id;
-    if (!clientId) return res.status(401).json({ message: "Unauthorized" });
-
-    const requests_total = await safeCount(
-      "SELECT COUNT(*) FROM change_requests WHERE client_id=$1",
-      [clientId]
-    );
-
-    const requests_active = await safeCount(
-      "SELECT COUNT(*) FROM change_requests WHERE client_id=$1 AND status IN ('open','accepted','proposed','proposal_sent','proposal_viewed')",
-      [clientId]
-    );
-
-    const bookings_total = await safeCount(
-      "SELECT COUNT(*) FROM bookings WHERE client_id=$1",
-      [clientId]
-    );
-
-    const bookings_confirmed = await safeCount(
-      "SELECT COUNT(*) FROM bookings WHERE client_id=$1 AND status='confirmed'",
-      [clientId]
-    );
-    const bookings_completed = await safeCount(
-      "SELECT COUNT(*) FROM bookings WHERE client_id=$1 AND status='completed'",
-      [clientId]
-    );
-    const bookings_cancelled = await safeCount(
-      "SELECT COUNT(*) FROM bookings WHERE client_id=$1 AND status IN ('cancelled','canceled')",
-      [clientId]
-    );
-
-    let rating = 3 + 0.5 * bookings_completed - 1 * bookings_cancelled;
-    rating = Math.max(0, Math.min(5, rating));
-    rating = Math.round(rating * 10) / 10;
-
-    const points = bookings_completed * 5;
-
-    const tiers = [
-      { name: "Bronze", at: 0 },
-      { name: "Silver", at: 500 },
-      { name: "Gold", at: 1000 },
-      { name: "Platinum", at: 2000 },
-    ];
-    let current = tiers[0];
-    for (const t of tiers) if (points >= t.at) current = t;
-    const nextIndex = Math.min(tiers.length - 1, tiers.indexOf(current) + 1);
-    const next = tiers[nextIndex];
-    const next_tier_at = next.at;
-
-    return res.json({
-      requests_total: int(requests_total),
-      requests_active: int(requests_active),
-      bookings_total: int(bookings_total),
-      bookings_confirmed: int(bookings_confirmed),
-      bookings_completed: int(bookings_completed),
-      bookings_cancelled: int(bookings_cancelled),
-      rating,
-      points,
-      tier: current.name,
-      next_tier_at,
-    });
-  } catch (e) {
-    console.error("getStats error:", e);
-    return res.status(500).json({ message: "Failed to load client stats" });
-  }
-};
-
-/** ========== PASSWORD CHANGE ========== */
+// POST /api/clients/change-password { password }
 exports.changePassword = async (req, res) => {
   try {
-    const id = req.user?.id;
-    if (!id) return res.status(401).json({ message: "Unauthorized" });
-
-    const { password } = req.body || {};
-    if (typeof password !== "string" || password.length < 6) {
-      return res.status(400).json({ message: "Password too short (min 6)" });
+    if (req.user?.role !== "client") {
+      return res.status(403).json({ message: "Only client" });
     }
-
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Password too short" });
+    }
     const hash = await bcrypt.hash(password, 10);
-    await pool.query(
-      "UPDATE clients SET password_hash=$1, updated_at=NOW() WHERE id=$2",
-      [hash, id]
+    await db.query("UPDATE clients SET password_hash = $1 WHERE id = $2", [
+      hash,
+      req.user.id,
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to change password" });
+  }
+};
+
+// GET /api/clients/stats
+exports.getStats = async (req, res) => {
+  try {
+    if (req.user?.role !== "client") {
+      return res.status(403).json({ message: "Only client" });
+    }
+    const clientId = req.user.id;
+
+    const reqTotal = await db.query(
+      "SELECT COUNT(*)::int AS c FROM change_requests WHERE client_id = $1",
+      [clientId]
+    );
+    const reqActive = await db.query(
+      "SELECT COUNT(*)::int AS c FROM change_requests WHERE client_id = $1 AND status IN ('new','accepted','in_progress')",
+      [clientId]
     );
 
-    return res.json({ ok: true });
+    const bookTotal = await db.query(
+      "SELECT COUNT(*)::int AS c FROM bookings WHERE client_id = $1",
+      [clientId]
+    );
+    const bookCompleted = await db.query(
+      "SELECT COUNT(*)::int AS c FROM bookings WHERE client_id = $1 AND status = 'completed'",
+      [clientId]
+    );
+    const bookCancelled = await db.query(
+      "SELECT COUNT(*)::int AS c FROM bookings WHERE client_id = $1 AND status = 'cancelled'",
+      [clientId]
+    );
+
+    // очень простая модель рейтинга/поинтов
+    const points = (bookCompleted.rows[0]?.c || 0) * 50;
+    let tier = "Bronze";
+    let next = 500;
+    if (points >= 2000) { tier = "Platinum"; next = points; }
+    else if (points >= 1000) { tier = "Gold"; next = 2000; }
+    else if (points >= 500)  { tier = "Silver"; next = 1000; }
+
+    const rating = 3.0 + Math.min(2, (bookCompleted.rows[0]?.c || 0) * 0.1); // условно
+
+    res.json({
+      rating,
+      points,
+      tier,
+      next_tier_at: next,
+      requests_total: reqTotal.rows[0].c,
+      requests_active: reqActive.rows[0].c,
+      bookings_total: bookTotal.rows[0].c,
+      bookings_completed: bookCompleted.rows[0].c,
+      bookings_cancelled: bookCancelled.rows[0].c,
+    });
   } catch (e) {
-    console.error("changePassword error:", e);
-    return res.status(500).json({ message: "Failed to change password" });
+    console.error(e);
+    res.status(500).json({ message: "Failed to get stats" });
   }
 };
