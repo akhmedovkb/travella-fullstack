@@ -1,64 +1,41 @@
-// frontend/src/api.js
-const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+import { useEffect, useState } from "react";
+import { apiGet, apiPost } from "../api";
 
-function getTokenByRole(role) {
-  if (role === "client")   return localStorage.getItem("clientToken");
-  if (role === "provider") return localStorage.getItem("token") || localStorage.getItem("providerToken");
-  // fallback: любой
-  return (
-    localStorage.getItem("clientToken") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("providerToken")
-  );
-}
+export function useWishlist() {
+  const [ids, setIds] = useState(new Set());
+  const [loading, setLoading] = useState(true);
 
-export function getAuthHeaders(role = null) {
-  const token = getTokenByRole(role);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await apiGet("/api/wishlist", true);
+        if (mounted) setIds(new Set(res.ids || []));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
-async function handle(res) {
-  let data; try { data = await res.json(); } catch { data = {}; }
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-  return data;
-}
+  const toggle = async (id) => {
+    const has = ids.has(id);
+    setIds(prev => {
+      const next = new Set(prev);
+      has ? next.delete(id) : next.add(id);
+      return next;
+    });
+    try {
+      await apiPost("/api/wishlist/toggle", { item_type: "service", item_id: id }, true);
+    } catch {
+      // rollback
+      setIds(prev => {
+        const next = new Set(prev);
+        has ? next.add(id) : next.delete(id);
+        return next;
+      });
+    }
+  };
 
-// withAuthOrRole: true | false | "client" | "provider"
-function buildHeaders(withAuthOrRole) {
-  const base = { "Content-Type": "application/json" };
-  if (withAuthOrRole === false) return base;
-  const role = withAuthOrRole === "client" || withAuthOrRole === "provider" ? withAuthOrRole : null;
-  return { ...base, ...getAuthHeaders(role) };
-}
-
-export async function apiGet(path, withAuthOrRole = true) {
-  const res = await fetch(`${API_URL}${path}`, { headers: buildHeaders(withAuthOrRole) });
-  return handle(res);
-}
-
-export async function apiPost(path, body, withAuthOrRole = true) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: buildHeaders(withAuthOrRole),
-    body: JSON.stringify(body ?? {}),
-  });
-  return handle(res);
-}
-
-export async function apiPut(path, body, withAuthOrRole = true) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "PUT",
-    headers: buildHeaders(withAuthOrRole),
-    body: JSON.stringify(body ?? {}),
-  });
-  return handle(res);
-}
-
-export async function apiDelete(path, body, withAuthOrRole = true) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "DELETE",
-    headers: buildHeaders(withAuthOrRole),
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return handle(res);
+  return { ids, toggle, loading };
 }
