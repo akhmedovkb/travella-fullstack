@@ -6,6 +6,11 @@ dotenv.config();
 const app = express();
 
 const clientRoutes = require("./routes/clientRoutes");
+const requestRoutes = require("./routes/requestRoutes");
+const bookingRoutes = require("./routes/bookingRoutes");
+
+app.use("/api/requests", requestRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 // Разрешаем CORS
 app.use(
