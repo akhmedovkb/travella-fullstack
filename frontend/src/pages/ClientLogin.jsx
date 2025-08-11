@@ -1,72 +1,72 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useNavigate, Link } from "react-router-dom";
 import { apiPost } from "../api";
 import LanguageSelector from "../components/LanguageSelector";
+import { useTranslation } from "react-i18next";
 
 export default function ClientLogin() {
   const { t } = useTranslation();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const nav = useNavigate();
+  const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const handleSubmit = async (e) => {
+  async function submit(e) {
     e.preventDefault();
     setErr("");
     setLoading(true);
     try {
-      const { token, client } = await apiPost("/api/clients/login", { email, password }, false);
-      localStorage.setItem("clientToken", token);
-      localStorage.setItem("client", JSON.stringify(client));
-      window.location.href = "/client/dashboard";
-    } catch (error) {
-      setErr(error.message);
+      const data = await apiPost("/api/clients/login", form, false); // без токена
+      if (!data?.token) throw new Error("No token");
+      localStorage.setItem("clientToken", data.token);
+      nav("/client/dashboard");
+    } catch (e2) {
+      setErr(e2.message || "Error");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white p-6 rounded-xl shadow">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">{t("client.login") || "Client Login"}</h1>
-          <LanguageSelector />
-        </div>
+    <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">{t("client.login.title")}</h1>
+        <div className="scale-90"><LanguageSelector /></div>
+      </div>
 
-        {err && <div className="mb-3 text-red-600 text-sm">{err}</div>}
+      {err && <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">{err}</div>}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("email") || "Email"}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-          />
-          <input
-            className="w-full border px-3 py-2 rounded"
-            placeholder={t("password") || "Password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-          />
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          type="email"
+          className="w-full border rounded px-3 py-2"
+          placeholder="email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          required
+        />
+        <input
+          type="password"
+          className="w-full border rounded px-3 py-2"
+          placeholder={t("client.login.password")}
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          required
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded transition"
+        >
+          {loading ? t("common.loading") : t("client.login.loginBtn")}
+        </button>
+      </form>
 
-          <button
-            className="w-full bg-orange-500 text-white py-2 rounded font-bold disabled:opacity-60"
-            disabled={loading}
-            type="submit"
-          >
-            {loading ? (t("loading") || "Loading...") : (t("login") || "Login")}
-          </button>
-        </form>
-
-        <div className="mt-4 text-sm text-center">
-          {t("no_account") || "No account?"}{" "}
-          <a className="text-orange-600 underline" href="/client/register">
-            {t("register") || "Register"}
-          </a>
-        </div>
+      <div className="mt-3 text-sm text-gray-600">
+        {t("client.login.noAccount")}{" "}
+        <Link to="/client/register" className="text-orange-600 font-semibold hover:underline">
+          {t("client.login.registerLink")}
+        </Link>
       </div>
     </div>
   );
