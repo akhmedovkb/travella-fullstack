@@ -304,6 +304,12 @@
       "refusedTours": "Отказные туры",
       "refresh": "Обновить",
       "noResults": "Нет данных",
+      "changePassword": "Сменить пароль",
+      "newPassword": "Новый пароль",
+      "changeBtn": "Сменить",
+      "logout": "Выйти",
+      "passwordTooShort": "Минимум 6 символов",
+      "passwordChanged": "Пароль обновлён"
       "tabs": {
         "myRequests": "Мои запросы",
         "myBookings": "Мои бронирования"
@@ -339,6 +345,7 @@
   }
 
 }
+
 
 
 
