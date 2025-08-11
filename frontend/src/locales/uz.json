@@ -231,6 +231,7 @@
     "requests": "So‘rovlar",
     "bookings": "Bronlar"
   },
+  
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -254,6 +255,8 @@
   "common": {
     "loading": "Yuklanmoqda…"
   }
+  
 }
+
 
 
