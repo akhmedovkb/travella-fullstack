@@ -55,7 +55,7 @@ export default function ClientDashboard() {
     setLoadingSearch(true);
     setResults([]);
     try {
-      // Пример простого поиска отказных туров без фильтров (добавите свои поля)
+      // Пример простого поиска отказных туров без фильтров
       const data = await apiPost("/api/marketplace/search", {
         category: "refused_tour",
         page: 1,
@@ -70,7 +70,7 @@ export default function ClientDashboard() {
   };
 
   const handleRequestChange = async (serviceId, text) => {
-    // Черновой маршрут — реализуем в следующем шаге (обмен сообщениями клиент↔агент)
+    // Черновой маршрут — реализуем позже
     try {
       await apiPost("/api/requests", { serviceId, text });
       alert(t("request_sent") || "Request sent");
@@ -80,7 +80,7 @@ export default function ClientDashboard() {
   };
 
   const handleBook = async (serviceId) => {
-    // Черновик: создадим позже реальное бронирование
+    // Черновик — создадим реальный бронирование-роут позже
     try {
       await apiPost("/api/bookings", { serviceId });
       alert(t("booking_requested") || "Booking requested");
