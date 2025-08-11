@@ -274,7 +274,9 @@
   "nav": {
     "dashboard": "Управление",
     "requests": "Запросы",
-    "bookings": "Бронирования"
+    "bookings": "Бронирования",
+    "clientDashboard": "Кабинет",
+    "favorites": "Избранное"
   },
   
   "client": {
@@ -353,6 +355,7 @@
   }
 
 }
+
 
 
 
