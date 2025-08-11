@@ -258,6 +258,12 @@
       "refusedTours": "Refused tours",
       "refresh": "Refresh",
       "noResults": "No results",
+      "changePassword": "Change password",
+      "newPassword": "New password",
+      "changeBtn": "Change",
+      "logout": "Logout",
+      "passwordTooShort": "At least 6 characters",
+      "passwordChanged": "Password updated",
       "tabs": {
         "myRequests": "My requests",
         "myBookings": "My bookings"
@@ -296,6 +302,7 @@
 
 
 }
+
 
 
 
