@@ -345,10 +345,12 @@
   },
   
   "common": {
-    "loading": "Загрузка…"
+    "loading": "Загрузка…",
+    "backToDashboard": "Назад в Dashboard"
   }
 
 }
+
 
 
 
