@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 export default function ClientDashboard() {
   const { t } = useTranslation();
 
-  // профиль
   const [profile, setProfile] = useState({
     name: "",
     phone: "",
@@ -14,20 +13,18 @@ export default function ClientDashboard() {
   });
   const [saving, setSaving] = useState(false);
 
-  // отказные туры
   const [refused, setRefused] = useState([]);
   const [loadingRefused, setLoadingRefused] = useState(false);
 
-  // вкладки
-  const [tab, setTab] = useState<"req" | "book">("req");
+  // ✅ без TS-дженериков
+  const [tab, setTab] = useState("req"); // "req" | "book"
   const [myRequests, setMyRequests] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
-  // ----- loaders -----
   async function loadProfile() {
     try {
-      const me = await apiGet("/api/clients/me"); // GET профиль клиента
+      const me = await apiGet("/api/clients/me");
       if (me) {
         setProfile((p) => ({
           ...p,
@@ -45,7 +42,6 @@ export default function ClientDashboard() {
   async function loadRefused() {
     setLoadingRefused(true);
     try {
-      // если эндпоинта нет — поймаем и покажем пусто
       const rows = await apiGet("/api/marketplace/refused").catch(() => []);
       setRefused(Array.isArray(rows) ? rows : []);
     } finally {
@@ -68,14 +64,12 @@ export default function ClientDashboard() {
     }
   }
 
-  // init
   useEffect(() => {
     loadProfile();
     loadRefused();
     loadTab("req");
   }, []);
 
-  // переключение вкладок — подгружаем лениво
   useEffect(() => {
     if (tab === "req" && myRequests.length === 0) loadTab("req");
     if (tab === "book" && myBookings.length === 0) loadTab("book");
@@ -86,7 +80,7 @@ export default function ClientDashboard() {
     e.preventDefault();
     setSaving(true);
     try {
-      await apiPut("/api/clients/me", profile); // PUT профиль клиента
+      await apiPut("/api/clients/me", profile);
     } catch (e2) {
       alert(e2.message || "Error");
     } finally {
@@ -97,7 +91,6 @@ export default function ClientDashboard() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Профиль */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-4">{t("client.dashboard.profileTitle")}</h2>
           <form onSubmit={saveProfile} className="space-y-3">
@@ -135,7 +128,6 @@ export default function ClientDashboard() {
           </form>
         </div>
 
-        {/* Отказные туры */}
         <div className="bg-white p-6 rounded-xl shadow">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">{t("client.dashboard.refusedTours")}</h2>
@@ -165,7 +157,6 @@ export default function ClientDashboard() {
         </div>
       </div>
 
-      {/* нижние вкладки */}
       <div className="bg-white p-6 rounded-xl shadow mt-6">
         <div className="flex gap-2 mb-3">
           <button
