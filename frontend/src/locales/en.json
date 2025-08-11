@@ -246,7 +246,9 @@
       "loginBtn": "Login",
       "noAccount": "No account?",
       "registerLink": "Register"
-    },
+    }
+  },
+  
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -266,7 +268,9 @@
       "reject": "Reject",
       "cancel": "Cancel",
       "status": "Status"  
+    }
     },
+
   
   "common": {
     "loading": "Loading…"
@@ -274,3 +278,4 @@
 
 
 }
+
