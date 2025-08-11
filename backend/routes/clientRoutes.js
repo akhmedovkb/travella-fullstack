@@ -6,7 +6,8 @@ const {
   login,
   getProfile,
   updateProfile,
-  getStats, // ← stats
+  getStats,
+  changePassword, // ← добавили
 } = require("../controllers/clientController");
 const authenticateToken = require("../middleware/authenticateToken");
 
@@ -14,15 +15,17 @@ const authenticateToken = require("../middleware/authenticateToken");
 router.post("/register", register);
 router.post("/login", login);
 
-// Private (совместимость с фронтом: /profile и /me)
+// Private (совместимость: /profile и /me)
 router.get("/profile", authenticateToken, getProfile);
 router.put("/profile", authenticateToken, updateProfile);
 
-// Алиасы под текущий фронт (/api/clients/me)
 router.get("/me", authenticateToken, getProfile);
 router.put("/me", authenticateToken, updateProfile);
 
 // Прогресс/статистика клиента
 router.get("/stats", authenticateToken, getStats);
+
+// Смена пароля клиента
+router.post("/change-password", authenticateToken, changePassword);
 
 module.exports = router;
