@@ -15,7 +15,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin) return cb(null, true); // Postman / server-to-server
+      if (!origin) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("Not allowed by CORS: " + origin));
     },
@@ -24,7 +24,6 @@ app.use(
     credentials: true,
   })
 );
-// Preflight
 app.options(
   "*",
   cors({
@@ -49,7 +48,6 @@ app.use("/api/hotels", hotelRoutes);
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
 
-// Новые/ранее добавленные
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
 
@@ -62,7 +60,11 @@ app.use("/api/bookings", bookingRoutes);
 const notificationsRoutes = require("./routes/notificationsRoutes");
 app.use("/api/notifications", notificationsRoutes);
 
-/** Debug: кто я по токену */
+// NEW: wishlist
+const wishlistRoutes = require("./routes/wishlistRoutes");
+app.use("/api/wishlist", wishlistRoutes);
+
+/** Debug */
 const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
 
