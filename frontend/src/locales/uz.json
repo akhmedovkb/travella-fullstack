@@ -265,6 +265,10 @@
       "logout": "Chiqish",
       "passwordTooShort": "Yangi parolni kiriting",
       "passwordChanged": "Parol yangilandi",
+      "uploadPhoto": "Rasm yuklash",
+      "changePhoto": "Rasmni almashtirish",
+      "removePhoto": "Rasmni olib tashlash",
+      "photoHint": "JPEG/PNG, 512×512 kvadrat. Avtomatik kesish va siqish.",
       "tabs": {
         "myRequests": "So‘rovlarim",
         "myBookings": "Bronlarim"
@@ -301,6 +305,7 @@
   }
   
 }
+
 
 
 
