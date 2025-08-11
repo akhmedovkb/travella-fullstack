@@ -264,6 +264,10 @@
       "logout": "Logout",
       "passwordTooShort": "At least 6 characters",
       "passwordChanged": "Password updated",
+      "uploadPhoto": "Upload photo",
+      "changePhoto": "Change photo",
+      "removePhoto": "Remove photo",
+      "photoHint": "JPEG/PNG, square 512×512. Cropped & compressed automatically.",
       "tabs": {
         "myRequests": "My requests",
         "myBookings": "My bookings"
@@ -302,6 +306,7 @@
 
 
 }
+
 
 
 
