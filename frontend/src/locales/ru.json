@@ -276,6 +276,23 @@
     "requests": "Запросы",
     "bookings": "Бронирования"
   },
+  "client": {
+    "register": {
+      "title": "Регистрация клиента",
+      "name": "Наименование",
+      "phone": "Телефон",
+      "password": "пароль",
+      "registerBtn": "Зарегистрироваться",
+      "haveAccount": "Уже есть аккаунт?",
+      "loginLink": "Войти"
+    },
+    "login": {
+      "title": "Вход клиента",
+      "password": "пароль",
+      "loginBtn": "Войти",
+      "noAccount": "Нет аккаунта?",
+      "registerLink": "Регистрация"
+    },
   "provider": {
     "requests": {
       "title": "Запросы (Поставщик)",
@@ -302,6 +319,7 @@
 
 
 }
+
 
 
 
