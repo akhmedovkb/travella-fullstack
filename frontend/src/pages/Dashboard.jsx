@@ -583,19 +583,18 @@ const resetServiceForm = () => {
 
 
   const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const readers = files.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    });
+  const files = Array.from(e.target.files || []);
+  const safeFiles = files.filter(f => f.size <= 3 * 1024 * 1024); // <= 3MB
+  const readers = safeFiles.map(file => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  }));
+  Promise.all(readers).then((base64Images) => {
+    setImages(prev => [...prev, ...base64Images]);
+  });
+};
 
-    Promise.all(readers).then((base64Images) => {
-      setImages((prev) => [...prev, ...base64Images]);
-    });
-  };
   
 const getCategoryOptions = (type) => {
   switch (type) {
@@ -1588,45 +1587,62 @@ const getCategoryOptions = (type) => {
         className="w-full border px-3 py-2 rounded mb-2"
       />
       <div className="mb-4">
-       <label className="block font-medium mb-1">{t("upload_images")}</label>
-       <div className="mb-2">
-        <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
-        {t("choose_files")}
-         <input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleImageUpload}
-          className="hidden"
-         />
-        </label>
-        <div className="mt-1 text-sm text-gray-600">
-        {images.length > 0
+  <label className="block font-medium mb-1">{t("upload_images")}</label>
+  <div className="mb-2">
+    <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
+      {t("choose_files")}
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+    </label>
+    <div className="mt-1 text-sm text-gray-600">
+      {images.length > 0
         ? t("file_chosen", { count: images.length })
         : t("no_files_selected")}
-        </div>
-       </div>
+    </div>
+  </div>
 
-        <div className="flex gap-2 flex-wrap">
-          {images.map((img, idx) => (
-            <div key={idx} className="relative">
-              <img
-                src={img}
-                alt={`preview-${idx}`}
-                className="w-20 h-20 object-cover rounded"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage(idx)}
-                className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
-                title="Удалить"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+  {/* Превью с drag&drop */}
+  {images.length > 0 && (
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+      {images.map((src, idx) => (
+        <div
+          key={idx}
+          className="relative group border rounded-lg overflow-hidden bg-white"
+          draggable
+          onDragStart={() => (dragItem.current = idx)}
+          onDragEnter={() => (dragOverItem.current = idx)}
+          onDragEnd={handleReorderImages}
+          onDragOver={(e) => e.preventDefault()}
+          title={t("drag_to_reorder")}
+        >
+          <img
+            src={src}
+            alt={`preview-${idx}`}
+            className="h-24 w-full object-cover select-none pointer-events-none"
+          />
+          <div className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">
+            {idx + 1}
+          </div>
+          <button
+            type="button"
+            onClick={() => handleRemoveImage(idx)}
+            className="absolute right-1 top-1 h-6 w-6 rounded-full bg-red-600 text-white text-xs hidden group-hover:flex items-center justify-center shadow"
+            aria-label="Удалить"
+            title={t("delete")}
+          >
+            ×
+          </button>
         </div>
-      </div>
+      ))}
+    </div>
+  )}
+</div>
+
       
       <div className="flex gap-4">
         <button
