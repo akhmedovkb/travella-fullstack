@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
+import { Link } from "react-router-dom";
+
+const hasClient = !!localStorage.getItem("clientToken");
+const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+const dashboardPath = hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
 
 const blocks = [
   "ГИД",
@@ -93,7 +98,20 @@ const MarketplaceBoard = () => {
   };
 
   return (
+    
     <div className="p-6">
+      {dashboardPath && (
+        <Link
+          to={dashboardPath}
+          className="inline-flex items-center gap-2 text-gray-600 hover:text-orange-600 mb-3"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{t("common.backToDashboard")}</span>
+        </Link>
+       )}
+
       <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
