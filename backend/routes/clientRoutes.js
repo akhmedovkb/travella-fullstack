@@ -1,13 +1,15 @@
-
+// backend/routes/clientRoutes.js
 const express = require("express");
 const router = express.Router();
-const {
-  registerClient, loginClient, getClientProfile
-} = require("../controllers/clientController");
+const { register, login, getProfile, updateProfile } = require("../controllers/clientController");
 const authenticateToken = require("../middleware/authenticateToken");
 
-router.post("/register", registerClient);
-router.post("/login", loginClient);
-router.get("/profile", authenticateToken, getClientProfile);
+// Public
+router.post("/register", register);
+router.post("/login", login);
+
+// Private
+router.get("/profile", authenticateToken, getProfile);
+router.put("/profile", authenticateToken, updateProfile);
 
 module.exports = router;
