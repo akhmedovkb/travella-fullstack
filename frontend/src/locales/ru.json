@@ -314,6 +314,9 @@
       "changePhoto": "Сменить фото",
       "removePhoto": "Удалить фото",
       "photoHint": "JPEG/PNG, квадрат 512×512. Подрезка и сжатие выполняются автоматически.",
+      "tabs": { "favorites": "Избранное" },
+      "noFavorites": "Нет избранного.",
+      "openOnMarketplace": "Открыть на витрине",
       "tabs": {
         "myRequests": "Мои запросы",
         "myBookings": "Мои бронирования"
@@ -350,6 +353,7 @@
   }
 
 }
+
 
 
 
