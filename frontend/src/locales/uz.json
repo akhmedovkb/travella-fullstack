@@ -257,7 +257,7 @@
       "languagesCsv": "languages_csv",
       "saveBtn": "Saqlash",
       "refusedTours": "Rad etilgan turlar",
-      "refresh": "yangilash",
+      "refresh": "Yangilash",
       "noResults": "ma’lumot yo‘q",
       "tabs": {
         "myRequests": "so‘rovlarim",
@@ -295,6 +295,7 @@
   }
   
 }
+
 
 
 
