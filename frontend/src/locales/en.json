@@ -228,7 +228,9 @@
   "nav": {
     "dashboard": "Dashboard",
     "requests": "Requests",
-    "bookings": "Bookings"
+    "bookings": "Bookings",
+    "clientDashboard": "Dashboard",
+    "favorites": "Favorites"
   },
   
   "client": {
@@ -308,6 +310,7 @@
 
 
 }
+
 
 
 
