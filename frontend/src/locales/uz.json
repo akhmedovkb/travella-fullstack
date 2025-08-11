@@ -231,6 +231,7 @@
     "requests": "So‘rovlar",
     "bookings": "Bronlar"
   },
+  
   "client": {
     "register": {
       "title": "Mijoz ro‘yxatdan o‘tishi",
@@ -247,7 +248,8 @@
       "loginBtn": "Kirish",
       "noAccount": "Hisob yo‘qmi?",
       "registerLink": "Ro‘yxatdan o‘tish"
-    },
+    }
+  }
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -266,10 +268,12 @@
       "reject": "Rad etish",
       "cancel": "Bekor qilish",
       "status": "Holat"
-    },
+    }
+  },
   
   "common": {
     "loading": "Yuklanmoqda…"
   }
   
 }
+
