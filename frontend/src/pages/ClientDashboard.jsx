@@ -591,13 +591,8 @@ function FavoritesList() {
   const end = start + PAGE_SIZE;
   const pageItems = (items || []).slice(start, end);
 
-  if (!items) return <div className="text-sm text-gray-500">{t("common.loading")}</div>;
-  if (items.length === 0)
-    return (
-      <div className="text-sm text-gray-500">
-        {t("client.dashboard.noFavorites", "Нет избранного.")}
-      </div>
-    );
+ if (!items) return <div className="text-sm text-gray-500">{t("common.loading")}</div>;
+ if (items.length === 0) return <EmptyFavorites />
 
   return (
     <div className="space-y-4">
