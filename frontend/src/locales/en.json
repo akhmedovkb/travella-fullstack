@@ -230,7 +230,23 @@
     "requests": "Requests",
     "bookings": "Bookings"
   },
-  
+  "client": {
+    "register": {
+      "title": "Client registration",
+      "name": "Name",
+      "phone": "Phone",
+      "password": "password",
+      "registerBtn": "Register",
+      "haveAccount": "Already have an account?",
+      "loginLink": "Login"
+    },
+    "login": {
+      "title": "Client login",
+      "password": "password",
+      "loginBtn": "Login",
+      "noAccount": "No account?",
+      "registerLink": "Register"
+    },
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -259,6 +275,7 @@
 
 
 }
+
 
 
 
