@@ -1,4 +1,3 @@
-// frontend/src/pages/Marketplace.jsx
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
@@ -20,7 +19,7 @@ const blocks = [
 const MarketplaceBoard = () => {
   const { t } = useTranslation();
 
-  // вычисляем актуальный путь в кабинет на каждом рендере
+  // актуальный путь в кабинет на каждом рендере
   const dashboardPath = (() => {
     const hasClient = !!localStorage.getItem("clientToken");
     const hasProvider =
@@ -46,14 +45,37 @@ const MarketplaceBoard = () => {
 
   // ♥ избранное
   const { ids, toggle } = useWishlist();
-  const onHeart = (id) => {
+
+  // ====== простой тост ======
+  const [toast, setToast] = useState(null); // {text, type}
+  const showToast = (text, type = "success") => {
+    setToast({ text, type });
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(null), 2300);
+  };
+  // ==========================
+
+  const onHeart = async (id) => {
     // проверяем актуальный токен в момент клика
     const token = localStorage.getItem("clientToken");
     if (!token) {
       window.location.href = "/client/login";
       return;
     }
-    toggle(id);
+    const was = ids.has(id); // было ли в избранном до клика
+    try {
+      await toggle(id);
+      if (was) {
+        showToast(t("toast.removedFromFav", "Удалено из избранного"), "info");
+      } else {
+        showToast(t("toast.addedToFav", "Добавлено в избранное"), "success");
+      }
+    } catch (e) {
+      showToast(
+        t("toast.favoriteError", "Не удалось обновить избранное"),
+        "error"
+      );
+    }
   };
 
   const handleInputChange = (e) => {
@@ -329,6 +351,23 @@ const MarketplaceBoard = () => {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ТОСТ */}
+      {toast && (
+        <div
+          className={`fixed right-4 top-4 z-50 px-4 py-2 rounded shadow text-white
+            ${
+              toast.type === "error"
+                ? "bg-red-500"
+                : toast.type === "info"
+                ? "bg-gray-800"
+                : "bg-emerald-500"
+            }`}
+          role="status"
+        >
+          {toast.text}
         </div>
       )}
     </div>
