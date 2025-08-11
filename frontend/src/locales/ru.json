@@ -309,7 +309,7 @@
       "changeBtn": "Сменить",
       "logout": "Выйти",
       "passwordTooShort": "Минимум 6 символов",
-      "passwordChanged": "Пароль обновлён"
+      "passwordChanged": "Пароль обновлён",
       "tabs": {
         "myRequests": "Мои запросы",
         "myBookings": "Мои бронирования"
@@ -345,6 +345,7 @@
   }
 
 }
+
 
 
 
