@@ -1,11 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { apiGet, apiPut, apiPost } from "../api";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
+/** утилита: инициалы по имени */
+function initials(name = "") {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map(p => p[0]?.toUpperCase() || "").join("");
+}
+
+/** утилита: кадрирование и ресайз в квадрат dataURL (jpeg) */
+async function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const minSide = Math.min(img.width, img.height);
+  const sx = (img.width - minSide) / 2;
+  const sy = (img.height - minSide) / 2;
+
+  canvas.width = size;
+  canvas.height = size;
+  ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
 export default function ClientDashboard() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
+  const fileInputRef = useRef(null);
 
   // профиль
   const [profile, setProfile] = useState({
@@ -14,6 +50,11 @@ export default function ClientDashboard() {
     avatar_url: ""
   });
   const [saving, setSaving] = useState(false);
+
+  // аватар
+  const [avatarPreview, setAvatarPreview] = useState("");      // dataURL для показа
+  const [avatarBase64, setAvatarBase64] = useState("");        // чистый base64 для API
+  const [avatarRemoved, setAvatarRemoved] = useState(false);   // пометили удаление
 
   // смена пароля
   const [newPass, setNewPass] = useState("");
@@ -24,7 +65,7 @@ export default function ClientDashboard() {
   const [loadingRefused, setLoadingRefused] = useState(false);
 
   // вкладки
-  const [tab, setTab] = useState("req"); // "req" | "book"
+  const [tab, setTab] = useState("req");
   const [myRequests, setMyRequests] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
@@ -34,12 +75,16 @@ export default function ClientDashboard() {
     try {
       const me = await apiGet("/api/clients/me");
       if (me) {
-        setProfile((p) => ({
+        setProfile(p => ({
           ...p,
           name: me.name ?? "",
           phone: me.phone ?? "",
           avatar_url: me.avatar_url ?? ""
         }));
+        // при загрузке профиля сбрасываем превью/флаги
+        setAvatarPreview("");
+        setAvatarBase64("");
+        setAvatarRemoved(false);
       }
     } catch (e) {
       console.warn("profile load:", e.message);
@@ -73,17 +118,14 @@ export default function ClientDashboard() {
 
   // init
   useEffect(() => {
-    // стартовая вкладка из URL
-    const t = params.get("tab");
-    setTab(t === "book" ? "book" : "req");
-
+    const tpar = params.get("tab");
+    setTab(tpar === "book" ? "book" : "req");
     loadProfile();
     loadRefused();
-    loadTab(t === "book" ? "book" : "req");
+    loadTab(tpar === "book" ? "book" : "req");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // переключение вкладок — лениво подгружаем
   useEffect(() => {
     if (tab === "req" && myRequests.length === 0) loadTab("req");
     if (tab === "book" && myBookings.length === 0) loadTab("book");
@@ -94,7 +136,15 @@ export default function ClientDashboard() {
     e.preventDefault();
     setSaving(true);
     try {
-      await apiPut("/api/clients/me", profile);
+      const payload = {
+        name: profile.name,
+        phone: profile.phone
+      };
+      if (avatarBase64) payload.avatar_base64 = avatarBase64; // новый аватар
+      if (avatarRemoved) payload.remove_avatar = true;         // удалить текущий
+
+      await apiPut("/api/clients/me", payload);
+      await loadProfile();
     } catch (e2) {
       alert(e2.message || "Error");
     } finally {
@@ -109,7 +159,6 @@ export default function ClientDashboard() {
     }
     setChanging(true);
     try {
-      // если на бэке другой путь — скажи, поменяю
       await apiPost("/api/clients/change-password", { password: newPass }, "client");
       setNewPass("");
       alert(t("client.dashboard.passwordChanged"));
@@ -125,12 +174,84 @@ export default function ClientDashboard() {
     window.location.href = "/client/login";
   }
 
+  async function onSelectAvatar(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataURL = await cropAndResizeToDataURL(file, 512, 0.9);
+      setAvatarPreview(dataURL);
+      setAvatarBase64(dataURL.split(",")[1]); // чистый base64 после запятой
+      setAvatarRemoved(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to process image");
+    } finally {
+      // обнулим, чтобы можно было выбрать тот же файл повторно
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function removeAvatar() {
+    setAvatarPreview("");
+    setAvatarBase64("");
+    setAvatarRemoved(true);
+  }
+
+  const showAvatar =
+    avatarPreview || profile.avatar_url || ""; // приоритет: превью -> url -> пусто
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Профиль + смена пароля + выход */}
+        {/* Профиль + аватар + смена пароля + выход */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold mb-4">{t("client.dashboard.profileTitle")}</h2>
+
+          {/* Аватар */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative">
+              <div className="w-32 h-32 rounded-full bg-gray-100 ring-2 ring-white shadow overflow-hidden flex items-center justify-center text-2xl font-semibold text-gray-600">
+                {showAvatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={showAvatar}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span>{initials(profile.name) || "🙂"}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onSelectAvatar}
+              />
+              <button
+                className="px-4 py-2 rounded bg-gray-900 text-white font-semibold hover:opacity-90"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {showAvatar ? t("client.dashboard.changePhoto") : t("client.dashboard.uploadPhoto")}
+              </button>
+              {showAvatar && (
+                <button
+                  className="px-4 py-2 rounded border border-gray-300 text-gray-800 hover:bg-gray-50"
+                  onClick={removeAvatar}
+                >
+                  {t("client.dashboard.removePhoto")}
+                </button>
+              )}
+              <div className="text-xs text-gray-500">
+                {t("client.dashboard.photoHint")}
+              </div>
+            </div>
+          </div>
+
           <form onSubmit={saveProfile} className="space-y-3">
             <input
               className="w-full border rounded px-3 py-2"
@@ -143,12 +264,6 @@ export default function ClientDashboard() {
               placeholder={t("client.dashboard.phone")}
               value={profile.phone}
               onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-            />
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder={t("client.dashboard.avatarUrl")}
-              value={profile.avatar_url}
-              onChange={(e) => setProfile({ ...profile, avatar_url: e.target.value })}
             />
 
             <button
