@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api";
+import { useTranslation } from "react-i18next";
 
 export default function ProviderRequests() {
+  const { t } = useTranslation();
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyTextById, setReplyTextById] = useState({});
@@ -37,11 +40,11 @@ export default function ProviderRequests() {
   async function sendProposal(id) {
     const raw = (proposalById[id] || "").trim();
     if (!raw) {
-      alert('Введите JSON, напр. {"price":1200,"hotel":"Taj","room":"TRPL"}');
+      alert(t("provider.requests.proposalPlaceholder"));
       return;
     }
     let json;
-    try { json = JSON.parse(raw); } catch { alert("Неверный JSON"); return; }
+    try { json = JSON.parse(raw); } catch { alert("Invalid JSON"); return; }
     try {
       await apiPost(`/api/requests/${id}/proposal`, { proposal: json }, "provider");
       setProposalById((p) => ({ ...p, [id]: "" }));
@@ -51,15 +54,15 @@ export default function ProviderRequests() {
     }
   }
 
-  if (loading) return <div className="p-4">Loading...</div>;
+  if (loading) return <div className="p-4">{t("common.loading")}</div>;
   const list = Array.isArray(items) ? items : [];
 
   return (
     <div className="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow">
-      <h1 className="text-2xl font-bold mb-4">Requests (Provider)</h1>
+      <h1 className="text-2xl font-bold mb-4">{t("provider.requests.title")}</h1>
 
       {list.length === 0 ? (
-        <div className="text-sm text-gray-500">Нет заявок.</div>
+        <div className="text-sm text-gray-500">{t("provider.requests.noItems")}</div>
       ) : (
         <div className="space-y-4">
           {list.map((r) => (
@@ -100,7 +103,7 @@ export default function ProviderRequests() {
                 <div className="flex gap-2">
                   <input
                     className="flex-1 border px-3 py-2 rounded text-sm"
-                    placeholder="Сообщение клиенту…"
+                    placeholder={t("provider.requests.messagePlaceholder")}
                     value={replyTextById[r.id] || ""}
                     onChange={(e) => setReplyTextById((p) => ({ ...p, [r.id]: e.target.value }))}
                   />
@@ -108,7 +111,7 @@ export default function ProviderRequests() {
                     className="w-36 bg-orange-500 text-white py-2 rounded font-bold"
                     onClick={() => sendReply(r.id)}
                   >
-                    Отправить
+                    {t("provider.requests.send")}
                   </button>
                 </div>
 
@@ -116,7 +119,7 @@ export default function ProviderRequests() {
                   <textarea
                     className="w-full border px-3 py-2 rounded text-sm"
                     rows={3}
-                    placeholder='JSON-предложение (напр. {"price":1200,"hotel":"Taj","room":"TRPL"})'
+                    placeholder={t("provider.requests.proposalPlaceholder")}
                     value={proposalById[r.id] || ""}
                     onChange={(e) => setProposalById((p) => ({ ...p, [r.id]: e.target.value }))}
                   />
@@ -125,14 +128,14 @@ export default function ProviderRequests() {
                       className="w-44 border border-gray-800 text-gray-900 py-2 rounded font-bold"
                       onClick={() => sendProposal(r.id)}
                     >
-                      Отправить предложение
+                      {t("provider.requests.sendProposal")}
                     </button>
                   </div>
                 </div>
               </div>
 
               <div className="mt-2 text-xs text-gray-500">
-                После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.
+                {t("provider.requests.afterAcceptNote")}
               </div>
             </div>
           ))}
