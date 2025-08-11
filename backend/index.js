@@ -5,6 +5,8 @@ dotenv.config();
 
 const app = express();
 
+const clientRoutes = require("./routes/clientRoutes");
+
 // Разрешаем CORS
 app.use(
   cors({
@@ -22,6 +24,9 @@ app.use(express.urlencoded({ extended: true }));
 // Подключаем роуты провайдеров
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
+
+// Подключаем роуты клиентов
+app.use("/api/clients", clientRoutes);
 
 //Подключаем роуты отелей
 const hotelRoutes = require("./routes/hotelRoutes");
