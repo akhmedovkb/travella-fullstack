@@ -266,14 +266,10 @@
       "reject": "Rad etish",
       "cancel": "Bekor qilish",
       "status": "Holat"
-    }
-  },
+    },
+  
   "common": {
     "loading": "Yuklanmoqda…"
   }
   
 }
-
-
-
-
