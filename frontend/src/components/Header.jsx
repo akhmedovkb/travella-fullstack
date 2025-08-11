@@ -23,69 +23,58 @@ const IconBookings = (p) => (
   </svg>
 );
 
+// ... импорты те же
 export default function Header() {
   const { t } = useTranslation();
 
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
-  const role = useMemo(() => (hasClient ? "client" : hasProvider ? "provider" : null), [hasClient, hasProvider]);
+  const role = hasClient ? "client" : hasProvider ? "provider" : null;
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchCounts = async () => {
-    if (!role) return;
-    setLoading(true);
-    try {
-      const data = await apiGet("/api/notifications/counts", role);
-      setCounts(data?.counts || null);
-    } catch {
-      setCounts(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    if (role !== "provider") return;     // ← для клиента не дергаем счётчики и не рисуем навигацию
+    const fetchCounts = async () => {
+      setLoading(true);
+      try {
+        const data = await apiGet("/api/notifications/counts", role);
+        setCounts(data?.counts || null);
+      } catch {
+        setCounts(null);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
     return () => clearInterval(id);
   }, [role]);
 
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
-  const clientRequests = (counts?.requests_open || 0) + (counts?.requests_proposed || 0);
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
 
   return (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <NavLink to="/" className="text-xl font-bold text-gray-800">
-          Travella
-        </NavLink>
+        <div className="text-xl font-bold text-gray-800">Travella</div>
 
-        {role && (
+        {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
-            {role === "client" ? (
-              <>
-                <NavItem to="/client/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-                <NavBadge to="/client/dashboard" label={t("nav.requests")} value={clientRequests} loading={loading} icon={<IconRequests />} />
-                <NavBadge to="/client/dashboard" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-              </>
-            ) : (
-              <>
-                <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-                <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
-                <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-              </>
-            )}
+            <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
           </nav>
         )}
+        {/* для клиента навигацию скрываем */}
       </div>
 
       <LanguageSelector />
     </div>
   );
 }
+
 
 function NavItem({ to, label, icon, end }) {
   return (
