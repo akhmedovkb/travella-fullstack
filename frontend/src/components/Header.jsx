@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Link } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
@@ -23,36 +23,35 @@ const IconBookings = (p) => (
   </svg>
 );
 const IconHeart = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M12 21s-7-4.35-9.33-7.67C.83 10.5 2.04 7 5.2 7c2.06 0 3.13 1.22 3.8 2 .67-.78 1.74-2 3.8-2 3.16 0 4.37 3.5 2.53 6.33C19 16.65 12 21 12 21Z"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
   </svg>
 );
 
 export default function Header() {
   const { t } = useTranslation();
+  const location = useLocation();
 
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = hasClient ? "client" : hasProvider ? "provider" : null;
 
-  const [counts, setCounts] = useState(null);         // провайдерские счётчики
-  const [favCount, setFavCount] = useState(null);     // клиентское избранное
-  const [loadingProv, setLoadingProv] = useState(false);
-  const [loadingFav, setLoadingFav] = useState(false);
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [favCount, setFavCount] = useState(0);
 
-  // провайдерские счётчики
+  // Provider counters (requests / bookings)
   useEffect(() => {
     if (role !== "provider") return;
     const fetchCounts = async () => {
-      setLoadingProv(true);
+      setLoading(true);
       try {
-        const data = await apiGet("/api/notifications/counts");
+        const data = await apiGet("/api/notifications/counts", role);
         setCounts(data?.counts || null);
       } catch {
         setCounts(null);
       } finally {
-        setLoadingProv(false);
+        setLoading(false);
       }
     };
     fetchCounts();
@@ -60,25 +59,32 @@ export default function Header() {
     return () => clearInterval(id);
   }, [role]);
 
-  // клиентский счётчик избранного
+  // Client wishlist counter
   useEffect(() => {
     if (role !== "client") return;
-    const fetchFav = async () => {
-      setLoadingFav(true);
+
+    const fetchFavs = async () => {
       try {
-        const data = await apiGet("/api/wishlist?expand=service");
-        const arr = Array.isArray(data) ? data : data?.items || [];
-        setFavCount(arr.length);
+        const res = await apiGet("/api/wishlist", true);
+        const list = Array.isArray(res) ? res : res?.items || [];
+        setFavCount(list.length);
       } catch {
         setFavCount(0);
-      } finally {
-        setLoadingFav(false);
       }
     };
-    fetchFav();
-    const id = setInterval(fetchFav, 30000);
-    return () => clearInterval(id);
-  }, [role]);
+
+    fetchFavs();
+
+    // обновляем счётчик по кастомному событию
+    const onFavChanged = () => fetchFavs();
+    window.addEventListener("wishlist:changed", onFavChanged);
+
+    // и на смену роутов (на всякий случай)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchFavs(location.pathname + location.search);
+
+    return () => window.removeEventListener("wishlist:changed", onFavChanged);
+  }, [role, location]);
 
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
@@ -86,30 +92,45 @@ export default function Header() {
   return (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        {/* Логотип → маркетплейс */}
         <Link
           to="/marketplace"
-          className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors
-             focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
+          className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
           aria-label="Go to marketplace"
         >
           Travella
         </Link>
 
-        {/* Провайдерская навигация */}
+        {/* Provider nav */}
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
             <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loadingProv} icon={<IconRequests />} />
-            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loadingProv} icon={<IconBookings />} />
+            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
           </nav>
         )}
 
-        {/* Клиентский мини-набор: Кабинет + Избранное */}
+        {/* Client shortcuts: cabinet + favorites */}
         {role === "client" && (
-          <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
-            <NavItem to="/client/dashboard" label={t("nav.clientDashboard", "Кабинет")} icon={<IconDashboard />} end />
-            <NavBadge to="/client/dashboard?tab=fav" label={t("nav.favorites", "Избранное")} value={favCount ?? 0} loading={loadingFav} icon={<IconHeart />} />
+          <nav className="flex items-center gap-2 text-sm">
+            <Link
+              to="/client/dashboard"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+            >
+              <IconDashboard />
+              <span>{t("client.header.cabinet", "Кабинет")}</span>
+            </Link>
+
+            <Link
+              to="/client/dashboard?tab=fav"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+              title={t("client.header.favorites", "Избранное")}
+            >
+              <IconHeart />
+              <span>{t("client.header.favorites", "Избранное")}</span>
+              <span className="min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center bg-orange-500 text-white">
+                {favCount}
+              </span>
+            </Link>
           </nav>
         )}
       </div>
