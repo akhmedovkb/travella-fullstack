@@ -301,10 +301,12 @@
   },
   
   "common": {
-    "loading": "Yuklanmoqda…"
+    "loading": "Yuklanmoqda…",
+    "backToDashboard": "Kabinetga qaytish"
   }
   
 }
+
 
 
 
