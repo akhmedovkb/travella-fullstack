@@ -38,9 +38,6 @@ module.exports.search = async (req, res, next) => {
     const lim = Math.min(200, Math.max(1, Number(limit) || 60));
     const off = Math.max(0, Number(offset) || 0);
 
-    // Будем сравнивать строки вида 'YYYY-MM-DDTHH:MM' (как у тебя в БД)
-    const nowIsoMinute = new Date().toISOString().slice(0, 16);
-
     const rowsQ = db("services")
       .select([
         "id",
@@ -54,26 +51,22 @@ module.exports.search = async (req, res, next) => {
         "created_at",
         "status",
         "details",
+        "expiration_at",
       ])
-      // только активные + неистёкшие
+      // Только активные и неистёкшие
       .modify((qb) => {
         if (only_active) {
-          // isActive в JSONB
           qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
-            // expiration как ТЕКСТ: либо пусто, либо > nowIsoMinute
             .andWhere((q2) => {
-              qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
-                .andWhere((q2) => {
-                  q2.whereNull('expiration_at')                
-                          .orWhereRaw('expiration_at > now()');
+              q2.whereNull("expiration_at").orWhereRaw("expiration_at > now()");
             });
         }
       })
-      // категория
+      // Категория
       .modify((qb) => {
         if (category) qb.andWhere("category", category);
       })
-      // q по title/description/details::text
+      // Поиск q по title/description/details::text
       .modify((qb) => {
         if (q && String(q).trim()) {
           qb.andWhere((sub) => {
@@ -83,14 +76,14 @@ module.exports.search = async (req, res, next) => {
           });
         }
       })
-      // диапазон цены
+      // Диапазон цены
       .modify((qb) => {
         const pmin = toNum(price_min);
         const pmax = toNum(price_max);
         if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
         if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
       })
-      // произвольные details.*
+      // Произвольные filters по details.*
       .modify((qb) => {
         Object.entries(rest || {}).forEach(([key, val]) => {
           if (!key.startsWith("details.")) return;
@@ -101,7 +94,7 @@ module.exports.search = async (req, res, next) => {
           else addDetailsLike(qb, dkey, String(val));
         });
       })
-      // сортировка
+      // Сортировка
       .modify((qb) => {
         switch (sort) {
           case "newest":
