@@ -239,30 +239,32 @@ function FavoritesList({
 
                   {/* body */}
                   <div className="p-3 flex-1 flex flex-col">
-                    <div className="font-semibold line-clamp-2">{title}</div>
-
-                    {/* buttons INSIDE the card bottom */}
-                    <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
-                      <button
-                        disabled={!serviceId}
-                        onClick={() => serviceId && onQuickRequest?.(serviceId)}
-                        className="bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600 disabled:opacity-40"
-                      >
-                        {t("quick_request", { defaultValue: "Быстрый запрос" })}
-                      </button>
-                      <button
-                        onClick={() => onRemove?.(it.id)}
-                        className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
-                        title={t("delete", { defaultValue: "Удалить" })}
-                      >
-                        {t("delete", { defaultValue: "Удалить" })}
-                      </button>
-                    </div>
-                  </div>
+                <div className="font-semibold line-clamp-2">{title}</div>
+                <div className="mt-auto flex gap-2 pt-3">
+                  {serviceId && (
+                    <button
+                      onClick={() => onQuickRequest?.(serviceId)}
+                      className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+                    >
+-                     Быстрый запрос
++                     {t("actions.quick_request")}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onRemove?.(it.id)}
+                    className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
+-                   title="Удалить"
++                   title={t("actions.delete")}
+                  >
+-                   Delete
++                   {t("actions.delete")}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+           </div>
+         );
+      })}
+   </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-center gap-2 mt-6">
