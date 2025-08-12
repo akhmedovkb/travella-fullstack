@@ -295,6 +295,7 @@
   "pagination": {
     "prev": "←",
     "next": "→"
+  },
   
   "provider": {
     "requests": {
@@ -317,7 +318,6 @@
       "status": "Status"  
      }
     },
-
   
   "common": {
     "loading": "Loading…",
@@ -327,13 +327,3 @@
 
 
 }
-
-
-
-
-
-
-
-
-
-
