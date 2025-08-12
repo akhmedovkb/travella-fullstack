@@ -204,26 +204,23 @@
   },
 
   "category": {
-    "refused_tour": "Rad etilgan tur",
-    "refused_hotel": "Rad etilgan otel",
-    "refused_flight": "Rad etilgan aviachipta",
-    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
-    "visa_support": "Visa hizmati",
-    "author_tour": "Mualliflik turi",
-    "city_tour_guide": "Shahar bo`ylab tur",
-    "mountain_tour_guide": "Tog`lar bo`ylab tur",
-    "city_tour_transport": "Shahar bo`ylab tur",
-    "mountain_tour_transport": "Tog`lar bo`ylab tur",
-    "one_way_transfer": "Bir tomonga transfer",
-    "dinner_transfer": "Tushlikga transfer",
-    "border_transfer": "Chegara transferi",
-    "hall_rent": "Zal ijarasi",
-    "hotel_room": "Xona ijarasi",
-    "hotel_transfer": "Mehmonxonadan transfer",
-    "${s": {
-      "category}": "Toifa"
-    }
-  },
+  "refused_tour": "Отказной тур",
+  "refused_hotel": "Отказной отель",
+  "refused_flight": "Отказной авиабилет",
+  "refused_event_ticket": "Отказной билет на мероприятие",
+  "visa_support": "Визовая поддержка",
+  "author_tour": "Авторский тур",
+  "city_tour_guide": "Городская экскурсия (гид)",
+  "mountain_tour_guide": "Экскурсия в горы (гид)",
+  "city_tour_transport": "Тур по городу (транспорт)",
+  "mountain_tour_transport": "Тур в горы (транспорт)",
+  "one_way_transfer": "Трансфер в одну сторону",
+  "dinner_transfer": "Трансфер на ужин",
+  "border_transfer": "Трансфер до границы",
+  "hall_rent": "Аренда зала",
+  "hotel_room": "Номер в отеле",
+  "hotel_transfer": "Трансфер от/до отеля"
+},
   
   "country_names": {
     "uzbekistan": "Узбекистан",
@@ -464,5 +461,6 @@
   "password_change": "Сменить пароль",
   "confirm_delete": "Удалить элемент?"
 }
+
 
 
