@@ -438,6 +438,87 @@ const updateServiceImagesOnly = async (req, res) => {
   }
 };
 
+// =====================
+// Статистика/рейтинг поставщика
+// =====================
+const getProviderStats = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    if (!providerId) {
+      return res.status(401).json({ message: "unauthorized" });
+    }
+
+    // Универсальные помощники, чтобы не падать, если таблицы/статусы отличаются
+    const safeCount = async (sql, params = []) => {
+      try {
+        const r = await pool.query(sql, params);
+        const v = r.rows?.[0]?.count ?? r.rows?.[0]?.c ?? 0;
+        return Number(v) || 0;
+      } catch (e) {
+        // логируем, но не валим весь ответ
+        console.warn("getProviderStats count error:", e.message);
+        return 0;
+      }
+    };
+
+    // Запросы (requests)
+    const requestsTotal = await safeCount(
+      "SELECT COUNT(*) FROM requests WHERE provider_id = $1",
+      [providerId]
+    );
+    const requestsActive = await safeCount(
+      `SELECT COUNT(*) FROM requests
+         WHERE provider_id = $1
+           AND status IN ('new','pending','open','active','accepted','in_progress')`,
+      [providerId]
+    );
+
+    // Бронирования (bookings)
+    const bookingsTotal = await safeCount(
+      "SELECT COUNT(*) FROM bookings WHERE provider_id = $1",
+      [providerId]
+    );
+    const completed = await safeCount(
+      `SELECT COUNT(*) FROM bookings
+         WHERE provider_id = $1 AND status IN ('completed','confirmed','done')`,
+      [providerId]
+    );
+    const cancelled = await safeCount(
+      `SELECT COUNT(*) FROM bookings
+         WHERE provider_id = $1 AND status IN ('cancelled','rejected','canceled')`,
+      [providerId]
+    );
+
+    // Рейтинг/уровень — пробуем взять из providers, иначе дефолт
+    let rating = 0;
+    let tier = "Bronze";
+    try {
+      const r = await pool.query(
+        "SELECT rating, tier FROM providers WHERE id = $1",
+        [providerId]
+      );
+      rating = Number(r.rows?.[0]?.rating) || 3.0;
+      tier = r.rows?.[0]?.tier || "Bronze";
+    } catch (e) {
+      console.warn("getProviderStats rating error:", e.message);
+    }
+
+    res.json({
+      rating,
+      tier,
+      requests_total: requestsTotal,
+      requests_active: requestsActive,
+      bookings_total: bookingsTotal,
+      completed,
+      cancelled,
+    });
+  } catch (err) {
+    console.error("❌ getProviderStats:", err.message);
+    res.status(500).json({ message: "server_error" });
+  }
+};
+
+
 
 module.exports = {
   registerProvider,
@@ -452,4 +533,5 @@ module.exports = {
   getBookedDates,
   saveBlockedDates,
   updateServiceImagesOnly,
+  getProviderStats,
 };
