@@ -997,11 +997,12 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-          </div>        
-        </div>
-       <div>
+          </div> 
+           <div>
     <ProviderStatsHeader />
       </div>
+        </div>
+      
 
         {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
