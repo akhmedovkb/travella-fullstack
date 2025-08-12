@@ -17,7 +17,7 @@ const {
   getBookedDates,
   saveBlockedDates,
   updateServiceImagesOnly,
-} = require("../controllers/ProviderController");
+} = require("../controllers/providerController");
 
 // Пускаем только провайдера
 function requireProvider(req, res, next) {
