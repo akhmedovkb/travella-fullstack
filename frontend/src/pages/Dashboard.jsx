@@ -6,6 +6,7 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import ProviderStatsHeader from "@/components/ProviderStatsHeader";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -997,7 +998,10 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+        <div>
+    <ProviderStatsHeader />
         </div>
+     </div>
 
         {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
