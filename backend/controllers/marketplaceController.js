@@ -1,244 +1,321 @@
-// app/controllers/marketplaceController.js
-"use strict";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import axios from "axios";
+import { Link } from "react-router-dom";
 
-const dbMod = require("../db");
+/** определяем, куда вести “назад в кабинет” */
+const hasClient = !!localStorage.getItem("clientToken");
+const hasProvider =
+  !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+const dashboardPath = hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
 
-// --- адаптер БД: поддерживаем knex ИЛИ pg.Pool ---
-let knex = null;
-let psql = null;
+/** вкладки */
+const blocks = [
+  "ГИД",
+  "ТРАНСПОРТ",
+  "ОТКАЗНОЙ ТУР",
+  "ОТКАЗНОЙ ОТЕЛЬ",
+  "ОТКАЗНОЙ АВИАБИЛЕТ",
+  "ОТКАЗНОЙ БИЛЕТ",
+];
 
-(function detectDB(m) {
-  if (!m) return;
-  const c = m.default || m;
+export default function Marketplace() {
+  const { t } = useTranslation();
 
-  // knex: сама функция (knex('table')), либо объект с raw/client/select
-  if (typeof c === "function" || (c && typeof c.raw === "function")) {
-    knex = c;
-    return;
-  }
-  // pg.Pool: объект с .query
-  if (c && typeof c.query === "function") {
-    psql = c;
-    return;
-  }
-})(dbMod);
-
-// Общая формула цены: details.netPrice (если есть) иначе services.price
-const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
-
-const toNum = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-};
-
-// ===================== KNEX ВАРИАНТ =====================
-async function searchWithKnex(req) {
-  const {
-    q,
-    category,
-    price_min,
-    price_max,
-    sort,
-    only_active = true,
-    limit = 60,
-    offset = 0,
-    ...rest
-  } = req.body || {};
-
-  const lim = Math.min(200, Math.max(1, Number(limit) || 60));
-  const off = Math.max(0, Number(offset) || 0);
-
-  const rowsQ = knex("services")
-    .select([
-      "id",
-      "provider_id",
-      "title",
-      "description",
-      "category",
-      "price",
-      "images",
-      "availability",
-      "created_at",
-      "status",
-      "details",
-      "expiration_at",
-    ])
-    .modify((qb) => {
-      if (only_active) {
-        qb.whereRaw(
-          `COALESCE(NULLIF(details->>'isActive','')::boolean, true) = true`
-        ).andWhere(function () {
-          this.whereNull("expiration_at").orWhere(
-            "expiration_at",
-            ">",
-            knex.fn.now()
-          );
-        });
-      }
-    })
-    .modify((qb) => {
-      if (category) qb.andWhere("category", category);
-    })
-    .modify((qb) => {
-      if (q && String(q).trim()) {
-        qb.andWhere((sub) => {
-          sub.whereRaw(`title ILIKE ?`, [`%${q}%`])
-            .orWhereRaw(`description ILIKE ?`, [`%${q}%`])
-            .orWhereRaw(`details::text ILIKE ?`, [`%${q}%`]);
-        });
-      }
-    })
-    .modify((qb) => {
-      const pmin = toNum(price_min);
-      const pmax = toNum(price_max);
-      if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
-      if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
-    })
-    .modify((qb) => {
-      Object.entries(rest || {}).forEach(([key, val]) => {
-        if (!key.startsWith("details.")) return;
-        const dkey = key.slice(8);
-        const isBool =
-          val === true || val === false || val === "true" || val === "false";
-        if (isBool) {
-          qb.andWhereRaw(`details->>? = ?`, [dkey, String(val) === "true" ? "true" : "false"]);
-        } else {
-          qb.andWhereRaw(`details->>? ILIKE ?`, [dkey, `%${val}%`]);
-        }
-      });
-    })
-    .modify((qb) => {
-      switch (sort) {
-        case "newest":
-          qb.orderBy("created_at", "desc");
-          break;
-        case "price_asc":
-          qb.orderByRaw(`${PRICE_SQL} asc nulls last`);
-          break;
-        case "price_desc":
-          qb.orderByRaw(`${PRICE_SQL} desc nulls last`);
-          break;
-        default:
-          qb.orderBy("created_at", "desc");
-      }
-    })
-    .limit(lim)
-    .offset(off);
-
-  const items = await rowsQ;
-  return { items, limit: lim, offset: off };
-}
-
-// ===================== PG ВАРИАНТ =====================
-async function searchWithPG(req) {
-  const {
-    q,
-    category,
-    price_min,
-    price_max,
-    sort,
-    only_active = true,
-    limit = 60,
-    offset = 0,
-    ...rest
-  } = req.body || {};
-
-  const lim = Math.min(200, Math.max(1, Number(limit) || 60));
-  const off = Math.max(0, Number(offset) || 0);
-
-  const cols = [
-    "id",
-    "provider_id",
-    "title",
-    "description",
-    "category",
-    "price",
-    "images",
-    "availability",
-    "created_at",
-    "status",
-    "details",
-    "expiration_at",
-  ];
-
-  const params = [];
-  const where = [];
-
-  if (only_active) {
-    where.push(
-      `COALESCE(NULLIF(details->>'isActive','')::boolean, true) = true`
-    );
-    where.push(`(expiration_at IS NULL OR expiration_at > now())`);
-  }
-
-  if (category) {
-    params.push(category);
-    where.push(`category = $${params.length}`);
-  }
-
-  if (q && String(q).trim()) {
-    params.push(`%${q}%`);
-    const n = params.length;
-    where.push(`(title ILIKE $${n} OR description ILIKE $${n} OR details::text ILIKE $${n})`);
-  }
-
-  const pmin = toNum(price_min);
-  if (pmin != null) {
-    params.push(pmin);
-    where.push(`${PRICE_SQL} >= $${params.length}`);
-  }
-  const pmax = toNum(price_max);
-  if (pmax != null) {
-    params.push(pmax);
-    where.push(`${PRICE_SQL} <= $${params.length}`);
-  }
-
-  Object.entries(rest || {}).forEach(([key, val]) => {
-    if (!key.startsWith("details.")) return;
-    const dkey = key.slice(8);
-    const isBool =
-      val === true || val === false || val === "true" || val === "false";
-    if (isBool) {
-      params.push(String(val) === "true" ? "true" : "false");
-      where.push(`details->>'${dkey}' = $${params.length}`);
-    } else {
-      params.push(`%${val}%`);
-      where.push(`details->>'${dkey}' ILIKE $${params.length}`);
-    }
+  const [activeBlock, setActiveBlock] = useState(null);
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    location: "",
+    adults: 1,
+    children: 0,
+    infants: 0,
+    providerType: "",
   });
 
-  let orderBy = `created_at DESC`;
-  if (sort === "price_asc") orderBy = `${PRICE_SQL} ASC NULLS LAST`;
-  else if (sort === "price_desc") orderBy = `${PRICE_SQL} DESC NULLS LAST`;
+  const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 6;
 
-  params.push(lim);
-  params.push(off);
+  const handleInputChange = (e) => {
+    setFilters({ ...filters, [e.target.name]: e.target.value });
+  };
+  const handleIncrement = (field) => {
+    setFilters((p) => ({ ...p, [field]: p[field] + 1 }));
+  };
+  const handleDecrement = (field) => {
+    setFilters((p) => ({ ...p, [field]: Math.max(0, p[field] - 1) }));
+  };
 
-  const sql = `
-    SELECT ${cols.join(", ")}
-    FROM services
-    ${where.length ? "WHERE " + where.join(" AND ") : ""}
-    ORDER BY ${orderBy}
-    LIMIT $${params.length - 1}
-    OFFSET $${params.length}
-  `;
+  const handleSearch = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/marketplace/search`,
+        filters
+      );
+      // Поддержка обоих форматов: {items:[]} и []
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.items)
+        ? res.data.items
+        : [];
+      setResults(list);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error(err);
+      setError(t("common.loading_error") || "Ошибка при поиске");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const { rows } = await psql.query(sql, params);
-  return { items: rows, limit: lim, offset: off };
+  const indexOfLast = currentPage * resultsPerPage;
+  const indexOfFirst = indexOfLast - resultsPerPage;
+  const currentResults = results.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.max(1, Math.ceil(results.length / resultsPerPage));
+
+  const renderRefusedHotelCard = (item) => {
+    const d = item?.details || {};
+    return (
+      <li key={item.id} className="border rounded p-4 bg-gray-50">
+        {item?.images?.length > 0 && (
+          <img
+            src={item.images[0]}
+            alt="preview"
+            className="w-full h-40 object-cover rounded mb-2"
+          />
+        )}
+        <div className="font-bold text-lg">{d.hotelName || "—"}</div>
+        <div className="text-sm text-gray-600">
+          {d.directionCountry || "—"}
+          {d.directionCountry && (d.directionTo ? ", " : "")}
+          {d.directionTo || ""}
+        </div>
+        <div className="text-sm">
+          🗓 {d.checkIn || "—"} → {d.checkOut || "—"}
+        </div>
+        <div className="text-sm">
+          💰 {d.netPrice ? `${d.netPrice} USD` : "—"}
+        </div>
+        <button className="mt-2 text-orange-600 hover:underline">
+          {t("marketplace.propose_price") || "Предложить цену"}
+        </button>
+      </li>
+    );
+  };
+
+  const onTabClick = (block) => {
+    setActiveBlock(block);
+    let providerType = "";
+    if (block === "ГИД") providerType = "guide";
+    else if (block === "ТРАНСПОРТ") providerType = "transport";
+    else if (
+      ["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(block)
+    ) {
+      providerType = "agent";
+    }
+    setFilters((prev) => ({ ...prev, providerType }));
+  };
+
+  return (
+    <div className="p-6">
+      {dashboardPath && (
+        <Link
+          to={dashboardPath}
+          className="inline-flex items-center gap-2 text-gray-600 hover:text-orange-600 mb-3"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M15 19l-7-7 7-7"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span>{t("common.backToDashboard") || "в Личный кабинет"}</span>
+        </Link>
+      )}
+
+      <h1 className="text-3xl font-bold mb-6 text-center">
+        {t("marketplace.title") || "Доска объявлений"}
+      </h1>
+
+      {/* ВКЛАДКИ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+        {blocks.map((block) => (
+          <button
+            key={block}
+            onClick={() => onTabClick(block)}
+            className={`p-4 rounded-xl shadow text-center font-semibold transition ${
+              activeBlock === block
+                ? "bg-orange-500 text-white"
+                : "bg-white border border-gray-300 hover:bg-gray-100"
+            }`}
+          >
+            {block}
+          </button>
+        ))}
+      </div>
+
+      {/* ФОРМА ПОИСКА */}
+      {activeBlock && (
+        <div className="bg-white rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-semibold mb-4">
+            {t("marketplace.search_in", { category: activeBlock }) ||
+              `Поиск по ${activeBlock}:`}
+          </h2>
+
+          <div className="grid md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.start_date") || "Дата начала"}
+              </label>
+              <input
+                type="date"
+                name="startDate"
+                value={filters.startDate}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.end_date") || "Дата окончания"}
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                value={filters.endDate}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.location") || "Локация"}
+              </label>
+              <input
+                type="text"
+                name="location"
+                placeholder={t("marketplace.location_placeholder") || "Введите локацию ..."}
+                value={filters.location}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            {[
+              { field: "adults", label: t("marketplace.adults") || "Взрослые (12+)" },
+              { field: "children", label: t("marketplace.children") || "Дети (2–11)" },
+              { field: "infants", label: t("marketplace.infants") || "Младенцы (0–1)" },
+            ].map(({ field, label }) => (
+              <div key={field} className="flex items-center justify-between">
+                <span className="font-medium">{label}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDecrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center">{filters[field]}</span>
+                  <button
+                    onClick={() => handleIncrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 text-right">
+            <button
+              onClick={handleSearch}
+              className="bg-orange-500 text-white px-6 py-2 rounded font-semibold"
+            >
+              {isLoading
+                ? t("marketplace.searching") || "Поиск…"
+                : t("marketplace.search") || "Найти"}
+            </button>
+          </div>
+
+          {error && <p className="text-red-500 mt-4">{error}</p>}
+
+          {/* РЕЗУЛЬТАТЫ */}
+          {currentResults.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-2">
+                {t("marketplace.results") || "Результаты:"}
+              </h3>
+
+              <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentResults.map((item) =>
+                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ" ? (
+                    renderRefusedHotelCard(item)
+                  ) : (
+                    <li key={item.id} className="border rounded p-4 bg-gray-50">
+                      {item?.images?.length > 0 && (
+                        <img
+                          src={item.images[0]}
+                          alt="preview"
+                          className="w-full h-40 object-cover rounded mb-2"
+                        />
+                      )}
+                      <div className="font-bold">{item.title}</div>
+                      {item.description && (
+                        <div className="text-sm text-gray-700">{item.description}</div>
+                      )}
+                      <div className="text-sm text-gray-600">{item.category}</div>
+                      {item.price != null && (
+                        <div className="text-sm">
+                          {t("marketplace.price") || "Цена"}: {item.price}
+                        </div>
+                      )}
+                      {item.location && (
+                        <div className="text-sm">
+                          {t("marketplace.location") || "Локация"}: {item.location}
+                        </div>
+                      )}
+                      <button className="mt-2 text-orange-600 hover:underline">
+                        {t("marketplace.propose_price") || "Предложить цену"}
+                      </button>
+                    </li>
+                  )
+                )}
+              </ul>
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex justify-center gap-2">
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`px-3 py-1 rounded border font-medium ${
+                        currentPage === i + 1
+                          ? "bg-orange-500 text-white"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
-
-// ===================== Контроллер =====================
-async function search(req, res, next) {
-  try {
-    let result;
-    if (knex) result = await searchWithKnex(req);
-    else if (psql) result = await searchWithPG(req);
-    else throw new Error("DB adapter not found (neither knex nor pg.Pool).");
-
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { search };
