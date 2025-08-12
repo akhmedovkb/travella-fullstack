@@ -1,16 +1,15 @@
+// src/pages/Marketplace.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 
-/* ========= utils ========= */
+/* ===== helpers ===== */
 function normalizeList(res) {
-  // поддержка форматов: [], {items:[]}, {data:[]}
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.items)) return res.items;
   if (Array.isArray(res?.data)) return res.data;
   return [];
 }
-
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -18,75 +17,63 @@ function fmtPrice(v) {
   return String(v);
 }
 
-function safeStr(v) {
-  if (v === null || v === undefined) return "";
-  return String(v);
-}
-
-/* ========= page ========= */
+/* ===== page ===== */
 export default function Marketplace() {
   const { t } = useTranslation();
 
-  /* data */
-  const [items, setItems] = useState([]);
+  // ui
   const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
 
-  /* filters */
-  const [q, setQ] = useState("");                    // свободный текст / локация
-  const [from, setFrom] = useState("");              // details.directionFrom
-  const [to, setTo] = useState("");                  // details.directionTo
-  const [airline, setAirline] = useState("");        // details.airline
-  const [hotel, setHotel] = useState("");            // details.hotel
-  const [dateFrom, setDateFrom] = useState("");      // details.startDate
-  const [dateTo, setDateTo] = useState("");          // details.endDate / returnDate
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
+  // filters (минимум — как раньше)
+  const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
-  const [sort, setSort] = useState("");
+  const [sort, setSort] = useState("newest");
 
-  const payload = useMemo(() => {
-    const p = {
+  const payload = useMemo(
+    () => ({
       q: q?.trim() || undefined,
       category: category || undefined,
-      price_min: priceMin || undefined,
-      price_max: priceMax || undefined,
-      sort: sort || undefined,
-      // backend понимает details.* (равенство/like)
-      ...(from ? { "details.directionFrom": from } : {}),
-      ...(to ? { "details.directionTo": to } : {}),
-      ...(airline ? { "details.airline": airline } : {}),
-      ...(hotel ? { "details.hotel": hotel } : {}),
-      ...(dateFrom ? { "details.startDate": dateFrom } : {}),
-      ...(dateTo ? { "details.endDate": dateTo, "details.returnDate": dateTo } : {}),
-    };
-    return p;
-  }, [q, category, priceMin, priceMax, sort, from, to, airline, hotel, dateFrom, dateTo]);
+      sort,
+      only_active: true,
+      limit: 60,
+      offset: 0,
+    }),
+    [q, category, sort]
+  );
 
   async function search(opts = {}) {
     setLoading(true);
     setError(null);
     try {
       const body = opts.all ? {} : payload;
+
+      // основной поиск
       let res = await apiPost("/api/marketplace/search", body);
       let list = normalizeList(res);
 
-      // graceful fallback
-      if (!Array.isArray(list) || list.length === 0) {
+      // fallback — публичные услуги
+      if (!list.length) {
         const pub = await apiGet("/api/services/public").catch(() => []);
         list = normalizeList(pub);
       }
       setItems(list);
-    } catch (e) {
-      setItems([]);
-      setError(t("common.loading_error") || "Не удалось загрузить данные");
+    } catch {
+      try {
+        const pub = await apiGet("/api/services/public");
+        setItems(normalizeList(pub));
+      } catch {
+        setItems([]);
+        setError(t("common.loading_error") || "Ошибка загрузки данных");
+      }
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    // автозагрузка всех активных
+    // автоподгрузка всего (как раньше)
     search({ all: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -95,275 +82,130 @@ export default function Marketplace() {
     if (!serviceId) return;
     const note =
       window.prompt(
-        t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
+        t("common.note_optional") ||
+          "Комментарий к запросу (необязательно):"
       ) || undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
-      alert(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+      alert(t("messages.request_sent") || "Запрос отправлен");
     } catch {
-      alert(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+      alert(t("common.loading_error") || "Не удалось отправить запрос");
     }
   }
 
-  /* ========= card ========= */
+  /* ===== Card (как на прежнем UI) ===== */
   function Card({ it }) {
-    const svc = it?.service || it; // на всякий случай
-    const id = svc.id ?? it.id;
-
+    const svc = it?.service || it;
+    const id = svc?.id ?? it?.id;
     const title =
-      svc.title ||
-      svc.name ||
-      svc.service_title ||
-      t("common.service", { defaultValue: "Услуга" });
-
-    const images = Array.isArray(svc.images) ? svc.images : [];
-    const image = images[0] || svc.cover || svc.image || null;
-
-    const details = svc.details || {};
-    const direction =
-      details.direction ||
-      [safeStr(details.directionFrom), "→", safeStr(details.directionTo)].filter(Boolean).join(" ");
-
-    const hotelName = details.hotel || "";
-    const accom = details.accommodation || details.accommodationCategory || "";
-    const airlineName = details.airline || "";
-    const start = details.startDate || details.startFlightDate || "";
-    const end =
-      details.endDate || details.returnDate || details.endFlightDate || "";
-    const price = svc.price ?? details.netPrice ?? it.price ?? it.netPrice;
+      svc?.title || svc?.name || svc?.service_title || t("title") || "Service";
+    const images = Array.isArray(svc?.images) ? svc.images : [];
+    const image = images[0] || svc?.cover || svc?.image || null;
+    const price = svc?.price ?? svc?.net_price ?? it?.price ?? it?.net_price;
     const prettyPrice = fmtPrice(price);
 
     return (
-      <div className="relative bg-white border rounded-xl overflow-hidden shadow-sm group flex flex-col">
+      <div className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100">
           {image ? (
             <img src={image} alt={title} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-              {t("favorites.no_image", { defaultValue: "Нет изображения" })}
+              {t("favorites.no_image") || "Нет изображения"}
             </div>
           )}
         </div>
-
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {direction && (
-            <div className="mt-1 text-sm text-gray-600 line-clamp-1">{direction}</div>
-          )}
           {prettyPrice && (
-            <div className="mt-2 text-sm">
-              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+            <div className="mt-1 text-xs text-gray-600">
+              {t("marketplace.price") || "Цена"}:{" "}
               <span className="font-semibold">{prettyPrice}</span>
             </div>
           )}
-
-          <div className="mt-auto pt-3 flex gap-2">
+          <div className="mt-auto pt-3">
             <button
               onClick={() => handleQuickRequest(id)}
-              className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
-              {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+              {t("actions.quick_request") || "Быстрый запрос"}
             </button>
-          </div>
-        </div>
-
-        {/* Hover tooltip */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-all duration-150"
-          style={{ zIndex: 2 }}
-        >
-          <div className="m-2 p-3 rounded-lg bg-white/95 shadow border text-xs leading-5">
-            {direction && (
-              <div>
-                <span className="text-gray-500">{t("marketplace.direction", { defaultValue: "Направление" })}:</span>{" "}
-                <span className="font-medium">{direction}</span>
-              </div>
-            )}
-            {(start || end) && (
-              <div>
-                <span className="text-gray-500">{t("marketplace.dates", { defaultValue: "Даты" })}:</span>{" "}
-                <span className="font-medium">
-                  {start || "—"} {end ? `→ ${end}` : ""}
-                </span>
-              </div>
-            )}
-            {(hotelName || accom) && (
-              <div>
-                <span className="text-gray-500">{t("marketplace.hotel", { defaultValue: "Отель" })}:</span>{" "}
-                <span className="font-medium">
-                  {hotelName || "—"} {accom ? `• ${accom}` : ""}
-                </span>
-              </div>
-            )}
-            {airlineName && (
-              <div>
-                <span className="text-gray-500">{t("marketplace.airline", { defaultValue: "Авиакомпания" })}:</span>{" "}
-                <span className="font-medium">{airlineName}</span>
-              </div>
-            )}
-            {prettyPrice && (
-              <div>
-                <span className="text-gray-500">{t("marketplace.price", { defaultValue: "Цена" })}:</span>{" "}
-                <span className="font-semibold">{prettyPrice}</span>
-              </div>
-            )}
           </div>
         </div>
       </div>
     );
   }
 
-  /* ========= ui ========= */
-
-  const categoryOptions = [
-    { value: "", label: t("marketplace.select_category", { defaultValue: "Выберите категорию" }) },
-    { value: "guide", label: t("category.city_tour_guide", { defaultValue: "Гид" }) },
-    { value: "transport", label: t("category.city_tour_transport", { defaultValue: "Транспорт" }) },
-    { value: "refused_tour", label: t("category.refused_tour", { defaultValue: "Отказной тур" }) },
-    { value: "refused_hotel", label: t("category.refused_hotel", { defaultValue: "Отказной отель" }) },
-    { value: "refused_flight", label: t("category.refused_flight", { defaultValue: "Отказной авиабилет" }) },
-    { value: "refused_event_ticket", label: t("category.refused_event_ticket", { defaultValue: "Отказной билет на мероприятие" }) },
-    { value: "visa_support", label: t("category.visa_support", { defaultValue: "Визовая поддержка" }) },
-    { value: "author_tour", label: t("category.author_tour", { defaultValue: "Авторский тур" }) },
-    { value: "hotel_room", label: t("category.hotel_room", { defaultValue: "Номер в отеле" }) },
-    { value: "hotel_transfer", label: t("category.hotel_transfer", { defaultValue: "Трансфер от/до отеля" }) },
-    { value: "hall_rent", label: t("category.hall_rent", { defaultValue: "Аренда зала" }) },
-  ];
-
-  const sortOptions = [
-    { value: "", label: t("marketplace.sort.default", { defaultValue: "Сортировка" }) },
-    { value: "newest", label: t("marketplace.sort.newest", { defaultValue: "Сначала новые" }) },
-    { value: "price_asc", label: t("marketplace.sort.price_asc", { defaultValue: "Цена ↑" }) },
-    { value: "price_desc", label: t("marketplace.sort.price_desc", { defaultValue: "Цена ↓" }) },
-  ];
-
+  /* ===== UI ===== */
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      {/* фильтры */}
-      <div className="bg-white rounded-xl shadow p-4 border mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+      {/* верхняя панель — компактная */}
+      <div className="bg-white rounded-xl shadow p-3 border mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
           <input
-            className="md:col-span-3 border rounded-lg px-3 py-2"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={t("marketplace.location_placeholder", { defaultValue: "Внесите локацию ..." })}
+            placeholder={t("marketplace.location_placeholder") || "Введите локацию ..."}
+            className="md:col-span-6 border rounded-lg px-3 py-2"
           />
-
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            placeholder={t("marketplace.from", { defaultValue: "Откуда" })}
-          />
-
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder={t("marketplace.to", { defaultValue: "Куда" })}
-          />
-
-          <input
-            type="date"
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            placeholder="ДД.ММ.ГГГГ"
-          />
-
-          <input
-            type="date"
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            placeholder="ДД.ММ.ГГГГ"
-          />
-
           <select
-            className="md:col-span-2 border rounded-lg px-3 py-2"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
+            className="md:col-span-3 border rounded-lg px-3 py-2"
           >
-            {categoryOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
+            <option value="">{t("marketplace.select_category") || "Выберите категорию"}</option>
+            <option value="guide">{t("category.guide") || "Гид"}</option>
+            <option value="transport">{t("category.transport") || "Транспорт"}</option>
+            <option value="refused_tour">{t("category.refused_tour") || "Отказной тур"}</option>
+            <option value="refused_hotel">{t("category.refused_hotel") || "Отказной отель"}</option>
+            <option value="refused_flight">{t("category.refused_flight") || "Отказной авиабилет"}</option>
+            <option value="refused_event_ticket">{t("category.refused_event_ticket") || "Отказной ивент"}</option>
+            <option value="visa_support">{t("category.visa_support") || "Визовая поддержка"}</option>
+            <option value="author_tour">{t("category.author_tour") || "Авторский тур"}</option>
+            <option value="hotel_room">{t("category.hotel_room") || "Номер отеля"}</option>
+            <option value="hall_rent">{t("category.hall_rent") || "Зал / аренда"}</option>
           </select>
 
           <select
-            className="md:col-span-2 border rounded-lg px-3 py-2"
             value={sort}
             onChange={(e) => setSort(e.target.value)}
+            className="md:col-span-2 border rounded-lg px-3 py-2"
           >
-            {sortOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
+            <option value="newest">{t("marketplace.sort_newest") || "Новые"}</option>
+            <option value="price_asc">{t("marketplace.sort_price_asc") || "Цена ↑"}</option>
+            <option value="price_desc">{t("marketplace.sort_price_desc") || "Цена ↓"}</option>
           </select>
 
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={hotel}
-            onChange={(e) => setHotel(e.target.value)}
-            placeholder={t("marketplace.hotel", { defaultValue: "Отель" })}
-          />
-
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={airline}
-            onChange={(e) => setAirline(e.target.value)}
-            placeholder={t("marketplace.airline", { defaultValue: "Авиакомпания" })}
-          />
-
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={priceMin}
-            onChange={(e) => setPriceMin(e.target.value)}
-            placeholder={t("marketplace.price_from", { defaultValue: "Цена от" })}
-          />
-
-          <input
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-            value={priceMax}
-            onChange={(e) => setPriceMax(e.target.value)}
-            placeholder={t("marketplace.price_to", { defaultValue: "Цена до" })}
-          />
-
-          <div className="md:col-span-2 flex gap-2">
+          <div className="md:col-span-1 flex gap-2">
             <button
               onClick={() => search()}
+              className="flex-1 px-4 py-2 rounded-lg bg-gray-900 text-white"
               disabled={loading}
-              className="flex-1 px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold disabled:opacity-60"
             >
-              {t("marketplace.search", { defaultValue: "Найти" })}
+              {t("marketplace.search") || "Найти"}
             </button>
             <button
               onClick={() => {
                 setQ("");
-                setFrom("");
-                setTo("");
-                setAirline("");
-                setHotel("");
-                setDateFrom("");
-                setDateTo("");
-                setPriceMin("");
-                setPriceMax("");
                 setCategory("");
-                setSort("");
+                setSort("newest");
                 search({ all: true });
               }}
-              disabled={loading}
               className="px-4 py-2 rounded-lg border"
+              disabled={loading}
+              title={t("back") || "Назад"}
             >
-              {t("back", { defaultValue: "Назад" })}
+              ←
             </button>
           </div>
         </div>
       </div>
 
-      {/* список */}
-      <div className="bg-white rounded-xl shadow p-6 border">
+      {/* контент */}
+      <div className="bg-white rounded-xl shadow p-4 border">
         {loading && (
           <div className="text-gray-500">
-            {t("marketplace.searching", { defaultValue: "Поиск..." })}
+            {t("common.loading") || "Загрузка..."}
           </div>
         )}
 
@@ -371,13 +213,13 @@ export default function Marketplace() {
           <div className="text-red-600">{error}</div>
         )}
 
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && !items.length && (
           <div className="text-gray-500">
-            {t("client.dashboard.noResults", { defaultValue: "Нет данных" })}
+            {t("client.dashboard.noResults") || "Нет данных"}
           </div>
         )}
 
-        {!loading && !error && items.length > 0 && (
+        {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (
               <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} />
