@@ -6,7 +6,7 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import ProviderStatsHeader from "@/components/ProviderStatsHeader";
+import ProviderStatsHeader from "../components/ProviderStatsHeader";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
