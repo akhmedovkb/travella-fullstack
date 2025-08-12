@@ -1,16 +1,15 @@
-// src/pages/Marketplace.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 
-// приведи ответ к массиву
+/* ================= helpers ================= */
+
 function normalizeList(res) {
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.items)) return res.items;
   if (Array.isArray(res?.data)) return res.data;
   return [];
 }
-const hasClient = !!localStorage.getItem("clientToken");
 
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
@@ -19,59 +18,61 @@ function fmtPrice(v) {
   return String(v);
 }
 
-export default function Marketplace() {
-  const { t, i18n } = useTranslation();
+function firstNonEmpty(...vals) {
+  for (const v of vals) {
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return null;
+}
 
-  // UI состояния
+function buildDates(d = {}) {
+  // Приоритет: тур/виза: startDate–endDate | авиаперелёт: startFlightDate–endFlightDate | отель: hotel_check_in–hotel_check_out | событие: eventDate
+  const s1 = firstNonEmpty(d.startDate, d.departure_date, d.start_flight_date, d.startFlightDate, d.hotel_check_in);
+  const e1 = firstNonEmpty(d.endDate, d.returnDate, d.end_flight_date, d.endFlightDate, d.hotel_check_out);
+  const ev = firstNonEmpty(d.eventDate, d.event_date);
+
+  if (s1 && e1) return `${s1} → ${e1}`;
+  if (s1) return `${s1}`;
+  if (ev) return `${ev}`;
+  return null;
+}
+
+/* ================= main ================= */
+
+export default function Marketplace() {
+  const { t } = useTranslation();
+
+  // filters
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("");
+  const filters = useMemo(
+    () => ({
+      q: q?.trim() || undefined,
+      category: category || undefined,
+    }),
+    [q, category]
+  );
+
+  // data state
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
 
-  // фильтры верхней панели
-  const [q, setQ] = useState(""); // «Внесите локацию…» -> по прибытиям/локациям
-  const [category, setCategory] = useState(""); // ключ селекта
-
-  // лайки
-  const [favIds, setFavIds] = useState(new Set());
-
-  // Варианты категорий селекта (ключи совпадают с backend CAT_MAP)
-  const categories = useMemo(
-    () => [
-      { key: "", label: t("marketplace.select_category") || "Выберите категорию" },
-      { key: "guide", label: t("guide") || "Гид" },
-      { key: "transport", label: t("transport") || "Транспорт" },
-      { key: "refused_tour", label: t("marketplace.package") || "Отказной тур" },
-      { key: "refused_hotel", label: t("marketplace.hotel") || "Отказной отель" },
-      { key: "refused_flight", label: t("marketplace.flight") || "Отказной авиабилет" },
-      { key: "refused_event_ticket", label: t("marketplace.refused_event") || "Отказной билет" },
-      { key: "visa_support", label: t("visa_support") || "Визовая поддержка" },
-    ],
-    [i18n.language, t]
-  );
-
-  // Загрузка избранного (только ids; без изменения внешнего вида)
-  useEffect(() => {
-    if (!hasClient) return;
-    (async () => {
-      try {
-        const res = await apiGet("/api/wishlist?idsOnly=1").catch(() => []);
-        const arr = Array.isArray(res) ? res : res?.ids || [];
-        setFavIds(new Set(arr.map(Number)));
-      } catch {}
-    })();
-  }, []);
+  // tooltip state (id -> bool) можно и без state, но так предсказуемо
+  const [hoverId, setHoverId] = useState(null);
 
   async function search(opts = {}) {
     setLoading(true);
     setError(null);
     try {
-      const payload = {
-        location: q?.trim() || undefined,
-        category: category || undefined,
-        ...opts,
-      };
-      const res = await apiPost("/api/marketplace/search", payload);
-      setItems(normalizeList(res));
+      const payload = opts?.all ? {} : filters;
+      let res = await apiPost("/api/marketplace/search", payload);
+      let list = normalizeList(res);
+      if (!list.length && opts?.fallback !== false) {
+        res = await apiGet("/api/services/public");
+        list = normalizeList(res);
+      }
+      setItems(list);
     } catch (e) {
       setError(t("common.loading_error") || "Не удалось загрузить данные");
       setItems([]);
@@ -80,122 +81,137 @@ export default function Marketplace() {
     }
   }
 
-  // первый рендер — показать всё
   useEffect(() => {
-    search({ only_active: true });
+    search({ all: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function onReset() {
-    setQ("");
-    setCategory("");
-    search({ only_active: true });
-  }
-
-  async function handleQuickRequest(serviceId) {
+  const handleQuickRequest = async (serviceId) => {
     if (!serviceId) return;
-    if (!hasClient) {
-      alert(t("client.login.title") || "Войдите как клиент");
-      return;
-    }
     const note =
       window.prompt(
         t("requests.note_prompt") ||
-          "Комментарий к запросу (необязательно):"
+          t("client.dashboard.noResults") ||
+          "Комментарий (необязательно)"
       ) || undefined;
-
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
       alert(t("requests.sent") || "Запрос отправлен");
     } catch {
       alert(t("requests.error") || "Не удалось отправить запрос");
     }
-  }
+  };
 
-  async function toggleFavorite(serviceId) {
-    if (!hasClient) {
-      alert(t("client.login.title") || "Войдите как клиент");
-      return;
-    }
-    try {
-      await apiPost("/api/wishlist/toggle", { service_id: serviceId });
-      setFavIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(serviceId)) next.delete(serviceId);
-        else next.add(serviceId);
-        return next;
-      });
-    } catch {
-      alert(t("toast.favoriteError") || "Не удалось изменить избранное");
-    }
-  }
-
-  // ===== Рендер =====
+  /* ================= card ================= */
 
   const Card = ({ it }) => {
     const svc = it?.service || it;
-    const id = Number(svc?.id ?? it?.id);
+    const id = svc.id ?? it.id;
+    const details = svc.details || it.details || {};
     const title =
-      svc?.title ||
-      svc?.name ||
-      svc?.service_title ||
+      svc.title ||
+      svc.name ||
+      details.eventName ||
       t("title") ||
       "Service";
-    const images = Array.isArray(svc?.images) ? svc.images : [];
-    const image = images[0] || svc?.cover || svc?.image || null;
-    const price = svc?.price ?? svc?.net_price ?? svc?.details?.netPrice;
+
+    const images = Array.isArray(svc.images) ? svc.images : [];
+    const image = images[0] || svc.cover || svc.image || null;
+    const price = firstNonEmpty(details.netPrice, svc.price, it.price);
     const prettyPrice = fmtPrice(price);
-    const isFav = favIds.has(id);
+
+    // tooltip fields
+    const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
+    const accommodation = firstNonEmpty(
+      details.accommodation,
+      details.accommodationCategory
+    );
+    const dates = buildDates(details);
 
     return (
-      <div className="bg-white rounded-2xl shadow border overflow-hidden">
-        <div className="relative aspect-[4/3] bg-gray-100">
+      <div
+        className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col"
+        onMouseEnter={() => setHoverId(id)}
+        onMouseLeave={() => setHoverId((prev) => (prev === id ? null : prev))}
+      >
+        <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
             <img src={image} alt={title} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
-              {t("favorites.no_image") || "Нет изображения"}
+              <span className="text-sm">
+                {t("favorites.no_image") || "Нет изображения"}
+              </span>
             </div>
           )}
 
-          {/* сердечко избранного — без изменения компоновки */}
-          <button
-            onClick={() => toggleFavorite(id)}
-            className="absolute top-2 right-2 w-9 h-9 rounded-full bg-white/90 flex items-center justify-center shadow"
-            title={isFav ? t("favorites.removed") : t("favorites.added")}
+          {/* Tooltip overlay */}
+          <div
+            className={`pointer-events-none absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity`}
           >
-            <span className={`text-lg ${isFav ? "text-red-500" : "text-gray-400"}`}>
-              {isFav ? "♥" : "♡"}
-            </span>
-          </button>
+            <div className="absolute left-0 right-0 bottom-0 p-3">
+              <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 space-y-1">
+                <div className="font-semibold line-clamp-2">{title}</div>
+                {hotel && (
+                  <div>
+                    <span className="opacity-75">{t("hotel") || "Отель"}: </span>
+                    <span className="font-medium">{hotel}</span>
+                  </div>
+                )}
+                {accommodation && (
+                  <div>
+                    <span className="opacity-75">
+                      {t("accommodation") || "Размещение"}:{" "}
+                    </span>
+                    <span className="font-medium">{accommodation}</span>
+                  </div>
+                )}
+                {dates && (
+                  <div>
+                    <span className="opacity-75">{t("date") || "Дата"}: </span>
+                    <span className="font-medium">{dates}</span>
+                  </div>
+                )}
+                {prettyPrice && (
+                  <div>
+                    <span className="opacity-75">
+                      {t("marketplace.price") || "Цена"}:{" "}
+                    </span>
+                    <span className="font-semibold">{prettyPrice}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="p-4">
-          <div className="uppercase text-sm font-semibold line-clamp-2">
-            {title}
-          </div>
+        <div className="p-3 flex-1 flex flex-col">
+          <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
-            <div className="mt-2 text-sm">
+            <div className="mt-1 text-sm">
               {t("marketplace.price") || "Цена"}:{" "}
               <span className="font-semibold">{prettyPrice}</span>
             </div>
           )}
-
-          <button
-            onClick={() => handleQuickRequest(id)}
-            className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white rounded px-3 py-2 text-sm font-semibold"
-          >
-            {t("actions.quick_request") || "Быстрый запрос"}
-          </button>
+          <div className="mt-auto pt-3">
+            <button
+              onClick={() => handleQuickRequest(id)}
+              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.quick_request") || "Быстрый запрос"}
+            </button>
+          </div>
         </div>
       </div>
     );
   };
 
+  /* ================= render ================= */
+
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      {/* Верхняя панель — сохранил визуал */}
-      <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      {/* Панель поиска — БЕЗ кнопки «Назад» */}
+      <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -208,11 +224,16 @@ export default function Marketplace() {
           onChange={(e) => setCategory(e.target.value)}
           className="w-full md:w-64 border rounded-lg px-3 py-2"
         >
-          {categories.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
+          <option value="">{t("marketplace.select_category") || "Выберите категорию"}</option>
+          <option value="guide">{t("marketplace.guide") || "Гид"}</option>
+          <option value="transport">{t("marketplace.transport") || "Транспорт"}</option>
+          <option value="refused_tour">{t("category.refused_tour") || "Отказной тур"}</option>
+          <option value="refused_hotel">{t("category.refused_hotel") || "Отказной отель"}</option>
+          <option value="refused_flight">{t("category.refused_flight") || "Отказной авиабилет"}</option>
+          <option value="refused_event_ticket">
+            {t("category.refused_event_ticket") || "Отказной билет на мероприятие"}
+          </option>
+          <option value="visa_support">{t("category.visa_support") || "Визовая поддержка"}</option>
         </select>
 
         <button
@@ -222,35 +243,27 @@ export default function Marketplace() {
         >
           {t("marketplace.search") || "Найти"}
         </button>
-
-        <button onClick={onReset} className="px-4 py-2 rounded-lg border">
-          {t("back") || "← Назад"}
-        </button>
       </div>
 
-      {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
         {loading && (
           <div className="text-gray-500">
-            {t("marketplace.searching") || "Идёт поиск..."}
+            {t("marketplace.searching") || "Поиск..."}
           </div>
         )}
 
         {!loading && error && <div className="text-red-600">{error}</div>}
 
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && !items.length && (
           <div className="text-gray-500">
-            {t("client.dashboard.noResults") || "Нет данных"}
+            {t("client.dashboard.noResults") || "Нет результатов"}
           </div>
         )}
 
-        {!loading && !error && items.length > 0 && (
+        {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (
-              <Card
-                key={it.id || it.service?.id || JSON.stringify(it)}
-                it={it}
-              />
+              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} />
             ))}
           </div>
         )}
