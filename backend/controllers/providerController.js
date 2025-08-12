@@ -412,36 +412,29 @@ const saveBlockedDates = async (req, res) => {
 
 const updateServiceImagesOnly = async (req, res) => {
   try {
-    const providerId = req.user.id;
+    const providerId = req.user?.providerId ?? (req.user?.role === "provider" ? req.user?.id : null);
+    if (!providerId) return res.status(403).json({ message: "provider_required" });
+
     const serviceId = Number(req.params.id);
     if (!Number.isInteger(serviceId)) {
       return res.status(400).json({ message: "invalid_service_id" });
     }
 
     const raw = Array.isArray(req.body?.images) ? req.body.images : [];
-    const images = raw
-      .map((x) => String(x || "").trim())
-      .filter(Boolean)
-      .slice(0, 10);
+    const images = raw.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 10);
 
-    const q = `
-      UPDATE services
-      SET images = $1::jsonb
-      WHERE id = $2 AND provider_id = $3
-      RETURNING id, title, images
-    `;
-    const { rows, rowCount } = await pool.query(q, [
-      JSON.stringify(images),
-      serviceId,
-      providerId,
-    ]);
-    if (rowCount === 0) {
-      return res.status(404).json({ message: "Услуга не найдена" });
-    }
-    return res.json(rows[0]);
+    const { rows, rowCount } = await pool.query(
+      `UPDATE services
+       SET images = $1::jsonb
+       WHERE id = $2 AND provider_id = $3
+       RETURNING id, title, images`,
+      [JSON.stringify(images), serviceId, providerId]
+    );
+    if (rowCount === 0) return res.status(404).json({ message: "service_not_found_or_forbidden" });
+    res.json(rows[0]);
   } catch (e) {
     console.error("updateServiceImagesOnly error", e);
-    return res.status(500).json({ message: "update_images_failed" });
+    res.status(500).json({ message: "update_images_failed" });
   }
 };
 
