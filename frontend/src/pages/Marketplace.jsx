@@ -1,377 +1,207 @@
-import React, { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
-import { Link } from "react-router-dom";
+import { apiGet, apiPost } from "../api";
 
-// ♥ избранное
-import WishHeart from "../components/WishHeart";
-import { useWishlist } from "../hooks/useWishlist";
+function normalizeList(res) {
+  // поддержка форматов: [], {items:[]}, {data:[]}
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.items)) return res.items;
+  if (Array.isArray(res?.data)) return res.data;
+  return [];
+}
 
-const blocks = [
-  "ГИД",
-  "ТРАНСПОРТ",
-  "ОТКАЗНОЙ ТУР",
-  "ОТКАЗНОЙ ОТЕЛЬ",
-  "ОТКАЗНОЙ АВИАБИЛЕТ",
-  "ОТКАЗНОЙ БИЛЕТ",
-];
+function fmtPrice(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
+  return String(v);
+}
 
-const MarketplaceBoard = () => {
+export default function Marketplace() {
   const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
 
-  // актуальный путь в кабинет на каждом рендере
-  const dashboardPath = (() => {
-    const hasClient = !!localStorage.getItem("clientToken");
-    const hasProvider =
-      !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
-    return hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
-  })();
+  // простые фильтры (оставил задел под расширение)
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("");
 
-  const [activeBlock, setActiveBlock] = useState(null);
-  const [filters, setFilters] = useState({
-    startDate: "",
-    endDate: "",
-    location: "",
-    adults: 1,
-    children: 0,
-    infants: 0,
-    providerType: "",
-  });
-  const [results, setResults] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const resultsPerPage = 6;
+  const filters = useMemo(
+    () => ({
+      q: q?.trim() || undefined,
+      category: category || undefined,
+      // при необходимости сюда же date_from/date_to/location/и т.п.
+    }),
+    [q, category]
+  );
 
-  // ♥ избранное
-  const { ids, toggle } = useWishlist();
-
-  // ====== простой тост ======
-  const [toast, setToast] = useState(null); // {text, type}
-  const showToast = (text, type = "success") => {
-    setToast({ text, type });
-    window.clearTimeout(showToast._t);
-    showToast._t = window.setTimeout(() => setToast(null), 2300);
-  };
-  // ==========================
-
-  const onHeart = async (id) => {
-    // проверяем актуальный токен в момент клика
-    const token = localStorage.getItem("clientToken");
-    if (!token) {
-      window.location.href = "/client/login";
-      return;
-    }
-    const was = ids.has(id); // было ли в избранном до клика
+  const search = async (opts = {}) => {
+    setLoading(true);
+    setError(null);
     try {
-      await toggle(id);
-      if (was) {
-        showToast(t("toast.removedFromFav", "Удалено из избранного"), "info");
-      } else {
-        showToast(t("toast.addedToFav", "Добавлено в избранное"), "success");
+      // Если нужна загрузка всех услуг, шлём пустые фильтры:
+      const payload = opts?.all ? {} : filters;
+
+      // Путь 1: общий поиск по маркетплейсу
+      let res = await apiPost("/api/marketplace/search", payload);
+      let list = normalizeList(res);
+
+      // Путь 2 (fallback): если эндпоинта нет — попробуем публичный список услуг
+      if (!list.length && opts?.fallback !== false) {
+        res = await apiGet("/api/services/public");
+        list = normalizeList(res);
       }
+
+      setItems(list);
     } catch (e) {
-      showToast(
-        t("toast.favoriteError", "Не удалось обновить избранное"),
-        "error"
-      );
-    }
-  };
-
-  const handleInputChange = (e) => {
-    setFilters({ ...filters, [e.target.name]: e.target.value });
-  };
-
-  const handleIncrement = (field) => {
-    setFilters((prev) => ({ ...prev, [field]: prev[field] + 1 }));
-  };
-
-  const handleDecrement = (field) => {
-    setFilters((prev) => ({ ...prev, [field]: Math.max(0, prev[field] - 1) }));
-  };
-
-  const handleSearch = async () => {
-    setIsLoading(true);
-    setError("");
-    try {
-      const res = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/marketplace/search`,
-        filters
-      );
-      setResults(res.data);
-      setCurrentPage(1);
-    } catch (err) {
-      setError("Ошибка при поиске");
-      console.error("Поиск не удался", err);
+      setError(t("common.loading_error") || "Не удалось загрузить данные");
+      setItems([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const indexOfLast = currentPage * resultsPerPage;
-  const indexOfFirst = indexOfLast - resultsPerPage;
-  const currentResults = results.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(results.length / resultsPerPage);
+  // авто-поиск ВСЕГО при первом открытии
+  useEffect(() => {
+    search({ all: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const renderRefusedHotelCard = (item) => {
-    const d = item.details || {};
+  const handleQuickRequest = async (serviceId) => {
+    if (!serviceId) return;
+    const note = window.prompt(t("client.dashboard.noResults") || "Комментарий (необязательно)") || undefined;
+    try {
+      await apiPost("/api/requests", { service_id: serviceId, note });
+      alert(t("actions.quick_request") + " ✓");
+    } catch {
+      alert(t("common.loading_error") || "Не удалось отправить запрос");
+    }
+  };
+
+  const Card = ({ it }) => {
+    // Унификация полей
+    const svc = it?.service || it; // вдруг приходят элементы в обёртке
+    const id = svc.id ?? it.id;
+    const title =
+      svc.title ||
+      svc.name ||
+      svc.service_title ||
+      t("title") ||
+      "Service";
+    const images = Array.isArray(svc.images) ? svc.images : [];
+    const image = images[0] || svc.cover || svc.image || null;
+    const price = svc.price ?? svc.net_price ?? it.price ?? it.net_price;
+    const prettyPrice = fmtPrice(price);
+    const location =
+      svc.location ||
+      svc.city ||
+      svc.direction_to ||
+      svc.direction ||
+      null;
+
     return (
-      <li key={item.id} className="border rounded p-4 bg-gray-50 relative">
-        {/* ♥ избранное */}
-        <div className="absolute top-2 right-2">
-          <WishHeart active={ids.has(item.id)} onClick={() => onHeart(item.id)} />
+      <div className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div className="aspect-[16/10] bg-gray-100">
+          {image ? (
+            <img src={image} alt={title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+              {t("favorites_no_image") || "No image"}
+            </div>
+          )}
         </div>
-
-        {item.images?.length > 0 && (
-          <img
-            src={item.images[0]}
-            alt="preview"
-            className="w-full h-40 object-cover rounded mb-2"
-          />
-        )}
-        <div className="font-bold text-lg">{d.hotelName || "—"}</div>
-        <div className="text-sm text-gray-600">
-          {d.directionCountry || "—"}, {d.directionTo || "—"}
+        <div className="p-3 flex-1 flex flex-col">
+          <div className="font-semibold line-clamp-2">{title}</div>
+          {location && (
+            <div className="mt-1 text-sm text-gray-500">{location}</div>
+          )}
+          {prettyPrice && (
+            <div className="mt-2 text-sm">
+              {t("marketplace.price") || "Price"}:{" "}
+              <span className="font-semibold">{prettyPrice}</span>
+            </div>
+          )}
+          <div className="mt-auto pt-3 flex gap-2">
+            <button
+              onClick={() => handleQuickRequest(id)}
+              className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.quick_request") || "Quick request"}
+            </button>
+          </div>
         </div>
-        <div className="text-sm">
-          🗓 {d.checkIn || "—"} → {d.checkOut || "—"}
-        </div>
-        <div className="text-sm">
-          💰 {d.netPrice ? `${d.netPrice} USD` : "—"}
-        </div>
-        <button className="mt-2 text-orange-600 hover:underline">
-          {t("marketplace.propose_price")}
-        </button>
-      </li>
+      </div>
     );
   };
 
   return (
-    <div className="p-6">
-      {/* назад в кабинет — только на мобилках */}
-      {dashboardPath && (
-        <Link
-          to={dashboardPath}
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-orange-600 mb-4 md:hidden"
+    <div className="max-w-7xl mx-auto p-4 md:p-6">
+      {/* Поисковая панель (минимальная) */}
+      <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("marketplace.location_placeholder") || "Enter query..."}
+          className="flex-1 border rounded-lg px-3 py-2"
+        />
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full md:w-56 border rounded-lg px-3 py-2"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M15 19l-7-7 7-7"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <span>{t("common.backToDashboard")}</span>
-        </Link>
-      )}
-
-      <h1 className="text-3xl font-bold mb-6 text-center">
-        {t("marketplace.title")}
-      </h1>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
-        {blocks.map((block, idx) => (
+          <option value="">{t("marketplace.select_category") || "Select category"}</option>
+          <option value="guide">{t("guide") || "Guide"}</option>
+          <option value="transport">{t("transport") || "Transport"}</option>
+          <option value="refused_tour">{t("refused_tour") || "Refused tour"}</option>
+          <option value="refused_hotel">{t("refused_hotel") || "Refused hotel"}</option>
+          <option value="refused_flight">{t("refused_ticket") || "Refused flight"}</option>
+          <option value="refused_event_ticket">{t("refused_event") || "Refused event"}</option>
+          <option value="visa_support">{t("visa_support") || "Visa support"}</option>
+        </select>
+        <div className="flex gap-2">
           <button
-            key={idx}
-            className={`p-4 rounded-xl shadow text-center font-semibold transition ${
-              activeBlock === block
-                ? "bg-orange-500 text-white"
-                : "bg-white border border-gray-300 hover:bg-gray-100"
-            }`}
-            onClick={() => {
-              setActiveBlock(block);
-              let providerType = "";
-              if (block === "ГИД") providerType = "guide";
-              else if (block === "ТРАНСПОРТ") providerType = "transport";
-              else if (
-                ["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(
-                  block
-                )
-              ) {
-                providerType = "agent";
-              }
-              setFilters((prev) => ({ ...prev, providerType }));
-            }}
+            onClick={() => search()}
+            className="px-4 py-2 rounded-lg bg-gray-900 text-white"
+            disabled={loading}
           >
-            {block}
+            {t("marketplace.search") || "Search"}
           </button>
-        ))}
+          <button
+            onClick={() => {
+              setQ("");
+              setCategory("");
+              search({ all: true });
+            }}
+            className="px-4 py-2 rounded-lg border"
+            disabled={loading}
+          >
+            {t("back") || "Reset"}
+          </button>
+        </div>
       </div>
 
-      {activeBlock && (
-        <div className="bg-white rounded-xl p-6 shadow-md">
-          <h2 className="text-xl font-semibold mb-4">
-            {t("marketplace.search_in", { category: activeBlock })}
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {t("marketplace.start_date")}
-              </label>
-              <input
-                type="date"
-                name="startDate"
-                value={filters.startDate}
-                onChange={handleInputChange}
-                className="border px-3 py-2 rounded w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {t("marketplace.end_date")}
-              </label>
-              <input
-                type="date"
-                name="endDate"
-                value={filters.endDate}
-                onChange={handleInputChange}
-                className="border px-3 py-2 rounded w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {t("marketplace.location")}
-              </label>
-              <input
-                type="text"
-                name="location"
-                placeholder={t("marketplace.location_placeholder")}
-                value={filters.location}
-                onChange={handleInputChange}
-                className="border px-3 py-2 rounded w-full"
-              />
-            </div>
+      {/* Список */}
+      <div className="bg-white rounded-xl shadow p-6 border">
+        {loading && <div className="text-gray-500">{t("marketplace.searching") || "Searching..."}</div>}
+        {!loading && error && (
+          <div className="text-red-600">{error}</div>
+        )}
+        {!loading && !error && !items.length && (
+          <div className="text-gray-500">
+            {t("client.dashboard.noResults") || "No results"}
           </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            {[
-              { field: "adults", label: t("marketplace.adults") },
-              { field: "children", label: t("marketplace.children") },
-              { field: "infants", label: t("marketplace.infants") },
-            ].map(({ field, label }) => (
-              <div key={field} className="flex items-center justify-between">
-                <span className="font-medium">{label}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDecrement(field)}
-                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 text-center">{filters[field]}</span>
-                  <button
-                    onClick={() => handleIncrement(field)}
-                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 text-right">
-            <button
-              onClick={handleSearch}
-              className="bg-orange-500 text-white px-6 py-2 rounded font-semibold"
-            >
-              {isLoading ? t("marketplace.searching") : t("marketplace.search")}
-            </button>
-          </div>
-
-          {error && <p className="text-red-500 mt-4">{error}</p>}
-
-          {currentResults.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">
-                {t("marketplace.results")}:
-              </h3>
-              <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {currentResults.map((item) =>
-                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ" ? (
-                    renderRefusedHotelCard(item)
-                  ) : (
-                    <li
-                      key={item.id}
-                      className="border rounded p-4 bg-gray-50 relative"
-                    >
-                      {/* ♥ избранное */}
-                      <div className="absolute top-2 right-2">
-                        <WishHeart
-                          active={ids.has(item.id)}
-                          onClick={() => onHeart(item.id)}
-                        />
-                      </div>
-
-                      {item.images?.length > 0 && (
-                        <img
-                          src={item.images[0]}
-                          alt="preview"
-                          className="w-full h-40 object-cover rounded mb-2"
-                        />
-                      )}
-                      <div className="font-bold">{item.title}</div>
-                      <div>{item.description}</div>
-                      <div className="text-sm text-gray-600">{item.category}</div>
-                      <div className="text-sm">
-                        {t("marketplace.price")}: {item.price} сум
-                      </div>
-                      <div className="text-sm">
-                        {t("marketplace.location")}: {item.location}
-                      </div>
-                      <button className="mt-2 text-orange-600 hover:underline">
-                        {t("marketplace.propose_price")}
-                      </button>
-                    </li>
-                  )
-                )}
-              </ul>
-
-              {totalPages > 1 && (
-                <div className="mt-4 flex justify-center gap-2">
-                  {Array.from({ length: totalPages }, (_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={`px-3 py-1 rounded border font-medium ${
-                        currentPage === i + 1
-                          ? "bg-orange-500 text-white"
-                          : "bg-white text-gray-700"
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </div>
-              )}
+        )}
+        {!loading && !error && !!items.length && (
+          <>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {items.map((it) => (
+                <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} />
+              ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ТОСТ */}
-      {toast && (
-        <div
-          className={`fixed right-4 top-4 z-50 px-4 py-2 rounded shadow text-white
-            ${
-              toast.type === "error"
-                ? "bg-red-500"
-                : toast.type === "info"
-                ? "bg-gray-800"
-                : "bg-emerald-500"
-            }`}
-          role="status"
-        >
-          {toast.text}
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
-};
-
-export default MarketplaceBoard;
+}
