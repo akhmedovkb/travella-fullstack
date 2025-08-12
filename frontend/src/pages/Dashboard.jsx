@@ -453,45 +453,53 @@ const Dashboard = () => {
     fetchCities();
   }, [selectedCountry]);
 
-  /** ===== Load profile + services ===== */
-  useEffect(() => {
-    // Profile
-    axios
-      .get(`${API_BASE}/api/providers/profile`, config)
-      .then((res) => {
-        setProfile(res.data || {});
-        setNewLocation(res.data?.location || "");
-        setNewSocial(res.data?.social || "");
-        setNewPhone(res.data?.phone || "");
-        setNewAddress(res.data?.address || "");
-        if (["guide", "transport"].includes(res.data?.type)) {
-          axios
-            .get(`${API_BASE}/api/providers/booked-dates`, config)
-            .then((response) => {
-              const formatted = (response.data || []).map((item) => new Date(item.date));
-              setBookedDates(formatted);
-            })
-            .catch((err) => {
-              console.error("Ошибка загрузки занятых дат", err);
-              toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-            });
-        }
-      })
-      .catch((err) => {
-        console.error("Ошибка загрузки профиля", err);
-        toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
-      });
+  /** ===== Load profile + services + stats ===== */
+useEffect(() => {
+  // Profile
+  axios
+    .get(`${API_BASE}/api/providers/profile`, config)
+    .then((res) => {
+      setProfile(res.data || {});
+      setNewLocation(res.data?.location || "");
+      setNewSocial(res.data?.social || "");
+      setNewPhone(res.data?.phone || "");
+      setNewAddress(res.data?.address || "");
 
-    // Services
-    axios
-      .get(`${API_BASE}/api/providers/services`, config)
-      .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
-      .catch((err) => {
-        console.error("Ошибка загрузки услуг", err);
-        toast.error(t("services_load_error") || "Не удалось загрузить услуги");
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      if (["guide", "transport"].includes(res.data?.type)) {
+        axios
+          .get(`${API_BASE}/api/providers/booked-dates`, config)
+          .then((response) => {
+            const formatted = (response.data || []).map((item) => new Date(item.date));
+            setBookedDates(formatted);
+          })
+          .catch((err) => {
+            console.error("Ошибка загрузки занятых дат", err);
+            toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+          });
+      }
+    })
+    .catch((err) => {
+      console.error("Ошибка загрузки профиля", err);
+      toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
+    });
+
+  // Services
+  axios
+    .get(`${API_BASE}/api/providers/services`, config)
+    .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
+    .catch((err) => {
+      console.error("Ошибка загрузки услуг", err);
+      toast.error(t("services_load_error") || "Не удалось загрузить услуги");
+    });
+
+  // Stats  <<< ДОБАВЬ ЭТО
+  axios
+    .get(`${API_BASE}/api/providers/stats`, config)
+    .then((res) => setStats(res.data || {}))
+    .catch(() => setStats({}));
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   /** ===== Provider inbox loaders/actions ===== */
   const refreshInbox = async () => {
