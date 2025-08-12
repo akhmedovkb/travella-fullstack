@@ -997,11 +997,21 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-          </div> 
-           <div>
-    <ProviderStatsHeader />
-      </div>
+          </div>          
         </div>
+        {/* Статистика поставщика под двумя колонками */}
+<div className="px-6 mt-6">
+  <ProviderStatsHeader
+    rating={profile?.rating ?? 0}
+    stats={{
+      requests_total:  stats?.requests_total  ?? 0,
+      requests_active: stats?.requests_active ?? 0,
+      bookings_total:  stats?.bookings_total  ?? 0,
+      completed:       stats?.completed       ?? 0,
+      cancelled:       stats?.cancelled       ?? 0,
+    }}
+  />
+</div>
       
 
         {/* Правый блок: услуги + входящие/брони */}
