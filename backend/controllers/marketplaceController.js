@@ -1,28 +1,42 @@
-// backend/controllers/marketplaceController.js
-const db = require("../db");
+// app/controllers/marketplaceController.js
+"use strict";
 
-// Цена: сначала netPrice из details, потом price
+const dbMod = require("../db");
+
+// Гарантированно получаем функцию knex: db("services")...
+const db =
+  typeof dbMod === "function"
+    ? dbMod
+    : dbMod?.knex || dbMod?.db || dbMod?.default;
+
+if (typeof db !== "function") {
+  throw new Error("Knex instance not found in ../db");
+}
+
+// Цена: сначала details.netPrice (если есть), иначе price из строки
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
+// -------- helpers --------
 const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 };
 
 function addLike(qb, column, value) {
-  if (value == null || value === "") return;
+  if (!value) return;
   qb.andWhereRaw(`${column} ILIKE ?`, [`%${value}%`]);
 }
 function addDetailsLike(qb, key, value) {
-  if (value == null || value === "") return;
+  if (!value) return;
   qb.andWhereRaw(`details->>? ILIKE ?`, [key, `%${value}%`]);
 }
 function addDetailsEq(qb, key, value) {
-  if (value == null || value === "") return;
+  if (value == null) return;
   qb.andWhereRaw(`details->>? = ?`, [key, String(value)]);
 }
 
-module.exports.search = async (req, res, next) => {
+// -------- controller --------
+async function search(req, res, next) {
   try {
     const {
       q,
@@ -39,9 +53,6 @@ module.exports.search = async (req, res, next) => {
     const lim = Math.min(200, Math.max(1, Number(limit) || 60));
     const off = Math.max(0, Number(offset) || 0);
 
-    // строка "YYYY-MM-DDTHH:MM" — как в details.expiration
-    const nowIsoMinute = new Date().toISOString().slice(0, 16);
-
     const rowsQ = db("services")
       .select([
         "id",
@@ -55,23 +66,27 @@ module.exports.search = async (req, res, next) => {
         "created_at",
         "status",
         "details",
+        "expiration_at",
       ])
+      // Только активные и неистёкшие
       .modify((qb) => {
         if (only_active) {
-          // 1) isActive в JSONB (или по умолчанию true)
-          qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`);
-          // 2) expiration хранится как текст "YYYY-MM-DDTHH:MM"
-          // допускаем отсутствие/пустоту или дату в будущем
-          qb.andWhere((q2) => {
-            q2.whereRaw(`(details->>'expiration') IS NULL`)
-              .orWhereRaw(`(details->>'expiration') = ''`)
-              .orWhereRaw(`(details->>'expiration') > ?`, [nowIsoMinute]);
+          qb.whereRaw(
+            `COALESCE(NULLIF(details->>'isActive','')::boolean, true) = true`
+          ).andWhere(function () {
+            this.whereNull("expiration_at").orWhere(
+              "expiration_at",
+              ">",
+              db.fn.now()
+            );
           });
         }
       })
+      // Категория
       .modify((qb) => {
         if (category) qb.andWhere("category", category);
       })
+      // Поиск по тексту
       .modify((qb) => {
         if (q && String(q).trim()) {
           qb.andWhere((sub) => {
@@ -81,12 +96,14 @@ module.exports.search = async (req, res, next) => {
           });
         }
       })
+      // Диапазон цены
       .modify((qb) => {
         const pmin = toNum(price_min);
         const pmax = toNum(price_max);
         if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
         if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
       })
+      // Произвольные details.*
       .modify((qb) => {
         Object.entries(rest || {}).forEach(([key, val]) => {
           if (!key.startsWith("details.")) return;
@@ -97,6 +114,7 @@ module.exports.search = async (req, res, next) => {
           else addDetailsLike(qb, dkey, String(val));
         });
       })
+      // Сортировка
       .modify((qb) => {
         switch (sort) {
           case "newest":
@@ -120,4 +138,6 @@ module.exports.search = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
+}
+
+module.exports = { search };
