@@ -377,19 +377,19 @@
     "cancelled": "Cancelled"
   },
   "tabs": {
-    "my_requests": "My requests",
-    "my_bookings": "My bookings",
-    "favorites": "Favorites"
+    "my_requests": "Мои запросы",
+    "my_bookings": "Мои бронирования",
+    "favorites": "Избранное"
   },
   "stats": {
-    "tier": "Tier",
-    "rating": "Rating",
-    "bonus_progress": "Bonus progress",
-    "requests_total": "Requests (total)",
-    "requests_active": "Requests (active)",
-    "bookings_total": "Bookings (total)",
-    "completed": "Completed",
-    "cancelled": "Cancelled"
+    "tier": "Уровень",
+    "rating": "Рейтинг",
+    "bonus_progress": "Бонусный прогресс",
+    "requests_total": "Запросов (всего)",
+    "requests_active": "Запросов (активные)",
+    "bookings_total": "Бронирований (всего)",
+    "completed": "Завершено",
+    "cancelled": "Отменено"
   },
   
   
@@ -420,3 +420,4 @@
   }
 
 }
+
