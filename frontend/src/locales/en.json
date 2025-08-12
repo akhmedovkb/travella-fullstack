@@ -327,6 +327,11 @@
     "completed": "Completed",
     "cancelled": "Cancelled"
   },  
+  "empty": {
+    "no_requests": "No requests yet.",
+    "no_bookings": "No bookings yet.",
+    "no_favorites": "Favorites list is empty"
+  },
   
   "provider": {
     "requests": {
@@ -356,5 +361,6 @@
   
   }
 }
+
 
 
