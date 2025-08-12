@@ -292,8 +292,8 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null);
-  const [avatarServerUrl, setAvatarServerUrl] = useState(null);
+  const [avatarBase64, setAvatarBase64] = useState(null); // can be dataURL or raw base64 from server
+  const [avatarServerUrl, setAvatarServerUrl] = useState(null); // absolute URL from server
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
   // Password
@@ -351,8 +351,23 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        setAvatarBase64(me?.avatar_base64 || null);
-        setAvatarServerUrl(me?.avatar_url || null);
+        // Robustly resolve avatar coming from server:
+        // - if avatar_base64 is raw (no data: prefix), wrap it
+        // - if it's already a dataURL, use as is
+        // - if avatar_url looks like http(s) or dataURL, use that
+        const rawB64 = me?.avatar_base64 || null;
+        const url = me?.avatar_url || null;
+        if (rawB64 && typeof rawB64 === "string") {
+          const isDataUrl = rawB64.startsWith("data:");
+          setAvatarBase64(isDataUrl ? rawB64 : `data:image/jpeg;base64,${rawB64}`);
+          setAvatarServerUrl(null);
+        } else if (url && typeof url === "string" && /^(https?:|data:)/i.test(url)) {
+          setAvatarServerUrl(url);
+          setAvatarBase64(null);
+        } else {
+          setAvatarBase64(null);
+          setAvatarServerUrl(null);
+        }
         setRemoveAvatar(false);
       } catch (e) {
         setError("Не удалось загрузить профиль");
@@ -391,14 +406,13 @@ export default function ClientDashboard() {
           const data = await apiGet("/api/wishlist?expand=service");
           const arr = Array.isArray(data) ? data : data?.items || [];
           if (!cancelled) {
-            setFavorites(arr); // <-- сохраняем элементы избранного как есть (variant A)
+            setFavorites(arr); // сохраняем элементы избранного как есть (variant A)
             const maxPage = Math.max(1, Math.ceil(arr.length / 8));
             setFavPage((p) => Math.min(Math.max(1, p), maxPage));
           }
         }
       } catch (e) {
         if (activeTab === "favorites") {
-          // не закидываем общую ошибку профиля из-за избранного
           setFavorites([]);
         } else {
           setError("Ошибка загрузки данных");
@@ -421,13 +435,12 @@ export default function ClientDashboard() {
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl);
+      setAvatarBase64(dataUrl); // keep as dataURL for preview
       setAvatarServerUrl(null);
       setRemoveAvatar(false);
     } catch (err) {
       setError("Не удалось обработать изображение");
     } finally {
-      // allow re-select same file
       e.target.value = "";
     }
   };
@@ -444,19 +457,33 @@ export default function ClientDashboard() {
       setMessage(null);
       setError(null);
       const payload = { name, phone };
-      if (avatarBase64) payload.avatar_base64 = avatarBase64;
+      if (avatarBase64) {
+        // If it's a dataURL -> strip prefix. If raw base64 -> send as is.
+        payload.avatar_base64 = avatarBase64.startsWith("data:")
+          ? avatarBase64.split(",")[1]
+          : avatarBase64;
+      }
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
       setMessage("Профиль сохранён");
-      // in case server sanitized fields:
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
-      if (res?.avatar_base64) {
-        setAvatarBase64(res.avatar_base64);
+      // Try to refresh avatar from server response
+      const rawB64 = res?.avatar_base64 || null;
+      const url = res?.avatar_url || null;
+      if (rawB64 && typeof rawB64 === "string") {
+        const isDataUrl = rawB64.startsWith("data:");
+        setAvatarBase64(isDataUrl ? rawB64 : `data:image/jpeg;base64,${rawB64}`);
         setAvatarServerUrl(null);
-      } else if (res?.avatar_url) {
-        setAvatarServerUrl(res.avatar_url);
+      } else if (url && typeof url === "string" && /^(https?:|data:)/i.test(url)) {
+        setAvatarServerUrl(url);
         setAvatarBase64(null);
+      } else if (!removeAvatar && avatarBase64) {
+        // fallback: keep local preview if server didn't echo back
+        setAvatarBase64(avatarBase64.startsWith("data:") ? avatarBase64 : `data:image/jpeg;base64,${avatarBase64}`);
+      } else {
+        setAvatarBase64(null);
+        setAvatarServerUrl(null);
       }
       setRemoveAvatar(false);
     } catch (e) {
@@ -520,8 +547,21 @@ export default function ClientDashboard() {
 
   /* -------- Render helpers -------- */
 
+  const resolveAvatarSrc = () => {
+    // Prefer dataURL base64 for preview
+    if (avatarBase64 && typeof avatarBase64 === "string") {
+      if (avatarBase64.startsWith("data:")) return avatarBase64;
+      // raw base64 -> wrap
+      return `data:image/jpeg;base64,${avatarBase64}`;
+    }
+    if (avatarServerUrl && /^(https?:|data:)/i.test(avatarServerUrl)) {
+      return avatarServerUrl;
+    }
+    return null;
+  };
+
   const Avatar = () => {
-    const src = avatarBase64 || avatarServerUrl || null;
+    const src = resolveAvatarSrc();
     if (src) {
       return (
         <img
