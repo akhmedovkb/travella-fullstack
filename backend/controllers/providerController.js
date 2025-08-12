@@ -25,7 +25,7 @@ function sanitizeImages(images) {
     .map((x) => String(x || "").trim())
     .filter(Boolean)
     .slice(0, 10);
-
+}
 function normalizeServicePayload(body) {
   const { title, description, price, category, images, availability, details } = body;
 
