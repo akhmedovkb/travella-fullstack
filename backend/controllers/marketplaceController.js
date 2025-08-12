@@ -62,9 +62,10 @@ module.exports.search = async (req, res, next) => {
           qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
             // expiration как ТЕКСТ: либо пусто, либо > nowIsoMinute
             .andWhere((q2) => {
-              q2.whereRaw(`(details->>'expiration') IS NULL`)
-                .orWhereRaw(`NULLIF(details->>'expiration','') IS NULL`)
-                .orWhereRaw(`(details->>'expiration') > ?`, [nowIsoMinute]);
+              qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
+                .andWhere((q2) => {
+                  q2.whereNull('expiration_at')                
+                          .orWhereRaw('expiration_at > now()');
             });
         }
       })
