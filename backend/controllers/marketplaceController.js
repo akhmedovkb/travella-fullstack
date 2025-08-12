@@ -1,32 +1,25 @@
-// SERVER: marketplaceController.js (CommonJS)
+// SERVER: marketplaceController.js (CommonJS). Работает с Knex ИЛИ с pg.Pool.
 
 const dbModule = require("../db");
 
-// Пытаемся корректно получить knex из любого варианта экспорта
+// --------- Определяем, что нам отдали из ../db ----------
+const isKnex = typeof dbModule === "function" && typeof dbModule.raw === "function";
 const knex =
-  (typeof dbModule === "function" && dbModule) ||
-  dbModule?.knex ||
-  dbModule?.db ||
-  dbModule?.default;
+  (isKnex && dbModule) ||
+  (dbModule && typeof dbModule.knex === "function" && dbModule.knex) ||
+  null;
 
-if (!knex || typeof knex !== "function") {
-  throw new Error("Knex instance not found in ../db");
-}
+const isPgPool =
+  dbModule &&
+  typeof dbModule === "object" &&
+  typeof dbModule.query === "function";
 
-// Цена: сначала netPrice из JSON, иначе обычная price
+// Общие утилиты
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
+const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-function toNum(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function addLike(qb, column, value) {
-  if (!value) return;
-  qb.andWhereRaw(`${column} ILIKE ?`, [`%${value}%`]);
-}
-
-module.exports.search = async (req, res, next) => {
+// --------- Реализация через pg.Pool (raw SQL) ----------
+async function searchWithPg(req, res, next) {
   try {
     const {
       q,
@@ -37,7 +30,90 @@ module.exports.search = async (req, res, next) => {
       only_active = true,
       limit = 60,
       offset = 0,
-      // возможны доп. поля: details.directionFrom и т.п.
+      ...rest
+    } = req.body || {};
+
+    const lim = Math.min(200, Math.max(1, Number(limit) || 60));
+    const off = Math.max(0, Number(offset) || 0);
+
+    const where = [];
+    const params = [];
+
+    const add = (sqlFrag, ...vals) => {
+      where.push(sqlFrag);
+      for (const v of vals) params.push(v);
+    };
+
+    if (only_active) {
+      add(`COALESCE((details->>'isActive')::boolean, true) = true`);
+      add(`(expiration_at IS NULL OR expiration_at > now())`);
+    }
+    if (category) add(`category = $${params.length + 1}`, category);
+
+    if (q && String(q).trim()) {
+      const p = `%${q}%`;
+      add(`(title ILIKE $${params.length + 1} OR description ILIKE $${params.length + 2} OR details::text ILIKE $${params.length + 3})`, p, p, p);
+    }
+
+    const pmin = toNum(price_min);
+    const pmax = toNum(price_max);
+    if (pmin != null) add(`${PRICE_SQL} >= $${params.length + 1}`, pmin);
+    if (pmax != null) add(`${PRICE_SQL} <= $${params.length + 1}`, pmax);
+
+    // произвольные details.*
+    Object.entries(rest || {}).forEach(([k, v]) => {
+      if (!k.startsWith("details.")) return;
+      if (v === undefined || v === null || v === "") return;
+      const dkey = k.slice("details.".length);
+      // jsonb ->> $param допускается в Postgres
+      add(`(details->> $${params.length + 1}) ILIKE $${params.length + 2}`, dkey, `%${v}%`);
+    });
+
+    let orderBy = "created_at DESC";
+    switch (sort) {
+      case "newest":
+        orderBy = "created_at DESC";
+        break;
+      case "price_asc":
+        orderBy = `${PRICE_SQL} ASC NULLS LAST`;
+        break;
+      case "price_desc":
+        orderBy = `${PRICE_SQL} DESC NULLS LAST`;
+        break;
+      default:
+        orderBy = "created_at DESC";
+    }
+
+    const sql = `
+      SELECT id, provider_id, title, description, category, price, images,
+             availability, created_at, status, details, expiration_at
+      FROM services
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY ${orderBy}
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
+    `;
+    params.push(lim, off);
+
+    const { rows } = await dbModule.query(sql, params);
+    res.json({ items: rows, limit: lim, offset: off });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --------- Реализация через Knex ----------
+async function searchWithKnex(req, res, next) {
+  try {
+    const {
+      q,
+      category,
+      price_min,
+      price_max,
+      sort,
+      only_active = true,
+      limit = 60,
+      offset = 0,
       ...rest
     } = req.body || {};
 
@@ -61,7 +137,6 @@ module.exports.search = async (req, res, next) => {
       ])
       .modify((qb) => {
         if (only_active) {
-          // Активные в JSON и неистёкшие по expiration_at
           qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
             .andWhere((sub) => {
               sub.whereNull("expiration_at").orWhereRaw("expiration_at > now()");
@@ -74,9 +149,9 @@ module.exports.search = async (req, res, next) => {
       .modify((qb) => {
         if (q && String(q).trim()) {
           qb.andWhere((sub) => {
-            addLike(sub, "title", q);
-            sub.orWhereRaw(`description ILIKE ?`, [`%${q}%`]);
-            sub.orWhereRaw(`details::text ILIKE ?`, [`%${q}%`]);
+            sub.whereRaw(`title ILIKE ?`, [`%${q}%`])
+              .orWhereRaw(`description ILIKE ?`, [`%${q}%`])
+              .orWhereRaw(`details::text ILIKE ?`, [`%${q}%`]);
           });
         }
       })
@@ -87,7 +162,6 @@ module.exports.search = async (req, res, next) => {
         if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
       })
       .modify((qb) => {
-        // произвольные фильтры по details.*   (напр. details.directionFrom="Tashkent")
         Object.entries(rest || {}).forEach(([key, val]) => {
           if (!key.startsWith("details.")) return;
           const dkey = key.slice("details.".length);
@@ -118,4 +192,11 @@ module.exports.search = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
+}
+
+// --------- Экспорт общего обработчика ----------
+module.exports.search = isKnex
+  ? searchWithKnex
+  : isPgPool
+  ? searchWithPg
+  : (req, res, next) => next(new Error("DB adapter is not supported: ../db has neither knex nor pg.Pool"));
