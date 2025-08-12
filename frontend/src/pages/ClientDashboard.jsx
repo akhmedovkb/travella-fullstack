@@ -169,7 +169,7 @@ function EmptyFavorites() {
   );
 }
 
-function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest }) {
+function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
   const pages = Math.max(1, Math.ceil(total / perPage));
@@ -205,12 +205,20 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     <div className="font-semibold line-clamp-2">{title}</div>
                     <div className="mt-auto flex gap-2 pt-3">
                       {serviceId && (
-                        <button
-                          onClick={() => onQuickRequest?.(serviceId)}
-                          className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-                        >
-                          {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => onQuickRequest?.(serviceId)}
+                            className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+                          >
+                            {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                          </button>
+                          <button
+                            onClick={() => onBook?.(serviceId)}
+                            className="flex-1 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
+                          >
+                            {t("actions.book_now", { defaultValue: "Забронировать" })}
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => onRemove?.(it.id)}
@@ -279,7 +287,7 @@ export default function ClientDashboard() {
 
   // Password
   const [newPassword, setNewPassword] = useState("");
-  const [changingPass, setChangingPass] = useState(false); // <-- fixed
+  const [changingPass, setChangingPass] = useState(false);
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -307,8 +315,16 @@ export default function ClientDashboard() {
   const favPageFromUrl = Number(searchParams.get("page") || 1);
   const [favPage, setFavPage] = useState(isNaN(favPageFromUrl) ? 1 : favPageFromUrl);
 
-  // локальный флаг на время accept/reject
+  // действия по офферу
   const [actingReqId, setActingReqId] = useState(null);
+
+  // booking modal state
+  const [bookingUI, setBookingUI] = useState({ open: false, serviceId: null });
+  const [bkDate, setBkDate] = useState("");
+  const [bkTime, setBkTime] = useState("");
+  const [bkPax, setBkPax] = useState(1);
+  const [bkNote, setBkNote] = useState("");
+  const [bkSending, setBkSending] = useState(false);
 
   /* -------- Effects -------- */
 
@@ -490,7 +506,6 @@ export default function ClientDashboard() {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
-      // мягко обновим список запросов
       try {
         const data = await apiGet("/api/requests/my");
         setRequests(Array.isArray(data) ? data : data?.items || []);
@@ -507,7 +522,6 @@ export default function ClientDashboard() {
       setError(null);
       await apiPost(`/api/requests/${id}/accept`, {});
       setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
-      // обновим запросы и брони
       const [r, b] = await Promise.allSettled([apiGet("/api/requests/my"), apiGet("/api/bookings/my")]);
       if (r.status === "fulfilled") setRequests(Array.isArray(r.value) ? r.value : r.value?.items || []);
       if (b.status === "fulfilled") setBookings(Array.isArray(b.value) ? b.value : b.value?.items || []);
@@ -525,7 +539,6 @@ export default function ClientDashboard() {
       setError(null);
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
-      // обновим запросы
       const data = await apiGet("/api/requests/my");
       setRequests(Array.isArray(data) ? data : data?.items || []);
     } catch (e) {
@@ -534,6 +547,39 @@ export default function ClientDashboard() {
       setActingReqId(null);
     }
   };
+
+  // booking
+  function openBooking(serviceId) {
+    setBookingUI({ open: true, serviceId });
+    setBkDate(""); setBkTime(""); setBkPax(1); setBkNote("");
+  }
+  function closeBooking() {
+    setBookingUI({ open: false, serviceId: null });
+  }
+  async function createBooking() {
+    if (!bookingUI.serviceId) return;
+    setBkSending(true);
+    try {
+      const details = {
+        date: bkDate || undefined,
+        time: bkTime || undefined,
+        pax: Number(bkPax) || 1,
+        note: bkNote || undefined,
+      };
+      await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
+      closeBooking();
+      setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" }));
+      setActiveTab("bookings"); // триггерит загрузку бронирований
+      try {
+        const data = await apiGet("/api/bookings/my");
+        setBookings(Array.isArray(data) ? data : data?.items || []);
+      } catch {}
+    } catch (e) {
+      setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" }));
+    } finally {
+      setBkSending(false);
+    }
+  }
 
   /* -------- Render helpers -------- */
 
@@ -666,6 +712,7 @@ export default function ClientDashboard() {
         perPage={8}
         onRemove={handleRemoveFavorite}
         onQuickRequest={handleQuickRequest}
+        onBook={(serviceId) => openBooking(serviceId)}
         onPageChange={(p) => setFavPage(p)}
       />
     );
@@ -771,7 +818,6 @@ export default function ClientDashboard() {
               <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
               <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
               <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
-              {/* refresh для активной вкладки */}
               <div className="ml-auto">
                 <button
                   onClick={async () => {
@@ -805,6 +851,54 @@ export default function ClientDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Booking modal */}
+      {bookingUI.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow p-5">
+            <div className="text-lg font-semibold mb-3">
+              {t("booking.title", { defaultValue: "Быстрое бронирование" })}
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-gray-600">{t("booking.date", { defaultValue: "Дата" })}</label>
+                  <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2"
+                    value={bkDate} onChange={(e) => setBkDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">{t("booking.time", { defaultValue: "Время" })}</label>
+                  <input type="time" className="mt-1 w-full border rounded-lg px-3 py-2"
+                    value={bkTime} onChange={(e) => setBkTime(e.target.value)} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">{t("booking.pax", { defaultValue: "Кол-во людей" })}</label>
+                <input type="number" min="1" className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={bkPax} onChange={(e) => setBkPax(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">{t("common.note_optional", { defaultValue: "Комментарий (необязательно)" })}</label>
+                <textarea rows={3} className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={bkNote} onChange={(e) => setBkNote(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={createBooking} disabled={bkSending}
+                className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
+                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
+              </button>
+              <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">
+                {t("actions.cancel", { defaultValue: "Отмена" })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
