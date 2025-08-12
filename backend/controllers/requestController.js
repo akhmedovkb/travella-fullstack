@@ -1,232 +1,194 @@
-// backend/controllers/requestController.js
 const pool = require("../db");
+const { validationResult } = require("express-validator");
 
-/**
- * Helper: получить provider_id услуги
- */
-async function getServiceProvider(serviceId) {
-  const q = await pool.query("SELECT provider_id FROM services WHERE id=$1", [serviceId]);
-  return q.rows[0]?.provider_id || null;
-}
-
-/**
- * POST /api/requests
- * Body: { serviceId, text }
- * Роль: client
- */
 exports.createRequest = async (req, res) => {
   try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ message: "Only clients can create requests" });
+    const userId = req.user?.id;
+    const role = req.user?.role; // "client" ожидается
+    if (!userId || role !== "client") {
+      return res.status(403).json({ message: "Only client can create requests" });
     }
-    const clientId = req.user.id;
-    const { serviceId, text } = req.body;
-    if (!serviceId || !text) return res.status(400).json({ message: "serviceId and text required" });
 
-    const providerId = await getServiceProvider(serviceId);
-    if (!providerId) return res.status(404).json({ message: "Service not found" });
+    const { service_id, note } = req.body;
+    if (!service_id) return res.status(400).json({ message: "service_id is required" });
 
-    // Создаём change_request + первое сообщение
-    const r = await pool.query(
-      `INSERT INTO change_requests (service_id, client_id, provider_id, status)
-       VALUES ($1, $2, $3, 'open')
-       RETURNING id, service_id, client_id, provider_id, status, proposal, created_at, updated_at`,
-      [serviceId, clientId, providerId]
+    // убеждаемся, что услуга существует
+    const svc = await pool.query("SELECT id, provider_id, title FROM services WHERE id=$1", [service_id]);
+    if (!svc.rowCount) return res.status(404).json({ message: "Service not found" });
+
+    const q = await pool.query(
+      `INSERT INTO requests (service_id, client_id, status, note)
+       VALUES ($1,$2,'new',$3)
+       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
+      [service_id, userId, note || null]
     );
 
-    const requestId = r.rows[0].id;
-    await pool.query(
-      `INSERT INTO change_request_messages (request_id, sender_role, sender_id, text)
-       VALUES ($1, 'client', $2, $3)`,
-      [requestId, clientId, text]
-    );
-
-    // Вернём с сообщениями
-    const messages = await pool.query(
-      `SELECT id, sender_role, sender_id, text, created_at
-       FROM change_request_messages WHERE request_id=$1 ORDER BY id ASC`,
-      [requestId]
-    );
-
-    return res.status(201).json({ ...r.rows[0], messages: messages.rows });
-  } catch (err) {
-    console.error("createRequest error:", err);
-    return res.status(500).json({ message: "Server error" });
+    res.status(201).json(q.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "createRequest error" });
   }
 };
 
-/**
- * GET /api/requests/my
- * Роль: client — мои запросы; provider — запросы по моим услугам
- */
-exports.listMyRequests = async (req, res) => {
+exports.getMyRequests = async (req, res) => {
   try {
+    const userId = req.user?.id;
     const role = req.user?.role;
-    const id = req.user?.id;
-
-    if (role === "client") {
-      const q = await pool.query(
-        `SELECT r.*, 
-                (SELECT json_agg(m ORDER BY m.id ASC)
-                 FROM change_request_messages m WHERE m.request_id=r.id) AS messages
-         FROM change_requests r
-         WHERE r.client_id=$1
-         ORDER BY r.id DESC`,
-        [id]
-      );
-      return res.json(q.rows);
+    if (!userId || role !== "client") {
+      return res.status(403).json({ message: "Only client can view own requests" });
     }
 
-    if (role === "provider") {
-      const q = await pool.query(
-        `SELECT r.*, 
-                (SELECT json_agg(m ORDER BY m.id ASC)
-                 FROM change_request_messages m WHERE m.request_id=r.id) AS messages
-         FROM change_requests r
-         WHERE r.provider_id=$1
-         ORDER BY r.id DESC`,
-        [id]
-      );
-      return res.json(q.rows);
-    }
-
-    return res.status(403).json({ message: "Unauthorized role" });
-  } catch (err) {
-    console.error("listMyRequests error:", err);
-    return res.status(500).json({ message: "Server error" });
+    const q = await pool.query(
+      `SELECT r.*, s.title AS service_title, s.category, s.provider_id
+       FROM requests r
+       JOIN services s ON s.id = r.service_id
+       WHERE r.client_id = $1
+       ORDER BY r.created_at DESC`,
+      [userId]
+    );
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "getMyRequests error" });
   }
 };
 
-/**
- * POST /api/requests/:id/reply
- * Body: { text }
- * Роль: client или provider
- */
-exports.reply = async (req, res) => {
+exports.getProviderRequests = async (req, res) => {
   try {
+    const providerId = req.user?.id;
     const role = req.user?.role;
-    const senderId = req.user?.id;
-    const requestId = req.params.id;
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ message: "text required" });
-
-    // Проверка доступа: участник ли?
-    const r = await pool.query(
-      `SELECT client_id, provider_id FROM change_requests WHERE id=$1`,
-      [requestId]
-    );
-    if (r.rows.length === 0) return res.status(404).json({ message: "Request not found" });
-
-    const { client_id, provider_id } = r.rows[0];
-    if (
-      (role === "client" && senderId !== client_id) ||
-      (role === "provider" && senderId !== provider_id)
-    ) {
-      return res.status(403).json({ message: "Not a participant" });
+    if (!providerId || role !== "provider") {
+      return res.status(403).json({ message: "Only provider can view incoming requests" });
     }
 
-    await pool.query(
-      `INSERT INTO change_request_messages (request_id, sender_role, sender_id, text)
-       VALUES ($1, $2, $3, $4)`,
-      [requestId, role, senderId, text]
+    const q = await pool.query(
+      `SELECT r.*, s.title AS service_title, s.category
+       FROM requests r
+       JOIN services s ON s.id = r.service_id
+       WHERE s.provider_id = $1
+       ORDER BY r.created_at DESC`,
+      [providerId]
     );
-
-    const messages = await pool.query(
-      `SELECT id, sender_role, sender_id, text, created_at
-       FROM change_request_messages WHERE request_id=$1 ORDER BY id ASC`,
-      [requestId]
-    );
-    return res.json({ requestId: Number(requestId), messages: messages.rows });
-  } catch (err) {
-    console.error("reply error:", err);
-    return res.status(500).json({ message: "Server error" });
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "getProviderRequests error" });
   }
 };
 
-/**
- * POST /api/requests/:id/proposal
- * Body: { proposal } // JSON (например, { hotel: "...", room:"TRPL", price: 1200 })
- * Роль: provider (только агент)
- * Ставит status = 'proposed', сохраняет proposal
- */
-exports.propose = async (req, res) => {
+exports.addProposal = async (req, res) => {
   try {
-    if (req.user?.role !== "provider") {
-      return res.status(403).json({ message: "Only provider can propose" });
+    const providerId = req.user?.id;
+    const role = req.user?.role;
+    if (!providerId || role !== "provider") {
+      return res.status(403).json({ message: "Only provider can send proposal" });
     }
-    const providerId = req.user.id;
-    const requestId = req.params.id;
-    const { proposal } = req.body;
-    if (!proposal) return res.status(400).json({ message: "proposal required" });
 
-    const r = await pool.query(
-      `UPDATE change_requests
-       SET proposal=$1, status='proposed', updated_at=NOW()
-       WHERE id=$2 AND provider_id=$3
-       RETURNING *`,
-      [proposal, requestId, providerId]
+    const { id } = req.params;
+    const { price, currency, hotel, room, terms, message } = req.body || {};
+
+    // проверяем, что запрос относится к услуге этого провайдера
+    const rq = await pool.query(
+      `SELECT r.id, r.client_id, r.service_id, s.provider_id
+       FROM requests r
+       JOIN services s ON s.id = r.service_id
+       WHERE r.id = $1`,
+      [id]
     );
-    if (r.rows.length === 0) return res.status(404).json({ message: "Request not found" });
+    if (!rq.rowCount) return res.status(404).json({ message: "Request not found" });
+    if (rq.rows[0].provider_id !== providerId) {
+      return res.status(403).json({ message: "Forbidden for this request" });
+    }
 
-    return res.json(r.rows[0]);
-  } catch (err) {
-    console.error("propose error:", err);
-    return res.status(500).json({ message: "Server error" });
+    const updated = await pool.query(
+      `UPDATE requests
+         SET proposal = jsonb_strip_nulls($2::jsonb),
+             status = 'proposed'
+       WHERE id = $1
+       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
+      [
+        id,
+        JSON.stringify({ price, currency, hotel, room, terms, message, ts: new Date().toISOString() }),
+      ]
+    );
+
+    res.json(updated.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "addProposal error" });
   }
 };
 
-/**
- * POST /api/requests/:id/accept
- * Роль: client — принимает предложение; переводит статус в 'accepted'
- */
-exports.accept = async (req, res) => {
+exports.acceptRequest = async (req, res) => {
+  const clientId = req.user?.id;
+  const role = req.user?.role;
+  if (!clientId || role !== "client") {
+    return res.status(403).json({ message: "Only client can accept" });
+  }
+
+  const client = await pool.connect();
   try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ message: "Only client can accept" });
-    }
-    const clientId = req.user.id;
-    const requestId = req.params.id;
+    await client.query("BEGIN");
 
-    const r = await pool.query(
-      `UPDATE change_requests
-       SET status='accepted', updated_at=NOW()
-       WHERE id=$1 AND client_id=$2
-       RETURNING *`,
-      [requestId, clientId]
+    const { id } = req.params;
+    const rq = await client.query(
+      `SELECT r.*, s.provider_id
+       FROM requests r
+       JOIN services s ON s.id = r.service_id
+       WHERE r.id=$1 AND r.client_id=$2
+       FOR UPDATE`,
+      [id, clientId]
     );
-    if (r.rows.length === 0) return res.status(404).json({ message: "Request not found" });
+    if (!rq.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Request not found" });
+    }
+    const r = rq.rows[0];
+    if (!r.proposal) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "No proposal to accept" });
+    }
 
-    return res.json(r.rows[0]);
-  } catch (err) {
-    console.error("accept error:", err);
-    return res.status(500).json({ message: "Server error" });
+    // обновляем статус запроса
+    await client.query(`UPDATE requests SET status='accepted' WHERE id=$1`, [id]);
+
+    // создаём бронь
+    const booking = await client.query(
+      `INSERT INTO bookings (request_id, service_id, client_id, provider_id, status, price, currency, details)
+       VALUES ($1,$2,$3,$4,'active', ($5->>'price')::numeric, $5->>'currency', $5)
+       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
+      [r.id, r.service_id, r.client_id, r.provider_id, r.proposal]
+    );
+
+    await client.query("COMMIT");
+    res.json({ ok: true, request_id: r.id, booking: booking.rows[0] });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ message: "acceptRequest error" });
+  } finally {
+    client.release();
   }
 };
 
-/**
- * POST /api/requests/:id/decline
- * Роль: client — отклоняет предложение; status='declined'
- */
-exports.decline = async (req, res) => {
+exports.rejectRequest = async (req, res) => {
   try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ message: "Only client can decline" });
+    const clientId = req.user?.id;
+    const role = req.user?.role;
+    if (!clientId || role !== "client") {
+      return res.status(403).json({ message: "Only client can reject" });
     }
-    const clientId = req.user.id;
-    const requestId = req.params.id;
 
-    const r = await pool.query(
-      `UPDATE change_requests
-       SET status='declined', updated_at=NOW()
-       WHERE id=$1 AND client_id=$2
-       RETURNING *`,
-      [requestId, clientId]
+    const { id } = req.params;
+    const upd = await pool.query(
+      `UPDATE requests SET status='rejected' WHERE id=$1 AND client_id=$2
+       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
+      [id, clientId]
     );
-    if (r.rows.length === 0) return res.status(404).json({ message: "Request not found" });
-
-    return res.json(r.rows[0]);
-  } catch (err) {
-    console.error("decline error:", err);
-    return res.status(500).json({ message: "Server error" });
+    if (!upd.rowCount) return res.status(404).json({ message: "Request not found" });
+    res.json(upd.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "rejectRequest error" });
   }
 };
