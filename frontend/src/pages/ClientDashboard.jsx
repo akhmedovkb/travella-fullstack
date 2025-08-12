@@ -124,6 +124,7 @@ function StatBox({ title, value }) {
 }
 
 function ClientStatsBlock({ stats }) {
+  const { t } = useTranslation();
   const rating = Number(stats?.rating || 0);
   const points = Number(stats?.points || 0);
   const next = Number(stats?.next_tier_at || 100);
@@ -133,11 +134,11 @@ function ClientStatsBlock({ stats }) {
     <div className="bg-white rounded-xl shadow p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm text-gray-500">Tier</div>
+          <div className="text-sm text-gray-500">{t("stats.tier")}</div>
           <div className="text-xl font-semibold">{tier}</div>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-500">Rating</div>
+          <div className="text-sm text-gray-500">{t("stats.rating")}</div>
           <div className="flex items-center justify-end gap-2">
             <Stars value={rating} size={20} />
             <span className="text-sm text-gray-600">{rating.toFixed(1)}</span>
@@ -146,15 +147,15 @@ function ClientStatsBlock({ stats }) {
       </div>
 
       <div className="mt-4">
-        <Progress value={points} max={next} label="Bonus progress" />
+        <Progress value={points} max={next} label={t("stats.bonus_progress")} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-        <StatBox title="Requests (total)" value={stats?.requests_total ?? 0} />
-        <StatBox title="Requests (active)" value={stats?.requests_active ?? 0} />
-        <StatBox title="Bookings (total)" value={stats?.bookings_total ?? 0} />
-        <StatBox title="Completed" value={stats?.bookings_completed ?? 0} />
-        <StatBox title="Cancelled" value={stats?.bookings_cancelled ?? 0} />
+        <StatBox title={t("stats.requests_total")}   value={stats?.requests_total ?? 0} />
+        <StatBox title={t("stats.requests_active")}  value={stats?.requests_active ?? 0} />
+        <StatBox title={t("stats.bookings_total")}   value={stats?.bookings_total ?? 0} />
+        <StatBox title={t("stats.completed")}        value={stats?.bookings_completed ?? 0} />
+        <StatBox title={t("stats.cancelled")}        value={stats?.bookings_cancelled ?? 0} />
       </div>
     </div>
   );
@@ -327,10 +328,11 @@ export default function ClientDashboard() {
 
   // Tabs
   const tabs = [
-    { key: "requests", label: t("my_requests") || "Мои запросы" },
-    { key: "bookings", label: t("my_bookings") || "Мои бронирования" },
-    { key: "favorites", label: t("favorites") || "Избранное" },
-  ];
+  { key: "requests", label: t("tabs.my_requests") },
+  { key: "bookings", label: t("tabs.my_bookings") },
+  { key: "favorites", label: t("tabs.favorites") }
+   ];
+
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(
     tabs.some((t) => t.key === initialTab) ? initialTab : "requests"
@@ -811,9 +813,9 @@ export default function ClientDashboard() {
           {/* Tabs */}
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">{t("my_requests") || "Мои запросы"}</TabButton>
-              <TabButton tabKey="bookings">{t("my_bookings") || "Мои бронирования"}</TabButton>
-              <TabButton tabKey="favorites">{t("favorites") || "Избранное"}</TabButton>
+              <TabButton tabKey="requests">{t("tabs.my_requests")}</TabButton>
+              <TabButton tabKey="bookings">{t("tabs.my_bookings")}</TabButton>
+              <TabButton tabKey="favorites">{t("tabs.favorites")}</TabButton>
             </div>
 
             {activeTab === "requests" && <RequestsList />}
