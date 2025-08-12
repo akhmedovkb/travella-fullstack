@@ -618,7 +618,7 @@ export default function ClientDashboard() {
   const RequestsList = () => {
     if (loadingTab) return <div className="text-gray-500">Загрузка...</div>;
     if (!requests?.length)
-      return <div className="text-gray-500">Пока нет запросов.</div>;
+      return <div className="text-gray-500">{t("empty.no_requests")}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
@@ -648,7 +648,7 @@ export default function ClientDashboard() {
   const BookingsList = () => {
     if (loadingTab) return <div className="text-gray-500">Загрузка...</div>;
     if (!bookings?.length)
-      return <div className="text-gray-500">Пока нет бронирований.</div>;
+      return <div className="text-gray-500">{t("empty.no_bookings")}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bookings.map((b) => {
