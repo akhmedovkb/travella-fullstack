@@ -307,6 +307,9 @@ export default function ClientDashboard() {
   const favPageFromUrl = Number(searchParams.get("page") || 1);
   const [favPage, setFavPage] = useState(isNaN(favPageFromUrl) ? 1 : favPageFromUrl);
 
+  // локальный флаг на время accept/reject
+  const [actingReqId, setActingReqId] = useState(null);
+
   /* -------- Effects -------- */
 
   useEffect(() => {
@@ -487,8 +490,48 @@ export default function ClientDashboard() {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
+      // мягко обновим список запросов
+      try {
+        const data = await apiGet("/api/requests/my");
+        setRequests(Array.isArray(data) ? data : data?.items || []);
+      } catch {}
     } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    }
+  };
+
+  // accept/reject предложения
+  const handleAcceptProposal = async (id) => {
+    try {
+      setActingReqId(id);
+      setError(null);
+      await apiPost(`/api/requests/${id}/accept`, {});
+      setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
+      // обновим запросы и брони
+      const [r, b] = await Promise.allSettled([apiGet("/api/requests/my"), apiGet("/api/bookings/my")]);
+      if (r.status === "fulfilled") setRequests(Array.isArray(r.value) ? r.value : r.value?.items || []);
+      if (b.status === "fulfilled") setBookings(Array.isArray(b.value) ? b.value : b.value?.items || []);
+      setActiveTab("bookings");
+    } catch (e) {
+      setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
+    } finally {
+      setActingReqId(null);
+    }
+  };
+
+  const handleRejectProposal = async (id) => {
+    try {
+      setActingReqId(id);
+      setError(null);
+      await apiPost(`/api/requests/${id}/reject`, {});
+      setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
+      // обновим запросы
+      const data = await apiGet("/api/requests/my");
+      setRequests(Array.isArray(data) ? data : data?.items || []);
+    } catch (e) {
+      setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
+    } finally {
+      setActingReqId(null);
     }
   };
 
@@ -527,12 +570,63 @@ export default function ClientDashboard() {
           const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
           const status = r?.status || "new";
           const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
+          const p = r?.proposal || null;
+
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
-              {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
-              {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
+              <div className="text-sm text-gray-500 mt-1">
+                {t("common.status", { defaultValue: "Статус" })}: {status}
+              </div>
+              {created && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {t("common.created", { defaultValue: "Создан" })}: {created}
+                </div>
+              )}
+              {r?.note && (
+                <div className="text-sm text-gray-600 mt-2">
+                  {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
+                </div>
+              )}
+
+              {/* Предложение от провайдера */}
+              {p ? (
+                <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                  <div className="font-medium mb-1">
+                    {t("client.dashboard.offer", { defaultValue: "Предложение" })}
+                  </div>
+                  <div>
+                    {t("client.dashboard.price", { defaultValue: "Цена" })}: {p.price} {p.currency || "USD"}
+                  </div>
+                  {p.hotel && <div>Отель: {p.hotel}</div>}
+                  {p.room && <div>Размещение: {p.room}</div>}
+                  {p.terms && <div>Условия: {p.terms}</div>}
+                  {p.message && <div>Сообщение: {p.message}</div>}
+
+                  {status !== "accepted" && status !== "rejected" && (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => handleAcceptProposal(r.id)}
+                        disabled={actingReqId === r.id}
+                        className="px-3 py-1.5 rounded bg-orange-600 text-white disabled:opacity-60"
+                      >
+                        {t("client.dashboard.accept", { defaultValue: "Принять" })}
+                      </button>
+                      <button
+                        onClick={() => handleRejectProposal(r.id)}
+                        disabled={actingReqId === r.id}
+                        className="px-3 py-1.5 rounded border disabled:opacity-60"
+                      >
+                        {t("client.dashboard.reject", { defaultValue: "Отклонить" })}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-gray-500">
+                  {t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -677,6 +771,32 @@ export default function ClientDashboard() {
               <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
               <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
               <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
+              {/* refresh для активной вкладки */}
+              <div className="ml-auto">
+                <button
+                  onClick={async () => {
+                    try {
+                      setLoadingTab(true);
+                      if (activeTab === "requests") {
+                        const data = await apiGet("/api/requests/my");
+                        setRequests(Array.isArray(data) ? data : data?.items || []);
+                      } else if (activeTab === "bookings") {
+                        const data = await apiGet("/api/bookings/my");
+                        setBookings(Array.isArray(data) ? data : data?.items || []);
+                      } else {
+                        const data = await apiGet("/api/wishlist?expand=service");
+                        const arr = Array.isArray(data) ? data : data?.items || [];
+                        setFavorites(arr);
+                      }
+                    } finally {
+                      setLoadingTab(false);
+                    }
+                  }}
+                  className="text-orange-600 hover:underline text-sm"
+                >
+                  {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
+                </button>
+              </div>
             </div>
 
             {activeTab === "requests" && <RequestsList />}
