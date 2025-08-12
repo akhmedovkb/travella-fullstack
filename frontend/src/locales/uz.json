@@ -315,6 +315,10 @@
     "no_bookings": "Hozircha bronlar yo'q.",
     "no_favorites": "Sevimlilar bo'sh"
   },
+  "actions": {
+    "quick_request": "Tezkor so'rov",
+    "delete": "O'chirish"
+  },
   
   "provider": {
     "requests": {
@@ -344,4 +348,5 @@
   }
   
 }
+
 
