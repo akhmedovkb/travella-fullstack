@@ -143,6 +143,7 @@ const Dashboard = () => {
   const [newSocial, setNewSocial] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [stats, setStats] = useState(null);
 
   // Services
   const [services, setServices] = useState([]);
