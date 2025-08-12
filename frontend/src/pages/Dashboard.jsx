@@ -156,6 +156,7 @@ const Dashboard = () => {
   const [images, setImages] = useState([]); // string[] (dataURL/URL)
 
   // Images DnD
+  thedrag: // (не удаляй строку; метка для поиска)
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
@@ -216,6 +217,12 @@ const Dashboard = () => {
     visaCountry: "",
   });
 
+  // === Provider Inbox / Bookings ===
+  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
+  const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
+  const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
+  const [loadingInbox, setLoadingInbox] = useState(false);
+
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -224,10 +231,12 @@ const Dashboard = () => {
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
   /** ===== API helpers ===== */
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
   const loadHotelOptions = async (inputValue) => {
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/api/hotels/search?query=${encodeURIComponent(inputValue || "")}`
+        `${API_BASE}/api/hotels/search?query=${encodeURIComponent(inputValue || "")}`
       );
       return (res.data || []).map((x) => ({ value: x.label || x.name || x, label: x.label || x.name || x }));
     } catch (err) {
@@ -337,7 +346,7 @@ const Dashboard = () => {
         typeof d === "string" ? d : new Date(d).toISOString().split("T")[0]
       );
       await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+        `${API_BASE}/api/providers/blocked-dates`,
         { dates: payload },
         config
       );
@@ -360,7 +369,7 @@ const Dashboard = () => {
   const handleConfirmDelete = () => {
     if (!serviceToDelete) return;
     axios
-      .delete(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${serviceToDelete}`, config)
+      .delete(`${API_BASE}/api/providers/services/${serviceToDelete}`, config)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== serviceToDelete));
         if (selectedService?.id === serviceToDelete) setSelectedService(null);
@@ -447,7 +456,7 @@ const Dashboard = () => {
   useEffect(() => {
     // Profile
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, config)
+      .get(`${API_BASE}/api/providers/profile`, config)
       .then((res) => {
         setProfile(res.data || {});
         setNewLocation(res.data?.location || "");
@@ -456,7 +465,7 @@ const Dashboard = () => {
         setNewAddress(res.data?.address || "");
         if (["guide", "transport"].includes(res.data?.type)) {
           axios
-            .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
+            .get(`${API_BASE}/api/providers/booked-dates`, config)
             .then((response) => {
               const formatted = (response.data || []).map((item) => new Date(item.date));
               setBookedDates(formatted);
@@ -474,7 +483,7 @@ const Dashboard = () => {
 
     // Services
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, config)
+      .get(`${API_BASE}/api/providers/services`, config)
       .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         console.error("Ошибка загрузки услуг", err);
@@ -482,6 +491,92 @@ const Dashboard = () => {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** ===== Provider inbox loaders/actions ===== */
+  const refreshInbox = async () => {
+    try {
+      setLoadingInbox(true);
+      const [rq, bk] = await Promise.all([
+        axios.get(`${API_BASE}/api/requests/provider`, config),
+        axios.get(`${API_BASE}/api/bookings/provider`, config),
+      ]);
+      setRequestsInbox(Array.isArray(rq.data) ? rq.data : []);
+      setBookingsInbox(Array.isArray(bk.data) ? bk.data : []);
+    } catch (e) {
+      console.error("Ошибка загрузки входящих/броней", e);
+      const msg = e?.response?.data?.message || "Ошибка загрузки входящих";
+      toast.error(msg);
+    } finally {
+      setLoadingInbox(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) refreshInbox();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const changeProposalForm = (id, field, value) => {
+    setProposalForms((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  };
+
+  const sendProposal = async (id) => {
+    const body = proposalForms[id] || {};
+    try {
+      setLoadingInbox(true);
+      await axios.post(`${API_BASE}/api/requests/${id}/proposal`, body, config);
+      toast.success("Предложение отправлено");
+      await refreshInbox();
+    } catch (e) {
+      console.error("Ошибка отправки предложения", e);
+      const msg = e?.response?.data?.message || "Ошибка отправки предложения";
+      toast.error(msg);
+    } finally {
+      setLoadingInbox(false);
+    }
+  };
+
+  const confirmBooking = async (id) => {
+    try {
+      setLoadingInbox(true);
+      await axios.post(`${API_BASE}/api/bookings/${id}/confirm`, {}, config);
+      toast.success("Бронь подтверждена");
+      await refreshInbox();
+    } catch (e) {
+      console.error("Ошибка подтверждения", e);
+      toast.error(e?.response?.data?.message || "Ошибка подтверждения");
+    } finally {
+      setLoadingInbox(false);
+    }
+  };
+
+  const rejectBooking = async (id) => {
+    try {
+      setLoadingInbox(true);
+      await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, config);
+      toast.success("Бронь отклонена");
+      await refreshInbox();
+    } catch (e) {
+      console.error("Ошибка отклонения", e);
+      toast.error(e?.response?.data?.message || "Ошибка отклонения");
+    } finally {
+      setLoadingInbox(false);
+    }
+  };
+
+  const cancelBooking = async (id) => {
+    try {
+      setLoadingInbox(true);
+      await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, config);
+      toast.success("Бронь отменена");
+      await refreshInbox();
+    } catch (e) {
+      console.error("Ошибка отмены", e);
+      toast.error(e?.response?.data?.message || "Ошибка отмены");
+    } finally {
+      setLoadingInbox(false);
+    }
+  };
 
   /** ===== Profile handlers ===== */
   const handlePhotoChange = (e) => {
@@ -515,7 +610,7 @@ const Dashboard = () => {
     }
 
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`, updated, config)
+      .put(`${API_BASE}/api/providers/profile`, updated, config)
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
@@ -533,7 +628,7 @@ const Dashboard = () => {
       return;
     }
     axios
-      .put(`${import.meta.env.VITE_API_BASE_URL}/api/providers/change-password`, { password: newPassword }, config)
+      .put(`${API_BASE}/api/providers/change-password`, { password: newPassword }, config)
       .then(() => {
         setNewPassword("");
         toast.success(t("password_changed") || "Пароль обновлён");
@@ -704,11 +799,11 @@ const Dashboard = () => {
 
     const req = selectedService
       ? axios.put(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/services/${selectedService.id}`,
+          `${API_BASE}/api/providers/services/${selectedService.id}`,
           data,
           config
         )
-      : axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/services`, data, config);
+      : axios.post(`${API_BASE}/api/providers/services`, data, config);
 
     req
       .then((res) => {
@@ -905,7 +1000,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Правый блок: услуги */}
+        {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
           <div className="mb-6">
             <div className="flex justify-between items-center">
@@ -1048,8 +1143,7 @@ const Dashboard = () => {
                     defaultOptions
                     loadOptions={loadHotelOptions}
                     value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                    placeholder={t("hotel")}
+                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                    placeholder={t("hotel")}
                     noOptionsMessage={() => t("hotel_not_found")}
                     className="mb-3"
                   />
@@ -1792,7 +1886,7 @@ const Dashboard = () => {
                           <option value="AI">AI - {t("food_options.ai")}</option>
                           <option value="UAI">UAI - {t("food_options.uai")}</option>
                         </select>
-                        <label className="inline-flex items-center mt-2">
+                        <label className="inline-flex.items-center mt-2">
                           <input
                             type="checkbox"
                             checked={details.halal || false}
@@ -2364,6 +2458,152 @@ const Dashboard = () => {
               )}
             </>
           )}
+
+          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (E2E) ===== */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Входящие запросы</h3>
+              <button
+                onClick={refreshInbox}
+                className="text-sm text-orange-600 underline"
+                disabled={loadingInbox}
+              >
+                Обновить
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {requestsInbox.length === 0 && (
+                <div className="text-sm text-gray-500">Запросов нет.</div>
+              )}
+
+              {requestsInbox.map((r) => (
+                <div key={r.id} className="border rounded-lg p-3">
+                  <div className="text-sm">
+                    <div className="font-medium">
+                      #{r.id} • service:{r.service_id} • {r.status}
+                    </div>
+                    {r.note && <div>Заметка: {r.note}</div>}
+                  </div>
+
+                  {/* существующий оффер */}
+                  {r.proposal && (
+                    <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-sm">
+                      <div className="font-medium mb-1">Отправлен оффер</div>
+                      <div>Цена: {r.proposal.price} {r.proposal.currency}</div>
+                      {r.proposal.hotel && <div>Отель: {r.proposal.hotel}</div>}
+                      {r.proposal.room && <div>Размещение: {r.proposal.room}</div>}
+                      {r.proposal.terms && <div>Условия: {r.proposal.terms}</div>}
+                      {r.proposal.message && <div>Сообщение: {r.proposal.message}</div>}
+                    </div>
+                  )}
+
+                  {/* форма оффера */}
+                  <div className="grid md:grid-cols-6 gap-2 mt-3">
+                    <input
+                      placeholder="Цена"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.price || ""}
+                      onChange={(e) => changeProposalForm(r.id, "price", e.target.value)}
+                    />
+                    <input
+                      placeholder="Валюта (USD)"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.currency || ""}
+                      onChange={(e) => changeProposalForm(r.id, "currency", e.target.value)}
+                    />
+                    <input
+                      placeholder="Отель"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.hotel || ""}
+                      onChange={(e) => changeProposalForm(r.id, "hotel", e.target.value)}
+                    />
+                    <input
+                      placeholder="Размещение (DBL/TRPL)"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.room || ""}
+                      onChange={(e) => changeProposalForm(r.id, "room", e.target.value)}
+                    />
+                    <input
+                      placeholder="Условия"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.terms || ""}
+                      onChange={(e) => changeProposalForm(r.id, "terms", e.target.value)}
+                    />
+                    <input
+                      placeholder="Сообщение"
+                      className="border rounded px-2 py-1"
+                      value={proposalForms[r.id]?.message || ""}
+                      onChange={(e) => changeProposalForm(r.id, "message", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="mt-2">
+                    <button
+                      onClick={() => sendProposal(r.id)}
+                      className="bg-orange-500 text-white px-3 py-1 rounded"
+                      disabled={loadingInbox}
+                    >
+                      Отправить оффер
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ===== МОИ БРОНИ (E2E) ===== */}
+          <div className="mt-8">
+            <h3 className="text-xl font-semibold mb-3">Мои брони</h3>
+            <div className="space-y-3">
+              {bookingsInbox.length === 0 && (
+                <div className="text-sm text-gray-500">Брони отсутствуют.</div>
+              )}
+              {bookingsInbox.map((b) => (
+                <div
+                  key={b.id}
+                  className="border rounded-lg p-3 flex items-start justify-between gap-3"
+                >
+                  <div className="text-sm">
+                    <div className="font-medium">
+                      #{b.id} • {b.service_title || "услуга"} • {b.status}
+                    </div>
+                    <div>{b.price ? `${b.price} ${b.currency || ""}` : "—"}</div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {b.status === "pending" && (
+                      <>
+                        <button
+                          onClick={() => confirmBooking(b.id)}
+                          className="text-sm bg-green-600 text-white px-3 py-1 rounded"
+                          disabled={loadingInbox}
+                        >
+                          Подтвердить
+                        </button>
+                        <button
+                          onClick={() => rejectBooking(b.id)}
+                          className="text-sm bg-red-600 text-white px-3 py-1 rounded"
+                          disabled={loadingInbox}
+                        >
+                          Отклонить
+                        </button>
+                      </>
+                    )}
+                    {(b.status === "pending" || b.status === "active") && (
+                      <button
+                        onClick={() => cancelBooking(b.id)}
+                        className="text-sm bg-gray-100 px-3 py-1 rounded hover:bg-gray-200"
+                        disabled={loadingInbox}
+                      >
+                        Отменить
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
