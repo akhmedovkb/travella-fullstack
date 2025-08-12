@@ -1,23 +1,29 @@
-// backend/routes/requestRoutes.js
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/authenticateToken");
-const ctrl = require("../controllers/requestController");
+const authenticateToken = require("../middleware/authenticateToken");
+const {
+  createRequest,
+  getMyRequests,
+  getProviderRequests,
+  addProposal,
+  acceptRequest,
+  rejectRequest,
+} = require("../controllers/requestController");
 
-// Клиент создаёт запрос (изменения условий)
-router.post("/", auth, ctrl.createRequest);
+// клиент создаёт запрос
+router.post("/", authenticateToken, createRequest);
 
-// Клиент: мои запросы; Провайдер: запросы по его услугам
-router.get("/my", auth, ctrl.listMyRequests);
+// клиент видит свои запросы
+router.get("/my", authenticateToken, getMyRequests);
 
-// Оба участника пишут сообщения
-router.post("/:id/reply", auth, ctrl.reply);
+// провайдер видит входящие
+router.get("/provider", authenticateToken, getProviderRequests);
 
-// Провайдер присылает предложение (JSON), статус -> proposed
-router.post("/:id/proposal", auth, ctrl.propose);
+// провайдер отправляет предложение
+router.post("/:id/proposal", authenticateToken, addProposal);
 
-// Клиент принимает/отклоняет предложение
-router.post("/:id/accept", auth, ctrl.accept);
-router.post("/:id/decline", auth, ctrl.decline);
+// клиент принимает / отклоняет
+router.post("/:id/accept", authenticateToken, acceptRequest);
+router.post("/:id/reject", authenticateToken, rejectRequest);
 
 module.exports = router;
