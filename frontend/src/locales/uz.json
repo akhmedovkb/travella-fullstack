@@ -277,6 +277,23 @@
       "noBookings": "Bronlar yo‘q"
     }
   },
+  "favorites": "Sevimlilar",
+  "favorites_empty_title": "Sevimlilar bo‘sh",
+  "favorites_empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
+  "favorites_no_image": "Rasm yo‘q",
+
+  "actions": {
+    "quick_request": "Tez so‘rov",
+    "remove": "O‘chirish",
+    "delete": "O‘chirish",
+    "cancel": "Bekor qilish",
+    "ok": "O‘chirish"
+  },
+
+  "pagination": {
+    "prev": "←",
+    "next": "→"
+  },
   
   "provider": {
     "requests": {
@@ -300,29 +317,13 @@
     }
   },
   
-  "favorites": "Sevimlilar",
-  "favorites_empty_title": "Sevimlilar bo‘sh",
-  "favorites_empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
-  "favorites_no_image": "Rasm yo‘q",
-
-  "actions": {
-    "quick_request": "Tez so‘rov",
-    "remove": "O‘chirish",
-    "delete": "O‘chirish",
-    "cancel": "Bekor qilish",
-    "ok": "O‘chirish"
-  },
-
-  "pagination": {
-    "prev": "←",
-    "next": "→"
-  
   "common": {
     "loading": "Yuklanmoqda…",
     "backToDashboard": "Kabinetga kirish"
   }
   
 }
+
 
 
 
