@@ -13,6 +13,27 @@ function initials(name = "") {
 }
 
 /**
+ * Make sure we always render a proper data URL for images.
+ * If the string is raw base64 -> add "data:<mime>;base64,".
+ * If it is already a data URL -> return as is (no duplication).
+ */
+function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
+  if (!b64OrDataUrl) return null;
+  return String(b64OrDataUrl).startsWith("data:")
+    ? b64OrDataUrl
+    : `data:${mime};base64,${b64OrDataUrl}`;
+}
+
+/**
+ * For sending to server: strip "data:*;base64," prefix if present.
+ */
+function stripDataUrlPrefix(dataUrl) {
+  if (!dataUrl) return null;
+  const m = String(dataUrl).match(/^data:[^;]+;base64,(.*)$/);
+  return m ? m[1] : dataUrl;
+}
+
+/**
  * Crop image to a centered square and resize to {size} x {size}, return dataURL (jpeg).
  */
 function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
@@ -313,13 +334,13 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null);
+  const [avatarBase64, setAvatarBase64] = useState(null);   // always data URL for UI
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
   // Password
   const [newPassword, setNewPassword] = useState("");
-  const [changingPass, setChangingPass] = useState(false);
+  the[changingPass, setChangingPass] = useState(false);
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -339,7 +360,7 @@ export default function ClientDashboard() {
   // Data for tabs
   const [requests, setRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [favorites, setFavorites] = useState([]); // wishlist items
+  const [favorites, setFavorites] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
   // UI messages
@@ -371,7 +392,8 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        setAvatarBase64(me?.avatar_base64 || null);
+        // normalize whatever server returns
+        setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
       } catch (e) {
@@ -440,7 +462,7 @@ export default function ClientDashboard() {
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl);
+      setAvatarBase64(dataUrl);          // UI keeps data URL
       setAvatarServerUrl(null);
       setRemoveAvatar(false);
     } catch (err) {
@@ -462,15 +484,18 @@ export default function ClientDashboard() {
       setMessage(null);
       setError(null);
       const payload = { name, phone };
-      if (avatarBase64) payload.avatar_base64 = avatarBase64;
+      // send raw base64 only, without data: prefix
+      if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
+
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
       // in case server sanitized fields:
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
+
       if (res?.avatar_base64) {
-        setAvatarBase64(res.avatar_base64);
+        setAvatarBase64(toDataUrl(res.avatar_base64)); // normalize for UI
         setAvatarServerUrl(null);
       } else if (res?.avatar_url) {
         setAvatarServerUrl(res.avatar_url);
@@ -547,7 +572,13 @@ export default function ClientDashboard() {
   const Avatar = () => {
     const src = avatarBase64 || avatarServerUrl || null;
     if (src) {
-      return <img src={src} alt="avatar" className="w-24 h-24 rounded-full object-cover border" />;
+      return (
+        <img
+          src={src}
+          alt=""
+          className="w-24 h-24 rounded-full object-cover border"
+        />
+      );
     }
     return (
       <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">
@@ -577,7 +608,8 @@ export default function ClientDashboard() {
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
-          const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
+          const serviceTitle =
+            r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
           const status = r?.status || "new";
           const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
           return (
@@ -610,7 +642,8 @@ export default function ClientDashboard() {
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bookings.map((b) => {
-          const serviceTitle = b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
+          const serviceTitle =
+            b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
           const status = b?.status || "new";
           const date = b?.date || b?.created_at;
           const when = date ? new Date(date).toLocaleString() : "";
