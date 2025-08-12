@@ -1,11 +1,32 @@
-// ProviderStatsHeader.jsx (расширенная версия)
+// frontend/src/components/ProviderStatsHeader.jsx
+import React from "react";
+
+/** Маленькая карточка-метрика */
+function StatChip({ label, value }) {
+  return (
+    <div className="rounded-lg border bg-gray-50 p-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Шапка статистики поставщика (рейтинг, прогресс, метрики)
+ * props:
+ *  - rating: number (0..5)
+ *  - stats: { requests_total, requests_active, bookings_total, completed, cancelled, points? }
+ *  - bonusTarget?: number (целевой порог для прогресса; по умолчанию 500)
+ *  - t?: i18n-функция
+ */
 export default function ProviderStatsHeader({
   rating = 0,
   stats = {},
-  bonusTarget = null, // например 500; если не передан — считаем от бронирований
+  bonusTarget = 500,
   t,
 }) {
-  const _t = (k, d) => (t ? t(k) : d);
+  const _t = (k, d) => (typeof t === "function" ? t(k) : d);
+
   const r = Math.max(0, Math.min(5, Number(rating) || 0));
   const rounded = Math.round(r * 10) / 10;
 
@@ -15,32 +36,45 @@ export default function ProviderStatsHeader({
   const completed       = Number(stats.completed)       || 0;
   const cancelled       = Number(stats.cancelled)       || 0;
 
-  // Если есть bonusTarget, прогресс считаем по очкам; иначе по брони: completed / bookings_total
+  // если API прислал points — используем; иначе считаем по completed
   const points = Number(stats.points) || completed;
-  const base   = bonusTarget ?? (bookings_total || 1);
+  const base   = Number(bonusTarget ?? bookings_total) || 1;
   const progressPct = Math.min(100, Math.round((points / base) * 100));
 
-  // Уровень по «очкам» (можно поправить пороги)
+  // Пороговые уровни — можно подправить, если нужно
   const tier =
     points >= 300 ? "Gold" :
     points >= 100 ? "Silver" : "Bronze";
 
   return (
     <div className="rounded-xl border bg-white p-4 shadow-sm">
+      {/* Заголовок + рейтинг */}
       <div className="flex items-center justify-between">
         <div className="text-lg font-semibold">
           {_t("stats.level", "Уровень")} {tier}
         </div>
+
         <div className="flex items-center gap-1">
-          {[1,2,3,4,5].map(i => (
-            <svg key={i} viewBox="0 0 24 24" className={`w-5 h-5 ${i <= Math.round(r) ? "text-yellow-500" : "text-gray-300"}`} fill={i <= Math.round(r) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-            </svg>
-          ))}
+          {[1, 2, 3, 4, 5].map((i) => {
+            const filled = i <= Math.round(r);
+            return (
+              <svg
+                key={i}
+                viewBox="0 0 24 24"
+                className={`w-5 h-5 ${filled ? "text-yellow-500" : "text-gray-300"}`}
+                fill={filled ? "currentColor" : "none"}
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+              </svg>
+            );
+          })}
           <span className="ml-2 text-sm text-gray-600">{rounded.toFixed(1)}</span>
         </div>
       </div>
 
+      {/* Прогресс */}
       <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
           <span>{_t("stats.bonus_progress", "Бонусный прогресс")}</span>
@@ -53,6 +87,7 @@ export default function ProviderStatsHeader({
         </div>
       </div>
 
+      {/* Метрики */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatChip label={_t("stats.requests_total", "Запросов (всего)")} value={requests_total} />
         <StatChip label={_t("stats.requests_active", "Запросов (активные)")} value={requests_active} />
