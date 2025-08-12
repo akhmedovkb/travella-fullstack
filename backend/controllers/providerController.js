@@ -19,40 +19,24 @@ const isExtendedCategory = (cat) =>
  * - price -> число либо null
  * - description -> строка либо null
  */
+function sanitizeImages(images) {
+  const arr = Array.isArray(images) ? images : images ? [images] : [];
+  return arr
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .slice(0, 10);
 
 function normalizeServicePayload(body) {
-  const {
-    title,
-    description,
-    price,
-    category,
-    images,
-    availability,
-    details,
-  } = body;
+  const { title, description, price, category, images, availability, details } = body;
 
-  // Безопасная нормализация массива картинок
-  const imagesArr = Array.isArray(images)
-    ? images
-        .map((x) => String(x || "").trim())
-        .filter(Boolean)
-        .slice(0, 10)
-    : images
-    ? [String(images).trim()].filter(Boolean)
-    : [];
-
+  const imagesArr = sanitizeImages(images);
   const availabilityArr = Array.isArray(availability) ? availability : [];
 
-  // details может быть объектом или строкой JSON (только для расширенных категорий)
   let detailsObj = null;
-  const extended = isExtendedCategory(category);
-  if (extended && details) {
+  if (details && isExtendedCategory(category)) {
     if (typeof details === "string") {
-      try {
-        detailsObj = JSON.parse(details);
-      } catch {
-        detailsObj = { value: String(details) };
-      }
+      try { detailsObj = JSON.parse(details); }
+      catch { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
@@ -68,9 +52,7 @@ function normalizeServicePayload(body) {
     availabilityArr,
     priceNum,
     descriptionStr:
-      description === undefined || description === null
-        ? null
-        : String(description),
+      description === undefined || description === null ? null : String(description),
     detailsObj,
   };
 }
