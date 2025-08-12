@@ -6,7 +6,7 @@ import { useSearchParams } from "react-router-dom";
 /** утилита: инициалы по имени */
 function initials(name = "") {
   const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() || "").join("");
+  return parts.map(p => p[0]?.toUpperCase() || "").join("");
 }
 
 /** утилита: кадрирование и ресайз в квадрат dataURL (jpeg) */
@@ -47,43 +47,39 @@ export default function ClientDashboard() {
   const [profile, setProfile] = useState({
     name: "",
     phone: "",
-    avatar_url: "",
+    avatar_url: ""
   });
   const [saving, setSaving] = useState(false);
 
   // аватар
-  const [avatarPreview, setAvatarPreview] = useState(""); // dataURL для показа
-  const [avatarBase64, setAvatarBase64] = useState(""); // чистый base64 для API
-  const [avatarRemoved, setAvatarRemoved] = useState(false); // пометили удаление
+  const [avatarPreview, setAvatarPreview] = useState("");      // dataURL для показа
+  const [avatarBase64, setAvatarBase64] = useState("");        // чистый base64 для API
+  const [avatarRemoved, setAvatarRemoved] = useState(false);   // пометили удаление
 
   // смена пароля
   const [newPass, setNewPass] = useState("");
   const [changing, setChanging] = useState(false);
 
-  // отказные туры (marketplace)
+  // отказные туры
   const [refused, setRefused] = useState([]);
   const [loadingRefused, setLoadingRefused] = useState(false);
 
-  // вкладки снизу
+  // вкладки
   const [tab, setTab] = useState("req");
   const [myRequests, setMyRequests] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
-
-  // избранное
-  const [favorites, setFavorites] = useState([]);
-  const [loadingFav, setLoadingFav] = useState(false);
 
   // ----- loaders -----
   async function loadProfile() {
     try {
       const me = await apiGet("/api/clients/me");
       if (me) {
-        setProfile((p) => ({
+        setProfile(p => ({
           ...p,
           name: me.name ?? "",
           phone: me.phone ?? "",
-          avatar_url: me.avatar_url ?? "",
+          avatar_url: me.avatar_url ?? ""
         }));
         // при загрузке профиля сбрасываем превью/флаги
         setAvatarPreview("");
@@ -102,16 +98,6 @@ export default function ClientDashboard() {
       setRefused(Array.isArray(rows) ? rows : []);
     } finally {
       setLoadingRefused(false);
-    }
-  }
-
-  async function loadFavorites() {
-    setLoadingFav(true);
-    try {
-      const rows = await apiGet("/api/favorites/my").catch(() => []);
-      setFavorites(Array.isArray(rows) ? rows : []);
-    } finally {
-      setLoadingFav(false);
     }
   }
 
@@ -136,7 +122,6 @@ export default function ClientDashboard() {
     setTab(tpar === "book" ? "book" : "req");
     loadProfile();
     loadRefused();
-    loadFavorites();
     loadTab(tpar === "book" ? "book" : "req");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -147,17 +132,16 @@ export default function ClientDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // ----- actions -----
   async function saveProfile(e) {
     e.preventDefault();
     setSaving(true);
     try {
       const payload = {
         name: profile.name,
-        phone: profile.phone,
+        phone: profile.phone
       };
       if (avatarBase64) payload.avatar_base64 = avatarBase64; // новый аватар
-      if (avatarRemoved) payload.remove_avatar = true; // удалить текущий
+      if (avatarRemoved) payload.remove_avatar = true;         // удалить текущий
 
       await apiPut("/api/clients/me", payload);
       await loadProfile();
@@ -213,28 +197,8 @@ export default function ClientDashboard() {
     setAvatarRemoved(true);
   }
 
-  async function acceptProposal(id) {
-    try {
-      await apiPost(`/api/requests/${id}/accept`, {});
-      // обновляем оба списка, т.к. может появиться бронь
-      await Promise.all([loadTab("req"), loadTab("book")]);
-      alert(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
-    } catch (e) {
-      alert(e.message || "Error");
-    }
-  }
-
-  async function rejectProposal(id) {
-    try {
-      await apiPost(`/api/requests/${id}/reject`, {});
-      await loadTab("req");
-      alert(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
-    } catch (e) {
-      alert(e.message || "Error");
-    }
-  }
-
-  const showAvatar = avatarPreview || profile.avatar_url || ""; // превью -> url -> пусто
+  const showAvatar =
+    avatarPreview || profile.avatar_url || ""; // приоритет: превью -> url -> пусто
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -249,7 +213,11 @@ export default function ClientDashboard() {
               <div className="w-32 h-32 rounded-full bg-gray-100 ring-2 ring-white shadow overflow-hidden flex items-center justify-center text-2xl font-semibold text-gray-600">
                 {showAvatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={showAvatar} alt="avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={showAvatar}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <span>{initials(profile.name) || "🙂"}</span>
                 )}
@@ -257,7 +225,13 @@ export default function ClientDashboard() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onSelectAvatar} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onSelectAvatar}
+              />
               <button
                 className="px-4 py-2 rounded bg-gray-900 text-white font-semibold hover:opacity-90"
                 onClick={() => fileInputRef.current?.click()}
@@ -334,7 +308,11 @@ export default function ClientDashboard() {
         <div className="bg-white p-6 rounded-xl shadow">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">{t("client.dashboard.refusedTours")}</h2>
-            <button onClick={loadRefused} className="text-orange-600 hover:underline" disabled={loadingRefused}>
+            <button
+              onClick={loadRefused}
+              className="text-orange-600 hover:underline"
+              disabled={loadingRefused}
+            >
               {t("client.dashboard.refresh")}
             </button>
           </div>
@@ -358,34 +336,22 @@ export default function ClientDashboard() {
 
       {/* нижние вкладки */}
       <div className="bg-white p-6 rounded-xl shadow mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTab("req")}
-              className={`px-3 py-1 rounded-full text-sm ${
-                tab === "req" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {t("client.dashboard.tabs.myRequests")}
-            </button>
-            <button
-              onClick={() => setTab("book")}
-              className={`px-3 py-1 rounded-full text-sm ${
-                tab === "book" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {t("client.dashboard.tabs.myBookings")}
-            </button>
-          </div>
+        <div className="flex gap-2 mb-3">
           <button
-            onClick={() => {
-              if (tab === "req") loadTab("req");
-              else loadTab("book");
-            }}
-            className="text-orange-600 hover:underline text-sm"
-            disabled={loadingTab}
+            onClick={() => setTab("req")}
+            className={`px-3 py-1 rounded-full text-sm ${
+              tab === "req" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
+            }`}
           >
-            {t("client.dashboard.refresh")}
+            {t("client.dashboard.tabs.myRequests")}
+          </button>
+          <button
+            onClick={() => setTab("book")}
+            className={`px-3 py-1 rounded-full text-sm ${
+              tab === "book" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
+            }`}
+          >
+            {t("client.dashboard.tabs.myBookings")}
           </button>
         </div>
 
@@ -398,61 +364,12 @@ export default function ClientDashboard() {
             <ul className="space-y-2">
               {myRequests.map((r) => (
                 <li key={r.id} className="border rounded p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold">
-                        Request #{r.id} · Service #{r.service_id}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {r.status} · {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                      </div>
-                      {r.note && <div className="text-sm mt-1">📝 {r.note}</div>}
-                    </div>
+                  <div className="font-semibold">
+                    Request #{r.id} · Service #{r.service_id}
                   </div>
-
-                  {/* предложение от провайдера */}
-                  {r.proposal ? (
-                    <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded p-3 text-sm">
-                      <div className="font-medium mb-1">
-                        {t("client.dashboard.offer", { defaultValue: "Предложение" })}
-                      </div>
-                      <div>
-                        {t("client.dashboard.price", { defaultValue: "Цена" })}: {r.proposal.price}{" "}
-                        {r.proposal.currency || "USD"}
-                      </div>
-                      {r.proposal.hotel && <div>Отель: {r.proposal.hotel}</div>}
-                      {r.proposal.room && <div>Размещение: {r.proposal.room}</div>}
-                      {r.proposal.terms && <div>Условия: {r.proposal.terms}</div>}
-                      {r.proposal.message && <div>Сообщение: {r.proposal.message}</div>}
-
-                      {r.status !== "accepted" && r.status !== "rejected" ? (
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            onClick={() => acceptProposal(r.id)}
-                            className="px-3 py-1 rounded bg-orange-600 text-white"
-                          >
-                            {t("client.dashboard.accept", { defaultValue: "Принять" })}
-                          </button>
-                          <button
-                            onClick={() => rejectProposal(r.id)}
-                            className="px-3 py-1 rounded border"
-                          >
-                            {t("client.dashboard.reject", { defaultValue: "Отклонить" })}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-2 text-xs text-gray-600">
-                          {r.status === "accepted"
-                            ? t("client.dashboard.accepted", { defaultValue: "Предложение принято" })
-                            : t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-sm text-gray-500">
-                      {t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}
-                    </div>
-                  )}
+                  <div className="text-sm text-gray-600">
+                    {r.status} · {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -469,46 +386,6 @@ export default function ClientDashboard() {
                 <div className="text-sm text-gray-600">
                   {b.status || ""} {b.created_at ? `· ${new Date(b.created_at).toLocaleString()}` : ""}
                 </div>
-                {b.price != null && (
-                  <div className="text-sm">
-                    {t("client.dashboard.price", { defaultValue: "Цена" })}: {b.price} {b.currency || "USD"}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Избранное */}
-      <div className="bg-white p-6 rounded-xl shadow mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold">{t("client.dashboard.favorites", { defaultValue: "Избранное" })}</h2>
-          <button onClick={loadFavorites} className="text-orange-600 hover:underline" disabled={loadingFav}>
-            {t("client.dashboard.refresh")}
-          </button>
-        </div>
-
-        {loadingFav ? (
-          <div className="text-sm text-gray-500">{t("common.loading")}</div>
-        ) : favorites.length === 0 ? (
-          <div className="text-sm text-gray-500">
-            {t("client.dashboard.noFavorites", { defaultValue: "Список пуст." })}
-          </div>
-        ) : (
-          <ul className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {favorites.map((it) => (
-              <li key={it.id || it.service_id} className="border rounded p-3 bg-gray-50">
-                <div className="font-semibold">{it.title || `service:${it.service_id}`}</div>
-                {it.images?.[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.images[0]} alt="" className="w-full h-28 object-cover rounded mt-2" />
-                )}
-                {it.price != null && (
-                  <div className="text-sm text-gray-700 mt-1">
-                    {it.price} {it.currency || "USD"}
-                  </div>
-                )}
               </li>
             ))}
           </ul>
