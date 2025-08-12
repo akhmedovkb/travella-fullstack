@@ -297,6 +297,22 @@
     "next": "→"
   },
   
+  "tabs": {
+    "my_requests": "My requests",
+    "my_bookings": "My bookings",
+    "favorites": "Favorites"
+  },
+  "stats": {
+    "tier": "Tier",
+    "rating": "Rating",
+    "bonus_progress": "Bonus progress",
+    "requests_total": "Requests (total)",
+    "requests_active": "Requests (active)",
+    "bookings_total": "Bookings (total)",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -324,6 +340,4 @@
     "backToDashboard": "Dashboard"
   
   }
-
-
 }
