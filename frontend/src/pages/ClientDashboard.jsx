@@ -179,32 +179,48 @@ function FavoritesList({
   onRemove,
   onQuickRequest,
 }) {
-  // items — это элементы wishlist (variant A), у каждого есть id (wishlist_id) и service / service_id
+  const { t } = useTranslation();
+
   const total = items?.length || 0;
   const pages = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(Math.max(1, page), pages);
   const start = (current - 1) * perPage;
   const pageItems = items.slice(start, start + perPage);
 
+  const Empty = () => (
+    <div className="p-8 text-center bg-white border rounded-xl">
+      <div className="text-lg font-semibold mb-2">
+        {t("favorites_empty_title", { defaultValue: "Избранное пусто" })}
+      </div>
+      <div className="text-gray-600">
+        {t("favorites_empty_text", {
+          defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       {total === 0 ? (
-        <EmptyFavorites />
+        <Empty />
       ) : (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {pageItems.map((it) => {
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
-              const title = s.title || s.name || "Услуга";
-              const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
+              const title = s.title || s.name || t("service", { defaultValue: "Услуга" });
+              const image =
+                Array.isArray(s.images) && s.images.length ? s.images[0] : null;
 
               return (
                 <div
                   key={it.id}
                   className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col"
                 >
-                  <div className="aspect-[16/10] bg-gray-100 relative">
+                  {/* image */}
+                  <div className="aspect-[16/10] bg-gray-100">
                     {image ? (
                       <img
                         src={image}
@@ -213,27 +229,32 @@ function FavoritesList({
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">Нет изображения</span>
+                        <span className="text-sm">
+                          {t("no_image", { defaultValue: "Нет изображения" })}
+                        </span>
                       </div>
                     )}
                   </div>
+
+                  {/* body */}
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
-                    <div className="mt-auto flex gap-2 pt-3">
-                      {serviceId && (
-                        <button
-                          onClick={() => onQuickRequest?.(serviceId)}
-                          className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-                        >
-                          Быстрый запрос
-                        </button>
-                      )}
+
+                    {/* buttons INSIDE the card bottom */}
+                    <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
+                      <button
+                        disabled={!serviceId}
+                        onClick={() => serviceId && onQuickRequest?.(serviceId)}
+                        className="bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600 disabled:opacity-40"
+                      >
+                        {t("quick_request", { defaultValue: "Быстрый запрос" })}
+                      </button>
                       <button
                         onClick={() => onRemove?.(it.id)}
                         className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
-                        title="Удалить из избранного"
+                        title={t("delete", { defaultValue: "Удалить" })}
                       >
-                        Удалить
+                        {t("delete", { defaultValue: "Удалить" })}
                       </button>
                     </div>
                   </div>
