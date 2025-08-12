@@ -5,7 +5,7 @@
   "logout": "Chiqish",
   "name": "Nomi",
   "type": "Ta'minotchi turi",
-  "location": "Faoliyat hududi",
+  "location": "Регион или место проведения",
   "social": "Ijtimoiy tarmoq havolasi",
   "certificate": "Sertifikat",
   "view_certificate": "Sertifikatni ko‘rish",
@@ -17,7 +17,6 @@
   "not_specified": "Ko‘rsatilmagan",
   "photo": "Rasm",
   "file_chosen": "Fayllar tanlandi",
-  
   "services": "Xizmatlar",
   "edit_service": "Xizmatni tahrirlang:",
   "guide": "Gid",
@@ -29,7 +28,27 @@
   "new_service_tip": "Yangi xizmat qo‘shish uchun barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
   "title": "Sarlavha",
   "description": "Tavsif",
-  "category": "Toifa",
+  "category": {
+    "refused_tour": "Rad etilgan tur",
+    "refused_hotel": "Rad etilgan otel",
+    "refused_flight": "Rad etilgan aviachipta",
+    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
+    "visa_support": "Visa hizmati",
+    "author_tour": "Mualliflik turi",
+    "city_tour_guide": "Shahar bo`ylab tur",
+    "mountain_tour_guide": "Tog`lar bo`ylab tur",
+    "city_tour_transport": "Shahar bo`ylab tur",
+    "mountain_tour_transport": "Tog`lar bo`ylab tur",
+    "one_way_transfer": "Bir tomonga transfer",
+    "dinner_transfer": "Tushlikga transfer",
+    "border_transfer": "Chegara transferi",
+    "hall_rent": "Zal ijarasi",
+    "hotel_room": "Xona ijarasi",
+    "hotel_transfer": "Mehmonxonadan transfer",
+    "${s": {
+      "category}": "Toifa"
+    }
+  },
   "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
   "select_files": "Fayllarni tanlash",
   "no_file_chosen": "Fayl tanlanmagan",
@@ -63,8 +82,8 @@
   "room_rent": "Xona ijarasi",
   "hotel_transfer": "Mehmonxonadan transfer",
   "hall_rent": "Zal ijarasi",
-  "expiration_timer": "Aktuallik taymeri",
-  "is_active": "Aktual",
+  "expiration_timer": "Таймер актуальности",
+  "is_active": "Faol",
   "new_refused_tour": "Yangi rad etilgan tur qo‘shish:",
   "new_refused_hotel": "Yangi rad etilgan mehmonxona qo‘shish:",
   "new_refused_airtkt": "Yangi rad etilgan aviachiptani qo‘shish:",
@@ -79,103 +98,73 @@
   "round_trip": "Qaytish bilan",
   "direction": "Yo`nalish",
   "accommodation": "Joylashuv",
-
-  
   "food": "Ovqatlanish turi",
-    "food_options": {
-      "select": "Tanlang",
-      "bb": "Faqat nonushta",
-      "hb": "Nonushta va kechki ovqat",
-      "fb": "Toʻliq pansiyon",
-      "ai": "Hammasi ichida",
-      "uai": "Ultra hammasi ichida",
-      "halal": "Halol"
-    },
-  
+  "food_options": {
+    "select": "Tanlang",
+    "bb": "Faqat nonushta",
+    "hb": "Nonushta va kechki ovqat",
+    "fb": "Toʻliq pansiyon",
+    "ai": "Hammasi ichida",
+    "uai": "Ultra hammasi ichida",
+    "halal": "Halol"
+  },
   "transfer": "Transfer",
-    "transfer_options": {
-      "select": "Transferni tanlang",
-      "individual": "Individual",
-      "group": "Guruhli",
-      "none": "Yo‘q"
-    },
-  
+  "transfer_options": {
+    "select": "Transferni tanlang",
+    "individual": "Individual",
+    "group": "Guruhli",
+    "none": "Yo‘q"
+  },
   "airline": "Aviakompaniya",
   "enter_airline": "Aviakompaniyani kiriting",
-  
   "changeable": "O'zgartirish mumkin",
   "visa_included": "Visa kiritilgan",
   "net_price": "Netto narx",
-
-  "category": {
-    "refused_tour": "Rad etilgan tur",
-    "refused_hotel": "Rad etilgan otel",
-    "refused_flight": "Rad etilgan aviachipta",
-    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
-    "visa_support": "Visa hizmati",
-    "author_tour": "Mualliflik turi",
-    "city_tour_guide": "Shahar bo`ylab tur",
-    "mountain_tour_guide": "Tog`lar bo`ylab tur",
-    "city_tour_transport": "Shahar bo`ylab tur",
-    "mountain_tour_transport": "Tog`lar bo`ylab tur",
-    "one_way_transfer": "Bir tomonga transfer",
-    "dinner_transfer": "Tushlikga transfer",
-    "border_transfer": "Chegara transferi"
-  },
-
   "direction_country": "Yo`nalish mamlakati",
   "direction_from": "Jo`nab ketish shahri",
   "direction_to": "Tashrif shahri",
-  "country_not_chosen": "Mamlakat tanlanmagan",
+  "country_not_chosen": "Mamlakatlar topilmadi",
   "direction_from_not_chosen": "Jo`nab ketish shahri tanlanmagan",
   "direction_to_not_chosen": "Tashrif shahri tanlanmagan",
-  
   "start_flight_date": "Jo`nash parvosi sanasi",
   "end_flight_date": "Qaytib kelish parvosi sanasi",
   "flight_details": "Parvoz haqida ma`lumot",
   "enter_flight_details": "Parvoz haqida ma`lumotni kiriting",
-  
   "accommodation_category": "Joylashuv toifasi",
   "enter_category": "Joylashuv toifasini kiriting",
-  "accommodation": "Joylashuv",
   "enter_accommodation": "Joylashuvni kiriting",
   "hotel_check_in": "Check-in sanasi",
   "hotel_check_out": "Check-out sanasi",
-  "refused_hotel_name": "Rad etilgan otel nomi",  
+  "refused_hotel_name": "Rad etilgan otel nomi",
   "adt": "Kattalar (ADT)",
   "chd": "Bolalar  (CHD)",
   "inf": "Go`daklar (INF)",
-
-  
   "login": {
-  "title": "Ta'minotchilar uchun kirish",
-  "email": "Email",
-  "password": "Parol",
-  "button": "Kirish",
-  "no_account": "Akkauntingiz yo‘qmi? ",
-  "error": "email yoki parol xato!"
-
-           },
- 
+    "title": "Ta'minotchilar uchun kirish",
+    "email": "Email",
+    "password": "Parol",
+    "button": "Kirish",
+    "no_account": "Akkauntingiz yo‘qmi? ",
+    "error": "email yoki parol xato!"
+  },
   "register": {
-  "title": "Ta'minotchini ro'yxatdan o'tkazish",
-  "name": "Nomi",
-  "type": "Ta'minotchi turi",
-  "location_placeholder": "masalan, Samarqand, Buxoro",
-  "email": "Email",
-  "social": "Ijtimoiy tarmoq havolasi",
-  "photo": "Profil rasmi",
-  "phone": "Telefon",
-  "password": "Parol",
-  "button": "Ro'yxatdan o'tish",
-  "success": "Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!",
-  "error": "Ro'yxatdan o'tishda xatolik yuz berdi.",
-  "select_file": "Faylni tanlash",
-  "no_file": "Fayl tanlanmagan",
-  "file_chosen": "Fayl tanlandi",
-  "required": "Iltimos, bu maydonni to‘ldiring"
-              },
-
+    "title": "Ta'minotchini ro'yxatdan o'tkazish",
+    "name": "Nomi",
+    "type": "Ta'minotchi turi",
+    "location_placeholder": "masalan, Samarqand, Buxoro",
+    "email": "Email",
+    "social": "Ijtimoiy tarmoq havolasi",
+    "photo": "Profil rasmi",
+    "phone": "Telefon",
+    "password": "Parol",
+    "button": "Ro'yxatdan o'tish",
+    "success": "Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!",
+    "error": "Ro'yxatdan o'tishda xatolik yuz berdi.",
+    "select_file": "Faylni tanlash",
+    "no_file": "Fayl tanlanmagan",
+    "file_chosen": "Fayl tanlandi",
+    "required": "Iltimos, bu maydonni to‘ldiring"
+  },
   "new_refused_event_ticket": "Отказной билет на мероприятие",
   "event_name": "Название мероприятия",
   "select_event_category": "Выберите категорию события",
@@ -185,15 +174,8 @@
   "event_category_masterclass": "Мастер-класс",
   "event_category_football": "Футбольный матч",
   "event_category_fight": "Бой",
-  "location": "Регион или место проведения",
   "event_date": "Дата мероприятия",
-  "net_price": "Цена нетто",
   "ticket_details": "Детали билета (ряд, место и т.д.)",
-  "expiration_timer": "Таймер актуальности",
-  "is_active": "Актуально",
-  "save_service": "Сохранить услугу",
-
- 
   "marketplace": {
     "title": "E'lonlar doskasi",
     "select_category": "Toifani tanlang",
@@ -211,27 +193,20 @@
     "children": "Bolalar (2–11)",
     "infants": "Chaqaloqlar (0–1)",
     "search": "Qidirish",
-    "search_in": "{{category}} bo`yicha qidirish:" ,
+    "search_in": "{{category}} bo`yicha qidirish:",
     "location_placeholder": "Hududni kiriting ...",
     "searching": "Qidirilyabdi...",
     "results": "Qidiruv natijasi",
-    "price": "Narh"
-               },
-
+    "price": "Narh",
+    "propose_price": "Narx taklif qilish"
+  },
   "new_visa_support": "Viza yordami",
   "select_country": "Viza uchun mamlakatni tanlang",
-  "description": "Tavsif",
-  "net_price": "Netto narx",
-  "is_active": "Faol",
-  "save_service": "Xizmatni saqlash",
-  "country_not_chosen": "Mamlakatlar topilmadi",
-
   "nav": {
     "dashboard": "Boshqaruv",
     "requests": "So‘rovlar",
     "bookings": "Bronlar"
   },
-  
   "client": {
     "register": {
       "title": "Mijoz ro‘yxatdan o‘tishi",
@@ -275,22 +250,37 @@
       },
       "noRequests": "So‘rovlar yo‘q",
       "noBookings": "Bronlar yo‘q"
+    },
+    "header": {
+      "cabinet": "Kabinet",
+      "favorites": "Sevimlilar"
     }
   },
-  
-  "favorites": "Sevimlilar",
+  "favorites": {
+    "empty_title": "Sevimlilar bo‘sh",
+    "empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
+    "no_image": "Rasm yo‘q",
+    "removed": "Sevimlilardan o'chirildi",
+    "added": "Sevimlilarga qo‘shildi",
+    "remove_error": "Sevimlilardan o'chirib bo‘lmadi",
+    "empty_subtitle": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting."
+  },
   "favorites_empty_title": "Sevimlilar bo‘sh",
   "favorites_empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
   "favorites_no_image": "Rasm yo‘q",
-
   "actions": {
-    "quick_request": "Tez so‘rov",
-    "remove": "O‘chirish",
-    "delete": "O‘chirish",
+    "quick_request": "Tezkor so'rov",
+    "delete": "O'chirish",
+    "remove": "O'chirish",
     "cancel": "Bekor qilish",
-    "ok": "O‘chirish"
+    "ok": "O'chirish",
+    "save_profile": "Profilni saqlash",
+    "upload_photo": "Rasm yuklash",
+    "change": "Almashtirish",
+    "logout": "Chiqish",
+    "change_photo": "Rasmni almashtirish",
+    "delete_photo": "Rasmni olib tashlash"
   },
-
   "pagination": {
     "prev": "←",
     "next": "→"
@@ -308,18 +298,14 @@
     "requests_active": "So'rovlar (faol)",
     "bookings_total": "Bronlar (jami)",
     "completed": "Yakunlangan",
-    "cancelled": "Bekor qilingan"
+    "cancelled": "Bekor qilingan",
+    "tier_label": "Daraja"
   },
   "empty": {
     "no_requests": "Hozircha so'rovlar yo'q.",
     "no_bookings": "Hozircha bronlar yo'q.",
     "no_favorites": "Sevimlilar bo'sh"
   },
-  "actions": {
-    "quick_request": "Tezkor so'rov",
-    "delete": "O'chirish"
-  },
-  
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -330,7 +316,6 @@
       "sendProposal": "Taklif yuborish",
       "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi."
     },
-  
     "bookings": {
       "title": "Bronlar (Provayder)",
       "noItems": "Bronlar yo‘q.",
@@ -341,12 +326,83 @@
       "status": "Holat"
     }
   },
-  
   "common": {
     "loading": "Yuklanmoqda…",
     "backToDashboard": "Kabinetga kirish"
-  }
-  
+  },
+  "bookings": {
+    "item": "Bron",
+    "empty": "Hozircha bronlar yo‘q."
+  },
+  "requests": {
+    "item": "So'rov",
+    "sent": "So'rov yuborildi",
+    "error": "So'rov yuborib bo'lmadi",
+    "note_prompt": "So'rov uchun izoh (ixtiyoriy):",
+    "empty": "Hozircha so‘rovlar yo‘q."
+  },
+  "service_images": "Xizmat rasmlari",
+  "clear_all": "Hammasini tozalash",
+  "clear_all_images_confirm": "Barcha rasmlarni o‘chirasizmi?",
+  "saving": "Saqlanmoqda...",
+  "service_deleted": "Xizmat o‘chirildi",
+  "select_city": "Shaharni tanlang",
+  "select_hotel": "Mehmonxonani tanlang",
+  "status": "Holat",
+  "sum": "Summasi",
+  "calendar": {
+    "booked": "Band qilingan",
+    "manual_blocked": "Qo‘lda bloklangan",
+    "save_button": "Band qilingan sanalarni saqlash",
+    "blocking_title": "Bandlik kalendari",
+    "label_blocked_manual": "Qo‘lda bloklangan",
+    "label_booked_by_clients": "Bronlar bilan band",
+    "load_error": "Band sanalarni yuklab bo‘lmadi",
+    "save_blocked_dates": "Band sanalarni saqlash",
+    "save_error": "Sanalarni saqlab bo‘lmadi",
+    "saved_successfully": "Sanalar saqlandi"
+  },
+  "toast": {
+    "addedToFav": "Sevimlilarga qo‘shildi",
+    "removedFromFav": "Sevimlilardan o'chirildi",
+    "favoriteError": "Sevimlilarni o'zgartirib bo'lmadi"
+  },
+  "cover": "Muqova",
+  "comment": "Izoh",
+  "loading_stats": "Statistika yuklanmoqda...",
+  "profile": {
+    "saved": "Profil saqlandi",
+    "password_changed": "Parol yangilandi"
+  },
+  "errors": {
+    "profile_load": "Profilni yuklab bo‘lmadi",
+    "profile_save": "Profilni saqlab bo‘lmadi",
+    "password_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
+    "password_change": "Parolni almashtirib bo‘lmadi",
+    "data_load": "Maʼlumotlarni yuklab bo‘lmadi",
+    "image_process": "Rasmni qayta ishlab bo‘lmadi",
+    "service_unknown": "Xizmatni aniqlab bo'lmadi"
+  },
+  "password_too_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
+  "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
+  "no_images_yet": "Hali rasmlar yo‘q",
+  "make_cover": "Muqova qilish",
+  "ok": "OK",
+  "cancel": "Bekor qilish",
+  "loading": "Yuklanmoqda…",
+  "created": "Yaratildi",
+  "date": "Sana",
+  "drag_to_reorder": "Tartiblash uchun sudrang",
+  "name_placeholder": "Ismingiz",
+  "password_change": "Parolni almashtirish",
+  "confirm_delete": "Ushbu elementni o‘chirilsinmi?",
+  "country_not_found": "Mamlakatlar topilmadi",
+  "direction_from_not_found": "Jo‘nash shahri topilmadi",
+  "direction_to_not_found": "Borish shahri topilmadi",
+  "hotels_load_error": "Mehmonxonalarni yuklab bo‘lmadi",
+  "profile_load_error": "Profilni yuklab bo‘lmadi",
+  "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
+  "departure_date": "Jo‘nash sanasi",
+  "my_bookings": "Bronlarim",
+  "my_requests": "So‘rovlarim"
 }
-
-
