@@ -313,20 +313,20 @@
     "cancelled": "Cancelled"
   },
   "tabs": {
-    "my_requests": "So'rovlarim",
-    "my_bookings": "Buyurtmalarim",
-    "favorites": "Sevimlilar"
+    "my_requests": "My requests",
+    "my_bookings": "My bookings",
+    "favorites": "Favorites"
   },
   "stats": {
-    "tier": "Daraja",
-    "rating": "Reyting",
-    "bonus_progress": "Bonus jarayoni",
-    "requests_total": "So'rovlar (jami)",
-    "requests_active": "So'rovlar (faol)",
-    "bookings_total": "Bronlar (jami)",
-    "completed": "Yakunlangan",
-    "cancelled": "Bekor qilingan"
-  },
+    "tier": "Tier",
+    "rating": "Rating",
+    "bonus_progress": "Bonus progress",
+    "requests_total": "Requests (total)",
+    "requests_active": "Requests (active)",
+    "bookings_total": "Bookings (total)",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },  
   
   "provider": {
     "requests": {
@@ -356,4 +356,5 @@
   
   }
 }
+
 
