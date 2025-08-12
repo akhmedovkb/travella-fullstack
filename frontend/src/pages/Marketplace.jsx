@@ -1,232 +1,285 @@
-// src/pages/Marketplace.jsx
-import { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiGet, apiPost } from "../api";
+import axios from "axios";
+import { Link } from "react-router-dom";
 
-/* ===== helpers ===== */
-function normalizeList(res) {
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res?.items)) return res.items;
-  if (Array.isArray(res?.data)) return res.data;
-  return [];
-}
-function fmtPrice(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
-  return String(v);
-}
+const hasClient = !!localStorage.getItem("clientToken");
+const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+const dashboardPath = hasProvider ? "/dashboard" : hasClient ? "/client/dashboard" : null;
 
-/* ===== page ===== */
-export default function Marketplace() {
+const blocks = [
+  "ГИД",
+  "ТРАНСПОРТ",
+  "ОТКАЗНОЙ ТУР",
+  "ОТКАЗНОЙ ОТЕЛЬ",
+  "ОТКАЗНОЙ АВИАБИЛЕТ",
+  "ОТКАЗНОЙ БИЛЕТ"
+];
+
+const MarketplaceBoard = () => {
   const { t } = useTranslation();
+  const [activeBlock, setActiveBlock] = useState(null);
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    location: "",
+    adults: 1,
+    children: 0,
+    infants: 0,
+    providerType: ""
+  });
+  const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 6;
 
-  // ui
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState([]);
-  const [error, setError] = useState(null);
+  const handleInputChange = (e) => {
+    setFilters({ ...filters, [e.target.name]: e.target.value });
+  };
 
-  // filters (минимум — как раньше)
-  const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
-  const [sort, setSort] = useState("newest");
+  const handleIncrement = (field) => {
+    setFilters((prev) => ({ ...prev, [field]: prev[field] + 1 }));
+  };
 
-  const payload = useMemo(
-    () => ({
-      q: q?.trim() || undefined,
-      category: category || undefined,
-      sort,
-      only_active: true,
-      limit: 60,
-      offset: 0,
-    }),
-    [q, category, sort]
-  );
+  const handleDecrement = (field) => {
+    setFilters((prev) => ({ ...prev, [field]: Math.max(0, prev[field] - 1) }));
+  };
 
-  async function search(opts = {}) {
-    setLoading(true);
-    setError(null);
+  const handleSearch = async () => {
+    setIsLoading(true);
+    setError("");
     try {
-      const body = opts.all ? {} : payload;
-
-      // основной поиск
-      let res = await apiPost("/api/marketplace/search", body);
-      let list = normalizeList(res);
-
-      // fallback — публичные услуги
-      if (!list.length) {
-        const pub = await apiGet("/api/services/public").catch(() => []);
-        list = normalizeList(pub);
-      }
-      setItems(list);
-    } catch {
-      try {
-        const pub = await apiGet("/api/services/public");
-        setItems(normalizeList(pub));
-      } catch {
-        setItems([]);
-        setError(t("common.loading_error") || "Ошибка загрузки данных");
-      }
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/marketplace/search`,
+        filters
+      );
+      setResults(res.data);
+      setCurrentPage(1);
+    } catch (err) {
+      setError("Ошибка при поиске");
+      console.error("Поиск не удался", err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }
+  };
 
-  useEffect(() => {
-    // автоподгрузка всего (как раньше)
-    search({ all: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const indexOfLast = currentPage * resultsPerPage;
+  const indexOfFirst = indexOfLast - resultsPerPage;
+  const currentResults = results.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil(results.length / resultsPerPage);
 
-  async function handleQuickRequest(serviceId) {
-    if (!serviceId) return;
-    const note =
-      window.prompt(
-        t("common.note_optional") ||
-          "Комментарий к запросу (необязательно):"
-      ) || undefined;
-    try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
-      alert(t("messages.request_sent") || "Запрос отправлен");
-    } catch {
-      alert(t("common.loading_error") || "Не удалось отправить запрос");
-    }
-  }
-
-  /* ===== Card (как на прежнем UI) ===== */
-  function Card({ it }) {
-    const svc = it?.service || it;
-    const id = svc?.id ?? it?.id;
-    const title =
-      svc?.title || svc?.name || svc?.service_title || t("title") || "Service";
-    const images = Array.isArray(svc?.images) ? svc.images : [];
-    const image = images[0] || svc?.cover || svc?.image || null;
-    const price = svc?.price ?? svc?.net_price ?? it?.price ?? it?.net_price;
-    const prettyPrice = fmtPrice(price);
-
+  const renderRefusedHotelCard = (item) => {
+    const d = item.details || {};
     return (
-      <div className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
-        <div className="aspect-[16/10] bg-gray-100">
-          {image ? (
-            <img src={image} alt={title} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-              {t("favorites.no_image") || "Нет изображения"}
-            </div>
-          )}
-        </div>
-        <div className="p-3 flex-1 flex flex-col">
-          <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (
-            <div className="mt-1 text-xs text-gray-600">
-              {t("marketplace.price") || "Цена"}:{" "}
-              <span className="font-semibold">{prettyPrice}</span>
-            </div>
-          )}
-          <div className="mt-auto pt-3">
-            <button
-              onClick={() => handleQuickRequest(id)}
-              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-            >
-              {t("actions.quick_request") || "Быстрый запрос"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ===== UI ===== */
-  return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      {/* верхняя панель — компактная */}
-      <div className="bg-white rounded-xl shadow p-3 border mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("marketplace.location_placeholder") || "Введите локацию ..."}
-            className="md:col-span-6 border rounded-lg px-3 py-2"
+      <li key={item.id} className="border rounded p-4 bg-gray-50">
+        {item.images?.length > 0 && (
+          <img
+            src={item.images[0]}
+            alt="preview"
+            className="w-full h-40 object-cover rounded mb-2"
           />
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="md:col-span-3 border rounded-lg px-3 py-2"
-          >
-            <option value="">{t("marketplace.select_category") || "Выберите категорию"}</option>
-            <option value="guide">{t("category.guide") || "Гид"}</option>
-            <option value="transport">{t("category.transport") || "Транспорт"}</option>
-            <option value="refused_tour">{t("category.refused_tour") || "Отказной тур"}</option>
-            <option value="refused_hotel">{t("category.refused_hotel") || "Отказной отель"}</option>
-            <option value="refused_flight">{t("category.refused_flight") || "Отказной авиабилет"}</option>
-            <option value="refused_event_ticket">{t("category.refused_event_ticket") || "Отказной ивент"}</option>
-            <option value="visa_support">{t("category.visa_support") || "Визовая поддержка"}</option>
-            <option value="author_tour">{t("category.author_tour") || "Авторский тур"}</option>
-            <option value="hotel_room">{t("category.hotel_room") || "Номер отеля"}</option>
-            <option value="hall_rent">{t("category.hall_rent") || "Зал / аренда"}</option>
-          </select>
-
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="md:col-span-2 border rounded-lg px-3 py-2"
-          >
-            <option value="newest">{t("marketplace.sort_newest") || "Новые"}</option>
-            <option value="price_asc">{t("marketplace.sort_price_asc") || "Цена ↑"}</option>
-            <option value="price_desc">{t("marketplace.sort_price_desc") || "Цена ↓"}</option>
-          </select>
-
-          <div className="md:col-span-1 flex gap-2">
-            <button
-              onClick={() => search()}
-              className="flex-1 px-4 py-2 rounded-lg bg-gray-900 text-white"
-              disabled={loading}
-            >
-              {t("marketplace.search") || "Найти"}
-            </button>
-            <button
-              onClick={() => {
-                setQ("");
-                setCategory("");
-                setSort("newest");
-                search({ all: true });
-              }}
-              className="px-4 py-2 rounded-lg border"
-              disabled={loading}
-              title={t("back") || "Назад"}
-            >
-              ←
-            </button>
-          </div>
+        )}
+        <div className="font-bold text-lg">{d.hotelName || "—"}</div>
+        <div className="text-sm text-gray-600">
+          {d.directionCountry || "—"}, {d.directionTo || "—"}
         </div>
+        <div className="text-sm">
+          🗓 {d.checkIn || "—"} → {d.checkOut || "—"}
+        </div>
+        <div className="text-sm">
+          💰 {d.netPrice ? `${d.netPrice} USD` : "—"}
+        </div>
+        <button className="mt-2 text-orange-600 hover:underline">
+          {t("marketplace.propose_price")}
+        </button>
+      </li>
+    );
+  };
+
+  return (
+    
+    <div className="p-6">
+      {dashboardPath && (
+        <Link
+          to={dashboardPath}
+          className="inline-flex items-center gap-2 text-gray-600 hover:text-orange-600 mb-3"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{t("common.backToDashboard")}</span>
+        </Link>
+       )}
+
+      <h1 className="text-3xl font-bold mb-6 text-center">{t("marketplace.title")}</h1>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+        {blocks.map((block, idx) => (
+          <button
+            key={idx}
+            className={`p-4 rounded-xl shadow text-center font-semibold transition ${
+              activeBlock === block
+                ? "bg-orange-500 text-white"
+                : "bg-white border border-gray-300 hover:bg-gray-100"
+            }`}
+            onClick={() => {
+              setActiveBlock(block);
+              let providerType = "";
+              if (block === "ГИД") providerType = "guide";
+              else if (block === "ТРАНСПОРТ") providerType = "transport";
+              else if (
+                ["ОТКАЗНОЙ ТУР", "ОТКАЗНОЙ ОТЕЛЬ", "ОТКАЗНОЙ АВИАБИЛЕТ", "ОТКАЗНОЙ БИЛЕТ"].includes(
+                  block
+                )
+              ) {
+                providerType = "agent";
+              }
+              setFilters((prev) => ({ ...prev, providerType }));
+            }}
+          >
+            {block}
+          </button>
+        ))}
       </div>
 
-      {/* контент */}
-      <div className="bg-white rounded-xl shadow p-4 border">
-        {loading && (
-          <div className="text-gray-500">
-            {t("common.loading") || "Загрузка..."}
+      {activeBlock && (
+        <div className="bg-white rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-semibold mb-4">
+            {t("marketplace.search_in", { category: activeBlock })}
+          </h2>
+          <div className="grid md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.start_date")}
+              </label>
+              <input
+                type="date"
+                name="startDate"
+                value={filters.startDate}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.end_date")}
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                value={filters.endDate}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t("marketplace.location")}
+              </label>
+              <input
+                type="text"
+                name="location"
+                placeholder={t("marketplace.location_placeholder")}
+                value={filters.location}
+                onChange={handleInputChange}
+                className="border px-3 py-2 rounded w-full"
+              />
+            </div>
           </div>
-        )}
 
-        {!loading && error && (
-          <div className="text-red-600">{error}</div>
-        )}
-
-        {!loading && !error && !items.length && (
-          <div className="text-gray-500">
-            {t("client.dashboard.noResults") || "Нет данных"}
-          </div>
-        )}
-
-        {!loading && !error && !!items.length && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => (
-              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} />
+          <div className="grid md:grid-cols-3 gap-4">
+            {[
+              { field: "adults", label: t("marketplace.adults") },
+              { field: "children", label: t("marketplace.children") },
+              { field: "infants", label: t("marketplace.infants") }
+            ].map(({ field, label }) => (
+              <div key={field} className="flex items-center justify-between">
+                <span className="font-medium">{label}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDecrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center">{filters[field]}</span>
+                  <button
+                    onClick={() => handleIncrement(field)}
+                    className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
-        )}
-      </div>
+
+          <div className="mt-6 text-right">
+            <button
+              onClick={handleSearch}
+              className="bg-orange-500 text-white px-6 py-2 rounded font-semibold"
+            >
+              {isLoading ? t("marketplace.searching") : t("marketplace.search")}
+            </button>
+          </div>
+
+          {error && <p className="text-red-500 mt-4">{error}</p>}
+
+          {currentResults.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-2">{t("marketplace.results")}:</h3>
+              <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentResults.map((item) =>
+                  activeBlock === "ОТКАЗНОЙ ОТЕЛЬ"
+                    ? renderRefusedHotelCard(item)
+                    : (
+                      <li key={item.id} className="border rounded p-4 bg-gray-50">
+                        {item.images?.length > 0 && (
+                          <img
+                            src={item.images[0]}
+                            alt="preview"
+                            className="w-full h-40 object-cover rounded mb-2"
+                          />
+                        )}
+                        <div className="font-bold">{item.title}</div>
+                        <div>{item.description}</div>
+                        <div className="text-sm text-gray-600">{item.category}</div>
+                        <div className="text-sm">{t("marketplace.price")}: {item.price} сум</div>
+                        <div className="text-sm">{t("marketplace.location")}: {item.location}</div>
+                        <button className="mt-2 text-orange-600 hover:underline">
+                          {t("marketplace.propose_price")}
+                        </button>
+                      </li>
+                    )
+                )}
+              </ul>
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex justify-center gap-2">
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`px-3 py-1 rounded border font-medium ${
+                        currentPage === i + 1
+                          ? "bg-orange-500 text-white"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default MarketplaceBoard;
