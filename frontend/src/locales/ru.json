@@ -328,12 +328,23 @@
     }
   },
   
+  "favorites": "Избранное",
   "favorites_empty_title": "Избранное пусто",
-  "favorites_empty_text": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
-  "quick_request": "Быстрый запрос",
-  "delete": "Удалить",
-  "no_image": "Нет изображения",
-  "service": "Услуга",
+  "favorites_empty_desc": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
+  "favorites_no_image": "Нет изображения",
+
+  "actions": {
+    "quick_request": "Быстрый запрос",
+    "remove": "Удалить",
+    "delete": "Удалить",
+    "cancel": "Отмена",
+    "ok": "Удалить"
+  },
+
+  "pagination": {
+    "prev": "←",
+    "next": "→"
+    },
   
   "provider": {
     "requests": {
@@ -362,6 +373,7 @@
   }
 
 }
+
 
 
 
