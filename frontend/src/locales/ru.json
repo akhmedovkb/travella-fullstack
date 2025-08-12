@@ -459,8 +459,18 @@
   "drag_to_reorder": "Перетащите для сортировки",
   "name_placeholder": "Ваше имя",
   "password_change": "Сменить пароль",
-  "confirm_delete": "Удалить элемент?"
+  "confirm_delete": "Удалить элемент?",
+  
+  "stats.level": "Уровень",
+  "stats.bonus_progress": "Бонусный прогресс",
+  "stats.requests_total": "Запросов (всего)",
+  "stats.requests_active": "Запросов (активные)",
+  "stats.bookings_total": "Бронирований (всего)",
+  "stats.completed": "Завершено",
+  "stats.cancelled": "Отменено"
+
 }
+
 
 
 
