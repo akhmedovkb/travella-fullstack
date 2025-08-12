@@ -5,7 +5,7 @@
   "logout": "Logout",
   "name": "Name",
   "type": "Provider Type",
-  "location": "Activity region",
+  "location": "Регион или место проведения",
   "social": "Social Media Link",
   "certificate": "Certificate",
   "view_certificate": "View Certificate",
@@ -17,7 +17,6 @@
   "not_specified": "Not specified",
   "photo": "Photo",
   "file_chosen": "Files has been chosen",
-  
   "services": "Services",
   "edit_service": "Edit the service:",
   "guide": "Guide",
@@ -29,12 +28,32 @@
   "new_service_tip": "To create a new service, fill in all the fields below and click «Save Service».",
   "title": "Title",
   "description": "Description",
-  "category": "Category",
+  "category": {
+    "refused_tour": "Refused tour",
+    "refused_hotel": "Refused hotel",
+    "refused_flight": "Refused air ticket",
+    "refused_event_ticket": "Refused event ticket",
+    "visa_support": "Visa support",
+    "author_tour": "Tailor-made tour",
+    "city_tour_guide": "City tour",
+    "mountain_tour_guide": "Mountain tour",
+    "city_tour_transport": "City tour",
+    "mountain_tour_transport": "Mountain tour",
+    "one_way_transfer": "One way transfer",
+    "dinner_transfer": "Dinner transfer",
+    "border_transfer": "Border transfer",
+    "hall_rent": "Hall rental",
+    "hotel_room": "Hotel room",
+    "hotel_transfer": "Hotel transfer",
+    "${s": {
+      "category}": "Category"
+    }
+  },
   "upload_images": "Images (multiple allowed):",
   "select_files": "Select files",
   "no_file_chosen": "No file chosen",
   "back": "← Back",
-  "save_service": "Save Service",
+  "save_service": "Save service",
   "delete": "Delete",
   "no_changes": "No changes to save",
   "profile_updated": "Profile updated",
@@ -63,8 +82,8 @@
   "room_rent": "Room rental",
   "hotel_transfer": "Hotel transfer",
   "hall_rent": "Hall rental",
-  "expiration_timer": "Actuality timer",
-  "is_active": "Actual",
+  "expiration_timer": "Таймер актуальности",
+  "is_active": "Active",
   "new_refused_tour": "Add a new refused tour:",
   "new_refused_hotel": "Add a new refused hotel:",
   "new_refused_airtkt": "Add a new refused flight ticket:",
@@ -73,55 +92,33 @@
   "refused_hotel_city": "City",
   "refused_hotel_select_city": "Enter the city",
   "refused_hotel_select": "Enter the hotel",
-
   "direction": "Direction",
-    
   "food": "Meal plan",
-    "food_options": {
-      "select": "Select option",
-      "bb": "Bed & Breakfast",
-      "hb": "Half Board",
-      "fb": "Full Board",
-      "ai": "All Inclusive",
-      "uai": "Ultra All Inclusive",
-      "halal": "Halal"
-    },
-  
+  "food_options": {
+    "select": "Select option",
+    "bb": "Bed & Breakfast",
+    "hb": "Half Board",
+    "fb": "Full Board",
+    "ai": "All Inclusive",
+    "uai": "Ultra All Inclusive",
+    "halal": "Halal"
+  },
   "transfer": "Transfer",
-    "transfer_options": {
-      "select": "Select transfer",
-      "individual": "Individual",
-      "group": "Group",
-      "none": "None"
-    },
-
+  "transfer_options": {
+    "select": "Select transfer",
+    "individual": "Individual",
+    "group": "Group",
+    "none": "None"
+  },
   "airline": "Airline",
   "enter_airline": "Enter Airline",
-  
   "changeable": "Changeable",
   "visa_included": "Visa included",
   "net_price": "Net price",
-
-  "category": {
-    "refused_tour": "Refused tour",
-    "refused_hotel": "Refused hotel",
-    "refused_flight": "Refused air ticket",
-    "refused_event_ticket": "Refused event ticket",
-    "visa_support": "Visa support",
-    "author_tour": "Tailor-made tour",
-    "city_tour_guide": "City tour",
-    "mountain_tour_guide": "Mountain tour",
-    "city_tour_transport": "City tour",
-    "mountain_tour_transport": "Mountain tour",
-    "one_way_transfer": "One way transfer",
-    "dinner_transfer": "Dinner transfer",
-    "border_transfer": "Border transfer"
-  },
-
   "direction_country": "Destination country",
   "direction_from": "Departure city",
   "direction_to": "Arrival city",
-  "country_not_chosen": "Not chosen",
+  "country_not_chosen": "No countries found",
   "direction_from_not_chosen": "Departure city not chosen",
   "direction_to_not_chosen": "Arrival city not chosen",
   "flight_type": "Flight type",
@@ -129,13 +126,10 @@
   "round_trip": "Round trip",
   "departure_date": "Departure date",
   "return_date": "Return date",
-
-  
   "start_flight_date": "Outbound flight date",
   "end_flight_date": "Return flight date",
   "flight_details": "Flight details",
   "enter_flight_details": "Enter flight details",
-  
   "accommodation_category": "Category of accommodation",
   "enter_category": "Enter category of accommodation",
   "accommodation": "Accommodation",
@@ -146,7 +140,6 @@
   "adt": "Adults (ADT)",
   "chd": "Children (CHD)",
   "inf": "Infants (INF)",
-  
   "login": {
     "title": "Supplier Login",
     "email": "Email",
@@ -154,27 +147,25 @@
     "button": "Login",
     "no_account": "No account? ",
     "error": "email or password error!"
-           },
-  
+  },
   "register": {
-  "title": "Provider Registration",
-  "name": "Name",
-  "type": "Provider Type",
-  "location_placeholder": "e.g. Samarkand, Bukhara",
-  "email": "Email",
-  "social": "Social media link",
-  "photo": "Profile photo",
-  "phone": "Phone",
-  "password": "Password",
-  "button": "Register",
-  "success": "Registration successful!",
-  "error": "Registration failed.",
-  "select_file": "Choose File",
-  "no_file": "No file selected",
-  "file_chosen": "File selected",
-  "required": "Please fill out this field"
-              },
-
+    "title": "Provider Registration",
+    "name": "Name",
+    "type": "Provider Type",
+    "location_placeholder": "e.g. Samarkand, Bukhara",
+    "email": "Email",
+    "social": "Social media link",
+    "photo": "Profile photo",
+    "phone": "Phone",
+    "password": "Password",
+    "button": "Register",
+    "success": "Registration successful!",
+    "error": "Registration failed.",
+    "select_file": "Choose File",
+    "no_file": "No file selected",
+    "file_chosen": "File selected",
+    "required": "Please fill out this field"
+  },
   "new_refused_event_ticket": "Отказной билет на мероприятие",
   "event_name": "Название мероприятия",
   "select_event_category": "Выберите категорию события",
@@ -184,14 +175,8 @@
   "event_category_masterclass": "Мастер-класс",
   "event_category_football": "Футбольный матч",
   "event_category_fight": "Бой",
-  "location": "Регион или место проведения",
   "event_date": "Дата мероприятия",
-  "net_price": "Цена нетто",
   "ticket_details": "Детали билета (ряд, место и т.д.)",
-  "expiration_timer": "Таймер актуальности",
-  "is_active": "Актуально",
-  "save_service": "Сохранить услугу",
-
   "marketplace": {
     "title": "Marketplace",
     "select_category": "Select a category",
@@ -213,18 +198,11 @@
     "location_placeholder": "Enter location...",
     "searching": "Searching...",
     "results": "Search Results",
-    "price": "Price"
-},
-  
+    "price": "Price",
+    "propose_price": "Propose price"
+  },
   "new_visa_support": "Visa support",
   "select_country": "Select country for visa",
-  "description": "Description",
-  "net_price": "Net price",
-  "is_active": "Active",
-  "save_service": "Save service",
-  "country_not_chosen": "No countries found",
-
-  
   "nav": {
     "dashboard": "Dashboard",
     "requests": "Requests",
@@ -232,7 +210,6 @@
     "clientDashboard": "Dashboard",
     "favorites": "Favorites"
   },
-  
   "client": {
     "register": {
       "title": "Client registration",
@@ -276,27 +253,41 @@
       },
       "noRequests": "No requests yet",
       "noBookings": "No bookings yet"
+    },
+    "header": {
+      "cabinet": "Dashboard",
+      "favorites": "Favorites"
     }
   },
-  
-  "favorites": "Favorites",
+  "favorites": {
+    "empty_title": "Favorites is empty",
+    "empty_desc": "Add interesting services to favorites and come back later.",
+    "no_image": "No image",
+    "removed": "Removed from favorites",
+    "added": "Added to favorites",
+    "remove_error": "Failed to remove from favorites",
+    "empty_subtitle": "Add interesting services to favorites and come back later."
+  },
   "favorites_empty_title": "Favorites is empty",
   "favorites_empty_desc": "Add interesting services to favorites and come back later.",
   "favorites_no_image": "No image",
-
   "actions": {
     "quick_request": "Quick request",
-    "remove": "Remove",
     "delete": "Delete",
+    "remove": "Remove",
     "cancel": "Cancel",
-    "ok": "Delete"
+    "ok": "Delete",
+    "save_profile": "Save profile",
+    "upload_photo": "Upload photo",
+    "change": "Change",
+    "logout": "Logout",
+    "change_photo": "Change photo",
+    "delete_photo": "Remove photo"
   },
-
   "pagination": {
     "prev": "←",
     "next": "→"
   },
-  
   "tabs": {
     "my_requests": "My requests",
     "my_bookings": "My bookings",
@@ -310,33 +301,14 @@
     "requests_active": "Requests (active)",
     "bookings_total": "Bookings (total)",
     "completed": "Completed",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "tier_label": "Tier"
   },
-  "tabs": {
-    "my_requests": "My requests",
-    "my_bookings": "My bookings",
-    "favorites": "Favorites"
-  },
-  "stats": {
-    "tier": "Tier",
-    "rating": "Rating",
-    "bonus_progress": "Bonus progress",
-    "requests_total": "Requests (total)",
-    "requests_active": "Requests (active)",
-    "bookings_total": "Bookings (total)",
-    "completed": "Completed",
-    "cancelled": "Cancelled"
-  },  
   "empty": {
     "no_requests": "No requests yet.",
     "no_bookings": "No bookings yet.",
     "no_favorites": "Favorites list is empty"
   },
-  "actions": {
-    "quick_request": "Quick request",
-    "delete": "Delete"
-  },
-  
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -347,7 +319,6 @@
       "sendProposal": "Send proposal",
       "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking."
     },
-    
     "bookings": {
       "title": "Bookings (Provider)",
       "noItems": "No bookings.",
@@ -355,17 +326,85 @@
       "confirm": "Confirm",
       "reject": "Reject",
       "cancel": "Cancel",
-      "status": "Status"  
-     }
-    },
-  
+      "status": "Status"
+    }
+  },
   "common": {
     "loading": "Loading…",
     "backToDashboard": "Dashboard"
-  
-  }
+  },
+  "bookings": {
+    "item": "Booking",
+    "empty": "No bookings yet."
+  },
+  "requests": {
+    "item": "Request",
+    "sent": "Request sent",
+    "error": "Failed to send request",
+    "note_prompt": "Note for the request (optional):",
+    "empty": "No requests yet."
+  },
+  "service_images": "Service images",
+  "clear_all": "Clear all",
+  "clear_all_images_confirm": "Remove all images?",
+  "saving": "Saving...",
+  "service_deleted": "Service deleted",
+  "select_city": "Select city",
+  "select_hotel": "Select hotel",
+  "status": "Status",
+  "sum": "Amount",
+  "calendar": {
+    "booked": "Booked",
+    "manual_blocked": "Manually blocked",
+    "save_button": "Save blocked dates",
+    "blocking_title": "Availability calendar",
+    "label_blocked_manual": "Blocked manually",
+    "label_booked_by_clients": "Blocked by bookings",
+    "load_error": "Failed to load blocked dates",
+    "save_blocked_dates": "Save blocked dates",
+    "save_error": "Failed to save dates",
+    "saved_successfully": "Dates saved"
+  },
+  "toast": {
+    "addedToFav": "Added to favorites",
+    "removedFromFav": "Removed from favorites",
+    "favoriteError": "Failed to toggle favorite"
+  },
+  "cover": "Cover",
+  "comment": "Comment",
+  "loading_stats": "Loading stats...",
+  "profile": {
+    "saved": "Profile saved",
+    "password_changed": "Password updated"
+  },
+  "errors": {
+    "profile_load": "Failed to load profile",
+    "profile_save": "Failed to save profile",
+    "password_short": "Password must be at least 6 characters",
+    "password_change": "Failed to change password",
+    "data_load": "Failed to load data",
+    "image_process": "Failed to process image",
+    "service_unknown": "Failed to determine service"
+  },
+  "password_too_short": "Password must be at least 6 characters",
+  "images_hint": "Up to 10 images, ≤ 3 MB each",
+  "no_images_yet": "No images yet",
+  "make_cover": "Make cover",
+  "ok": "OK",
+  "cancel": "Cancel",
+  "loading": "Loading…",
+  "created": "Created",
+  "date": "Date",
+  "drag_to_reorder": "Drag to reorder",
+  "name_placeholder": "Your name",
+  "password_change": "Change password",
+  "confirm_delete": "Delete this item?",
+  "country_not_found": "Countries not found",
+  "direction_from_not_found": "Departure city not found",
+  "direction_to_not_found": "Arrival city not found",
+  "hotels_load_error": "Failed to load hotels",
+  "profile_load_error": "Failed to load profile",
+  "services_load_error": "Failed to load services",
+  "my_bookings": "My bookings",
+  "my_requests": "My requests"
 }
-
-
-
-
