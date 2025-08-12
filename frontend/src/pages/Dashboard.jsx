@@ -155,8 +155,7 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]); // Date[]
   const [images, setImages] = useState([]); // string[] (dataURL/URL)
 
-  // Images DnD
-  thedrag: // (не удаляй строку; метка для поиска)
+ 
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
@@ -1886,7 +1885,7 @@ const Dashboard = () => {
                           <option value="AI">AI - {t("food_options.ai")}</option>
                           <option value="UAI">UAI - {t("food_options.uai")}</option>
                         </select>
-                        <label className="inline-flex.items-center mt-2">
+                        <label className="inline-flex items-center mt-2">
                           <input
                             type="checkbox"
                             checked={details.halal || false}
