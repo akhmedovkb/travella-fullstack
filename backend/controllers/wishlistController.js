@@ -1,21 +1,20 @@
 // controllers/wishlistController.js
 const pool = require("../db");
 
-/** Нормализуем images в массив строк (поддержка jsonb, text[], строки) */
+/** Мягкая нормализация картинок в массив строк */
 function normalizeImages(val) {
   if (!val) return [];
   if (Array.isArray(val)) return val;
   if (typeof val === "string") {
-    // может быть JSON-строкой или одиночным URL/base64
     try {
       const parsed = JSON.parse(val);
-      return Array.isArray(parsed) ? parsed : parsed ? [val] : [];
+      return Array.isArray(parsed) ? parsed : (val ? [val] : []);
     } catch {
       return [val];
     }
   }
   if (typeof val === "object") {
-    // если пришёл jsonb-объект (например, массив) от pg
+    // JSONB из pg может прийти объектом/массивом
     if (Array.isArray(val)) return val;
     return [];
   }
@@ -24,12 +23,9 @@ function normalizeImages(val) {
 
 /**
  * GET /api/wishlist?expand=service
- * Возвращает массив избранного. При expand=service добавляет объект `service`.
- * Формат элемента:
- * {
- *   id, service_id, created_at,
- *   service?: { id, title, images: string[] }
- * }
+ * Возвращает массив избранного; при expand=service добавляет объект service.
+ * Элемент:
+ * { id, service_id, created_at, service?: { id, title, images: string[] } }
  */
 exports.listWishlist = async (req, res) => {
   try {
@@ -37,9 +33,7 @@ exports.listWishlist = async (req, res) => {
     const expand = String(req.query.expand || "") === "service";
 
     if (expand) {
-      // ВАЖНО: не используем несуществующие поля (s.name).
-      // Заголовок берём безопасно: только s.title.
-      // Картинки берём через to_jsonb(s)->'images', чтобы не падать, если в схеме нет колонки images.
+      // ВАЖНО: только s.title (без s.name) — чтобы не падать на несуществующей колонке.
       const sql = `
         SELECT
           w.id,
@@ -83,21 +77,29 @@ exports.listWishlist = async (req, res) => {
 /**
  * POST /api/wishlist/toggle
  * Тело: { service_id? , itemId? | id? }
- * - Если передан itemId/id — удаляем запись по её id.
- * - Иначе работаем по service_id: если была — удаляем, если не было — создаём.
+ * - Если пришёл itemId/id — удаляем запись по её id (быстрое снятие).
+ * - Если пришёл service_id — toggle по услуге (если было — удаляем, иначе — добавляем).
  */
 exports.toggleWishlist = async (req, res) => {
   try {
     const clientId = req.user.id;
     const body = req.body || {};
 
-    // Вариант 1: удаление по id записи
+    // Вариант 1: удаление по id записи wishlist
     const wishlistId = body.id || body.itemId;
     if (wishlistId) {
       const del = await pool.query(
         `DELETE FROM wishlist WHERE id = $1 AND client_id = $2`,
         [wishlistId, clientId]
       );
+      // Фолбэк: если вдруг прислали service_id вместо id — попробуем удалить по service_id
+      if (del.rowCount === 0) {
+        const del2 = await pool.query(
+          `DELETE FROM wishlist WHERE service_id = $1 AND client_id = $2`,
+          [wishlistId, clientId]
+        );
+        if (del2.rowCount > 0) return res.json({ removed: true, by: "service_id_fallback" });
+      }
       return res.json({ removed: del.rowCount > 0, by: "wishlist_id" });
     }
 
@@ -111,6 +113,7 @@ exports.toggleWishlist = async (req, res) => {
       `SELECT id FROM wishlist WHERE client_id = $1 AND service_id = $2`,
       [clientId, serviceId]
     );
+
     if (exists.rowCount > 0) {
       await pool.query(
         `DELETE FROM wishlist WHERE client_id = $1 AND service_id = $2`,
