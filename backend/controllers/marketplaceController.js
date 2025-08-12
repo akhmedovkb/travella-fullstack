@@ -1,6 +1,7 @@
-// /app/controllers/marketplaceController.js
+// backend/controllers/marketplaceController.js
 const db = require("../db");
 
+// Цена: сначала netPrice из details, потом price
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
 const toNum = (v) => {
@@ -21,7 +22,7 @@ function addDetailsEq(qb, key, value) {
   qb.andWhereRaw(`details->>? = ?`, [key, String(value)]);
 }
 
-async function search(req, res, next) {
+module.exports.search = async (req, res, next) => {
   try {
     const {
       q,
@@ -38,6 +39,9 @@ async function search(req, res, next) {
     const lim = Math.min(200, Math.max(1, Number(limit) || 60));
     const off = Math.max(0, Number(offset) || 0);
 
+    // строка "YYYY-MM-DDTHH:MM" — как в details.expiration
+    const nowIsoMinute = new Date().toISOString().slice(0, 16);
+
     const rowsQ = db("services")
       .select([
         "id",
@@ -51,14 +55,18 @@ async function search(req, res, next) {
         "created_at",
         "status",
         "details",
-        "expiration_at",
       ])
       .modify((qb) => {
         if (only_active) {
-          qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
-            .andWhere((q2) => {
-              q2.whereNull("expiration_at").orWhereRaw("expiration_at > now()");
-            });
+          // 1) isActive в JSONB (или по умолчанию true)
+          qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`);
+          // 2) expiration хранится как текст "YYYY-MM-DDTHH:MM"
+          // допускаем отсутствие/пустоту или дату в будущем
+          qb.andWhere((q2) => {
+            q2.whereRaw(`(details->>'expiration') IS NULL`)
+              .orWhereRaw(`(details->>'expiration') = ''`)
+              .orWhereRaw(`(details->>'expiration') > ?`, [nowIsoMinute]);
+          });
         }
       })
       .modify((qb) => {
@@ -112,7 +120,4 @@ async function search(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
-// ЕДИНЫЙ ЯВНЫЙ ЭКСПОРТ
-module.exports = { search };
+};
