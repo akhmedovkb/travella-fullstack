@@ -332,6 +332,10 @@
     "no_bookings": "No bookings yet.",
     "no_favorites": "Favorites list is empty"
   },
+  "actions": {
+    "quick_request": "Quick request",
+    "delete": "Delete"
+  },
   
   "provider": {
     "requests": {
@@ -361,6 +365,7 @@
   
   }
 }
+
 
 
 
