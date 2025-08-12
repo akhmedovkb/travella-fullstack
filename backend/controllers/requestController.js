@@ -1,18 +1,18 @@
 const pool = require("../db");
-const { validationResult } = require("express-validator");
 
+// Создать запрос (клиент)
 exports.createRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const role = req.user?.role; // "client" ожидается
+    const role = req.user?.role; // "client"
     if (!userId || role !== "client") {
       return res.status(403).json({ message: "Only client can create requests" });
     }
 
-    const { service_id, note } = req.body;
+    const { service_id, note } = req.body || {};
     if (!service_id) return res.status(400).json({ message: "service_id is required" });
 
-    // убеждаемся, что услуга существует
+    // Проверяем, что услуга существует
     const svc = await pool.query("SELECT id, provider_id, title FROM services WHERE id=$1", [service_id]);
     if (!svc.rowCount) return res.status(404).json({ message: "Service not found" });
 
@@ -30,6 +30,7 @@ exports.createRequest = async (req, res) => {
   }
 };
 
+// Мои запросы (клиент)
 exports.getMyRequests = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -53,6 +54,7 @@ exports.getMyRequests = async (req, res) => {
   }
 };
 
+// Входящие запросы провайдера
 exports.getProviderRequests = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -76,6 +78,7 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
+// Провайдер отправляет предложение
 exports.addProposal = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -87,7 +90,7 @@ exports.addProposal = async (req, res) => {
     const { id } = req.params;
     const { price, currency, hotel, room, terms, message } = req.body || {};
 
-    // проверяем, что запрос относится к услуге этого провайдера
+    // Проверяем, что запрос относится к услуге этого провайдера
     const rq = await pool.query(
       `SELECT r.id, r.client_id, r.service_id, s.provider_id
        FROM requests r
@@ -119,6 +122,7 @@ exports.addProposal = async (req, res) => {
   }
 };
 
+// Клиент принимает предложение → создаём бронь в статусе 'pending'
 exports.acceptRequest = async (req, res) => {
   const clientId = req.user?.id;
   const role = req.user?.role;
@@ -149,13 +153,13 @@ exports.acceptRequest = async (req, res) => {
       return res.status(400).json({ message: "No proposal to accept" });
     }
 
-    // обновляем статус запроса
+    // Обновляем статус запроса
     await client.query(`UPDATE requests SET status='accepted' WHERE id=$1`, [id]);
 
-    // создаём бронь
+    // Создаём бронь (pending — дальше провайдер confirm/reject)
     const booking = await client.query(
       `INSERT INTO bookings (request_id, service_id, client_id, provider_id, status, price, currency, details)
-       VALUES ($1,$2,$3,$4,'active', ($5->>'price')::numeric, $5->>'currency', $5)
+       VALUES ($1,$2,$3,$4,'pending', ($5->>'price')::numeric, $5->>'currency', $5)
        RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
       [r.id, r.service_id, r.client_id, r.provider_id, r.proposal]
     );
@@ -171,6 +175,7 @@ exports.acceptRequest = async (req, res) => {
   }
 };
 
+// Клиент отклоняет предложение
 exports.rejectRequest = async (req, res) => {
   try {
     const clientId = req.user?.id;
