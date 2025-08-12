@@ -347,6 +347,42 @@
   "common": {
     "loading": "Загрузка…",
     "backToDashboard": "в Личный кабинет"
-  }
+  },
+
+  "my_requests": "Мои запросы",
+  "my_bookings": "Мои бронирования",
+  "favorites": "Избранное",
+
+  "tabs.my_requests": "Мои запросы",
+  "tabs.my_bookings": "Мои бронирования",
+  "tabs.favorites": "Избранное",
+
+  "actions.upload_photo": "Загрузить фото",
+  "actions.change_photo": "Сменить фото",
+  "actions.delete_photo": "Удалить фото",
+  "actions.save_profile": "Сохранить профиль",
+  "actions.change": "Сменить",
+  "actions.logout": "Выйти",
+  "actions.quick_request": "Быстрый запрос",
+  "actions.delete": "Удалить",
+
+  "stats.tier": "Уровень",
+  "stats.rating": "Рейтинг",
+  "stats.bonus_progress": "Бонусный прогресс",
+  "stats.requests_total": "Запросов (всего)",
+  "stats.requests_active": "Запросов (активные)",
+  "stats.bookings_total": "Бронирований (всего)",
+  "stats.completed": "Завершено",
+  "stats.cancelled": "Отменено",
+
+  "favorites_empty_title": "Избранное пусто",
+  "favorites_empty_desc": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
+  "favorites_no_image": "Нет изображения",
+
+  "requests.empty": "Пока нет запросов.",
+  "bookings.empty": "Пока нет бронирований.",
+  "common.loading_stats": "Загрузка статистики..."
+
 
 }
+
