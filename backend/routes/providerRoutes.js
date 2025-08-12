@@ -17,6 +17,7 @@ const {
   getBookedDates,
   saveBlockedDates,
   updateServiceImagesOnly,
+  getProviderStats,
 } = require("../controllers/providerController");
 
 // Пускаем только провайдера
