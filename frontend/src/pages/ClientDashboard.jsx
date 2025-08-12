@@ -1,3 +1,4 @@
+// src/pages/ClientDashboard.jsx
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -5,21 +6,35 @@ import { apiGet, apiPut, apiPost } from "../api";
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] || "";
   const second = parts[1]?.[0] || "";
   return (first + second).toUpperCase() || "U";
 }
 
 /**
+ * Make sure we always render a proper data URL for images.
+ * If the string is raw base64 -> add "data:<mime>;base64,".
+ * If it is already a data URL -> return as is (no duplication).
+ */
+function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
+  if (!b64OrDataUrl) return null;
+  return String(b64OrDataUrl).startsWith("data:")
+    ? b64OrDataUrl
+    : `data:${mime};base64,${b64OrDataUrl}`;
+}
+
+/**
+ * For sending to server: strip "data:*;base64," prefix if present.
+ */
+function stripDataUrlPrefix(dataUrl) {
+  if (!dataUrl) return null;
+  const m = String(dataUrl).match(/^data:[^;]+;base64,(.*)$/);
+  return m ? m[1] : dataUrl;
+}
+
+/**
  * Crop image to a centered square and resize to {size} x {size}, return dataURL (jpeg).
- * @param {File} file
- * @param {number} size
- * @param {number} quality
- * @returns {Promise<string>} dataURL
  */
 function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   return new Promise((resolve, reject) => {
@@ -124,20 +139,25 @@ function StatBox({ title, value }) {
 }
 
 function ClientStatsBlock({ stats }) {
+  const { t } = useTranslation();
   const rating = Number(stats?.rating || 0);
   const points = Number(stats?.points || 0);
   const next = Number(stats?.next_tier_at || 100);
-  const tier = stats?.tier || "Bronze";
+  const tier = stats?.tier || t("stats.tier", { defaultValue: "Tier" });
 
   return (
     <div className="bg-white rounded-xl shadow p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm text-gray-500">Tier</div>
+          <div className="text-sm text-gray-500">
+            {t("stats.tier", { defaultValue: "Tier" })}
+          </div>
           <div className="text-xl font-semibold">{tier}</div>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-500">Rating</div>
+          <div className="text-sm text-gray-500">
+            {t("stats.rating", { defaultValue: "Rating" })}
+          </div>
           <div className="flex items-center justify-end gap-2">
             <Stars value={rating} size={20} />
             <span className="text-sm text-gray-600">{rating.toFixed(1)}</span>
@@ -146,15 +166,34 @@ function ClientStatsBlock({ stats }) {
       </div>
 
       <div className="mt-4">
-        <Progress value={points} max={next} label="Bonus progress" />
+        <Progress
+          value={points}
+          max={next}
+          label={t("stats.bonus_progress", { defaultValue: "Bonus progress" })}
+        />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-        <StatBox title="Requests (total)" value={stats?.requests_total ?? 0} />
-        <StatBox title="Requests (active)" value={stats?.requests_active ?? 0} />
-        <StatBox title="Bookings (total)" value={stats?.bookings_total ?? 0} />
-        <StatBox title="Completed" value={stats?.bookings_completed ?? 0} />
-        <StatBox title="Cancelled" value={stats?.bookings_cancelled ?? 0} />
+        <StatBox
+          title={t("stats.requests_total", { defaultValue: "Requests (total)" })}
+          value={stats?.requests_total ?? 0}
+        />
+        <StatBox
+          title={t("stats.requests_active", { defaultValue: "Requests (active)" })}
+          value={stats?.requests_active ?? 0}
+        />
+        <StatBox
+          title={t("stats.bookings_total", { defaultValue: "Bookings (total)" })}
+          value={stats?.bookings_total ?? 0}
+        />
+        <StatBox
+          title={t("stats.completed", { defaultValue: "Completed" })}
+          value={stats?.bookings_completed ?? 0}
+        />
+        <StatBox
+          title={t("stats.cancelled", { defaultValue: "Cancelled" })}
+          value={stats?.bookings_cancelled ?? 0}
+        />
       </div>
     </div>
   );
@@ -165,10 +204,10 @@ function EmptyFavorites() {
   return (
     <div className="p-8 text-center bg-white border rounded-xl">
       <div className="text-lg font-semibold mb-2">
-        {t("favorites_empty_title", { defaultValue: "Избранное пусто" })}
+        {t("favorites.empty_title", { defaultValue: "Избранное пусто" })}
       </div>
       <div className="text-gray-600">
-        {t("favorites_empty_desc", {
+        {t("favorites.empty_desc", {
           defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
         })}
       </div>
@@ -211,15 +250,11 @@ function FavoritesList({
                 >
                   <div className="aspect-[16/10] bg-gray-100 relative">
                     {image ? (
-                      <img
-                        src={image}
-                        alt={title}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={image} alt={title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
                         <span className="text-sm">
-                          {t("favorites_no_image", { defaultValue: "Нет изображения" })}
+                          {t("favorites.no_image", { defaultValue: "Нет изображения" })}
                         </span>
                       </div>
                     )}
@@ -299,13 +334,13 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null);
+  const [avatarBase64, setAvatarBase64] = useState(null);   // always data URL for UI
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
   // Password
   const [newPassword, setNewPassword] = useState("");
-  const [changingPass, setChangingPass] = useState(false);
+  the[changingPass, setChangingPass] = useState(false);
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -319,25 +354,21 @@ export default function ClientDashboard() {
   ];
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(
-    tabs.some((tb) => tb.key === initialTab) ? initialTab : "requests"
+    tabs.some((t) => t.key === initialTab) ? initialTab : "requests"
   );
 
   // Data for tabs
   const [requests, setRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [favorites, setFavorites] = useState([]); // wishlist items (expand=service)
+  const [favorites, setFavorites] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
   // UI messages
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
 
-  // Pagination for favorites
   const favPageFromUrl = Number(searchParams.get("page") || 1);
   const [favPage, setFavPage] = useState(isNaN(favPageFromUrl) ? 1 : favPageFromUrl);
-
-  // Decision (accept/reject) state for proposals
-  const [decidingId, setDecidingId] = useState(null);
 
   /* -------- Effects -------- */
 
@@ -361,11 +392,12 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        setAvatarBase64(me?.avatar_base64 || null);
+        // normalize whatever server returns
+        setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
       } catch (e) {
-        setError(t("common.profile_load_error", { defaultValue: "Не удалось загрузить профиль" }));
+        setError(t("errors.profile_load", { defaultValue: "Не удалось загрузить профиль" }));
       } finally {
         setLoadingProfile(false);
       }
@@ -410,7 +442,7 @@ export default function ClientDashboard() {
         if (activeTab === "favorites") {
           setFavorites([]);
         } else {
-          setError(t("common.load_error", { defaultValue: "Ошибка загрузки данных" }));
+          setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
         }
       } finally {
         if (!cancelled) setLoadingTab(false);
@@ -419,8 +451,7 @@ export default function ClientDashboard() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, t]);
 
   /* -------- Handlers -------- */
 
@@ -431,13 +462,13 @@ export default function ClientDashboard() {
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl);
+      setAvatarBase64(dataUrl);          // UI keeps data URL
       setAvatarServerUrl(null);
       setRemoveAvatar(false);
     } catch (err) {
-      setError(t("common.image_process_error", { defaultValue: "Не удалось обработать изображение" }));
+      setError(t("errors.image_process", { defaultValue: "Не удалось обработать изображение" }));
     } finally {
-      e.target.value = "";
+      e.target.value = ""; // allow re-select same file
     }
   };
 
@@ -453,14 +484,18 @@ export default function ClientDashboard() {
       setMessage(null);
       setError(null);
       const payload = { name, phone };
-      if (avatarBase64) payload.avatar_base64 = avatarBase64;
+      // send raw base64 only, without data: prefix
+      if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
+
       const res = await apiPut("/api/clients/me", payload);
-      setMessage(t("common.saved", { defaultValue: "Профиль сохранён" }));
+      setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
+      // in case server sanitized fields:
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
+
       if (res?.avatar_base64) {
-        setAvatarBase64(res.avatar_base64);
+        setAvatarBase64(toDataUrl(res.avatar_base64)); // normalize for UI
         setAvatarServerUrl(null);
       } else if (res?.avatar_url) {
         setAvatarServerUrl(res.avatar_url);
@@ -468,7 +503,7 @@ export default function ClientDashboard() {
       }
       setRemoveAvatar(false);
     } catch (e) {
-      setError(t("common.save_error", { defaultValue: "Не удалось сохранить профиль" }));
+      setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
     } finally {
       setSavingProfile(false);
     }
@@ -476,7 +511,11 @@ export default function ClientDashboard() {
 
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
-      setError(t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" }));
+      setError(
+        t("client.dashboard.passwordTooShort", {
+          defaultValue: "Пароль должен быть не короче 6 символов",
+        })
+      );
       return;
     }
     try {
@@ -486,7 +525,7 @@ export default function ClientDashboard() {
       setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
       setNewPassword("");
     } catch (e) {
-      setError(t("client.dashboard.changePasswordError", { defaultValue: "Не удалось изменить пароль" }));
+      setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
     } finally {
       setChangingPass(false);
     }
@@ -505,55 +544,26 @@ export default function ClientDashboard() {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
       setFavorites((prev) => prev.filter((x) => x.id !== itemId));
-      setMessage(t("favorites_removed", { defaultValue: "Удалено из избранного" }));
+      setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
     } catch (e) {
-      setError(t("favorites_remove_error", { defaultValue: "Не удалось удалить из избранного" }));
+      setError(t("errors.favorite_remove", { defaultValue: "Не удалось удалить из избранного" }));
     }
   };
 
   const handleQuickRequest = async (serviceId) => {
     if (!serviceId) {
-      setError(t("common.service_not_found", { defaultValue: "Не удалось определить услугу" }));
+      setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
       return;
     }
-    const note = window.prompt(
-      t("client.dashboard.quickRequestNote", { defaultValue: "Комментарий к запросу (необязательно):" })
-    ) || undefined;
+    const note =
+      window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) ||
+      undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
-      setMessage(t("client.dashboard.request_sent", { defaultValue: "Запрос отправлен" }));
+      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
     } catch (e) {
-      setError(t("client.dashboard.request_failed", { defaultValue: "Не удалось отправить запрос" }));
-    }
-  };
-
-  // NEW: accept / reject provider proposal
-  const handleAcceptProposal = async (requestId) => {
-    try {
-      setDecidingId(requestId);
-      await apiPost(`/api/requests/${requestId}/accept`, {});
-      const data = await apiGet("/api/requests/my");
-      setRequests(Array.isArray(data) ? data : data?.items || []);
-      setMessage(t("common.accepted", { defaultValue: "Предложение принято" }));
-    } catch (e) {
-      setError(t("common.error", { defaultValue: "Ошибка" }));
-    } finally {
-      setDecidingId(null);
-    }
-  };
-
-  const handleRejectProposal = async (requestId) => {
-    try {
-      setDecidingId(requestId);
-      await apiPost(`/api/requests/${requestId}/reject`, {});
-      const data = await apiGet("/api/requests/my");
-      setRequests(Array.isArray(data) ? data : data?.items || []);
-      setMessage(t("common.rejected", { defaultValue: "Предложение отклонено" }));
-    } catch (e) {
-      setError(t("common.error", { defaultValue: "Ошибка" }));
-    } finally {
-      setDecidingId(null);
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
     }
   };
 
@@ -565,7 +575,7 @@ export default function ClientDashboard() {
       return (
         <img
           src={src}
-          alt="avatar"
+          alt=""
           className="w-24 h-24 rounded-full object-cover border"
         />
       );
@@ -592,17 +602,9 @@ export default function ClientDashboard() {
   };
 
   const RequestsList = () => {
-    if (loadingTab) return (
-      <div className="text-gray-500">
-        {t("common.loading", { defaultValue: "Загрузка..." })}
-      </div>
-    );
-    if (!requests?.length) return (
-      <div className="text-gray-500">
-        {t("empty.no_requests", { defaultValue: "Пока нет запросов." })}
-      </div>
-    );
-
+    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
+    if (!requests?.length)
+      return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
@@ -610,14 +612,6 @@ export default function ClientDashboard() {
             r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
           const status = r?.status || "new";
           const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
-          // попытка разобрать предложение
-          let offer = null;
-          try {
-            offer = typeof r?.proposal === "string" ? JSON.parse(r.proposal) : r?.proposal || r?.offer;
-          } catch {
-            offer = null; // игнорируем кривой JSON
-          }
-
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
@@ -634,55 +628,6 @@ export default function ClientDashboard() {
                   {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
                 </div>
               )}
-
-              {/* Предложение поставщика + действия */}
-              {offer ? (
-                <div className="mt-3 border-t pt-3">
-                  <div className="text-sm text-gray-600">
-                    {t("client.dashboard.offer", { defaultValue: "Предложение" })}
-                  </div>
-
-                  <div className="text-sm mt-1 space-y-1">
-                    {"price" in offer && (
-                      <div>
-                        {t("common.price", { defaultValue: "Цена" })}: {offer.price}
-                      </div>
-                    )}
-                    {offer.hotel && (
-                      <div>
-                        {t("common.hotel", { defaultValue: "Отель" })}: {offer.hotel}
-                      </div>
-                    )}
-                    {offer.room && (
-                      <div>
-                        {t("common.room", { defaultValue: "Номер" })}: {offer.room}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => handleAcceptProposal(r.id)}
-                      className="px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                      disabled={decidingId === r.id}
-                    >
-                      {t("actions.accept", { defaultValue: "Принять" })}
-                    </button>
-                    <button
-                      onClick={() => handleRejectProposal(r.id)}
-                      className="px-3 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-60"
-                      disabled={decidingId === r.id}
-                    >
-                      {t("actions.reject", { defaultValue: "Отклонить" })}
-                    </button>
-                  </div>
-                </div>
-              ) : r?.proposal ? (
-                // если было что-то, но не распарсилось — покажем сырьё
-                <pre className="mt-3 border-t pt-3 text-xs overflow-auto">
-{String(r.proposal)}
-                </pre>
-              ) : null}
             </div>
           );
         })}
@@ -691,13 +636,9 @@ export default function ClientDashboard() {
   };
 
   const BookingsList = () => {
-    if (loadingTab) return <div className="text-gray-500">
-      {t("common.loading", { defaultValue: "Загрузка..." })}
-    </div>;
+    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!bookings?.length)
-      return <div className="text-gray-500">
-        {t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}
-      </div>;
+      return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bookings.map((b) => {
@@ -730,9 +671,7 @@ export default function ClientDashboard() {
   };
 
   const FavoritesTab = () => {
-    if (loadingTab) return <div className="text-gray-500">
-      {t("common.loading", { defaultValue: "Загрузка..." })}
-    </div>;
+    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     return (
       <FavoritesList
         items={favorites}
@@ -879,7 +818,6 @@ export default function ClientDashboard() {
             <ClientStatsBlock stats={stats} />
           )}
 
-          {/* Tabs */}
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
               <TabButton tabKey="requests">
