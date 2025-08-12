@@ -312,6 +312,21 @@
     "completed": "Completed",
     "cancelled": "Cancelled"
   },
+  "tabs": {
+    "my_requests": "So'rovlarim",
+    "my_bookings": "Buyurtmalarim",
+    "favorites": "Sevimlilar"
+  },
+  "stats": {
+    "tier": "Daraja",
+    "rating": "Reyting",
+    "bonus_progress": "Bonus jarayoni",
+    "requests_total": "So'rovlar (jami)",
+    "requests_active": "So'rovlar (faol)",
+    "bookings_total": "Bronlar (jami)",
+    "completed": "Yakunlangan",
+    "cancelled": "Bekor qilingan"
+  },
   
   "provider": {
     "requests": {
@@ -341,3 +356,4 @@
   
   }
 }
+
