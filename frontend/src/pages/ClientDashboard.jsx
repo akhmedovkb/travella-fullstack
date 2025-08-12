@@ -1,395 +1,903 @@
-import { useEffect, useState, useRef } from "react";
-import { apiGet, apiPut, apiPost } from "../api";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
+import { apiGet, apiPut, apiPost } from "../api";
 
-/** утилита: инициалы по имени */
+/* ===================== Helpers ===================== */
 function initials(name = "") {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map(p => p[0]?.toUpperCase() || "").join("");
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const first = parts[0]?.[0] || "";
+  const second = parts[1]?.[0] || "";
+  return (first + second).toUpperCase() || "U";
 }
 
-/** утилита: кадрирование и ресайз в квадрат dataURL (jpeg) */
-async function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
-  const dataUrl = await new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
-    fr.readAsDataURL(file);
-  });
-
-  const img = await new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = dataUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  const minSide = Math.min(img.width, img.height);
-  const sx = (img.width - minSide) / 2;
-  const sy = (img.height - minSide) / 2;
-
-  canvas.width = size;
-  canvas.height = size;
-  ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-
-  return canvas.toDataURL("image/jpeg", quality);
-}
-
-export default function ClientDashboard() {
-  const { t } = useTranslation();
-  const [params] = useSearchParams();
-  const fileInputRef = useRef(null);
-
-  // профиль
-  const [profile, setProfile] = useState({
-    name: "",
-    phone: "",
-    avatar_url: ""
-  });
-  const [saving, setSaving] = useState(false);
-
-  // аватар
-  const [avatarPreview, setAvatarPreview] = useState("");      // dataURL для показа
-  const [avatarBase64, setAvatarBase64] = useState("");        // чистый base64 для API
-  const [avatarRemoved, setAvatarRemoved] = useState(false);   // пометили удаление
-
-  // смена пароля
-  const [newPass, setNewPass] = useState("");
-  const [changing, setChanging] = useState(false);
-
-  // отказные туры
-  const [refused, setRefused] = useState([]);
-  const [loadingRefused, setLoadingRefused] = useState(false);
-
-  // вкладки
-  const [tab, setTab] = useState("req");
-  const [myRequests, setMyRequests] = useState([]);
-  const [myBookings, setMyBookings] = useState([]);
-  const [loadingTab, setLoadingTab] = useState(false);
-
-  // ----- loaders -----
-  async function loadProfile() {
+/**
+ * Crop image to a centered square and resize to {size} x {size}, return dataURL (jpeg).
+ * @param {File} file
+ * @param {number} size
+ * @param {number} quality
+ * @returns {Promise<string>} dataURL
+ */
+function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
+  return new Promise((resolve, reject) => {
     try {
-      const me = await apiGet("/api/clients/me");
-      if (me) {
-        setProfile(p => ({
-          ...p,
-          name: me.name ?? "",
-          phone: me.phone ?? "",
-          avatar_url: me.avatar_url ?? ""
-        }));
-        // при загрузке профиля сбрасываем превью/флаги
-        setAvatarPreview("");
-        setAvatarBase64("");
-        setAvatarRemoved(false);
-      }
-    } catch (e) {
-      console.warn("profile load:", e.message);
-    }
-  }
-
-  async function loadRefused() {
-    setLoadingRefused(true);
-    try {
-      const rows = await apiGet("/api/marketplace/refused").catch(() => []);
-      setRefused(Array.isArray(rows) ? rows : []);
-    } finally {
-      setLoadingRefused(false);
-    }
-  }
-
-  async function loadTab(which) {
-    setLoadingTab(true);
-    try {
-      if (which === "req") {
-        const rows = await apiGet("/api/requests/my").catch(() => []);
-        setMyRequests(Array.isArray(rows) ? rows : []);
-      } else {
-        const rows = await apiGet("/api/bookings/my").catch(() => []);
-        setMyBookings(Array.isArray(rows) ? rows : []);
-      }
-    } finally {
-      setLoadingTab(false);
-    }
-  }
-
-  // init
-  useEffect(() => {
-    const tpar = params.get("tab");
-    setTab(tpar === "book" ? "book" : "req");
-    loadProfile();
-    loadRefused();
-    loadTab(tpar === "book" ? "book" : "req");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (tab === "req" && myRequests.length === 0) loadTab("req");
-    if (tab === "book" && myBookings.length === 0) loadTab("book");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
-
-  async function saveProfile(e) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const payload = {
-        name: profile.name,
-        phone: profile.phone
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const minSide = Math.min(img.width, img.height);
+          const sx = Math.max(0, (img.width - minSide) / 2);
+          const sy = Math.max(0, (img.height - minSide) / 2);
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve(dataUrl);
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = reader.result;
       };
-      if (avatarBase64) payload.avatar_base64 = avatarBase64; // новый аватар
-      if (avatarRemoved) payload.remove_avatar = true;         // удалить текущий
-
-      await apiPut("/api/clients/me", payload);
-      await loadProfile();
-    } catch (e2) {
-      alert(e2.message || "Error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function changePassword() {
-    if (!newPass || newPass.length < 6) {
-      alert(t("client.dashboard.passwordTooShort"));
-      return;
-    }
-    setChanging(true);
-    try {
-      await apiPost("/api/clients/change-password", { password: newPass }, "client");
-      setNewPass("");
-      alert(t("client.dashboard.passwordChanged"));
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
     } catch (e) {
-      alert(e.message || "Error");
-    } finally {
-      setChanging(false);
+      reject(e);
     }
-  }
+  });
+}
 
-  function logout() {
-    localStorage.removeItem("clientToken");
-    window.location.href = "/client/login";
-  }
+/* ===================== Mini Components ===================== */
 
-  async function onSelectAvatar(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataURL = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarPreview(dataURL);
-      setAvatarBase64(dataURL.split(",")[1]); // чистый base64 после запятой
-      setAvatarRemoved(false);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to process image");
-    } finally {
-      // обнулим, чтобы можно было выбрать тот же файл повторно
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
+function Stars({ value = 0, size = 18, className = "" }) {
+  const full = Math.floor(value);
+  const half = value - full >= 0.5;
+  const total = 5;
+  const starPath =
+    "M12 .587l3.668 7.428 8.2 1.733-5.934 5.78 1.402 8.472L12 19.548 4.664 24l1.402-8.472L.132 9.748l8.2-1.733z";
+  return (
+    <div className={`flex items-center gap-1 ${className}`}>
+      {Array.from({ length: total }).map((_, i) => {
+        const filled = i < full;
+        const showHalf = i === full && half;
+        return (
+          <div key={i} className="relative" style={{ width: size, height: size }}>
+            <svg
+              viewBox="0 0 24 24"
+              width={size}
+              height={size}
+              className={filled ? "text-yellow-400" : "text-gray-300"}
+              fill="currentColor"
+            >
+              <path d={starPath} />
+            </svg>
+            {showHalf && (
+              <svg
+                viewBox="0 0 24 24"
+                width={size}
+                height={size}
+                className="absolute inset-0 text-yellow-400 overflow-hidden"
+                style={{ clipPath: "inset(0 50% 0 0)" }}
+                fill="currentColor"
+              >
+                <path d={starPath} />
+              </svg>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-  function removeAvatar() {
-    setAvatarPreview("");
-    setAvatarBase64("");
-    setAvatarRemoved(true);
-  }
+function Progress({ value = 0, max = 100, label }) {
+  const pct = Math.max(0, Math.min(100, Math.round((value / (max || 1)) * 100)));
+  return (
+    <div>
+      {label && <div className="mb-1 text-sm text-gray-600">{label}</div>}
+      <div className="w-full bg-gray-200 rounded-full h-3">
+        <div
+          className="h-3 bg-orange-500 rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+          title={`${pct}%`}
+        />
+      </div>
+      <div className="mt-1 text-xs text-gray-500">
+        {value} / {max} ({pct}%)
+      </div>
+    </div>
+  );
+}
 
-  const showAvatar =
-    avatarPreview || profile.avatar_url || ""; // приоритет: превью -> url -> пусто
+function StatBox({ title, value }) {
+  return (
+    <div className="p-4 bg-white border rounded-xl shadow-sm flex flex-col">
+      <div className="text-sm text-gray-500">{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
+    </div>
+  );
+}
+
+function ClientStatsBlock({ stats }) {
+  const rating = Number(stats?.rating || 0);
+  const points = Number(stats?.points || 0);
+  const next = Number(stats?.next_tier_at || 100);
+  const tier = stats?.tier || "Bronze";
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Профиль + аватар + смена пароля + выход */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-bold mb-4">{t("client.dashboard.profileTitle")}</h2>
-
-          {/* Аватар */}
-          <div className="flex items-center gap-4 mb-4">
-            <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gray-100 ring-2 ring-white shadow overflow-hidden flex items-center justify-center text-2xl font-semibold text-gray-600">
-                {showAvatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={showAvatar}
-                    alt="avatar"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>{initials(profile.name) || "🙂"}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onSelectAvatar}
-              />
-              <button
-                className="px-4 py-2 rounded bg-gray-900 text-white font-semibold hover:opacity-90"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {showAvatar ? t("client.dashboard.changePhoto") : t("client.dashboard.uploadPhoto")}
-              </button>
-              {showAvatar && (
-                <button
-                  className="px-4 py-2 rounded border border-gray-300 text-gray-800 hover:bg-gray-50"
-                  onClick={removeAvatar}
-                >
-                  {t("client.dashboard.removePhoto")}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <form onSubmit={saveProfile} className="space-y-3">
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder={t("client.dashboard.name")}
-              value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-            />
-            <input
-              className="w-full border rounded px-3 py-2"
-              placeholder={t("client.dashboard.phone")}
-              value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-            />
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded transition"
-            >
-              {saving ? t("common.loading") : t("client.dashboard.saveBtn")}
-            </button>
-          </form>
-
-          {/* Смена пароля */}
-          <div className="mt-6 pt-6 border-t">
-            <div className="font-semibold mb-2">{t("client.dashboard.changePassword")}</div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                className="flex-1 border rounded px-3 py-2"
-                placeholder={t("client.dashboard.newPassword")}
-                value={newPass}
-                onChange={(e) => setNewPass(e.target.value)}
-              />
-              <button
-                onClick={changePassword}
-                disabled={changing}
-                className="px-4 bg-gray-900 text-white rounded font-semibold"
-              >
-                {changing ? t("common.loading") : t("client.dashboard.changeBtn")}
-              </button>
-            </div>
-          </div>
-
-          {/* Выйти */}
-          <div className="mt-6">
-            <button
-              onClick={logout}
-              className="w-full border border-red-300 text-red-700 hover:bg-red-50 rounded py-2 font-semibold"
-            >
-              {t("client.dashboard.logout")}
-            </button>
-          </div>
+    <div className="bg-white rounded-xl shadow p-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm text-gray-500">Tier</div>
+          <div className="text-xl font-semibold">{tier}</div>
         </div>
-
-        {/* Отказные туры */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">{t("client.dashboard.refusedTours")}</h2>
-            <button
-              onClick={loadRefused}
-              className="text-orange-600 hover:underline"
-              disabled={loadingRefused}
-            >
-              {t("client.dashboard.refresh")}
-            </button>
+        <div className="text-right">
+          <div className="text-sm text-gray-500">Rating</div>
+          <div className="flex items-center justify-end gap-2">
+            <Stars value={rating} size={20} />
+            <span className="text-sm text-gray-600">{rating.toFixed(1)}</span>
           </div>
-
-          {loadingRefused ? (
-            <div className="text-sm text-gray-500">{t("common.loading")}</div>
-          ) : refused.length === 0 ? (
-            <div className="text-sm text-gray-500">{t("client.dashboard.noResults")}</div>
-          ) : (
-            <ul className="space-y-2">
-              {refused.map((it) => (
-                <li key={it.id} className="border rounded p-3">
-                  <div className="font-semibold">{it.title || it.name || `#${it.id}`}</div>
-                  {it.price && <div className="text-sm text-gray-600">Net: {it.price}</div>}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
 
-      {/* нижние вкладки */}
-      <div className="bg-white p-6 rounded-xl shadow mt-6">
-        <div className="flex gap-2 mb-3">
-          <button
-            onClick={() => setTab("req")}
-            className={`px-3 py-1 rounded-full text-sm ${
-              tab === "req" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
-            }`}
-          >
-            {t("client.dashboard.tabs.myRequests")}
-          </button>
-          <button
-            onClick={() => setTab("book")}
-            className={`px-3 py-1 rounded-full text-sm ${
-              tab === "book" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-800"
-            }`}
-          >
-            {t("client.dashboard.tabs.myBookings")}
-          </button>
+      <div className="mt-4">
+        <Progress value={points} max={next} label="Bonus progress" />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
+        <StatBox title="Requests (total)" value={stats?.requests_total ?? 0} />
+        <StatBox title="Requests (active)" value={stats?.requests_active ?? 0} />
+        <StatBox title="Bookings (total)" value={stats?.bookings_total ?? 0} />
+        <StatBox title="Completed" value={stats?.bookings_completed ?? 0} />
+        <StatBox title="Cancelled" value={stats?.bookings_cancelled ?? 0} />
+      </div>
+    </div>
+  );
+}
+
+function EmptyFavorites() {
+  const { t } = useTranslation();
+  return (
+    <div className="p-8 text-center bg-white border rounded-xl">
+      <div className="text-lg font-semibold mb-2">
+        {t("favorites_empty_title", { defaultValue: "Избранное пусто" })}
+      </div>
+      <div className="text-gray-600">
+        {t("favorites_empty_desc", {
+          defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FavoritesList({
+  items,
+  page,
+  perPage = 8,
+  onPageChange,
+  onRemove,
+  onQuickRequest,
+}) {
+  const { t } = useTranslation();
+  const total = items?.length || 0;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), pages);
+  const start = (current - 1) * perPage;
+  const pageItems = items.slice(start, start + perPage);
+
+  return (
+    <div>
+      {total === 0 ? (
+        <EmptyFavorites />
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {pageItems.map((it) => {
+              const s = it.service || {};
+              const serviceId = s.id ?? it.service_id ?? null;
+              const title = s.title || s.name || t("common.service", { defaultValue: "Услуга" });
+              const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
+
+              return (
+                <div
+                  key={it.id}
+                  className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col"
+                >
+                  <div className="aspect-[16/10] bg-gray-100 relative">
+                    {image ? (
+                      <img
+                        src={image}
+                        alt={title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <span className="text-sm">
+                          {t("favorites_no_image", { defaultValue: "Нет изображения" })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 flex-1 flex flex-col">
+                    <div className="font-semibold line-clamp-2">{title}</div>
+                    <div className="mt-auto flex gap-2 pt-3">
+                      {serviceId && (
+                        <button
+                          onClick={() => onQuickRequest?.(serviceId)}
+                          className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+                        >
+                          {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onRemove?.(it.id)}
+                        className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
+                        title={t("actions.delete", { defaultValue: "Удалить" })}
+                      >
+                        {t("actions.delete", { defaultValue: "Удалить" })}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <button
+              className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
+              onClick={() => onPageChange?.(current - 1)}
+              disabled={current <= 1}
+            >
+              {t("pagination.prev", { defaultValue: "←" })}
+            </button>
+            {Array.from({ length: pages }).map((_, i) => {
+              const p = i + 1;
+              const active = p === current;
+              return (
+                <button
+                  key={p}
+                  onClick={() => onPageChange?.(p)}
+                  className={`px-3 py-1.5 rounded-lg border ${
+                    active ? "bg-gray-900 text-white" : "bg-white"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
+              onClick={() => onPageChange?.(current + 1)}
+              disabled={current >= pages}
+            >
+              {t("pagination.next", { defaultValue: "→" })}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ===================== Main Page ===================== */
+
+export default function ClientDashboard() {
+  const { t } = useTranslation();
+  const fileRef = useRef(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Profile
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatarBase64, setAvatarBase64] = useState(null);
+  const [avatarServerUrl, setAvatarServerUrl] = useState(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+
+  // Password
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPass, setChangingPass] = useState(false);
+
+  // Stats
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Tabs
+  const tabs = [
+    { key: "requests", label: t("tabs.my_requests", { defaultValue: "Мои запросы" }) },
+    { key: "bookings", label: t("tabs.my_bookings", { defaultValue: "Мои бронирования" }) },
+    { key: "favorites", label: t("tabs.favorites", { defaultValue: "Избранное" }) },
+  ];
+  const initialTab = searchParams.get("tab") || "requests";
+  const [activeTab, setActiveTab] = useState(
+    tabs.some((tb) => tb.key === initialTab) ? initialTab : "requests"
+  );
+
+  // Data for tabs
+  const [requests, setRequests] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [favorites, setFavorites] = useState([]); // wishlist items (expand=service)
+  const [loadingTab, setLoadingTab] = useState(false);
+
+  // UI messages
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Pagination for favorites
+  const favPageFromUrl = Number(searchParams.get("page") || 1);
+  const [favPage, setFavPage] = useState(isNaN(favPageFromUrl) ? 1 : favPageFromUrl);
+
+  // Decision (accept/reject) state for proposals
+  const [decidingId, setDecidingId] = useState(null);
+
+  /* -------- Effects -------- */
+
+  useEffect(() => {
+    // Sync URL with tab & page
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", activeTab);
+    if (activeTab === "favorites") {
+      params.set("page", String(favPage));
+    } else {
+      params.delete("page");
+    }
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, favPage]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoadingProfile(true);
+        const me = await apiGet("/api/clients/me");
+        setName(me?.name || "");
+        setPhone(me?.phone || "");
+        setAvatarBase64(me?.avatar_base64 || null);
+        setAvatarServerUrl(me?.avatar_url || null);
+        setRemoveAvatar(false);
+      } catch (e) {
+        setError(t("common.profile_load_error", { defaultValue: "Не удалось загрузить профиль" }));
+      } finally {
+        setLoadingProfile(false);
+      }
+    })();
+  }, [t]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoadingStats(true);
+        const data = await apiGet("/api/clients/stats");
+        setStats(data || {});
+      } catch (e) {
+        setStats({});
+      } finally {
+        setLoadingStats(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingTab(true);
+        if (activeTab === "requests") {
+          const data = await apiGet("/api/requests/my");
+          if (!cancelled) setRequests(Array.isArray(data) ? data : data?.items || []);
+        } else if (activeTab === "bookings") {
+          const data = await apiGet("/api/bookings/my");
+          if (!cancelled) setBookings(Array.isArray(data) ? data : data?.items || []);
+        } else if (activeTab === "favorites") {
+          const data = await apiGet("/api/wishlist?expand=service");
+          const arr = Array.isArray(data) ? data : data?.items || [];
+          if (!cancelled) {
+            setFavorites(arr);
+            const maxPage = Math.max(1, Math.ceil(arr.length / 8));
+            setFavPage((p) => Math.min(Math.max(1, p), maxPage));
+          }
+        }
+      } catch (e) {
+        if (activeTab === "favorites") {
+          setFavorites([]);
+        } else {
+          setError(t("common.load_error", { defaultValue: "Ошибка загрузки данных" }));
+        }
+      } finally {
+        if (!cancelled) setLoadingTab(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  /* -------- Handlers -------- */
+
+  const handleUploadClick = () => fileRef.current?.click();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
+      setAvatarBase64(dataUrl);
+      setAvatarServerUrl(null);
+      setRemoveAvatar(false);
+    } catch (err) {
+      setError(t("common.image_process_error", { defaultValue: "Не удалось обработать изображение" }));
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setAvatarBase64(null);
+    setAvatarServerUrl(null);
+    setRemoveAvatar(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true);
+      setMessage(null);
+      setError(null);
+      const payload = { name, phone };
+      if (avatarBase64) payload.avatar_base64 = avatarBase64;
+      if (removeAvatar) payload.remove_avatar = true;
+      const res = await apiPut("/api/clients/me", payload);
+      setMessage(t("common.saved", { defaultValue: "Профиль сохранён" }));
+      setName(res?.name ?? name);
+      setPhone(res?.phone ?? phone);
+      if (res?.avatar_base64) {
+        setAvatarBase64(res.avatar_base64);
+        setAvatarServerUrl(null);
+      } else if (res?.avatar_url) {
+        setAvatarServerUrl(res.avatar_url);
+        setAvatarBase64(null);
+      }
+      setRemoveAvatar(false);
+    } catch (e) {
+      setError(t("common.save_error", { defaultValue: "Не удалось сохранить профиль" }));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setError(t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" }));
+      return;
+    }
+    try {
+      setChangingPass(true);
+      setError(null);
+      await apiPost("/api/clients/change-password", { password: newPassword });
+      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
+      setNewPassword("");
+    } catch (e) {
+      setError(t("client.dashboard.changePasswordError", { defaultValue: "Не удалось изменить пароль" }));
+    } finally {
+      setChangingPass(false);
+    }
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("clientToken");
+      window.location.href = "/client/login";
+    } catch {
+      window.location.href = "/client/login";
+    }
+  };
+
+  const handleRemoveFavorite = async (itemId) => {
+    try {
+      await apiPost("/api/wishlist/toggle", { itemId });
+      setFavorites((prev) => prev.filter((x) => x.id !== itemId));
+      setMessage(t("favorites_removed", { defaultValue: "Удалено из избранного" }));
+    } catch (e) {
+      setError(t("favorites_remove_error", { defaultValue: "Не удалось удалить из избранного" }));
+    }
+  };
+
+  const handleQuickRequest = async (serviceId) => {
+    if (!serviceId) {
+      setError(t("common.service_not_found", { defaultValue: "Не удалось определить услугу" }));
+      return;
+    }
+    const note = window.prompt(
+      t("client.dashboard.quickRequestNote", { defaultValue: "Комментарий к запросу (необязательно):" })
+    ) || undefined;
+    try {
+      await apiPost("/api/requests", { service_id: serviceId, note });
+      setMessage(t("client.dashboard.request_sent", { defaultValue: "Запрос отправлен" }));
+      setActiveTab("requests");
+    } catch (e) {
+      setError(t("client.dashboard.request_failed", { defaultValue: "Не удалось отправить запрос" }));
+    }
+  };
+
+  // NEW: accept / reject provider proposal
+  const handleAcceptProposal = async (requestId) => {
+    try {
+      setDecidingId(requestId);
+      await apiPost(`/api/requests/${requestId}/accept`, {});
+      const data = await apiGet("/api/requests/my");
+      setRequests(Array.isArray(data) ? data : data?.items || []);
+      setMessage(t("common.accepted", { defaultValue: "Предложение принято" }));
+    } catch (e) {
+      setError(t("common.error", { defaultValue: "Ошибка" }));
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
+  const handleRejectProposal = async (requestId) => {
+    try {
+      setDecidingId(requestId);
+      await apiPost(`/api/requests/${requestId}/reject`, {});
+      const data = await apiGet("/api/requests/my");
+      setRequests(Array.isArray(data) ? data : data?.items || []);
+      setMessage(t("common.rejected", { defaultValue: "Предложение отклонено" }));
+    } catch (e) {
+      setError(t("common.error", { defaultValue: "Ошибка" }));
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
+  /* -------- Render helpers -------- */
+
+  const Avatar = () => {
+    const src = avatarBase64 || avatarServerUrl || null;
+    if (src) {
+      return (
+        <img
+          src={src}
+          alt="avatar"
+          className="w-24 h-24 rounded-full object-cover border"
+        />
+      );
+    }
+    return (
+      <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">
+        {initials(name)}
+      </div>
+    );
+  };
+
+  const TabButton = ({ tabKey, children }) => {
+    const active = activeTab === tabKey;
+    return (
+      <button
+        onClick={() => setActiveTab(tabKey)}
+        className={`px-4 py-2 rounded-lg border-b-2 font-medium ${
+          active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"
+        }`}
+      >
+        {children}
+      </button>
+    );
+  };
+
+  const RequestsList = () => {
+    if (loadingTab) return (
+      <div className="text-gray-500">
+        {t("common.loading", { defaultValue: "Загрузка..." })}
+      </div>
+    );
+    if (!requests?.length) return (
+      <div className="text-gray-500">
+        {t("empty.no_requests", { defaultValue: "Пока нет запросов." })}
+      </div>
+    );
+
+    return (
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {requests.map((r) => {
+          const serviceTitle =
+            r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
+          const status = r?.status || "new";
+          const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
+          // попытка разобрать предложение
+          let offer = null;
+          try {
+            offer = typeof r?.proposal === "string" ? JSON.parse(r.proposal) : r?.proposal || r?.offer;
+          } catch {
+            offer = null; // игнорируем кривой JSON
+          }
+
+          return (
+            <div key={r.id} className="bg-white border rounded-xl p-4">
+              <div className="font-semibold">{serviceTitle}</div>
+              <div className="text-sm text-gray-500 mt-1">
+                {t("common.status", { defaultValue: "Статус" })}: {status}
+              </div>
+              {created && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {t("common.created", { defaultValue: "Создан" })}: {created}
+                </div>
+              )}
+              {r?.note && (
+                <div className="text-sm text-gray-600 mt-2">
+                  {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
+                </div>
+              )}
+
+              {/* Предложение поставщика + действия */}
+              {offer ? (
+                <div className="mt-3 border-t pt-3">
+                  <div className="text-sm text-gray-600">
+                    {t("client.dashboard.offer", { defaultValue: "Предложение" })}
+                  </div>
+
+                  <div className="text-sm mt-1 space-y-1">
+                    {"price" in offer && (
+                      <div>
+                        {t("common.price", { defaultValue: "Цена" })}: {offer.price}
+                      </div>
+                    )}
+                    {offer.hotel && (
+                      <div>
+                        {t("common.hotel", { defaultValue: "Отель" })}: {offer.hotel}
+                      </div>
+                    )}
+                    {offer.room && (
+                      <div>
+                        {t("common.room", { defaultValue: "Номер" })}: {offer.room}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => handleAcceptProposal(r.id)}
+                      className="px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                      disabled={decidingId === r.id}
+                    >
+                      {t("actions.accept", { defaultValue: "Принять" })}
+                    </button>
+                    <button
+                      onClick={() => handleRejectProposal(r.id)}
+                      className="px-3 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-60"
+                      disabled={decidingId === r.id}
+                    >
+                      {t("actions.reject", { defaultValue: "Отклонить" })}
+                    </button>
+                  </div>
+                </div>
+              ) : r?.proposal ? (
+                // если было что-то, но не распарсилось — покажем сырьё
+                <pre className="mt-3 border-t pt-3 text-xs overflow-auto">
+{String(r.proposal)}
+                </pre>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const BookingsList = () => {
+    if (loadingTab) return <div className="text-gray-500">
+      {t("common.loading", { defaultValue: "Загрузка..." })}
+    </div>;
+    if (!bookings?.length)
+      return <div className="text-gray-500">
+        {t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}
+      </div>;
+    return (
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {bookings.map((b) => {
+          const serviceTitle =
+            b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
+          const status = b?.status || "new";
+          const date = b?.date || b?.created_at;
+          const when = date ? new Date(date).toLocaleString() : "";
+          return (
+            <div key={b.id} className="bg-white border rounded-xl p-4">
+              <div className="font-semibold">{serviceTitle}</div>
+              <div className="text-sm text-gray-500 mt-1">
+                {t("common.status", { defaultValue: "Статус" })}: {status}
+              </div>
+              {when && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {t("common.date", { defaultValue: "Дата" })}: {when}
+                </div>
+              )}
+              {b?.price && (
+                <div className="text-sm text-gray-600 mt-2">
+                  {t("common.amount", { defaultValue: "Сумма" })}: {b.price}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const FavoritesTab = () => {
+    if (loadingTab) return <div className="text-gray-500">
+      {t("common.loading", { defaultValue: "Загрузка..." })}
+    </div>;
+    return (
+      <FavoritesList
+        items={favorites}
+        page={favPage}
+        perPage={8}
+        onRemove={handleRemoveFavorite}
+        onQuickRequest={handleQuickRequest}
+        onPageChange={(p) => setFavPage(p)}
+      />
+    );
+  };
+
+  /* -------- Layout -------- */
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Left: Profile */}
+        <div className="md:col-span-1">
+          <div className="bg-white rounded-xl shadow p-6 border">
+            <div className="flex items-center gap-4">
+              <Avatar />
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleUploadClick}
+                  className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg"
+                >
+                  {avatarBase64 || avatarServerUrl
+                    ? t("client.dashboard.changePhoto", { defaultValue: "Сменить фото" })
+                    : t("client.dashboard.uploadPhoto", { defaultValue: "Загрузить фото" })}
+                </button>
+                {(avatarBase64 || avatarServerUrl) && (
+                  <button
+                    onClick={handleRemovePhoto}
+                    className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                  >
+                    {t("client.dashboard.removePhoto", { defaultValue: "Удалить фото" })}
+                  </button>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <div>
+                <label className="text-sm text-gray-600">
+                  {t("client.dashboard.name", { defaultValue: "Наименование" })}
+                </label>
+                <input
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("client.dashboard.name", { defaultValue: "Ваше имя" })}
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">
+                  {t("client.dashboard.phone", { defaultValue: "Телефон" })}
+                </label>
+                <input
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+998 ..."
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile || loadingProfile}
+                  className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60"
+                >
+                  {savingProfile
+                    ? t("common.saving", { defaultValue: "Сохранение..." })
+                    : t("client.dashboard.saveBtn", { defaultValue: "Сохранить" })}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t pt-6">
+              <div className="text-sm text-gray-600 mb-2">
+                {t("client.dashboard.changePassword", { defaultValue: "Смена пароля" })}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  className="flex-1 border rounded-lg px-3 py-2"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder={t("client.dashboard.newPassword", { defaultValue: "Новый пароль" })}
+                />
+                <button
+                  onClick={handleChangePassword}
+                  disabled={changingPass}
+                  className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60"
+                >
+                  {changingPass
+                    ? "..."
+                    : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <button
+                onClick={handleLogout}
+                className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50"
+              >
+                {t("client.dashboard.logout", { defaultValue: "Выйти" })}
+              </button>
+            </div>
+
+            {(message || error) && (
+              <div className="mt-4 text-sm">
+                {message && (
+                  <div className="text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    {message}
+                  </div>
+                )}
+                {error && (
+                  <div className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">
+                    {error}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {loadingTab ? (
-          <div className="text-sm text-gray-500">{t("common.loading")}</div>
-        ) : tab === "req" ? (
-          myRequests.length === 0 ? (
-            <div className="text-sm text-gray-500">{t("client.dashboard.noRequests")}</div>
+        {/* Right: Stats + Tabs */}
+        <div className="md:col-span-2">
+          {loadingStats ? (
+            <div className="bg-white rounded-xl shadow p-6 border text-gray-500">
+              {t("common.loading", { defaultValue: "Загрузка..." })}
+            </div>
           ) : (
-            <ul className="space-y-2">
-              {myRequests.map((r) => (
-                <li key={r.id} className="border rounded p-3">
-                  <div className="font-semibold">
-                    Request #{r.id} · Service #{r.service_id}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {r.status} · {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )
-        ) : myBookings.length === 0 ? (
-          <div className="text-sm text-gray-500">{t("client.dashboard.noBookings")}</div>
-        ) : (
-          <ul className="space-y-2">
-            {myBookings.map((b) => (
-              <li key={b.id} className="border rounded p-3">
-                <div className="font-semibold">
-                  Booking #{b.id} · Service #{b.service_id}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {b.status || ""} {b.created_at ? `· ${new Date(b.created_at).toLocaleString()}` : ""}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+            <ClientStatsBlock stats={stats} />
+          )}
+
+          {/* Tabs */}
+          <div className="mt-6 bg-white rounded-xl shadow p-6 border">
+            <div className="flex items-center gap-3 border-b pb-3 mb-4">
+              <TabButton tabKey="requests">
+                {t("tabs.my_requests", { defaultValue: "Мои запросы" })}
+              </TabButton>
+              <TabButton tabKey="bookings">
+                {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
+              </TabButton>
+              <TabButton tabKey="favorites">
+                {t("tabs.favorites", { defaultValue: "Избранное" })}
+              </TabButton>
+            </div>
+
+            {activeTab === "requests" && <RequestsList />}
+            {activeTab === "bookings" && <BookingsList />}
+            {activeTab === "favorites" && <FavoritesTab />}
+          </div>
+        </div>
       </div>
     </div>
   );
