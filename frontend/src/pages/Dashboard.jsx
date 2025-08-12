@@ -1007,19 +1007,22 @@ useEffect(() => {
               </div>
             </div>
           </div>
+          
           {/* Статистика поставщика под двумя колонками */}
 <div className="px-6 mt-6">
   <ProviderStatsHeader
-    rating={Number(profile?.rating) || 0}
-    stats={{
-      requests_total:  Number(stats?.requests_total)  || 0,
-      requests_active: Number(stats?.requests_active) || 0,
-      bookings_total:  Number(stats?.bookings_total)  || 0,
-      completed:       Number(stats?.completed)       || 0,
-      cancelled:       Number(stats?.cancelled)       || 0,
-    }}
-    t={t}
-  />
+  rating={Number(profile?.rating) || 0}
+  stats={{
+    requests_total:  Number(stats?.requests_total)  || 0,
+    requests_active: Number(stats?.requests_active) || 0,
+    bookings_total:  Number(stats?.bookings_total)  || 0,
+    completed:       Number(stats?.completed)       || 0,
+    cancelled:       Number(stats?.cancelled)       || 0,
+    points:          Number(stats?.points) || Number(stats?.completed) || 0, // если API вернёт points — используем его
+  }}
+  bonusTarget={500}
+  t={t}
+/>
 </div>
 
         </div>
