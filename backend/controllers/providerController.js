@@ -19,6 +19,7 @@ const isExtendedCategory = (cat) =>
  * - price -> число либо null
  * - description -> строка либо null
  */
+
 function normalizeServicePayload(body) {
   const {
     title,
@@ -30,19 +31,26 @@ function normalizeServicePayload(body) {
     details,
   } = body;
 
-  const imagesArr =
-    Array.isArray(images) ? images : images ? [images] : [];
-  const availabilityArr =
-    Array.isArray(availability) ? availability : [];
+  // Безопасная нормализация массива картинок
+  const imagesArr = Array.isArray(images)
+    ? images
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+        .slice(0, 10)
+    : images
+    ? [String(images).trim()].filter(Boolean)
+    : [];
 
-  // details может быть объектом или строкой JSON
+  const availabilityArr = Array.isArray(availability) ? availability : [];
+
+  // details может быть объектом или строкой JSON (только для расширенных категорий)
   let detailsObj = null;
-  if (details && isExtendedCategory(category)) {
+  const extended = isExtendedCategory(category);
+  if (extended && details) {
     if (typeof details === "string") {
       try {
         detailsObj = JSON.parse(details);
       } catch {
-        // если пришла строка, но не JSON — оборачиваем в объект
         detailsObj = { value: String(details) };
       }
     } else if (typeof details === "object") {
@@ -50,18 +58,14 @@ function normalizeServicePayload(body) {
     }
   }
 
-  // price может прийти строкой
   const priceNum =
-    price === undefined || price === null || price === ""
-      ? null
-      : Number(price);
+    price === undefined || price === null || price === "" ? null : Number(price);
 
   return {
     title: title ?? "",
     category: category ?? "",
     imagesArr,
     availabilityArr,
-    // для “простых” категорий храним price/description, для расширенных — null
     priceNum,
     descriptionStr:
       description === undefined || description === null
@@ -69,6 +73,8 @@ function normalizeServicePayload(body) {
         : String(description),
     detailsObj,
   };
+}
+
 }
 // =====================
 // Регистрация поставщика
@@ -423,6 +429,42 @@ const saveBlockedDates = async (req, res) => {
   }
 };
 
+const updateServiceImagesOnly = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = Number(req.params.id);
+    if (!Number.isInteger(serviceId)) {
+      return res.status(400).json({ message: "invalid_service_id" });
+    }
+
+    const raw = Array.isArray(req.body?.images) ? req.body.images : [];
+    const images = raw
+      .map((x) => String(x || "").trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const q = `
+      UPDATE services
+      SET images = $1::jsonb
+      WHERE id = $2 AND provider_id = $3
+      RETURNING id, title, images
+    `;
+    const { rows, rowCount } = await pool.query(q, [
+      JSON.stringify(images),
+      serviceId,
+      providerId,
+    ]);
+    if (rowCount === 0) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error("updateServiceImagesOnly error", e);
+    return res.status(500).json({ message: "update_images_failed" });
+  }
+};
+
+
 module.exports = {
   registerProvider,
   loginProvider,
@@ -434,5 +476,6 @@ module.exports = {
   deleteService,
   changeProviderPassword,
   getBookedDates,
-  saveBlockedDates
+  saveBlockedDates,
+  updateServiceImagesOnly,
 };
