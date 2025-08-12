@@ -1,4 +1,3 @@
-// src/pages/ClientDashboard.jsx
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -12,11 +11,6 @@ function initials(name = "") {
   return (first + second).toUpperCase() || "U";
 }
 
-/**
- * Make sure we always render a proper data URL for images.
- * If the string is raw base64 -> add "data:<mime>;base64,".
- * If it is already a data URL -> return as is (no duplication).
- */
 function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
   if (!b64OrDataUrl) return null;
   return String(b64OrDataUrl).startsWith("data:")
@@ -24,18 +18,13 @@ function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
     : `data:${mime};base64,${b64OrDataUrl}`;
 }
 
-/**
- * For sending to server: strip "data:*;base64," prefix if present.
- */
 function stripDataUrlPrefix(dataUrl) {
   if (!dataUrl) return null;
   const m = String(dataUrl).match(/^data:[^;]+;base64,(.*)$/);
   return m ? m[1] : dataUrl;
 }
 
-/**
- * Crop image to a centered square and resize to {size} x {size}, return dataURL (jpeg).
- */
+/** Crop image -> square 512x512, return dataURL (jpeg) */
 function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   return new Promise((resolve, reject) => {
     try {
@@ -82,13 +71,7 @@ function Stars({ value = 0, size = 18, className = "" }) {
         const showHalf = i === full && half;
         return (
           <div key={i} className="relative" style={{ width: size, height: size }}>
-            <svg
-              viewBox="0 0 24 24"
-              width={size}
-              height={size}
-              className={filled ? "text-yellow-400" : "text-gray-300"}
-              fill="currentColor"
-            >
+            <svg viewBox="0 0 24 24" width={size} height={size} className={filled ? "text-yellow-400" : "text-gray-300"} fill="currentColor">
               <path d={starPath} />
             </svg>
             {showHalf && (
@@ -116,11 +99,7 @@ function Progress({ value = 0, max = 100, label }) {
     <div>
       {label && <div className="mb-1 text-sm text-gray-600">{label}</div>}
       <div className="w-full bg-gray-200 rounded-full h-3">
-        <div
-          className="h-3 bg-orange-500 rounded-full transition-all"
-          style={{ width: `${pct}%` }}
-          title={`${pct}%`}
-        />
+        <div className="h-3 bg-orange-500 rounded-full transition-all" style={{ width: `${pct}%` }} title={`${pct}%`} />
       </div>
       <div className="mt-1 text-xs text-gray-500">
         {value} / {max} ({pct}%)
@@ -149,15 +128,11 @@ function ClientStatsBlock({ stats }) {
     <div className="bg-white rounded-xl shadow p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm text-gray-500">
-            {t("stats.tier", { defaultValue: "Tier" })}
-          </div>
+          <div className="text-sm text-gray-500">{t("stats.tier", { defaultValue: "Tier" })}</div>
           <div className="text-xl font-semibold">{tier}</div>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-500">
-            {t("stats.rating", { defaultValue: "Rating" })}
-          </div>
+          <div className="text-sm text-gray-500">{t("stats.rating", { defaultValue: "Rating" })}</div>
           <div className="flex items-center justify-end gap-2">
             <Stars value={rating} size={20} />
             <span className="text-sm text-gray-600">{rating.toFixed(1)}</span>
@@ -166,34 +141,15 @@ function ClientStatsBlock({ stats }) {
       </div>
 
       <div className="mt-4">
-        <Progress
-          value={points}
-          max={next}
-          label={t("stats.bonus_progress", { defaultValue: "Bonus progress" })}
-        />
+        <Progress value={points} max={next} label={t("stats.bonus_progress", { defaultValue: "Bonus progress" })} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-        <StatBox
-          title={t("stats.requests_total", { defaultValue: "Requests (total)" })}
-          value={stats?.requests_total ?? 0}
-        />
-        <StatBox
-          title={t("stats.requests_active", { defaultValue: "Requests (active)" })}
-          value={stats?.requests_active ?? 0}
-        />
-        <StatBox
-          title={t("stats.bookings_total", { defaultValue: "Bookings (total)" })}
-          value={stats?.bookings_total ?? 0}
-        />
-        <StatBox
-          title={t("stats.completed", { defaultValue: "Completed" })}
-          value={stats?.bookings_completed ?? 0}
-        />
-        <StatBox
-          title={t("stats.cancelled", { defaultValue: "Cancelled" })}
-          value={stats?.bookings_cancelled ?? 0}
-        />
+        <StatBox title={t("stats.requests_total", { defaultValue: "Requests (total)" })} value={stats?.requests_total ?? 0} />
+        <StatBox title={t("stats.requests_active", { defaultValue: "Requests (active)" })} value={stats?.requests_active ?? 0} />
+        <StatBox title={t("stats.bookings_total", { defaultValue: "Bookings (total)" })} value={stats?.bookings_total ?? 0} />
+        <StatBox title={t("stats.completed", { defaultValue: "Completed" })} value={stats?.bookings_completed ?? 0} />
+        <StatBox title={t("stats.cancelled", { defaultValue: "Cancelled" })} value={stats?.bookings_cancelled ?? 0} />
       </div>
     </div>
   );
@@ -203,9 +159,7 @@ function EmptyFavorites() {
   const { t } = useTranslation();
   return (
     <div className="p-8 text-center bg-white border rounded-xl">
-      <div className="text-lg font-semibold mb-2">
-        {t("favorites.empty_title", { defaultValue: "Избранное пусто" })}
-      </div>
+      <div className="text-lg font-semibold mb-2">{t("favorites.empty_title", { defaultValue: "Избранное пусто" })}</div>
       <div className="text-gray-600">
         {t("favorites.empty_desc", {
           defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
@@ -215,14 +169,7 @@ function EmptyFavorites() {
   );
 }
 
-function FavoritesList({
-  items,
-  page,
-  perPage = 8,
-  onPageChange,
-  onRemove,
-  onQuickRequest,
-}) {
+function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
   const pages = Math.max(1, Math.ceil(total / perPage));
@@ -244,18 +191,13 @@ function FavoritesList({
               const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
 
               return (
-                <div
-                  key={it.id}
-                  className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col"
-                >
+                <div key={it.id} className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
                   <div className="aspect-[16/10] bg-gray-100 relative">
                     {image ? (
                       <img src={image} alt={title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">
-                          {t("favorites.no_image", { defaultValue: "Нет изображения" })}
-                        </span>
+                        <span className="text-sm">{t("favorites.no_image", { defaultValue: "Нет изображения" })}</span>
                       </div>
                     )}
                   </div>
@@ -284,7 +226,6 @@ function FavoritesList({
             })}
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-center gap-2 mt-6">
             <button
               className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
@@ -300,9 +241,7 @@ function FavoritesList({
                 <button
                   key={p}
                   onClick={() => onPageChange?.(p)}
-                  className={`px-3 py-1.5 rounded-lg border ${
-                    active ? "bg-gray-900 text-white" : "bg-white"
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg border ${active ? "bg-gray-900 text-white" : "bg-white"}`}
                 >
                   {p}
                 </button>
@@ -334,13 +273,13 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null);   // always data URL for UI
+  const [avatarBase64, setAvatarBase64] = useState(null); // data URL for UI
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
   // Password
   const [newPassword, setNewPassword] = useState("");
-  the[changingPass, setChangingPass] = useState(false);
+  const [changingPass, setChangingPass] = useState(false); // <-- fixed
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -353,9 +292,7 @@ export default function ClientDashboard() {
     { key: "favorites", label: t("tabs.favorites", { defaultValue: "Избранное" }) },
   ];
   const initialTab = searchParams.get("tab") || "requests";
-  const [activeTab, setActiveTab] = useState(
-    tabs.some((t) => t.key === initialTab) ? initialTab : "requests"
-  );
+  const [activeTab, setActiveTab] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : "requests");
 
   // Data for tabs
   const [requests, setRequests] = useState([]);
@@ -373,14 +310,10 @@ export default function ClientDashboard() {
   /* -------- Effects -------- */
 
   useEffect(() => {
-    // Sync URL with tab & page
     const params = new URLSearchParams(searchParams);
     params.set("tab", activeTab);
-    if (activeTab === "favorites") {
-      params.set("page", String(favPage));
-    } else {
-      params.delete("page");
-    }
+    if (activeTab === "favorites") params.set("page", String(favPage));
+    else params.delete("page");
     setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, favPage]);
@@ -392,11 +325,10 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        // normalize whatever server returns
         setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
-      } catch (e) {
+      } catch {
         setError(t("errors.profile_load", { defaultValue: "Не удалось загрузить профиль" }));
       } finally {
         setLoadingProfile(false);
@@ -410,7 +342,7 @@ export default function ClientDashboard() {
         setLoadingStats(true);
         const data = await apiGet("/api/clients/stats");
         setStats(data || {});
-      } catch (e) {
+      } catch {
         setStats({});
       } finally {
         setLoadingStats(false);
@@ -438,12 +370,9 @@ export default function ClientDashboard() {
             setFavPage((p) => Math.min(Math.max(1, p), maxPage));
           }
         }
-      } catch (e) {
-        if (activeTab === "favorites") {
-          setFavorites([]);
-        } else {
-          setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
-        }
+      } catch {
+        if (activeTab === "favorites") setFavorites([]);
+        else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
       } finally {
         if (!cancelled) setLoadingTab(false);
       }
@@ -462,13 +391,13 @@ export default function ClientDashboard() {
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl);          // UI keeps data URL
+      setAvatarBase64(dataUrl);
       setAvatarServerUrl(null);
       setRemoveAvatar(false);
-    } catch (err) {
+    } catch {
       setError(t("errors.image_process", { defaultValue: "Не удалось обработать изображение" }));
     } finally {
-      e.target.value = ""; // allow re-select same file
+      e.target.value = "";
     }
   };
 
@@ -484,25 +413,23 @@ export default function ClientDashboard() {
       setMessage(null);
       setError(null);
       const payload = { name, phone };
-      // send raw base64 only, without data: prefix
       if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
 
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
-      // in case server sanitized fields:
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
 
       if (res?.avatar_base64) {
-        setAvatarBase64(toDataUrl(res.avatar_base64)); // normalize for UI
+        setAvatarBase64(toDataUrl(res.avatar_base64));
         setAvatarServerUrl(null);
       } else if (res?.avatar_url) {
         setAvatarServerUrl(res.avatar_url);
         setAvatarBase64(null);
       }
       setRemoveAvatar(false);
-    } catch (e) {
+    } catch {
       setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
     } finally {
       setSavingProfile(false);
@@ -512,9 +439,7 @@ export default function ClientDashboard() {
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       setError(
-        t("client.dashboard.passwordTooShort", {
-          defaultValue: "Пароль должен быть не короче 6 символов",
-        })
+        t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" })
       );
       return;
     }
@@ -524,7 +449,7 @@ export default function ClientDashboard() {
       await apiPost("/api/clients/change-password", { password: newPassword });
       setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
       setNewPassword("");
-    } catch (e) {
+    } catch {
       setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
     } finally {
       setChangingPass(false);
@@ -545,7 +470,7 @@ export default function ClientDashboard() {
       await apiPost("/api/wishlist/toggle", { itemId });
       setFavorites((prev) => prev.filter((x) => x.id !== itemId));
       setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
-    } catch (e) {
+    } catch {
       setError(t("errors.favorite_remove", { defaultValue: "Не удалось удалить из избранного" }));
     }
   };
@@ -562,7 +487,7 @@ export default function ClientDashboard() {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
-    } catch (e) {
+    } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
     }
   };
@@ -572,13 +497,7 @@ export default function ClientDashboard() {
   const Avatar = () => {
     const src = avatarBase64 || avatarServerUrl || null;
     if (src) {
-      return (
-        <img
-          src={src}
-          alt=""
-          className="w-24 h-24 rounded-full object-cover border"
-        />
-      );
+      return <img src={src} alt="" className="w-24 h-24 rounded-full object-cover border" />;
     }
     return (
       <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">
@@ -592,9 +511,7 @@ export default function ClientDashboard() {
     return (
       <button
         onClick={() => setActiveTab(tabKey)}
-        className={`px-4 py-2 rounded-lg border-b-2 font-medium ${
-          active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"
-        }`}
+        className={`px-4 py-2 rounded-lg border-b-2 font-medium ${active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"}`}
       >
         {children}
       </button>
@@ -603,31 +520,19 @@ export default function ClientDashboard() {
 
   const RequestsList = () => {
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!requests?.length)
-      return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
+    if (!requests?.length) return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
-          const serviceTitle =
-            r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
+          const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
           const status = r?.status || "new";
           const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">
-                {t("common.status", { defaultValue: "Статус" })}: {status}
-              </div>
-              {created && (
-                <div className="text-xs text-gray-400 mt-1">
-                  {t("common.created", { defaultValue: "Создан" })}: {created}
-                </div>
-              )}
-              {r?.note && (
-                <div className="text-sm text-gray-600 mt-2">
-                  {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
-                </div>
-              )}
+              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
+              {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
+              {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
             </div>
           );
         })}
@@ -637,32 +542,20 @@ export default function ClientDashboard() {
 
   const BookingsList = () => {
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!bookings?.length)
-      return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
+    if (!bookings?.length) return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bookings.map((b) => {
-          const serviceTitle =
-            b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
+          const serviceTitle = b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
           const status = b?.status || "new";
           const date = b?.date || b?.created_at;
           const when = date ? new Date(date).toLocaleString() : "";
           return (
             <div key={b.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">
-                {t("common.status", { defaultValue: "Статус" })}: {status}
-              </div>
-              {when && (
-                <div className="text-xs text-gray-400 mt-1">
-                  {t("common.date", { defaultValue: "Дата" })}: {when}
-                </div>
-              )}
-              {b?.price && (
-                <div className="text-sm text-gray-600 mt-2">
-                  {t("common.amount", { defaultValue: "Сумма" })}: {b.price}
-                </div>
-              )}
+              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
+              {when && <div className="text-xs text-gray-400 mt-1">{t("common.date", { defaultValue: "Дата" })}: {when}</div>}
+              {b?.price && <div className="text-sm text-gray-600 mt-2">{t("common.amount", { defaultValue: "Сумма" })}: {b.price}</div>}
             </div>
           );
         })}
@@ -695,37 +588,23 @@ export default function ClientDashboard() {
             <div className="flex items-center gap-4">
               <Avatar />
               <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleUploadClick}
-                  className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg"
-                >
+                <button onClick={handleUploadClick} className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg">
                   {avatarBase64 || avatarServerUrl
                     ? t("client.dashboard.changePhoto", { defaultValue: "Сменить фото" })
                     : t("client.dashboard.uploadPhoto", { defaultValue: "Загрузить фото" })}
                 </button>
                 {(avatarBase64 || avatarServerUrl) && (
-                  <button
-                    onClick={handleRemovePhoto}
-                    className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
-                  >
+                  <button onClick={handleRemovePhoto} className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
                     {t("client.dashboard.removePhoto", { defaultValue: "Удалить фото" })}
                   </button>
                 )}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               </div>
             </div>
 
             <div className="mt-6 space-y-3">
               <div>
-                <label className="text-sm text-gray-600">
-                  {t("client.dashboard.name", { defaultValue: "Наименование" })}
-                </label>
+                <label className="text-sm text-gray-600">{t("client.dashboard.name", { defaultValue: "Наименование" })}</label>
                 <input
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={name}
@@ -734,9 +613,7 @@ export default function ClientDashboard() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-600">
-                  {t("client.dashboard.phone", { defaultValue: "Телефон" })}
-                </label>
+                <label className="text-sm text-gray-600">{t("client.dashboard.phone", { defaultValue: "Телефон" })}</label>
                 <input
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={phone}
@@ -751,17 +628,13 @@ export default function ClientDashboard() {
                   disabled={savingProfile || loadingProfile}
                   className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60"
                 >
-                  {savingProfile
-                    ? t("common.saving", { defaultValue: "Сохранение..." })
-                    : t("client.dashboard.saveBtn", { defaultValue: "Сохранить" })}
+                  {savingProfile ? t("common.saving", { defaultValue: "Сохранение..." }) : t("client.dashboard.saveBtn", { defaultValue: "Сохранить" })}
                 </button>
               </div>
             </div>
 
             <div className="mt-8 border-t pt-6">
-              <div className="text-sm text-gray-600 mb-2">
-                {t("client.dashboard.changePassword", { defaultValue: "Смена пароля" })}
-              </div>
+              <div className="text-sm text-gray-600 mb-2">{t("client.dashboard.changePassword", { defaultValue: "Смена пароля" })}</div>
               <div className="flex gap-2">
                 <input
                   type="password"
@@ -770,39 +643,22 @@ export default function ClientDashboard() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder={t("client.dashboard.newPassword", { defaultValue: "Новый пароль" })}
                 />
-                <button
-                  onClick={handleChangePassword}
-                  disabled={changingPass}
-                  className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60"
-                >
-                  {changingPass
-                    ? "..."
-                    : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}
+                <button onClick={handleChangePassword} disabled={changingPass} className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60">
+                  {changingPass ? "..." : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}
                 </button>
               </div>
             </div>
 
             <div className="mt-8">
-              <button
-                onClick={handleLogout}
-                className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50"
-              >
+              <button onClick={handleLogout} className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">
                 {t("client.dashboard.logout", { defaultValue: "Выйти" })}
               </button>
             </div>
 
             {(message || error) && (
               <div className="mt-4 text-sm">
-                {message && (
-                  <div className="text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                    {message}
-                  </div>
-                )}
-                {error && (
-                  <div className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">
-                    {error}
-                  </div>
-                )}
+                {message && <div className="text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{message}</div>}
+                {error && <div className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">{error}</div>}
               </div>
             )}
           </div>
@@ -811,24 +667,16 @@ export default function ClientDashboard() {
         {/* Right: Stats + Tabs */}
         <div className="md:col-span-2">
           {loadingStats ? (
-            <div className="bg-white rounded-xl shadow p-6 border text-gray-500">
-              {t("common.loading", { defaultValue: "Загрузка..." })}
-            </div>
+            <div className="bg-white rounded-xl shadow p-6 border text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>
           ) : (
             <ClientStatsBlock stats={stats} />
           )}
 
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">
-                {t("tabs.my_requests", { defaultValue: "Мои запросы" })}
-              </TabButton>
-              <TabButton tabKey="bookings">
-                {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
-              </TabButton>
-              <TabButton tabKey="favorites">
-                {t("tabs.favorites", { defaultValue: "Избранное" })}
-              </TabButton>
+              <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
+              <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
+              <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
             </div>
 
             {activeTab === "requests" && <RequestsList />}
