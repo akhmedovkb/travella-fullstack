@@ -580,9 +580,6 @@ const resetServiceForm = () => {
   }
 };
 
-
-
-
   const handleImageUpload = (e) => {
   const files = Array.from(e.target.files || []);
   const safeFiles = files.filter(f => f.size <= 3 * 1024 * 1024); // <= 3MB
@@ -596,6 +593,80 @@ const resetServiceForm = () => {
   });
 };
 
+function ImagesEditor({ images, onUpload, onRemove, onReorder, dragItem, dragOverItem, t }) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="font-semibold">{t("service_images", { defaultValue: "Фото услуги" })}</h4>
+        {images?.length > 0 && (
+          <button
+            type="button"
+            className="text-sm text-red-600 hover:underline"
+            onClick={() => {
+              if (confirm(t("clear_all_images_confirm", { defaultValue: "Удалить все изображения?" }))) {
+                images.splice(0, images.length); // очистим массив на месте
+                onReorder(); // дернём перерисовку
+              }
+            }}
+          >
+            {t("clear_all", { defaultValue: "Очистить всё" })}
+          </button>
+        )}
+      </div>
+
+      {/* Grid превью */}
+      {images?.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {images.map((src, idx) => (
+            <div
+              key={idx}
+              className="relative group border rounded overflow-hidden bg-gray-50"
+              draggable
+              onDragStart={() => (dragItem.current = idx)}
+              onDragEnter={() => (dragOverItem.current = idx)}
+              onDragEnd={onReorder}
+              onDragOver={(e) => e.preventDefault()}
+              title={t("drag_to_reorder", { defaultValue: "Перетащите, чтобы поменять порядок" })}
+            >
+              <img src={src} alt="" className="w-full h-32 object-cover" />
+              <button
+                type="button"
+                className="absolute top-1 right-1 bg-white/90 border rounded px-2 py-0.5 text-xs shadow hidden group-hover:block"
+                onClick={() => onRemove(idx)}
+              >
+                {t("delete", { defaultValue: "Удалить" })}
+              </button>
+              <div className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 bg-white/90 rounded shadow">
+                #{idx + 1}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500 mb-2">
+          {t("no_images_yet", { defaultValue: "Изображений пока нет" })}
+        </div>
+      )}
+
+      {/* Загрузка */}
+      <div className="mt-3">
+        <label className="inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded cursor-pointer">
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onUpload}
+            className="hidden"
+          />
+          {t("choose_files", { defaultValue: "Выбрать файлы" })}
+        </label>
+        <div className="text-xs text-gray-500 mt-1">
+          {t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })}
+        </div>
+      </div>
+    </div>
+  );
+}
   
 const getCategoryOptions = (type) => {
   switch (type) {
