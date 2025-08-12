@@ -277,6 +277,7 @@
       "noBookings": "Bronlar yo‘q"
     }
   },
+  
   "favorites": "Sevimlilar",
   "favorites_empty_title": "Sevimlilar bo‘sh",
   "favorites_empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
@@ -323,6 +324,7 @@
   }
   
 }
+
 
 
 
