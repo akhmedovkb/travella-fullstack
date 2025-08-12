@@ -1,5 +1,9 @@
 const express = require("express");
 const router = express.Router();
+
+const authenticateToken = require("../middleware/authenticateToken");
+
+// ⚠️ Если файл называется ProviderController.js — используем такой же регистр в require
 const {
   registerProvider,
   loginProvider,
@@ -11,28 +15,41 @@ const {
   updateService,
   deleteService,
   getBookedDates,
-  saveBlockedDates
-} = require("../controllers/providerController");
+  saveBlockedDates,
+  updateServiceImagesOnly,
+} = require("../controllers/ProviderController");
 
-const authenticateToken = require("../middleware/authenticateToken");
+// Пускаем только провайдера
+function requireProvider(req, res, next) {
+  if (req.user?.role === "provider" || req.user?.providerId) return next();
+  return res.status(403).json({ error: "provider_required" });
+}
 
 // Auth
 router.post("/register", registerProvider);
 router.post("/login", loginProvider);
 
 // Profile
-router.get("/profile", authenticateToken, getProviderProfile);
-router.put("/profile", authenticateToken, updateProviderProfile);
-router.put("/change-password", authenticateToken, changeProviderPassword);
+router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
+router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
+router.put("/change-password", authenticateToken, requireProvider, changeProviderPassword);
 
-// Services
-router.post("/services", authenticateToken, addService);
-router.get("/services", authenticateToken, getServices);
-router.put("/services/:id", authenticateToken, updateService);
-router.delete("/services/:id", authenticateToken, deleteService);
+// Services (все под провайдером)
+router.post("/services", authenticateToken, requireProvider, addService);
+router.get("/services", authenticateToken, requireProvider, getServices);
+router.put("/services/:id", authenticateToken, requireProvider, updateService);
+router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 
 // Calendar
-router.get("/booked-dates", authenticateToken, getBookedDates);
-router.post("/blocked-dates", authenticateToken, saveBlockedDates);
+router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
+router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
+
+// Только картинки услуги
+router.patch(
+  "/services/:id/images",
+  authenticateToken,
+  requireProvider,
+  updateServiceImagesOnly
+);
 
 module.exports = router;
