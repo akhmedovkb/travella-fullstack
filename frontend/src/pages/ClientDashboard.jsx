@@ -134,11 +134,11 @@ function ClientStatsBlock({ stats }) {
     <div className="bg-white rounded-xl shadow p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm text-gray-500">{t("stats.tier")}</div>
+          <div className="text-sm text-gray-500">{t("stats.tier_label") || "Tier"}</div>
           <div className="text-xl font-semibold">{tier}</div>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-500">{t("stats.rating")}</div>
+          <div className="text-sm text-gray-500">{t("stats.rating") || "Rating"}</div>
           <div className="flex items-center justify-end gap-2">
             <Stars value={rating} size={20} />
             <span className="text-sm text-gray-600">{rating.toFixed(1)}</span>
@@ -147,26 +147,29 @@ function ClientStatsBlock({ stats }) {
       </div>
 
       <div className="mt-4">
-        <Progress value={points} max={next} label={t("stats.bonus_progress")} />
+        <Progress value={points} max={next} label={t("stats.bonus_progress") || "Bonus progress"} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-        <StatBox title={t("stats.requests_total")}   value={stats?.requests_total ?? 0} />
-        <StatBox title={t("stats.requests_active")}  value={stats?.requests_active ?? 0} />
-        <StatBox title={t("stats.bookings_total")}   value={stats?.bookings_total ?? 0} />
-        <StatBox title={t("stats.completed")}        value={stats?.bookings_completed ?? 0} />
-        <StatBox title={t("stats.cancelled")}        value={stats?.bookings_cancelled ?? 0} />
+        <StatBox title={t("stats.requests_total") || "Requests (total)"} value={stats?.requests_total ?? 0} />
+        <StatBox title={t("stats.requests_active") || "Requests (active)"} value={stats?.requests_active ?? 0} />
+        <StatBox title={t("stats.bookings_total") || "Bookings (total)"} value={stats?.bookings_total ?? 0} />
+        <StatBox title={t("stats.completed") || "Completed"} value={stats?.bookings_completed ?? 0} />
+        <StatBox title={t("stats.cancelled") || "Cancelled"} value={stats?.bookings_cancelled ?? 0} />
       </div>
     </div>
   );
 }
 
 function EmptyFavorites() {
+  const { t } = useTranslation();
   return (
     <div className="p-8 text-center bg-white border rounded-xl">
-      <div className="text-lg font-semibold mb-2">Избранное пусто</div>
+      <div className="text-lg font-semibold mb-2">
+        {t("favorites.empty_title") || "Избранное пусто"}
+      </div>
       <div className="text-gray-600">
-        Добавляйте интересные услуги в избранное и возвращайтесь позже.
+        {t("favorites.empty_subtitle") || "Добавляйте интересные услуги в избранное и возвращайтесь позже."}
       </div>
     </div>
   );
@@ -181,47 +184,32 @@ function FavoritesList({
   onQuickRequest,
 }) {
   const { t } = useTranslation();
-
+  // items — это элементы wishlist (variant A), у каждого есть id (wishlist_id) и service / service_id
   const total = items?.length || 0;
   const pages = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(Math.max(1, page), pages);
   const start = (current - 1) * perPage;
   const pageItems = items.slice(start, start + perPage);
 
-  const Empty = () => (
-    <div className="p-8 text-center bg-white border rounded-xl">
-      <div className="text-lg font-semibold mb-2">
-        {t("favorites_empty_title", { defaultValue: "Избранное пусто" })}
-      </div>
-      <div className="text-gray-600">
-        {t("favorites_empty_text", {
-          defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <div>
       {total === 0 ? (
-        <Empty />
+        <EmptyFavorites />
       ) : (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {pageItems.map((it) => {
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
-              const title = s.title || s.name || t("service", { defaultValue: "Услуга" });
-              const image =
-                Array.isArray(s.images) && s.images.length ? s.images[0] : null;
+              const title = s.title || s.name || "Услуга";
+              const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
 
               return (
                 <div
                   key={it.id}
                   className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col"
                 >
-                  {/* image */}
-                  <div className="aspect-[16/10] bg-gray-100">
+                  <div className="aspect-[16/10] bg-gray-100 relative">
                     {image ? (
                       <img
                         src={image}
@@ -230,41 +218,34 @@ function FavoritesList({
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">
-                          {t("no_image", { defaultValue: "Нет изображения" })}
-                        </span>
+                        <span className="text-sm">{t("favorites.no_image") || "Нет изображения"}</span>
                       </div>
                     )}
                   </div>
-
-                  {/* body */}
                   <div className="p-3 flex-1 flex flex-col">
-                <div className="font-semibold line-clamp-2">{title}</div>
-                <div className="mt-auto flex gap-2 pt-3">
-                  {serviceId && (
-                    <button
-                      onClick={() => onQuickRequest?.(serviceId)}
-                      className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-                    >
--                     Быстрый запрос
-+                     {t("actions.quick_request")}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onRemove?.(it.id)}
-                    className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
--                   title="Удалить"
-+                   title={t("actions.delete")}
-                  >
--                   Delete
-+                   {t("actions.delete")}
-                  </button>
+                    <div className="font-semibold line-clamp-2">{title}</div>
+                    <div className="mt-auto flex gap-2 pt-3">
+                      {serviceId && (
+                        <button
+                          onClick={() => onQuickRequest?.(serviceId)}
+                          className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+                        >
+                          {t("actions.quick_request") || "Быстрый запрос"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onRemove?.(it.id)}
+                        className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
+                        title={t("actions.delete") || "Удалить"}
+                      >
+                        {t("actions.delete") || "Удалить"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-           </div>
-         );
-      })}
-   </div>
+              );
+            })}
+          </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-center gap-2 mt-6">
@@ -316,8 +297,8 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null); // can be dataURL or raw base64 from server
-  const [avatarServerUrl, setAvatarServerUrl] = useState(null); // absolute URL from server
+  const [avatarBase64, setAvatarBase64] = useState(null);
+  const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
   // Password
@@ -330,11 +311,10 @@ export default function ClientDashboard() {
 
   // Tabs
   const tabs = [
-  { key: "requests", label: t("tabs.my_requests") },
-  { key: "bookings", label: t("tabs.my_bookings") },
-  { key: "favorites", label: t("tabs.favorites") }
-   ];
-
+    { key: "requests", label: t("my_requests") || "Мои запросы" },
+    { key: "bookings", label: t("my_bookings") || "Мои бронирования" },
+    { key: "favorites", label: t("favorites") || "Избранное" },
+  ];
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(
     tabs.some((t) => t.key === initialTab) ? initialTab : "requests"
@@ -376,31 +356,16 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        // Robustly resolve avatar coming from server:
-        // - if avatar_base64 is raw (no data: prefix), wrap it
-        // - if it's already a dataURL, use as is
-        // - if avatar_url looks like http(s) or dataURL, use that
-        const rawB64 = me?.avatar_base64 || null;
-        const url = me?.avatar_url || null;
-        if (rawB64 && typeof rawB64 === "string") {
-          const isDataUrl = rawB64.startsWith("data:");
-          setAvatarBase64(isDataUrl ? rawB64 : `data:image/jpeg;base64,${rawB64}`);
-          setAvatarServerUrl(null);
-        } else if (url && typeof url === "string" && /^(https?:|data:)/i.test(url)) {
-          setAvatarServerUrl(url);
-          setAvatarBase64(null);
-        } else {
-          setAvatarBase64(null);
-          setAvatarServerUrl(null);
-        }
+        setAvatarBase64(me?.avatar_base64 || null);
+        setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
       } catch (e) {
-        setError("Не удалось загрузить профиль");
+        setError(t("errors.profile_load") || "Не удалось загрузить профиль");
       } finally {
         setLoadingProfile(false);
       }
     })();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     (async () => {
@@ -431,7 +396,7 @@ export default function ClientDashboard() {
           const data = await apiGet("/api/wishlist?expand=service");
           const arr = Array.isArray(data) ? data : data?.items || [];
           if (!cancelled) {
-            setFavorites(arr); // сохраняем элементы избранного как есть (variant A)
+            setFavorites(arr); // <-- сохраняем элементы избранного как есть (variant A)
             const maxPage = Math.max(1, Math.ceil(arr.length / 8));
             setFavPage((p) => Math.min(Math.max(1, p), maxPage));
           }
@@ -440,7 +405,7 @@ export default function ClientDashboard() {
         if (activeTab === "favorites") {
           setFavorites([]);
         } else {
-          setError("Ошибка загрузки данных");
+          setError(t("errors.data_load") || "Ошибка загрузки данных");
         }
       } finally {
         if (!cancelled) setLoadingTab(false);
@@ -449,7 +414,7 @@ export default function ClientDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, t]);
 
   /* -------- Handlers -------- */
 
@@ -460,12 +425,13 @@ export default function ClientDashboard() {
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl); // keep as dataURL for preview
+      setAvatarBase64(dataUrl);
       setAvatarServerUrl(null);
       setRemoveAvatar(false);
     } catch (err) {
-      setError("Не удалось обработать изображение");
+      setError(t("errors.image_process") || "Не удалось обработать изображение");
     } finally {
+      // allow re-select same file
       e.target.value = "";
     }
   };
@@ -482,37 +448,23 @@ export default function ClientDashboard() {
       setMessage(null);
       setError(null);
       const payload = { name, phone };
-      if (avatarBase64) {
-        // If it's a dataURL -> strip prefix. If raw base64 -> send as is.
-        payload.avatar_base64 = avatarBase64.startsWith("data:")
-          ? avatarBase64.split(",")[1]
-          : avatarBase64;
-      }
+      if (avatarBase64) payload.avatar_base64 = avatarBase64;
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
-      setMessage("Профиль сохранён");
+      setMessage(t("profile.saved") || "Профиль сохранён");
+      // in case server sanitized fields:
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
-      // Try to refresh avatar from server response
-      const rawB64 = res?.avatar_base64 || null;
-      const url = res?.avatar_url || null;
-      if (rawB64 && typeof rawB64 === "string") {
-        const isDataUrl = rawB64.startsWith("data:");
-        setAvatarBase64(isDataUrl ? rawB64 : `data:image/jpeg;base64,${rawB64}`);
+      if (res?.avatar_base64) {
+        setAvatarBase64(res.avatar_base64);
         setAvatarServerUrl(null);
-      } else if (url && typeof url === "string" && /^(https?:|data:)/i.test(url)) {
-        setAvatarServerUrl(url);
+      } else if (res?.avatar_url) {
+        setAvatarServerUrl(res.avatar_url);
         setAvatarBase64(null);
-      } else if (!removeAvatar && avatarBase64) {
-        // fallback: keep local preview if server didn't echo back
-        setAvatarBase64(avatarBase64.startsWith("data:") ? avatarBase64 : `data:image/jpeg;base64,${avatarBase64}`);
-      } else {
-        setAvatarBase64(null);
-        setAvatarServerUrl(null);
       }
       setRemoveAvatar(false);
     } catch (e) {
-      setError("Не удалось сохранить профиль");
+      setError(t("errors.profile_save") || "Не удалось сохранить профиль");
     } finally {
       setSavingProfile(false);
     }
@@ -520,17 +472,17 @@ export default function ClientDashboard() {
 
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
-      setError("Пароль должен быть не короче 6 символов");
+      setError(t("errors.password_short") || "Пароль должен быть не короче 6 символов");
       return;
     }
     try {
       setChangingPass(true);
       setError(null);
       await apiPost("/api/clients/change-password", { password: newPassword });
-      setMessage("Пароль изменён");
+      setMessage(t("profile.password_changed") || "Пароль изменён");
       setNewPassword("");
     } catch (e) {
-      setError("Не удалось изменить пароль");
+      setError(t("errors.password_change") || "Не удалось изменить пароль");
     } finally {
       setChangingPass(false);
     }
@@ -549,44 +501,31 @@ export default function ClientDashboard() {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
       setFavorites((prev) => prev.filter((x) => x.id !== itemId));
-      setMessage("Удалено из избранного");
+      setMessage(t("favorites.removed") || "Удалено из избранного");
     } catch (e) {
-      setError("Не удалось удалить из избранного");
+      setError(t("favorites.remove_error") || "Не удалось удалить из избранного");
     }
   };
 
   const handleQuickRequest = async (serviceId) => {
     if (!serviceId) {
-      setError("Не удалось определить услугу");
+      setError(t("errors.service_unknown") || "Не удалось определить услугу");
       return;
     }
-    const note = window.prompt("Комментарий к запросу (необязательно):") || undefined;
+    const note = window.prompt(t("requests.note_prompt") || "Комментарий к запросу (необязательно):") || undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
-      setMessage("Запрос отправлен");
+      setMessage(t("requests.sent") || "Запрос отправлен");
       setActiveTab("requests");
     } catch (e) {
-      setError("Не удалось отправить запрос");
+      setError(t("requests.error") || "Не удалось отправить запрос");
     }
   };
 
   /* -------- Render helpers -------- */
 
-  const resolveAvatarSrc = () => {
-    // Prefer dataURL base64 for preview
-    if (avatarBase64 && typeof avatarBase64 === "string") {
-      if (avatarBase64.startsWith("data:")) return avatarBase64;
-      // raw base64 -> wrap
-      return `data:image/jpeg;base64,${avatarBase64}`;
-    }
-    if (avatarServerUrl && /^(https?:|data:)/i.test(avatarServerUrl)) {
-      return avatarServerUrl;
-    }
-    return null;
-  };
-
   const Avatar = () => {
-    const src = resolveAvatarSrc();
+    const src = avatarBase64 || avatarServerUrl || null;
     if (src) {
       return (
         <img
@@ -618,14 +557,14 @@ export default function ClientDashboard() {
   };
 
   const RequestsList = () => {
-    if (loadingTab) return <div className="text-gray-500">Загрузка...</div>;
+    if (loadingTab) return <div className="text-gray-500">{t("loading") || "Загрузка..."}</div>;
     if (!requests?.length)
-      return <div className="text-gray-500">{t("empty.no_requests")}</div>;
+      return <div className="text-gray-500">{t("requests.empty") || "Пока нет запросов."}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
           const serviceTitle =
-            r?.service?.title || r?.service_title || r?.title || "Запрос";
+            r?.service?.title || r?.service_title || r?.title || (t("requests.item") || "Запрос");
           const status = r?.status || "new";
           const created = r?.created_at
             ? new Date(r.created_at).toLocaleString()
@@ -633,12 +572,12 @@ export default function ClientDashboard() {
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">Статус: {status}</div>
+              <div className="text-sm text-gray-500 mt-1">{(t("status") || "Статус")}: {status}</div>
               {created && (
-                <div className="text-xs text-gray-400 mt-1">Создан: {created}</div>
+                <div className="text-xs text-gray-400 mt-1">{(t("created") || "Создан")}: {created}</div>
               )}
               {r?.note && (
-                <div className="text-sm text-gray-600 mt-2">Комментарий: {r.note}</div>
+                <div className="text-sm text-gray-600 mt-2">{(t("comment") || "Комментарий")}: {r.note}</div>
               )}
             </div>
           );
@@ -648,26 +587,26 @@ export default function ClientDashboard() {
   };
 
   const BookingsList = () => {
-    if (loadingTab) return <div className="text-gray-500">Загрузка...</div>;
+    if (loadingTab) return <div className="text-gray-500">{t("loading") || "Загрузка..."}</div>;
     if (!bookings?.length)
-      return <div className="text-gray-500">{t("empty.no_bookings")}</div>;
+      return <div className="text-gray-500">{t("bookings.empty") || "Пока нет бронирований."}</div>;
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bookings.map((b) => {
           const serviceTitle =
-            b?.service?.title || b?.service_title || b?.title || "Бронирование";
+            b?.service?.title || b?.service_title || b?.title || (t("bookings.item") || "Бронирование");
           const status = b?.status || "new";
           const date = b?.date || b?.created_at;
           const when = date ? new Date(date).toLocaleString() : "";
           return (
             <div key={b.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">Статус: {status}</div>
+              <div className="text-sm text-gray-500 mt-1">{(t("status") || "Статус")}: {status}</div>
               {when && (
-                <div className="text-xs text-gray-400 mt-1">Дата: {when}</div>
+                <div className="text-xs text-gray-400 mt-1">{(t("date") || "Дата")}: {when}</div>
               )}
               {b?.price && (
-                <div className="text-sm text-gray-600 mt-2">Сумма: {b.price}</div>
+                <div className="text-sm text-gray-600 mt-2">{(t("sum") || "Сумма")}: {b.price}</div>
               )}
             </div>
           );
@@ -677,7 +616,7 @@ export default function ClientDashboard() {
   };
 
   const FavoritesTab = () => {
-    if (loadingTab) return <div className="text-gray-500">Загрузка...</div>;
+    if (loadingTab) return <div className="text-gray-500">{t("loading") || "Загрузка..."}</div>;
     return (
       <FavoritesList
         items={favorites}
@@ -705,14 +644,14 @@ export default function ClientDashboard() {
                   onClick={handleUploadClick}
                   className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg"
                 >
-                  {avatarBase64 || avatarServerUrl ? "Сменить фото" : "Загрузить фото"}
+                  {avatarBase64 || avatarServerUrl ? (t("actions.change_photo") || "Сменить фото") : (t("actions.upload_photo") || "Загрузить фото")}
                 </button>
                 {(avatarBase64 || avatarServerUrl) && (
                   <button
                     onClick={handleRemovePhoto}
                     className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
                   >
-                    Удалить фото
+                    {t("actions.delete_photo") || "Удалить фото"}
                   </button>
                 )}
                 <input
@@ -727,16 +666,16 @@ export default function ClientDashboard() {
 
             <div className="mt-6 space-y-3">
               <div>
-                <label className="text-sm text-gray-600">Имя</label>
+                <label className="text-sm text-gray-600">{t("name") || "Имя"}</label>
                 <input
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ваше имя"
+                  placeholder={t("name_placeholder") || "Ваше имя"}
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-600">Телефон</label>
+                <label className="text-sm text-gray-600">{t("phone") || "Телефон"}</label>
                 <input
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={phone}
@@ -751,27 +690,27 @@ export default function ClientDashboard() {
                   disabled={savingProfile || loadingProfile}
                   className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60"
                 >
-                  {savingProfile ? "Сохранение..." : "Сохранить профиль"}
+                  {savingProfile ? (t("saving") || "Сохранение...") : (t("actions.save_profile") || "Сохранить профиль")}
                 </button>
               </div>
             </div>
 
             <div className="mt-8 border-t pt-6">
-              <div className="text-sm text-gray-600 mb-2">Смена пароля</div>
+              <div className="text-sm text-gray-600 mb-2">{t("password_change") || "Смена пароля"}</div>
               <div className="flex gap-2">
                 <input
                   type="password"
                   className="flex-1 border rounded-lg px-3 py-2"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Новый пароль"
+                  placeholder={t("new_password") || "Новый пароль"}
                 />
                 <button
                   onClick={handleChangePassword}
                   disabled={changingPass}
                   className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60"
                 >
-                  {changingPass ? "..." : "Сменить"}
+                  {changingPass ? "..." : (t("actions.change") || "Сменить")}
                 </button>
               </div>
             </div>
@@ -781,7 +720,7 @@ export default function ClientDashboard() {
                 onClick={handleLogout}
                 className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50"
               >
-                Выйти
+                {t("actions.logout") || "Выйти"}
               </button>
             </div>
 
@@ -806,7 +745,7 @@ export default function ClientDashboard() {
         <div className="md:col-span-2">
           {loadingStats ? (
             <div className="bg-white rounded-xl shadow p-6 border text-gray-500">
-              Загрузка статистики...
+              {t("loading_stats") || "Загрузка статистики..."}
             </div>
           ) : (
             <ClientStatsBlock stats={stats} />
@@ -815,9 +754,9 @@ export default function ClientDashboard() {
           {/* Tabs */}
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">{t("tabs.my_requests")}</TabButton>
-              <TabButton tabKey="bookings">{t("tabs.my_bookings")}</TabButton>
-              <TabButton tabKey="favorites">{t("tabs.favorites")}</TabButton>
+              <TabButton tabKey="requests">{t("my_requests") || "Мои запросы"}</TabButton>
+              <TabButton tabKey="bookings">{t("my_bookings") || "Мои бронирования"}</TabButton>
+              <TabButton tabKey="favorites">{t("favorites") || "Избранное"}</TabButton>
             </div>
 
             {activeTab === "requests" && <RequestsList />}
