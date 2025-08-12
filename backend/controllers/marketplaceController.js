@@ -1,20 +1,36 @@
-// controllers/marketplaceController.js
-// CommonJS, работает с уже настроенным knex из ../db
+// /app/controllers/marketplaceController.js
+// Универсальный контроллер: поддерживает либо knex, либо node-postgres pool (db.query)
 
-const dbModule = require("../db");
-const db = dbModule?.knex || dbModule;
-if (typeof db !== "function") {
-  throw new Error("Knex instance not found in ../db");
+const dbMod = require("../db");
+
+// Определяем доступный драйвер
+let knex = null;
+let pg = null;
+if (typeof dbMod === "function") {
+  // export = knex()
+  knex = dbMod;
+} else if (dbMod && typeof dbMod.knex === "function") {
+  // module.exports = { knex }
+  knex = dbMod.knex;
+} else if (dbMod && typeof dbMod.default === "function") {
+  // ESM default
+  knex = dbMod.default;
+} else if (dbMod && typeof dbMod.query === "function") {
+  // node-postgres Pool
+  pg = dbMod;
+} else if (dbMod && dbMod.pool && typeof dbMod.pool.query === "function") {
+  // { pool }
+  pg = dbMod.pool;
 }
+// Никаких падений здесь — просто выбросим понятную ошибку при первом запросе, если и knex, и pg не найдены.
 
-// Цена: сначала details.netPrice (если есть), иначе services.price
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
-// сопоставление «крупных» категорий из UI -> реальные категории в таблице services.category
-const CAT_MAP = {
+// Маппинг "групп" на реальные категории в БД
+const CATEGORY_ALIAS = {
   guide: [
     "city_tour_guide",
-    "mountain_tour_guide"
+    "mountain_tour_guide",
   ],
   transport: [
     "city_tour_transport",
@@ -22,14 +38,19 @@ const CAT_MAP = {
     "one_way_transfer",
     "dinner_transfer",
     "border_transfer",
-    "hotel_transfer"
+    "hotel_transfer",
   ],
-  refused_tour: ["refused_tour", "author_tour"], // авторские туры сюда тоже
-  refused_hotel: ["refused_hotel"],
-  refused_flight: ["refused_flight"],
-  refused_event_ticket: ["refused_event_ticket"],
-  visa_support: ["visa_support"]
+  // иногда фронт присылает "package" как отказной тур
+  package: ["refused_tour", "author_tour"],
 };
+
+function expandCategory(cat) {
+  if (!cat) return null;
+  const key = String(cat).trim();
+  if (CATEGORY_ALIAS[key]) return CATEGORY_ALIAS[key];
+  // уже конечная категория
+  return [key];
+}
 
 function toNum(v) {
   const n = Number(v);
@@ -38,104 +59,183 @@ function toNum(v) {
 
 module.exports.search = async (req, res, next) => {
   try {
+    if (!knex && !pg) {
+      throw new Error("DB driver is not available: expected knex function or pg Pool with .query()");
+    }
+
     const {
-      q,                // текстовый поиск
-      location,         // город/локация из инпута «Внесите локацию…»
-      category,         // ключ из селекта
+      q,
+      category,
+      location,
       price_min,
       price_max,
-      sort = "newest",
+      sort,
+      only_active = true,
       limit = 60,
       offset = 0,
-      only_active = true
     } = req.body || {};
 
+    const cats = expandCategory(category);
     const lim = Math.min(200, Math.max(1, Number(limit) || 60));
     const off = Math.max(0, Number(offset) || 0);
 
-    const rowsQ = db("services")
-      .select([
-        "id",
-        "provider_id",
-        "title",
-        "description",
-        "category",
-        "price",
-        "images",
-        "availability",
-        "created_at",
-        "status",
-        "details",
-        "expiration_at",
-      ])
-      .modify((qb) => {
-        if (only_active) {
-          // 1) активные по флагу в JSONB
-          qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`);
-          // 2) не истёкшие по колонке expiration_at
-          qb.andWhere((q2) => {
-            q2.whereNull("expiration_at").orWhere("expiration_at", ">", db.fn.now());
-          });
-        }
-      })
-      // Категория из селекта
-      .modify((qb) => {
-        if (!category) return;
-        const mapped = CAT_MAP[category];
-        if (Array.isArray(mapped)) qb.whereIn("category", mapped);
-        else qb.andWhere("category", String(category));
-      })
-      // Локация: direction_to / directionTo / location / direction
-      .modify((qb) => {
-        const loc = (location || "").trim();
-        if (!loc) return;
-        const like = `%${loc}%`;
-        qb.andWhere((sub) => {
-          sub
-            .orWhereRaw(`details->>'direction_to' ILIKE ?`, [like])
-            .orWhereRaw(`details->>'directionTo' ILIKE ?`, [like])
-            .orWhereRaw(`details->>'location' ILIKE ?`, [like])
-            .orWhereRaw(`details->>'direction' ILIKE ?`, [like]);
-        });
-      })
-      // Текстовый q — по title/description/details::text
-      .modify((qb) => {
-        const text = (q || "").trim();
-        if (!text) return;
-        const like = `%${text}%`;
-        qb.andWhere((sub) => {
-          sub
-            .orWhere("title", "ilike", like)
-            .orWhere("description", "ilike", like)
-            .orWhereRaw(`details::text ILIKE ?`, [like]);
-        });
-      })
-      // Диапазон цены (нетто/price)
-      .modify((qb) => {
-        const pmin = toNum(price_min);
-        const pmax = toNum(price_max);
-        if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
-        if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
-      })
-      // Сортировка
-      .modify((qb) => {
-        switch (sort) {
-          case "price_asc":
-            qb.orderByRaw(`${PRICE_SQL} asc nulls last`);
-            break;
-          case "price_desc":
-            qb.orderByRaw(`${PRICE_SQL} desc nulls last`);
-            break;
-          case "newest":
-          default:
-            qb.orderBy("created_at", "desc");
-        }
-      })
-      .limit(lim)
-      .offset(off);
+    // ---------- ВЕТКА KNEX ----------
+    if (knex) {
+      const rowsQ = knex("services")
+        .select([
+          "id",
+          "provider_id",
+          "title",
+          "description",
+          "category",
+          "price",
+          "images",
+          "availability",
+          "created_at",
+          "status",
+          "details",
+          "expiration_at",
+        ])
+        // только активные + неистёкшие
+        .modify((qb) => {
+          if (only_active) {
+            qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
+              .andWhere((q2) =>
+                q2.whereNull("expiration_at").orWhereRaw("expiration_at > now()")
+              );
+          }
+        })
+        // категория / алиасы
+        .modify((qb) => {
+          if (cats && cats.length) {
+            qb.whereIn("category", cats);
+          }
+        })
+        // текстовый поиск
+        .modify((qb) => {
+          if (q && String(q).trim()) {
+            const like = `%${String(q).trim()}%`;
+            qb.andWhere((sub) => {
+              sub.whereRaw(`title ILIKE ?`, [like])
+                .orWhereRaw(`description ILIKE ?`, [like])
+                .orWhereRaw(`details::text ILIKE ?`, [like]);
+            });
+          }
+        })
+        // фильтр по локации (город прибытия/место)
+        .modify((qb) => {
+          if (location && String(location).trim()) {
+            const like = `%${String(location).trim()}%`;
+            qb.andWhere((sub) => {
+              sub.whereRaw(`COALESCE(details->>'direction_to','') ILIKE ?`, [like])
+                .orWhereRaw(`COALESCE(details->>'directionTo','') ILIKE ?`, [like])
+                .orWhereRaw(`COALESCE(details->>'location','') ILIKE ?`, [like])
+                .orWhereRaw(`COALESCE(details->>'direction','') ILIKE ?`, [like]);
+            });
+          }
+        })
+        // диапазон цены (нетто/price)
+        .modify((qb) => {
+          const pmin = toNum(price_min);
+          const pmax = toNum(price_max);
+          if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
+          if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
+        })
+        // сортировка
+        .modify((qb) => {
+          switch (sort) {
+            case "newest":
+              qb.orderBy("created_at", "desc");
+              break;
+            case "price_asc":
+              qb.orderByRaw(`${PRICE_SQL} asc nulls last`);
+              break;
+            case "price_desc":
+              qb.orderByRaw(`${PRICE_SQL} desc nulls last`);
+              break;
+            default:
+              qb.orderBy("created_at", "desc");
+          }
+        })
+        .limit(lim)
+        .offset(off);
 
-    const items = await rowsQ;
-    res.json({ items, limit: lim, offset: off });
+      const items = await rowsQ;
+      return res.json({ items, limit: lim, offset: off });
+    }
+
+    // ---------- ВЕТКА PG (node-postgres) ----------
+    // Собираем where вручную
+    const where = [];
+    const params = [];
+    let p = 1;
+
+    if (only_active) {
+      where.push(`COALESCE((details->>'isActive')::boolean, true) = true`);
+      where.push(`(expiration_at IS NULL OR expiration_at > now())`);
+    }
+
+    if (cats && cats.length) {
+      // category IN (...)
+      const ph = cats.map(() => `$${p++}`).join(",");
+      params.push(...cats);
+      where.push(`category IN (${ph})`);
+    }
+
+    if (q && String(q).trim()) {
+      const like = `%${String(q).trim()}%`;
+      params.push(like, like, like);
+      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
+      where.push(`(title ILIKE ${c1} OR description ILIKE ${c2} OR details::text ILIKE ${c3})`);
+    }
+
+    if (location && String(location).trim()) {
+      const like = `%${String(location).trim()}%`;
+      params.push(like, like, like, like);
+      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`, c4 = `$${p++}`;
+      where.push(`(
+        COALESCE(details->>'direction_to','') ILIKE ${c1}
+        OR COALESCE(details->>'directionTo','') ILIKE ${c2}
+        OR COALESCE(details->>'location','') ILIKE ${c3}
+        OR COALESCE(details->>'direction','') ILIKE ${c4}
+      )`);
+    }
+
+    const pmin = toNum(price_min);
+    const pmax = toNum(price_max);
+    if (pmin != null) {
+      params.push(pmin);
+      where.push(`${PRICE_SQL} >= $${p++}`);
+    }
+    if (pmax != null) {
+      params.push(pmax);
+      where.push(`${PRICE_SQL} <= $${p++}`);
+    }
+
+    let orderBy = "created_at DESC";
+    switch (sort) {
+      case "newest":
+        orderBy = "created_at DESC";
+        break;
+      case "price_asc":
+        orderBy = `${PRICE_SQL} ASC NULLS LAST`;
+        break;
+      case "price_desc":
+        orderBy = `${PRICE_SQL} DESC NULLS LAST`;
+        break;
+    }
+
+    params.push(lim, off);
+    const sql = `
+      SELECT id, provider_id, title, description, category, price, images, availability, created_at, status, details, expiration_at
+      FROM services
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY ${orderBy}
+      LIMIT $${p++} OFFSET $${p++}
+    `;
+
+    const { rows } = await pg.query(sql, params);
+    return res.json({ items: rows, limit: lim, offset: off });
   } catch (err) {
     next(err);
   }
