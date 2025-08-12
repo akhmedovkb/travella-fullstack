@@ -1076,6 +1076,16 @@ const getCategoryOptions = (type) => {
           {t("is_active")}
         </label>
       {/* КНОПКА СОХРАНИТЬ */}
+      <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+      
       <button
         className="w-full bg-orange-500 text-white py-2 rounded font-bold mt-4"
         onClick={handleSaveService}
@@ -1247,6 +1257,16 @@ const getCategoryOptions = (type) => {
         />
         <label>{t("is_active")}</label>
       </div>
+
+      <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
 
       <button
         className="w-full bg-orange-500 text-white py-2 rounded font-bold"
@@ -1448,6 +1468,16 @@ const getCategoryOptions = (type) => {
       {t("is_active")}
     </label>
 
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
       onClick={handleSaveService}
@@ -1560,6 +1590,16 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-4"
     />
 
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
       onClick={handleSaveService}
@@ -1624,6 +1664,16 @@ const getCategoryOptions = (type) => {
       />
       <span>{t("is_active")}</span>
     </label>
+
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
 
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
@@ -1996,6 +2046,16 @@ const getCategoryOptions = (type) => {
       {t("is_active")}
     </label>
 
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
       onClick={handleSaveService}
@@ -2165,6 +2225,16 @@ const getCategoryOptions = (type) => {
     />
     <label>{t("is_active")}</label>
   </div>
+
+  <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
 
   <button
     className="w-full bg-orange-500 text-white py-2 rounded font-bold"
@@ -2361,6 +2431,16 @@ const getCategoryOptions = (type) => {
       {t("is_active")}
     </label>
 
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
       onClick={handleSaveService}
@@ -2468,6 +2548,16 @@ const getCategoryOptions = (type) => {
       className="w-full border px-3 py-2 rounded mb-4"
     />
 
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
+
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
       onClick={handleSaveService}
@@ -2527,6 +2617,16 @@ const getCategoryOptions = (type) => {
       />
       <span>{t("is_active")}</span>
     </label>
+
+    <ImagesEditor
+        images={images}
+        onUpload={handleImageUpload}
+        onRemove={handleRemoveImage}
+        onReorder={handleReorderImages}
+        dragItem={dragItem}
+        dragOverItem={dragOverItem}
+        t={t}
+      />
 
     <button
       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
