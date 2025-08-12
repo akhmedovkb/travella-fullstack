@@ -278,12 +278,23 @@
       "noBookings": "No bookings yet"
     }
   },
-  "favorites_empty_title": "No favorites yet",
-  "favorites_empty_text": "Add interesting services to favorites and come back later.",
-  "quick_request": "Quick request",
-  "delete": "Remove",
-  "no_image": "No image",
-  "service": "Service",
+  
+  "favorites": "Favorites",
+  "favorites_empty_title": "Favorites is empty",
+  "favorites_empty_desc": "Add interesting services to favorites and come back later.",
+  "favorites_no_image": "No image",
+
+  "actions": {
+    "quick_request": "Quick request",
+    "remove": "Remove",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "ok": "Delete"
+  },
+
+  "pagination": {
+    "prev": "←",
+    "next": "→"
   
   "provider": {
     "requests": {
@@ -316,6 +327,7 @@
 
 
 }
+
 
 
 
