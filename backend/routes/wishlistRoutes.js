@@ -1,13 +1,10 @@
+// routes/wishlistRoutes.js
 const express = require("express");
 const router = express.Router();
-const authenticateToken = require("../middleware/authenticateToken");
-const {
-  listWishlist,
-  toggleWishlist,
-} = require("../controllers/wishlistController");
+const { authenticateToken } = require("../middleware/authenticateToken");
+const wishlist = require("../controllers/wishlistController");
 
-// все эндпоинты — только для клиента
-router.get("/", authenticateToken, listWishlist);
-router.post("/toggle", authenticateToken, toggleWishlist);
+router.get("/api/wishlist", authenticateToken, wishlist.listWishlist);
+router.post("/api/wishlist/toggle", authenticateToken, wishlist.toggleWishlist);
 
 module.exports = router;
