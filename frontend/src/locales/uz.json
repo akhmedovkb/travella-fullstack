@@ -310,6 +310,11 @@
     "completed": "Yakunlangan",
     "cancelled": "Bekor qilingan"
   },
+  "empty": {
+    "no_requests": "Hozircha so'rovlar yo'q.",
+    "no_bookings": "Hozircha bronlar yo'q.",
+    "no_favorites": "Sevimlilar bo'sh"
+  },
   
   "provider": {
     "requests": {
@@ -339,3 +344,4 @@
   }
   
 }
+
