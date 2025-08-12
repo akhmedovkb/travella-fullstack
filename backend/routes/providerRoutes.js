@@ -35,6 +35,9 @@ router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/change-password", authenticateToken, requireProvider, changeProviderPassword);
 
+// Stats
+router.get("/stats", authenticateToken, requireProvider, getProviderStats);
+
 // Services (все под провайдером)
 router.post("/services", authenticateToken, requireProvider, addService);
 router.get("/services", authenticateToken, requireProvider, getServices);
