@@ -1,6 +1,6 @@
+// /app/controllers/marketplaceController.js
 const db = require("../db");
 
-// price: coalesce(details.netPrice, price)
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
 const toNum = (v) => {
@@ -21,7 +21,7 @@ function addDetailsEq(qb, key, value) {
   qb.andWhereRaw(`details->>? = ?`, [key, String(value)]);
 }
 
-module.exports.search = async (req, res, next) => {
+async function search(req, res, next) {
   try {
     const {
       q,
@@ -53,7 +53,6 @@ module.exports.search = async (req, res, next) => {
         "details",
         "expiration_at",
       ])
-      // Только активные и неистёкшие
       .modify((qb) => {
         if (only_active) {
           qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
@@ -62,11 +61,9 @@ module.exports.search = async (req, res, next) => {
             });
         }
       })
-      // Категория
       .modify((qb) => {
         if (category) qb.andWhere("category", category);
       })
-      // Поиск q по title/description/details::text
       .modify((qb) => {
         if (q && String(q).trim()) {
           qb.andWhere((sub) => {
@@ -76,14 +73,12 @@ module.exports.search = async (req, res, next) => {
           });
         }
       })
-      // Диапазон цены
       .modify((qb) => {
         const pmin = toNum(price_min);
         const pmax = toNum(price_max);
         if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
         if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
       })
-      // Произвольные filters по details.*
       .modify((qb) => {
         Object.entries(rest || {}).forEach(([key, val]) => {
           if (!key.startsWith("details.")) return;
@@ -94,7 +89,6 @@ module.exports.search = async (req, res, next) => {
           else addDetailsLike(qb, dkey, String(val));
         });
       })
-      // Сортировка
       .modify((qb) => {
         switch (sort) {
           case "newest":
@@ -118,4 +112,7 @@ module.exports.search = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
+}
+
+// ЕДИНЫЙ ЯВНЫЙ ЭКСПОРТ
+module.exports = { search };
