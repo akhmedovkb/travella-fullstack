@@ -185,7 +185,7 @@
     "package": "Tour Package",
     "hotel": "Hotel",
     "flight": "Flight",
-    "event": "Event Ticket",
+    "refused_event": "Refused Event Ticket",
     "search_filters": "Search Filters",
     "start_date": "Start Date",
     "end_date": "End Date",
@@ -408,3 +408,4 @@
   "my_bookings": "My bookings",
   "my_requests": "My requests"
 }
+
