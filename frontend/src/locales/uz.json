@@ -295,18 +295,7 @@
     "prev": "←",
     "next": "→"
   },
-  
-  "provider": {
-    "requests": {
-      "title": "So‘rovlar (Provayder)",
-      "noItems": "So‘rovlar yo‘q.",
-      "messagePlaceholder": "Mijozga xabar…",
-      "send": "Yuborish",
-      "proposalPlaceholder": "JSON taklif (masalan {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-      "sendProposal": "Taklif yuborish",
-      "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi."
-    },
-    "tabs": {
+  "tabs": {
     "my_requests": "So'rovlarim",
     "my_bookings": "Buyurtmalarim",
     "favorites": "Sevimlilar"
@@ -321,7 +310,18 @@
     "completed": "Yakunlangan",
     "cancelled": "Bekor qilingan"
   },
-
+  
+  "provider": {
+    "requests": {
+      "title": "So‘rovlar (Provayder)",
+      "noItems": "So‘rovlar yo‘q.",
+      "messagePlaceholder": "Mijozga xabar…",
+      "send": "Yuborish",
+      "proposalPlaceholder": "JSON taklif (masalan {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+      "sendProposal": "Taklif yuborish",
+      "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi."
+    },
+  
     "bookings": {
       "title": "Bronlar (Provayder)",
       "noItems": "Bronlar yo‘q.",
