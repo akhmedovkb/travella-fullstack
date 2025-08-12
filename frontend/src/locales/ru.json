@@ -1,9 +1,83 @@
 {
+  "nav": {
+    "dashboard": "Управление",
+    "requests": "Запросы",
+    "bookings": "Бронирования",
+    "clientDashboard": "Кабинет",
+    "favorites": "Избранное"
+  },
+
+  "common": {
+    "loading": "Загрузка…",
+    "loading_stats": "Загрузка статистики...",
+    "saving": "Сохранение...",
+    "backToDashboard": "в Личный кабинет",
+    "status": "Статус",
+    "created": "Создан",
+    "date": "Дата",
+    "sum": "Сумма",
+    "name": "Наименование",
+    "phone": "Телефон"
+  },
+
+  "actions": {
+    "upload_photo": "Загрузить фото",
+    "change_photo": "Сменить фото",
+    "delete_photo": "Удалить фото",
+    "save_profile": "Сохранить профиль",
+    "change": "Сменить",
+    "logout": "Выйти",
+    "quick_request": "Быстрый запрос",
+    "delete": "Удалить",
+    "remove": "Удалить",
+    "cancel": "Отмена",
+    "ok": "Удалить"
+  },
+
+  "tabs": {
+    "my_requests": "Мои запросы",
+    "my_bookings": "Мои бронирования",
+    "favorites": "Избранное"
+  },
+
+  "my_requests": "Мои запросы",
+  "my_bookings": "Мои бронирования",
+  "favorites": "Избранное",
+
+  "stats": {
+    "tier_label": "Уровень",
+    "rating": "Рейтинг",
+    "bonus_progress": "Бонусный прогресс",
+    "requests_total": "Запросов (всего)",
+    "requests_active": "Запросов (активные)",
+    "bookings_total": "Бронирований (всего)",
+    "completed": "Завершено",
+    "cancelled": "Отменено"
+  },
+
+  "favorites_block": {
+    "empty_title": "Избранное пусто",
+    "empty_subtitle": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
+    "no_image": "Нет изображения",
+    "removed": "Удалено из избранного",
+    "remove_error": "Не удалось удалить из избранного"
+  },
+
+  "requests": {
+    "empty": "Пока нет запросов.",
+    "item": "Запрос",
+    "note_prompt": "Комментарий к запросу (необязательно):",
+    "sent": "Запрос отправлен",
+    "error": "Не удалось отправить запрос"
+  },
+
+  "bookings": {
+    "empty": "Пока нет бронирований.",
+    "item": "Бронирование"
+  },
+
   "provider_profile": "Профиль поставщика",
-  "phone": "Телефон",
   "address": "Адрес",
-  "logout": "Выйти",
-  "name": "Наименование",
   "type": "Тип поставщика",
   "location": "Регион деятельности",
   "social": "Ссылка на соцсети",
@@ -13,7 +87,6 @@
   "save": "Сохранить",
   "change_password": "Сменить пароль",
   "new_password": "Новый пароль",
-  "change": "Сменить",
   "not_specified": "Не указано",
   "photo": "Фото",
   "file_chosen": "Файлы выбраны",
@@ -50,64 +123,72 @@
   "no_files_selected": "Файлы не выбраны",
   "expiration_timer": "Таймер актуальности",
   "is_active": "Актуально",
+
   "new_refused_tour": "Добавление нового отказного тура:",
   "new_refused_hotel": "Добавление нового отказного отеля:",
   "new_refused_airtkt": "Добавление нового отказного авиабилета:",
-  "new_refused_tkt": "Добавление нового отказного билета на мероприятие:",
-  "new_visa_service": "Добавление услуги визы:",  
+  "new_refused_event_ticket": "Отказной билет на мероприятие",
+  "new_visa_support": "Визовая поддержка",
+
   "direction": "Направление",
-  "accommodation": "Размещение",
-  "refused_hotel_city": "Город",
-  "refused_hotel_select_city": "Введите город",
-  "refused_hotel_select": "Введите отель",
-  
-  "food": "Питание",
-    "food_options": {
-      "select": "Выберите вариант",
-      "bb": "Только завтрак",
-      "hb": "Завтрак и ужин",
-      "fb": "Полный пансион",
-      "ai": "Всё включено",
-      "uai": "Ультра всё включено",
-      "halal": "Халяль"
-    },
-  
-  "transfer": "Трансфер",
-    "transfer_options": {
-      "select": "Выберите трансфер",
-      "individual": "Индивидуальный",
-      "group": "Групповой",
-      "none": "Отсутствует"
-    },
+  "direction_country": "Страна направления",
+  "direction_from": "Город отправления",
+  "direction_to": "Город прибытия",
+  "country_not_chosen": "Не выбрано",
+  "country_not_found": "Страны не найдены",
+  "direction_from_not_chosen": "Город вылета не выбран",
+  "direction_to_not_chosen": "Город прибытия не выбран",
+  "direction_from_not_found": "Город вылета не найден",
+  "direction_to_not_found": "Город прибытия не найден",
 
   "airline": "Авиакомпания",
   "enter_airline": "Введите авиакомпанию",
-  
-  "changeable": "Можно вносить изменения",
-  "visa_included": "Виза включена",
-  "net_price": "Цена нетто",
-  
-  "select_category": "Выберите категорию",
-  "city_tour": "Тур по городу",
-  "mountain_tour": "Тур по горам",
-  "one_way_transfer": "Трансфер в одну сторону",
-  "dinner_transfer": "Трансфер на ужин",
-  "border_transfer": "Пограничный трансфер",
-  "refused_tour": "Отказной тур",
-  "refused_hotel": "Отказной отель",
-  "refused_ticket": "Отказной авиабилет",
-  "visa_support": "Визовая поддержка",
-  "authored_tour": "Авторский тур",
-  "room_rent": "Аренда номера",
-  "hotel_transfer": "Трансфер от отеля",
-  "hall_rent": "Аренда зала",
   "flight_type": "Тип перелёта",
   "one_way": "В одну сторону",
   "round_trip": "Туда-обратно",
   "departure_date": "Дата вылета",
   "return_date": "Дата возвращения",
+  "start_flight_date": "Дата рейса вылета",
+  "end_flight_date": "Дата рейса обратно",
+  "flight_details": "Детали рейса",
+  "enter_flight_details": "Введите детали рейса",
 
-  "category": {
+  "hotel_check_in": "Дата заезда",
+  "hotel_check_out": "Дата выезда",
+  "refused_hotel_city": "Город",
+  "refused_hotel_select_city": "Введите город",
+  "refused_hotel_name": "Название отказного отеля",
+  "refused_hotel_select": "Введите отель",
+
+  "accommodation_category": "Категория размещения",
+  "enter_category": "Внесите категорию размещения",
+  "accommodation": "Размещение",
+  "enter_accommodation": "Внесите размещение",
+
+  "food": "Питание",
+  "food_options": {
+    "select": "Выберите вариант",
+    "bb": "Только завтрак",
+    "hb": "Завтрак и ужин",
+    "fb": "Полный пансион",
+    "ai": "Всё включено",
+    "uai": "Ультра всё включено",
+    "halal": "Халяль"
+  },
+
+  "transfer": "Трансфер",
+  "transfer_options": {
+    "select": "Выберите трансфер",
+    "individual": "Индивидуальный",
+    "group": "Групповой",
+    "none": "Отсутствует"
+  },
+
+  "changeable": "Можно вносить изменения",
+  "visa_included": "Виза включена",
+  "net_price": "Цена нетто",
+
+  "category_map": {
     "refused_tour": "Отказной тур",
     "refused_hotel": "Отказной отель",
     "refused_flight": "Отказной авиабилет",
@@ -120,37 +201,16 @@
     "mountain_tour_transport": "Тур в горы",
     "one_way_transfer": "Трансфер в одну сторону",
     "dinner_transfer": "Трансфер на ужин",
-    "border_transfer": "Трансфер из/до границы"
-    
+    "border_transfer": "Трансфер из/до границы",
+    "hotel_room": "Номер в отеле",
+    "hotel_transfer": "Трансфер от отеля",
+    "hall_rent": "Аренда зала"
   },
 
-  "direction_country": "Страна направления",
-  "direction_from": "Город отправления",
-  "direction_to": "Город прибытия",
-  "country_not_chosen": "Не выбрано",
-  "direction_from_not_chosen": "Город вылета не выбран",
-  "direction_to_not_chosen": "Город прибытия не выбран",
-
-  
-  "start_flight_date": "Дата рейса вылета",
-  "end_flight_date": "Дата рейса обратно",
-  "flight_details": "Детали рейса",
-  "enter_flight_details": "Введите детали рейса",
-
-  
-  "accommodation_category": "Категория размещения",
-  "enter_category": "Внесите категорию размещения",
-  "accommodation": "Размещение",
-  "enter_accommodation": "Внесите размещение",
-  "hotel_check_in": "Дата заезда",
-  "hotel_check_out": "Дата выезда",
-  "refused_hotel_name": "Название отказного отеля",
-  
-  
   "adt": "Взрослые (ADT)",
   "chd": "Дети (CHD)",
   "inf": "Младенцы (INF)",
-  
+
   "login": {
     "title": "Вход для поставщика",
     "email": "Email",
@@ -178,14 +238,16 @@
     "file_chosen": "Файл выбран",
     "required": "Заполните это поле"
   },
-  
+
   "calendar": {
-  "blocking_title": "Календарь занятости",
-  "label_blocked_manual": "Заблокировано вручную",
-  "label_booked_by_clients": "Занято по бронированиям",
-  "save_blocked_dates": "Сохранить занятые даты",
-  "dates_saved": "Занятые даты сохранены",
-  "save_error": "Ошибка сохранения дат"
+    "blocking_title": "Календарь занятости",
+    "label_blocked_manual": "Заблокировано вручную",
+    "label_booked_by_clients": "Занято по бронированиям",
+    "save_blocked_dates": "Сохранить занятые даты",
+    "dates_saved": "Занятые даты сохранены",
+    "save_error": "Ошибка сохранения дат",
+    "load_error": "Не удалось загрузить занятые даты",
+    "saved_successfully": "Даты сохранены"
   },
 
   "marketplace": {
@@ -211,197 +273,7 @@
     "results": "Результаты поиска",
     "price": "Цена"
   },
-  
-  "country_names": {
-  "uzbekistan": "Узбекистан",
-  "india": "Индия",
-  "turkey": "Турция",
-  "uae": "ОАЭ"
-},
-  
-"city_names": {
-  "tashkent": "Ташкент",
-  "samarkand": "Самарканд",
-  "delhi": "Дели",
-  "istanbul": "Стамбул",
-  "dubai": "Дубай"
-},
-  
-  "new_refused_event_ticket": "Отказной билет на мероприятие",
-  "event_name": "Название мероприятия",
-  "select_event_category": "Выберите категорию события",
-  "event_category_concert": "Концерт",
-  "event_category_exhibition": "Выставка",
-  "event_category_show": "Шоу",
-  "event_category_masterclass": "Мастер-класс",
-  "event_category_football": "Футбольный матч",
-  "event_category_fight": "Бой",
-  "location": "Регион или место проведения",
-  "event_date": "Дата мероприятия",
-  "net_price": "Цена нетто",
-  "ticket_details": "Детали билета (ряд, место и т.д.)",
-  "expiration_timer": "Таймер актуальности",
-  "is_active": "Актуально",
-  "save_service": "Сохранить услугу",
-  "new_visa_support": "Визовая поддержка",
-  "select_country": "Выберите страну для визы",
-  "description": "Описание",
-  "net_price": "Цена нетто",
-  "is_active": "Актуально",
-  "save_service": "Сохранить услугу",
-  "country_not_chosen": "Страны не найдены",
 
-  "hotels_load_error": "Не удалось загрузить отели",
-  "profile_load_error": "Не удалось загрузить профиль",
-  "services_load_error": "Не удалось загрузить услуги",
-
-  "calendar": {
-    "blocking_title": "Календарь занятости",
-    "label_blocked_manual": "Заблокировано вручную",
-    "label_booked_by_clients": "Занято по бронированиям",
-    "save_blocked_dates": "Сохранить занятые даты",
-    "dates_saved": "Занятые даты сохранены",
-    "save_error": "Ошибка сохранения дат",
-    "load_error": "Не удалось загрузить занятые даты",
-    "saved_successfully": "Даты сохранены"
-   },
-
-  "country_not_found": "Страны не найдены",
-  "direction_from_not_found": "Город вылета не найден",
-  "direction_to_not_found": "Город прибытия не найден",
-
-  
-  "nav": {
-    "dashboard": "Управление",
-    "requests": "Запросы",
-    "bookings": "Бронирования",
-    "clientDashboard": "Кабинет",
-    "favorites": "Избранное"
-  },
-  
-  "client": {
-    "register": {
-      "title": "Регистрация клиента",
-      "name": "Наименование",
-      "phone": "Телефон",
-      "password": "пароль",
-      "registerBtn": "Зарегистрироваться",
-      "haveAccount": "Уже есть аккаунт?",
-      "loginLink": "Войти"
-    },
-    "login": {
-      "title": "Вход клиента",
-      "password": "пароль",
-      "loginBtn": "Войти",
-      "noAccount": "Нет аккаунта?",
-      "registerLink": "Регистрация"
-    },
-    "dashboard": {
-      "profileTitle": "Профиль",
-      "name": "Наименование",
-      "phone": "Телефон",
-      "avatarUrl": "Ссылка на аву",
-      "languagesCsv": "languages_csv",
-      "saveBtn": "Сохранить",
-      "refusedTours": "Отказные туры",
-      "refresh": "Обновить",
-      "noResults": "Нет данных",
-      "changePassword": "Сменить пароль",
-      "newPassword": "Новый пароль",
-      "changeBtn": "Сменить",
-      "logout": "Выйти",
-      "passwordTooShort": "Минимум 6 символов",
-      "passwordChanged": "Пароль обновлён",
-      "uploadPhoto": "Загрузить фото",
-      "changePhoto": "Сменить фото",
-      "removePhoto": "Удалить фото",
-      "photoHint": "JPEG/PNG, квадрат 512×512. Подрезка и сжатие выполняются автоматически.",
-      "tabs": { "favorites": "Избранное" },
-      "noFavorites": "Нет избранного.",
-      "openOnMarketplace": "Открыть на витрине",
-      "tabs": {
-        "myRequests": "Мои запросы",
-        "myBookings": "Мои бронирования"
-      },
-      "noRequests": "Запросов нет",
-      "noBookings": "Бронирований нет"
-    }
-  },
-  
-  "favorites": "Избранное",
-  "favorites_empty_title": "Избранное пусто",
-  "favorites_empty_desc": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
-  "favorites_no_image": "Нет изображения",
-
-  "actions": {
-    "quick_request": "Быстрый запрос",
-    "remove": "Удалить",
-    "delete": "Удалить",
-    "cancel": "Отмена",
-    "ok": "Удалить"
-  },
-
-  "pagination": {
-    "prev": "←",
-    "next": "→"
-    },
-
-  "tabs": {
-    "my_requests": "Мои запросы",
-    "my_bookings": "Мои бронирования",
-    "favorites": "Избранное"
-  },
-  "stats": {
-    "tier": "Уровень",
-    "rating": "Рейтинг",
-    "bonus_progress": "Бонусный прогресс",
-    "requests_total": "Запросов (всего)",
-    "requests_active": "Запросов (активные)",
-    "bookings_total": "Бронирований (всего)",
-    "completed": "Завершено",
-    "cancelled": "Отменено"
-  },
-  "tabs": {
-    "my_requests": "My requests",
-    "my_bookings": "My bookings",
-    "favorites": "Favorites"
-  },
-  "stats": {
-    "tier": "Tier",
-    "rating": "Rating",
-    "bonus_progress": "Bonus progress",
-    "requests_total": "Requests (total)",
-    "requests_active": "Requests (active)",
-    "bookings_total": "Bookings (total)",
-    "completed": "Completed",
-    "cancelled": "Cancelled"
-  },
-  "tabs": {
-    "my_requests": "Мои запросы",
-    "my_bookings": "Мои бронирования",
-    "favorites": "Избранное"
-  },
-  "stats": {
-    "tier": "Уровень",
-    "rating": "Рейтинг",
-    "bonus_progress": "Бонусный прогресс",
-    "requests_total": "Запросов (всего)",
-    "requests_active": "Запросов (активные)",
-    "bookings_total": "Бронирований (всего)",
-    "completed": "Завершено",
-    "cancelled": "Отменено"
-  },
-  "empty": {
-    "no_requests": "Пока нет запросов.",
-    "no_bookings": "Пока нет бронирований.",
-    "no_favorites": "Избранное пусто"
-  },
-  "actions": {
-    "quick_request": "Быстрый запрос",
-    "delete": "Удалить"
-  },
-  
-  
   "provider": {
     "requests": {
       "title": "Запросы (Поставщик)",
@@ -421,14 +293,5 @@
       "cancel": "Отменить",
       "status": "Статус"
     }
-  },
-  
-  "common": {
-    "loading": "Загрузка…",
-    "backToDashboard": "в Личный кабинет"
   }
-
 }
-
-
-
