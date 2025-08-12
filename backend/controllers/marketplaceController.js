@@ -1,89 +1,127 @@
-const pool = require("../db");
+const db = require("../db");
 
-const searchListings = async (req, res) => {
-  const {
-    category,
-    startDate,
-    endDate,
-    location,
-    adults,
-    children,
-    infants,
-    providerType,
-    filters = {} // 👈 Вложенные фильтры из поля details
-  } = req.body;
+// price: coalesce(details.netPrice, price)
+const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
-  try {
-    const conditions = [];
-    const values = [];
-    let index = 1;
-
-    // Фильтрация по категории услуги
-    if (category) {
-      conditions.push(`services.category = $${index}`);
-      values.push(category);
-      index++;
-    }
-
-    // Фильтрация по типу поставщика
-    if (providerType) {
-      conditions.push(`providers.type = $${index}`);
-      values.push(providerType);
-      index++;
-    }
-
-    // Фильтрация по дате: не включать если дата уже занята
-    if (startDate && endDate) {
-      conditions.push(`
-        NOT EXISTS (
-          SELECT 1 FROM jsonb_array_elements_text(services.availability) AS a
-          WHERE a::DATE BETWEEN $${index}::DATE AND $${index + 1}::DATE
-        )
-      `);
-      values.push(startDate, endDate);
-      index += 2;
-    }
-
-    // Фильтрация по локации
-    if (location) {
-      conditions.push(`providers.location ILIKE $${index}`);
-      values.push(`%${location}%`);
-      index++;
-    }
-
-    // Доп. фильтры по details
-    const direction = filters.details?.directionCountry;
-    const city = filters.details?.directionTo;
-
-    if (direction) {
-      conditions.push(`services.details->>'directionCountry' ILIKE $${index}`);
-      values.push(`%${direction}%`);
-      index++;
-    }
-
-    if (city) {
-      conditions.push(`services.details->>'directionTo' ILIKE $${index}`);
-      values.push(`%${city}%`);
-      index++;
-    }
-
-    const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
-
-    const query = `
-      SELECT services.*, providers.name AS provider_name, providers.type AS provider_type
-      FROM services
-      JOIN providers ON services.provider_id = providers.id
-      ${whereClause}
-      ORDER BY services.created_at DESC
-    `;
-
-    const results = await pool.query(query, values);
-
-    res.json(results.rows);
-  } catch (err) {
-    console.error("Ошибка при поиске объявлений:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
-  }
+const toNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 };
 
-module.exports = { searchListings };
+function addLike(qb, column, value) {
+  if (value == null || value === "") return;
+  qb.andWhereRaw(`${column} ILIKE ?`, [`%${value}%`]);
+}
+function addDetailsLike(qb, key, value) {
+  if (value == null || value === "") return;
+  qb.andWhereRaw(`details->>? ILIKE ?`, [key, `%${value}%`]);
+}
+function addDetailsEq(qb, key, value) {
+  if (value == null || value === "") return;
+  qb.andWhereRaw(`details->>? = ?`, [key, String(value)]);
+}
+
+module.exports.search = async (req, res, next) => {
+  try {
+    const {
+      q,
+      category,
+      price_min,
+      price_max,
+      sort,
+      only_active = true,
+      limit = 60,
+      offset = 0,
+      ...rest
+    } = req.body || {};
+
+    const lim = Math.min(200, Math.max(1, Number(limit) || 60));
+    const off = Math.max(0, Number(offset) || 0);
+
+    // Будем сравнивать строки вида 'YYYY-MM-DDTHH:MM' (как у тебя в БД)
+    const nowIsoMinute = new Date().toISOString().slice(0, 16);
+
+    const rowsQ = db("services")
+      .select([
+        "id",
+        "provider_id",
+        "title",
+        "description",
+        "category",
+        "price",
+        "images",
+        "availability",
+        "created_at",
+        "status",
+        "details",
+      ])
+      // только активные + неистёкшие
+      .modify((qb) => {
+        if (only_active) {
+          // isActive в JSONB
+          qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
+            // expiration как ТЕКСТ: либо пусто, либо > nowIsoMinute
+            .andWhere((q2) => {
+              q2.whereRaw(`(details->>'expiration') IS NULL`)
+                .orWhereRaw(`NULLIF(details->>'expiration','') IS NULL`)
+                .orWhereRaw(`(details->>'expiration') > ?`, [nowIsoMinute]);
+            });
+        }
+      })
+      // категория
+      .modify((qb) => {
+        if (category) qb.andWhere("category", category);
+      })
+      // q по title/description/details::text
+      .modify((qb) => {
+        if (q && String(q).trim()) {
+          qb.andWhere((sub) => {
+            addLike(sub, "title", q);
+            sub.orWhereRaw(`description ILIKE ?`, [`%${q}%`]);
+            sub.orWhereRaw(`details::text ILIKE ?`, [`%${q}%`]);
+          });
+        }
+      })
+      // диапазон цены
+      .modify((qb) => {
+        const pmin = toNum(price_min);
+        const pmax = toNum(price_max);
+        if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
+        if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
+      })
+      // произвольные details.*
+      .modify((qb) => {
+        Object.entries(rest || {}).forEach(([key, val]) => {
+          if (!key.startsWith("details.")) return;
+          const dkey = key.slice("details.".length);
+          const isBool =
+            val === true || val === false || val === "true" || val === "false";
+          if (isBool) addDetailsEq(qb, dkey, String(val) === "true");
+          else addDetailsLike(qb, dkey, String(val));
+        });
+      })
+      // сортировка
+      .modify((qb) => {
+        switch (sort) {
+          case "newest":
+            qb.orderBy("created_at", "desc");
+            break;
+          case "price_asc":
+            qb.orderByRaw(`${PRICE_SQL} asc nulls last`);
+            break;
+          case "price_desc":
+            qb.orderByRaw(`${PRICE_SQL} desc nulls last`);
+            break;
+          default:
+            qb.orderBy("created_at", "desc");
+        }
+      })
+      .limit(lim)
+      .offset(off);
+
+    const items = await rowsQ;
+    res.json({ items, limit: lim, offset: off });
+  } catch (err) {
+    next(err);
+  }
+};
