@@ -404,5 +404,20 @@
   "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
   "departure_date": "Jo‘nash sanasi",
   "my_bookings": "Bronlarim",
-  "my_requests": "So‘rovlarim"
+  "my_requests": "So‘rovlarim",
+
+  "reviews": {
+  "title_provider": "Mijozlar sharhlari",
+  "title_service": "Xizmat sharhlari",
+  "count": "ta sharh",
+  "empty": "Hozircha sharhlar yo‘q.",
+  "leave_service": "Xizmat haqida sharh qoldirish",
+  "leave_client": "Mijoz haqida sharh qoldirish",
+  "rating": "Baholash",
+  "placeholder": "Tajribaning qisqacha tavsifi",
+  "send": "Yuborish",
+  "save_error": "Sharhni saqlab bo‘lmadi"
 }
+
+}
+
