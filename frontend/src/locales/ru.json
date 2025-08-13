@@ -190,6 +190,16 @@
   },
 
   "marketplace": {
+    "select_category": "Выберите категорию",
+    "guide": "Гид",
+    "transport": "Транспорт",
+    "package": "Турпакет",
+    "hotel": "Отель",
+    "flight": "Авиабилет",
+    "refused_event": "Отказной билет",
+    "visa_support": "Визовая поддержка",
+    "price": "Цена",
+    "reviews": "Отзывы",
     "title": "Доска объявлений",
     "select_category": "Выберите категорию",
     "guide": "Гид",
@@ -537,5 +547,6 @@
 
 
 }
+
 
 
