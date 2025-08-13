@@ -2,14 +2,14 @@
 const express = require("express");
 const router = express.Router();
 
-const authenticateToken = require("./middleware/authenticateToken");
+const authenticateToken = require("../middleware/authenticateToken");
 const {
   addServiceReview,
   addClientReview,
   getServiceReviews,
   getProviderReviews,
   getClientReviews,
-} = require("./controllers/reviewController");
+} = require("../controllers/reviewController");
 
 // простые role-guards (если у вас уже есть — используйте их)
 function requireClient(req, res, next) {
