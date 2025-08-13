@@ -215,7 +215,10 @@
     "propose_price": "Propose price",
     "supplier": "Supplier",
     "phone": "Phone",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "no_image": "No image",
+    "time_left": "Time left",
+    "time_expired": "Expired"
   },
 
   "new_refused_event_ticket": "Refused event ticket",
@@ -314,7 +317,7 @@
   "common": {
     "loading": "Loading…",
     "backToDashboard": "Dashboard",
-    "find": "Search"
+    "find": "Find"
   },
 
   "favorites": {
@@ -324,7 +327,9 @@
     "removed": "Removed from favorites",
     "added": "Added to favorites",
     "remove_error": "Failed to remove from favorites",
-    "empty_subtitle": "Add interesting services to favorites and come back later."
+    "empty_subtitle": "Add interesting services to favorites and come back later.",
+    "add": "Add to favorites",
+    "remove": "Remove from favorites"
   },
 
   "tabs": {
@@ -424,5 +429,11 @@
     "placeholder": "Describe your experience",
     "send": "Send",
     "save_error": "Failed to save review"
+  },
+
+  "actions": {
+    "cancel": "Cancel",
+    "send": "Send",
+    "quick_request": "Quick request"
   }
 }
