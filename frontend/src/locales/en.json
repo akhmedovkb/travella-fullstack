@@ -119,6 +119,8 @@
   },
   "comment": "Comment",
   "common": {
+    "find": "Find",
+    "loading": "Loading…",
     "note_optional": "Request note (optional):",
     "comment": "Comment",
     "amount": "Amount",
@@ -441,10 +443,6 @@
   "visa_included": "Visa included",
   "visa_support": "Visa support",
 
-  "common": {
-    "find": "Find",
-    "loading": "Loading…"
-  },
   "marketplace": {
     "supplier": "Supplier",
     "phone": "Phone",
@@ -478,6 +476,7 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
 
 
 
