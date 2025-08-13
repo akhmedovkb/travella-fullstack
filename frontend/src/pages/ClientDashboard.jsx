@@ -56,6 +56,22 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   });
 }
 
+/* ===== NEW: tiny helpers for price formatting (используются в избранном) ===== */
+function fmtPrice(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
+  return String(v);
+}
+function firstNonEmpty(...args) {
+  for (const v of args) {
+    if (v === 0) return 0;
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return null;
+}
+/* ============================================================================ */
+
 /* ===================== Mini Components ===================== */
 
 function Stars({ value = 0, size = 18, className = "" }) {
@@ -190,19 +206,62 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const title = s.title || s.name || t("common.service", { defaultValue: "Услуга" });
               const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
 
+              // NEW: аккуратный вывод цены (если есть)
+              const details = s.details || {};
+              const price = firstNonEmpty(details.netPrice, s.price, it.price);
+              const prettyPrice = fmtPrice(price);
+
               return (
-                <div key={it.id} className="bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
+                <div
+                  key={it.id}
+                  className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
+                >
                   <div className="aspect-[16/10] bg-gray-100 relative">
                     {image ? (
                       <img src={image} alt={title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">{t("favorites.no_image", { defaultValue: "Нет изображения" })}</span>
+                        <span className="text-sm">
+                          {t("favorites.no_image", { defaultValue: "Нет изображения" })}
+                        </span>
                       </div>
                     )}
+
+                    {/* NEW: иконка-удаление (сердечко) */}
+                    <button
+                      onClick={() => onRemove?.(it.id)}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20"
+                      title={t("favorites.removed", { defaultValue: "Удалить из избранного" })}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
+                      </svg>
+                    </button>
+
+                    {/* NEW: стеклянный тёмный тултип снизу при ховере */}
+                    <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+                        <div className="font-semibold line-clamp-2">{title}</div>
+                        {prettyPrice && (
+                          <div className="mt-1">
+                            <span className="opacity-80">
+                              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+                            </span>
+                            <span className="font-semibold">{prettyPrice}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
+
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
+                    {prettyPrice && (
+                      <div className="mt-1 text-sm">
+                        {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+                        <span className="font-semibold">{prettyPrice}</span>
+                      </div>
+                    )}
                     <div className="mt-auto flex gap-2 pt-3">
                       {serviceId && (
                         <>
