@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost } from "../api";
+import { createPortal } from "react-dom";
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -56,7 +57,7 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   });
 }
 
-/* ===== helpers for price formatting (используются в избранном) ===== */
+/* ===== helpers ===== */
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -70,7 +71,6 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
-/* --- как в маркетплейсе: сбор дат из details --- */
 function buildDates(d = {}) {
   const hotelIn =
     d.hotel_check_in ||
@@ -91,17 +91,30 @@ function buildDates(d = {}) {
   if (hotelOut) return String(hotelOut);
   return null;
 }
-/* ============================================================================ */
+/* форматирование Telegram */
+function renderTelegram(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null;
+  let label = s;
 
-/* ============ Портал для “вне карточки” подсказки ============ */
-import { createPortal } from "react-dom";
+  if (/^https?:\/\//i.test(s)) {
+    href = s;
+  } else if (s.startsWith("@")) {
+    href = `https://t.me/${s.slice(1)}`;
+    label = s;
+  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
+    href = `https://t.me/${s}`;
+    label = `@${s}`;
+  }
+  return { href, label };
+}
+
+/* ============ Портал ============ */
 function TooltipPortal({ visible, x, y, width, children }) {
   if (!visible) return null;
   return createPortal(
-    <div
-      className="fixed z-[3000] pointer-events-none"
-      style={{ left: x, top: y, width }}
-    >
+    <div className="fixed z-[3000] pointer-events-none" style={{ left: x, top: y, width }}>
       {children}
     </div>,
     document.body
@@ -222,8 +235,6 @@ function EmptyFavorites() {
   );
 }
 
-/* ===================== Favorites ===================== */
-
 function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
@@ -243,11 +254,9 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
 
-              // title
               const title =
                 s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
 
-              // image
               const image =
                 (Array.isArray(s.images) && s.images[0]) ||
                 (Array.isArray(it.images) && it.images[0]) ||
@@ -259,7 +268,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 it.image ||
                 null;
 
-              // normalize details (may be string)
+              // normalize details
               let rawDetails = s.details ?? it.details ?? {};
               let details = {};
               try {
@@ -268,7 +277,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 details = {};
               }
 
-              // price
               const price = firstNonEmpty(
                 details.netPrice,
                 details.price,
@@ -280,7 +288,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const prettyPrice = fmtPrice(price);
 
-              // fields for tooltip
               const hotel = firstNonEmpty(
                 details.hotel,
                 details.hotelName,
@@ -296,19 +303,47 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const dates = buildDates(details);
 
-              // --- Портал-подсказка (вне карточки) ---
+              // supplier
+              const prov =
+                s.provider || s.supplier || s.vendor || it.provider || it.supplier || {};
+              const supplierName = firstNonEmpty(
+                prov?.name,
+                s.provider_name,
+                it.provider_name,
+                details.provider_name
+              );
+              const supplierPhone = firstNonEmpty(
+                prov?.phone,
+                prov?.phone_number,
+                prov?.phones?.[0],
+                prov?.contacts?.phone,
+                s.provider_phone,
+                it.provider_phone,
+                details.provider_phone
+              );
+              const supplierTgRaw = firstNonEmpty(
+                prov?.telegram,
+                prov?.tg,
+                prov?.socials?.telegram,
+                prov?.contacts?.telegram,
+                prov?.social,
+                prov?.social_link,
+                s.provider_telegram,
+                it.provider_telegram,
+                details.provider_telegram,
+                s.telegram,
+                details.telegram
+              );
+              const supplierTg = renderTelegram(supplierTgRaw);
+
+              // --- подсказка-portal ---
               const imgRef = useRef(null);
               const [tipOpen, setTipOpen] = useState(false);
               const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
               const computePos = () => {
                 const r = imgRef.current?.getBoundingClientRect();
                 if (!r) return;
-                // Слегка выносим вверх, чтобы “вылезала” за карточку
-                setTipPos({
-                  x: r.left + 12,
-                  y: r.top - 12,
-                  w: Math.max(220, r.width - 24),
-                });
+                setTipPos({ x: r.left + 12, y: r.top - 12, w: Math.max(220, r.width - 24) });
               };
 
               return (
@@ -319,10 +354,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                   <div
                     className="aspect-[16/10] bg-gray-100 relative"
                     ref={imgRef}
-                    onMouseEnter={() => {
-                      computePos();
-                      setTipOpen(true);
-                    }}
+                    onMouseEnter={() => { computePos(); setTipOpen(true); }}
                     onMouseMove={computePos}
                     onMouseLeave={() => setTipOpen(false)}
                   >
@@ -336,7 +368,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* Сердечко (красное) + тултип к нему */}
+                    {/* Сердечко */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -357,10 +389,11 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* ПОДСКАЗКА ЧЕРЕЗ ПОРТАЛ — выходит за карточку */}
+                    {/* ПОДСКАЗКА ЧЕРЕЗ ПОРТАЛ */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
+
                         {hotel && (
                           <div>
                             <span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span>
@@ -391,6 +424,49 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                             <span className="font-semibold">{prettyPrice}</span>
                           </div>
                         )}
+
+                        {/* ---- поставщик (в подсказке оставить можно) ---- */}
+                        {(supplierName || supplierPhone || supplierTg?.label) && (
+                          <>
+                            {supplierName && (
+                              <div>
+                                <span className="opacity-80">{t("supplier", { defaultValue: "Поставщик" })}: </span>
+                                <span className="font-medium">{supplierName}</span>
+                              </div>
+                            )}
+                            {supplierPhone && (
+                              <div>
+                                <span className="opacity-80">{t("phone", { defaultValue: "Телефон" })}: </span>
+                                <a
+                                  className="font-medium underline pointer-events-auto"
+                                  href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {supplierPhone}
+                                </a>
+                              </div>
+                            )}
+                            {supplierTg?.label && (
+                              <div>
+                                <span className="opacity-80">{t("telegram", { defaultValue: "Телеграм" })}: </span>
+                                {supplierTg.href ? (
+                                  <a
+                                    className="font-medium underline pointer-events-auto"
+                                    href={supplierTg.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {supplierTg.label}
+                                  </a>
+                                ) : (
+                                  <span className="font-medium">{supplierTg.label}</span>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {/* ---- /поставщик ---- */}
                       </div>
                     </TooltipPortal>
                   </div>
@@ -404,7 +480,49 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* actions */}
+                    {/* === НОВОЕ: блок с поставщиком под ценой === */}
+                    {(supplierName || supplierPhone || supplierTg?.label) && (
+                      <div className="mt-2 text-sm space-y-0.5">
+                        {supplierName && (
+                          <div>
+                            <span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span>
+                            <span className="font-medium">{supplierName}</span>
+                          </div>
+                        )}
+                        {supplierPhone && (
+                          <div>
+                            <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
+                            <a
+                              href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                              className="underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {supplierPhone}
+                            </a>
+                          </div>
+                        )}
+                        {supplierTg?.label && (
+                          <div>
+                            <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
+                            {supplierTg.href ? (
+                              <a
+                                href={supplierTg.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {supplierTg.label}
+                              </a>
+                            ) : (
+                              <span className="font-medium">{supplierTg.label}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* === /НОВОЕ === */}
+
                     <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {serviceId && (
                         <>
@@ -499,6 +617,7 @@ export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : "requests");
 
   // Data for tabs
+  thead
   const [requests, setRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [favorites, setFavorites] = useState([]);
