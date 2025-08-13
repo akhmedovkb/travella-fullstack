@@ -420,7 +420,6 @@
     "save_error": "Sharhni saqlab bo‘lmadi"
   },
 
-  {
   "actions": {
     "cancel": "Bekor qilish",
     "send": "Yuborish"
@@ -431,6 +430,7 @@
   }
 
 }
+
 
 
 
