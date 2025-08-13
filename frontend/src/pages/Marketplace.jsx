@@ -269,6 +269,15 @@ export default function Marketplace() {
     }
   };
 
+  // анти-мерцание: обновляемся 1 раз в минуту
+      const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+      useEffect(() => {
+        const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+        return () => clearInterval(id);
+      }, []);
+      const now = nowMin * 60000; // использовать вместо Date.now()
+
+
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -417,10 +426,11 @@ export default function Marketplace() {
 
     const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
 
-    const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
-    const hasTimer = !!expireAt;
-    const timerText = hasTimer ? formatLeft(leftMs) : null;
+    const timerText = useMemo(() => {
+      if (!expireAt) return null;
+      return formatLeft(Math.max(0, expireAt - now));
+    }, [expireAt, now]);
 
     const [revOpen, setRevOpen] = useState(false);
     const [revPos, setRevPos] = useState({ x: 0, y: 0 });
