@@ -340,7 +340,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {
                     {hasTimer && (
                       <span
                         className={`absolute top-2 left-2 z-20 pointer-events-none px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
