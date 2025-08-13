@@ -449,9 +449,28 @@
     "find": "Find",
     "no_results": "No results",
     "loading_error": "Failed to load data"
+  },
+  "actions": {
+    "quick_request": "Tezkor so‘rov"
+  },
+  "marketplace": {
+    "reviews": "Xizmat sharhlari",
+    "no_reviews": "Hozircha sharhlar yo‘q.",
+    "time_left": "Tugashigacha",
+    "time_over": "Muddati tugagan"
+  },
+  "favorites": {
+    "add": "Sevimlilarga",
+    "remove": "Sevimlilardan o‘chirish"
+  },
+  "common": {
+    "find": "Topish",
+    "no_results": "Natijalar yo‘q",
+    "loading_error": "Ma’lumotlarni yuklab bo‘lmadi"
   }
 
 }
+
 
 
 
