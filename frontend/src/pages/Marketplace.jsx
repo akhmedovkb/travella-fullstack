@@ -256,6 +256,7 @@ export default function Marketplace() {
   // модалка быстрого запроса
   const [qrOpen, setQrOpen] = useState(false);
   const [qrServiceId, setQrServiceId] = useState(null);
+  const [qrProviderId, setQrProviderId] = useState(null);
   const openQuickRequest = (serviceId) => { setQrServiceId(serviceId); setQrOpen(true); };
   const submitQuickRequest = async (note) => {
     try {
