@@ -93,6 +93,22 @@ function buildDates(d = {}) {
 }
 /* ============================================================================ */
 
+/* ============ Портал для “вне карточки” подсказки ============ */
+import { createPortal } from "react-dom";
+function TooltipPortal({ visible, x, y, width, children }) {
+  if (!visible) return null;
+  return createPortal(
+    <div
+      className="fixed z-[3000] pointer-events-none"
+      style={{ left: x, top: y, width }}
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
+/* ============================================================================ */
+
 /* ===================== Mini Components ===================== */
 
 function Stars({ value = 0, size = 18, className = "" }) {
@@ -206,6 +222,8 @@ function EmptyFavorites() {
   );
 }
 
+/* ===================== Favorites ===================== */
+
 function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
@@ -225,11 +243,11 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
 
-              // название
+              // title
               const title =
                 s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
 
-              // картинка
+              // image
               const image =
                 (Array.isArray(s.images) && s.images[0]) ||
                 (Array.isArray(it.images) && it.images[0]) ||
@@ -241,9 +259,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 it.image ||
                 null;
 
-              // цена (если есть)
-              // details в избранном иногда приходит строкой или лежит на уровне item.
-              // Нормализуем и парсим, если нужно.
+              // normalize details (may be string)
               let rawDetails = s.details ?? it.details ?? {};
               let details = {};
               try {
@@ -251,6 +267,8 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               } catch {
                 details = {};
               }
+
+              // price
               const price = firstNonEmpty(
                 details.netPrice,
                 details.price,
@@ -262,7 +280,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const prettyPrice = fmtPrice(price);
 
-              // доп. поля для подсказки как в маркетплейсе
+              // fields for tooltip
               const hotel = firstNonEmpty(
                 details.hotel,
                 details.hotelName,
@@ -278,12 +296,36 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const dates = buildDates(details);
 
+              // --- Портал-подсказка (вне карточки) ---
+              const imgRef = useRef(null);
+              const [tipOpen, setTipOpen] = useState(false);
+              const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
+              const computePos = () => {
+                const r = imgRef.current?.getBoundingClientRect();
+                if (!r) return;
+                // Слегка выносим вверх, чтобы “вылезала” за карточку
+                setTipPos({
+                  x: r.left + 12,
+                  y: r.top - 12,
+                  w: Math.max(220, r.width - 24),
+                });
+              };
+
               return (
                 <div
                   key={it.id}
                   className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
                 >
-                  <div className="aspect-[16/10] bg-gray-100 relative">
+                  <div
+                    className="aspect-[16/10] bg-gray-100 relative"
+                    ref={imgRef}
+                    onMouseEnter={() => {
+                      computePos();
+                      setTipOpen(true);
+                    }}
+                    onMouseMove={computePos}
+                    onMouseLeave={() => setTipOpen(false)}
+                  >
                     {image ? (
                       <img src={image} alt={title} className="w-full h-full object-cover" />
                     ) : (
@@ -315,50 +357,42 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* Плашка-подсказка снизу при ховере — идентична маркетплейсу */}
-                    <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute inset-x-0 bottom-0 p-3">
-                        <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-                          <div className="font-semibold line-clamp-2">{title}</div>
-
-                          {hotel && (
-                            <div>
-                              <span className="opacity-80">
-                                {t("hotel", { defaultValue: "Отель" })}:{" "}
-                              </span>
-                              <span className="font-medium">{hotel}</span>
-                            </div>
-                          )}
-
-                          {accommodation && (
-                            <div>
-                              <span className="opacity-80">
-                                {t("accommodation", { defaultValue: "Размещение" })}:{" "}
-                              </span>
-                              <span className="font-medium">{accommodation}</span>
-                            </div>
-                          )}
-
-                          {dates && (
-                            <div>
-                              <span className="opacity-80">
-                                {t("date", { defaultValue: "Дата" })}:{" "}
-                              </span>
-                              <span className="font-medium">{dates}</span>
-                            </div>
-                          )}
-
-                          {prettyPrice && (
-                            <div>
-                              <span className="opacity-80">
-                                {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                              </span>
-                              <span className="font-semibold">{prettyPrice}</span>
-                            </div>
-                          )}
-                        </div>
+                    {/* ПОДСКАЗКА ЧЕРЕЗ ПОРТАЛ — выходит за карточку */}
+                    <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
+                      <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
+                        <div className="font-semibold line-clamp-2">{title}</div>
+                        {hotel && (
+                          <div>
+                            <span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span>
+                            <span className="font-medium">{hotel}</span>
+                          </div>
+                        )}
+                        {accommodation && (
+                          <div>
+                            <span className="opacity-80">
+                              {t("accommodation", { defaultValue: "Размещение" })}:{" "}
+                            </span>
+                            <span className="font-medium">{accommodation}</span>
+                          </div>
+                        )}
+                        {dates && (
+                          <div>
+                            <span className="opacity-80">
+                              {t("date", { defaultValue: "Дата" })}:{" "}
+                            </span>
+                            <span className="font-medium">{dates}</span>
+                          </div>
+                        )}
+                        {prettyPrice && (
+                          <div>
+                            <span className="opacity-80">
+                              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+                            </span>
+                            <span className="font-semibold">{prettyPrice}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    </TooltipPortal>
                   </div>
 
                   <div className="p-3 flex-1 flex flex-col">
