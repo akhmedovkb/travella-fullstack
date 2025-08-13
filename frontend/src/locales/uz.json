@@ -215,7 +215,10 @@
     "propose_price": "Narx taklif qilish",
     "supplier": "Ta'minotchi",
     "phone": "Telefon",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "no_image": "Rasm yo‘q",
+    "time_left": "Qolgan vaqt",
+    "time_expired": "Muddati tugadi"
   },
 
   "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
@@ -322,7 +325,9 @@
     "removed": "Sevimlilardan o‘chirildi",
     "added": "Sevimlilarga qo‘shildi",
     "remove_error": "Sevimlilardan o‘chirib bo‘lmadi",
-    "empty_subtitle": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting."
+    "empty_subtitle": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
+    "add": "Sevimlilarga qo‘shish",
+    "remove": "Sevimlilardan o‘chirish"
   },
 
   "tabs": {
@@ -422,5 +427,11 @@
     "placeholder": "Tajribaning qisqacha tavsifi",
     "send": "Yuborish",
     "save_error": "Sharhni saqlab bo‘lmadi"
+  },
+
+  "actions": {
+    "cancel": "Bekor qilish",
+    "send": "Yuborish",
+    "quick_request": "Tezkor so‘rov"
   }
 }
