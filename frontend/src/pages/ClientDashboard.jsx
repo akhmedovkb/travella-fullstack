@@ -289,24 +289,27 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    <div className="mt-auto flex gap-2 pt-3">
-                      {serviceId && (
-                        <>
-                          <button
-                            onClick={() => onQuickRequest?.(serviceId)}
-                            className="flex-1 bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-                          >
-                            {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
-                          </button>
-                          <button
-                            onClick={() => onBook?.(serviceId)}
-                            className="flex-1 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50"
-                          >
-                            {t("actions.book_now", { defaultValue: "Забронировать" })}
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* actions */}
+                          <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {serviceId && (
+                              <>
+                                <button
+                                  onClick={() => onQuickRequest?.(serviceId)}
+                                  className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
+                                >
+                                  {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                                </button>
+                          
+                                <button
+                                  onClick={() => onBook?.(serviceId)}
+                                  className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
+                                >
+                                  {t("actions.book_now", { defaultValue: "Забронировать" })}
+                                </button>
+                              </>
+                            )}
+                          </div>
+
                   </div>
                 </div>
               );
