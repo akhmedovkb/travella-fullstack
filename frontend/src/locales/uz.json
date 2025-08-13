@@ -3,7 +3,10 @@
   "accommodation_category": "Joylashuv toifasi",
   "actions": {
     "cancel": "Bekor qilish",
-    "quick_request": "Tez so‘rov"
+    "quick_request": "Tez so‘rov",
+    "quick_request": "Tez so‘rov",
+    "cancel": "Bekor qilish",
+    "send": "YUBORISH"
   },
   "add_error": "Xizmatni qo‘shishda xatolik",
   "address": "Manzil",
@@ -471,4 +474,5 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
