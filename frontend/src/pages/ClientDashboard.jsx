@@ -13,20 +13,15 @@ function initials(name = "") {
   const second = parts[1]?.[0] || "";
   return (first + second).toUpperCase() || "U";
 }
-
 function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
   if (!b64OrDataUrl) return null;
-  return String(b64OrDataUrl).startsWith("data:")
-    ? b64OrDataUrl
-    : `data:${mime};base64,${b64OrDataUrl}`;
+  return String(b64OrDataUrl).startsWith("data:") ? b64OrDataUrl : `data:${mime};base64,${b64OrDataUrl}`;
 }
-
 function stripDataUrlPrefix(dataUrl) {
   if (!dataUrl) return null;
   const m = String(dataUrl).match(/^data:[^;]+;base64,(.*)$/);
   return m ? m[1] : dataUrl;
 }
-
 /** Crop image -> square 512x512, return dataURL (jpeg) */
 function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   return new Promise((resolve, reject) => {
@@ -39,11 +34,9 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
           const sx = Math.max(0, (img.width - minSide) / 2);
           const sy = Math.max(0, (img.height - minSide) / 2);
           const canvas = document.createElement("canvas");
-          canvas.width = size;
-          canvas.height = size;
+          canvas.width = size; canvas.height = size;
           const ctx = canvas.getContext("2d");
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
+          ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
           const dataUrl = canvas.toDataURL("image/jpeg", quality);
           resolve(dataUrl);
@@ -53,9 +46,7 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
       };
       reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsDataURL(file);
-    } catch (e) {
-      reject(e);
-    }
+    } catch (e) { reject(e); }
   });
 }
 
@@ -73,21 +64,17 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
+function pick(obj, keys) {
+  if (!obj) return null;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  }
+  return null;
+}
 function buildDates(d = {}) {
-  const hotelIn =
-    d.hotel_check_in ||
-    d.checkIn ||
-    d.startDate ||
-    d.start_flight_date ||
-    d.startFlightDate ||
-    d.departureFlightDate;
-  const hotelOut =
-    d.hotel_check_out ||
-    d.checkOut ||
-    d.returnDate ||
-    d.end_flight_date ||
-    d.endFlightDate ||
-    d.returnFlightDate;
+  const hotelIn = d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate || d.departureFlightDate;
+  const hotelOut = d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate || d.returnFlightDate;
   if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
   if (hotelIn) return String(hotelIn);
   if (hotelOut) return String(hotelOut);
@@ -97,143 +84,82 @@ function buildDates(d = {}) {
 function renderTelegram(value) {
   if (!value) return null;
   const s = String(value).trim();
-  let href = null;
-  let label = s;
-
-  if (/^https?:\/\//i.test(s)) {
-    href = s;
-  } else if (s.startsWith("@")) {
-    href = `https://t.me/${s.slice(1)}`;
-    label = s;
-  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
-    href = `https://t.me/${s}`;
-    label = `@${s}`;
-  }
+  let href = null, label = s;
+  if (/^https?:\/\//i.test(s)) href = s;
+  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
+  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
   return { href, label };
 }
 
-/* ============ Портал ============ */
+/* ============ Портал (подсказка) ============ */
 function TooltipPortal({ visible, x, y, width, children }) {
   if (!visible) return null;
   return createPortal(
-    <div className="fixed z-[3000] pointer-events-none" style={{ left: x, top: y, width }}>
-      {children}
-    </div>,
+    <div className="fixed z-[3000] pointer-events-none" style={{ left: x, top: y, width }}>{children}</div>,
     document.body
   );
 }
 
 /* ======== provider fetch (cache + fallbacks) ======== */
-
 const providerCache = new Map();
-
 async function fetchProviderProfile(providerId) {
   if (!providerId) return null;
   if (providerCache.has(providerId)) return providerCache.get(providerId);
-
   const endpoints = [
-    `/api/providers/${providerId}`,
-    `/api/provider/${providerId}`,
-    `/api/suppliers/${providerId}`,
-    `/api/supplier/${providerId}`,
-    `/api/agencies/${providerId}`,
-    `/api/agency/${providerId}`,
-    `/api/companies/${providerId}`,
-    `/api/company/${providerId}`,
-    `/api/users/${providerId}`,
-    `/api/user/${providerId}`,
+    `/api/providers/${providerId}`, `/api/provider/${providerId}`,
+    `/api/suppliers/${providerId}`, `/api/supplier/${providerId}`,
+    `/api/agencies/${providerId}`, `/api/agency/${providerId}`,
+    `/api/companies/${providerId}`, `/api/company/${providerId}`,
+    `/api/users/${providerId}`, `/api/user/${providerId}`,
   ];
-
   let profile = null;
   for (const url of endpoints) {
     try {
       const res = await apiGet(url);
-      const obj =
-        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
-      if (obj && (obj.id || obj.name || obj.title)) {
-        profile = obj;
-        break;
-      }
-    } catch {
-      /* try next endpoint */
-    }
+      const obj = (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+      if (obj && (obj.id || obj.name || obj.title)) { profile = obj; break; }
+    } catch {}
   }
-
   providerCache.set(providerId, profile || null);
   return profile;
 }
 
 /* ===== Универсальный парсер полей услуги ===== */
-function _firstNonEmpty(...args) {
-  for (const v of args)
-    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
-  return null;
-}
-function _maybeParse(obj) {
-  if (!obj) return null;
-  if (typeof obj === "string") {
-    try {
-      return JSON.parse(obj);
-    } catch {
-      return null;
-    }
-  }
-  return typeof obj === "object" ? obj : null;
-}
+function _firstNonEmpty(...args) { for (const v of args) if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v; return null; }
+function _maybeParse(obj) { if (!obj) return null; if (typeof obj === "string") { try { return JSON.parse(obj); } catch { return null; } } return typeof obj === "object" ? obj : null; }
 function _mergeDetails(svc, it) {
-  const cands = [
-    svc?.details, it?.details, svc?.detail, it?.detail,
-    svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
-  ].map(_maybeParse).filter(Boolean);
+  const cands = [svc?.details, it?.details, svc?.detail, it?.detail, svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info]
+    .map(_maybeParse).filter(Boolean);
   return Object.assign({}, ...cands);
 }
 function extractServiceFields(item) {
   const svc = item?.service || item || {};
-
   const details = _mergeDetails(svc, item);
   const bag = { ...details, ...svc, ...item };
 
-  const title = _firstNonEmpty(
-    svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
-  );
+  const title = _firstNonEmpty(svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name);
 
-  const rawPrice = _firstNonEmpty(
-    details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice,
-    svc.netPrice, svc.price, item?.price
-  );
+  const rawPrice = _firstNonEmpty(details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice, svc.netPrice, svc.price, item?.price);
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
-  const hotel = _firstNonEmpty(
-    details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
-    svc.hotel, svc.hotel_name, svc.refused_hotel_name
-  );
-  const accommodation = _firstNonEmpty(
-    details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category,
-    svc.accommodation, svc.room, svc.room_type
-  );
+  const hotel = _firstNonEmpty(details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name, svc.hotel, svc.hotel_name, svc.refused_hotel_name);
+  const accommodation = _firstNonEmpty(details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category, svc.accommodation, svc.room, svc.room_type);
 
-  const left = _firstNonEmpty(
-    bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
-  );
-  const right = _firstNonEmpty(
-    bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
-  );
+  const left = _firstNonEmpty(bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate);
+  const right = _firstNonEmpty(bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate);
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
-  const inlineProvider = _firstNonEmpty(
-    svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
-    item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
-    details?.provider
-  ) || {};
+  const inlineProvider = _firstNonEmpty(svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner, item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner, details?.provider) || {};
 
-  const providerId = _firstNonEmpty(
-    svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
-    svc.owner_id, svc.agency_id
-  );
+  const providerId = _firstNonEmpty(svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id, svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id);
+
+  const flatName = _firstNonEmpty(pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"]));
+  const flatPhone = _firstNonEmpty(pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"]));
+  const flatTg = _firstNonEmpty(pick(bag, ["provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram","telegram","tg","telegram_username","telegram_link"]));
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
-  return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, status };
+  return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, flatName, flatPhone, flatTg, status };
 }
 
 /* ===================== Mini Components ===================== */
@@ -242,8 +168,7 @@ function Stars({ value = 0, size = 18, className = "" }) {
   const full = Math.floor(value);
   const half = value - full >= 0.5;
   const total = 5;
-  const starPath =
-    "M12 .587l3.668 7.428 8.2 1.733-5.934 5.78 1.402 8.472L12 19.548 4.664 24l1.402-8.472L.132 9.748l8.2-1.733z";
+  const starPath = "M12 .587l3.668 7.428 8.2 1.733-5.934 5.78 1.402 8.472L12 19.548 4.664 24l1.402-8.472L.132 9.748l8.2-1.733z";
   return (
     <div className={`flex items-center gap-1 ${className}`}>
       {Array.from({ length: total }).map((_, i) => {
@@ -251,20 +176,9 @@ function Stars({ value = 0, size = 18, className = "" }) {
         const showHalf = i === full && half;
         return (
           <div key={i} className="relative" style={{ width: size, height: size }}>
-            <svg viewBox="0 0 24 24" width={size} height={size} className={filled ? "text-yellow-400" : "text-gray-300"} fill="currentColor">
-              <path d={starPath} />
-            </svg>
+            <svg viewBox="0 0 24 24" width={size} height={size} className={filled ? "text-yellow-400" : "text-gray-300"} fill="currentColor"><path d={starPath} /></svg>
             {showHalf && (
-              <svg
-                viewBox="0 0 24 24"
-                width={size}
-                height={size}
-                className="absolute inset-0 text-yellow-400 overflow-hidden"
-                style={{ clipPath: "inset(0 50% 0 0)" }}
-                fill="currentColor"
-              >
-                <path d={starPath} />
-              </svg>
+              <svg viewBox="0 0 24 24" width={size} height={size} className="absolute inset-0 text-yellow-400 overflow-hidden" style={{ clipPath: "inset(0 50% 0 0)" }} fill="currentColor"><path d={starPath} /></svg>
             )}
           </div>
         );
@@ -278,12 +192,8 @@ function Progress({ value = 0, max = 100, label }) {
   return (
     <div>
       {label && <div className="mb-1 text-sm text-gray-600">{label}</div>}
-      <div className="w-full bg-gray-200 rounded-full h-3">
-        <div className="h-3 bg-orange-500 rounded-full transition-all" style={{ width: `${pct}%` }} title={`${pct}%`} />
-      </div>
-      <div className="mt-1 text-xs text-gray-500">
-        {value} / {max} ({pct}%)
-      </div>
+      <div className="w-full bg-gray-200 rounded-full h-3"><div className="h-3 bg-orange-500 rounded-full transition-all" style={{ width: `${pct}%` }} title={`${pct}%`} /></div>
+      <div className="mt-1 text-xs text-gray-500">{value} / {max} ({pct}%)</div>
     </div>
   );
 }
@@ -320,9 +230,7 @@ function ClientStatsBlock({ stats }) {
         </div>
       </div>
 
-      <div className="mt-4">
-        <Progress value={points} max={next} label={t("stats.bonus_progress", { defaultValue: "Bonus progress" })} />
-      </div>
+      <div className="mt-4"><Progress value={points} max={next} label={t("stats.bonus_progress", { defaultValue: "Bonus progress" })} /></div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
         <StatBox title={t("stats.requests_total", { defaultValue: "Requests (total)" })} value={stats?.requests_total ?? 0} />
@@ -340,11 +248,7 @@ function EmptyFavorites() {
   return (
     <div className="p-8 text-center bg-white border rounded-xl">
       <div className="text-lg font-semibold mb-2">{t("favorites.empty_title", { defaultValue: "Избранное пусто" })}</div>
-      <div className="text-gray-600">
-        {t("favorites.empty_desc", {
-          defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
-        })}
-      </div>
+      <div className="text-gray-600">{t("favorites.empty_desc", { defaultValue: "Добавляйте интересные услуги в избранное и возвращайтесь позже." })}</div>
     </div>
   );
 }
@@ -365,32 +269,17 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {pageItems.map((it) => {
-              // универсальный разбор
               const {
-                svc,
-                title,
-                hotel,
-                accommodation,
-                dates,
-                prettyPrice,
-                inlineProvider,
-                providerId,
+                svc, title, hotel, accommodation, dates, prettyPrice,
+                inlineProvider, providerId, flatName, flatPhone, flatTg,
               } = extractServiceFields(it);
 
               const serviceId = svc.id ?? it.service_id ?? null;
-
-              // картинки
               const image =
                 (Array.isArray(svc.images) && svc.images[0]) ||
-                svc.cover ||
-                svc.cover_url ||
-                svc.image ||
-                it.cover ||
-                it.cover_url ||
-                it.image ||
-                null;
+                svc.cover || svc.cover_url || svc.image ||
+                it.cover || it.cover_url || it.image || null;
 
-              // подгрузка профиля поставщика
               const [provider, setProvider] = useState(null);
               useEffect(() => {
                 let alive = true;
@@ -399,42 +288,27 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                   const p = await fetchProviderProfile(providerId);
                   if (alive) setProvider(p);
                 })();
-                return () => {
-                  alive = false;
-                };
+                return () => { alive = false; };
               }, [providerId]);
 
               const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+
               const supplierName = _firstNonEmpty(
-                prov?.name,
-                prov?.title,
-                prov?.display_name,
-                prov?.company_name,
-                prov?.brand
+                prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand,
+                flatName
               );
               const supplierPhone = _firstNonEmpty(
-                prov?.phone,
-                prov?.phone_number,
-                prov?.phoneNumber,
-                prov?.tel,
-                prov?.mobile,
-                prov?.whatsapp,
-                prov?.whatsApp,
-                prov?.phones?.[0],
-                prov?.contacts?.phone,
-                prov?.contact_phone
+                prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile, prov?.whatsapp, prov?.whatsApp,
+                prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone,
+                flatPhone
               );
               const supplierTgRaw = _firstNonEmpty(
-                prov?.telegram,
-                prov?.tg,
-                prov?.telegram_username,
-                prov?.telegram_link,
-                prov?.contacts?.telegram,
-                prov?.socials?.telegram
+                prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link, prov?.contacts?.telegram, prov?.socials?.telegram,
+                flatTg
               );
               const supplierTg = renderTelegram(supplierTgRaw);
 
-              // подсказка-portal для стекляшки
+              // подсказка (портал) — чтобы «выходила» за карточку
               const imgRef = useRef(null);
               const [tipOpen, setTipOpen] = useState(false);
               const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
@@ -445,10 +319,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               };
 
               return (
-                <div
-                  key={it.id}
-                  className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
-                >
+                <div key={it.id} className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
                   <div
                     className="aspect-[16/10] bg-gray-100 relative"
                     ref={imgRef}
@@ -460,9 +331,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">
-                          {t("favorites.no_image", { defaultValue: "Нет изображения" })}
-                        </span>
+                        <span className="text-sm">{t("favorites.no_image", { defaultValue: "Нет изображения" })}</span>
                       </div>
                     )}
 
@@ -488,41 +357,14 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* стеклянная подсказка из Marketplace (портал за пределами карточки) */}
+                    {/* стеклянная подсказка (портал) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
-
-                        {hotel && (
-                          <div>
-                            <span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span>
-                            <span className="font-medium">{hotel}</span>
-                          </div>
-                        )}
-                        {accommodation && (
-                          <div>
-                            <span className="opacity-80">
-                              {t("accommodation", { defaultValue: "Размещение" })}:{" "}
-                            </span>
-                            <span className="font-medium">{accommodation}</span>
-                          </div>
-                        )}
-                        {dates && (
-                          <div>
-                            <span className="opacity-80">
-                              {t("date", { defaultValue: "Дата" })}:{" "}
-                            </span>
-                            <span className="font-medium">{dates}</span>
-                          </div>
-                        )}
-                        {prettyPrice && (
-                          <div>
-                            <span className="opacity-80">
-                              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                            </span>
-                            <span className="font-semibold">{prettyPrice}</span>
-                          </div>
-                        )}
+                        {hotel && (<div><span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span><span className="font-medium">{hotel}</span></div>)}
+                        {accommodation && (<div><span className="opacity-80">{t("accommodation", { defaultValue: "Размещение" })}: </span><span className="font-medium">{accommodation}</span></div>)}
+                        {dates && (<div><span className="opacity-80">{t("date", { defaultValue: "Дата" })}: </span><span className="font-medium">{dates}</span></div>)}
+                        {prettyPrice && (<div><span className="opacity-80">{t("marketplace.price", { defaultValue: "Цена" })}: </span><span className="font-semibold">{prettyPrice}</span></div>)}
                       </div>
                     </TooltipPortal>
                   </div>
@@ -530,50 +372,24 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                   {/* ТЕЛО КАРТОЧКИ В ИЗБРАННОМ */}
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
-                    {prettyPrice && (
-                      <div className="mt-1 text-sm">
-                        {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                        <span className="font-semibold">{prettyPrice}</span>
-                      </div>
-                    )}
+                    {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price", { defaultValue: "Цена" })}: <span className="font-semibold">{prettyPrice}</span></div>)}
 
                     {/* === блок поставщика под ценой === */}
                     {(supplierName || supplierPhone || supplierTg?.label) && (
                       <div className="mt-2 text-sm space-y-0.5">
-                        {supplierName && (
-                          <div>
-                            <span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span>
-                            <span className="font-medium">{supplierName}</span>
-                          </div>
-                        )}
+                        {supplierName && (<div><span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span><span className="font-medium">{supplierName}</span></div>)}
                         {supplierPhone && (
                           <div>
                             <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
-                            <a
-                              href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                              className="underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {supplierPhone}
-                            </a>
+                            <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline" onClick={(e) => e.stopPropagation()}>{supplierPhone}</a>
                           </div>
                         )}
                         {supplierTg?.label && (
                           <div>
                             <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
                             {supplierTg.href ? (
-                              <a
-                                href={supplierTg.href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {supplierTg.label}
-                              </a>
-                            ) : (
-                              <span className="font-medium">{supplierTg.label}</span>
-                            )}
+                              <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline" onClick={(e) => e.stopPropagation()}>{supplierTg.label}</a>
+                            ) : (<span className="font-medium">{supplierTg.label}</span>)}
                           </div>
                         )}
                       </div>
@@ -589,7 +405,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                           >
                             {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                           </button>
-
                           <button
                             onClick={() => onBook?.(serviceId)}
                             className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
@@ -606,33 +421,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
           </div>
 
           <div className="flex items-center justify-center gap-2 mt-6">
-            <button
-              className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
-              onClick={() => onPageChange?.(current - 1)}
-              disabled={current <= 1}
-            >
-              {t("pagination.prev", { defaultValue: "←" })}
-            </button>
+            <button className="px-3 py-1.5 rounded-lg border disabled:opacity-40" onClick={() => onPageChange?.(current - 1)} disabled={current <= 1}>{t("pagination.prev", { defaultValue: "←" })}</button>
             {Array.from({ length: pages }).map((_, i) => {
-              const p = i + 1;
-              const active = p === current;
-              return (
-                <button
-                  key={p}
-                  onClick={() => onPageChange?.(p)}
-                  className={`px-3 py-1.5 rounded-lg border ${active ? "bg-gray-900 text-white" : "bg-white"}`}
-                >
-                  {p}
-                </button>
-              );
+              const p = i + 1; const active = p === current;
+              return (<button key={p} onClick={() => onPageChange?.(p)} className={`px-3 py-1.5 rounded-lg border ${active ? "bg-gray-900 text-white" : "bg-white"}`}>{p}</button>);
             })}
-            <button
-              className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
-              onClick={() => onPageChange?.(current + 1)}
-              disabled={current >= pages}
-            >
-              {t("pagination.next", { defaultValue: "→" })}
-            </button>
+            <button className="px-3 py-1.5 rounded-lg border disabled:opacity-40" onClick={() => onPageChange?.(current + 1)} disabled={current >= pages}>{t("pagination.next", { defaultValue: "→" })}</button>
           </div>
         </>
       )}
@@ -762,211 +556,123 @@ export default function ClientDashboard() {
         if (!cancelled) setLoadingTab(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [activeTab, t]);
 
   const handleUploadClick = () => fileRef.current?.click();
-
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const dataUrl = await cropAndResizeToDataURL(file, 512, 0.9);
-      setAvatarBase64(dataUrl);
-      setAvatarServerUrl(null);
-      setRemoveAvatar(false);
-    } catch {
-      setError(t("errors.image_process", { defaultValue: "Не удалось обработать изображение" }));
-    } finally {
-      e.target.value = "";
-    }
+      setAvatarBase64(dataUrl); setAvatarServerUrl(null); setRemoveAvatar(false);
+    } catch { setError(t("errors.image_process", { defaultValue: "Не удалось обработать изображение" })); }
+    finally { e.target.value = ""; }
   };
-
-  const handleRemovePhoto = () => {
-    setAvatarBase64(null);
-    setAvatarServerUrl(null);
-    setRemoveAvatar(true);
-  };
+  const handleRemovePhoto = () => { setAvatarBase64(null); setAvatarServerUrl(null); setRemoveAvatar(true); };
 
   const handleSaveProfile = async () => {
     try {
-      setSavingProfile(true);
-      setMessage(null);
-      setError(null);
+      setSavingProfile(true); setMessage(null); setError(null);
       const payload = { name, phone };
       if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
-
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
-      setName(res?.name ?? name);
-      setPhone(res?.phone ?? phone);
-
-      if (res?.avatar_base64) {
-        setAvatarBase64(toDataUrl(res.avatar_base64));
-        setAvatarServerUrl(null);
-      } else if (res?.avatar_url) {
-        setAvatarServerUrl(res.avatar_url);
-        setAvatarBase64(null);
-      }
+      setName(res?.name ?? name); setPhone(res?.phone ?? phone);
+      if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
+      else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
-    } catch {
-      setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
-    } finally {
-      setSavingProfile(false);
-    }
+    } catch { setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" })); }
+    finally { setSavingProfile(false); }
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      setError(
-        t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" })
-      );
-      return;
-    }
+    if (!newPassword || newPassword.length < 6) { setError(t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" })); return; }
     try {
-      setChangingPass(true);
-      setError(null);
+      setChangingPass(true); setError(null);
       await apiPost("/api/clients/change-password", { password: newPassword });
-      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
-      setNewPassword("");
-    } catch {
-      setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
-    } finally {
-      setChangingPass(false);
-    }
+      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" })); setNewPassword("");
+    } catch { setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" })); }
+    finally { setChangingPass(false); }
   };
 
-  const handleLogout = () => {
-    try {
-      localStorage.removeItem("clientToken");
-    } finally {
-      window.location.href = "/client/login";
-    }
-  };
+  const handleLogout = () => { try { localStorage.removeItem("clientToken"); } finally { window.location.href = "/client/login"; } };
 
   const handleRemoveFavorite = async (itemId) => {
-    try {
-      await apiPost("/api/wishlist/toggle", { itemId });
-    } catch {} // игнор ошибки, потом подрежем список локально
+    try { await apiPost("/api/wishlist/toggle", { itemId }); } catch {}
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
   const handleQuickRequest = async (serviceId) => {
-    if (!serviceId) {
-      setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
-      return;
-    }
-    const note =
-      window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) ||
-      undefined;
+    if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
+    const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
-      try {
-        const data = await apiGet("/api/requests/my");
-        setRequests(Array.isArray(data) ? data : data?.items || []);
-      } catch {}
-    } catch {
-      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-    }
+      try { const data = await apiGet("/api/requests/my"); setRequests(Array.isArray(data) ? data : data?.items || []); } catch {}
+    } catch { setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" })); }
   };
 
   const handleAcceptProposal = async (id) => {
     try {
-      setActingReqId(id);
-      setError(null);
+      setActingReqId(id); setError(null);
       await apiPost(`/api/requests/${id}/accept`, {});
       setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
       const [r, b] = await Promise.allSettled([apiGet("/api/requests/my"), apiGet("/api/bookings/my")]);
       if (r.status === "fulfilled") setRequests(Array.isArray(r.value) ? r.value : r.value?.items || []);
       if (b.status === "fulfilled") setBookings(Array.isArray(b.value) ? b.value : b.value?.items || []);
       setActiveTab("bookings");
-    } catch (e) {
-      setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-    } finally {
-      setActingReqId(null);
-    }
+    } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
+    finally { setActingReqId(null); }
   };
 
   const handleRejectProposal = async (id) => {
     try {
-      setActingReqId(id);
-      setError(null);
+      setActingReqId(id); setError(null);
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
       const data = await apiGet("/api/requests/my");
       setRequests(Array.isArray(data) ? data : data?.items || []);
-    } catch (e) {
-      setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-    } finally {
-      setActingReqId(null);
-    }
+    } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
+    finally { setActingReqId(null); }
   };
 
-  function openBooking(serviceId) {
-    setBookingUI({ open: true, serviceId });
-    setBkDate(""); setBkTime(""); setBkPax(1); setBkNote("");
-  }
-  function closeBooking() {
-    setBookingUI({ open: false, serviceId: null });
-  }
+  function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
+  function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
   async function createBooking() {
     if (!bookingUI.serviceId) return;
     setBkSending(true);
     try {
-      const details = {
-        date: bkDate || undefined,
-        time: bkTime || undefined,
-        pax: Number(bkPax) || 1,
-        note: bkNote || undefined,
-      };
+      const details = { date: bkDate || undefined, time: bkTime || undefined, pax: Number(bkPax) || 1, note: bkNote || undefined };
       await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
-      closeBooking();
-      setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" }));
-      setActiveTab("bookings");
-      try {
-        const data = await apiGet("/api/bookings/my");
-        setBookings(Array.isArray(data) ? data : data?.items || []);
-      } catch {}
-    } catch (e) {
-      setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" }));
-    } finally {
-      setBkSending(false);
-    }
+      closeBooking(); setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" })); setActiveTab("bookings");
+      try { const data = await apiGet("/api/bookings/my"); setBookings(Array.isArray(data) ? data : data?.items || []); } catch {}
+    } catch (e) { setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" })); }
+    finally { setBkSending(false); }
   }
 
   /* -------- Render helpers -------- */
 
   const Avatar = () => {
     const src = avatarBase64 || avatarServerUrl || null;
-    if (src) {
-      return <img src={src} alt="" className="w-24 h-24 rounded-full object-cover border" />;
-    }
-    return (
-      <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">
-        {initials(name)}
-      </div>
-    );
+    if (src) return <img src={src} alt="" className="w-24 h-24 rounded-full object-cover border" />;
+    return <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">{initials(name)}</div>;
   };
 
   const TabButton = ({ tabKey, children }) => {
     const active = activeTab === tabKey;
     return (
-      <button
-        onClick={() => setActiveTab(tabKey)}
-        className={`px-4 py-2 rounded-lg border-b-2 font-medium ${active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"}`}
-      >
+      <button onClick={() => setActiveTab(tabKey)} className={`px-4 py-2 rounded-lg border-b-2 font-medium ${active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"}`}>
         {children}
       </button>
     );
   };
 
   const RequestsList = () => {
+    const { t } = useTranslation();
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!requests?.length) return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
     return (
@@ -980,28 +686,14 @@ export default function ClientDashboard() {
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">
-                {t("common.status", { defaultValue: "Статус" })}: {status}
-              </div>
-              {created && (
-                <div className="text-xs text-gray-400 mt-1">
-                  {t("common.created", { defaultValue: "Создан" })}: {created}
-                </div>
-              )}
-              {r?.note && (
-                <div className="text-sm text-gray-600 mt-2">
-                  {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
-                </div>
-              )}
+              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
+              {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
+              {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
 
               {p ? (
                 <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
-                  <div className="font-medium mb-1">
-                    {t("client.dashboard.offer", { defaultValue: "Предложение" })}
-                  </div>
-                  <div>
-                    {t("client.dashboard.price", { defaultValue: "Цена" })}: {p.price} {p.currency || "USD"}
-                  </div>
+                  <div className="font-medium mb-1">{t("client.dashboard.offer", { defaultValue: "Предложение" })}</div>
+                  <div>{t("client.dashboard.price", { defaultValue: "Цена" })}: {p.price} {p.currency || "USD"}</div>
                   {p.hotel && <div>Отель: {p.hotel}</div>}
                   {p.room && <div>Размещение: {p.room}</div>}
                   {p.terms && <div>Условия: {p.terms}</div>}
@@ -1009,27 +701,17 @@ export default function ClientDashboard() {
 
                   {status !== "accepted" && status !== "rejected" && (
                     <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => handleAcceptProposal(r.id)}
-                        disabled={actingReqId === r.id}
-                        className="px-3 py-1.5 rounded bg-orange-600 text-white disabled:opacity-60"
-                      >
+                      <button onClick={() => handleAcceptProposal(r.id)} disabled={actingReqId === r.id} className="px-3 py-1.5 rounded bg-orange-600 text-white disabled:opacity-60">
                         {t("client.dashboard.accept", { defaultValue: "Принять" })}
                       </button>
-                      <button
-                        onClick={() => handleRejectProposal(r.id)}
-                        disabled={actingReqId === r.id}
-                        className="px-3 py-1.5 rounded border disabled:opacity-60"
-                      >
+                      <button onClick={() => handleRejectProposal(r.id)} disabled={actingReqId === r.id} className="px-3 py-1.5 rounded border disabled:opacity-60">
                         {t("client.dashboard.reject", { defaultValue: "Отклонить" })}
                       </button>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-gray-500">
-                  {t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}
-                </div>
+                <div className="mt-2 text-sm text-gray-500">{t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}</div>
               )}
             </div>
           );
@@ -1039,6 +721,7 @@ export default function ClientDashboard() {
   };
 
   const BookingsList = () => {
+    const { t } = useTranslation();
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!bookings?.length) return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
     return (
@@ -1086,9 +769,7 @@ export default function ClientDashboard() {
               <Avatar />
               <div className="flex flex-col gap-2">
                 <button onClick={handleUploadClick} className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg">
-                  {avatarBase64 || avatarServerUrl
-                    ? t("client.dashboard.changePhoto", { defaultValue: "Сменить фото" })
-                    : t("client.dashboard.uploadPhoto", { defaultValue: "Загрузить фото" })}
+                  {avatarBase64 || avatarServerUrl ? t("client.dashboard.changePhoto", { defaultValue: "Сменить фото" }) : t("client.dashboard.uploadPhoto", { defaultValue: "Загрузить фото" })}
                 </button>
                 {(avatarBase64 || avatarServerUrl) && (
                   <button onClick={handleRemovePhoto} className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
@@ -1102,29 +783,15 @@ export default function ClientDashboard() {
             <div className="mt-6 space-y-3">
               <div>
                 <label className="text-sm text-gray-600">{t("client.dashboard.name", { defaultValue: "Наименование" })}</label>
-                <input
-                  className="mt-1 w-full border rounded-lg px-3 py-2"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t("client.dashboard.name", { defaultValue: "Ваше имя" })}
-                />
+                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("client.dashboard.name", { defaultValue: "Ваше имя" })} />
               </div>
               <div>
                 <label className="text-sm text-gray-600">{t("client.dashboard.phone", { defaultValue: "Телефон" })}</label>
-                <input
-                  className="mt-1 w-full border rounded-lg px-3 py-2"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+998 ..."
-                />
+                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 ..." />
               </div>
 
               <div className="pt-2">
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile || loadingProfile}
-                  className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60"
-                >
+                <button onClick={handleSaveProfile} disabled={savingProfile || loadingProfile} className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
                   {savingProfile ? t("common.saving", { defaultValue: "Сохранение..." }) : t("client.dashboard.saveBtn", { defaultValue: "Сохранить" })}
                 </button>
               </div>
@@ -1133,23 +800,13 @@ export default function ClientDashboard() {
             <div className="mt-8 border-t pt-6">
               <div className="text-sm text-gray-600 mb-2">{t("client.dashboard.changePassword", { defaultValue: "Смена пароля" })}</div>
               <div className="flex gap-2">
-                <input
-                  type="password"
-                  className="flex-1 border rounded-lg px-3 py-2"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder={t("client.dashboard.newPassword", { defaultValue: "Новый пароль" })}
-                />
-                <button onClick={handleChangePassword} disabled={changingPass} className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60">
-                  {changingPass ? "..." : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}
-                </button>
+                <input type="password" className="flex-1 border rounded-lg px-3 py-2" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("client.dashboard.newPassword", { defaultValue: "Новый пароль" })} />
+                <button onClick={handleChangePassword} disabled={changingPass} className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60">{changingPass ? "..." : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}</button>
               </div>
             </div>
 
             <div className="mt-8">
-              <button onClick={handleLogout} className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">
-                {t("client.dashboard.logout", { defaultValue: "Выйти" })}
-              </button>
+              <button onClick={handleLogout} className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t("client.dashboard.logout", { defaultValue: "Выйти" })}</button>
             </div>
 
             {(message || error) && (
@@ -1212,45 +869,36 @@ export default function ClientDashboard() {
       {bookingUI.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow p-5">
-            <div className="text-lg font-semibold mb-3">
-              {t("booking.title", { defaultValue: "Быстрое бронирование" })}
-            </div>
+            <div className="text-lg font-semibold mb-3">{t("booking.title", { defaultValue: "Быстрое бронирование" })}</div>
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-gray-600">{t("booking.date", { defaultValue: "Дата" })}</label>
-                  <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2"
-                    value={bkDate} onChange={(e) => setBkDate(e.target.value)} />
+                  <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkDate} onChange={(e) => setBkDate(e.target.value)} />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">{t("booking.time", { defaultValue: "Время" })}</label>
-                  <input type="time" className="mt-1 w-full border rounded-lg px-3 py-2"
-                    value={bkTime} onChange={(e) => setBkTime(e.target.value)} />
+                  <input type="time" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkTime} onChange={(e) => setBkTime(e.target.value)} />
                 </div>
               </div>
 
               <div>
                 <label className="text-sm text-gray-600">{t("booking.pax", { defaultValue: "Кол-во людей" })}</label>
-                <input type="number" min="1" className="mt-1 w-full border rounded-lg px-3 py-2"
-                  value={bkPax} onChange={(e) => setBkPax(e.target.value)} />
+                <input type="number" min="1" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkPax} onChange={(e) => setBkPax(e.target.value)} />
               </div>
 
               <div>
                 <label className="text-sm text-gray-600">{t("common.note_optional", { defaultValue: "Комментарий (необязательно)" })}</label>
-                <textarea rows={3} className="mt-1 w-full border rounded-lg px-3 py-2"
-                  value={bkNote} onChange={(e) => setBkNote(e.target.value)} />
+                <textarea rows={3} className="mt-1 w-full border rounded-lg px-3 py-2" value={bkNote} onChange={(e) => setBkNote(e.target.value)} />
               </div>
             </div>
 
             <div className="mt-4 flex gap-2">
-              <button onClick={createBooking} disabled={bkSending}
-                className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
+              <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
                 {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
               </button>
-              <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">
-                {t("actions.cancel", { defaultValue: "Отмена" })}
-              </button>
+              <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
             </div>
           </div>
         </div>
