@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -249,7 +248,8 @@ function extractServiceFields(item) {
 
 export default function Marketplace() {
   const { t } = useTranslation();
-  // Quick Request modal state & handlers
+
+  // ===== Быстрый запрос: модалка
   const [quickReq, setQuickReq] = useState({ open: false, serviceId: null, title: "", note: "" });
   const openQuickRequest = (svc) => {
     if (!svc) return;
@@ -269,15 +269,13 @@ export default function Marketplace() {
     }
   };
 
-  // анти-мерцание: обновляемся 1 раз в минуту
+  // ===== Анти-мерцание таймера: тик раз в минуту
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
-      useEffect(() => {
-        const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
-        return () => clearInterval(id);
-      }, []);
-  const now = nowMin * 60000; // использовать вместо Date.now()
-
-
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMin * 60000;
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
@@ -420,11 +418,10 @@ export default function Marketplace() {
 
     const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
 
+    const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
-    const timerText = useMemo(() => {
-      if (!expireAt) return null;
-      return formatLeft(Math.max(0, expireAt - now));
-    }, [expireAt, now]);
+    const hasTimer = !!expireAt;
+    const timerText = hasTimer ? formatLeft(leftMs) : null;
 
     const [revOpen, setRevOpen] = useState(false);
     const [revPos, setRevPos] = useState({ x: 0, y: 0 });
@@ -453,11 +450,11 @@ export default function Marketplace() {
 
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
-        <div className="aspect-[16/10] bg-gray-100 relative">
+        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-t-[18px]">
           {image ? (
-            <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
+            <img src={image} alt={title || "Service"} className="absolute inset-0 h-full w-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
               <span className="text-sm">Нет изображения</span>
             </div>
           )}
@@ -507,7 +504,7 @@ export default function Marketplace() {
           {/* стеклянная подсказка при ховере */}
           <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-x-0 bottom-0 p-3">
-              <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+              <div className="rounded-2xl bg-gradient-to-b from-black/70 to-black/40 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl">
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
                 {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
@@ -616,7 +613,7 @@ export default function Marketplace() {
           </div>
         )}
       </div>
-    
+
       {/* Quick Request Modal */}
       {quickReq.open && (
         <div className="fixed inset-0 z-[3000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -655,6 +652,6 @@ export default function Marketplace() {
           </div>
         </div>
       )}
-</div>
+    </div>
   );
 }
