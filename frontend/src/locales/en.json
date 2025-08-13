@@ -116,6 +116,8 @@
   },
   "comment": "Comment",
   "common": {
+    "note_optional": "Request note (optional):",
+    "comment": "Comment",
     "amount": "Amount",
     "backToDashboard": "Dashboard",
     "booking": "Booking",
@@ -473,4 +475,5 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
 
