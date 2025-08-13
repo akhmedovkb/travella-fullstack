@@ -288,7 +288,24 @@
     "select_category": "Выберите категорию",
     "start_date": "Дата начала",
     "title": "Доска объявлений",
-    "transport": "Транспорт"
+    "transport": "Транспорт",
+    "supplier": "Поставщик",
+    "phone": "Телефон",
+    "telegram": "Телеграм",
+    "no_image": "Нет изображения",
+    "price": "Цена",
+    "no_results": "Нет результатов",
+    "time_left": "До окончания",
+    "time_expired": "Время истекло",
+    "select_category": "Выберите категорию",
+    "guide": "Гид",
+    "transport": "Транспорт",
+    "package": "Турпакет",
+    "hotel": "Отель",
+    "flight": "Авиабилет",
+    "refused_event": "Отказной билет",
+    "reviews": "Отзывы об услуге",
+    "search_placeholder": "Поиск по услугам, странам, городам…"
   },
   "messages": {
     "booking_created": "Бронирование создано",
@@ -465,26 +482,6 @@
   "visa_included": "Виза включена",
   "visa_support": "Визовая поддержка",
 
-
-  "marketplace": {
-    "supplier": "Поставщик",
-    "phone": "Телефон",
-    "telegram": "Телеграм",
-    "no_image": "Нет изображения",
-    "price": "Цена",
-    "no_results": "Нет результатов",
-    "time_left": "До окончания",
-    "time_expired": "Время истекло",
-    "select_category": "Выберите категорию",
-    "guide": "Гид",
-    "transport": "Транспорт",
-    "package": "Турпакет",
-    "hotel": "Отель",
-    "flight": "Авиабилет",
-    "refused_event": "Отказной билет",
-    "reviews": "Отзывы об услуге",
-    "search_placeholder": "Поиск по услугам, странам, городам…"
-  },
   "favorites": {
     "add": "В избранное",
     "remove": "Убрать из избранного",
@@ -500,6 +497,7 @@
   "countdown": { "until_end": "До окончания", "expired": "Время истекло" }
 
 }
+
 
 
 
