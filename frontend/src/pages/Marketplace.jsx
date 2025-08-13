@@ -259,7 +259,7 @@ export default function Marketplace() {
   const openQuickRequest = (serviceId) => { setQrServiceId(serviceId); setQrOpen(true); };
   const submitQuickRequest = async (note) => {
     try {
-      await apiPost("/api/requests/quick", { service_id: qrServiceId, note });
+      await apiPost("/api/requests/quick", { service_id: qrServiceId, provider_id: qrProviderId, note });
       toast(t("messages.request_sent") || "Запрос отправлен");
     } catch (e) {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
@@ -564,7 +564,7 @@ export default function Marketplace() {
 
           <div className="mt-auto pt-3">
             <button
-              onClick={() => openQuickRequest(id)}
+              onClick={() => openQuickRequest(serviceId, providerId)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
               {t("actions.quick_request") || "Быстрый запрос"}
