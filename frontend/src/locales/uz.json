@@ -433,5 +433,93 @@
     "cancel": "Bekor qilish",
     "send": "Yuborish",
     "quick_request": "Tezkor so‘rov"
+  },
+
+  "marketplace": {
+    "search_placeholder": "Xizmatlar, davlatlar, shaharlar bo‘yicha qidirish…",
+    "supplier": "Ta’minotchi",
+    "phone": "Telefon",
+    "telegram": "Telegram",
+    "time_left": "Qolgan vaqt",
+    "time_expired": "Muddati tugagan",
+    "no_image": "Rasm yo‘q",
+    "no_results": "Hech narsa topilmadi",
+    "show_more": "Yana ko‘rsatish",
+    "reset_filters": "Filtrlarni tozalash",
+    "filters": "Filtrlar",
+    "sort": "Saralash",
+    "sort_new": "Avval yangilar",
+    "sort_price_low": "Narx: pastdan yuqoriga",
+    "sort_price_high": "Narx: yuqoridan pastga",
+    "per_page": "Sahifada",
+    "items": "ta",
+    "status": "Holat",
+    "status_draft": "Qoralama",
+    "status_approved": "Tasdiqlangan",
+    "status_rejected": "Rad etilgan",
+    "price_from": "dan",
+    "price_to": "gacha",
+    "copy_success": "Nusxa olindi",
+    "copy_error": "Nusxa olish muvaffaqiyatsiz",
+    "timer": {
+      "d": "{{count}} kun",
+      "h": "{{count}} soat",
+      "m": "{{count}} daq",
+      "s": "{{count}} son"
+    },
+    "pagination": {
+      "prev": "Oldingi",
+      "next": "Keyingi",
+      "page": "Sahifa {{page}} / {{total}}"
+    }
+  },
+  "favorites": {
+    "add": "Sevimlilarga qo‘shish",
+    "remove": "Sevimlilardan olib tashlash",
+    "added_toast": "Sevimlilarga qo‘shildi",
+    "removed_toast": "Sevimlilardan olib tashlandi"
+  },
+  "actions": {
+    "quick_request": "Tez so‘rov",
+    "open": "Ochish",
+    "close": "Yopish",
+    "send": "Yuborish",
+    "cancel": "Bekor qilish"
+  },
+  "tooltips": {
+    "favorite_add": "Sevimlilarga qo‘shish",
+    "favorite_remove": "Sevimlilardan olib tashlash",
+    "call": "Qo‘ng‘iroq qilish",
+    "open_telegram": "Telegram’ni ochish",
+    "quick_request": "Tez so‘rov yuborish",
+    "copy": "Nusxa olish"
+  },
+  "modals": {
+    "quick_request": {
+      "title": "Tez so‘rov",
+      "subtitle": "Kontaktlaringizni qoldiring — tez orada bog‘lanamiz",
+      "name": "Ism",
+      "phone": "Telefon raqami",
+      "telegram": "Telegram",
+      "message": "Xabar",
+      "consent": "Bog‘lanishga roziman",
+      "success_title": "So‘rov yuborildi",
+      "success_desc": "Tez orada bog‘lanamiz.",
+      "error_title": "Yuborib bo‘lmadi",
+      "error_desc": "Keyinroq qayta urinib ko‘ring."
+    }
+  },
+  "common": {
+    "find": "Topish",
+    "loading": "Yuklanmoqda…",
+    "error": "Nimadir xato ketdi",
+    "save": "Saqlash",
+    "edit": "Tahrirlash",
+    "delete": "O‘chirish",
+    "apply": "Qo‘llash",
+    "clear": "Tozalash"
   }
+
+
 }
+
