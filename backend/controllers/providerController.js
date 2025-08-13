@@ -545,7 +545,33 @@ const getProviderStats = async (req, res) => {
 };
 
 
+
+/**
+ * Public endpoint: GET /api/providers/:id
+ * Returns { id, name, phone, telegram } where telegram maps from providers.social
+ */
+const getProviderPublicById = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+  try {
+    const result = await pool.query(
+      `SELECT id, name, phone, social AS telegram
+         FROM providers
+        WHERE id = $1`,
+      [id]
+    );
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    return res.json(result.rows[0]);
+  } catch (e) {
+    console.error("getProviderPublicById error", e);
+    return res.status(500).json({ error: "server_error" });
+  }
+};
+
 module.exports = {
+  getProviderPublicById,
   registerProvider,
   loginProvider,
   getProviderProfile,
