@@ -1,80 +1,82 @@
 // backend/index.js
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const morgan = require("morgan");
-
-const providerRoutes = require("./routes/providerRoutes");
-const clientRoutes = require("./routes/clientRoutes");
-const marketplaceRoutes = require("./routes/marketplaceRoutes");
-const bookingRoutes = require("./routes/bookingRoutes");
-const requestRoutes = require("./routes/requestRoutes");
-const reviewRoutes = require("./routes/reviewRoutes");
-const wishlistRoutes = require("./routes/wishlistRoutes");
-const hotelRoutes = require("./routes/hotelRoutes");
-const notificationsRoutes = require("./routes/notificationsRoutes");
+const dotenv = require("dotenv");
+dotenv.config();
 
 const app = express();
 
-// доверяем прокси (Railway/Vercel)
-app.set("trust proxy", 1);
-
-// CORS: перечисли фронтовые домены через запятую в CORS_ORIGIN
-// пример: CORS_ORIGIN=https://travella-fullstack.vercel.app,http://localhost:5173
-const allowlist = (process.env.CORS_ORIGIN || "")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
+/** CORS */
+const allowedOrigins = [
+  "https://travella-fullstack.vercel.app",
+  "http://localhost:5173",
+];
 
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin) return cb(null, true); // для curl/health
-      if (allowlist.length === 0 || allowlist.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"));
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS: " + origin));
     },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+app.options(
+  "*",
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
 
-app.use(express.json({ limit: "15mb" }));
-app.use(morgan("dev"));
+/** Body */
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-// health
-app.get("/", (req, res) =>
-  res.json({
-    ok: true,
-    service: "travella-backend",
-    env: process.env.NODE_ENV || "development",
-  })
-);
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+/** Routes */
+const providerRoutes = require("./routes/providerRoutes");
+app.use("/api/providers", providerRoutes);
 
-/* ================== API ================== */
-app.use("/api/providers", providerRoutes);        // профили, услуги, календарь, и т.д.
-app.use("/api/clients", clientRoutes);            // клиенты
-app.use("/api/marketplace", marketplaceRoutes);   // поиск/витрина (POST /search и др.)
-app.use("/api/bookings", bookingRoutes);          // бронирования
-app.use("/api/requests", requestRoutes);          // быстрые запросы/контакты
-app.use("/api/reviews", reviewRoutes);            // отзывы/рейтинги
-app.use("/api/wishlist", wishlistRoutes);         // избранное
-app.use("/api/hotels", hotelRoutes);              // поиск отелей (autocomplete)
+const hotelRoutes = require("./routes/hotelRoutes");
+app.use("/api/hotels", hotelRoutes);
+
+const marketplaceRoutes = require("./routes/marketplaceRoutes");
+app.use("/api/marketplace", marketplaceRoutes);
+
+const clientRoutes = require("./routes/clientRoutes");
+app.use("/api/clients", clientRoutes);
+
+const requestRoutes = require("./routes/requestRoutes");
+app.use("/api/requests", requestRoutes);
+
+const bookingRoutes = require("./routes/bookingRoutes");
+app.use("/api/bookings", bookingRoutes);
+
+const notificationsRoutes = require("./routes/notificationsRoutes");
 app.use("/api/notifications", notificationsRoutes);
 
-/* ================ 404 + errors ================ */
-app.use((req, res) => {
-  res.status(404).json({ error: "Not found" });
-});
+// NEW: wishlist
+const wishlistRoutes = require("./routes/wishlistRoutes");
+app.use("/api/wishlist", wishlistRoutes);
 
-app.use((err, req, res, next) => {
-  console.error(err);
-  const status = err.status || 500;
-  res.status(status).json({ error: err.message || "Internal Server Error" });
-});
+// Reviews (отзывы)
+const reviewRoutes = require("./routes/reviewRoutes");
+app.use("/api/reviews", reviewRoutes);
 
-/* ================== START ================== */
-const PORT = process.env.PORT || 3000;
-// Railway сам выставляет HOST/PORT; слушаем на 0.0.0.0
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`API listening on :${PORT}`);
+/** Debug */
+const authenticateToken = require("./middleware/authenticateToken");
+app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
+
+/** Health */
+app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
+
+/** Start */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
