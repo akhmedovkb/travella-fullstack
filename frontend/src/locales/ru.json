@@ -457,5 +457,45 @@
   "upload_images": "Изображения (можно несколько):",
   "view_certificate": "Посмотреть сертификат",
   "visa_included": "Виза включена",
-  "visa_support": "Визовая поддержка"
+  "visa_support": "Визовая поддержка",
+
+  
+  "common": {
+    "find": "Найти",
+    "loading": "Загрузка…"
+  },
+  "marketplace": {
+    "supplier": "Поставщик",
+    "phone": "Телефон",
+    "telegram": "Телеграм",
+    "no_image": "Нет изображения",
+    "price": "Цена",
+    "no_results": "Нет результатов",
+    "time_left": "До окончания",
+    "time_expired": "Время истекло",
+    "select_category": "Выберите категорию",
+    "guide": "Гид",
+    "transport": "Транспорт",
+    "package": "Турпакет",
+    "hotel": "Отель",
+    "flight": "Авиабилет",
+    "refused_event": "Отказной билет",
+    "reviews": "Отзывы об услуге",
+    "search_placeholder": "Поиск по услугам, странам, городам…"
+  },
+  "favorites": {
+    "add": "В избранное",
+    "remove": "Убрать из избранного",
+    "added_toast": "Добавлено в избранное",
+    "removed_toast": "Удалено из избранного"
+  },
+  "tooltips": {
+    "favorite_add": "В избранное",
+    "favorite_remove": "Убрать из избранного"
+  },
+  "messages": { "request_sent": "Запрос отправлен" },
+  "errors": { "request_send": "Не удалось отправить запрос", "loading_error": "Не удалось загрузить данные" },
+  "countdown": { "until_end": "До окончания", "expired": "Время истекло" }
+
 }
+
