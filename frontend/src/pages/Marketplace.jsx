@@ -1,4 +1,4 @@
-//frontend/src/pages/Marketplace.jsx
+// frontend/src/pages/Marketplace.jsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -80,7 +80,6 @@ function toast(txt) {
 
 /* ---------- срок действия / обратный счёт ---------- */
 
-/** Пытаемся извлечь timestamp истечения (ms) из разных возможных полей */
 function resolveExpireAt(service) {
   const s = service || {};
   const d = s.details || {};
@@ -103,7 +102,6 @@ function resolveExpireAt(service) {
     }
   }
 
-  // альтернатива: ttl_hours от created_at
   if (!ts) {
     const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
     if (ttl && Number(ttl) > 0 && s.created_at) {
@@ -146,11 +144,6 @@ function Stars({ value = 0, size = 14 }) {
             strokeWidth="1.5"
           >
             <path d="M12 .587l3.668 7.431L24 9.748l-6 5.847L19.335 24 12 20.202 4.665 24 6 15.595 0 9.748l8.332-1.73z" />
-            {half && (
-              <clipPath id={`half-${i}`}>
-                <rect x="0" y="0" width="12" height="24" />
-              </clipPath>
-            )}
           </svg>
         );
       })}
@@ -196,14 +189,12 @@ function renderTelegram(value) {
 export default function Marketplace() {
   const { t } = useTranslation();
 
-  // глобальные "часы" для всех карточек (обновление раз в секунду)
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // фильтры
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const filters = useMemo(
@@ -215,15 +206,12 @@ export default function Marketplace() {
     [q, category]
   );
 
-  // данные
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
 
-  // избранное (множество id)
   const [favIds, setFavIds] = useState(new Set());
 
-  // загрузка списка
   const search = async (opts = {}) => {
     setLoading(true);
     setError(null);
@@ -232,19 +220,17 @@ export default function Marketplace() {
       let res = await apiPost("/api/marketplace/search", payload);
       let list = normalizeList(res);
 
-      // фолбэк на публичные услуги, если поиск ещё не готов
       if (!list.length && opts?.fallback !== false) {
         res = await apiGet("/api/services/public");
         list = normalizeList(res);
       }
 
-      // подстраховка локации
       if (filters.location) {
         list = list.filter((it) => matchesLocation(it, filters.location));
       }
 
       setItems(list);
-    } catch (e) {
+    } catch {
       setError(t("common.loading_error") || "Не удалось загрузить данные");
       setItems([]);
     } finally {
@@ -257,20 +243,16 @@ export default function Marketplace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // при заходе подгружаем реальные избранные
   useEffect(() => {
     (async () => {
       try {
         const ids = await apiGet("/api/wishlist/ids");
         const arr = Array.isArray(ids) ? ids : [];
         setFavIds(new Set(arr));
-      } catch {
-        // не залогинен клиентом — игнор
-      }
+      } catch {}
     })();
   }, []);
 
-  // быстрый запрос
   const handleQuickRequest = async (serviceId) => {
     if (!serviceId) return;
     const note =
@@ -287,7 +269,6 @@ export default function Marketplace() {
     }
   };
 
-  // избранное — переключение строго после ответа сервера
   const toggleFavorite = async (id) => {
     try {
       const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
@@ -315,7 +296,6 @@ export default function Marketplace() {
     }
   };
 
-  /* ---------- опции категорий ---------- */
   const categoryOptions = [
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
     { value: "guide", label: t("marketplace.guide") || "Гид" },
@@ -326,8 +306,6 @@ export default function Marketplace() {
     { value: "refused_event_ticket", label: t("marketplace.refused_event") || t("category.refused_event_ticket") || "Отказной билет" },
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
-
-  /* ===================== карточка ===================== */
 
   const Card = ({ it, now }) => {
     const svc = it?.service || it;
@@ -349,7 +327,7 @@ export default function Marketplace() {
     );
     const dates = buildDates(details);
 
-    // supplier info
+    // supplier info (для вывода в теле карточки)
     const prov =
       svc.provider ||
       svc.supplier ||
@@ -389,19 +367,20 @@ export default function Marketplace() {
 
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const statusRaw = svc.status ?? it.status ?? details.status ?? null;
-    // draft скрываем
-    const status    = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
-    const badge     = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+    // draft скрыта
+    const status =
+      typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft"
+        ? null
+        : statusRaw;
+    const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
     const isFav = favIds.has(id);
 
-    // срок действия
     const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
     const hasTimer = !!expireAt;
     const timerText = hasTimer ? formatLeft(leftMs) : null;
 
-    // ----- отзывы: тултип через портал -----
     const [revOpen, setRevOpen] = useState(false);
     const [revPos, setRevPos] = useState({ x: 0, y: 0 });
     const [revData, setRevData] = useState({ avg: 0, count: 0, items: [] });
@@ -410,7 +389,7 @@ export default function Marketplace() {
     const openReviews = async () => {
       if (revBtnRef.current) {
         const r = revBtnRef.current.getBoundingClientRect();
-        setRevPos({ x: r.left - 8, y: r.top - 8 }); // чуточку левее/выше
+        setRevPos({ x: r.left - 8, y: r.top - 8 });
       }
       setRevOpen(true);
       try {
@@ -440,10 +419,8 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Верх: иконки */}
           <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
             <div className="flex items-center gap-2">
-              {/* Таймер (если есть срок) */}
               {hasTimer && (
                 <span
                   className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow
@@ -454,14 +431,12 @@ export default function Marketplace() {
                 </span>
               )}
 
-              {/* Рейтинг/статус — показываем, если таймера нет */}
               {!hasTimer && badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
                 </span>
               )}
 
-              {/* Иконка отзывов */}
               <button
                 ref={revBtnRef}
                 className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
@@ -475,7 +450,6 @@ export default function Marketplace() {
               </button>
             </div>
 
-            {/* сердечко */}
             <button
               className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${
                 isFav ? "text-red-500" : ""
@@ -503,7 +477,7 @@ export default function Marketplace() {
             </button>
           </div>
 
-          {/* Нижняя стекляшка (подсказка) */}
+          {/* стеклянная подсказка при ховере */}
           <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
@@ -536,55 +510,12 @@ export default function Marketplace() {
                     <span className="font-semibold">{prettyPrice}</span>
                   </div>
                 )}
-                {/* supplier — только в подсказке раньше, оставил как есть (можно скрыть по желанию) */}
-                {supplierName && (
-                  <div>
-                    <span className="opacity-80">
-                      {t("supplier", { defaultValue: "Поставщик" })}:{" "}
-                    </span>
-                    <span className="font-medium">{supplierName}</span>
-                  </div>
-                )}
-                {supplierPhone && (
-                  <div>
-                    <span className="opacity-80">
-                      {t("phone", { defaultValue: "Телефон" })}:{" "}
-                    </span>
-                    <a
-                      className="font-medium underline pointer-events-auto"
-                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {supplierPhone}
-                    </a>
-                  </div>
-                )}
-                {supplierTg?.label && (
-                  <div>
-                    <span className="opacity-80">
-                      {t("telegram", { defaultValue: "Телеграм" })}:{" "}
-                    </span>
-                    {supplierTg.href ? (
-                      <a
-                        className="font-medium underline pointer-events-auto"
-                        href={supplierTg.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {supplierTg.label}
-                      </a>
-                    ) : (
-                      <span className="font-medium">{supplierTg.label}</span>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* тултип отзывов — через портал, поверх карточки */}
+        {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
             <div className="mb-1 font-semibold">
@@ -610,6 +541,7 @@ export default function Marketplace() {
           </div>
         </TooltipPortal>
 
+        {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
@@ -619,18 +551,22 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* === НОВОЕ: блок с поставщиком в теле карточки под ценой === */}
+          {/* === блок поставщика под ценой === */}
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
               {supplierName && (
                 <div>
-                  <span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span>
+                  <span className="text-gray-500">
+                    {t("supplier", { defaultValue: "Поставщик" })}:{" "}
+                  </span>
                   <span className="font-medium">{supplierName}</span>
                 </div>
               )}
               {supplierPhone && (
                 <div>
-                  <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
+                  <span className="text-gray-500">
+                    {t("phone", { defaultValue: "Телефон" })}:{" "}
+                  </span>
                   <a
                     href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
                     className="underline"
@@ -642,7 +578,9 @@ export default function Marketplace() {
               )}
               {supplierTg?.label && (
                 <div>
-                  <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
+                  <span className="text-gray-500">
+                    {t("telegram", { defaultValue: "Телеграм" })}:{" "}
+                  </span>
                   {supplierTg.href ? (
                     <a
                       href={supplierTg.href}
@@ -660,7 +598,7 @@ export default function Marketplace() {
               )}
             </div>
           )}
-          {/* === /НОВОЕ === */}
+          {/* === /блок поставщика === */}
 
           <div className="mt-auto pt-3">
             <button
@@ -675,7 +613,6 @@ export default function Marketplace() {
     );
   };
 
-  /* ===================== layout ===================== */
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       {/* Панель поиска */}
@@ -723,7 +660,11 @@ export default function Marketplace() {
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (
-              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />
+              <Card
+                key={it.id || it.service?.id || JSON.stringify(it)}
+                it={it}
+                now={now}
+              />
             ))}
           </div>
         )}
