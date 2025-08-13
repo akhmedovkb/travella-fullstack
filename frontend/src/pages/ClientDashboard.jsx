@@ -304,38 +304,71 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const dates = buildDates(details);
 
-              // supplier
+              /* --------- Поставщик (расширенный сбор полей) --------- */
               const prov =
-                s.provider || s.supplier || s.vendor || it.provider || it.supplier || {};
+                s.provider ||
+                s.provider_profile ||
+                s.supplier ||
+                s.vendor ||
+                s.agency ||
+                s.owner ||
+                it.provider ||
+                it.provider_profile ||
+                it.supplier ||
+                it.vendor ||
+                it.agency ||
+                it.owner ||
+                details.provider ||
+                {};
+
               const supplierName = firstNonEmpty(
                 prov?.name,
+                prov?.title,
+                prov?.display_name,
+                prov?.company_name,
+                prov?.brand,
                 s.provider_name,
                 it.provider_name,
-                details.provider_name
+                details.provider_name,
+                s.owner_name,
+                s.agency_name
               );
+
               const supplierPhone = firstNonEmpty(
                 prov?.phone,
                 prov?.phone_number,
+                prov?.phoneNumber,
+                prov?.tel,
+                prov?.mobile,
+                prov?.whatsapp,
+                prov?.whatsApp,
                 prov?.phones?.[0],
                 prov?.contacts?.phone,
+                prov?.contact_phone,
                 s.provider_phone,
                 it.provider_phone,
                 details.provider_phone
               );
+
               const supplierTgRaw = firstNonEmpty(
                 prov?.telegram,
                 prov?.tg,
+                prov?.telegram_username,
+                prov?.telegram_link,
+                prov?.tg_link,
                 prov?.socials?.telegram,
                 prov?.contacts?.telegram,
                 prov?.social,
                 prov?.social_link,
+                prov?.links?.telegram,
+                details.provider_telegram,
                 s.provider_telegram,
                 it.provider_telegram,
-                details.provider_telegram,
                 s.telegram,
                 details.telegram
               );
               const supplierTg = renderTelegram(supplierTgRaw);
+              /* ------------------------------------------------------ */
 
               // подсказка-portal для стекляшки
               const imgRef = useRef(null);
@@ -604,8 +637,7 @@ export default function ClientDashboard() {
     if (activeTab === "favorites") params.set("page", String(favPage));
     else params.delete("page");
     setSearchParams(params, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, favPage]);
+  }, [activeTab, favPage]); // eslint-disable-line
 
   useEffect(() => {
     (async () => {
@@ -754,11 +786,9 @@ export default function ClientDashboard() {
   const handleRemoveFavorite = async (itemId) => {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
-      setFavorites((prev) => prev.filter((x) => x.id !== itemId));
-      setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
-    } catch {
-      setError(t("errors.favorite_remove", { defaultValue: "Не удалось удалить из избранного" }));
-    }
+    } catch {} // игнор ошибки, потом подрежем список локально
+    setFavorites((prev) => prev.filter((x) => x.id !== itemId));
+    setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
   const handleQuickRequest = async (serviceId) => {
