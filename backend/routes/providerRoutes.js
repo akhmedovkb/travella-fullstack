@@ -18,6 +18,7 @@ const {
   saveBlockedDates,
   updateServiceImagesOnly,
   getProviderStats,
+  getProviderPublicById,
 } = require("../controllers/providerController");
 
 // Пускаем только провайдера
@@ -55,5 +56,7 @@ router.patch(
   requireProvider,
   updateServiceImagesOnly
 );
+
+router.get("/:id(\\d+)", getProviderPublicById);
 
 module.exports = router;
