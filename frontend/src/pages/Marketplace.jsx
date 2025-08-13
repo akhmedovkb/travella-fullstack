@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
+import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
 
@@ -484,19 +485,18 @@ export default function Marketplace() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
                 </svg>
-            </button>
+              </button>
             </div>
 
-            <button
-              className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${isFav ? "text-red-500" : ""}`}
-              onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
-              title={isFav ? (t("tooltips.favorite_remove") || "Убрать из избранного")
-                           : (t("tooltips.favorite_add") || "В избранное")}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-              </svg>
-            </button>
+            {/* Сердце: WishHeart внутри такого же «стеклянного» контейнера */}
+            <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
+              <WishHeart
+                active={isFav}
+                onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
+                size={18}
+                className="!p-0 !hover:bg-transparent"
+              />
+            </div>
           </div>
 
           {/* стеклянная подсказка при ховере */}
