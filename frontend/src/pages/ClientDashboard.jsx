@@ -77,13 +77,15 @@ function buildDates(d = {}) {
     d.checkIn ||
     d.startDate ||
     d.start_flight_date ||
-    d.startFlightDate;
+    d.startFlightDate ||
+    d.departureFlightDate;
   const hotelOut =
     d.hotel_check_out ||
     d.checkOut ||
     d.returnDate ||
     d.end_flight_date ||
-    d.endFlightDate;
+    d.endFlightDate ||
+    d.returnFlightDate;
   if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
   if (hotelIn) return String(hotelIn);
   if (hotelOut) return String(hotelOut);
@@ -240,15 +242,39 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 null;
 
               // цена (если есть)
-              const details = s.details || {};
-              const price = firstNonEmpty(details.netPrice, s.price, it.price);
+              // details в избранном иногда приходит строкой или лежит на уровне item.
+              // Нормализуем и парсим, если нужно.
+              let rawDetails = s.details ?? it.details ?? {};
+              let details = {};
+              try {
+                details = typeof rawDetails === "string" ? JSON.parse(rawDetails) : (rawDetails || {});
+              } catch {
+                details = {};
+              }
+              const price = firstNonEmpty(
+                details.netPrice,
+                details.price,
+                details.totalPrice,
+                details.priceNet,
+                details.grossPrice,
+                s.price,
+                it.price
+              );
               const prettyPrice = fmtPrice(price);
 
               // доп. поля для подсказки как в маркетплейсе
-              const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
+              const hotel = firstNonEmpty(
+                details.hotel,
+                details.hotelName,
+                details.refused_hotel_name,
+                details?.hotel?.name
+              );
               const accommodation = firstNonEmpty(
                 details.accommodation,
-                details.accommodationCategory
+                details.accommodationCategory,
+                details.room,
+                details.roomType,
+                details.room_category
               );
               const dates = buildDates(details);
 
