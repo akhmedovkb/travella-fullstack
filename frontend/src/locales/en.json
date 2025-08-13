@@ -240,32 +240,7 @@
   },
   "logout": "Logout",
   "make_cover": "Make cover",
-  "marketplace": {
-    "adults": "Adults (12+)",
-    "children": "Children (2–11)",
-    "end_date": "End date",
-    "flight": "Refused airline ticket",
-    "guide": "Guide",
-    "hotel": "Refused hotel",
-    "infants": "Infants (0–1)",
-    "location": "Location",
-    "location_placeholder": "Enter location...",
-    "package": "Refused tour",
-    "price": "Price",
-    "propose_price": "Propose price",
-    "refused_event": "Refused event ticket",
-    "results": "Search results",
-    "reviews": "Service reviews",
-    "search": "Search",
-    "search_filters": "Search filters",
-    "search_in": "Search in {{category}}:",
-    "search_placeholder": "Search services, countries, cities…",
-    "searching": "Searching...",
-    "select_category": "Select a category",
-    "start_date": "Start date",
-    "title": "Marketplace",
-    "transport": "Transport"
-  },
+  
   "messages": {
     "booking_created": "Booking created",
     "favorite_removed": "Removed from favorites",
@@ -444,6 +419,30 @@
   "visa_support": "Visa support",
 
   "marketplace": {
+    "adults": "Adults (12+)",
+    "children": "Children (2–11)",
+    "end_date": "End date",
+    "flight": "Refused airline ticket",
+    "guide": "Guide",
+    "hotel": "Refused hotel",
+    "infants": "Infants (0–1)",
+    "location": "Location",
+    "location_placeholder": "Enter location...",
+    "package": "Refused tour",
+    "price": "Price",
+    "propose_price": "Propose price",
+    "refused_event": "Refused event ticket",
+    "results": "Search results",
+    "reviews": "Service reviews",
+    "search": "Search",
+    "search_filters": "Search filters",
+    "search_in": "Search in {{category}}:",
+    "search_placeholder": "Search services, countries, cities…",
+    "searching": "Searching...",
+    "select_category": "Select a category",
+    "start_date": "Start date",
+    "title": "Marketplace",
+    "transport": "Transport",
     "supplier": "Supplier",
     "phone": "Phone",
     "telegram": "Telegram",
@@ -476,6 +475,7 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
 
 
 
