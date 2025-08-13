@@ -227,18 +227,18 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* NEW: иконка-удаление (сердечко) */}
+                    {/* Heart: красное, так как элемент уже в избранном */}
                     <button
                       onClick={() => onRemove?.(it.id)}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20"
-                      title={t("favorites.removed", { defaultValue: "Удалить из избранного" })}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
+                      title={t("favorites.remove_title", { defaultValue: "Удалить из Избранного" })}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
                       </svg>
                     </button>
 
-                    {/* NEW: стеклянный тёмный тултип снизу при ховере */}
+                    {/* Тёмная «стекляшка» с названием и ценой */}
                     <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                         <div className="font-semibold line-clamp-2">{title}</div>
@@ -547,7 +547,7 @@ export default function ClientDashboard() {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
       setFavorites((prev) => prev.filter((x) => x.id !== itemId));
-      setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
+      setMessage(t("favorites.removed_cap", { defaultValue: "Удалено из Избранного" }));
     } catch {
       setError(t("errors.favorite_remove", { defaultValue: "Не удалось удалить из избранного" }));
     }
