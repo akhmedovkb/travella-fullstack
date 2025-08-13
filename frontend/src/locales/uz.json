@@ -327,6 +327,7 @@
   },
 
   "stats": {
+    "level": "Daraja",
     "tier": "Daraja",
     "rating": "Reyting",
     "bonus_progress": "Bonus jarayoni",
@@ -419,3 +420,4 @@
     "save_error": "Sharhni saqlab bo‘lmadi"
   }
 }
+
