@@ -92,12 +92,36 @@ router.post("/quick", authenticateToken, handleCreateQuick);
 router.post("/", authenticateToken, handleCreateQuick);
 
 // Входящие запросы провайдера (минимальный набор полей + комментарий)
-router.get("/provider/inbox", authenticateToken, async (req, res) => {
-  try {
-    const providerId = req.user?.id;
-    if (!providerId) return res.status(401).json({ error: "unauthorized" });
+// ===== helper: какие ID считать "моими" для провайдера =====
+function collectProviderIdsFromUser(user) {
+  const ids = [
+    user?.id,
+    user?.provider_id,
+    user?.profile_id,
+    user?.company_id,
+    user?.agency_id,
+    user?.owner_id,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v));
+  return Array.from(new Set(ids));
+}
 
-    const rows = await findQuickRequestsByProvider(providerId);
+// находим все быстрые запросы для одного из ID
+async function findQuickRequestsByProviderMany(providerIds) {
+  return __mem.requests
+    .filter((r) => r.type === "quick" && providerIds.includes(String(r.provider_id)))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+// единый хендлер инбокса
+async function providerInboxHandler(req, res) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
+
+    const myIds = collectProviderIdsFromUser(req.user);
+    const rows = await findQuickRequestsByProviderMany(myIds);
+
     const items = await Promise.all(
       rows.map(async (r) => {
         const svc = await getServiceById(r.service_id);
@@ -122,11 +146,18 @@ router.get("/provider/inbox", authenticateToken, async (req, res) => {
       })
     );
 
-    return res.json({ items });
+    res.json({ items });
   } catch (e) {
     console.error("inbox error:", e);
-    return res.status(500).json({ error: "inbox_load_failed" });
+    res.status(500).json({ error: "inbox_load_failed" });
   }
-});
+}
+
+// ✅ основной путь (как раньше в наших примерах)
+router.get("/provider/inbox", authenticateToken, providerInboxHandler);
+
+// ✅ алиас под старый фронт (Dashboard бьёт сюда)
+router.get("/provider", authenticateToken, providerInboxHandler);
+
 
 module.exports = router;
