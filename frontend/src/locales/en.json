@@ -329,6 +329,7 @@
   },
 
   "stats": {
+    "level": "Level",
     "tier": "Tier",
     "rating": "Rating",
     "bonus_progress": "Bonus progress",
@@ -421,3 +422,4 @@
     "save_error": "Failed to save review"
   }
 }
+
