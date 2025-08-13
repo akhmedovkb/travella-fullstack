@@ -444,68 +444,94 @@ const updateServiceImagesOnly = async (req, res) => {
 const getProviderStats = async (req, res) => {
   try {
     const providerId = req.user?.id;
-    if (!providerId) {
-      return res.status(401).json({ message: "unauthorized" });
-    }
+    if (!providerId) return res.status(401).json({ message: "unauthorized" });
 
-    // Универсальные помощники, чтобы не падать, если таблицы/статусы отличаются
-    const safeCount = async (sql, params = []) => {
-      try {
-        const r = await pool.query(sql, params);
-        const v = r.rows?.[0]?.count ?? r.rows?.[0]?.c ?? 0;
-        return Number(v) || 0;
-      } catch (e) {
-        // логируем, но не валим весь ответ
-        console.warn("getProviderStats count error:", e.message);
-        return 0;
+    const safeCount = async (sqls, params = []) => {
+      // sqls: массив альтернатив под разные названия колонок
+      for (const sql of sqls) {
+        try {
+          const r = await pool.query(sql, params);
+          const v = r.rows?.[0]?.count ?? r.rows?.[0]?.c ?? 0;
+          return Number(v) || 0;
+        } catch (e) {
+          // пробуем следующую альтернативу
+        }
       }
+      return 0;
     };
 
-    // Запросы (requests)
-    const requestsTotal = await safeCount(
+    // requests
+    const requestsTotal = await safeCount([
       "SELECT COUNT(*) FROM requests WHERE provider_id = $1",
-      [providerId]
-    );
-    const requestsActive = await safeCount(
+      `SELECT COUNT(*) FROM requests WHERE "providerId" = $1`,
+    ], [providerId]);
+
+    const requestsActive = await safeCount([
       `SELECT COUNT(*) FROM requests
          WHERE provider_id = $1
            AND status IN ('new','pending','open','active','accepted','in_progress')`,
-      [providerId]
-    );
+      `SELECT COUNT(*) FROM requests
+         WHERE "providerId" = $1
+           AND status IN ('new','pending','open','active','accepted','in_progress')`,
+    ], [providerId]);
 
-    // Бронирования (bookings)
-    const bookingsTotal = await safeCount(
+    // bookings
+    const bookingsTotal = await safeCount([
       "SELECT COUNT(*) FROM bookings WHERE provider_id = $1",
-      [providerId]
-    );
-    const completed = await safeCount(
+      `SELECT COUNT(*) FROM bookings WHERE "providerId" = $1`,
+    ], [providerId]);
+
+    const completed = await safeCount([
       `SELECT COUNT(*) FROM bookings
          WHERE provider_id = $1 AND status IN ('completed','confirmed','done')`,
-      [providerId]
-    );
-    const cancelled = await safeCount(
+      `SELECT COUNT(*) FROM bookings
+         WHERE "providerId" = $1 AND status IN ('completed','confirmed','done')`,
+    ], [providerId]);
+
+    const cancelled = await safeCount([
       `SELECT COUNT(*) FROM bookings
          WHERE provider_id = $1 AND status IN ('cancelled','rejected','canceled')`,
-      [providerId]
-    );
+      `SELECT COUNT(*) FROM bookings
+         WHERE "providerId" = $1 AND status IN ('cancelled','rejected','canceled')`,
+    ], [providerId]);
 
-    // Рейтинг/уровень — пробуем взять из providers, иначе дефолт
-    let rating = 0;
-    let tier = "Bronze";
+    // Рейтинг провайдера — средняя по отзывам на его услуги
+    // находим id всех его услуг по двум вариантам колонки
+    let serviceIds = [];
     try {
-      const r = await pool.query(
-        "SELECT rating, tier FROM providers WHERE id = $1",
-        [providerId]
-      );
-      rating = Number(r.rows?.[0]?.rating) || 3.0;
-      tier = r.rows?.[0]?.tier || "Bronze";
-    } catch (e) {
-      console.warn("getProviderStats rating error:", e.message);
+      const r1 = await pool.query(`SELECT id FROM services WHERE provider_id = $1`, [providerId]);
+      serviceIds = r1.rows.map(x => x.id);
+    } catch {}
+    if (!serviceIds.length) {
+      try {
+        const r2 = await pool.query(`SELECT id FROM services WHERE "providerId" = $1`, [providerId]);
+        serviceIds = r2.rows.map(x => x.id);
+      } catch {}
     }
 
+    let rating = 0, reviews_count = 0;
+    if (serviceIds.length) {
+      const agg = await pool.query(
+        `SELECT COALESCE(AVG(rating),0)::float AS avg, COUNT(*)::int AS count
+           FROM reviews
+          WHERE type='service' AND service_id = ANY($1)`,
+        [serviceIds]
+      );
+      rating = Number(agg.rows?.[0]?.avg || 0);
+      reviews_count = Number(agg.rows?.[0]?.count || 0);
+    }
+
+    // tier (если нужен) — читаем из providers, иначе Bronze
+    let tier = "Bronze";
+    try {
+      const r = await pool.query(`SELECT tier FROM providers WHERE id=$1`, [providerId]);
+      tier = r.rows?.[0]?.tier || "Bronze";
+    } catch {}
+
     res.json({
-      rating,
       tier,
+      rating,
+      reviews_count,
       requests_total: requestsTotal,
       requests_active: requestsActive,
       bookings_total: bookingsTotal,
@@ -517,7 +543,6 @@ const getProviderStats = async (req, res) => {
     res.status(500).json({ message: "server_error" });
   }
 };
-
 
 
 module.exports = {
