@@ -110,7 +110,8 @@ router.get("/provider/inbox", authenticateToken, async (req, res) => {
           created_at: r.created_at,
           status: r.status || "new",
           note: r.note || null, // показываем комментарий
-          service: svc ? { id: svc.id, title: svc.title || svc.name || "Service" } : null,
+          service: svc ? { id: svc.id, title: svc.title || svc.name || "Service" } : { id: r.service_id, title: r.service_title || "Service" },
+
           client: cli
             ? {
                 id: cli.id,
