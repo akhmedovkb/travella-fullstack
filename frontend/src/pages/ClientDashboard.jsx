@@ -56,7 +56,7 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   });
 }
 
-/* ===== NEW: tiny helpers for price formatting (используются в избранном) ===== */
+/* ===== helpers for price formatting (используются в избранном) ===== */
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -203,10 +203,24 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
             {pageItems.map((it) => {
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
-              const title = s.title || s.name || t("common.service", { defaultValue: "Услуга" });
-              const image = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
 
-              // NEW: аккуратный вывод цены (если есть)
+              // название: берём из service, затем из самого элемента
+              const title =
+                s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
+
+              // картинка: пытаемся найти любой доступный источник
+              const image =
+                (Array.isArray(s.images) && s.images[0]) ||
+                (Array.isArray(it.images) && it.images[0]) ||
+                s.cover ||
+                s.cover_url ||
+                s.image ||
+                it.cover ||
+                it.cover_url ||
+                it.image ||
+                null;
+
+              // цена (если есть)
               const details = s.details || {};
               const price = firstNonEmpty(details.netPrice, s.price, it.price);
               const prettyPrice = fmtPrice(price);
@@ -227,18 +241,30 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* Heart: красное, так как элемент уже в избранном */}
-                    <button
-                      onClick={() => onRemove?.(it.id)}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
-                      title={t("favorites.remove_title", { defaultValue: "Удалить из Избранного" })}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-                      </svg>
-                    </button>
+                    {/* Красное сердечко + собственный тултип (как на карточке маркетплейса) */}
+                    <div className="absolute top-2 right-2 z-20">
+                      <div className="relative group/heart">
+                        <button
+                          onClick={() => onRemove?.(it.id)}
+                          className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
+                          aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
+                          </svg>
+                        </button>
 
-                    {/* Тёмная «стекляшка» с названием и ценой */}
+                        {/* тултип */}
+                        <div className="absolute -top-2 right-8 -translate-y-full opacity-0 group-hover/heart:opacity-100 transition-opacity pointer-events-none">
+                          <div className="relative bg-black/80 text-white text-xs px-2 py-1 rounded-md shadow backdrop-blur-md">
+                            {t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+                            <div className="absolute -bottom-1 right-2 w-2 h-2 bg-black/80 rotate-45" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* стеклянная плашка снизу при ховере */}
                     <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                         <div className="font-semibold line-clamp-2">{title}</div>
@@ -262,6 +288,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                         <span className="font-semibold">{prettyPrice}</span>
                       </div>
                     )}
+
                     <div className="mt-auto flex gap-2 pt-3">
                       {serviceId && (
                         <>
@@ -279,13 +306,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => onRemove?.(it.id)}
-                        className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
-                        title={t("actions.delete", { defaultValue: "Удалить" })}
-                      >
-                        {t("actions.delete", { defaultValue: "Удалить" })}
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -340,7 +360,7 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarBase64, setAvatarBase64] = useState(null); // data URL for UI
+  const [avatarBase64, setAvatarBase64] = useState(null);
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
 
@@ -547,7 +567,7 @@ export default function ClientDashboard() {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
       setFavorites((prev) => prev.filter((x) => x.id !== itemId));
-      setMessage(t("favorites.removed_cap", { defaultValue: "Удалено из Избранного" }));
+      setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
     } catch {
       setError(t("errors.favorite_remove", { defaultValue: "Не удалось удалить из избранного" }));
     }
@@ -628,7 +648,7 @@ export default function ClientDashboard() {
       await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
       closeBooking();
       setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" }));
-      setActiveTab("bookings"); // триггерит загрузку бронирований
+      setActiveTab("bookings");
       try {
         const data = await apiGet("/api/bookings/my");
         setBookings(Array.isArray(data) ? data : data?.items || []);
