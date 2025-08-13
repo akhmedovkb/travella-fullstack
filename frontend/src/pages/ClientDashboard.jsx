@@ -95,7 +95,7 @@ function renderTelegram(value) {
 function TooltipPortal({ visible, x, y, width, children }) {
   if (!visible) return null;
   return createPortal(
-    <div className="fixed z-10 pointer-events-none" style={{ left: x, top: y, width }}>{children}</div>,
+    <div className="fixed z-10 pointer-events-none" style={{ left: x, top: y, width, opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(-4px)", transition: "opacity 120ms ease, transform 120ms ease" }}>{children}</div>,
     document.body
   );
 }
@@ -327,7 +327,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               return (
                 <div key={it.id} className="group relative w-full bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
                   <div
-                    className="aspect-[16/10] bg-gray-100 relative"
+                    className="aspect-[4/3] bg-gray-100 relative"
                     ref={imgRef}
                     onMouseEnter={() => { computePos(); setTipOpen(true); }}
                     onMouseMove={computePos}
@@ -373,7 +373,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
 
                     {/* стеклянная подсказка (портал) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
-                      <div className="pointer-events-none select-none rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
+                      <div className="pointer-events-none select-none rounded-2xl bg-gradient-to-b from-black/70 to-black/40 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
                         {hotel && (<div><span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span><span className="font-medium">{hotel}</span></div>)}
                         {accommodation && (<div><span className="opacity-80">{t("accommodation", { defaultValue: "Размещение" })}: </span><span className="font-medium">{accommodation}</span></div>)}
