@@ -418,6 +418,19 @@
     "placeholder": "Tajribaning qisqacha tavsifi",
     "send": "Yuborish",
     "save_error": "Sharhni saqlab bo‘lmadi"
+  },
+
+  {
+  "actions": {
+    "cancel": "Bekor qilish",
+    "send": "Yuborish"
+  },
+  "requests": {
+    "note_label": "So‘rov uchun izoh (ixtiyoriy):",
+    "note_placeholder": "Masalan: sanalar, guruh tarkibi, istaklar"
   }
 }
+
+}
+
 
