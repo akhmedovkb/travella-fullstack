@@ -119,6 +119,8 @@
   },
   "comment": "Izoh",
   "common": {
+     "find": "Qidirish",
+    "loading": "Yuklanmoqda…",
     "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
     "comment": "Izoh",
     "amount": "Summasi",
@@ -438,10 +440,6 @@
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza yordami",
 
-  "common": {
-    "find": "Qidirish",
-    "loading": "Yuklanmoqda…"
-  },
   "marketplace": {
     "supplier": "Ta’minotchi",
     "phone": "Telefon",
@@ -475,6 +473,7 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
 
 
