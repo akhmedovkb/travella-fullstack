@@ -430,9 +430,29 @@
   "requests": {
     "note_label": "Comment (optional):",
     "note_placeholder": "E.g. dates, party size, special wishes"
+  },
+
+  "actions": {
+    "quick_request": "Quick request"
+  },
+  "marketplace": {
+    "reviews": "Service reviews",
+    "no_reviews": "No reviews yet.",
+    "time_left": "Time left",
+    "time_over": "Expired"
+  },
+  "favorites": {
+    "add": "Add to favorites",
+    "remove": "Remove from favorites"
+  },
+  "common": {
+    "find": "Find",
+    "no_results": "No results",
+    "loading_error": "Failed to load data"
   }
 
 }
+
 
 
 
