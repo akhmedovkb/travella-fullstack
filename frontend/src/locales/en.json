@@ -4,7 +4,7 @@
   "actions": {
     "quick_request": "Quick request",
     "cancel": "Cancel",
-    "send": "SEND"
+    "send": "SEND",
     "cancel": "Cancel",
     "quick_request": "Quick request"
   },
@@ -478,6 +478,7 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
 
 
 
