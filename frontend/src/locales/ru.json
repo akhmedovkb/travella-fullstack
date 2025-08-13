@@ -87,7 +87,7 @@
     "select": "Выберите вариант",
     "bb": "Только завтрак",
     "hb": "Завтрак и ужин",
-    "fb": "Полный пансион",
+    "fb": "Полный псион",
     "ai": "Всё включено",
     "uai": "Ультра всё включено",
     "halal": "Халяль"
@@ -208,10 +208,14 @@
     "search": "Найти",
     "search_in": "Поиск по {{category}}:",
     "location_placeholder": "Внесите локацию ...",
+    "search_placeholder": "Внесите локацию ...",
     "searching": "Идет поиск...",
     "results": "Результаты поиска",
     "price": "Цена",
-    "propose_price": "Предложить цену"
+    "propose_price": "Предложить цену",
+    "supplier": "Поставщик",
+    "phone": "Телефон",
+    "telegram": "Телеграм"
   },
 
   "country_names": {
@@ -328,7 +332,8 @@
 
   "common": {
     "loading": "Загрузка…",
-    "backToDashboard": "в Личный кабинет"
+    "backToDashboard": "в Личный кабинет",
+    "find": "Найти"
   },
 
   "my_requests": "Мои запросы",
@@ -344,18 +349,24 @@
     "empty_subtitle": "Добавляйте интересные услуги в избранное и возвращайтесь позже."
   },
 
-  "tabs.my_requests": "Мои запросы",
-  "tabs.my_bookings": "Мои бронирования",
-  "tabs.favorites": "Избранное",
+  "tabs": {
+    "my_requests": "Мои запросы",
+    "my_bookings": "Мои бронирования",
+    "favorites": "Избранное"
+  },
 
-  "actions.upload_photo": "Загрузить фото",
-  "actions.change_photo": "Сменить фото",
-  "actions.delete_photo": "Удалить фото",
-  "actions.save_profile": "Сохранить профиль",
-  "actions.change": "Сменить",
-  "actions.logout": "Выйти",
-  "actions.quick_request": "Быстрый запрос",
-  "actions.delete": "Удалить",
+  "actions": {
+    "upload_photo": "Загрузить фото",
+    "change_photo": "Сменить фото",
+    "delete_photo": "Удалить фото",
+    "save_profile": "Сохранить профиль",
+    "change": "Сменить",
+    "logout": "Выйти",
+    "quick_request": "Быстрый запрос",
+    "delete": "Удалить",
+    "cancel": "Отмена",
+    "send": "Отправить"
+  },
 
   "stats": {
     "level": "Уровень",
@@ -386,7 +397,9 @@
     "sent": "Запрос отправлен",
     "error": "Не удалось отправить запрос",
     "note_prompt": "Комментарий к запросу (необязательно):",
-    "empty": "Пока нет запросов."
+    "empty": "Пока нет запросов.",
+    "note_label": "Комментарий к запросу (необязательно):",
+    "note_placeholder": "Например: даты, состав, пожелания"
   },
 
   "service_images": "Фото услуги",
@@ -446,21 +459,5 @@
     "placeholder": "Коротко опишите опыт",
     "send": "Отправить",
     "save_error": "Не удалось сохранить отзыв"
-  },
-
-
-  "actions": {
-    "cancel": "Отмена",
-    "send": "Отправить"
-  },
-  "requests": {
-    "note_label": "Комментарий к запросу (необязательно):",
-    "note_placeholder": "Например: даты, состав, пожелания"
   }
-
-
 }
-
-
-
-
