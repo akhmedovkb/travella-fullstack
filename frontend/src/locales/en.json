@@ -201,7 +201,11 @@
     "no_image": "No image",
     "remove_error": "Failed to remove from favorites",
     "remove_from": "Remove from favorites",
-    "removed": "Removed from favorites"
+    "removed": "Removed from favorites",
+    "add": "Add to favorites",
+    "remove": "Remove from favorites",
+    "added_toast": "Added to favorites",
+    "removed_toast": "Removed from favorites"
   },
   "file_chosen": "Files chosen",
   "fill_all_fields": "Please fill in all fields and select dates",
@@ -461,12 +465,7 @@
     "reviews": "Service reviews",
     "search_placeholder": "Search services, countries, cities…"
   },
-  "favorites": {
-    "add": "Add to favorites",
-    "remove": "Remove from favorites",
-    "added_toast": "Added to favorites",
-    "removed_toast": "Removed from favorites"
-  },
+  
   "tooltips": {
     "favorite_add": "Add to favorites",
     "favorite_remove": "Remove from favorites"
@@ -475,6 +474,7 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
 
 
 
