@@ -1,3 +1,4 @@
+// frontend/src/components/QuickRequestModal.jsx
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,6 @@ export default function QuickRequestModal({ open, onClose, onSubmit }) {
   const noteRef = useRef(null);
   const boxRef = useRef(null);
 
-  // safe translate (чтобы не показывать ключи)
   const tt = (k, def) => {
     const v = t(k);
     return v === k ? def : v;
