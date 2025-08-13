@@ -2494,65 +2494,10 @@ useEffect(() => {
           )}
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (E2E) ===== */}
-          <div className="mt-8">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">Входящие запросы</h3>
-              <button
-                onClick={refreshInbox}
-                className="text-sm text-orange-600 underline"
-                disabled={loadingInbox}
-              >
-                Обновить
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-3">
-              {requestsInbox.length === 0 && (
-                <div className="text-sm text-gray-500">Запросов нет.</div>
-              )}
-
-              {requestsInbox.map((r) => (
-                <div key={r.id} className="border rounded-lg p-3">
-                  <div className="text-sm">
-                    <div className="font-medium">
-                      #{r.id} • service:{r.service_id} • {r.status}
-                    </div>
-                    {r.note && <div>Заметка: {r.note}</div>}
-                  </div>
-
-                  {/* существующий оффер */}
-                  {r.proposal && (
-                    <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-sm">
-                      <div className="font-medium mb-1">Отправлен оффер</div>
-                      <div>Цена: {r.proposal.price} {r.proposal.currency}</div>
-                      {r.proposal.hotel && <div>Отель: {r.proposal.hotel}</div>}
-                      {r.proposal.room && <div>Размещение: {r.proposal.room}</div>}
-                      {r.proposal.terms && <div>Условия: {r.proposal.terms}</div>}
-                      {r.proposal.message && <div>Сообщение: {r.proposal.message}</div>}
-                    </div>
-                  )}
-
-                  {/* форма оффера */}
-                  
-                    <section className="mt-6">
-                      <ProviderInboxList showHeader={false} compact />
-                    </section>
-                  
-
-                  <div className="mt-2">
-                    <button
-                      onClick={() => sendProposal(r.id)}
-                      className="bg-orange-500 text-white px-3 py-1 rounded"
-                      disabled={loadingInbox}
-                    >
-                      Отправить оффер
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+          <section className="mt-6">
+            <ProviderInboxList showHeader={false} compact />
+          </section>
+          
           {/* ===== МОИ БРОНИ (E2E) ===== */}
           <div className="mt-8">
             <h3 className="text-xl font-semibold mb-3">Мои брони</h3>
