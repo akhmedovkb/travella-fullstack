@@ -64,6 +64,10 @@ app.use("/api/notifications", notificationsRoutes);
 const wishlistRoutes = require("./routes/wishlistRoutes");
 app.use("/api/wishlist", wishlistRoutes);
 
+// Reviews (отзывы)
+const reviewRoutes = require("./routes/reviewRoutes");
+app.use("/api/reviews", reviewRoutes);
+
 /** Debug */
 const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
