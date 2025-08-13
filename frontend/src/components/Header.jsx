@@ -121,7 +121,7 @@ export default function Header() {
             </Link>
 
             <Link
-              to="/client/dashboard?tab=fav"
+              to="/client/dashboard?tab=favorites"
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
               title={t("client.header.favorites", "Избранное")}
             >
