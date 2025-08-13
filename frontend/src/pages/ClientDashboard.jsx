@@ -307,6 +307,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 flatTg
               );
               const supplierTg = renderTelegram(supplierTgRaw);
+              const expireAt = resolveExpireAt(svc);
+              const baseNow = (typeof now === 'number' ? now : Date.now());
+              const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
+              const hasTimer = !!expireAt;
+              const timerText = hasTimer ? formatLeft(leftMs) : null;
+
 
               // подсказка (портал) — чтобы «выходила» за карточку
               const imgRef = useRef(null);
@@ -335,7 +341,15 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* Сердечко (красное), ховер-текст и удаление */}
+                    {hasTimer && (
+                      <span
+                        className={`absolute top-2 left-2 z-20 pointer-events-none px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
+                        title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
+                      >
+                        {timerText}
+                      </span>
+                    )}
+{/* Сердечко (красное), ховер-текст и удаление */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -913,4 +927,41 @@ export default function ClientDashboard() {
       )}
     </div>
   );
+}
+
+/* ---------- срок действия / обратный счёт ---------- */
+function resolveExpireAt(service) {
+  const s = service || {};
+  const d = s.details || {};
+  const cand = [
+    s.expires_at, s.expire_at, s.expireAt,
+    d.expires_at, d.expire_at, d.expiresAt,
+    d.expiration, d.expiration_at, d.expirationAt,
+    d.expiration_ts, d.expirationTs,
+  ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+  if (!cand) {
+    const ttl = d.ttl_hours || d.ttlHours || s.ttl_hours || s.ttlHours;
+    if (ttl) {
+      let ts = null;
+      if (d.created_at || s.created_at) {
+        const created = Date.parse(d.created_at || s.created_at);
+        if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
+      }
+      return ts;
+    }
+    return null;
+  }
+  const ts = Number(cand) || Date.parse(cand);
+  return Number.isFinite(ts) ? ts : null;
+}
+function formatLeft(ms) {
+  if (ms <= 0) return "00:00:00";
+  const total = Math.floor(ms / 1000);
+  const dd = Math.floor(total / 86400);
+  const hh = Math.floor((total % 86400) / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  if (dd > 0) return `${dd}д ${pad(hh)}:${pad(mm)}`;
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
