@@ -27,48 +27,6 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
-function buildDates(d = {}) {
-  const hotelIn =
-    d.hotel_check_in ||
-    d.checkIn ||
-    d.startDate ||
-    d.start_flight_date ||
-    d.startFlightDate;
-  const hotelOut =
-    d.hotel_check_out ||
-    d.checkOut ||
-    d.returnDate ||
-    d.end_flight_date ||
-    d.endFlightDate;
-  if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
-  if (hotelIn) return String(hotelIn);
-  if (hotelOut) return String(hotelOut);
-  return null;
-}
-function matchesLocation(it, q) {
-  if (!q) return true;
-  const svc = it?.service || it;
-  const d = svc.details || {};
-  const hay = [
-    svc.location,
-    svc.city,
-    svc.direction_to,
-    svc.directionTo,
-    d.direction_to,
-    d.directionTo,
-    d.direction_to_city,
-    d.directionToCity,
-    d.location,
-    d.direction,
-    d.directionTo || d.direction_to,
-    d.directionFrom || d.direction_from,
-    d.eventName,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return hay.includes(String(q).toLowerCase());
-}
 function toast(txt) {
   const el = document.createElement("div");
   el.textContent = txt;
@@ -223,6 +181,86 @@ async function fetchProviderProfile(providerId) {
   return profile;
 }
 
+/* ===== Универсальный парсер полей услуги ===== */
+function _firstNonEmpty(...args) {
+  for (const v of args)
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  return null;
+}
+function _maybeParse(obj) {
+  if (!obj) return null;
+  if (typeof obj === "string") {
+    try {
+      return JSON.parse(obj);
+    } catch {
+      return null;
+    }
+  }
+  return typeof obj === "object" ? obj : null;
+}
+function _mergeDetails(svc, it) {
+  const cands = [
+    svc?.details, it?.details, svc?.detail, it?.detail,
+    svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
+  ].map(_maybeParse).filter(Boolean);
+  // слева направо: приоритет details, затем meta/payload и т.д.
+  return Object.assign({}, ...cands);
+}
+function extractServiceFields(item) {
+  const svc = item?.service || item || {};
+
+  const details = _mergeDetails(svc, item);
+  const bag = { ...details, ...svc, ...item };
+
+  // Заголовок
+  const title = _firstNonEmpty(
+    svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
+  );
+
+  // Цена
+  const rawPrice = _firstNonEmpty(
+    details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice,
+    svc.netPrice, svc.price, item?.price
+  );
+  const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
+
+  // Отель / Размещение
+  const hotel = _firstNonEmpty(
+    details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
+    svc.hotel, svc.hotel_name, svc.refused_hotel_name
+  );
+  const accommodation = _firstNonEmpty(
+    details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category,
+    svc.accommodation, svc.room, svc.room_type
+  );
+
+  // Даты
+  const left = _firstNonEmpty(
+    bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
+  );
+  const right = _firstNonEmpty(
+    bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
+  );
+  const dates = left && right ? `${left} → ${right}` : left || right || null;
+
+  // Провайдер inline + id
+  const inlineProvider = _firstNonEmpty(
+    svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
+    item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
+    details?.provider
+  ) || {};
+
+  const providerId = _firstNonEmpty(
+    svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
+    svc.owner_id, svc.agency_id
+  );
+
+  // Статус
+  const status = _firstNonEmpty(svc.status, item.status, details?.status);
+
+  return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, status };
+}
+
 /* ===================== страница ===================== */
 
 export default function Marketplace() {
@@ -265,7 +303,19 @@ export default function Marketplace() {
       }
 
       if (filters.location) {
-        list = list.filter((it) => matchesLocation(it, filters.location));
+        list = list.filter((it) => {
+          const s = it?.service || it;
+          const d = s.details || {};
+          const hay = [
+            s.location, s.city,
+            s.direction_to, s.directionTo,
+            d.direction_to, d.directionTo,
+            d.direction_to_city, d.directionToCity,
+            d.location, d.direction, d.directionTo, d.direction_from, d.directionFrom,
+            d.eventName
+          ].filter(Boolean).join(" ").toLowerCase();
+          return hay.includes(String(filters.location).toLowerCase());
+        });
       }
 
       setItems(list);
@@ -347,55 +397,26 @@ export default function Marketplace() {
   ];
 
   const Card = ({ it, now }) => {
-    const svc = it?.service || it;
-    const id = svc.id ?? it.id;
-    const details = svc.details || it.details || {};
-    const title =
-      svc.title || svc.name || details.eventName || t("title") || "Service";
+    // универсальный разбор полей
+    const {
+      svc,
+      title,
+      hotel,
+      accommodation,
+      dates,
+      prettyPrice,
+      inlineProvider,
+      providerId,
+      status: statusRaw,
+    } = extractServiceFields(it);
 
+    const id = svc.id ?? it.id;
+
+    // картинка
     const images = Array.isArray(svc.images) ? svc.images : [];
     const image = images[0] || svc.cover || svc.image || null;
 
-    const price = firstNonEmpty(details.netPrice, svc.price, it.price);
-    const prettyPrice = fmtPrice(price);
-
-    const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
-    const accommodation = firstNonEmpty(
-      details.accommodation,
-      details.accommodationCategory
-    );
-    const dates = buildDates(details);
-
-    // base provider from payload
-    const inlineProv =
-      svc.provider ||
-      svc.provider_profile ||
-      svc.supplier ||
-      svc.vendor ||
-      svc.agency ||
-      svc.owner ||
-      it.provider ||
-      it.provider_profile ||
-      it.supplier ||
-      it.vendor ||
-      it.agency ||
-      it.owner ||
-      details.provider ||
-      {};
-
-    // provider id candidates
-    const providerId =
-      firstNonEmpty(
-        svc.provider_id,
-        svc.providerId,
-        it.provider_id,
-        it.providerId,
-        details.provider_id,
-        svc.owner_id,
-        svc.agency_id
-      ) || null;
-
-    // fetched provider state
+    /* --------- Поставщик: inline + подгрузка по id --------- */
     const [provider, setProvider] = useState(null);
     useEffect(() => {
       let alive = true;
@@ -409,22 +430,15 @@ export default function Marketplace() {
       };
     }, [providerId]);
 
-    const prov = { ...(inlineProv || {}), ...(provider || {}) };
-
-    const supplierName = firstNonEmpty(
+    const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+    const supplierName = _firstNonEmpty(
       prov?.name,
       prov?.title,
       prov?.display_name,
       prov?.company_name,
-      prov?.brand,
-      svc.provider_name,
-      it.provider_name,
-      details.provider_name,
-      svc.owner_name,
-      svc.agency_name
+      prov?.brand
     );
-
-    const supplierPhone = firstNonEmpty(
+    const supplierPhone = _firstNonEmpty(
       prov?.phone,
       prov?.phone_number,
       prov?.phoneNumber,
@@ -434,33 +448,20 @@ export default function Marketplace() {
       prov?.whatsApp,
       prov?.phones?.[0],
       prov?.contacts?.phone,
-      prov?.contact_phone,
-      svc.provider_phone,
-      it.provider_phone,
-      details.provider_phone
+      prov?.contact_phone
     );
-
-    const supplierTgRaw = firstNonEmpty(
+    const supplierTgRaw = _firstNonEmpty(
       prov?.telegram,
       prov?.tg,
       prov?.telegram_username,
       prov?.telegram_link,
-      prov?.tg_link,
-      prov?.socials?.telegram,
       prov?.contacts?.telegram,
-      prov?.social,
-      prov?.social_link,
-      prov?.links?.telegram,
-      details.provider_telegram,
-      svc.provider_telegram,
-      it.provider_telegram,
-      svc.telegram,
-      details.telegram
+      prov?.socials?.telegram
     );
     const supplierTg = renderTelegram(supplierTgRaw);
+    /* ------------------------------------------------------- */
 
-    const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
-    const statusRaw = svc.status ?? it.status ?? details.status ?? null;
+    const rating = Number(svc.rating ?? it.rating ?? 0);
     // draft скрыта
     const status =
       typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft"
@@ -468,7 +469,7 @@ export default function Marketplace() {
         : statusRaw;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
-    const isFav = favIds.has(id);
+    const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
 
     const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
@@ -504,12 +505,10 @@ export default function Marketplace() {
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title} className="w-full h-full object-cover" />
+            <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-sm">
-                {t("favorites.no_image") || "Нет изображения"}
-              </span>
+              <span className="text-sm">Нет изображения</span>
             </div>
           )}
 
@@ -536,7 +535,7 @@ export default function Marketplace() {
                 className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
                 onMouseEnter={openReviews}
                 onMouseLeave={closeReviews}
-                title={t("reviews.title_service") || "Отзывы об услуге"}
+                title="Отзывы об услуге"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
@@ -552,11 +551,7 @@ export default function Marketplace() {
                 e.stopPropagation();
                 toggleFavorite(id);
               }}
-              title={
-                isFav
-                  ? t("favorites.removed") || "Удалить из избранного"
-                  : t("favorites.added") || "В избранное"
-              }
+              title={isFav ? "Удалить из избранного" : "В избранное"}
             >
               <svg
                 width="18"
@@ -578,29 +573,25 @@ export default function Marketplace() {
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (
                   <div>
-                    <span className="opacity-80">{t("hotel") || "Отель"}: </span>
+                    <span className="opacity-80">Отель: </span>
                     <span className="font-medium">{hotel}</span>
                   </div>
                 )}
                 {accommodation && (
                   <div>
-                    <span className="opacity-80">
-                      {t("accommodation") || "Размещение"}:{" "}
-                    </span>
+                    <span className="opacity-80">Размещение: </span>
                     <span className="font-medium">{accommodation}</span>
                   </div>
                 )}
                 {dates && (
                   <div>
-                    <span className="opacity-80">{t("date") || "Дата"}: </span>
+                    <span className="opacity-80">Дата: </span>
                     <span className="font-medium">{dates}</span>
                   </div>
                 )}
                 {prettyPrice && (
                   <div>
-                    <span className="opacity-80">
-                      {t("marketplace.price") || "Цена"}:{" "}
-                    </span>
+                    <span className="opacity-80">Цена: </span>
                     <span className="font-semibold">{prettyPrice}</span>
                   </div>
                 )}
@@ -612,16 +603,14 @@ export default function Marketplace() {
         {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">
-              {(t("reviews.title_service") || "Отзывы об услуге").toUpperCase()}
-            </div>
+            <div className="mb-1 font-semibold">ОТЗЫВЫ ОБ УСЛУГЕ</div>
             <div className="flex items-center gap-2">
               <Stars value={revData.avg} />
               <span className="opacity-80">({revData.count || 0})</span>
             </div>
             <div className="mt-1">
               {!revData.items?.length ? (
-                <span className="opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</span>
+                <span className="opacity-80">Пока нет отзывов.</span>
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
@@ -640,8 +629,7 @@ export default function Marketplace() {
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
             <div className="mt-1 text-sm">
-              {t("marketplace.price") || "Цена"}:{" "}
-              <span className="font-semibold">{prettyPrice}</span>
+              Цена: <span className="font-semibold">{prettyPrice}</span>
             </div>
           )}
 
@@ -650,21 +638,16 @@ export default function Marketplace() {
             <div className="mt-2 text-sm space-y-0.5">
               {supplierName && (
                 <div>
-                  <span className="text-gray-500">
-                    {t("supplier", { defaultValue: "Поставщик" })}:{" "}
-                  </span>
+                  <span className="text-gray-500">Поставщик: </span>
                   <span className="font-medium">{supplierName}</span>
                 </div>
               )}
               {supplierPhone && (
                 <div>
-                  <span className="text-gray-500">
-                    {t("phone", { defaultValue: "Телефон" })}:{" "}
-                  </span>
+                  <span className="text-gray-500">Телефон: </span>
                   <a
                     href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
                     className="underline"
-                    onClick={(e) => e.stopPropagation()}
                   >
                     {supplierPhone}
                   </a>
@@ -672,16 +655,13 @@ export default function Marketplace() {
               )}
               {supplierTg?.label && (
                 <div>
-                  <span className="text-gray-500">
-                    {t("telegram", { defaultValue: "Телеграм" })}:{" "}
-                  </span>
+                  <span className="text-gray-500">Телеграм: </span>
                   {supplierTg.href ? (
                     <a
                       href={supplierTg.href}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       {supplierTg.label}
                     </a>
@@ -699,7 +679,7 @@ export default function Marketplace() {
               onClick={() => handleQuickRequest(id)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
-              {t("actions.quick_request") || "Быстрый запрос"}
+              Быстрый запрос
             </button>
           </div>
         </div>
@@ -714,7 +694,7 @@ export default function Marketplace() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={t("marketplace.location_placeholder") || "Внесите локацию ..."}
+          placeholder="Внесите локацию ..."
           className="flex-1 border rounded-lg px-3 py-2"
         />
         <select
@@ -734,22 +714,16 @@ export default function Marketplace() {
           className="px-5 py-2 rounded-lg bg-gray-900 text-white"
           disabled={loading}
         >
-          {t("marketplace.search") || "Найти"}
+          Найти
         </button>
       </div>
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && (
-          <div className="text-gray-500">
-            {t("marketplace.searching") || "Поиск..."}
-          </div>
-        )}
+        {loading && <div className="text-gray-500">Поиск...</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
         {!loading && !error && !items.length && (
-          <div className="text-gray-500">
-            {t("client.dashboard.noResults") || "Нет результатов"}
-          </div>
+          <div className="text-gray-500">Нет результатов</div>
         )}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
