@@ -71,7 +71,7 @@ function firstNonEmpty(...args) {
     if (v === 0) return 0;
     if (v !== undefined && v !== null && String(v).trim() !== "") return v;
   }
-  return null;
+  ��return null;
 }
 function buildDates(d = {}) {
   const hotelIn =
@@ -121,6 +121,46 @@ function TooltipPortal({ visible, x, y, width, children }) {
     </div>,
     document.body
   );
+}
+
+/* ======== provider fetch (cache + fallbacks) ======== */
+
+const providerCache = new Map();
+
+async function fetchProviderProfile(providerId) {
+  if (!providerId) return null;
+  if (providerCache.has(providerId)) return providerCache.get(providerId);
+
+  const endpoints = [
+    `/api/providers/${providerId}`,
+    `/api/provider/${providerId}`,
+    `/api/suppliers/${providerId}`,
+    `/api/supplier/${providerId}`,
+    `/api/agencies/${providerId}`,
+    `/api/agency/${providerId}`,
+    `/api/companies/${providerId}`,
+    `/api/company/${providerId}`,
+    `/api/users/${providerId}`,
+    `/api/user/${providerId}`,
+  ];
+
+  let profile = null;
+  for (const url of endpoints) {
+    try {
+      const res = await apiGet(url);
+      const obj =
+        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+      if (obj && (obj.id || obj.name || obj.title)) {
+        profile = obj;
+        break;
+      }
+    } catch {
+      /* try next endpoint */
+    }
+  }
+
+  providerCache.set(providerId, profile || null);
+  return profile;
 }
 
 /* ===================== Mini Components ===================== */
@@ -304,8 +344,8 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const dates = buildDates(details);
 
-              /* --------- Поставщик (расширенный сбор полей) --------- */
-              const prov =
+              // inline provider + id
+              const inlineProv =
                 s.provider ||
                 s.provider_profile ||
                 s.supplier ||
@@ -320,6 +360,32 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 it.owner ||
                 details.provider ||
                 {};
+              const providerId =
+                firstNonEmpty(
+                  s.provider_id,
+                  s.providerId,
+                  it.provider_id,
+                  it.providerId,
+                  details.provider_id,
+                  s.owner_id,
+                  s.agency_id
+                ) || null;
+
+              // fetched provider (per-card state)
+              const [provider, setProvider] = useState(null);
+              useEffect(() => {
+                let alive = true;
+                (async () => {
+                  if (!providerId) return;
+                  const p = await fetchProviderProfile(providerId);
+                  if (alive) setProvider(p);
+                })();
+                return () => {
+                  alive = false;
+                };
+              }, [providerId]);
+
+              const prov = { ...(inlineProv || {}), ...(provider || {}) };
 
               const supplierName = firstNonEmpty(
                 prov?.name,
@@ -368,7 +434,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 details.telegram
               );
               const supplierTg = renderTelegram(supplierTgRaw);
-              /* ------------------------------------------------------ */
 
               // подсказка-portal для стекляшки
               const imgRef = useRef(null);
@@ -786,7 +851,7 @@ export default function ClientDashboard() {
   const handleRemoveFavorite = async (itemId) => {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
-    } catch {} // игнор ошибки, потом подрежем список локально
+    } catch {} // игнор ошибки
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
