@@ -267,7 +267,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
         <EmptyFavorites />
       ) : (
         <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
             {pageItems.map((it) => {
               const {
                 svc, title, hotel, accommodation, dates, prettyPrice,
@@ -319,7 +319,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               };
 
               return (
-                <div key={it.id} className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
+                <div key={it.id} className="group relative w-full bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
                   <div
                     className="aspect-[16/10] bg-gray-100 relative"
                     ref={imgRef}
@@ -440,6 +440,14 @@ export default function ClientDashboard() {
   const { t } = useTranslation();
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // ===== minute timer for stable countdown / no flicker =====
+  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMin * 60000;
 
   // Profile
   const [loadingProfile, setLoadingProfile] = useState(true);
