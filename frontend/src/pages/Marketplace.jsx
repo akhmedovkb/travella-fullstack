@@ -10,14 +10,12 @@ function normalizeList(res) {
   if (Array.isArray(res?.data)) return res.data;
   return [];
 }
-
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
   return String(v);
 }
-
 function firstNonEmpty(...args) {
   for (const v of args) {
     if (v === 0) return 0;
@@ -25,17 +23,16 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
-
 function buildDates(d = {}) {
-  const hotelIn = d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
-  const hotelOut = d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
+  const hotelIn =
+    d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
+  const hotelOut =
+    d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
   if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
   if (hotelIn) return String(hotelIn);
   if (hotelOut) return String(hotelOut);
   return null;
 }
-
-/* маленький клиент-сайд фильтр локации */
 function matchesLocation(it, q) {
   if (!q) return true;
   const svc = it?.service || it;
@@ -65,35 +62,50 @@ function matchesLocation(it, q) {
 export default function Marketplace() {
   const { t } = useTranslation();
 
-  // Поисковые фильтры
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const filters = useMemo(
-    () => ({
-      q: q?.trim() || undefined,
-      location: q?.trim() || undefined,
-      category: category || undefined,
-    }),
+    () => ({ q: q?.trim() || undefined, location: q?.trim() || undefined, category: category || undefined }),
     [q, category]
   );
 
-  // Данные
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
 
-  // Избранное — локальный Set для мгновенной реакции
+  // избранное
   const [favIds, setFavIds] = useState(new Set());
 
-  // Простой тост поверх всего
+  // простой тост
   const [toast, setToast] = useState(null);
   const showToast = (msg) => {
     setToast(msg);
-    window.clearTimeout(showToast._t);
-    showToast._t = window.setTimeout(() => setToast(null), 1800);
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => setToast(null), 1800);
   };
 
-  // Загрузка
+  // кэш отзывов по услуге
+  const [reviewsCache, setReviewsCache] = useState({});
+
+  async function getServiceReviewsCached(serviceId) {
+    if (reviewsCache[serviceId]) return reviewsCache[serviceId];
+    try {
+      const r = await apiGet(`/api/reviews/service/${serviceId}?limit=6`);
+      const data = {
+        count: Number(r?.count || 0),
+        avg: Number(r?.avg || 0),
+        items: Array.isArray(r?.items) ? r.items : [],
+      };
+      setReviewsCache((p) => ({ ...p, [serviceId]: data }));
+      return data;
+    } catch {
+      const data = { count: 0, avg: 0, items: [] };
+      setReviewsCache((p) => ({ ...p, [serviceId]: data }));
+      return data;
+    }
+  }
+
+  // Загрузка листинга
   const search = async (opts = {}) => {
     setLoading(true);
     setError(null);
@@ -101,18 +113,11 @@ export default function Marketplace() {
       const payload = opts?.all ? {} : filters;
       let res = await apiPost("/api/marketplace/search", payload);
       let list = normalizeList(res);
-
-      // Фолбэк: публичные услуги
       if (!list.length && opts?.fallback !== false) {
         res = await apiGet("/api/services/public");
         list = normalizeList(res);
       }
-
-      // Клиентский фильтр по локации
-      if (filters.location) {
-        list = list.filter((it) => matchesLocation(it, filters.location));
-      }
-
+      if (filters.location) list = list.filter((it) => matchesLocation(it, filters.location));
       setItems(list);
     } catch {
       setError(t("common.loading_error") || "Не удалось загрузить данные");
@@ -121,7 +126,6 @@ export default function Marketplace() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     search({ all: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,17 +148,16 @@ export default function Marketplace() {
     }
   };
 
-  // Избранное: безопасно определяем новое состояние по ответу сервера
+  // Избранное
   const toggleFavorite = async (id) => {
     try {
       const res = await apiPost("/api/wishlist/toggle", { itemId: id });
-      // извлекаем новое состояние из разных возможных форматов ответа
       let nextIsFav;
       if (typeof res?.added === "boolean") nextIsFav = res.added;
       else if (typeof res?.isFav === "boolean") nextIsFav = res.isFav;
       else if (res?.action === "added") nextIsFav = true;
       else if (res?.action === "removed") nextIsFav = false;
-      else nextIsFav = !favIds.has(id); // фолбэк: локальный инверт
+      else nextIsFav = !favIds.has(id);
 
       setFavIds((prev) => {
         const next = new Set(prev);
@@ -173,19 +176,31 @@ export default function Marketplace() {
     }
   };
 
-  /* ===================== UI: Селект категорий ===================== */
   const categoryOptions = [
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
-    // провайдеры
     { value: "guide", label: t("marketplace.guide") || "Гид" },
     { value: "transport", label: t("marketplace.transport") || "Транспорт" },
-    // «отказные»
     { value: "refused_tour", label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур" },
     { value: "refused_hotel", label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель" },
     { value: "refused_flight", label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет" },
     { value: "refused_event_ticket", label: t("marketplace.refused_event") || t("category.refused_event_ticket") || "Отказной билет" },
-    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" }
+    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
+
+  /* ======= small star view ======= */
+  const Stars = ({ value = 0 }) => {
+    const n = Math.round(value);
+    return (
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg key={i} width="14" height="14" viewBox="0 0 24 24"
+               className="text-yellow-400" fill={i <= n ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"/>
+          </svg>
+        ))}
+      </div>
+    );
+  };
 
   /* ===================== Card ===================== */
   const Card = ({ it }) => {
@@ -209,6 +224,19 @@ export default function Marketplace() {
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
     const isFav = favIds.has(id);
 
+    // reviews
+    const cached = reviewsCache[id];
+    const [revOpen, setRevOpen] = useState(false);
+    const [rev, setRev] = useState(cached || null);
+
+    const openReviews = async () => {
+      setRevOpen(true);
+      if (!rev) {
+        const data = await getServiceReviewsCached(id);
+        setRev(data);
+      }
+    };
+
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
@@ -220,8 +248,8 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Верх: бейдж + сердечко */}
-          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+          {/* Верх: бейдж + отзывы + сердечко */}
+          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-[10]">
             <div className="flex items-center gap-2">
               {badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
@@ -230,39 +258,95 @@ export default function Marketplace() {
               )}
             </div>
 
-            <button
-              className={`pointer-events-auto p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
-                isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(id);
-              }}
-              title={
-                isFav
-                  ? t("favorites.removed") || "Удалить из избранного"
-                  : t("favorites.added") || "В избранное"
-              }
-              aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill={isFav ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="1.8"
+            <div className="flex items-center gap-2 pointer-events-auto">
+              {/* reviews chip */}
+              <div
+                onMouseEnter={openReviews}
+                onFocus={openReviews}
+                onMouseLeave={() => setRevOpen(false)}
+                className="relative"
               >
-                <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-              </svg>
-            </button>
+                <button
+                  className="p-1.5 rounded-full bg-black/35 hover:bg-black/45 text-white backdrop-blur-md ring-1 ring-white/20"
+                  title={t("reviews.title_service") || "Отзывы об услуге"}
+                  aria-label="Service reviews"
+                >
+                  {/* chat bubble */}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/>
+                  </svg>
+                </button>
+                <span className="absolute -right-1 -top-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-white text-gray-900 shadow">
+                  {Number(rev?.count ?? 0)}
+                </span>
+
+                {/* Popover с отзывами — поверх всех слоёв */}
+                {revOpen && (
+                  <div
+                    className="absolute z-[1100] right-0 mt-2 w-72 rounded-lg bg-black/80 text-white ring-1 ring-white/10 shadow-lg p-3"
+                    onMouseEnter={() => setRevOpen(true)}
+                    onMouseLeave={() => setRevOpen(false)}
+                  >
+                    <div className="text-xs uppercase opacity-80 mb-1">
+                      {t("reviews.title_service") || "Отзывы об услуге"}
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Stars value={rev?.avg || 0} />
+                      <div className="text-xs opacity-80">({Number(rev?.count || 0)})</div>
+                    </div>
+                    {!rev ? (
+                      <div className="text-sm opacity-80">…</div>
+                    ) : rev.items.length ? (
+                      <ul className="space-y-2 max-h-56 overflow-auto pr-1">
+                        {rev.items.map((r) => (
+                          <li key={r.id} className="text-sm">
+                            <div className="flex items-center gap-2">
+                              <Stars value={r.rating} />
+                              <span className="opacity-70 text-xs">
+                                {new Date(r.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {r.text && (
+                              <div className="mt-0.5 line-clamp-2 opacity-95">{r.text}</div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* heart */}
+              <button
+                className={`p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
+                  isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(id);
+                }}
+                title={
+                  isFav
+                    ? t("favorites.removed") || "Удалить из избранного"
+                    : t("favorites.added") || "В избранное"
+                }
+                aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"}
+                     stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
-          {/* Тултип «стеклянный» */}
-          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* НИЖНИЙ ТЁМНЫЙ ОВЕРЛЕЙ («стекляшка») */}
+          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity z-[5]">
             <div className="absolute inset-x-0 bottom-0 p-3">
-              {/* делаем текст чуть темнее и уменьшаем белизну подложки */}
-              <div className="rounded-lg bg-white/8 backdrop-blur-md text-white/95 text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+              <div className="rounded-lg bg-black/55 text-white text-xs sm:text-sm p-3 ring-1 ring-white/10 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (
                   <div>
@@ -293,6 +377,7 @@ export default function Marketplace() {
           </div>
         </div>
 
+        {/* контент карточки */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
@@ -317,16 +402,14 @@ export default function Marketplace() {
   /* ===================== Layout ===================== */
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      {/* Тост */}
+      {/* тост */}
       {toast && (
-        <div className="fixed right-4 top-16 z-[1000]">
-          <div className="bg-white shadow-lg border rounded-lg px-4 py-2 text-sm">
-            {toast}
-          </div>
+        <div className="fixed right-4 top-16 z-[1200]">
+          <div className="bg-white shadow-lg border rounded-lg px-4 py-2 text-sm">{toast}</div>
         </div>
       )}
 
-      {/* Панель поиска */}
+      {/* панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
           value={q}
@@ -345,7 +428,6 @@ export default function Marketplace() {
             </option>
           ))}
         </select>
-
         <button
           onClick={() => search()}
           className="px-5 py-2 rounded-lg bg-gray-900 text-white"
@@ -355,18 +437,12 @@ export default function Marketplace() {
         </button>
       </div>
 
-      {/* Список */}
+      {/* список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && (
-          <div className="text-gray-500">
-            {t("marketplace.searching") || "Поиск..."}
-          </div>
-        )}
+        {loading && <div className="text-gray-500">{t("marketplace.searching") || "Поиск..."}</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
         {!loading && !error && !items.length && (
-          <div className="text-gray-500">
-            {t("client.dashboard.noResults") || "Нет результатов"}
-          </div>
+          <div className="text-gray-500">{t("client.dashboard.noResults") || "Нет результатов"}</div>
         )}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
