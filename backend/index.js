@@ -9,6 +9,7 @@ const app = express();
 /** CORS */
 const allowedOrigins = [
   "https://travella-fullstack.vercel.app",
+  "https://travella-fullstack-8yle5am3l-komil.vercel.app",
   "http://localhost:5173",
 ];
 
