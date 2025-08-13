@@ -124,7 +124,6 @@
     "amount": "Summasi",
     "backToDashboard": "Kabinetga qaytish",
     "booking": "Bron qilish",
-    "comment": "Izoh",
     "created": "Yaratilgan",
     "date": "Sana",
     "loading": "Yuklanmoqda…",
@@ -476,6 +475,7 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
 
 
