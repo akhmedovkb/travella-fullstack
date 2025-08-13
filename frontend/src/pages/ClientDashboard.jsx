@@ -315,7 +315,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const computePos = () => {
                 const r = imgRef.current?.getBoundingClientRect();
                 if (!r) return;
-                setTipPos({ x: r.left + 12, y: r.top - 12, w: Math.max(220, r.width - 24) });
+                setTipPos({ x: r.left + 12, y: r.top - 12, w: Math.max(220, Math.floor(r.width * 0.7)) });
               };
 
               return (
@@ -359,7 +359,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
 
                     {/* стеклянная подсказка (портал) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
-                      <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
+                      <div className="pointer-events-none select-none rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
                         {hotel && (<div><span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span><span className="font-medium">{hotel}</span></div>)}
                         {accommodation && (<div><span className="opacity-80">{t("accommodation", { defaultValue: "Размещение" })}: </span><span className="font-medium">{accommodation}</span></div>)}
