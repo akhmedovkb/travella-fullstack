@@ -172,6 +172,25 @@ function TooltipPortal({ visible, x, y, children }) {
   );
 }
 
+/* --- форматирование Telegram --- */
+function renderTelegram(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null;
+  let label = s;
+
+  if (/^https?:\/\//i.test(s)) {
+    href = s;
+  } else if (s.startsWith("@")) {
+    href = `https://t.me/${s.slice(1)}`;
+    label = s;
+  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
+    href = `https://t.me/${s}`;
+    label = `@${s}`;
+  }
+  return { href, label };
+}
+
 /* ===================== страница ===================== */
 
 export default function Marketplace() {
@@ -330,8 +349,47 @@ export default function Marketplace() {
     );
     const dates = buildDates(details);
 
+    // supplier info
+    const prov =
+      svc.provider ||
+      svc.supplier ||
+      svc.vendor ||
+      it.provider ||
+      it.supplier ||
+      {};
+    const supplierName = firstNonEmpty(
+      prov?.name,
+      svc.provider_name,
+      it.provider_name,
+      details.provider_name
+    );
+    const supplierPhone = firstNonEmpty(
+      prov?.phone,
+      prov?.phone_number,
+      prov?.phones?.[0],
+      prov?.contacts?.phone,
+      svc.provider_phone,
+      it.provider_phone,
+      details.provider_phone
+    );
+    const supplierTgRaw = firstNonEmpty(
+      prov?.telegram,
+      prov?.tg,
+      prov?.socials?.telegram,
+      prov?.contacts?.telegram,
+      prov?.social,
+      prov?.social_link,
+      svc.provider_telegram,
+      details.provider_telegram,
+      it.provider_telegram,
+      svc.telegram,
+      details.telegram
+    );
+    const supplierTg = renderTelegram(supplierTgRaw);
+
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const statusRaw = svc.status ?? it.status ?? details.status ?? null;
+    // draft скрываем
     const status    = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
     const badge     = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
@@ -396,7 +454,7 @@ export default function Marketplace() {
                 </span>
               )}
 
-              {/* Рейтинг/статус — показываем, если таймера нет (чтобы не дублировать) */}
+              {/* Рейтинг/статус — показываем, если таймера нет */}
               {!hasTimer && badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
@@ -411,7 +469,6 @@ export default function Marketplace() {
                 onMouseLeave={closeReviews}
                 title={t("reviews.title_service") || "Отзывы об услуге"}
               >
-                {/* bubble icon */}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
                 </svg>
@@ -446,7 +503,7 @@ export default function Marketplace() {
             </button>
           </div>
 
-          {/* Нижняя стекляшка (тёмная) */}
+          {/* Нижняя стекляшка (подсказка) */}
           <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
@@ -477,6 +534,49 @@ export default function Marketplace() {
                       {t("marketplace.price") || "Цена"}:{" "}
                     </span>
                     <span className="font-semibold">{prettyPrice}</span>
+                  </div>
+                )}
+                {/* supplier — только в подсказке раньше, оставил как есть (можно скрыть по желанию) */}
+                {supplierName && (
+                  <div>
+                    <span className="opacity-80">
+                      {t("supplier", { defaultValue: "Поставщик" })}:{" "}
+                    </span>
+                    <span className="font-medium">{supplierName}</span>
+                  </div>
+                )}
+                {supplierPhone && (
+                  <div>
+                    <span className="opacity-80">
+                      {t("phone", { defaultValue: "Телефон" })}:{" "}
+                    </span>
+                    <a
+                      className="font-medium underline pointer-events-auto"
+                      href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {supplierPhone}
+                    </a>
+                  </div>
+                )}
+                {supplierTg?.label && (
+                  <div>
+                    <span className="opacity-80">
+                      {t("telegram", { defaultValue: "Телеграм" })}:{" "}
+                    </span>
+                    {supplierTg.href ? (
+                      <a
+                        className="font-medium underline pointer-events-auto"
+                        href={supplierTg.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {supplierTg.label}
+                      </a>
+                    ) : (
+                      <span className="font-medium">{supplierTg.label}</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -518,6 +618,50 @@ export default function Marketplace() {
               <span className="font-semibold">{prettyPrice}</span>
             </div>
           )}
+
+          {/* === НОВОЕ: блок с поставщиком в теле карточки под ценой === */}
+          {(supplierName || supplierPhone || supplierTg?.label) && (
+            <div className="mt-2 text-sm space-y-0.5">
+              {supplierName && (
+                <div>
+                  <span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span>
+                  <span className="font-medium">{supplierName}</span>
+                </div>
+              )}
+              {supplierPhone && (
+                <div>
+                  <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
+                  <a
+                    href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                    className="underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {supplierPhone}
+                  </a>
+                </div>
+              )}
+              {supplierTg?.label && (
+                <div>
+                  <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
+                  {supplierTg.href ? (
+                    <a
+                      href={supplierTg.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {supplierTg.label}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{supplierTg.label}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {/* === /НОВОЕ === */}
+
           <div className="mt-auto pt-3">
             <button
               onClick={() => handleQuickRequest(id)}
