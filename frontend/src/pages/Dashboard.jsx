@@ -7,6 +7,8 @@ import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
+import ProviderReviews from "../components/ProviderReviews";
+
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -1009,22 +1011,27 @@ useEffect(() => {
           </div>
           
           {/* Статистика поставщика под двумя колонками */}
-<div className="px-6 mt-6">
-  <ProviderStatsHeader
-  rating={Number(profile?.rating) || 0}
-  stats={{
-    requests_total:  Number(stats?.requests_total)  || 0,
-    requests_active: Number(stats?.requests_active) || 0,
-    bookings_total:  Number(stats?.bookings_total)  || 0,
-    completed:       Number(stats?.completed)       || 0,
-    cancelled:       Number(stats?.cancelled)       || 0,
-    points:          Number(stats?.points) || Number(stats?.completed) || 0, // если API вернёт points — используем его
-  }}
-  bonusTarget={500}
-  t={t}
-/>
-</div>
+          <div className="px-6 mt-6">
+            <ProviderStatsHeader
+              rating={Number(profile?.rating) || 0}
+                stats={{
+                    requests_total:  Number(stats?.requests_total)  || 0,
+                    requests_active: Number(stats?.requests_active) || 0,
+                    bookings_total:  Number(stats?.bookings_total)  || 0,
+                    completed:       Number(stats?.completed)       || 0,
+                    cancelled:       Number(stats?.cancelled)       || 0,
+                    points:          Number(stats?.points) || Number(stats?.completed) || 0, // если API вернёт points — используем его
+                       }}
+                   bonusTarget={500}
+                   t={t}
+             />
+           </div>
 
+          {/* Отзывы клиентов о провайдере */}
+           <div className="px-6 mt-6">
+            <ProviderReviews providerId={profile?.id} t={t} />
+           </div>
+          
         </div>
        
         {/* Правый блок: услуги + входящие/брони */}
