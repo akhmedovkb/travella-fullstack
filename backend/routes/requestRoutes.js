@@ -4,12 +4,12 @@ const router = express.Router();
 const authenticateToken = require("../middleware/authenticateToken");
 
 /** ===== In-memory fallback для dev =====
- * Замени функции ниже на реальные вызовы БД (Mongo/Prisma/SQL).
+ * Замените функции ниже на реальные вызовы БД (Mongo/Prisma/SQL) при наличии.
  */
 const __mem = global.__travella_mem || {
   services: new Map(), // id -> { id, title, provider_id, ... }
   users: new Map(),    // id -> { id, name, phone, telegram, role }
-  requests: [],        // { id, type, service_id, provider_id, client_id, note, status, created_at }
+  requests: [],        // { id, type, service_id, provider_id, client_id, note, status, created_at, service_title? }
 };
 global.__travella_mem = __mem;
 
@@ -35,7 +35,7 @@ async function findQuickRequestsByProvider(provider_id) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-/** ===== Хендлер создания быстрого запроса (общий) ===== */
+/** ===== Общий хендлер создания быстрого запроса ===== */
 async function handleCreateQuick(req, res) {
   try {
     const clientId = req.user?.id;
@@ -56,13 +56,12 @@ async function handleCreateQuick(req, res) {
       svc?.user_id ||
       null;
 
-    // 2) Фолбэк: берём из тела запроса
+    // 2) Фолбэк: берём из тела запроса (фронт теперь его передаёт)
     if (!provider_id && providerIdFromBody) {
       provider_id = providerIdFromBody;
     }
 
     if (!provider_id) {
-      // Хотите — верните 404 как раньше, но чтобы не блокировать UX, лучше так:
       return res.status(404).json({ error: "service_not_found" });
     }
 
@@ -71,11 +70,10 @@ async function handleCreateQuick(req, res) {
       service_id,
       provider_id,
       client_id: clientId,
-      note: note || null,
+      note: note || null, // комментарий клиента
       status: "new",
       created_at: new Date().toISOString(),
-      // можно сохранить минималку по услуге, если svc есть:
-      service_title: svc?.title || svc?.name || null,
+      service_title: svc?.title || svc?.name || null, // пригодится в инбоксе, если svc не загрузится
     });
 
     return res.json({ ok: true, id: rec.id });
@@ -85,16 +83,15 @@ async function handleCreateQuick(req, res) {
   }
 }
 
-
 /** ===== Маршруты ===== */
 
-// Создать быстрый запрос (новый путь)
+// Создать «быстрый запрос» (новый путь)
 router.post("/quick", authenticateToken, handleCreateQuick);
 
-// Алиас для старого фронта (POST /api/requests)
+// Алиас для обратной совместимости (POST /api/requests)
 router.post("/", authenticateToken, handleCreateQuick);
 
-// Входящие запросы провайдера (минимальный набор полей)
+// Входящие запросы провайдера (минимальный набор полей + комментарий)
 router.get("/provider/inbox", authenticateToken, async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -109,9 +106,10 @@ router.get("/provider/inbox", authenticateToken, async (req, res) => {
           id: r.id,
           created_at: r.created_at,
           status: r.status || "new",
-          note: r.note || null, // показываем комментарий
-          service: svc ? { id: svc.id, title: svc.title || svc.name || "Service" } : { id: r.service_id, title: r.service_title || "Service" },
-
+          note: r.note || null,
+          service: svc
+            ? { id: svc.id, title: svc.title || svc.name || "Service" }
+            : { id: r.service_id, title: r.service_title || "Service" },
           client: cli
             ? {
                 id: cli.id,
