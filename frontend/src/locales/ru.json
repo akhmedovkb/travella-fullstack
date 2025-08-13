@@ -467,9 +467,24 @@
   "stats.requests_active": "Запросов (активные)",
   "stats.bookings_total": "Бронирований (всего)",
   "stats.completed": "Завершено",
-  "stats.cancelled": "Отменено"
+  "stats.cancelled": "Отменено",
+
+  "reviews": {
+  "title_provider": "Отзывы клиентов",
+  "title_service": "Отзывы об услуге",
+  "count": "отзыв(ов)",
+  "empty": "Пока нет отзывов.",
+  "leave_service": "Оставить отзыв об услуге",
+  "leave_client": "Оставить отзыв о клиенте",
+  "rating": "Оценка",
+  "placeholder": "Коротко опишите опыт",
+  "send": "Отправить",
+  "save_error": "Не удалось сохранить отзыв"
+}
+
 
 }
+
 
 
 
