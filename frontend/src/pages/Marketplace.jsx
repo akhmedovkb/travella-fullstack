@@ -259,7 +259,7 @@ export default function Marketplace() {
   const openQuickRequest = (serviceId) => { setQrServiceId(serviceId); setQrOpen(true); };
   const submitQuickRequest = async (note) => {
     try {
-      await apiPost("/api/requests", { service_id: qrServiceId, note });
+      await apiPost("/api/requests/quick", { service_id: qrServiceId, note });
       toast(t("messages.request_sent") || "Запрос отправлен");
     } catch (e) {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
