@@ -207,7 +207,8 @@ const Card = ({ it }) => {
   const svc = it?.service || it;
   const id = svc.id ?? it.id;
   const details = svc.details || it.details || {};
-  const title = svc.title || svc.name || details.eventName || t("title") || "Service";
+  const title =
+    svc.title || svc.name || details.eventName || t("title") || "Service";
 
   const images = Array.isArray(svc.images) ? svc.images : [];
   const image = images[0] || svc.cover || svc.image || null;
@@ -220,18 +221,13 @@ const Card = ({ it }) => {
   const dates = buildDates(details);
 
   const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
-
-  // прячем статусы draft/inactive
-  const rawStatus = (svc.status ?? it.status ?? details.status ?? "")
-    .toString()
-    .toLowerCase();
-  const status = ["draft", "inactive"].includes(rawStatus) ? null : rawStatus || null;
-
+  const statusRaw = (svc.status ?? it.status ?? details.status ?? "").toLowerCase();
+  const status = ["draft","inactive"].includes(statusRaw) ? null : statusRaw || null;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
   const isFav = favIds.has(id);
 
-  // reviews
+  // reviews state
   const cached = reviewsCache[id];
   const [revOpen, setRevOpen] = useState(false);
   const [rev, setRev] = useState(cached || null);
@@ -244,9 +240,9 @@ const Card = ({ it }) => {
   };
 
   return (
-    // ВАЖНО: больше НЕ overflow-hidden, чтобы поповер не обрезался
+    // у карточки overflow-visible, чтобы ничего не резалось
     <div className="group relative bg-white border rounded-xl shadow-sm flex flex-col overflow-visible">
-      {/* скругление и обрезка только на блоке изображения */}
+      {/* БЛОК ИЗОБРАЖЕНИЯ — скругление и обрезка только тут */}
       <div className="relative aspect-[16/10] bg-gray-100 rounded-t-xl overflow-hidden">
         {image ? (
           <img src={image} alt={title} className="w-full h-full object-cover" />
@@ -256,7 +252,7 @@ const Card = ({ it }) => {
           </div>
         )}
 
-        {/* Верх: бейдж + отзывы + сердечко */}
+        {/* Верх: бейдж + кнопки */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-[10]">
           <div className="flex items-center gap-2">
             {badge && (
@@ -267,7 +263,7 @@ const Card = ({ it }) => {
           </div>
 
           <div className="flex items-center gap-2 pointer-events-auto">
-            {/* reviews chip */}
+            {/* reviews trigger (только кнопка) */}
             <div
               onMouseEnter={openReviews}
               onFocus={openReviews}
@@ -286,54 +282,15 @@ const Card = ({ it }) => {
               <span className="absolute -right-1 -top-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-white text-gray-900 shadow">
                 {Number(rev?.count ?? 0)}
               </span>
-
-              {/* ПОПОВЕР С ОТЗЫВАМИ — поверх всех слоёв и НЕ обрезается */}
-              {revOpen && (
-                <div
-                  className="absolute z-[1200] right-0 mt-2 w-72 rounded-lg bg-black/80 text-white ring-1 ring-white/10 shadow-lg p-3"
-                  onMouseEnter={() => setRevOpen(true)}
-                  onMouseLeave={() => setRevOpen(false)}
-                >
-                  <div className="text-xs uppercase opacity-80 mb-1">
-                    {t("reviews.title_service") || "Отзывы об услуге"}
-                  </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Stars value={rev?.avg || 0} />
-                    <div className="text-xs opacity-80">({Number(rev?.count || 0)})</div>
-                  </div>
-                  {!rev ? (
-                    <div className="text-sm opacity-80">…</div>
-                  ) : rev.items.length ? (
-                    <ul className="space-y-2 max-h-56 overflow-auto pr-1">
-                      {rev.items.map((r) => (
-                        <li key={r.id} className="text-sm">
-                          <div className="flex items-center gap-2">
-                            <Stars value={r.rating} />
-                            <span className="opacity-70 text-xs">
-                              {new Date(r.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                          {r.text && <div className="mt-0.5 line-clamp-2 opacity-95">{r.text}</div>}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="text-sm opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</div>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* heart */}
+            {/* сердечко */}
             <button
               className={`p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
                 isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
               }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(id);
-              }}
-              title={isFav ? t("favorites.removed") || "Удалить из избранного" : t("favorites.added") || "В избранное"}
+              onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
+              title={isFav ? t("favorites.removed") || "Удалено из избранного" : t("favorites.added") || "В избранное"}
               aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
@@ -343,27 +300,55 @@ const Card = ({ it }) => {
           </div>
         </div>
 
-        {/* ТЁМНЫЙ нижний оверлей */}
+        {/* тёмный нижний оверлей */}
         <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity z-[5]">
           <div className="absolute inset-x-0 bottom-0 p-3">
             <div className="rounded-lg bg-black/55 text-white text-xs sm:text-sm p-3 ring-1 ring-white/10 shadow-lg">
               <div className="font-semibold line-clamp-2">{title}</div>
-              {hotel && (
-                <div><span className="opacity-80">{t("hotel") || "Отель"}: </span><span className="font-medium">{hotel}</span></div>
-              )}
-              {accommodation && (
-                <div><span className="opacity-80">{t("accommodation") || "Размещение"}: </span><span className="font-medium">{accommodation}</span></div>
-              )}
-              {dates && (
-                <div><span className="opacity-80">{t("date") || "Дата"}: </span><span className="font-medium">{dates}</span></div>
-              )}
-              {prettyPrice && (
-                <div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>
-              )}
+              {hotel && (<div><span className="opacity-80">{t("hotel") || "Отель"}: </span><span className="font-medium">{hotel}</span></div>)}
+              {accommodation && (<div><span className="opacity-80">{t("accommodation") || "Размещение"}: </span><span className="font-medium">{accommodation}</span></div>)}
+              {dates && (<div><span className="opacity-80">{t("date") || "Дата"}: </span><span className="font-medium">{dates}</span></div>)}
+              {prettyPrice && (<div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>)}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ПОПАП С ОТЗЫВАМИ — ВНЕ блока изображения, поверх карточки */}
+      {revOpen && (
+        <div
+          className="absolute z-[2000] right-2 top-12 w-72 rounded-lg bg-black/80 text-white ring-1 ring-white/10 shadow-xl p-3"
+          onMouseEnter={() => setRevOpen(true)}
+          onMouseLeave={() => setRevOpen(false)}
+        >
+          <div className="text-xs uppercase opacity-80 mb-1">
+            {t("reviews.title_service") || "Отзывы об услуге"}
+          </div>
+          <div className="flex items-center gap-2 mb-2">
+            <Stars value={rev?.avg || 0} />
+            <div className="text-xs opacity-80">({Number(rev?.count || 0)})</div>
+          </div>
+          {!rev ? (
+            <div className="text-sm opacity-80">…</div>
+          ) : rev.items.length ? (
+            <ul className="space-y-2 max-h-56 overflow-auto pr-1">
+              {rev.items.map((r) => (
+                <li key={r.id} className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <Stars value={r.rating} />
+                    <span className="opacity-70 text-xs">
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {r.text && <div className="mt-0.5 line-clamp-2 opacity-95">{r.text}</div>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-sm opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</div>
+          )}
+        </div>
+      )}
 
       {/* тело карточки */}
       <div className="p-3 flex-1 flex flex-col">
@@ -385,6 +370,7 @@ const Card = ({ it }) => {
     </div>
   );
 };
+
 
 
   /* ===================== Layout ===================== */
