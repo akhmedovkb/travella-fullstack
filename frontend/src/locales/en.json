@@ -437,7 +437,6 @@
     "quick_request": "Quick request"
   },
 
-  {
   "marketplace": {
     "search_placeholder": "Search services, countries, cities…",
     "supplier": "Supplier",
@@ -522,7 +521,7 @@
     "apply": "Apply",
     "clear": "Clear"
   }
-}
 
 }
+
 
