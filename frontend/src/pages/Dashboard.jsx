@@ -2533,11 +2533,11 @@ useEffect(() => {
                   )}
 
                   {/* форма оффера */}
-                  <div className="grid md:grid-cols-6 gap-2 mt-3">
+                  
                     <section className="mt-6">
                       <ProviderInboxList showHeader={false} compact />
                     </section>
-                  </div>
+                  
 
                   <div className="mt-2">
                     <button
