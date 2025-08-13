@@ -447,5 +447,96 @@
     "cancel": "Отмена",
     "send": "Отправить",
     "quick_request": "Быстрый запрос"
+  },
+
+  {
+  "marketplace": {
+    "search_placeholder": "Поиск по услугам, странам, городам…",
+    "supplier": "Поставщик",
+    "phone": "Телефон",
+    "telegram": "Телеграм",
+    "time_left": "Осталось",
+    "time_expired": "Истекло",
+    "no_image": "Нет изображения",
+    "no_results": "Ничего не найдено",
+    "show_more": "Показать ещё",
+    "reset_filters": "Сбросить фильтры",
+    "filters": "Фильтры",
+    "sort": "Сортировать",
+    "sort_new": "Сначала новые",
+    "sort_price_low": "Цена: по возрастанию",
+    "sort_price_high": "Цена: по убыванию",
+    "per_page": "На странице",
+    "items": "элементов",
+    "status": "Статус",
+    "status_draft": "Черновик",
+    "status_approved": "Одобрено",
+    "status_rejected": "Отклонено",
+    "price_from": "от",
+    "price_to": "до",
+    "copy_success": "Скопировано",
+    "copy_error": "Не удалось скопировать",
+    "timer": {
+      "d": "{{count}}д",
+      "h": "{{count}}ч",
+      "m": "{{count}}м",
+      "s": "{{count}}с"
+    },
+    "pagination": {
+      "prev": "Назад",
+      "next": "Вперёд",
+      "page": "Стр. {{page}} из {{total}}"
+    }
+  },
+  "favorites": {
+    "add": "В избранное",
+    "remove": "Убрать из избранного",
+    "added_toast": "Добавлено в избранное",
+    "removed_toast": "Удалено из избранного"
+  },
+  "actions": {
+    "quick_request": "Быстрый запрос",
+    "open": "Открыть",
+    "close": "Закрыть",
+    "send": "Отправить",
+    "cancel": "Отмена"
+  },
+  "tooltips": {
+    "favorite_add": "Добавить в избранное",
+    "favorite_remove": "Убрать из избранного",
+    "call": "Позвонить",
+    "open_telegram": "Открыть в Telegram",
+    "quick_request": "Отправить быстрый запрос",
+    "copy": "Скопировать"
+  },
+  "modals": {
+    "quick_request": {
+      "title": "Быстрый запрос",
+      "subtitle": "Оставьте контакты — мы свяжемся с вами",
+      "name": "Имя",
+      "phone": "Номер телефона",
+      "telegram": "Телеграм",
+      "message": "Сообщение",
+      "consent": "Согласен на связь",
+      "success_title": "Запрос отправлен",
+      "success_desc": "Мы свяжемся с вами в ближайшее время.",
+      "error_title": "Не удалось отправить",
+      "error_desc": "Попробуйте позже."
+    }
+  },
+  "common": {
+    "find": "Найти",
+    "loading": "Загрузка…",
+    "error": "Что-то пошло не так",
+    "save": "Сохранить",
+    "edit": "Редактировать",
+    "delete": "Удалить",
+    "apply": "Применить",
+    "clear": "Очистить"
   }
 }
+
+
+
+}
+
