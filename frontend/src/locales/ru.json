@@ -2,6 +2,9 @@
   "accommodation": "Размещение",
   "accommodation_category": "Категория размещения",
   "actions": {
+    "quick_request": "Быстрый запрос",
+    "cancel": "Отмена",
+    "send": "ОТПРАВИТЬ",
     "cancel": "Отмена",
     "quick_request": "Быстрый запрос"
   },
@@ -498,4 +501,5 @@
   "countdown": { "until_end": "До окончания", "expired": "Время истекло" }
 
 }
+
 
