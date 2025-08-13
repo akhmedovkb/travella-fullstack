@@ -120,6 +120,7 @@ async function providerInboxHandler(req, res) {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
 
     const myIds = collectProviderIdsFromUser(req.user);
+    console.log("INBOX ids=", myIds, "requests=", __mem.requests.map(r => ({id:r.id, provider_id:r.provider_id})));
     const rows = await findQuickRequestsByProviderMany(myIds);
 
     const items = await Promise.all(
