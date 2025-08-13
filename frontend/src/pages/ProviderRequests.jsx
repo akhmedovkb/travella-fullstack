@@ -16,7 +16,7 @@ export default function ProviderRequests() {
         const res = await apiGet("/api/requests/provider/inbox");
         if (!alive) return;
         setItems(Array.isArray(res?.items) ? res.items : []);
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setErr(t("errors.data_load") || "Failed to load");
       } finally {
@@ -85,7 +85,9 @@ export default function ProviderRequests() {
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            {r.client.telegram.startsWith("@") ? r.client.telegram : `@${r.client.telegram.replace(/^https?:\/\/t\.me\//i,"")}`}
+                            {r.client.telegram.startsWith("@")
+                              ? r.client.telegram
+                              : `@${r.client.telegram.replace(/^https?:\/\/t\.me\//i, "")}`}
                           </a>
                         </>
                       )}
