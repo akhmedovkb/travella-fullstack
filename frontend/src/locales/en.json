@@ -422,7 +422,7 @@
     "save_error": "Failed to save review"
   },
 
-  {
+  
   "actions": {
     "cancel": "Cancel",
     "send": "Send"
@@ -433,6 +433,7 @@
   }
 
 }
+
 
 
 
