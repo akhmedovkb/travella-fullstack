@@ -1,7 +1,10 @@
+// frontend/src/pages/ClientDashboard.jsx
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost } from "../api";
+import { createPortal } from "react-dom";
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -56,7 +59,7 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
   });
 }
 
-/* ===== helpers for price formatting (используются в избранном) ===== */
+/* ===== value helpers ===== */
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -70,7 +73,6 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
-/* --- как в маркетплейсе: сбор дат из details --- */
 function buildDates(d = {}) {
   const hotelIn =
     d.hotel_check_in ||
@@ -91,23 +93,35 @@ function buildDates(d = {}) {
   if (hotelOut) return String(hotelOut);
   return null;
 }
-/* ============================================================================ */
+/* форматирование Telegram */
+function renderTelegram(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null;
+  let label = s;
 
-/* ============ Портал для “вне карточки” подсказки ============ */
-import { createPortal } from "react-dom";
+  if (/^https?:\/\//i.test(s)) {
+    href = s;
+  } else if (s.startsWith("@")) {
+    href = `https://t.me/${s.slice(1)}`;
+    label = s;
+  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
+    href = `https://t.me/${s}`;
+    label = `@${s}`;
+  }
+  return { href, label };
+}
+
+/* ============ Портал ============ */
 function TooltipPortal({ visible, x, y, width, children }) {
   if (!visible) return null;
   return createPortal(
-    <div
-      className="fixed z-[3000] pointer-events-none"
-      style={{ left: x, top: y, width }}
-    >
+    <div className="fixed z-[3000] pointer-events-none" style={{ left: x, top: y, width }}>
       {children}
     </div>,
     document.body
   );
 }
-/* ============================================================================ */
 
 /* ===================== Mini Components ===================== */
 
@@ -222,8 +236,6 @@ function EmptyFavorites() {
   );
 }
 
-/* ===================== Favorites ===================== */
-
 function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
@@ -243,11 +255,9 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
 
-              // title
               const title =
                 s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
 
-              // image
               const image =
                 (Array.isArray(s.images) && s.images[0]) ||
                 (Array.isArray(it.images) && it.images[0]) ||
@@ -259,7 +269,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 it.image ||
                 null;
 
-              // normalize details (may be string)
+              // normalize details
               let rawDetails = s.details ?? it.details ?? {};
               let details = {};
               try {
@@ -268,7 +278,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 details = {};
               }
 
-              // price
               const price = firstNonEmpty(
                 details.netPrice,
                 details.price,
@@ -280,7 +289,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const prettyPrice = fmtPrice(price);
 
-              // fields for tooltip
               const hotel = firstNonEmpty(
                 details.hotel,
                 details.hotelName,
@@ -296,19 +304,47 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const dates = buildDates(details);
 
-              // --- Портал-подсказка (вне карточки) ---
+              // supplier
+              const prov =
+                s.provider || s.supplier || s.vendor || it.provider || it.supplier || {};
+              const supplierName = firstNonEmpty(
+                prov?.name,
+                s.provider_name,
+                it.provider_name,
+                details.provider_name
+              );
+              const supplierPhone = firstNonEmpty(
+                prov?.phone,
+                prov?.phone_number,
+                prov?.phones?.[0],
+                prov?.contacts?.phone,
+                s.provider_phone,
+                it.provider_phone,
+                details.provider_phone
+              );
+              const supplierTgRaw = firstNonEmpty(
+                prov?.telegram,
+                prov?.tg,
+                prov?.socials?.telegram,
+                prov?.contacts?.telegram,
+                prov?.social,
+                prov?.social_link,
+                s.provider_telegram,
+                it.provider_telegram,
+                details.provider_telegram,
+                s.telegram,
+                details.telegram
+              );
+              const supplierTg = renderTelegram(supplierTgRaw);
+
+              // подсказка-portal для стекляшки
               const imgRef = useRef(null);
               const [tipOpen, setTipOpen] = useState(false);
               const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
               const computePos = () => {
                 const r = imgRef.current?.getBoundingClientRect();
                 if (!r) return;
-                // Слегка выносим вверх, чтобы “вылезала” за карточку
-                setTipPos({
-                  x: r.left + 12,
-                  y: r.top - 12,
-                  w: Math.max(220, r.width - 24),
-                });
+                setTipPos({ x: r.left + 12, y: r.top - 12, w: Math.max(220, r.width - 24) });
               };
 
               return (
@@ -319,10 +355,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                   <div
                     className="aspect-[16/10] bg-gray-100 relative"
                     ref={imgRef}
-                    onMouseEnter={() => {
-                      computePos();
-                      setTipOpen(true);
-                    }}
+                    onMouseEnter={() => { computePos(); setTipOpen(true); }}
                     onMouseMove={computePos}
                     onMouseLeave={() => setTipOpen(false)}
                   >
@@ -336,13 +369,14 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* Сердечко (красное) + тултип к нему */}
+                    {/* Сердечко (красное), ховер-текст и удаление */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
                           onClick={() => onRemove?.(it.id)}
                           className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
                           aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+                          title={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
                         >
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
@@ -357,10 +391,11 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* ПОДСКАЗКА ЧЕРЕЗ ПОРТАЛ — выходит за карточку */}
+                    {/* стеклянная подсказка из Marketplace */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
+
                         {hotel && (
                           <div>
                             <span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span>
@@ -395,6 +430,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     </TooltipPortal>
                   </div>
 
+                  {/* ТЕЛО КАРТОЧКИ В ИЗБРАННОМ */}
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
                     {prettyPrice && (
@@ -404,7 +440,49 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* actions */}
+                    {/* === блок поставщика под ценой === */}
+                    {(supplierName || supplierPhone || supplierTg?.label) && (
+                      <div className="mt-2 text-sm space-y-0.5">
+                        {supplierName && (
+                          <div>
+                            <span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span>
+                            <span className="font-medium">{supplierName}</span>
+                          </div>
+                        )}
+                        {supplierPhone && (
+                          <div>
+                            <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
+                            <a
+                              href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                              className="underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {supplierPhone}
+                            </a>
+                          </div>
+                        )}
+                        {supplierTg?.label && (
+                          <div>
+                            <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
+                            {supplierTg.href ? (
+                              <a
+                                href={supplierTg.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {supplierTg.label}
+                              </a>
+                            ) : (
+                              <span className="font-medium">{supplierTg.label}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* === /блок поставщика === */}
+
                     <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {serviceId && (
                         <>
@@ -511,18 +589,14 @@ export default function ClientDashboard() {
   const favPageFromUrl = Number(searchParams.get("page") || 1);
   const [favPage, setFavPage] = useState(isNaN(favPageFromUrl) ? 1 : favPageFromUrl);
 
-  // действия по офферу
   const [actingReqId, setActingReqId] = useState(null);
 
-  // booking modal state
   const [bookingUI, setBookingUI] = useState({ open: false, serviceId: null });
   const [bkDate, setBkDate] = useState("");
   const [bkTime, setBkTime] = useState("");
   const [bkPax, setBkPax] = useState(1);
   const [bkNote, setBkNote] = useState("");
   const [bkSending, setBkSending] = useState(false);
-
-  /* -------- Effects -------- */
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -596,8 +670,6 @@ export default function ClientDashboard() {
       cancelled = true;
     };
   }, [activeTab, t]);
-
-  /* -------- Handlers -------- */
 
   const handleUploadClick = () => fileRef.current?.click();
 
@@ -710,7 +782,6 @@ export default function ClientDashboard() {
     }
   };
 
-  // accept/reject предложения
   const handleAcceptProposal = async (id) => {
     try {
       setActingReqId(id);
@@ -743,7 +814,6 @@ export default function ClientDashboard() {
     }
   };
 
-  // booking
   function openBooking(serviceId) {
     setBookingUI({ open: true, serviceId });
     setBkDate(""); setBkTime(""); setBkPax(1); setBkNote("");
@@ -830,7 +900,6 @@ export default function ClientDashboard() {
                 </div>
               )}
 
-              {/* Предложение от провайдера */}
               {p ? (
                 <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
                   <div className="font-medium mb-1">
@@ -912,8 +981,6 @@ export default function ClientDashboard() {
       />
     );
   };
-
-  /* -------- Layout -------- */
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
