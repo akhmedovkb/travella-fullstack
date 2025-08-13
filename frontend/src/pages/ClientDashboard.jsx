@@ -308,7 +308,8 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const supplierTg = renderTelegram(supplierTgRaw);
               const expireAt = resolveExpireAt(svc);
-              const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+              const baseNow = (typeof now === 'number' ? now : Date.now());
+              const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
               const hasTimer = !!expireAt;
               const timerText = hasTimer ? formatLeft(leftMs) : null;
 
