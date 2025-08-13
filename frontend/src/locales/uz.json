@@ -427,9 +427,32 @@
   "requests": {
     "note_label": "So‘rov uchun izoh (ixtiyoriy):",
     "note_placeholder": "Masalan: sanalar, guruh tarkibi, istaklar"
+  },
+
+  
+  "actions": {
+    "quick_request": "Быстрый запрос"
+  },
+  "marketplace": {
+    "reviews": "Отзывы об услуге",
+    "no_reviews": "Пока нет отзывов.",
+    "time_left": "До окончания",
+    "time_over": "Время истекло"
+  },
+  "favorites": {
+    "add": "В избранное",
+    "remove": "Удалить из избранного"
+  },
+  "common": {
+    "find": "Найти",
+    "no_results": "Нет результатов",
+    "loading_error": "Не удалось загрузить данные"
   }
 
+
+
 }
+
 
 
 
