@@ -438,6 +438,16 @@
   },
 
   "marketplace": {
+    "select_category": "Select category",
+    "guide": "Guide",
+    "transport": "Transport",
+    "package": "Tour package",
+    "hotel": "Hotel",
+    "flight": "Flight ticket",
+    "refused_event": "Refused event ticket",
+    "visa_support": "Visa support",
+    "price": "Price",
+    "reviews": "Reviews",
     "search_placeholder": "Search services, countries, cities…",
     "supplier": "Supplier",
     "phone": "Phone",
@@ -523,5 +533,6 @@
   }
 
 }
+
 
 
