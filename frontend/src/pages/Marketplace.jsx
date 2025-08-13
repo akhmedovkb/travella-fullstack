@@ -78,6 +78,54 @@ function toast(txt) {
   setTimeout(() => el.remove(), 1800);
 }
 
+/* ---------- срок действия / обратный счёт ---------- */
+
+/** Пытаемся извлечь timestamp истечения (ms) из разных возможных полей */
+function resolveExpireAt(service) {
+  const s = service || {};
+  const d = s.details || {};
+
+  const cand = [
+    s.expires_at, s.expire_at, s.expireAt,
+    d.expires_at, d.expire_at, d.expiresAt,
+    d.expiration, d.expiration_at, d.expirationAt,
+    d.expiration_ts, d.expirationTs,
+  ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+
+  let ts = null;
+
+  if (cand !== undefined && cand !== null) {
+    if (typeof cand === "number") {
+      ts = cand > 1e12 ? cand : cand * 1000;
+    } else {
+      const parsed = Date.parse(String(cand));
+      if (!Number.isNaN(parsed)) ts = parsed;
+    }
+  }
+
+  // альтернатива: ttl_hours от created_at
+  if (!ts) {
+    const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
+    if (ttl && Number(ttl) > 0 && s.created_at) {
+      const created = Date.parse(s.created_at);
+      if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
+    }
+  }
+
+  return ts; // ms или null
+}
+function formatLeft(ms) {
+  if (ms <= 0) return "00:00:00";
+  const total = Math.floor(ms / 1000);
+  const dd = Math.floor(total / 86400);
+  const hh = Math.floor((total % 86400) / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  if (dd > 0) return `${dd}д ${pad(hh)}:${pad(mm)}`;
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+}
+
 /* ---------- маленький компонент звёзд ---------- */
 function Stars({ value = 0, size = 14 }) {
   const full = Math.round(Number(value) * 2) / 2; // шаг 0.5
@@ -128,6 +176,13 @@ function TooltipPortal({ visible, x, y, children }) {
 
 export default function Marketplace() {
   const { t } = useTranslation();
+
+  // глобальные "часы" для всех карточек (обновление раз в секунду)
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // фильтры
   const [q, setQ] = useState("");
@@ -255,7 +310,7 @@ export default function Marketplace() {
 
   /* ===================== карточка ===================== */
 
-  const Card = ({ it }) => {
+  const Card = ({ it, now }) => {
     const svc = it?.service || it;
     const id = svc.id ?? it.id;
     const details = svc.details || it.details || {};
@@ -278,7 +333,14 @@ export default function Marketplace() {
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const status = svc.status ?? it.status ?? details.status ?? null;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+
     const isFav = favIds.has(id);
+
+    // срок действия
+    const expireAt = resolveExpireAt(svc);
+    const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+    const hasTimer = !!expireAt;
+    const timerText = hasTimer ? formatLeft(leftMs) : null;
 
     // ----- отзывы: тултип через портал -----
     const [revOpen, setRevOpen] = useState(false);
@@ -322,11 +384,24 @@ export default function Marketplace() {
           {/* Верх: иконки */}
           <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
             <div className="flex items-center gap-2">
-              {badge && (
+              {/* Таймер (если есть срок) */}
+              {hasTimer && (
+                <span
+                  className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow
+                    ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
+                  title={leftMs > 0 ? "До окончания" : "Время истекло"}
+                >
+                  {timerText}
+                </span>
+              )}
+
+              {/* Рейтинг/статус — показываем, если таймера нет (чтобы не дублировать) */}
+              {!hasTimer && badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
                 </span>
               )}
+
               {/* Иконка отзывов */}
               <button
                 ref={revBtnRef}
@@ -503,7 +578,7 @@ export default function Marketplace() {
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (
-              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} />
+              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />
             ))}
           </div>
         )}
