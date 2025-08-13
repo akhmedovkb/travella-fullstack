@@ -251,11 +251,15 @@ function extractServiceFields(item) {
 export default function Marketplace() {
   const { t } = useTranslation();
 
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+useEffect(() => {
+  const id = setInterval(
+    () => setNowMin(Math.floor(Date.now() / 60000)),
+    60000
+  );
+  return () => clearInterval(id);
+}, []);
+const now = nowMin * 60000; // если нужен миллисекундный now
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
