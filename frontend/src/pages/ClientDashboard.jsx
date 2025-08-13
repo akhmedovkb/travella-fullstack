@@ -95,7 +95,7 @@ function renderTelegram(value) {
 function TooltipPortal({ visible, x, y, width, children }) {
   if (!visible) return null;
   return createPortal(
-    <div className="fixed z-[3000] pointer-events-none" style={{ left: x, top: y, width }}>{children}</div>,
+    <div className="fixed z-10 pointer-events-none" style={{ left: x, top: y, width }}>{children}</div>,
     document.body
   );
 }
@@ -321,7 +321,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const computePos = () => {
                 const r = imgRef.current?.getBoundingClientRect();
                 if (!r) return;
-                setTipPos({ x: r.left + 12, y: r.top - 12, w: Math.max(220, Math.floor(r.width * 0.7)) });
+                setTipPos({ x: r.left, y: r.top + 40, w: Math.floor(r.width) });
               };
 
               return (
