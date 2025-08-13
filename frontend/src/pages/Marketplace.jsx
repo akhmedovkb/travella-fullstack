@@ -27,8 +27,10 @@ function firstNonEmpty(...args) {
 }
 
 function buildDates(d = {}) {
-  const hotelIn = d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
-  const hotelOut = d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
+  const hotelIn =
+    d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
+  const hotelOut =
+    d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
   if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
   if (hotelIn) return String(hotelIn);
   if (hotelOut) return String(hotelOut);
@@ -61,7 +63,93 @@ function matchesLocation(it, q) {
   return hay.includes(String(q).toLowerCase());
 }
 
-/* ===================== Карточка ===================== */
+/* ===================== Reviews Button ===================== */
+// Маленькая кнопка «Отзывы»; лениво подгружает 2 последних отзыва по услуге
+function ReviewsButton({ serviceId, initialRating = 0, t }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState({
+    avg: Number(initialRating) || 0,
+    count: 0,
+    latest: [],
+    loaded: false,
+  });
+
+  const load = async () => {
+    if (loading || data.loaded || !serviceId) return;
+    try {
+      setLoading(true);
+      const res = await apiGet(`/api/reviews/service/${serviceId}`);
+      const list = normalizeList(res);
+      const count = list.length;
+      const avg = count
+        ? list.reduce((s, r) => s + (Number(r.rating) || 0), 0) / count
+        : Number(initialRating) || 0;
+      setData({ avg, count, latest: list.slice(0, 2), loaded: true });
+    } catch {
+      // молча игнорируем; покажем «0 отзывов»
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="relative pointer-events-auto group/rev"
+      onMouseEnter={load}
+      onFocus={load}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 flex items-center gap-1"
+        title={t("reviews.title") || "Отзывы"}
+      >
+        {/* иконка-комментарий */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M20 2H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
+        </svg>
+        <span className="text-[11px] font-semibold leading-none">{data.count}</span>
+      </button>
+
+      {/* тултип/подсказка */}
+      <div
+        className={`absolute right-0 mt-2 w-72 rounded-lg bg-white/95 backdrop-blur-md text-gray-900 shadow-lg ring-1 ring-black/10 p-3 transition opacity-0 group-hover/rev:opacity-100 ${
+          open ? "opacity-100" : ""
+        }`}
+        style={{ pointerEvents: "none" }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-yellow-500">★</span>
+          <span className="font-semibold">{data.avg ? data.avg.toFixed(1) : "—"}</span>
+          <span className="text-xs text-gray-500">
+            {data.count} {t("reviews.count") || "отзыв(ов)"}
+          </span>
+        </div>
+        {loading && (
+          <div className="text-xs text-gray-500">{t("common.loading") || "Загрузка..."}</div>
+        )}
+        {!loading && data.latest.length === 0 && (
+          <div className="text-xs text-gray-500">
+            {t("reviews.no_reviews") || "Отзывов пока нет"}
+          </div>
+        )}
+        {!loading &&
+          data.latest.map((r, i) => (
+            <div key={i} className="text-xs border-top border-gray-200 pt-2 mt-2">
+              <div className="flex items-center gap-1 text-yellow-500 mb-0.5">
+                {"★".repeat(Math.round(Number(r.rating) || 0))}
+              </div>
+              <div className="line-clamp-3">{r.comment || r.text}</div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== Карточка + страница ===================== */
 
 export default function Marketplace() {
   const { t } = useTranslation();
@@ -202,7 +290,7 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Верх: бейдж + сердечко */}
+          {/* Верх: бейдж + отзывы + сердечко */}
           <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
             <div className="flex items-center gap-2">
               {badge && (
@@ -211,29 +299,36 @@ export default function Marketplace() {
                 </span>
               )}
             </div>
-            <button
-              className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(id);
-              }}
-              title={
-                isFav
-                  ? t("favorites.removed") || "Удалить из избранного"
-                  : t("favorites.added") || "В избранное"
-              }
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill={isFav ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="1.8"
+
+            <div className="flex items-center gap-1.5">
+              {/* Кнопка отзывов */}
+              <ReviewsButton serviceId={id} initialRating={rating} t={t} />
+
+              {/* Сердечко */}
+              <button
+                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(id);
+                }}
+                title={
+                  isFav
+                    ? t("favorites.removed") || "Удалить из избранного"
+                    : t("favorites.added") || "В избранное"
+                }
               >
-                <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-              </svg>
-            </button>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill={isFav ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* «Стеклянный» тултип при наведении */}
@@ -321,7 +416,7 @@ export default function Marketplace() {
         >
           {t("marketplace.search") || "Найти"}
         </button>
-        {/* Кнопку «Назад» убрали по твоей просьбе */}
+        {/* Кнопку «Назад» убрали */}
       </div>
 
       {/* Список */}
