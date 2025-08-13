@@ -331,8 +331,9 @@ export default function Marketplace() {
     const dates = buildDates(details);
 
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
-    const status = svc.status ?? it.status ?? details.status ?? null;
-    const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+    const statusRaw = svc.status ?? it.status ?? details.status ?? null;
+    const status    = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
+    const badge     = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
     const isFav = favIds.has(id);
 
