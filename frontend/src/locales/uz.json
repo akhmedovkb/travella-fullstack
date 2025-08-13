@@ -432,5 +432,43 @@
   "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
   "view_certificate": "Sertifikatni ko‘rish",
   "visa_included": "Viza kiritilgan",
-  "visa_support": "Viza yordami"
+  "visa_support": "Viza yordami",
+
+  "common": {
+    "find": "Qidirish",
+    "loading": "Yuklanmoqda…"
+  },
+  "marketplace": {
+    "supplier": "Ta’minotchi",
+    "phone": "Telefon",
+    "telegram": "Telegram",
+    "no_image": "Rasm yo‘q",
+    "price": "Narx",
+    "no_results": "Natija topilmadi",
+    "time_left": "Tugashiga qoldi",
+    "time_expired": "Muddati tugagan",
+    "select_category": "Toifani tanlang",
+    "guide": "Gid",
+    "transport": "Transport",
+    "package": "Turbaket",
+    "hotel": "Mehmonxona",
+    "flight": "Aviabilet",
+    "refused_event": "Rad etilgan tadbir bileti",
+    "reviews": "Xizmat sharhlari",
+    "search_placeholder": "Xizmatlar, davlatlar, shaharlar bo‘yicha qidirish…"
+  },
+  "favorites": {
+    "add": "Sevimlilarga qo‘shish",
+    "remove": "Sevimlilardan olib tashlash",
+    "added_toast": "Sevimlilarga qo‘shildi",
+    "removed_toast": "Sevimlilardan olib tashlandi"
+  },
+  "tooltips": {
+    "favorite_add": "Sevimlilarga qo‘shish",
+    "favorite_remove": "Sevimlilardan olib tashlash"
+  },
+  "messages": { "request_sent": "So‘rov yuborildi" },
+  "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
+  "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
