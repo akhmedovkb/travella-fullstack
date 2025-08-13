@@ -270,20 +270,14 @@ export default function Marketplace() {
   };
 
   // анти-мерцание: обновляемся 1 раз в минуту
-      const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
       useEffect(() => {
         const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
         return () => clearInterval(id);
       }, []);
-      const now = nowMin * 60000; // использовать вместо Date.now()
+  const now = nowMin * 60000; // использовать вместо Date.now()
 
 
-
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
