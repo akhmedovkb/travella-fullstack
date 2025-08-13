@@ -225,7 +225,7 @@ function extractServiceFields(item) {
     svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id
   );
 
-  // плоские поля — как запасной вариант
+  // плоские поля — запасной вариант
   const flatName = _firstNonEmpty(
     pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"])
   );
@@ -249,13 +249,7 @@ function extractServiceFields(item) {
 export default function Marketplace() {
   const { t } = useTranslation();
 
-  // безопасный перевод с фоллбеком
-  const tt = (key, def) => {
-    const v = t(key);
-    return v && v !== key ? v : def;
-  };
-
-  // ===== Быстрый запрос: модалка
+  /* -------- Quick Request modal -------- */
   const [quickReq, setQuickReq] = useState({ open: false, serviceId: null, title: "", note: "" });
   const openQuickRequest = (svc) => {
     if (!svc) return;
@@ -269,20 +263,20 @@ export default function Marketplace() {
     try {
       await apiPost("/api/requests", { service_id: id, note: quickReq.note || undefined });
       setQuickReq({ open: false, serviceId: null, title: "", note: "" });
-      toast(tt("requests.sent", "Запрос отправлен"));
+      toast(t("requests.sent") || (t("actions.quick_request") + " ✓"));
     } catch {
-      toast(tt("requests.error", "Не удалось отправить запрос"));
+      toast(t("requests.error") || "Не удалось отправить запрос");
     }
   };
 
-  // ===== Анти-мерцание таймера: тик раз в минуту
-  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+  /* -------- таймер без мерцаний -------- */
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const now = nowMin * 60000;
 
+  /* -------- фильтры/поиск -------- */
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const filters = useMemo(() => ({
@@ -328,7 +322,7 @@ export default function Marketplace() {
 
       setItems(list);
     } catch {
-      setError(tt("common.loading_error", "Не удалось загрузить данные"));
+      setError(t("common.loading_error") || "Не удалось загрузить данные");
       setItems([]);
     } finally {
       setLoading(false);
@@ -347,8 +341,6 @@ export default function Marketplace() {
     })();
   }, []);
 
-  const handleQuickRequest = (serviceId) => { openQuickRequest(serviceId); };
-
   const toggleFavorite = async (id) => {
     try {
       const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
@@ -358,23 +350,23 @@ export default function Marketplace() {
         if (added) next.add(id); else next.delete(id);
         return next;
       });
-      toast(added ? tt("toast.addedToFav", "Добавлено в избранное") : tt("toast.removedFromFav", "Удалено из избранного"));
+      toast(added ? (t("toast.addedToFav") || "Добавлено в избранное") : (t("toast.removedFromFav") || "Удалено из избранного"));
     } catch (e) {
       const msg = (e && (e.status || e.code || e.message)) || "";
-      if (String(msg).includes("401") || String(msg).includes("403")) toast(tt("auth.client_required", "Войдите как клиент"));
-      else toast(tt("toast.favoriteError", "Не удалось изменить избранное"));
+      if (String(msg).includes("401") || String(msg).includes("403")) toast("Войдите как клиент");
+      else toast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
 
   const categoryOptions = [
-    { value: "", label: tt("marketplace.select_category", "Выберите категорию") },
-    { value: "guide", label: tt("marketplace.guide", "Гид") },
-    { value: "transport", label: tt("marketplace.transport", "Транспорт") },
-    { value: "refused_tour", label: tt("marketplace.package", "Отказной тур") },
-    { value: "refused_hotel", label: tt("marketplace.hotel", "Отказной отель") },
-    { value: "refused_flight", label: tt("marketplace.flight", "Отказной авиабилет") },
-    { value: "refused_event_ticket", label: tt("marketplace.refused_event", "Отказной билет") },
-    { value: "visa_support", label: tt("category.visa_support", "Визовая поддержка") },
+    { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
+    { value: "guide", label: t("marketplace.guide") || "Гид" },
+    { value: "transport", label: t("marketplace.transport") || "Транспорт" },
+    { value: "refused_tour", label: t("marketplace.package") || "Отказной тур" },
+    { value: "refused_hotel", label: t("marketplace.hotel") || "Отказной отель" },
+    { value: "refused_flight", label: t("marketplace.flight") || "Отказной авиабилет" },
+    { value: "refused_event_ticket", label: t("marketplace.refused_event") || "Отказной билет" },
+    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
   const Card = ({ it, now }) => {
@@ -456,12 +448,12 @@ export default function Marketplace() {
 
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
-        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-t-[18px]">
+        <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title || "Service"} className="absolute inset-0 h-full w-full object-cover" />
+            <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-              <span className="text-sm">Нет изображения</span>
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <span className="text-sm">{t("favorites.no_image") || "Нет изображения"}</span>
             </div>
           )}
 
@@ -499,7 +491,7 @@ export default function Marketplace() {
             <button
               className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${isFav ? "text-red-500" : ""}`}
               onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
-              title={isFav ? tt("fav.remove", "Удалить из избранного") : tt("fav.add", "В избранное")}
+              title={isFav ? (t("favorites.remove") || "Удалить из избранного") : (t("favorites.add") || "В избранное")}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
@@ -507,10 +499,10 @@ export default function Marketplace() {
             </button>
           </div>
 
-          {/* стеклянная подсказка при ховере */}
+          {/* стеклянная подсказка при ховере — ширина по изображению, появляется плавно */}
           <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <div className="absolute inset-x-0 bottom-0 p-3">
-              <div className="rounded-2xl bg-gradient-to-b from-black/70 to-black/40 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl">
+              <div className="rounded-xl bg-gradient-to-b from-black/40 to-black/65 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
                 {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
@@ -524,14 +516,14 @@ export default function Marketplace() {
         {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">{tt("reviews.title", "ОТЗЫВЫ ОБ УСЛУГЕ")}</div>
+            <div className="mb-1 font-semibold">ОТЗЫВЫ ОБ УСЛУГЕ</div>
             <div className="flex items-center gap-2">
               <Stars value={revData.avg} />
               <span className="opacity-80">({revData.count || 0})</span>
             </div>
             <div className="mt-1">
               {!revData.items?.length ? (
-                <span className="opacity-80">{tt("reviews.empty", "Пока нет отзывов.")}</span>
+                <span className="opacity-80">Пока нет отзывов.</span>
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
@@ -546,21 +538,21 @@ export default function Marketplace() {
         {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (<div className="mt-1 text-sm">{tt("marketplace.price", "Цена")}: <span className="font-semibold">{prettyPrice}</span></div>)}
+          {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span></div>)}
 
           {/* === блок поставщика под ценой === */}
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
-              {supplierName && (<div><span className="text-gray-500">{tt("marketplace.supplier", "Поставщик")}: </span><span className="font-medium">{supplierName}</span></div>)}
+              {supplierName && (<div><span className="text-gray-500">Поставщик: </span><span className="font-medium">{supplierName}</span></div>)}
               {supplierPhone && (
                 <div>
-                  <span className="text-gray-500">{tt("marketplace.phone", "Телефон")}: </span>
+                  <span className="text-gray-500">{t("phone") || "Телефон"}: </span>
                   <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">{supplierPhone}</a>
                 </div>
               )}
               {supplierTg?.label && (
                 <div>
-                  <span className="text-gray-500">{tt("marketplace.telegram", "Телеграм")}: </span>
+                  <span className="text-gray-500">Телеграм: </span>
                   {supplierTg.href ? (
                     <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">{supplierTg.label}</a>
                   ) : (<span className="font-medium">{supplierTg.label}</span>)}
@@ -575,7 +567,7 @@ export default function Marketplace() {
               onClick={() => openQuickRequest(svc)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
-              {tt("marketplace.quick_request_button", "Быстрый запрос")}
+              {t("actions.quick_request") || "Быстрый запрос"}
             </button>
           </div>
         </div>
@@ -590,7 +582,7 @@ export default function Marketplace() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={tt("marketplace.search_placeholder", "Внесите локацию ...")}
+          placeholder={t("marketplace.location_placeholder") || "Внесите локацию ..."}
           className="flex-1 border rounded-lg px-3 py-2"
         />
         <select
@@ -604,15 +596,15 @@ export default function Marketplace() {
         </select>
 
         <button onClick={() => search()} className="px-5 py-2 rounded-lg bg-gray-900 text-white" disabled={loading}>
-          {tt("actions.search", "Найти")}
+          {t("marketplace.search") || "Найти"}
         </button>
       </div>
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">{tt("marketplace.loading", "Поиск...")}</div>}
+        {loading && <div className="text-gray-500">{t("marketplace.searching") || "Поиск..."}</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (<div className="text-gray-500">{tt("marketplace.no_results", "Нет результатов")}</div>)}
+        {!loading && !error && !items.length && (<div className="text-gray-500">{t("common.no_results") || "Нет результатов"}</div>)}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (<Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />))}
@@ -625,17 +617,17 @@ export default function Marketplace() {
         <div className="fixed inset-0 z-[3000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
             <div className="px-5 pt-4 pb-3 border-b">
-              <div className="text-lg font-semibold">{tt("actions.quick_request", "Быстрый запрос")}</div>
+              <div className="text-lg font-semibold">{t("actions.quick_request") || "Быстрый запрос"}</div>
               {quickReq.title ? <div className="text-sm text-gray-500 mt-0.5">{quickReq.title}</div> : null}
             </div>
             <div className="p-5">
               <label className="block text-sm text-gray-600 mb-2">
-                {tt("requests.note_label", "Комментарий (необязательно):")}
+                {t("requests.note_label") || t("requests.note_prompt") || "Комментарий (необязательно):"}
               </label>
               <textarea
                 value={quickReq.note}
                 onChange={(e) => setQuickReq((q) => ({ ...q, note: e.target.value }))}
-                placeholder={tt("requests.note_placeholder", "")}
+                placeholder={t("requests.note_placeholder") || ""}
                 className="w-full h-28 rounded-xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-orange-500/40"
               />
             </div>
@@ -645,14 +637,14 @@ export default function Marketplace() {
                 onClick={() => setQuickReq({ open: false, serviceId: null, title: "", note: "" })}
                 className="px-4 h-10 rounded-xl border border-gray-300 hover:bg-gray-50"
               >
-                {tt("actions.cancel", "Отмена")}
+                {t("actions.cancel") || t("cancel") || "Отмена"}
               </button>
               <button
                 type="button"
                 onClick={submitQuickRequest}
                 className="px-4 h-10 rounded-xl bg-orange-500 text-white hover:bg-orange-600"
               >
-                {tt("actions.send", "Отправить")}
+                {t("actions.send") || "Отправить"}
               </button>
             </div>
           </div>
