@@ -200,7 +200,11 @@
     "no_image": "Rasm yo‘q",
     "remove_error": "Sevimlilardan o‘chirib bo‘lmadi",
     "remove_from": "Sevimlilardan olib tashlash",
-    "removed": "Sevimlilardan o‘chirildi"
+    "removed": "Sevimlilardan o‘chirildi",
+    "add": "Sevimlilarga qo‘shish",
+    "remove": "Sevimlilardan olib tashlash",
+    "added_toast": "Sevimlilarga qo‘shildi",
+    "removed_toast": "Sevimlilardan olib tashlandi"
   },
   "file_chosen": "Fayllar tanlandi",
   "fill_all_fields": "Iltimos, barcha maydonlarni to‘ldiring va sanalarni tanlang",
@@ -456,13 +460,7 @@
   "view_certificate": "Sertifikatni ko‘rish",
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza yordami",
-
-  "favorites": {
-    "add": "Sevimlilarga qo‘shish",
-    "remove": "Sevimlilardan olib tashlash",
-    "added_toast": "Sevimlilarga qo‘shildi",
-    "removed_toast": "Sevimlilardan olib tashlandi"
-  },
+  
   "tooltips": {
     "favorite_add": "Sevimlilarga qo‘shish",
     "favorite_remove": "Sevimlilardan olib tashlash"
@@ -471,6 +469,7 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
 
 
