@@ -190,6 +190,16 @@
   },
 
   "marketplace": {
+    "select_category": "Toifani tanlang",
+    "guide": "Gid",
+    "transport": "Transport",
+    "package": "Turbaket",
+    "hotel": "Mehmonxona",
+    "flight": "Aviabilet",
+    "refused_event": "Rad etilgan tadbir bileti",
+    "visa_support": "Viza yordami",
+    "price": "Narx",
+    "reviews": "Sharhlar",
     "title": "E'lonlar doskasi",
     "select_category": "Toifani tanlang",
     "guide": "Gid",
@@ -522,4 +532,5 @@
 
 
 }
+
 
