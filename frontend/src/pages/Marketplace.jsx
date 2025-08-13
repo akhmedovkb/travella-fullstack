@@ -1,4 +1,3 @@
-// frontend/src/pages/Marketplace.jsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -250,16 +249,32 @@ function extractServiceFields(item) {
 
 export default function Marketplace() {
   const { t } = useTranslation();
+  // Quick Request modal state & handlers
+  const [quickReq, setQuickReq] = useState({ open: false, serviceId: null, title: "", note: "" });
+  const openQuickRequest = (svc) => {
+    if (!svc) return;
+    const id = (typeof svc === "object") ? (svc.id || svc.service?.id) : svc;
+    const title = (typeof svc === "object") ? (svc.title || svc.service?.title || svc.details?.title || "") : "";
+    setQuickReq({ open: true, serviceId: id, title, note: "" });
+  };
+  const submitQuickRequest = async () => {
+    const id = quickReq.serviceId;
+    if (!id) return;
+    try {
+      await apiPost("/api/requests", { service_id: id, note: quickReq.note || undefined });
+      setQuickReq({ open: false, serviceId: null, title: "", note: "" });
+      toast(t("requests.sent") || (t("actions.quick_request") + " ✓"));
+    } catch {
+      toast(t("requests.error") || "Не удалось отправить запрос");
+    }
+  };
 
-  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
-useEffect(() => {
-  const id = setInterval(
-    () => setNowMin(Math.floor(Date.now() / 60000)),
-    60000
-  );
-  return () => clearInterval(id);
-}, []);
-const now = nowMin * 60000; // если нужен миллисекундный now
+
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
@@ -325,16 +340,7 @@ const now = nowMin * 60000; // если нужен миллисекундный 
     })();
   }, []);
 
-  const handleQuickRequest = async (serviceId) => {
-    if (!serviceId) return;
-    const note = window.prompt(t("requests.note_prompt") || t("client.dashboard.noResults") || "Комментарий (необязательно)") || undefined;
-    try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
-      alert(t("requests.sent") || (t("actions.quick_request") + " ✓"));
-    } catch {
-      alert(t("requests.error") || "Не удалось отправить запрос");
-    }
-  };
+  const handleQuickRequest = (serviceId) => { openQuickRequest(serviceId); };
 
   const toggleFavorite = async (id) => {
     try {
@@ -559,7 +565,7 @@ const now = nowMin * 60000; // если нужен миллисекундный 
 
           <div className="mt-auto pt-3">
             <button
-              onClick={() => handleQuickRequest(id)}
+              onClick={() => openQuickRequest(svc)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
               Быстрый запрос
@@ -606,6 +612,45 @@ const now = nowMin * 60000; // если нужен миллисекундный 
           </div>
         )}
       </div>
-    </div>
+    
+      {/* Quick Request Modal */}
+      {quickReq.open && (
+        <div className="fixed inset-0 z-[3000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+            <div className="px-5 pt-4 pb-3 border-b">
+              <div className="text-lg font-semibold">{t("actions.quick_request") || "Быстрый запрос"}</div>
+              {quickReq.title ? <div className="text-sm text-gray-500 mt-0.5">{quickReq.title}</div> : null}
+            </div>
+            <div className="p-5">
+              <label className="block text-sm text-gray-600 mb-2">
+                {t("requests.note_label") || "Комментарий (необязательно):"}
+              </label>
+              <textarea
+                value={quickReq.note}
+                onChange={(e) => setQuickReq((q) => ({ ...q, note: e.target.value }))}
+                placeholder={t("requests.note_placeholder") || ""}
+                className="w-full h-28 rounded-xl border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-orange-500/40"
+              />
+            </div>
+            <div className="px-5 pb-5 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setQuickReq({ open: false, serviceId: null, title: "", note: "" })}
+                className="px-4 h-10 rounded-xl border border-gray-300 hover:bg-gray-50"
+              >
+                {t("actions.cancel") || "Отмена"}
+              </button>
+              <button
+                type="button"
+                onClick={submitQuickRequest}
+                className="px-4 h-10 rounded-xl bg-orange-500 text-white hover:bg-orange-600"
+              >
+                {t("actions.send") || "Отправить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
   );
 }
