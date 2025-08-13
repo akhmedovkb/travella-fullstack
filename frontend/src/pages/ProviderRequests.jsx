@@ -1,146 +1,108 @@
+// frontend/src/pages/ProviderRequests.jsx
 import { useEffect, useState } from "react";
-import { apiGet, apiPost } from "../api";
 import { useTranslation } from "react-i18next";
+import { apiGet } from "../api";
 
 export default function ProviderRequests() {
   const { t } = useTranslation();
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [replyTextById, setReplyTextById] = useState({});
-  const [proposalById, setProposalById] = useState({}); // текстовое поле с JSON
+  const [err, setErr] = useState(null);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const rows = await apiGet("/api/requests/my", "provider"); // заявки по услугам провайдера
-      setItems(rows || []);
-    } catch (e) {
-      console.error(e);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await apiGet("/api/requests/provider/inbox");
+        if (!alive) return;
+        setItems(Array.isArray(res?.items) ? res.items : []);
+      } catch (e) {
+        if (!alive) return;
+        setErr(t("errors.data_load") || "Failed to load");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [t]);
 
-  useEffect(() => { load(); }, []);
-
-  async function sendReply(id) {
-    const text = (replyTextById[id] || "").trim();
-    if (!text) return;
-    try {
-      await apiPost(`/api/requests/${id}/reply`, { text }, "provider");
-      setReplyTextById((p) => ({ ...p, [id]: "" }));
-      await load();
-    } catch (e) {
-      alert(e.message);
-    }
-  }
-
-  async function sendProposal(id) {
-    const raw = (proposalById[id] || "").trim();
-    if (!raw) {
-      alert(t("provider.requests.proposalPlaceholder"));
-      return;
-    }
-    let json;
-    try { json = JSON.parse(raw); } catch { alert("Invalid JSON"); return; }
-    try {
-      await apiPost(`/api/requests/${id}/proposal`, { proposal: json }, "provider");
-      setProposalById((p) => ({ ...p, [id]: "" }));
-      await load();
-    } catch (e) {
-      alert(e.message);
-    }
-  }
-
-  if (loading) return <div className="p-4">{t("common.loading")}</div>;
-  const list = Array.isArray(items) ? items : [];
+  if (loading) return <div className="p-4 text-gray-500">{t("common.loading") || "Loading…"}</div>;
 
   return (
-    <div className="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow">
-      <h1 className="text-2xl font-bold mb-4">{t("provider.requests.title")}</h1>
-
-      {list.length === 0 ? (
-        <div className="text-sm text-gray-500">{t("provider.requests.noItems")}</div>
-      ) : (
-        <div className="space-y-4">
-          {list.map((r) => (
-            <div key={r.id} className="border rounded-lg p-4">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div className="font-semibold">
-                  Request #{r.id} · Service #{r.service_id} · Client #{r.client_id}
-                </div>
-                <div className="text-sm text-gray-600">
-                  Status: <b>{r.status}</b> · {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                </div>
-              </div>
-
-              {/* Сообщения */}
-              <div className="mt-3 bg-gray-50 rounded p-3 max-h-56 overflow-auto">
-                {Array.isArray(r.messages) && r.messages.length > 0 ? (
-                  r.messages.map((m) => (
-                    <div key={m.id} className="text-sm mb-2">
-                      <span className="font-semibold">{m.sender_role}</span>: {m.text}{" "}
-                      <span className="text-gray-500">· {new Date(m.created_at).toLocaleString()}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-sm text-gray-500">Нет сообщений.</div>
-                )}
-              </div>
-
-              {/* Текущее предложение (если есть) */}
-              {r.proposal && (
-                <div className="mt-3 border rounded p-3">
-                  <div className="font-semibold mb-1">Текущее предложение</div>
-                  <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(r.proposal, null, 2)}</pre>
-                </div>
-              )}
-
-              {/* Ответ и отправка нового предложения */}
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex gap-2">
-                  <input
-                    className="flex-1 border px-3 py-2 rounded text-sm"
-                    placeholder={t("provider.requests.messagePlaceholder")}
-                    value={replyTextById[r.id] || ""}
-                    onChange={(e) => setReplyTextById((p) => ({ ...p, [r.id]: e.target.value }))}
-                  />
-                  <button
-                    className="w-36 bg-orange-500 text-white py-2 rounded font-bold"
-                    onClick={() => sendReply(r.id)}
-                  >
-                    {t("provider.requests.send")}
-                  </button>
-                </div>
-
-                <div>
-                  <textarea
-                    className="w-full border px-3 py-2 rounded text-sm"
-                    rows={3}
-                    placeholder={t("provider.requests.proposalPlaceholder")}
-                    value={proposalById[r.id] || ""}
-                    onChange={(e) => setProposalById((p) => ({ ...p, [r.id]: e.target.value }))}
-                  />
-                  <div className="flex justify-end mt-2">
-                    <button
-                      className="w-44 border border-gray-800 text-gray-900 py-2 rounded font-bold"
-                      onClick={() => sendProposal(r.id)}
-                    >
-                      {t("provider.requests.sendProposal")}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-2 text-xs text-gray-500">
-                {t("provider.requests.afterAcceptNote")}
-              </div>
-            </div>
-          ))}
+    <div className="max-w-6xl mx-auto p-4 md:p-6">
+      <div className="bg-white rounded-xl border shadow p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-lg font-semibold">
+            {t("requests.inbox") || "Incoming requests"}
+          </div>
         </div>
-      )}
+
+        {err && <div className="text-red-600 mb-3">{err}</div>}
+
+        {!err && (!items || items.length === 0) && (
+          <div className="text-gray-500">{t("requests.empty") || "No requests yet."}</div>
+        )}
+
+        {items && items.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="py-2 pr-4">{t("requests.created_at") || "Created"}</th>
+                  <th className="py-2 pr-4">{t("requests.service") || "Service"}</th>
+                  <th className="py-2 pr-4">{t("requests.client") || "Client"}</th>
+                  <th className="py-2 pr-4">{t("common.comment") || "Comment"}</th>
+                  <th className="py-2">{t("requests.status") || "Status"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      {r.created_at ? new Date(r.created_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="py-2 pr-4">{r.service?.title || "—"}</td>
+                    <td className="py-2 pr-4">
+                      {r.client?.name || "—"}
+                      {r.client?.phone && (
+                        <>
+                          {" · "}
+                          <a className="underline" href={`tel:${r.client.phone}`}>{r.client.phone}</a>
+                        </>
+                      )}
+                      {r.client?.telegram && (
+                        <>
+                          {" · "}
+                          <a
+                            className="underline"
+                            href={
+                              r.client.telegram.startsWith("@")
+                                ? `https://t.me/${r.client.telegram.slice(1)}`
+                                : /^https?:\/\//i.test(r.client.telegram)
+                                ? r.client.telegram
+                                : `https://t.me/${r.client.telegram}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {r.client.telegram.startsWith("@") ? r.client.telegram : `@${r.client.telegram.replace(/^https?:\/\/t\.me\//i,"")}`}
+                          </a>
+                        </>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 max-w-[360px]">
+                      <span className="line-clamp-2 block" title={r.note || ""}>
+                        {r.note || "—"}
+                      </span>
+                    </td>
+                    <td className="py-2">{r.status || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
