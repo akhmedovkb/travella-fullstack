@@ -28,7 +28,6 @@
   "new_service_tip": "To create a new service, fill in all fields below and click “Save service”.",
   "title": "Title",
   "description": "Description",
-
   "category": {
     "refused_tour": "Refused tour",
     "refused_hotel": "Refused hotel",
@@ -47,7 +46,6 @@
     "hotel_room": "Hotel room",
     "hotel_transfer": "Hotel transfer"
   },
-
   "upload_images": "Images (multiple allowed):",
   "select_files": "Select files",
   "no_file_chosen": "No file chosen",
@@ -66,22 +64,18 @@
   "delete_error": "Failed to delete service",
   "choose_files": "Choose files",
   "no_files_selected": "No files selected",
-
   "expiration_timer": "Expiration timer",
   "is_active": "Active",
-
   "new_refused_tour": "Add a new refused tour:",
   "new_refused_hotel": "Add a new refused hotel:",
   "new_refused_airtkt": "Add a new refused flight ticket:",
   "new_refused_tkt": "Add a new refused event ticket:",
   "new_visa_service": "Add a visa-support service:",
-
   "direction": "Direction",
   "accommodation": "Accommodation",
   "refused_hotel_city": "City",
   "refused_hotel_select_city": "Enter the city",
   "refused_hotel_select": "Enter the hotel",
-
   "food": "Meal plan",
   "food_options": {
     "select": "Select option",
@@ -92,7 +86,6 @@
     "uai": "Ultra All Inclusive",
     "halal": "Halal"
   },
-
   "transfer": "Transfer",
   "transfer_options": {
     "select": "Select transfer",
@@ -100,13 +93,11 @@
     "group": "Group",
     "none": "None"
   },
-
   "airline": "Airline",
   "enter_airline": "Enter airline",
   "changeable": "Changeable",
   "visa_included": "Visa included",
   "net_price": "Net price",
-
   "select_category": "Select category",
   "city_tour": "City tour",
   "mountain_tour": "Mountain tour",
@@ -121,7 +112,6 @@
   "room_rent": "Room rental",
   "hotel_transfer": "Hotel transfer",
   "hall_rent": "Hall rental",
-
   "flight_type": "Flight type",
   "one_way": "One way",
   "round_trip": "Round trip",
@@ -146,7 +136,6 @@
   "adt": "Adults (ADT)",
   "chd": "Children (CHD)",
   "inf": "Infants (INF)",
-
   "login": {
     "title": "Supplier login",
     "email": "Email",
@@ -155,7 +144,6 @@
     "no_account": "No account?",
     "error": "Email or password is incorrect"
   },
-
   "register": {
     "title": "Provider registration",
     "name": "Name",
@@ -174,7 +162,6 @@
     "file_chosen": "File selected",
     "required": "Please fill out this field"
   },
-
   "calendar": {
     "blocking_title": "Availability calendar",
     "label_blocked_manual": "Blocked manually",
@@ -188,7 +175,6 @@
     "manual_blocked": "Manually blocked",
     "save_button": "Save blocked dates"
   },
-
   "marketplace": {
     "title": "Marketplace",
     "select_category": "Select a category",
@@ -213,7 +199,6 @@
     "price": "Price",
     "propose_price": "Propose price"
   },
-
   "new_refused_event_ticket": "Refused event ticket",
   "event_name": "Event name",
   "select_event_category": "Select event category",
@@ -227,7 +212,6 @@
   "ticket_details": "Ticket details (row, seat, etc.)",
   "new_visa_support": "Visa support",
   "select_country": "Select country for visa",
-
   "nav": {
     "dashboard": "Dashboard",
     "requests": "Requests",
@@ -235,7 +219,6 @@
     "clientDashboard": "Dashboard",
     "favorites": "Favorites"
   },
-
   "client": {
     "register": {
       "title": "Client registration",
@@ -285,7 +268,6 @@
       "favorites": "Favorites"
     }
   },
-
   "provider": {
     "requests": {
       "title": "Requests (Provider)",
@@ -306,12 +288,11 @@
       "status": "Status"
     }
   },
-
   "common": {
     "loading": "Loading…",
-    "backToDashboard": "Dashboard"
+    "backToDashboard": "Dashboard",
+    "loading_error": "Failed to load data"
   },
-
   "favorites": {
     "empty_title": "Favorites is empty",
     "empty_desc": "Add interesting services to favorites and come back later.",
@@ -321,13 +302,11 @@
     "remove_error": "Failed to remove from favorites",
     "empty_subtitle": "Add interesting services to favorites and come back later."
   },
-
   "tabs": {
     "my_requests": "My requests",
     "my_bookings": "My bookings",
     "favorites": "Favorites"
   },
-
   "stats": {
     "level": "Level",
     "tier": "Tier",
@@ -340,26 +319,24 @@
     "cancelled": "Cancelled",
     "tier_label": "Tier"
   },
-
   "empty": {
     "no_requests": "No requests yet.",
     "no_bookings": "No bookings yet.",
     "no_favorites": "Favorites list is empty"
   },
-
   "bookings": {
     "item": "Booking",
     "empty": "No bookings yet."
   },
-
   "requests": {
     "item": "Request",
     "sent": "Request sent",
     "error": "Failed to send request",
     "note_prompt": "Note for the request (optional):",
-    "empty": "No requests yet."
+    "empty": "No requests yet.",
+    "note_label": "Comment (optional):",
+    "note_placeholder": "E.g. dates, party size, special wishes"
   },
-
   "service_images": "Service images",
   "clear_all": "Clear all",
   "clear_all_images_confirm": "Remove all images?",
@@ -369,13 +346,11 @@
   "select_hotel": "Select hotel",
   "status": "Status",
   "sum": "Amount",
-
   "toast": {
     "addedToFav": "Added to favorites",
     "removedFromFav": "Removed from favorites",
     "favoriteError": "Failed to toggle favorite"
   },
-
   "cover": "Cover",
   "comment": "Comment",
   "loading_stats": "Loading stats...",
@@ -405,74 +380,16 @@
   "name_placeholder": "Your name",
   "password_change": "Change password",
   "confirm_delete": "Delete this item?",
-
   "my_bookings": "My bookings",
   "my_requests": "My requests",
-
-  "reviews": {
-    "title_provider": "Customer reviews",
-    "title_service": "Service reviews",
-    "count": "review(s)",
-    "empty": "No reviews yet.",
-    "leave_service": "Leave a review about the service",
-    "leave_client": "Leave a review about the client",
-    "rating": "Rating",
-    "placeholder": "Describe your experience",
-    "send": "Send",
-    "save_error": "Failed to save review"
-  },
-
-  
-  "actions": {
-    "cancel": "Cancel",
-    "send": "Send"
-  },
-  "requests": {
-    "note_label": "Comment (optional):",
-    "note_placeholder": "E.g. dates, party size, special wishes"
-  },
-
-  "actions": {
-    "quick_request": "Quick request"
-  },
-  "marketplace": {
-    "reviews": "Service reviews",
-    "no_reviews": "No reviews yet.",
-    "time_left": "Time left",
-    "time_over": "Expired"
-  },
-  "favorites": {
-    "add": "Add to favorites",
-    "remove": "Remove from favorites"
-  },
-  "common": {
-    "find": "Find",
-    "no_results": "No results",
-    "loading_error": "Failed to load data"
-  },
-  "actions": {
-    "quick_request": "Tezkor so‘rov"
-  },
-  "marketplace": {
-    "reviews": "Xizmat sharhlari",
-    "no_reviews": "Hozircha sharhlar yo‘q.",
-    "time_left": "Tugashigacha",
-    "time_over": "Muddati tugagan"
-  },
-  "favorites": {
-    "add": "Sevimlilarga",
-    "remove": "Sevimlilardan o‘chirish"
-  },
-  "common": {
-    "find": "Topish",
-    "no_results": "Natijalar yo‘q",
-    "loading_error": "Ma’lumotlarni yuklab bo‘lmadi"
-  }
-
+  "actions.upload_photo": "Upload photo",
+  "actions.change_photo": "Change photo",
+  "actions.delete_photo": "Delete photo",
+  "actions.save_profile": "Save profile",
+  "actions.change": "Change",
+  "actions.logout": "Logout",
+  "actions.quick_request": "Quick request",
+  "actions.delete": "Delete",
+  "actions.cancel": "Cancel",
+  "actions.send": "Send"
 }
-
-
-
-
-
-
