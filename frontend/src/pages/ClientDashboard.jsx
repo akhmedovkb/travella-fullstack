@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";                      // ⬅️ NEW
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost } from "../api";
@@ -71,6 +72,17 @@ function firstNonEmpty(...args) {
   return null;
 }
 /* ============================================================================ */
+
+/* ---------- Портал для всплывашек поверх карточек (как в Marketplace) ---------- */
+function TooltipPortal({ visible, x, y, children }) {
+  if (!visible) return null;
+  return createPortal(
+    <div className="fixed z-[3000] pointer-events-none" style={{ top: y, left: x }}>
+      {children}
+    </div>,
+    document.body
+  );
+}
 
 /* ===================== Mini Components ===================== */
 
@@ -185,6 +197,7 @@ function EmptyFavorites() {
   );
 }
 
+/* ===================== Favorites ===================== */
 function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
   const { t } = useTranslation();
   const total = items?.length || 0;
@@ -193,6 +206,125 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
   const start = (current - 1) * perPage;
   const pageItems = items.slice(start, start + perPage);
 
+  /* Внутренняя карточка избранного — отдельный компонент, чтобы корректно использовать хуки для портал-тултипа */
+  function FavCard({ it }) {
+    const s = it.service || {};
+    const serviceId = s.id ?? it.service_id ?? null;
+
+    const title = s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
+
+    const image =
+      (Array.isArray(s.images) && s.images[0]) ||
+      (Array.isArray(it.images) && it.images[0]) ||
+      s.cover ||
+      s.cover_url ||
+      s.image ||
+      it.cover ||
+      it.cover_url ||
+      it.image ||
+      null;
+
+    const details = s.details || {};
+    const price = firstNonEmpty(details.netPrice, s.price, it.price);
+    const prettyPrice = fmtPrice(price);
+
+    // --- Портальный тултип для сердечка (как в маркетплейсе)
+    const heartRef = useRef(null);
+    const [tipOpen, setTipOpen] = useState(false);
+    const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+
+    const openTip = () => {
+      if (!heartRef.current) return;
+      const r = heartRef.current.getBoundingClientRect();
+      setTipPos({ x: r.left - 8, y: r.top - 8 }); // слегка левее/выше
+      setTipOpen(true);
+    };
+    const closeTip = () => setTipOpen(false);
+
+    return (
+      <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
+        <div className="aspect-[16/10] bg-gray-100 relative">
+          {image ? (
+            <img src={image} alt={title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <span className="text-sm">
+                {t("favorites.no_image", { defaultValue: "Нет изображения" })}
+              </span>
+            </div>
+          )}
+
+          {/* Красное сердечко */}
+          <button
+            ref={heartRef}
+            onMouseEnter={openTip}
+            onMouseLeave={closeTip}
+            onClick={() => onRemove?.(it.id)}
+            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
+            aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
+            </svg>
+          </button>
+
+          {/* Портальный тултип поверх карточки */}
+          <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y}>
+            <div className="pointer-events-none bg-black/85 text-white text-xs px-2 py-1 rounded-md shadow backdrop-blur-md ring-1 ring-white/10">
+              {t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+            </div>
+          </TooltipPortal>
+
+          {/* стеклянная плашка снизу при ховере */}
+          <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+              <div className="font-semibold line-clamp-2">{title}</div>
+              {prettyPrice && (
+                <div className="mt-1">
+                  <span className="opacity-80">
+                    {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+                  </span>
+                  <span className="font-semibold">{prettyPrice}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-3 flex-1 flex flex-col">
+          <div className="font-semibold line-clamp-2">{title}</div>
+          {prettyPrice && (
+            <div className="mt-1 text-sm">
+              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+              <span className="font-semibold">{prettyPrice}</span>
+            </div>
+          )}
+
+          {/* actions */}
+          <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {serviceId && (
+              <>
+                <button
+                  onClick={() => onQuickRequest?.(serviceId)}
+                  className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
+                >
+                  {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                </button>
+
+                <button
+                  onClick={() => onBook?.(serviceId)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
+                >
+                  {t("actions.book_now", { defaultValue: "Забронировать" })}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {total === 0 ? (
@@ -200,120 +332,9 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
       ) : (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {pageItems.map((it) => {
-              const s = it.service || {};
-              const serviceId = s.id ?? it.service_id ?? null;
-
-              // название: берём из service, затем из самого элемента
-              const title =
-                s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
-
-              // картинка: пытаемся найти любой доступный источник
-              const image =
-                (Array.isArray(s.images) && s.images[0]) ||
-                (Array.isArray(it.images) && it.images[0]) ||
-                s.cover ||
-                s.cover_url ||
-                s.image ||
-                it.cover ||
-                it.cover_url ||
-                it.image ||
-                null;
-
-              // цена (если есть)
-              const details = s.details || {};
-              const price = firstNonEmpty(details.netPrice, s.price, it.price);
-              const prettyPrice = fmtPrice(price);
-
-              return (
-                <div
-                  key={it.id}
-                  className="group relative bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
-                >
-                  <div className="aspect-[16/10] bg-gray-100 relative">
-                    {image ? (
-                      <img src={image} alt={title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">
-                          {t("favorites.no_image", { defaultValue: "Нет изображения" })}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Красное сердечко + собственный тултип (как на карточке маркетплейса) */}
-                    <div className="absolute top-2 right-2 z-20">
-                      <div className="relative group/heart">
-                        <button
-                          onClick={() => onRemove?.(it.id)}
-                          className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
-                          aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-                          </svg>
-                        </button>
-
-                        {/* тултип */}
-                        <div className="absolute -top-2 right-8 -translate-y-full opacity-0 group-hover/heart:opacity-100 transition-opacity pointer-events-none">
-                          <div className="relative bg-black/80 text-white text-xs px-2 py-1 rounded-md shadow backdrop-blur-md">
-                            {t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                            <div className="absolute -bottom-1 right-2 w-2 h-2 bg-black/80 rotate-45" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* стеклянная плашка снизу при ховере */}
-                    <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-                        <div className="font-semibold line-clamp-2">{title}</div>
-                        {prettyPrice && (
-                          <div className="mt-1">
-                            <span className="opacity-80">
-                              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                            </span>
-                            <span className="font-semibold">{prettyPrice}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 flex-1 flex flex-col">
-                    <div className="font-semibold line-clamp-2">{title}</div>
-                    {prettyPrice && (
-                      <div className="mt-1 text-sm">
-                        {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                        <span className="font-semibold">{prettyPrice}</span>
-                      </div>
-                    )}
-
-                    {/* actions */}
-                          <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {serviceId && (
-                              <>
-                                <button
-                                  onClick={() => onQuickRequest?.(serviceId)}
-                                  className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
-                                >
-                                  {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
-                                </button>
-                          
-                                <button
-                                  onClick={() => onBook?.(serviceId)}
-                                  className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
-                                >
-                                  {t("actions.book_now", { defaultValue: "Забронировать" })}
-                                </button>
-                              </>
-                            )}
-                          </div>
-
-                  </div>
-                </div>
-              );
-            })}
+            {pageItems.map((it) => (
+              <FavCard key={it.id} it={it} />
+            ))}
           </div>
 
           <div className="flex items-center justify-center gap-2 mt-6">
