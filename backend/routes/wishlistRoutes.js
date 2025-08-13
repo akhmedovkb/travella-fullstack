@@ -3,15 +3,14 @@ const router = express.Router();
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 
-// helper: получаем client_id из токена
+// Унифицированный способ получить client_id из токена
 function getClientId(req) {
-  // поддержим оба варианта, вдруг где-то оставался другой payload
   return req.user?.clientId ?? (req.user?.role === "client" ? req.user?.id : null);
 }
 
 /**
  * POST /api/wishlist/toggle
- * body: { serviceId }  // допускаем itemId как синоним
+ * body: { serviceId }   // допускаем также itemId как синоним
  * return: { added: boolean }
  */
 router.post("/toggle", authenticateToken, async (req, res) => {
@@ -22,7 +21,7 @@ router.post("/toggle", authenticateToken, async (req, res) => {
     const serviceId = Number(req.body?.serviceId ?? req.body?.itemId);
     if (!serviceId) return res.status(400).json({ message: "service_id_required" });
 
-    // пытаемся вставить; если конфликт — удаляем (toggle)
+    // Пробуем вставить, при конфликте считаем что запись уже есть → переключаем на удаление
     const ins = await pool.query(
       `INSERT INTO wishlist (client_id, service_id)
        VALUES ($1, $2)
@@ -47,7 +46,7 @@ router.post("/toggle", authenticateToken, async (req, res) => {
 });
 
 /**
- * GET /api/wishlist/ids  -> [service_id, ...]
+ * GET /api/wishlist/ids -> массив ID услуг в избранном пользователя
  */
 router.get("/ids", authenticateToken, async (req, res) => {
   try {
@@ -66,7 +65,7 @@ router.get("/ids", authenticateToken, async (req, res) => {
 });
 
 /**
- * GET /api/wishlist  -> список карточек с данными услуги
+ * GET /api/wishlist -> детальный список карточек избранного
  */
 router.get("/", authenticateToken, async (req, res) => {
   try {
@@ -74,8 +73,7 @@ router.get("/", authenticateToken, async (req, res) => {
     if (!clientId) return res.status(403).json({ message: "client_required" });
 
     const r = await pool.query(
-      `SELECT w.service_id, w.created_at,
-              s.*
+      `SELECT w.service_id, w.created_at, s.*
          FROM wishlist w
          JOIN services s ON s.id = w.service_id
         WHERE w.client_id = $1
