@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
+import QuickRequestModal from "../components/QuickRequestModal";
 
 /* ===================== utils ===================== */
 
@@ -251,15 +252,28 @@ function extractServiceFields(item) {
 export default function Marketplace() {
   const { t } = useTranslation();
 
+  // модалка быстрого запроса
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrServiceId, setQrServiceId] = useState(null);
+  const openQuickRequest = (serviceId) => { setQrServiceId(serviceId); setQrOpen(true); };
+  const submitQuickRequest = async (note) => {
+    try {
+      await apiPost("/api/requests", { service_id: qrServiceId, note });
+      toast(t("messages.request_sent") || "Запрос отправлен");
+    } catch (e) {
+      toast(t("errors.request_send") || "Не удалось отправить запрос");
+    } finally {
+      setQrOpen(false);
+      setQrServiceId(null);
+    }
+  };
+
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
-useEffect(() => {
-  const id = setInterval(
-    () => setNowMin(Math.floor(Date.now() / 60000)),
-    60000
-  );
-  return () => clearInterval(id);
-}, []);
-const now = nowMin * 60000; // если нужен миллисекундный now
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMin * 60000;
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
@@ -325,17 +339,6 @@ const now = nowMin * 60000; // если нужен миллисекундный 
     })();
   }, []);
 
-  const handleQuickRequest = async (serviceId) => {
-    if (!serviceId) return;
-    const note = window.prompt(t("requests.note_prompt") || t("client.dashboard.noResults") || "Комментарий (необязательно)") || undefined;
-    try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
-      alert(t("requests.sent") || (t("actions.quick_request") + " ✓"));
-    } catch {
-      alert(t("requests.error") || "Не удалось отправить запрос");
-    }
-  };
-
   const toggleFavorite = async (id) => {
     try {
       const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
@@ -345,10 +348,11 @@ const now = nowMin * 60000; // если нужен миллисекундный 
         if (added) next.add(id); else next.delete(id);
         return next;
       });
-      toast(added ? (t("toast.addedToFav") || "Добавлено в избранное") : (t("toast.removedFromFav") || "Удалено из избранного"));
+      toast(added ? (t("favorites.added_toast") || "Добавлено в избранное")
+                  : (t("favorites.removed_toast") || "Удалено из избранного"));
     } catch (e) {
       const msg = (e && (e.status || e.code || e.message)) || "";
-      if (String(msg).includes("401") || String(msg).includes("403")) toast("Войдите как клиент");
+      if (String(msg).includes("401") || String(msg).includes("403")) toast(t("auth.login_required") || "Войдите как клиент");
       else toast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
@@ -445,10 +449,10 @@ const now = nowMin * 60000; // если нужен миллисекундный 
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
+            <img src={image} alt={title || t("marketplace.no_image")} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-sm">Нет изображения</span>
+              <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
             </div>
           )}
 
@@ -458,7 +462,7 @@ const now = nowMin * 60000; // если нужен миллисекундный 
                 <span
                   className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow
                     ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
-                  title={leftMs > 0 ? "До окончания" : "Время истекло"}
+                  title={leftMs > 0 ? (t("countdown.until_end") || "До окончания") : (t("countdown.expired") || "Время истекло")}
                 >
                   {timerText}
                 </span>
@@ -475,18 +479,19 @@ const now = nowMin * 60000; // если нужен миллисекундный 
                 className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
                 onMouseEnter={openReviews}
                 onMouseLeave={closeReviews}
-                title="Отзывы об услуге"
+                title={t("marketplace.reviews") || "Отзывы об услуге"}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
                 </svg>
-              </button>
+            </button>
             </div>
 
             <button
               className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${isFav ? "text-red-500" : ""}`}
               onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
-              title={isFav ? "Удалить из избранного" : "В избранное"}
+              title={isFav ? (t("tooltips.favorite_remove") || "Убрать из избранного")
+                           : (t("tooltips.favorite_add") || "В избранное")}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
@@ -501,8 +506,8 @@ const now = nowMin * 60000; // если нужен миллисекундный 
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
                 {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
-                {dates && (<div><span className="opacity-80">Дата: </span><span className="font-medium">{dates}</span></div>)}
-                {prettyPrice && (<div><span className="opacity-80">Цена: </span><span className="font-semibold">{prettyPrice}</span></div>)}
+                {dates && (<div><span className="opacity-80">{t("common.date") || "Дата"}: </span><span className="font-medium">{dates}</span></div>)}
+                {prettyPrice && (<div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>)}
               </div>
             </div>
           </div>
@@ -511,14 +516,14 @@ const now = nowMin * 60000; // если нужен миллисекундный 
         {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">ОТЗЫВЫ ОБ УСЛУГЕ</div>
+            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
             <div className="flex items-center gap-2">
               <Stars value={revData.avg} />
               <span className="opacity-80">({revData.count || 0})</span>
             </div>
             <div className="mt-1">
               {!revData.items?.length ? (
-                <span className="opacity-80">Пока нет отзывов.</span>
+                <span className="opacity-80">—</span>
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
@@ -533,21 +538,21 @@ const now = nowMin * 60000; // если нужен миллисекундный 
         {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (<div className="mt-1 text-sm">Цена: <span className="font-semibold">{prettyPrice}</span></div>)}
+          {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span></div>)}
 
           {/* === блок поставщика под ценой === */}
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
-              {supplierName && (<div><span className="text-gray-500">Поставщик: </span><span className="font-medium">{supplierName}</span></div>)}
+              {supplierName && (<div><span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span><span className="font-medium">{supplierName}</span></div>)}
               {supplierPhone && (
                 <div>
-                  <span className="text-gray-500">Телефон: </span>
+                  <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
                   <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">{supplierPhone}</a>
                 </div>
               )}
               {supplierTg?.label && (
                 <div>
-                  <span className="text-gray-500">Телеграм: </span>
+                  <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
                   {supplierTg.href ? (
                     <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">{supplierTg.label}</a>
                   ) : (<span className="font-medium">{supplierTg.label}</span>)}
@@ -559,10 +564,10 @@ const now = nowMin * 60000; // если нужен миллисекундный 
 
           <div className="mt-auto pt-3">
             <button
-              onClick={() => handleQuickRequest(id)}
+              onClick={() => openQuickRequest(id)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
-              Быстрый запрос
+              {t("actions.quick_request") || "Быстрый запрос"}
             </button>
           </div>
         </div>
@@ -577,7 +582,7 @@ const now = nowMin * 60000; // если нужен миллисекундный 
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Внесите локацию ..."
+          placeholder={t("marketplace.search_placeholder") || "Поиск по услугам, странам, городам…"}
           className="flex-1 border rounded-lg px-3 py-2"
         />
         <select
@@ -591,21 +596,28 @@ const now = nowMin * 60000; // если нужен миллисекундный 
         </select>
 
         <button onClick={() => search()} className="px-5 py-2 rounded-lg bg-gray-900 text-white" disabled={loading}>
-          Найти
+          {t("common.find") || "Найти"}
         </button>
       </div>
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">Поиск...</div>}
+        {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (<div className="text-gray-500">Нет результатов</div>)}
+        {!loading && !error && !items.length && (<div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>)}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => (<Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />))}
           </div>
         )}
       </div>
+
+      {/* Модалка быстрого запроса */}
+      <QuickRequestModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onSubmit={submitQuickRequest}
+      />
     </div>
   );
 }
