@@ -263,7 +263,24 @@
     "select_category": "Toifani tanlang",
     "start_date": "Boshlanish sanasi",
     "title": "E'lonlar doskasi",
-    "transport": "Transport"
+    "transport": "Transport",    
+    "supplier": "Ta’minotchi",
+    "phone": "Telefon",
+    "telegram": "Telegram",
+    "no_image": "Rasm yo‘q",
+    "price": "Narx",
+    "no_results": "Natija topilmadi",
+    "time_left": "Tugashiga qoldi",
+    "time_expired": "Muddati tugagan",
+    "select_category": "Toifani tanlang",
+    "guide": "Gid",
+    "transport": "Transport",
+    "package": "Turbaket",
+    "hotel": "Mehmonxona",
+    "flight": "Aviabilet",
+    "refused_event": "Rad etilgan tadbir bileti",
+    "reviews": "Xizmat sharhlari",
+    "search_placeholder": "Xizmatlar, davlatlar, shaharlar bo‘yicha qidirish…"
   },
   "messages": {
     "booking_created": "Bron yaratildi",
@@ -440,25 +457,6 @@
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza yordami",
 
-  "marketplace": {
-    "supplier": "Ta’minotchi",
-    "phone": "Telefon",
-    "telegram": "Telegram",
-    "no_image": "Rasm yo‘q",
-    "price": "Narx",
-    "no_results": "Natija topilmadi",
-    "time_left": "Tugashiga qoldi",
-    "time_expired": "Muddati tugagan",
-    "select_category": "Toifani tanlang",
-    "guide": "Gid",
-    "transport": "Transport",
-    "package": "Turbaket",
-    "hotel": "Mehmonxona",
-    "flight": "Aviabilet",
-    "refused_event": "Rad etilgan tadbir bileti",
-    "reviews": "Xizmat sharhlari",
-    "search_placeholder": "Xizmatlar, davlatlar, shaharlar bo‘yicha qidirish…"
-  },
   "favorites": {
     "add": "Sevimlilarga qo‘shish",
     "remove": "Sevimlilardan olib tashlash",
@@ -473,6 +471,7 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
 
 
