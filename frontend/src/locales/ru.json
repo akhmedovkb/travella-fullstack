@@ -190,16 +190,6 @@
   },
 
   "marketplace": {
-    "select_category": "Выберите категорию",
-    "guide": "Гид",
-    "transport": "Транспорт",
-    "package": "Турпакет",
-    "hotel": "Отель",
-    "flight": "Авиабилет",
-    "refused_event": "Отказной билет",
-    "visa_support": "Визовая поддержка",
-    "price": "Цена",
-    "reviews": "Отзывы",
     "title": "Доска объявлений",
     "select_category": "Выберите категорию",
     "guide": "Гид",
@@ -218,17 +208,10 @@
     "search": "Найти",
     "search_in": "Поиск по {{category}}:",
     "location_placeholder": "Внесите локацию ...",
-    "search_placeholder": "Внесите локацию ...",
     "searching": "Идет поиск...",
     "results": "Результаты поиска",
     "price": "Цена",
-    "propose_price": "Предложить цену",
-    "supplier": "Поставщик",
-    "phone": "Телефон",
-    "telegram": "Телеграм",
-    "no_image": "Нет изображения",
-    "time_left": "До окончания",
-    "time_expired": "Время истекло"
+    "propose_price": "Предложить цену"
   },
 
   "country_names": {
@@ -258,6 +241,13 @@
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "new_visa_support": "Визовая поддержка",
   "select_country": "Выберите страну для визы",
+
+  "hotels_load_error": "Не удалось загрузить отели",
+  "profile_load_error": "Не удалось загрузить профиль",
+  "services_load_error": "Не удалось загрузить услуги",
+  "country_not_found": "Страны не найдены",
+  "direction_from_not_found": "Город вылета не найден",
+  "direction_to_not_found": "Город прибытия не найден",
 
   "nav": {
     "dashboard": "Управление",
@@ -338,9 +328,11 @@
 
   "common": {
     "loading": "Загрузка…",
-    "backToDashboard": "в Личный кабинет",
-    "find": "Найти"
+    "backToDashboard": "в Личный кабинет"
   },
+
+  "my_requests": "Мои запросы",
+  "my_bookings": "Мои бронирования",
 
   "favorites": {
     "empty_title": "Избранное пусто",
@@ -349,16 +341,21 @@
     "removed": "Удалено из избранного",
     "added": "Добавлено в избранное",
     "remove_error": "Не удалось удалить из избранного",
-    "empty_subtitle": "Добавляйте интересные услуги в избранное и возвращайтесь позже.",
-    "add": "В избранное",
-    "remove": "Удалить из избранного"
+    "empty_subtitle": "Добавляйте интересные услуги в избранное и возвращайтесь позже."
   },
 
-  "tabs": {
-    "my_requests": "Мои запросы",
-    "my_bookings": "Мои бронирования",
-    "favorites": "Избранное"
-  },
+  "tabs.my_requests": "Мои запросы",
+  "tabs.my_bookings": "Мои бронирования",
+  "tabs.favorites": "Избранное",
+
+  "actions.upload_photo": "Загрузить фото",
+  "actions.change_photo": "Сменить фото",
+  "actions.delete_photo": "Удалить фото",
+  "actions.save_profile": "Сохранить профиль",
+  "actions.change": "Сменить",
+  "actions.logout": "Выйти",
+  "actions.quick_request": "Быстрый запрос",
+  "actions.delete": "Удалить",
 
   "stats": {
     "level": "Уровень",
@@ -389,9 +386,7 @@
     "sent": "Запрос отправлен",
     "error": "Не удалось отправить запрос",
     "note_prompt": "Комментарий к запросу (необязательно):",
-    "empty": "Пока нет запросов.",
-    "note_label": "Комментарий к запросу (необязательно):",
-    "note_placeholder": "Например: даты, состав, пожелания"
+    "empty": "Пока нет запросов."
   },
 
   "service_images": "Фото услуги",
@@ -451,102 +446,6 @@
     "placeholder": "Коротко опишите опыт",
     "send": "Отправить",
     "save_error": "Не удалось сохранить отзыв"
-  },
-
-  "actions": {
-    "cancel": "Отмена",
-    "send": "Отправить",
-    "quick_request": "Быстрый запрос"
-  },
-
-  "marketplace": {
-    "search_placeholder": "Поиск по услугам, странам, городам…",
-    "supplier": "Поставщик",
-    "phone": "Телефон",
-    "telegram": "Телеграм",
-    "time_left": "Осталось",
-    "time_expired": "Истекло",
-    "no_image": "Нет изображения",
-    "no_results": "Ничего не найдено",
-    "show_more": "Показать ещё",
-    "reset_filters": "Сбросить фильтры",
-    "filters": "Фильтры",
-    "sort": "Сортировать",
-    "sort_new": "Сначала новые",
-    "sort_price_low": "Цена: по возрастанию",
-    "sort_price_high": "Цена: по убыванию",
-    "per_page": "На странице",
-    "items": "элементов",
-    "status": "Статус",
-    "status_draft": "Черновик",
-    "status_approved": "Одобрено",
-    "status_rejected": "Отклонено",
-    "price_from": "от",
-    "price_to": "до",
-    "copy_success": "Скопировано",
-    "copy_error": "Не удалось скопировать",
-    "timer": {
-      "d": "{{count}}д",
-      "h": "{{count}}ч",
-      "m": "{{count}}м",
-      "s": "{{count}}с"
-    },
-    "pagination": {
-      "prev": "Назад",
-      "next": "Вперёд",
-      "page": "Стр. {{page}} из {{total}}"
-    }
-  },
-  "favorites": {
-    "add": "В избранное",
-    "remove": "Убрать из избранного",
-    "added_toast": "Добавлено в избранное",
-    "removed_toast": "Удалено из избранного"
-  },
-  "actions": {
-    "quick_request": "Быстрый запрос",
-    "open": "Открыть",
-    "close": "Закрыть",
-    "send": "Отправить",
-    "cancel": "Отмена"
-  },
-  "tooltips": {
-    "favorite_add": "Добавить в избранное",
-    "favorite_remove": "Убрать из избранного",
-    "call": "Позвонить",
-    "open_telegram": "Открыть в Telegram",
-    "quick_request": "Отправить быстрый запрос",
-    "copy": "Скопировать"
-  },
-  "modals": {
-    "quick_request": {
-      "title": "Быстрый запрос",
-      "subtitle": "Оставьте контакты — мы свяжемся с вами",
-      "name": "Имя",
-      "phone": "Номер телефона",
-      "telegram": "Телеграм",
-      "message": "Сообщение",
-      "consent": "Согласен на связь",
-      "success_title": "Запрос отправлен",
-      "success_desc": "Мы свяжемся с вами в ближайшее время.",
-      "error_title": "Не удалось отправить",
-      "error_desc": "Попробуйте позже."
-    }
-  },
-  "common": {
-    "find": "Найти",
-    "loading": "Загрузка…",
-    "error": "Что-то пошло не так",
-    "save": "Сохранить",
-    "edit": "Редактировать",
-    "delete": "Удалить",
-    "apply": "Применить",
-    "clear": "Очистить"
   }
-
-
-
 }
-
-
 
