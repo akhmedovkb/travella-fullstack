@@ -71,7 +71,7 @@ function firstNonEmpty(...args) {
     if (v === 0) return 0;
     if (v !== undefined && v !== null && String(v).trim() !== "") return v;
   }
-  ��return null;
+  return null;
 }
 function buildDates(d = {}) {
   const hotelIn =
@@ -161,6 +161,79 @@ async function fetchProviderProfile(providerId) {
 
   providerCache.set(providerId, profile || null);
   return profile;
+}
+
+/* ===== Универсальный парсер полей услуги ===== */
+function _firstNonEmpty(...args) {
+  for (const v of args)
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  return null;
+}
+function _maybeParse(obj) {
+  if (!obj) return null;
+  if (typeof obj === "string") {
+    try {
+      return JSON.parse(obj);
+    } catch {
+      return null;
+    }
+  }
+  return typeof obj === "object" ? obj : null;
+}
+function _mergeDetails(svc, it) {
+  const cands = [
+    svc?.details, it?.details, svc?.detail, it?.detail,
+    svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
+  ].map(_maybeParse).filter(Boolean);
+  return Object.assign({}, ...cands);
+}
+function extractServiceFields(item) {
+  const svc = item?.service || item || {};
+
+  const details = _mergeDetails(svc, item);
+  const bag = { ...details, ...svc, ...item };
+
+  const title = _firstNonEmpty(
+    svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
+  );
+
+  const rawPrice = _firstNonEmpty(
+    details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice,
+    svc.netPrice, svc.price, item?.price
+  );
+  const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
+
+  const hotel = _firstNonEmpty(
+    details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
+    svc.hotel, svc.hotel_name, svc.refused_hotel_name
+  );
+  const accommodation = _firstNonEmpty(
+    details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category,
+    svc.accommodation, svc.room, svc.room_type
+  );
+
+  const left = _firstNonEmpty(
+    bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
+  );
+  const right = _firstNonEmpty(
+    bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
+  );
+  const dates = left && right ? `${left} → ${right}` : left || right || null;
+
+  const inlineProvider = _firstNonEmpty(
+    svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
+    item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
+    details?.provider
+  ) || {};
+
+  const providerId = _firstNonEmpty(
+    svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
+    svc.owner_id, svc.agency_id
+  );
+
+  const status = _firstNonEmpty(svc.status, item.status, details?.status);
+
+  return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, status };
 }
 
 /* ===================== Mini Components ===================== */
@@ -292,86 +365,32 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {pageItems.map((it) => {
-              const s = it.service || {};
-              const serviceId = s.id ?? it.service_id ?? null;
+              // универсальный разбор
+              const {
+                svc,
+                title,
+                hotel,
+                accommodation,
+                dates,
+                prettyPrice,
+                inlineProvider,
+                providerId,
+              } = extractServiceFields(it);
 
-              const title =
-                s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
+              const serviceId = svc.id ?? it.service_id ?? null;
 
+              // картинки
               const image =
-                (Array.isArray(s.images) && s.images[0]) ||
-                (Array.isArray(it.images) && it.images[0]) ||
-                s.cover ||
-                s.cover_url ||
-                s.image ||
+                (Array.isArray(svc.images) && svc.images[0]) ||
+                svc.cover ||
+                svc.cover_url ||
+                svc.image ||
                 it.cover ||
                 it.cover_url ||
                 it.image ||
                 null;
 
-              // normalize details
-              let rawDetails = s.details ?? it.details ?? {};
-              let details = {};
-              try {
-                details = typeof rawDetails === "string" ? JSON.parse(rawDetails) : (rawDetails || {});
-              } catch {
-                details = {};
-              }
-
-              const price = firstNonEmpty(
-                details.netPrice,
-                details.price,
-                details.totalPrice,
-                details.priceNet,
-                details.grossPrice,
-                s.price,
-                it.price
-              );
-              const prettyPrice = fmtPrice(price);
-
-              const hotel = firstNonEmpty(
-                details.hotel,
-                details.hotelName,
-                details.refused_hotel_name,
-                details?.hotel?.name
-              );
-              const accommodation = firstNonEmpty(
-                details.accommodation,
-                details.accommodationCategory,
-                details.room,
-                details.roomType,
-                details.room_category
-              );
-              const dates = buildDates(details);
-
-              // inline provider + id
-              const inlineProv =
-                s.provider ||
-                s.provider_profile ||
-                s.supplier ||
-                s.vendor ||
-                s.agency ||
-                s.owner ||
-                it.provider ||
-                it.provider_profile ||
-                it.supplier ||
-                it.vendor ||
-                it.agency ||
-                it.owner ||
-                details.provider ||
-                {};
-              const providerId =
-                firstNonEmpty(
-                  s.provider_id,
-                  s.providerId,
-                  it.provider_id,
-                  it.providerId,
-                  details.provider_id,
-                  s.owner_id,
-                  s.agency_id
-                ) || null;
-
-              // fetched provider (per-card state)
+              // подгрузка профиля поставщика
               const [provider, setProvider] = useState(null);
               useEffect(() => {
                 let alive = true;
@@ -385,22 +404,15 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 };
               }, [providerId]);
 
-              const prov = { ...(inlineProv || {}), ...(provider || {}) };
-
-              const supplierName = firstNonEmpty(
+              const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+              const supplierName = _firstNonEmpty(
                 prov?.name,
                 prov?.title,
                 prov?.display_name,
                 prov?.company_name,
-                prov?.brand,
-                s.provider_name,
-                it.provider_name,
-                details.provider_name,
-                s.owner_name,
-                s.agency_name
+                prov?.brand
               );
-
-              const supplierPhone = firstNonEmpty(
+              const supplierPhone = _firstNonEmpty(
                 prov?.phone,
                 prov?.phone_number,
                 prov?.phoneNumber,
@@ -410,28 +422,15 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 prov?.whatsApp,
                 prov?.phones?.[0],
                 prov?.contacts?.phone,
-                prov?.contact_phone,
-                s.provider_phone,
-                it.provider_phone,
-                details.provider_phone
+                prov?.contact_phone
               );
-
-              const supplierTgRaw = firstNonEmpty(
+              const supplierTgRaw = _firstNonEmpty(
                 prov?.telegram,
                 prov?.tg,
                 prov?.telegram_username,
                 prov?.telegram_link,
-                prov?.tg_link,
-                prov?.socials?.telegram,
                 prov?.contacts?.telegram,
-                prov?.social,
-                prov?.social_link,
-                prov?.links?.telegram,
-                details.provider_telegram,
-                s.provider_telegram,
-                it.provider_telegram,
-                s.telegram,
-                details.telegram
+                prov?.socials?.telegram
               );
               const supplierTg = renderTelegram(supplierTgRaw);
 
@@ -458,7 +457,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     onMouseLeave={() => setTipOpen(false)}
                   >
                     {image ? (
-                      <img src={image} alt={title} className="w-full h-full object-cover" />
+                      <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
                         <span className="text-sm">
@@ -489,7 +488,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* стеклянная подсказка из Marketplace */}
+                    {/* стеклянная подсказка из Marketplace (портал за пределами карточки) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="rounded-lg bg-black/60 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
@@ -851,7 +850,7 @@ export default function ClientDashboard() {
   const handleRemoveFavorite = async (itemId) => {
     try {
       await apiPost("/api/wishlist/toggle", { itemId });
-    } catch {} // игнор ошибки
+    } catch {} // игнор ошибки, потом подрежем список локально
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
