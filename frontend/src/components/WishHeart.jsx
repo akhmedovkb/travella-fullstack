@@ -1,10 +1,13 @@
+import { useTranslation } from "react-i18next";
+
 export default function WishHeart({ active, onClick }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label="Wishlist"
-      title={active ? "Убрать из избранного" : "В избранное"}
+      title={active ? t("favorites.remove_from") : t("favorites.add")}
       className={`p-2 rounded-full hover:bg-gray-100 ${active ? "text-red-500" : "text-gray-400"}`}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor">
