@@ -131,14 +131,13 @@ function Stars({ value = 0, size = 14 }) {
     <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => {
         const filled = i + 1 <= full;
-        const half = !filled && i + 0.5 === full;
         return (
           <svg
             key={i}
             width={size}
             height={size}
             viewBox="0 0 24 24"
-            className={filled || half ? "text-amber-400" : "text-gray-400"}
+            className={filled ? "text-amber-400" : "text-gray-400"}
             fill={filled ? "currentColor" : "none"}
             stroke="currentColor"
             strokeWidth="1.5"
@@ -240,8 +239,7 @@ export default function Marketplace() {
 
   useEffect(() => {
     search({ all: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     (async () => {
@@ -327,43 +325,71 @@ export default function Marketplace() {
     );
     const dates = buildDates(details);
 
-    // supplier info (для вывода в теле карточки)
+    /* --------- Поставщик (расширенный сбор полей) --------- */
     const prov =
       svc.provider ||
+      svc.provider_profile ||
       svc.supplier ||
       svc.vendor ||
+      svc.agency ||
+      svc.owner ||
       it.provider ||
+      it.provider_profile ||
       it.supplier ||
+      it.vendor ||
+      it.agency ||
+      it.owner ||
+      details.provider ||
       {};
+
     const supplierName = firstNonEmpty(
       prov?.name,
+      prov?.title,
+      prov?.display_name,
+      prov?.company_name,
+      prov?.brand,
       svc.provider_name,
       it.provider_name,
-      details.provider_name
+      details.provider_name,
+      svc.owner_name,
+      svc.agency_name
     );
+
     const supplierPhone = firstNonEmpty(
       prov?.phone,
       prov?.phone_number,
+      prov?.phoneNumber,
+      prov?.tel,
+      prov?.mobile,
+      prov?.whatsapp,
+      prov?.whatsApp,
       prov?.phones?.[0],
       prov?.contacts?.phone,
+      prov?.contact_phone,
       svc.provider_phone,
       it.provider_phone,
       details.provider_phone
     );
+
     const supplierTgRaw = firstNonEmpty(
       prov?.telegram,
       prov?.tg,
+      prov?.telegram_username,
+      prov?.telegram_link,
+      prov?.tg_link,
       prov?.socials?.telegram,
       prov?.contacts?.telegram,
       prov?.social,
       prov?.social_link,
-      svc.provider_telegram,
+      prov?.links?.telegram,
       details.provider_telegram,
+      svc.provider_telegram,
       it.provider_telegram,
       svc.telegram,
       details.telegram
     );
     const supplierTg = renderTelegram(supplierTgRaw);
+    /* ------------------------------------------------------ */
 
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const statusRaw = svc.status ?? it.status ?? details.status ?? null;
