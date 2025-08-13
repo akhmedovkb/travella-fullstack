@@ -119,6 +119,8 @@
   },
   "comment": "Izoh",
   "common": {
+    "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
+    "comment": "Izoh",
     "amount": "Summasi",
     "backToDashboard": "Kabinetga qaytish",
     "booking": "Bron qilish",
@@ -474,5 +476,6 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
 }
+
 
 
