@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
-
+import ProviderInboxList from "../components/ProviderInboxList";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -2534,42 +2534,9 @@ useEffect(() => {
 
                   {/* форма оффера */}
                   <div className="grid md:grid-cols-6 gap-2 mt-3">
-                    <input
-                      placeholder="Цена"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.price || ""}
-                      onChange={(e) => changeProposalForm(r.id, "price", e.target.value)}
-                    />
-                    <input
-                      placeholder="Валюта (USD)"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.currency || ""}
-                      onChange={(e) => changeProposalForm(r.id, "currency", e.target.value)}
-                    />
-                    <input
-                      placeholder="Отель"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.hotel || ""}
-                      onChange={(e) => changeProposalForm(r.id, "hotel", e.target.value)}
-                    />
-                    <input
-                      placeholder="Размещение (DBL/TRPL)"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.room || ""}
-                      onChange={(e) => changeProposalForm(r.id, "room", e.target.value)}
-                    />
-                    <input
-                      placeholder="Условия"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.terms || ""}
-                      onChange={(e) => changeProposalForm(r.id, "terms", e.target.value)}
-                    />
-                    <input
-                      placeholder="Сообщение"
-                      className="border rounded px-2 py-1"
-                      value={proposalForms[r.id]?.message || ""}
-                      onChange={(e) => changeProposalForm(r.id, "message", e.target.value)}
-                    />
+                    <section className="mt-6">
+                      <ProviderInboxList showHeader={false} compact />
+                    </section>
                   </div>
 
                   <div className="mt-2">
