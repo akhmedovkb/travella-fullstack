@@ -41,23 +41,41 @@ async function handleCreateQuick(req, res) {
     const clientId = req.user?.id;
     if (!clientId) return res.status(401).json({ error: "unauthorized" });
 
-    const { service_id, note } = req.body || {};
+    const { service_id, provider_id: providerIdFromBody, note } = req.body || {};
     if (!service_id) return res.status(400).json({ error: "service_id required" });
 
-    const svc = await getServiceById(service_id);
-    if (!svc) return res.status(404).json({ error: "service_not_found" });
+    let svc = null;
+    try { svc = await getServiceById(service_id); } catch (_) {}
 
-    const provider_id =
-      svc.provider_id || svc.providerId || svc.owner_id || svc.agency_id || svc.user_id;
+    // 1) Пытаемся взять провайдера из записи услуги
+    let provider_id =
+      svc?.provider_id ||
+      svc?.providerId ||
+      svc?.owner_id ||
+      svc?.agency_id ||
+      svc?.user_id ||
+      null;
+
+    // 2) Фолбэк: берём из тела запроса
+    if (!provider_id && providerIdFromBody) {
+      provider_id = providerIdFromBody;
+    }
+
+    if (!provider_id) {
+      // Хотите — верните 404 как раньше, но чтобы не блокировать UX, лучше так:
+      return res.status(404).json({ error: "service_not_found" });
+    }
 
     const rec = await createQuickRequest({
       type: "quick",
       service_id,
       provider_id,
       client_id: clientId,
-      note: note || null, // комментарий клиента
+      note: note || null,
       status: "new",
       created_at: new Date().toISOString(),
+      // можно сохранить минималку по услуге, если svc есть:
+      service_title: svc?.title || svc?.name || null,
     });
 
     return res.json({ ok: true, id: rec.id });
@@ -66,6 +84,7 @@ async function handleCreateQuick(req, res) {
     return res.status(500).json({ error: "request_create_failed" });
   }
 }
+
 
 /** ===== Маршруты ===== */
 
