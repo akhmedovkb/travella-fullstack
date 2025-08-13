@@ -1,7 +1,6 @@
 // src/pages/Marketplace.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "react-toastify";
 import { apiGet, apiPost } from "../api";
 
 /* ===================== Helpers ===================== */
@@ -11,12 +10,14 @@ function normalizeList(res) {
   if (Array.isArray(res?.data)) return res.data;
   return [];
 }
+
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
   return String(v);
 }
+
 function firstNonEmpty(...args) {
   for (const v of args) {
     if (v === 0) return 0;
@@ -24,17 +25,17 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
+
 function buildDates(d = {}) {
-  const hotelIn =
-    d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
-  const hotelOut =
-    d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
+  const hotelIn = d.hotel_check_in || d.checkIn || d.startDate || d.start_flight_date || d.startFlightDate;
+  const hotelOut = d.hotel_check_out || d.checkOut || d.returnDate || d.end_flight_date || d.endFlightDate;
   if (hotelIn && hotelOut) return `${hotelIn} → ${hotelOut}`;
   if (hotelIn) return String(hotelIn);
   if (hotelOut) return String(hotelOut);
   return null;
 }
-/* маленький клиент-сайд фильтр локации на случай, если бэкенд не отфильтровал */
+
+/* маленький клиент-сайд фильтр локации */
 function matchesLocation(it, q) {
   if (!q) return true;
   const svc = it?.service || it;
@@ -60,6 +61,7 @@ function matchesLocation(it, q) {
   return hay.includes(String(q).toLowerCase());
 }
 
+/* ===================== Page ===================== */
 export default function Marketplace() {
   const { t } = useTranslation();
 
@@ -67,7 +69,11 @@ export default function Marketplace() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const filters = useMemo(
-    () => ({ q: q?.trim() || undefined, location: q?.trim() || undefined, category: category || undefined }),
+    () => ({
+      q: q?.trim() || undefined,
+      location: q?.trim() || undefined,
+      category: category || undefined,
+    }),
     [q, category]
   );
 
@@ -76,8 +82,16 @@ export default function Marketplace() {
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
 
-  // избранное (локальный set для мгновенной реакции)
+  // Избранное — локальный Set для мгновенной реакции
   const [favIds, setFavIds] = useState(new Set());
+
+  // Простой тост поверх всего
+  const [toast, setToast] = useState(null);
+  const showToast = (msg) => {
+    setToast(msg);
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(null), 1800);
+  };
 
   // Загрузка
   const search = async (opts = {}) => {
@@ -95,10 +109,12 @@ export default function Marketplace() {
       }
 
       // Клиентский фильтр по локации
-      if (filters.location) list = list.filter((it) => matchesLocation(it, filters.location));
+      if (filters.location) {
+        list = list.filter((it) => matchesLocation(it, filters.location));
+      }
 
       setItems(list);
-    } catch (e) {
+    } catch {
       setError(t("common.loading_error") || "Не удалось загрузить данные");
       setItems([]);
     } finally {
@@ -122,37 +138,38 @@ export default function Marketplace() {
       ) || undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
-      toast.success(t("requests.sent") || (t("actions.quick_request") + " ✓"));
+      alert(t("requests.sent") || (t("actions.quick_request") + " ✓"));
     } catch {
-      toast.error(t("requests.error") || "Не удалось отправить запрос");
+      alert(t("requests.error") || "Не удалось отправить запрос");
     }
   };
 
-  // Избранное
+  // Избранное: безопасно определяем новое состояние по ответу сервера
   const toggleFavorite = async (id) => {
     try {
-      await apiPost("/api/wishlist/toggle", { itemId: id });
+      const res = await apiPost("/api/wishlist/toggle", { itemId: id });
+      // извлекаем новое состояние из разных возможных форматов ответа
+      let nextIsFav;
+      if (typeof res?.added === "boolean") nextIsFav = res.added;
+      else if (typeof res?.isFav === "boolean") nextIsFav = res.isFav;
+      else if (res?.action === "added") nextIsFav = true;
+      else if (res?.action === "removed") nextIsFav = false;
+      else nextIsFav = !favIds.has(id); // фолбэк: локальный инверт
 
-      let nowFav = false;
       setFavIds((prev) => {
         const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-          nowFav = false;
-        } else {
-          next.add(id);
-          nowFav = true;
-        }
+        if (nextIsFav) next.add(id);
+        else next.delete(id);
         return next;
       });
 
-      if (nowFav) {
-        toast.success(t("favorites.added") || "Добавлено в избранное");
-      } else {
-        toast.info(t("favorites.removed") || "Удалено из избранного");
-      }
+      showToast(
+        nextIsFav
+          ? t("toast.addedToFav") || "Добавлено в избранное"
+          : t("toast.removedFromFav") || "Удалено из избранного"
+      );
     } catch {
-      toast.error(t("toast.favoriteError") || "Не удалось изменить избранное");
+      showToast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
 
@@ -167,7 +184,7 @@ export default function Marketplace() {
     { value: "refused_hotel", label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель" },
     { value: "refused_flight", label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет" },
     { value: "refused_event_ticket", label: t("marketplace.refused_event") || t("category.refused_event_ticket") || "Отказной билет" },
-    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
+    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" }
   ];
 
   /* ===================== Card ===================== */
@@ -175,8 +192,7 @@ export default function Marketplace() {
     const svc = it?.service || it;
     const id = svc.id ?? it.id;
     const details = svc.details || it.details || {};
-    const title =
-      svc.title || svc.name || details.eventName || t("title") || "Service";
+    const title = svc.title || svc.name || details.eventName || t("title") || "Service";
 
     const images = Array.isArray(svc.images) ? svc.images : [];
     const image = images[0] || svc.cover || svc.image || null;
@@ -185,35 +201,17 @@ export default function Marketplace() {
     const prettyPrice = fmtPrice(price);
 
     const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
-    const accommodation = firstNonEmpty(
-      details.accommodation,
-      details.accommodationCategory
-    );
+    const accommodation = firstNonEmpty(details.accommodation, details.accommodationCategory);
     const dates = buildDates(details);
 
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const status = svc.status ?? it.status ?? details.status ?? null;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
-
-    const reviewsCount = Number(
-      it.reviews_count ??
-        svc.reviews_count ??
-        svc.reviews?.count ??
-        0
-    );
-    const reviewsAvg = Number(
-      it.reviews_avg ??
-        svc.reviews_avg ??
-        svc.reviews?.avg ??
-        0
-    );
-
     const isFav = favIds.has(id);
 
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
-
           {image ? (
             <img src={image} alt={title} className="w-full h-full object-cover" />
           ) : (
@@ -222,67 +220,49 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Верхний слой: рейтинг/статус слева, отзывы + сердечко справа */}
-          <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
+          {/* Верх: бейдж + сердечко */}
+          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
             <div className="flex items-center gap-2">
               {badge && (
-                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/40 backdrop-blur-md ring-1 ring-white/20">
+                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Бейдж отзывов c тултипом (поверх всего) */}
-              <div className="relative group/rev pointer-events-auto">
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs bg-black/40 backdrop-blur-md ring-1 ring-white/20">
-                  {/* иконка «комментарии» */}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M21 15a4 4 0 0 1-4 4H8l-4 4v-4H5a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8z"/>
-                  </svg>
-                  <span>{reviewsCount}</span>
-                </div>
-                {/* тултип */}
-                <div className="absolute top-full right-0 mt-1 z-30 hidden group-hover/rev:block">
-                  <div className="bg-gray-900 text-white text-xs rounded-md px-2 py-1 shadow-lg whitespace-nowrap">
-                    {t("reviews.title_service") || "Отзывы об услуге"}
-                    {reviewsCount > 0 ? ` • ${reviewsAvg.toFixed(1)}` : ""}
-                  </div>
-                </div>
-              </div>
-
-              {/* Избранное */}
-              <button
-                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFavorite(id);
-                }}
-                aria-pressed={isFav}
-                title={
-                  isFav
-                    ? t("favorites.removed") || "Удалить из избранного"
-                    : t("favorites.added") || "В избранное"
-                }
+            <button
+              className={`pointer-events-auto p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
+                isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(id);
+              }}
+              title={
+                isFav
+                  ? t("favorites.removed") || "Удалить из избранного"
+                  : t("favorites.added") || "В избранное"
+              }
+              aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill={isFav ? "currentColor" : "none"}
+                stroke="currentColor"
+                strokeWidth="1.8"
               >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill={isFav ? "#EF4444" : "none"}
-                  stroke={isFav ? "#EF4444" : "currentColor"}
-                  strokeWidth="1.8"
-                >
-                  <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-                </svg>
-              </button>
-            </div>
+                <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
+              </svg>
+            </button>
           </div>
 
-          {/* «Стеклянный» подпояс при наведении (понизил белизну, повысил контраст) */}
-          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {/* Тултип «стеклянный» */}
+          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-x-0 bottom-0 p-3">
-              <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-black/30 shadow-lg">
+              {/* делаем текст чуть темнее и уменьшаем белизну подложки */}
+              <div className="rounded-lg bg-white/8 backdrop-blur-md text-white/95 text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
                 {hotel && (
                   <div>
@@ -313,7 +293,6 @@ export default function Marketplace() {
           </div>
         </div>
 
-        {/* Тело карточки */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
@@ -338,6 +317,15 @@ export default function Marketplace() {
   /* ===================== Layout ===================== */
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+      {/* Тост */}
+      {toast && (
+        <div className="fixed right-4 top-16 z-[1000]">
+          <div className="bg-white shadow-lg border rounded-lg px-4 py-2 text-sm">
+            {toast}
+          </div>
+        </div>
+      )}
+
       {/* Панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
@@ -365,12 +353,15 @@ export default function Marketplace() {
         >
           {t("marketplace.search") || "Найти"}
         </button>
-        {/* Кнопку «Назад» убрали */}
       </div>
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">{t("marketplace.searching") || "Поиск..."}</div>}
+        {loading && (
+          <div className="text-gray-500">
+            {t("marketplace.searching") || "Поиск..."}
+          </div>
+        )}
         {!loading && error && <div className="text-red-600">{error}</div>}
         {!loading && !error && !items.length && (
           <div className="text-gray-500">
