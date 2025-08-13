@@ -28,6 +28,7 @@
   "new_service_tip": "Yangi xizmat qo‘shish uchun barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
   "title": "Sarlavha",
   "description": "Tavsif",
+
   "category": {
     "refused_tour": "Rad etilgan tur",
     "refused_hotel": "Rad etilgan mehmonxona",
@@ -46,6 +47,7 @@
     "hotel_room": "Mehmonxona xonasi",
     "hotel_transfer": "Mehmonxonadan/ga transfer"
   },
+
   "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
   "select_files": "Fayllarni tanlash",
   "no_file_chosen": "Fayl tanlanmagan",
@@ -64,18 +66,22 @@
   "delete_error": "Xizmatni o‘chirishda xatolik",
   "choose_files": "Fayllarni tanlash",
   "no_files_selected": "Fayl tanlanmagan",
+
   "expiration_timer": "Amal qilish taymeri",
   "is_active": "Faol",
+
   "new_refused_tour": "Yangi rad etilgan tur qo‘shish:",
   "new_refused_hotel": "Yangi rad etilgan mehmonxona qo‘shish:",
   "new_refused_airtkt": "Yangi rad etilgan aviachipta qo‘shish:",
   "new_refused_tkt": "Yangi rad etilgan tadbir chiptasini qo‘shish:",
   "new_visa_service": "Viza xizmatini qo‘shish:",
+
   "direction": "Yo‘nalish",
   "accommodation": "Joylashuv",
   "refused_hotel_city": "Shahar",
   "refused_hotel_select_city": "Shaharni kiriting",
   "refused_hotel_select": "Mehmonxonani kiriting",
+
   "food": "Ovqatlanish turi",
   "food_options": {
     "select": "Tanlang",
@@ -86,6 +92,7 @@
     "uai": "Ultra hammasi ichida",
     "halal": "Halol"
   },
+
   "transfer": "Transfer",
   "transfer_options": {
     "select": "Transferni tanlang",
@@ -93,11 +100,13 @@
     "group": "Guruhli",
     "none": "Yo‘q"
   },
+
   "airline": "Aviakompaniya",
   "enter_airline": "Aviakompaniyani kiriting",
   "changeable": "O‘zgartirish mumkin",
   "visa_included": "Viza kiritilgan",
   "net_price": "Netto narx",
+
   "select_category": "Toifani tanlang",
   "city_tour": "Shahar bo‘ylab sayohat",
   "mountain_tour": "Tog‘li sayohat",
@@ -112,6 +121,7 @@
   "room_rent": "Xona ijarasi",
   "hotel_transfer": "Mehmonxonadan transfer",
   "hall_rent": "Zal ijarasi",
+
   "flight_type": "Parvoz turi",
   "one_way": "Bir tomonga",
   "round_trip": "Qaytish bilan",
@@ -136,6 +146,7 @@
   "adt": "Kattalar (ADT)",
   "chd": "Bolalar (CHD)",
   "inf": "Go‘daklar (INF)",
+
   "login": {
     "title": "Ta'minotchilar uchun kirish",
     "email": "Email",
@@ -144,6 +155,7 @@
     "no_account": "Akkauntingiz yo‘qmi?",
     "error": "Email yoki parol noto‘g‘ri"
   },
+
   "register": {
     "title": "Ta'minotchini ro‘yxatdan o‘tkazish",
     "name": "Nomi",
@@ -162,6 +174,7 @@
     "file_chosen": "Fayl tanlandi",
     "required": "Iltimos, ushbu maydonni to‘ldiring"
   },
+
   "calendar": {
     "blocking_title": "Bandlik kalendari",
     "label_blocked_manual": "Qo‘lda bloklangan",
@@ -175,6 +188,7 @@
     "manual_blocked": "Qo‘lda bloklangan",
     "save_button": "Band sanalarni saqlash"
   },
+
   "marketplace": {
     "title": "E'lonlar doskasi",
     "select_category": "Toifani tanlang",
@@ -194,11 +208,16 @@
     "search": "Qidirish",
     "search_in": "{{category}} bo‘yicha qidirish:",
     "location_placeholder": "Hududni kiriting ...",
+    "search_placeholder": "Hududni kiriting ...",
     "searching": "Qidirilmoqda...",
     "results": "Qidiruv natijalari",
     "price": "Narx",
-    "propose_price": "Narx taklif qilish"
+    "propose_price": "Narx taklif qilish",
+    "supplier": "Ta'minotchi",
+    "phone": "Telefon",
+    "telegram": "Telegram"
   },
+
   "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
   "event_name": "Tadbir nomi",
   "select_event_category": "Tadbir toifasini tanlang",
@@ -212,11 +231,13 @@
   "ticket_details": "Chipta tafsilotlari (qator, o‘rin va h.k.)",
   "new_visa_support": "Viza yordami",
   "select_country": "Viza uchun mamlakatni tanlang",
+
   "nav": {
     "dashboard": "Boshqaruv",
     "requests": "So‘rovlar",
     "bookings": "Bronlar"
   },
+
   "client": {
     "register": {
       "title": "Mijoz ro‘yxatdan o‘tishi",
@@ -266,6 +287,7 @@
       "favorites": "Sevimlilar"
     }
   },
+
   "provider": {
     "requests": {
       "title": "So‘rovlar (Provayder)",
@@ -286,11 +308,13 @@
       "status": "Holat"
     }
   },
+
   "common": {
     "loading": "Yuklanmoqda…",
     "backToDashboard": "Kabinetga qaytish",
-    "loading_error": "Maʼlumotlarni yuklab bo‘lmadi"
+    "find": "Qidirish"
   },
+
   "favorites": {
     "empty_title": "Sevimlilar bo‘sh",
     "empty_desc": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
@@ -300,11 +324,13 @@
     "remove_error": "Sevimlilardan o‘chirib bo‘lmadi",
     "empty_subtitle": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting."
   },
+
   "tabs": {
     "my_requests": "So‘rovlarim",
     "my_bookings": "Bronlarim",
     "favorites": "Sevimlilar"
   },
+
   "stats": {
     "level": "Daraja",
     "tier": "Daraja",
@@ -317,15 +343,18 @@
     "cancelled": "Bekor qilingan",
     "tier_label": "Daraja"
   },
+
   "empty": {
     "no_requests": "Hozircha so‘rovlar yo‘q.",
     "no_bookings": "Hozircha bronlar yo‘q.",
     "no_favorites": "Sevimlilar bo‘sh"
   },
+
   "bookings": {
     "item": "Bron",
     "empty": "Hozircha bronlar yo‘q."
   },
+
   "requests": {
     "item": "So‘rov",
     "sent": "So‘rov yuborildi",
@@ -335,6 +364,7 @@
     "note_label": "So‘rov uchun izoh (ixtiyoriy):",
     "note_placeholder": "Masalan: sanalar, guruh tarkibi, istaklar"
   },
+
   "service_images": "Xizmat rasmlari",
   "clear_all": "Hammasini tozalash",
   "clear_all_images_confirm": "Barcha rasmlarni o‘chirasizmi?",
@@ -344,11 +374,13 @@
   "select_hotel": "Mehmonxonani tanlang",
   "status": "Holat",
   "sum": "Summasi",
+
   "toast": {
     "addedToFav": "Sevimlilarga qo‘shildi",
     "removedFromFav": "Sevimlilardan o‘chirildi",
     "favoriteError": "Sevimlilarni o‘zgartirib bo‘lmadi"
   },
+
   "cover": "Muqova",
   "comment": "Izoh",
   "loading_stats": "Statistika yuklanmoqda...",
@@ -378,16 +410,17 @@
   "name_placeholder": "Ismingiz",
   "password_change": "Parolni almashtirish",
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
-  "my_bookings": "Bronlarim",
-  "my_requests": "So‘rovlarim",
-  "actions.upload_photo": "Rasm yuklash",
-  "actions.change_photo": "Rasmni almashtirish",
-  "actions.delete_photo": "Rasmni o‘chirish",
-  "actions.save_profile": "Profilni saqlash",
-  "actions.change": "Almashtirish",
-  "actions.logout": "Chiqish",
-  "actions.quick_request": "Tezkor so‘rov",
-  "actions.delete": "O‘chirish",
-  "actions.cancel": "Bekor qilish",
-  "actions.send": "Yuborish"
+
+  "reviews": {
+    "title_provider": "Mijozlar sharhlari",
+    "title_service": "Xizmat sharhlari",
+    "count": "ta sharh",
+    "empty": "Hozircha sharhlar yo‘q.",
+    "leave_service": "Xizmat haqida sharh qoldirish",
+    "leave_client": "Mijoz haqida sharh qoldirish",
+    "rating": "Baholash",
+    "placeholder": "Tajribaning qisqacha tavsifi",
+    "send": "Yuborish",
+    "save_error": "Sharhni saqlab bo‘lmadi"
+  }
 }
