@@ -183,6 +183,46 @@ function renderTelegram(value) {
   return { href, label };
 }
 
+/* ======== provider fetch (cache + fallbacks) ======== */
+
+const providerCache = new Map();
+
+async function fetchProviderProfile(providerId) {
+  if (!providerId) return null;
+  if (providerCache.has(providerId)) return providerCache.get(providerId);
+
+  const endpoints = [
+    `/api/providers/${providerId}`,
+    `/api/provider/${providerId}`,
+    `/api/suppliers/${providerId}`,
+    `/api/supplier/${providerId}`,
+    `/api/agencies/${providerId}`,
+    `/api/agency/${providerId}`,
+    `/api/companies/${providerId}`,
+    `/api/company/${providerId}`,
+    `/api/users/${providerId}`,
+    `/api/user/${providerId}`,
+  ];
+
+  let profile = null;
+  for (const url of endpoints) {
+    try {
+      const res = await apiGet(url);
+      const obj =
+        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+      if (obj && (obj.id || obj.name || obj.title)) {
+        profile = obj;
+        break;
+      }
+    } catch {
+      /* try next endpoint */
+    }
+  }
+
+  providerCache.set(providerId, profile || null);
+  return profile;
+}
+
 /* ===================== страница ===================== */
 
 export default function Marketplace() {
@@ -239,7 +279,8 @@ export default function Marketplace() {
 
   useEffect(() => {
     search({ all: true });
-  }, []); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -325,8 +366,8 @@ export default function Marketplace() {
     );
     const dates = buildDates(details);
 
-    /* --------- Поставщик (расширенный сбор полей) --------- */
-    const prov =
+    // base provider from payload
+    const inlineProv =
       svc.provider ||
       svc.provider_profile ||
       svc.supplier ||
@@ -341,6 +382,34 @@ export default function Marketplace() {
       it.owner ||
       details.provider ||
       {};
+
+    // provider id candidates
+    const providerId =
+      firstNonEmpty(
+        svc.provider_id,
+        svc.providerId,
+        it.provider_id,
+        it.providerId,
+        details.provider_id,
+        svc.owner_id,
+        svc.agency_id
+      ) || null;
+
+    // fetched provider state
+    const [provider, setProvider] = useState(null);
+    useEffect(() => {
+      let alive = true;
+      (async () => {
+        if (!providerId) return;
+        const p = await fetchProviderProfile(providerId);
+        if (alive) setProvider(p);
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [providerId]);
+
+    const prov = { ...(inlineProv || {}), ...(provider || {}) };
 
     const supplierName = firstNonEmpty(
       prov?.name,
@@ -389,7 +458,6 @@ export default function Marketplace() {
       details.telegram
     );
     const supplierTg = renderTelegram(supplierTgRaw);
-    /* ------------------------------------------------------ */
 
     const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
     const statusRaw = svc.status ?? it.status ?? details.status ?? null;
