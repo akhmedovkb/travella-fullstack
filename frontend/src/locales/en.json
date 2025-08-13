@@ -435,5 +435,94 @@
     "cancel": "Cancel",
     "send": "Send",
     "quick_request": "Quick request"
+  },
+
+  {
+  "marketplace": {
+    "search_placeholder": "Search services, countries, cities…",
+    "supplier": "Supplier",
+    "phone": "Phone",
+    "telegram": "Telegram",
+    "time_left": "Time left",
+    "time_expired": "Expired",
+    "no_image": "No image",
+    "no_results": "Nothing found",
+    "show_more": "Show more",
+    "reset_filters": "Reset filters",
+    "filters": "Filters",
+    "sort": "Sort",
+    "sort_new": "Newest first",
+    "sort_price_low": "Price: low to high",
+    "sort_price_high": "Price: high to low",
+    "per_page": "Per page",
+    "items": "items",
+    "status": "Status",
+    "status_draft": "Draft",
+    "status_approved": "Approved",
+    "status_rejected": "Rejected",
+    "price_from": "from",
+    "price_to": "to",
+    "copy_success": "Copied",
+    "copy_error": "Failed to copy",
+    "timer": {
+      "d": "{{count}}d",
+      "h": "{{count}}h",
+      "m": "{{count}}m",
+      "s": "{{count}}s"
+    },
+    "pagination": {
+      "prev": "Prev",
+      "next": "Next",
+      "page": "Page {{page}} of {{total}}"
+    }
+  },
+  "favorites": {
+    "add": "Add to favorites",
+    "remove": "Remove from favorites",
+    "added_toast": "Added to favorites",
+    "removed_toast": "Removed from favorites"
+  },
+  "actions": {
+    "quick_request": "Quick request",
+    "open": "Open",
+    "close": "Close",
+    "send": "Send",
+    "cancel": "Cancel"
+  },
+  "tooltips": {
+    "favorite_add": "Add to favorites",
+    "favorite_remove": "Remove from favorites",
+    "call": "Call",
+    "open_telegram": "Open in Telegram",
+    "quick_request": "Send a quick request",
+    "copy": "Copy"
+  },
+  "modals": {
+    "quick_request": {
+      "title": "Quick request",
+      "subtitle": "Leave your contact — we’ll get back to you",
+      "name": "Name",
+      "phone": "Phone number",
+      "telegram": "Telegram",
+      "message": "Message",
+      "consent": "I agree to be contacted",
+      "success_title": "Request sent",
+      "success_desc": "We’ll contact you shortly.",
+      "error_title": "Couldn’t send",
+      "error_desc": "Try again later."
+    }
+  },
+  "common": {
+    "find": "Find",
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "apply": "Apply",
+    "clear": "Clear"
   }
 }
+
+}
+
