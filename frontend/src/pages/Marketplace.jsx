@@ -203,201 +203,189 @@ export default function Marketplace() {
   };
 
   /* ===================== Card ===================== */
-  const Card = ({ it }) => {
-    const svc = it?.service || it;
-    const id = svc.id ?? it.id;
-    const details = svc.details || it.details || {};
-    const title = svc.title || svc.name || details.eventName || t("title") || "Service";
+const Card = ({ it }) => {
+  const svc = it?.service || it;
+  const id = svc.id ?? it.id;
+  const details = svc.details || it.details || {};
+  const title = svc.title || svc.name || details.eventName || t("title") || "Service";
 
-    const images = Array.isArray(svc.images) ? svc.images : [];
-    const image = images[0] || svc.cover || svc.image || null;
+  const images = Array.isArray(svc.images) ? svc.images : [];
+  const image = images[0] || svc.cover || svc.image || null;
 
-    const price = firstNonEmpty(details.netPrice, svc.price, it.price);
-    const prettyPrice = fmtPrice(price);
+  const price = firstNonEmpty(details.netPrice, svc.price, it.price);
+  const prettyPrice = fmtPrice(price);
 
-    const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
-    const accommodation = firstNonEmpty(details.accommodation, details.accommodationCategory);
-    const dates = buildDates(details);
+  const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
+  const accommodation = firstNonEmpty(details.accommodation, details.accommodationCategory);
+  const dates = buildDates(details);
 
-    const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
-    const status = svc.status ?? it.status ?? details.status ?? null;
-    const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
-    const isFav = favIds.has(id);
+  const rating = Number(svc.rating ?? details.rating ?? it.rating ?? 0);
 
-    // reviews
-    const cached = reviewsCache[id];
-    const [revOpen, setRevOpen] = useState(false);
-    const [rev, setRev] = useState(cached || null);
+  // прячем статусы draft/inactive
+  const rawStatus = (svc.status ?? it.status ?? details.status ?? "")
+    .toString()
+    .toLowerCase();
+  const status = ["draft", "inactive"].includes(rawStatus) ? null : rawStatus || null;
 
-    const openReviews = async () => {
-      setRevOpen(true);
-      if (!rev) {
-        const data = await getServiceReviewsCached(id);
-        setRev(data);
-      }
-    };
+  const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
-    return (
-      <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
-        <div className="aspect-[16/10] bg-gray-100 relative">
-          {image ? (
-            <img src={image} alt={title} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-sm">{t("favorites.no_image") || "Нет изображения"}</span>
-            </div>
-          )}
+  const isFav = favIds.has(id);
 
-          {/* Верх: бейдж + отзывы + сердечко */}
-          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-[10]">
-            <div className="flex items-center gap-2">
-              {badge && (
-                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                  {badge}
-                </span>
+  // reviews
+  const cached = reviewsCache[id];
+  const [revOpen, setRevOpen] = useState(false);
+  const [rev, setRev] = useState(cached || null);
+  const openReviews = async () => {
+    setRevOpen(true);
+    if (!rev) {
+      const data = await getServiceReviewsCached(id);
+      setRev(data);
+    }
+  };
+
+  return (
+    // ВАЖНО: больше НЕ overflow-hidden, чтобы поповер не обрезался
+    <div className="group relative bg-white border rounded-xl shadow-sm flex flex-col overflow-visible">
+      {/* скругление и обрезка только на блоке изображения */}
+      <div className="relative aspect-[16/10] bg-gray-100 rounded-t-xl overflow-hidden">
+        {image ? (
+          <img src={image} alt={title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-gray-400">
+            <span className="text-sm">{t("favorites.no_image") || "Нет изображения"}</span>
+          </div>
+        )}
+
+        {/* Верх: бейдж + отзывы + сердечко */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-[10]">
+          <div className="flex items-center gap-2">
+            {badge && (
+              <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                {badge}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 pointer-events-auto">
+            {/* reviews chip */}
+            <div
+              onMouseEnter={openReviews}
+              onFocus={openReviews}
+              onMouseLeave={() => setRevOpen(false)}
+              className="relative"
+            >
+              <button
+                className="p-1.5 rounded-full bg-black/35 hover:bg-black/45 text-white backdrop-blur-md ring-1 ring-white/20"
+                title={t("reviews.title_service") || "Отзывы об услуге"}
+                aria-label="Service reviews"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/>
+                </svg>
+              </button>
+              <span className="absolute -right-1 -top-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-white text-gray-900 shadow">
+                {Number(rev?.count ?? 0)}
+              </span>
+
+              {/* ПОПОВЕР С ОТЗЫВАМИ — поверх всех слоёв и НЕ обрезается */}
+              {revOpen && (
+                <div
+                  className="absolute z-[1200] right-0 mt-2 w-72 rounded-lg bg-black/80 text-white ring-1 ring-white/10 shadow-lg p-3"
+                  onMouseEnter={() => setRevOpen(true)}
+                  onMouseLeave={() => setRevOpen(false)}
+                >
+                  <div className="text-xs uppercase opacity-80 mb-1">
+                    {t("reviews.title_service") || "Отзывы об услуге"}
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Stars value={rev?.avg || 0} />
+                    <div className="text-xs opacity-80">({Number(rev?.count || 0)})</div>
+                  </div>
+                  {!rev ? (
+                    <div className="text-sm opacity-80">…</div>
+                  ) : rev.items.length ? (
+                    <ul className="space-y-2 max-h-56 overflow-auto pr-1">
+                      {rev.items.map((r) => (
+                        <li key={r.id} className="text-sm">
+                          <div className="flex items-center gap-2">
+                            <Stars value={r.rating} />
+                            <span className="opacity-70 text-xs">
+                              {new Date(r.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          {r.text && <div className="mt-0.5 line-clamp-2 opacity-95">{r.text}</div>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</div>
+                  )}
+                </div>
               )}
             </div>
 
-            <div className="flex items-center gap-2 pointer-events-auto">
-              {/* reviews chip */}
-              <div
-                onMouseEnter={openReviews}
-                onFocus={openReviews}
-                onMouseLeave={() => setRevOpen(false)}
-                className="relative"
-              >
-                <button
-                  className="p-1.5 rounded-full bg-black/35 hover:bg-black/45 text-white backdrop-blur-md ring-1 ring-white/20"
-                  title={t("reviews.title_service") || "Отзывы об услуге"}
-                  aria-label="Service reviews"
-                >
-                  {/* chat bubble */}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/>
-                  </svg>
-                </button>
-                <span className="absolute -right-1 -top-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-white text-gray-900 shadow">
-                  {Number(rev?.count ?? 0)}
-                </span>
-
-                {/* Popover с отзывами — поверх всех слоёв */}
-                {revOpen && (
-                  <div
-                    className="absolute z-[1100] right-0 mt-2 w-72 rounded-lg bg-black/80 text-white ring-1 ring-white/10 shadow-lg p-3"
-                    onMouseEnter={() => setRevOpen(true)}
-                    onMouseLeave={() => setRevOpen(false)}
-                  >
-                    <div className="text-xs uppercase opacity-80 mb-1">
-                      {t("reviews.title_service") || "Отзывы об услуге"}
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Stars value={rev?.avg || 0} />
-                      <div className="text-xs opacity-80">({Number(rev?.count || 0)})</div>
-                    </div>
-                    {!rev ? (
-                      <div className="text-sm opacity-80">…</div>
-                    ) : rev.items.length ? (
-                      <ul className="space-y-2 max-h-56 overflow-auto pr-1">
-                        {rev.items.map((r) => (
-                          <li key={r.id} className="text-sm">
-                            <div className="flex items-center gap-2">
-                              <Stars value={r.rating} />
-                              <span className="opacity-70 text-xs">
-                                {new Date(r.created_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                            {r.text && (
-                              <div className="mt-0.5 line-clamp-2 opacity-95">{r.text}</div>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-sm opacity-80">{t("reviews.empty") || "Пока нет отзывов."}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* heart */}
-              <button
-                className={`p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
-                  isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFavorite(id);
-                }}
-                title={
-                  isFav
-                    ? t("favorites.removed") || "Удалить из избранного"
-                    : t("favorites.added") || "В избранное"
-                }
-                aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"}
-                     stroke="currentColor" strokeWidth="1.8">
-                  <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* НИЖНИЙ ТЁМНЫЙ ОВЕРЛЕЙ («стекляшка») */}
-          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity z-[5]">
-            <div className="absolute inset-x-0 bottom-0 p-3">
-              <div className="rounded-lg bg-black/55 text-white text-xs sm:text-sm p-3 ring-1 ring-white/10 shadow-lg">
-                <div className="font-semibold line-clamp-2">{title}</div>
-                {hotel && (
-                  <div>
-                    <span className="opacity-80">{t("hotel") || "Отель"}: </span>
-                    <span className="font-medium">{hotel}</span>
-                  </div>
-                )}
-                {accommodation && (
-                  <div>
-                    <span className="opacity-80">{t("accommodation") || "Размещение"}: </span>
-                    <span className="font-medium">{accommodation}</span>
-                  </div>
-                )}
-                {dates && (
-                  <div>
-                    <span className="opacity-80">{t("date") || "Дата"}: </span>
-                    <span className="font-medium">{dates}</span>
-                  </div>
-                )}
-                {prettyPrice && (
-                  <div>
-                    <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
-                    <span className="font-semibold">{prettyPrice}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* контент карточки */}
-        <div className="p-3 flex-1 flex flex-col">
-          <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (
-            <div className="mt-1 text-sm">
-              {t("marketplace.price") || "Цена"}:{" "}
-              <span className="font-semibold">{prettyPrice}</span>
-            </div>
-          )}
-          <div className="mt-auto pt-3">
+            {/* heart */}
             <button
-              onClick={() => handleQuickRequest(id)}
-              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+              className={`p-1.5 rounded-full backdrop-blur-md ring-1 ring-white/20 transition ${
+                isFav ? "bg-black/40 text-red-500" : "bg-black/30 text-white hover:bg-black/40"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(id);
+              }}
+              title={isFav ? t("favorites.removed") || "Удалить из избранного" : t("favorites.added") || "В избранное"}
+              aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
             >
-              {t("actions.quick_request") || "Быстрый запрос"}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z"/>
+              </svg>
             </button>
           </div>
         </div>
+
+        {/* ТЁМНЫЙ нижний оверлей */}
+        <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity z-[5]">
+          <div className="absolute inset-x-0 bottom-0 p-3">
+            <div className="rounded-lg bg-black/55 text-white text-xs sm:text-sm p-3 ring-1 ring-white/10 shadow-lg">
+              <div className="font-semibold line-clamp-2">{title}</div>
+              {hotel && (
+                <div><span className="opacity-80">{t("hotel") || "Отель"}: </span><span className="font-medium">{hotel}</span></div>
+              )}
+              {accommodation && (
+                <div><span className="opacity-80">{t("accommodation") || "Размещение"}: </span><span className="font-medium">{accommodation}</span></div>
+              )}
+              {dates && (
+                <div><span className="opacity-80">{t("date") || "Дата"}: </span><span className="font-medium">{dates}</span></div>
+              )}
+              {prettyPrice && (
+                <div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-    );
-  };
+
+      {/* тело карточки */}
+      <div className="p-3 flex-1 flex flex-col">
+        <div className="font-semibold line-clamp-2">{title}</div>
+        {prettyPrice && (
+          <div className="mt-1 text-sm">
+            {t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span>
+          </div>
+        )}
+        <div className="mt-auto pt-3">
+          <button
+            onClick={() => handleQuickRequest(id)}
+            className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+          >
+            {t("actions.quick_request") || "Быстрый запрос"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
   /* ===================== Layout ===================== */
   return (
