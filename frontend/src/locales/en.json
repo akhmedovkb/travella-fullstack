@@ -434,5 +434,43 @@
   "upload_images": "Images (multiple allowed):",
   "view_certificate": "View certificate",
   "visa_included": "Visa included",
-  "visa_support": "Visa support"
+  "visa_support": "Visa support",
+
+  "common": {
+    "find": "Find",
+    "loading": "Loading…"
+  },
+  "marketplace": {
+    "supplier": "Supplier",
+    "phone": "Phone",
+    "telegram": "Telegram",
+    "no_image": "No image",
+    "price": "Price",
+    "no_results": "No results",
+    "time_left": "Time left",
+    "time_expired": "Expired",
+    "select_category": "Select category",
+    "guide": "Guide",
+    "transport": "Transport",
+    "package": "Tour package",
+    "hotel": "Hotel",
+    "flight": "Flight ticket",
+    "refused_event": "Refused event ticket",
+    "reviews": "Service reviews",
+    "search_placeholder": "Search services, countries, cities…"
+  },
+  "favorites": {
+    "add": "Add to favorites",
+    "remove": "Remove from favorites",
+    "added_toast": "Added to favorites",
+    "removed_toast": "Removed from favorites"
+  },
+  "tooltips": {
+    "favorite_add": "Add to favorites",
+    "favorite_remove": "Remove from favorites"
+  },
+  "messages": { "request_sent": "Request sent" },
+  "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
+  "countdown": { "until_end": "Time left", "expired": "Expired" }
 }
+
