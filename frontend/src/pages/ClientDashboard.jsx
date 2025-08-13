@@ -70,7 +70,7 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
-/* --- для подсказки как на маркетплейсе --- */
+/* --- как в маркетплейсе: сбор дат из details --- */
 function buildDates(d = {}) {
   const hotelIn =
     d.hotel_check_in ||
@@ -223,7 +223,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const s = it.service || {};
               const serviceId = s.id ?? it.service_id ?? null;
 
-              // название: берём из service, затем из самого элемента
+              // название
               const title =
                 s.title || s.name || it.title || t("common.service", { defaultValue: "Услуга" });
 
@@ -244,7 +244,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const price = firstNonEmpty(details.netPrice, s.price, it.price);
               const prettyPrice = fmtPrice(price);
 
-              // доп. поля — как в маркетплейсе
+              // доп. поля для подсказки как в маркетплейсе
               const hotel = firstNonEmpty(details.hotel, details.refused_hotel_name);
               const accommodation = firstNonEmpty(
                 details.accommodation,
@@ -268,7 +268,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     )}
 
-                    {/* красное сердечко + тултип к нему */}
+                    {/* Сердечко (красное) + тултип к нему */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -289,42 +289,48 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* стеклянная плашка снизу при ховере — в точности как в маркетплейсе */}
-                    <div className="pointer-events-none absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-                        <div className="font-semibold line-clamp-2">{title}</div>
+                    {/* Плашка-подсказка снизу при ховере — идентична маркетплейсу */}
+                    <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute inset-x-0 bottom-0 p-3">
+                        <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+                          <div className="font-semibold line-clamp-2">{title}</div>
 
-                        {hotel && (
-                          <div>
-                            <span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span>
-                            <span className="font-medium">{hotel}</span>
-                          </div>
-                        )}
+                          {hotel && (
+                            <div>
+                              <span className="opacity-80">
+                                {t("hotel", { defaultValue: "Отель" })}:{" "}
+                              </span>
+                              <span className="font-medium">{hotel}</span>
+                            </div>
+                          )}
 
-                        {accommodation && (
-                          <div>
-                            <span className="opacity-80">
-                              {t("accommodation", { defaultValue: "Размещение" })}:{" "}
-                            </span>
-                            <span className="font-medium">{accommodation}</span>
-                          </div>
-                        )}
+                          {accommodation && (
+                            <div>
+                              <span className="opacity-80">
+                                {t("accommodation", { defaultValue: "Размещение" })}:{" "}
+                              </span>
+                              <span className="font-medium">{accommodation}</span>
+                            </div>
+                          )}
 
-                        {dates && (
-                          <div>
-                            <span className="opacity-80">{t("date", { defaultValue: "Дата" })}: </span>
-                            <span className="font-medium">{dates}</span>
-                          </div>
-                        )}
+                          {dates && (
+                            <div>
+                              <span className="opacity-80">
+                                {t("date", { defaultValue: "Дата" })}:{" "}
+                              </span>
+                              <span className="font-medium">{dates}</span>
+                            </div>
+                          )}
 
-                        {prettyPrice && (
-                          <div>
-                            <span className="opacity-80">
-                              {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
-                            </span>
-                            <span className="font-semibold">{prettyPrice}</span>
-                          </div>
-                        )}
+                          {prettyPrice && (
+                            <div>
+                              <span className="opacity-80">
+                                {t("marketplace.price", { defaultValue: "Цена" })}:{" "}
+                              </span>
+                              <span className="font-semibold">{prettyPrice}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -608,8 +614,7 @@ export default function ClientDashboard() {
   const handleLogout = () => {
     try {
       localStorage.removeItem("clientToken");
-      window.location.href = "/client/login";
-    } catch {
+    } finally {
       window.location.href = "/client/login";
     }
   };
