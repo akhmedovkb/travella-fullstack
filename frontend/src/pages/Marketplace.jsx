@@ -27,6 +27,14 @@ function firstNonEmpty(...args) {
   }
   return null;
 }
+function pick(obj, keys) {
+  if (!obj) return null;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  }
+  return null;
+}
 function toast(txt) {
   const el = document.createElement("div");
   el.textContent = txt;
@@ -41,25 +49,20 @@ function toast(txt) {
 function resolveExpireAt(service) {
   const s = service || {};
   const d = s.details || {};
-
   const cand = [
     s.expires_at, s.expire_at, s.expireAt,
     d.expires_at, d.expire_at, d.expiresAt,
     d.expiration, d.expiration_at, d.expirationAt,
     d.expiration_ts, d.expirationTs,
   ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
-
   let ts = null;
-
   if (cand !== undefined && cand !== null) {
-    if (typeof cand === "number") {
-      ts = cand > 1e12 ? cand : cand * 1000;
-    } else {
+    if (typeof cand === "number") ts = cand > 1e12 ? cand : cand * 1000;
+    else {
       const parsed = Date.parse(String(cand));
       if (!Number.isNaN(parsed)) ts = parsed;
     }
   }
-
   if (!ts) {
     const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
     if (ttl && Number(ttl) > 0 && s.created_at) {
@@ -67,8 +70,7 @@ function resolveExpireAt(service) {
       if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
     }
   }
-
-  return ts; // ms или null
+  return ts;
 }
 function formatLeft(ms) {
   if (ms <= 0) return "00:00:00";
@@ -84,7 +86,7 @@ function formatLeft(ms) {
 
 /* ---------- маленький компонент звёзд ---------- */
 function Stars({ value = 0, size = 14 }) {
-  const full = Math.round(Number(value) * 2) / 2; // шаг 0.5
+  const full = Math.round(Number(value) * 2) / 2;
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => {
@@ -112,10 +114,7 @@ function Stars({ value = 0, size = 14 }) {
 function TooltipPortal({ visible, x, y, children }) {
   if (!visible) return null;
   return createPortal(
-    <div
-      className="fixed z-[3000] pointer-events-none"
-      style={{ top: y, left: x }}
-    >
+    <div className="fixed z-[3000] pointer-events-none" style={{ top: y, left: x }}>
       {children}
     </div>,
     document.body
@@ -128,23 +127,15 @@ function renderTelegram(value) {
   const s = String(value).trim();
   let href = null;
   let label = s;
-
-  if (/^https?:\/\//i.test(s)) {
-    href = s;
-  } else if (s.startsWith("@")) {
-    href = `https://t.me/${s.slice(1)}`;
-    label = s;
-  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
-    href = `https://t.me/${s}`;
-    label = `@${s}`;
-  }
+  if (/^https?:\/\//i.test(s)) href = s;
+  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
+  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
   return { href, label };
 }
 
 /* ======== provider fetch (cache + fallbacks) ======== */
 
 const providerCache = new Map();
-
 async function fetchProviderProfile(providerId) {
   if (!providerId) return null;
   if (providerCache.has(providerId)) return providerCache.get(providerId);
@@ -166,36 +157,22 @@ async function fetchProviderProfile(providerId) {
   for (const url of endpoints) {
     try {
       const res = await apiGet(url);
-      const obj =
-        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
-      if (obj && (obj.id || obj.name || obj.title)) {
-        profile = obj;
-        break;
-      }
-    } catch {
-      /* try next endpoint */
-    }
+      const obj = (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+      if (obj && (obj.id || obj.name || obj.title)) { profile = obj; break; }
+    } catch {}
   }
-
   providerCache.set(providerId, profile || null);
   return profile;
 }
 
 /* ===== Универсальный парсер полей услуги ===== */
 function _firstNonEmpty(...args) {
-  for (const v of args)
-    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  for (const v of args) if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
   return null;
 }
 function _maybeParse(obj) {
   if (!obj) return null;
-  if (typeof obj === "string") {
-    try {
-      return JSON.parse(obj);
-    } catch {
-      return null;
-    }
-  }
+  if (typeof obj === "string") { try { return JSON.parse(obj); } catch { return null; } }
   return typeof obj === "object" ? obj : null;
 }
 function _mergeDetails(svc, it) {
@@ -203,28 +180,23 @@ function _mergeDetails(svc, it) {
     svc?.details, it?.details, svc?.detail, it?.detail,
     svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
   ].map(_maybeParse).filter(Boolean);
-  // слева направо: приоритет details, затем meta/payload и т.д.
   return Object.assign({}, ...cands);
 }
 function extractServiceFields(item) {
   const svc = item?.service || item || {};
-
   const details = _mergeDetails(svc, item);
   const bag = { ...details, ...svc, ...item };
 
-  // Заголовок
   const title = _firstNonEmpty(
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
 
-  // Цена
   const rawPrice = _firstNonEmpty(
     details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice,
     svc.netPrice, svc.price, item?.price
   );
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
-  // Отель / Размещение
   const hotel = _firstNonEmpty(
     details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
     svc.hotel, svc.hotel_name, svc.refused_hotel_name
@@ -234,7 +206,6 @@ function extractServiceFields(item) {
     svc.accommodation, svc.room, svc.room_type
   );
 
-  // Даты
   const left = _firstNonEmpty(
     bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
   );
@@ -243,22 +214,36 @@ function extractServiceFields(item) {
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
-  // Провайдер inline + id
+  // inline объект, если есть
   const inlineProvider = _firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
     item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
     details?.provider
   ) || {};
 
+  // id провайдера (включая id из inline-объекта)
   const providerId = _firstNonEmpty(
     svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
-    svc.owner_id, svc.agency_id
+    svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id
   );
 
-  // Статус
+  // плоские поля — как запасной вариант
+  const flatName = _firstNonEmpty(
+    pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"])
+  );
+  const flatPhone = _firstNonEmpty(
+    pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"])
+  );
+  const flatTg = _firstNonEmpty(
+    pick(bag, ["provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram","telegram","tg","telegram_username","telegram_link"])
+  );
+
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
-  return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, status };
+  return {
+    svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice,
+    inlineProvider, providerId, flatName, flatPhone, flatTg, status
+  };
 }
 
 /* ===================== страница ===================== */
@@ -274,14 +259,11 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
-  const filters = useMemo(
-    () => ({
-      q: q?.trim() || undefined,
-      location: q?.trim() || undefined,
-      category: category || undefined,
-    }),
-    [q, category]
-  );
+  const filters = useMemo(() => ({
+    q: q?.trim() || undefined,
+    location: q?.trim() || undefined,
+    category: category || undefined,
+  }), [q, category]);
 
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -327,10 +309,7 @@ export default function Marketplace() {
     }
   };
 
-  useEffect(() => {
-    search({ all: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
 
   useEffect(() => {
     (async () => {
@@ -344,12 +323,7 @@ export default function Marketplace() {
 
   const handleQuickRequest = async (serviceId) => {
     if (!serviceId) return;
-    const note =
-      window.prompt(
-        t("requests.note_prompt") ||
-          t("client.dashboard.noResults") ||
-          "Комментарий (необязательно)"
-      ) || undefined;
+    const note = window.prompt(t("requests.note_prompt") || t("client.dashboard.noResults") || "Комментарий (необязательно)") || undefined;
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
       alert(t("requests.sent") || (t("actions.quick_request") + " ✓"));
@@ -362,26 +336,16 @@ export default function Marketplace() {
     try {
       const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
       const added = !!res?.added;
-
       setFavIds((prev) => {
         const next = new Set(prev);
-        if (added) next.add(id);
-        else next.delete(id);
+        if (added) next.add(id); else next.delete(id);
         return next;
       });
-
-      toast(
-        added
-          ? t("toast.addedToFav") || "Добавлено в избранное"
-          : t("toast.removedFromFav") || "Удалено из избранного"
-      );
+      toast(added ? (t("toast.addedToFav") || "Добавлено в избранное") : (t("toast.removedFromFav") || "Удалено из избранного"));
     } catch (e) {
       const msg = (e && (e.status || e.code || e.message)) || "";
-      if (String(msg).includes("401") || String(msg).includes("403")) {
-        toast("Войдите как клиент");
-      } else {
-        toast(t("toast.favoriteError") || "Не удалось изменить избранное");
-      }
+      if (String(msg).includes("401") || String(msg).includes("403")) toast("Войдите как клиент");
+      else toast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
 
@@ -397,22 +361,13 @@ export default function Marketplace() {
   ];
 
   const Card = ({ it, now }) => {
-    // универсальный разбор полей
     const {
-      svc,
-      title,
-      hotel,
-      accommodation,
-      dates,
-      prettyPrice,
-      inlineProvider,
-      providerId,
-      status: statusRaw,
+      svc, title, hotel, accommodation, dates, prettyPrice,
+      inlineProvider, providerId, flatName, flatPhone, flatTg, status: statusRaw,
     } = extractServiceFields(it);
 
     const id = svc.id ?? it.id;
 
-    // картинка
     const images = Array.isArray(svc.images) ? svc.images : [];
     const image = images[0] || svc.cover || svc.image || null;
 
@@ -425,48 +380,29 @@ export default function Marketplace() {
         const p = await fetchProviderProfile(providerId);
         if (alive) setProvider(p);
       })();
-      return () => {
-        alive = false;
-      };
+      return () => { alive = false; };
     }, [providerId]);
 
     const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+
     const supplierName = _firstNonEmpty(
-      prov?.name,
-      prov?.title,
-      prov?.display_name,
-      prov?.company_name,
-      prov?.brand
+      prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand,
+      flatName
     );
     const supplierPhone = _firstNonEmpty(
-      prov?.phone,
-      prov?.phone_number,
-      prov?.phoneNumber,
-      prov?.tel,
-      prov?.mobile,
-      prov?.whatsapp,
-      prov?.whatsApp,
-      prov?.phones?.[0],
-      prov?.contacts?.phone,
-      prov?.contact_phone
+      prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile, prov?.whatsapp, prov?.whatsApp,
+      prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone,
+      flatPhone
     );
     const supplierTgRaw = _firstNonEmpty(
-      prov?.telegram,
-      prov?.tg,
-      prov?.telegram_username,
-      prov?.telegram_link,
-      prov?.contacts?.telegram,
-      prov?.socials?.telegram
+      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link, prov?.contacts?.telegram, prov?.socials?.telegram,
+      flatTg
     );
     const supplierTg = renderTelegram(supplierTgRaw);
     /* ------------------------------------------------------- */
 
     const rating = Number(svc.rating ?? it.rating ?? 0);
-    // draft скрыта
-    const status =
-      typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft"
-        ? null
-        : statusRaw;
+    const status = (typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft") ? null : statusRaw;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
     const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
@@ -544,23 +480,11 @@ export default function Marketplace() {
             </div>
 
             <button
-              className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${
-                isFav ? "text-red-500" : ""
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(id);
-              }}
+              className={`pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 ${isFav ? "text-red-500" : ""}`}
+              onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
               title={isFav ? "Удалить из избранного" : "В избранное"}
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill={isFav ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
               </svg>
             </button>
@@ -571,30 +495,10 @@ export default function Marketplace() {
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
-                {hotel && (
-                  <div>
-                    <span className="opacity-80">Отель: </span>
-                    <span className="font-medium">{hotel}</span>
-                  </div>
-                )}
-                {accommodation && (
-                  <div>
-                    <span className="opacity-80">Размещение: </span>
-                    <span className="font-medium">{accommodation}</span>
-                  </div>
-                )}
-                {dates && (
-                  <div>
-                    <span className="opacity-80">Дата: </span>
-                    <span className="font-medium">{dates}</span>
-                  </div>
-                )}
-                {prettyPrice && (
-                  <div>
-                    <span className="opacity-80">Цена: </span>
-                    <span className="font-semibold">{prettyPrice}</span>
-                  </div>
-                )}
+                {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
+                {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
+                {dates && (<div><span className="opacity-80">Дата: </span><span className="font-medium">{dates}</span></div>)}
+                {prettyPrice && (<div><span className="opacity-80">Цена: </span><span className="font-semibold">{prettyPrice}</span></div>)}
               </div>
             </div>
           </div>
@@ -614,9 +518,7 @@ export default function Marketplace() {
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
-                    <li key={r.id} className="line-clamp-2 opacity-90">
-                      {r.text || ""}
-                    </li>
+                    <li key={r.id} className="line-clamp-2 opacity-90">{r.text || ""}</li>
                   ))}
                 </ul>
               )}
@@ -627,47 +529,24 @@ export default function Marketplace() {
         {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (
-            <div className="mt-1 text-sm">
-              Цена: <span className="font-semibold">{prettyPrice}</span>
-            </div>
-          )}
+          {prettyPrice && (<div className="mt-1 text-sm">Цена: <span className="font-semibold">{prettyPrice}</span></div>)}
 
           {/* === блок поставщика под ценой === */}
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
-              {supplierName && (
-                <div>
-                  <span className="text-gray-500">Поставщик: </span>
-                  <span className="font-medium">{supplierName}</span>
-                </div>
-              )}
+              {supplierName && (<div><span className="text-gray-500">Поставщик: </span><span className="font-medium">{supplierName}</span></div>)}
               {supplierPhone && (
                 <div>
                   <span className="text-gray-500">Телефон: </span>
-                  <a
-                    href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
-                    className="underline"
-                  >
-                    {supplierPhone}
-                  </a>
+                  <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">{supplierPhone}</a>
                 </div>
               )}
               {supplierTg?.label && (
                 <div>
                   <span className="text-gray-500">Телеграм: </span>
                   {supplierTg.href ? (
-                    <a
-                      href={supplierTg.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      {supplierTg.label}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{supplierTg.label}</span>
-                  )}
+                    <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">{supplierTg.label}</a>
+                  ) : (<span className="font-medium">{supplierTg.label}</span>)}
                 </div>
               )}
             </div>
@@ -703,17 +582,11 @@ export default function Marketplace() {
           className="w-full md:w-64 border rounded-lg px-3 py-2"
         >
           {categoryOptions.map((opt) => (
-            <option key={opt.value || "root"} value={opt.value}>
-              {opt.label}
-            </option>
+            <option key={opt.value || "root"} value={opt.value}>{opt.label}</option>
           ))}
         </select>
 
-        <button
-          onClick={() => search()}
-          className="px-5 py-2 rounded-lg bg-gray-900 text-white"
-          disabled={loading}
-        >
+        <button onClick={() => search()} className="px-5 py-2 rounded-lg bg-gray-900 text-white" disabled={loading}>
           Найти
         </button>
       </div>
@@ -722,18 +595,10 @@ export default function Marketplace() {
       <div className="bg-white rounded-xl shadow p-6 border">
         {loading && <div className="text-gray-500">Поиск...</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (
-          <div className="text-gray-500">Нет результатов</div>
-        )}
+        {!loading && !error && !items.length && (<div className="text-gray-500">Нет результатов</div>)}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => (
-              <Card
-                key={it.id || it.service?.id || JSON.stringify(it)}
-                it={it}
-                now={now}
-              />
-            ))}
+            {items.map((it) => (<Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />))}
           </div>
         )}
       </div>
