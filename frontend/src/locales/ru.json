@@ -4,20 +4,10 @@
   "actions": {
     "quick_request": "Быстрый запрос",
     "cancel": "Отмена",
-    "send": "ОТПРАВИТЬ",
-    "cancel": "Отмена",
-    "quick_request": "Быстрый запрос"
+    "send": "ОТПРАВИТЬ"
   },
-  "actions.change": "Сменить",
-  "actions.change_photo": "Сменить фото",
-  "actions.delete": "Удалить",
-  "actions.delete_photo": "Удалить фото",
-  "actions.logout": "Выйти",
-  "actions.quick_request": "Быстрый запрос",
-  "actions.save_profile": "Сохранить профиль",
-  "actions.upload_photo": "Загрузить фото",
-  "add_error": "Ошибка добавления",
   "address": "Адрес",
+  "add_error": "Ошибка добавления",
   "adt": "Взрослые (ADT)",
   "agent": "Турагент",
   "airline": "Авиакомпания",
@@ -73,13 +63,6 @@
   "changeable": "Можно вносить изменения",
   "chd": "Дети (CHD)",
   "choose_files": "Выбрать файлы",
-  "city_names": {
-    "delhi": "Дели",
-    "dubai": "Дубай",
-    "istanbul": "Стамбул",
-    "samarkand": "Самарканд",
-    "tashkent": "Ташкент"
-  },
   "city_tour": "Тур по городу",
   "clear_all": "Очистить всё",
   "clear_all_images_confirm": "Удалить все изображения?",
@@ -137,15 +120,12 @@
     "find": "Найти",
     "loading": "Загрузка…",
     "note_optional": "Комментарий к запросу (необязательно):",
-    "comment": "Комментарий",
     "amount": "Сумма",
     "backToDashboard": "в Личный кабинет",
     "booking": "Бронирование",
     "created": "Создано",
     "date": "Дата",
-    "loading": "Загрузка…",
     "loading_error": "Не удалось загрузить данные",
-    "note_optional": "Комментарий к запросу (необязательно):",
     "request": "Запрос",
     "saving": "Сохранение…",
     "sending": "Отправка…",
@@ -156,14 +136,7 @@
     "expired": "Время истекло",
     "until_end": "До окончания"
   },
-  "country_names": {
-    "india": "Индия",
-    "turkey": "Турция",
-    "uae": "ОАЭ",
-    "uzbekistan": "Узбекистан"
-  },
   "country_not_chosen": "Страны не найдены",
-  "country_not_found": "Страны не найдены",
   "cover": "Обложка",
   "created": "Создан",
   "date": "Дата",
@@ -176,10 +149,8 @@
   "direction_country": "Страна назначения",
   "direction_from": "Город вылета",
   "direction_from_not_chosen": "Город вылета не выбран",
-  "direction_from_not_found": "Город вылета не найден",
   "direction_to": "Город прибытия",
   "direction_to_not_chosen": "Город прибытия не выбран",
-  "direction_to_not_found": "Город прибытия не найден",
   "drag_to_reorder": "Перетащите для сортировки",
   "edit": "Редактировать",
   "edit_service": "Отредактируйте услугу:",
@@ -225,7 +196,6 @@
     "remove_error": "Не удалось удалить из избранного",
     "remove_from": "Убрать из избранного",
     "removed": "Удалено из избранного",
-    "add": "В избранное",
     "remove": "Убрать из избранного",
     "added_toast": "Добавлено в избранное",
     "removed_toast": "Удалено из избранного"
@@ -251,7 +221,6 @@
   "hotel_check_out": "Дата выезда",
   "hotel_not_found": "Отель не найден",
   "hotel_transfer": "Трансфер от отеля",
-  "hotels_load_error": "Не удалось загрузить отели",
   "images_hint": "До 10 изображений, ≤ 3 МБ каждое",
   "inf": "Младенцы (INF)",
   "is_active": "Актуально",
@@ -297,19 +266,9 @@
     "phone": "Телефон",
     "telegram": "Телеграм",
     "no_image": "Нет изображения",
-    "price": "Цена",
     "no_results": "Нет результатов",
     "time_left": "До окончания",
-    "time_expired": "Время истекло",
-    "select_category": "Выберите категорию",
-    "guide": "Гид",
-    "transport": "Транспорт",
-    "package": "Турпакет",
-    "hotel": "Отель",
-    "flight": "Авиабилет",
-    "refused_event": "Отказной билет",
-    "reviews": "Отзывы об услуге",
-    "search_placeholder": "Поиск по услугам, странам, городам…"
+    "time_expired": "Время истекло"
   },
   "messages": {
     "booking_created": "Бронирование создано",
@@ -373,25 +332,24 @@
       "title": "Бронирования (Поставщик)"
     },
     "inbox": {
-    "title": "Входящие заявки",
-    "total": "Всего",
-    "new": "Новые",
-    "processed": "Обработанные",
-    "from": "От",
-    "empty": "Нет заявок",
-    "mark_processed": "Обработано",
-    "confirm_delete": "Удалить заявку?"
-  }
-  },
-    "requests": {
-      "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.",
-      "messagePlaceholder": "Сообщение клиенту…",
-      "noItems": "Нет заявок.",
-      "proposalPlaceholder": "JSON-предложение (напр. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-      "send": "Отправить",
-      "sendProposal": "Отправить предложение",
-      "title": "Запросы (Поставщик)"
+      "title": "Входящие заявки",
+      "total": "Всего",
+      "new": "Новые",
+      "processed": "Обработанные",
+      "from": "От",
+      "empty": "Нет заявок",
+      "mark_processed": "Обработано",
+      "confirm_delete": "Удалить заявку?"
     }
+  },
+  "requests": {
+    "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.",
+    "messagePlaceholder": "Сообщение клиенту…",
+    "noItems": "Нет заявок.",
+    "proposalPlaceholder": "JSON-предложение (напр. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+    "send": "Отправить",
+    "sendProposal": "Отправить предложение",
+    "title": "Запросы (Поставщик)"
   },
   "provider_profile": "Профиль поставщика",
   "refused_hotel": "Отказной отель",
@@ -419,7 +377,7 @@
     "title": "Регистрация поставщика",
     "type": "Тип поставщика"
   },
-  "requests": {
+  "requests_list": {
     "empty": "Пока нет запросов.",
     "error": "Не удалось отправить запрос",
     "item": "Запрос",
@@ -472,9 +430,11 @@
   },
   "status": "Статус",
   "sum": "Сумма",
-  "tabs.favorites": "Избранное",
-  "tabs.my_bookings": "Мои бронирования",
-  "tabs.my_requests": "Мои запросы",
+  "tabs": {
+    "favorites": "Избранное",
+    "my_bookings": "Мои бронирования",
+    "my_requests": "Мои запросы"
+  },
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "title": "Название",
   "toast": {
@@ -496,27 +456,8 @@
   "view_certificate": "Посмотреть сертификат",
   "visa_included": "Виза включена",
   "visa_support": "Визовая поддержка",
-  
   "tooltips": {
     "favorite_add": "В избранное",
     "favorite_remove": "Убрать из избранного"
-  },
-  "messages": { "request_sent": "Запрос отправлен" },
-  "errors": { "request_send": "Не удалось отправить запрос", "loading_error": "Не удалось загрузить данные" },
-  "countdown": { "until_end": "До окончания", "expired": "Время истекло" },
-
-
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
