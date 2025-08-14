@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
-import ProviderInboxList from "../components/ProviderInboxList";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -60,7 +59,6 @@ function resolveExpireAtFromService(service) {
     const ts = typeof cand === "number" ? (cand > 1e12 ? cand : cand * 1000) : Date.parse(String(cand));
     if (Number.isFinite(ts)) return ts;
   }
-  // fallback по датам услуги (отели/перелёты/мероприятия)
   const dates = [
     d.hotel_check_out, d.endFlightDate, d.returnDate, d.end_flight_date,
     s.hotel_check_out, s.endFlightDate, s.returnDate, s.end_flight_date,
@@ -69,7 +67,6 @@ function resolveExpireAtFromService(service) {
     const ts = Date.parse(v);
     if (!Number.isNaN(ts)) return ts;
   }
-  // TTL (часы) от created_at
   const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? s.ttlHours;
   if (ttl) {
     const created = Date.parse(d.created_at || s.created_at || s.createdAt);
@@ -274,9 +271,9 @@ const Dashboard = () => {
   });
 
   // === Provider Inbox / Bookings ===
-  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
-  const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
-  const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
+  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы
+  const [bookingsInbox, setBookingsInbox] = useState([]); // брони
+  const [proposalForms, setProposalForms] = useState({});
   const [loadingInbox, setLoadingInbox] = useState(false);
 
   const token = localStorage.getItem("token");
@@ -285,13 +282,16 @@ const Dashboard = () => {
   /** ===== Utils ===== */
   const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
+  const fmtDate = (v) => {
+    const d = v ? new Date(v) : null;
+    return d && !isNaN(d) ? d.toLocaleString() : "";
+  };
 
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-  // Глобальные хелперы для ProviderInboxList: очистка и «От кого»
+  // Глобальные хелперы для очистки и резолва имени
   useEffect(() => {
-    // server-cleanup доступен глобально
     window.__providerCleanupExpired = async () => {
       const urls = [
         `${API_BASE}/api/provider/cleanup-expired`,
@@ -301,12 +301,11 @@ const Dashboard = () => {
         `${API_BASE}/api/requests/purgeExpired`,
       ];
       for (const url of urls) {
-        try { await axios.post(url, {}, config); return true; } catch { /* try next */ }
+        try { await axios.post(url, {}, config); return true; } catch {}
       }
       return false;
     };
 
-    // резолвер «От кого»
     window.__providerClientNameResolver = async (req) => {
       const embedded = req?.client || req?.customer || req?.from || req?.sender || req?.created_by || {};
       const inline = firstNonEmpty(
@@ -340,7 +339,7 @@ const Dashboard = () => {
           const obj = res.data?.data || res.data?.item || res.data?.profile || res.data?.client || res.data?.user || res.data?.customer || res.data;
           const name = firstNonEmpty(obj?.name, obj?.title, obj?.display_name, obj?.company_name);
           if (name) { clientCache.set(id, name); return name; }
-        } catch { /* next */ }
+        } catch {}
       }
       clientCache.set(id, null);
       return "—";
@@ -418,13 +417,11 @@ const Dashboard = () => {
 
     const processed = [];
     for (const f of toProcess) {
-      if (f.size > 6 * 1024 * 1024) continue; // пропускаем >6MB
+      if (f.size > 6 * 1024 * 1024) continue;
       try {
         const dataUrl = await resizeImageFile(f, 1600, 0.85, "image/jpeg");
         processed.push(dataUrl);
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
 
     if (processed.length) {
@@ -626,6 +623,21 @@ const Dashboard = () => {
     }
   };
 
+  const enrichRequestsWithFrom = async (list) => {
+    if (typeof window.__providerClientNameResolver !== "function") return list;
+    const withNames = await Promise.all(
+      list.map(async (r) => {
+        try {
+          const name = await window.__providerClientNameResolver(r);
+          return { ...r, __fromName: name };
+        } catch {
+          return { ...r, __fromName: "—" };
+        }
+      })
+    );
+    return withNames;
+  };
+
   const refreshInbox = async () => {
     try {
       setLoadingInbox(true);
@@ -639,8 +651,9 @@ const Dashboard = () => {
       const now = Date.now();
       const reqs = Array.isArray(rq.data) ? rq.data : [];
       const filtered = reqs.filter((r) => !isExpiredRequest(r, now));
+      const enriched = await enrichRequestsWithFrom(filtered);
 
-      setRequestsInbox(filtered);
+      setRequestsInbox(enriched);
       setBookingsInbox(Array.isArray(bk.data) ? bk.data : []);
     } catch (e) {
       console.error("Ошибка загрузки входящих/броней", e);
@@ -2624,14 +2637,49 @@ const Dashboard = () => {
             </>
           )}
 
-          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
+          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (локальный рендер) ===== */}
           <section className="mt-8">
-            <ProviderInboxList
-              showHeader
-              cleanupExpired={serverCleanupExpired}
-              nameResolver={typeof window !== "undefined" ? window.__providerClientNameResolver : undefined}
-              onAfterAction={refreshInbox}
-            />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xl font-semibold">Входящие запросы</h3>
+              <button onClick={refreshInbox} className="text-sm text-orange-600 hover:underline">
+                Обновить
+              </button>
+            </div>
+
+            {loadingInbox && <div className="text-sm text-gray-500">Загрузка…</div>}
+
+            <div className="space-y-3">
+              {requestsInbox.length === 0 && !loadingInbox && (
+                <div className="text-sm text-gray-500">Запросов нет.</div>
+              )}
+
+              {requestsInbox.map((r) => (
+                <div key={r.id} className="border rounded-lg p-4 bg-white">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="text-blue-700">#{r.id}</span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100">New</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-500">{fmtDate(r.created_at || r.createdAt)}</span>
+                  </div>
+
+                  <div className="mt-2 text-sm">
+                    <div>
+                      Услуга:{" "}
+                      {r.service_title || r.service?.title || r.serviceName || r.title || "—"}
+                    </div>
+                    <div className="mt-1">
+                      От кого: <span className="font-medium">{r.__fromName || "—"}</span>
+                    </div>
+                    {r.comment && (
+                      <div className="mt-2">
+                        <div className="text-gray-500">Комментарий:</div>
+                        <div className="px-3 py-2 bg-gray-50 border rounded">{r.comment}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
