@@ -1,7 +1,9 @@
 // src/components/ProviderInboxList.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
+
+/* ------------------------ UI helpers ------------------------ */
 
 function StatusBadge({ status }) {
   const map =
@@ -55,26 +57,128 @@ function makeTgHref(v) {
   return `https://t.me/${s}`;
 }
 
-const ProviderInboxList = ({ showHeader = false }) => {
+/* ------------------------ Nice Confirm ------------------------ */
+
+function ConfirmModal({ open, title, message, confirmText = "OK", cancelText = "Отмена", onClose, onConfirm }) {
+  // закрытие по ESC
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === "Escape" && onClose?.();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[999]">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+          <div className="px-5 pt-5">
+            <h4 className="text-lg font-semibold">{title}</h4>
+            <p className="mt-2 text-sm text-gray-600">{message}</p>
+          </div>
+          <div className="mt-5 px-5 pb-5 flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-md text-sm ring-1 ring-gray-300 hover:bg-gray-50"
+            >
+              {cancelText}
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-3 py-1.5 rounded-md text-sm text-white bg-red-600 hover:bg-red-700"
+            >
+              {confirmText}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------ Tiny Toasts ------------------------ */
+
+function ToastHost({ toasts, onDone }) {
+  return (
+    <div className="fixed right-4 bottom-4 z-[998] space-y-2">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`rounded-lg px-3 py-2 shadow-lg ring-1 ring-black/5 text-sm text-white ${
+            t.kind === "error" ? "bg-red-600" : "bg-green-600"
+          }`}
+          onAnimationEnd={() => onDone(t.id)}
+        >
+          {t.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------ Main component ------------------------ */
+
+const ProviderInboxList = ({ showHeader = false, onCounters /* optional: позволяет пробросить цифры в шапку */ }) => {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState({});
   const [busyDel, setBusyDel] = useState({});
+  const [stats, setStats] = useState({ total: 0, new: 0, processed: 0 });
 
+  // confirm
+  const [confirm, setConfirm] = useState({
+    open: false,
+    title: "",
+    message: "",
+    resolve: null,
+  });
+  const askConfirm = (title, message) =>
+    new Promise((resolve) => setConfirm({ open: true, title, message, resolve }));
+  const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
+
+  // toasts
+  const [toasts, setToasts] = useState([]);
+  const toastId = useRef(1);
+  const pushToast = (text, kind = "ok") => {
+    const id = toastId.current++;
+    setToasts((arr) => [...arr, { id, text, kind }]);
+    // автоудаление
+    setTimeout(() => setToasts((arr) => arr.filter((x) => x.id !== id)), 2200);
+  };
+
+  // API
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+
+  const fetchStats = async () => {
+    try {
+      const r = await axios.get(`${API_BASE}/api/requests/provider/stats`, config);
+      const s = r.data || { total: 0, new: 0, processed: 0 };
+      setStats(s);
+      onCounters?.(s); // отдать наверх, если нужно показать в бейдже меню
+    } catch (e) {
+      // не шумим тостом — это вспомогательный вызов
+      console.error("stats load error:", e?.response?.data || e?.message);
+    }
+  };
 
   const load = async () => {
     try {
       setLoading(true);
-      // сервер всё равно чистит при выдаче, но ручной триггер не мешает
-      try { await axios.post(`${API_BASE}/api/requests/cleanup-expired`, {}, config); } catch {}
+      try {
+        // не обязательно, но можно вручную инициировать очистку
+        await axios.post(`${API_BASE}/api/requests/cleanup-expired`, {}, config);
+      } catch {}
       const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
       setItems(Array.isArray(res.data?.items) ? res.data.items : []);
+      await fetchStats();
     } catch (e) {
       console.error("Ошибка загрузки входящих:", e);
+      pushToast(t("errors.loading_error", { defaultValue: "Failed to load data" }), "error");
     } finally {
       setLoading(false);
     }
@@ -91,38 +195,73 @@ const ProviderInboxList = ({ showHeader = false }) => {
     try {
       await axios.put(`${API_BASE}/api/requests/${id}/processed`, {}, config);
       setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "processed" } : r)));
+      pushToast(t("provider.inbox.mark_processed", { defaultValue: "Processed" }));
+      fetchStats();
     } catch (e) {
       console.error("mark processed failed:", e?.response?.data || e?.message);
-      alert(t("errors.action_failed", { defaultValue: "Action failed" }));
+      pushToast(t("errors.action_failed", { defaultValue: "Action failed" }), "error");
     } finally {
-      setBusy((b) => { const n = { ...b }; delete n[id]; return n; });
+      setBusy((b) => {
+        const n = { ...b };
+        delete n[id];
+        return n;
+      });
     }
   };
 
   const handleDelete = async (id) => {
     if (!id) return;
-    if (!window.confirm(t("provider.inbox.confirm_delete", { defaultValue: "Delete request?" }))) {
-      return;
-    }
+    const ok = await askConfirm(
+      t("delete", { defaultValue: "Delete" }),
+      t("provider.inbox.confirm_delete", { defaultValue: "Delete request?" })
+    );
+    closeConfirm();
+    if (!ok) return;
+
     setBusyDel((b) => ({ ...b, [id]: true }));
     try {
       await axios.delete(`${API_BASE}/api/requests/${id}`, config);
       setItems((prev) => prev.filter((r) => r.id !== id));
+      pushToast(t("service_deleted", { defaultValue: "Deleted" }));
+      fetchStats();
     } catch (e) {
       console.error("delete request failed:", e?.response?.data || e?.message);
-      alert(t("errors.action_failed", { defaultValue: "Action failed" }));
+      pushToast(t("errors.action_failed", { defaultValue: "Action failed" }), "error");
     } finally {
-      setBusyDel((b) => { const n = { ...b }; delete n[id]; return n; });
+      setBusyDel((b) => {
+        const n = { ...b };
+        delete n[id];
+        return n;
+      });
     }
+  };
+
+  // обработчики модалки
+  const onConfirmYes = () => {
+    const resolver = confirm.resolve;
+    closeConfirm();
+    // чуть позже, после анимации
+    setTimeout(() => resolver?.(true), 0);
+  };
+  const onConfirmNo = () => {
+    const resolver = confirm.resolve;
+    closeConfirm();
+    setTimeout(() => resolver?.(false), 0);
   };
 
   return (
     <div>
+      {/* Заголовок + counters */}
       {showHeader && (
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xl font-semibold">
-            {t("provider.inbox.title", { defaultValue: "Incoming Requests" })}
-          </h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-semibold">
+              {t("provider.inbox.title", { defaultValue: "Incoming Requests" })}
+            </h3>
+            <span className="inline-flex items-center text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+              {stats.total}
+            </span>
+          </div>
           <button
             onClick={load}
             className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"
@@ -132,6 +271,22 @@ const ProviderInboxList = ({ showHeader = false }) => {
           </button>
         </div>
       )}
+
+      {/* мини-строка со счётчиками */}
+      <div className="mb-3 text-sm text-gray-700">
+        <span className="mr-4">
+          {t("stats.requests_total", { defaultValue: "Всего" })}:{" "}
+          <span className="font-medium">{stats.total}</span>
+        </span>
+        <span className="mr-4">
+          {t("provider.inbox.new", { defaultValue: "Новые" })}:{" "}
+          <span className="font-medium">{stats.new}</span>
+        </span>
+        <span>
+          {t("provider.inbox.processed", { defaultValue: "Обработанные" })}:{" "}
+          <span className="font-medium">{stats.processed}</span>
+        </span>
+      </div>
 
       {loading && (
         <div className="text-sm text-gray-500">
@@ -175,7 +330,9 @@ const ProviderInboxList = ({ showHeader = false }) => {
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
                   {phone ? (
-                    <a href={`tel:${phone}`} className="underline hover:no-underline">{phone}</a>
+                    <a href={`tel:${phone}`} className="underline hover:no-underline">
+                      {phone}
+                    </a>
                   ) : (
                     <span className="text-gray-400">—</span>
                   )}
@@ -195,7 +352,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
                 </div>
               </div>
 
-              {/* КОММЕНТАРИЙ (возвращён) */}
+              {/* Комментарий */}
               {r.note && (
                 <div className="mt-3">
                   <div className="text-xs uppercase tracking-wide text-gray-500">
@@ -234,6 +391,20 @@ const ProviderInboxList = ({ showHeader = false }) => {
           );
         })}
       </div>
+
+      {/* модал подтверждения */}
+      <ConfirmModal
+        open={confirm.open}
+        title={confirm.title}
+        message={confirm.message}
+        confirmText={t("ok", { defaultValue: "OK" })}
+        cancelText={t("cancel", { defaultValue: "Отмена" })}
+        onClose={onConfirmNo}
+        onConfirm={onConfirmYes}
+      />
+
+      {/* тосты */}
+      <ToastHost toasts={toasts} onDone={(id) => setToasts((arr) => arr.filter((x) => x.id !== id))} />
     </div>
   );
 };
