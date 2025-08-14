@@ -5,311 +5,178 @@ const router = express.Router();
 const db = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 
-/* =========================
-   Helpers
-   ========================= */
-function safeJSON(x) {
-  if (!x) return {};
-  if (typeof x === "object") return x;
+/* ===================== Helpers ===================== */
+
+function collectProviderIdsFromUser(user) {
+  // Соберём все возможные идентификаторы (на случай разных схем)
+  const ids = [
+    user?.id,
+    user?.provider_id,
+    user?.profile_id,
+    user?.company_id,
+    user?.agency_id,
+    user?.owner_id,
+  ]
+    .filter((v) => v !== undefined && v !== null)
+    .map((v) => Number(v))
+    .filter(Number.isFinite);
+
+  // уникальные
+  return Array.from(new Set(ids));
+}
+
+async function getServiceById(serviceId) {
+  const q = await db.query(
+    `SELECT id, title, provider_id
+       FROM services
+      WHERE id = $1
+      LIMIT 1`,
+    [serviceId]
+  );
+  return q.rows[0] || null;
+}
+
+async function getClientById(clientId) {
+  const q = await db.query(
+    `SELECT id, name, phone, telegram
+       FROM clients
+      WHERE id = $1
+      LIMIT 1`,
+    [clientId]
+  );
+  return q.rows[0] || null;
+}
+
+/* ===================== Create Quick Request ===================== */
+/**
+ * POST /api/requests/quick
+ * POST /api/requests                  (алиас)
+ * body: { service_id: number, note?: string, provider_id?: number, service_title?: string }
+ */
+async function handleCreateQuick(req, res) {
   try {
-    return JSON.parse(x);
-  } catch {
-    return {};
-  }
-}
-function parseTs(v) {
-  if (!v) return null;
-  const n = Date.parse(v);
-  return Number.isNaN(n) ? null : n;
-}
+    const clientId = req.user?.id;
+    if (!clientId) return res.status(401).json({ error: "unauthorized" });
 
-/**
- * Возвращает UNIX(ms) истечения услуги (expiryTs) по правилам:
- * 1) details.expiration / expires_at / expiration_at
- * 2) авиабилеты: returnDate | returnFlightDate | endDate | startDate (one-way)
- * 3) отели: endDate
- * 4) тур/событие: endDate либо startDate (если конца нет)
- * 5) fallback TTL = created_at + 30 дней
- */
-function computeServiceExpiryMs(svc) {
-  const now = Date.now();
+    const { service_id, note } = req.body || {};
+    if (!service_id) return res.status(400).json({ error: "service_id required" });
 
-  const category = (svc.category || "").toLowerCase();
-  const details = safeJSON(svc.details);
-  const createdTs =
-    parseTs(svc.created_at) ??
-    parseTs(svc.createdAt) ??
-    parseTs(svc.created) ??
-    now;
+    // найдём услугу и валидируем наличие провайдера
+    const svc = await getServiceById(service_id);
+    if (!svc || !svc.provider_id) {
+      return res.status(404).json({ error: "service_not_found" });
+    }
 
-  // 1) явная дата истечения
-  const explicit =
-    parseTs(details.expiration) ??
-    parseTs(details.expires_at) ??
-    parseTs(details.expiration_at);
-  if (explicit) return explicit;
-
-  // 2-4) по категориям
-  const candidates = [];
-  if (category.includes("flight") || category.includes("avia")) {
-    candidates.push(
-      details.returnDate,
-      details.returnFlightDate,
-      details.endDate,
-      details.startDate
+    // создаём запись запроса
+    const ins = await db.query(
+      `INSERT INTO requests (service_id, client_id, status, note, created_at)
+       VALUES ($1, $2, 'new', $3, NOW())
+       RETURNING id`,
+      [service_id, clientId, note || null]
     );
-  } else if (category.includes("hotel")) {
-    candidates.push(details.endDate);
-  } else if (
-    category.includes("tour") ||
-    category.includes("event") ||
-    category.includes("refused_tour") ||
-    category.includes("author_tour")
-  ) {
-    candidates.push(details.endDate, details.startDate);
-  } else {
-    candidates.push(details.endDate, details.startDate);
-  }
 
-  for (const c of candidates) {
-    const t = parseTs(c);
-    if (t) return t;
+    return res.json({ ok: true, id: ins.rows[0].id });
+  } catch (e) {
+    console.error("quick request error:", e);
+    return res.status(500).json({ error: "request_create_failed" });
   }
-
-  // 5) TTL 30 дней
-  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-  return createdTs + THIRTY_DAYS;
 }
 
-/* =========================
-   Очистка просроченных заявок
-   ========================= */
-
+/* ===================== Provider Inbox ===================== */
 /**
- * Удаляет просроченные заявки.
- * Возвращает массив удалённых request.id (строкой).
+ * GET /api/requests/provider
+ * GET /api/requests/provider/inbox  (алиас)
+ * Возвращает входящие «быстрые» запросы для провайдера.
+ * Фильтрация — по services.provider_id (а НЕ requests.provider_id).
  */
-async function cleanupExpiredRequests() {
-  const now = Date.now();
+async function providerInboxHandler(req, res) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
 
-  const { rows } = await db.query(
-    `
-    SELECT r.id              AS request_id,
-           r.service_id,
-           r.created_at      AS request_created_at,
-           s.category,
-           s.details,
-           s.created_at
+    const ids = collectProviderIdsFromUser(req.user);
+    if (!ids.length) return res.json({ items: [] });
+
+    const q = await db.query(
+      `
+      SELECT
+        r.id,
+        r.created_at,
+        COALESCE(r.status, 'new') AS status,
+        r.note,
+        json_build_object(
+          'id', s.id,
+          'title', COALESCE(s.title, '—')
+        ) AS service,
+        json_build_object(
+          'id', c.id,
+          'name', COALESCE(c.name, '—'),
+          'phone', c.phone,
+          'telegram', c.telegram
+        ) AS client
       FROM requests r
       JOIN services s ON s.id = r.service_id
-    `
-  );
+      JOIN clients  c ON c.id = r.client_id
+      WHERE s.provider_id = ANY ($1::int[])
+      ORDER BY r.created_at DESC
+      `,
+      [ids]
+    );
 
-  const toDelete = [];
-  for (const row of rows) {
-    const expiry = computeServiceExpiryMs(row);
-    if (expiry && now > expiry) {
-      toDelete.push(String(row.request_id));
-    }
+    return res.json({ items: q.rows });
+  } catch (e) {
+    console.error("provider inbox error:", e);
+    return res.status(500).json({ error: "inbox_load_failed" });
   }
-
-  if (toDelete.length === 0) return [];
-
-  await db.query(`DELETE FROM requests WHERE id::text = ANY($1)`, [toDelete]);
-  return toDelete;
 }
 
-async function purgeExpiredRequests() {
-  return cleanupExpiredRequests();
-}
-
-/* =========================
-   Создание заявки (быстрый запрос)
-   ========================= */
+/* ===================== Client's own requests ===================== */
 /**
- * POST /api/requests
- * Тело (любые поля, минимум serviceId):
- * {
- *   serviceId: string|number,      // ОБЯЗАТЕЛЬНО
- *   name?: string,                 // Имя отправителя
- *   phone?: string,
- *   telegram?: string,             // @ник или ссылка
- *   comment?: string               // Комментарий
- * }
- *
- * Если пользователь авторизован — client_id возьмём из токена.
- * Роут без обязательной авторизации — можно слать и анонимные быстрые запросы.
+ * GET /api/requests/my
+ * Список запросов клиента для вкладки «Мои запросы»
  */
-router.post("/", async (req, res) => {
+async function listMyRequests(req, res) {
   try {
-    const {
-      serviceId,
-      name = null,
-      phone = null,
-      telegram = null,
-      comment = null,
-    } = req.body || {};
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
 
-    if (!serviceId) {
-      return res.status(400).json({ error: "serviceId is required" });
-    }
-
-    // Попытаемся вытащить client_id из токена, если он есть
-    let clientId = null;
-    try {
-      // мягкая проверка — не падаем, если токена нет/он невалидный
-      await new Promise((resolve) =>
-        authenticateToken(req, res, resolve) // resolve без ответа => просто продолжим
-      );
-      clientId = req.user?.id || null;
-    } catch {
-      clientId = null;
-    }
-
-    // Проверим, что сервис существует
-    const s = await db.query(`SELECT id, provider_id FROM services WHERE id::text = $1`, [
-      String(serviceId),
-    ]);
-    if (!s.rows.length) {
-      return res.status(404).json({ error: "Service not found" });
-    }
-
-    // Вставка. Предполагаем такие колонки в requests:
-    // id (uuid default), service_id, client_id (nullable),
-    // name, phone, telegram, comment, processed (bool default false),
-    // created_at (default now()).
-    const { rows } = await db.query(
+    const q = await db.query(
       `
-      INSERT INTO requests (service_id, client_id, name, phone, telegram, comment)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *
+      SELECT
+        r.id,
+        r.created_at,
+        COALESCE(r.status, 'new') AS status,
+        r.note,
+        r.proposal,                -- если храните предложение в JSON
+        json_build_object(
+          'id', s.id,
+          'title', COALESCE(s.title, '—')
+        ) AS service
+      FROM requests r
+      JOIN services s ON s.id = r.service_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
       `,
-      [String(serviceId), clientId, name, phone, telegram, comment]
+      [req.user.id]
     );
 
-    res.status(201).json({ success: true, request: rows[0] });
+    res.json({ items: q.rows });
   } catch (e) {
-    console.error("POST /api/requests error:", e);
-    // Подстрахуемся: если таблица без некоторых колонок — вернём понятную ошибку
-    return res.status(500).json({
-      error:
-        "Failed to create request. Check that table 'requests' has columns: service_id, client_id (nullable), name, phone, telegram, comment, processed (default false), created_at (default now()).",
-    });
+    console.error("my requests error:", e);
+    return res.status(500).json({ error: "my_load_failed" });
   }
-});
+}
 
-/* =========================
-   Inbox провайдера
-   ========================= */
-router.get("/provider", authenticateToken, async (req, res) => {
-  try {
-    const providerId = req.user?.id;
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 20));
+/* ===================== Routes ===================== */
 
-    if (!providerId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+// создать «быстрый запрос»
+router.post("/quick", authenticateToken, handleCreateQuick);
+// алиас под старый фронт
+router.post("/", authenticateToken, handleCreateQuick);
 
-    const { rows } = await db.query(
-      `
-      SELECT r.*
-        FROM requests r
-        JOIN services s ON s.id = r.service_id
-       WHERE s.provider_id::text = $1::text
-       ORDER BY r.created_at DESC
-       LIMIT $2
-      `,
-      [String(providerId), limit]
-    );
+// инбокс провайдера
+router.get("/provider", authenticateToken, providerInboxHandler);
+router.get("/provider/inbox", authenticateToken, providerInboxHandler);
 
-    res.json(rows || []);
-  } catch (e) {
-    console.error("GET /api/requests/provider error:", e);
-    res.status(500).json({ error: "Failed to fetch provider inbox" });
-  }
-});
+// запросы текущего клиента
+router.get("/my", authenticateToken, listMyRequests);
 
-/* =========================
-   Метки и удаление
-   ========================= */
-router.post("/:id/process", authenticateToken, async (req, res) => {
-  try {
-    const id = String(req.params.id);
-    await db.query(
-      `
-      UPDATE requests
-         SET processed = TRUE,
-             processed_at = NOW()
-       WHERE id::text = $1
-      `,
-      [id]
-    );
-    res.json({ success: true });
-  } catch (e) {
-    console.error("POST /api/requests/:id/process error:", e);
-    res.status(500).json({ error: "Failed to process request" });
-  }
-});
-
-router.delete("/:id", authenticateToken, async (req, res) => {
-  try {
-    const id = String(req.params.id);
-    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
-    res.json({ success: true });
-  } catch (e) {
-    console.error("DELETE /api/requests/:id error:", e);
-    res.status(500).json({ error: "Failed to delete request" });
-  }
-});
-
-/* =========================
-   Очистка (основные пути)
-   ========================= */
-router.post("/cleanup-expired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await cleanupExpiredRequests();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/cleanup-expired error:", e);
-    res.status(500).json({ error: "Failed to cleanup expired requests" });
-  }
-});
-
-router.post("/purge-expired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await purgeExpiredRequests();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/purge-expired error:", e);
-    res.status(500).json({ error: "Failed to purge expired requests" });
-  }
-});
-
-/* =========================
-   Алиасы (back-compat)
-   ========================= */
-router.post("/cleanup", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await cleanupExpiredRequests();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/cleanup error:", e);
-    res.status(500).json({ error: "Failed to cleanup (alias)" });
-  }
-});
-
-router.post("/purgeExpired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await purgeExpiredRequests();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/purgeExpired error:", e);
-    res.status(500).json({ error: "Failed to purge (alias)" });
-  }
-});
-
-module.exports = {
-  router,
-  cleanupExpiredRequests,
-  purgeExpiredRequests,
-};
+module.exports = router;
