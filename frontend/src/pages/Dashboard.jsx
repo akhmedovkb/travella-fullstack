@@ -38,6 +38,65 @@ async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "ima
   return canvas.toDataURL(mime, quality);
 }
 
+/* ===== Доп. полезные хелперы для очистки и «От кого» ===== */
+const firstNonEmpty = (...vals) => {
+  for (const v of vals) {
+    if (v === 0) return 0;
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return null;
+};
+const maybeParse = (x) => {
+  if (!x) return null;
+  if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
+  return typeof x === "object" ? x : null;
+};
+const clientCache = new Map();
+
+function resolveExpireAtFromService(service) {
+  const s = service || {};
+  const d = s.details || {};
+  const cand = firstNonEmpty(
+    s.expires_at, s.expire_at, s.expireAt, s.expiration, s.expiration_at, s.expirationAt,
+    d.expires_at, d.expire_at, d.expiresAt, d.expiration, d.expiration_at, d.expirationAt,
+    d.expiration_ts, d.expirationTs
+  );
+  if (cand) {
+    const ts = typeof cand === "number" ? (cand > 1e12 ? cand : cand * 1000) : Date.parse(String(cand));
+    if (Number.isFinite(ts)) return ts;
+  }
+  // fallback по датам услуги (отели/перелеты/мероприятия)
+  const dates = [
+    d.hotel_check_out, d.endFlightDate, d.returnDate, d.end_flight_date,
+    s.hotel_check_out, s.endFlightDate, s.returnDate, s.end_flight_date,
+  ].filter(Boolean);
+  for (const v of dates) {
+    const ts = Date.parse(v);
+    if (!Number.isNaN(ts)) return ts;
+  }
+  // TTL (часы) от created_at
+  const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? s.ttlHours;
+  if (ttl) {
+    const created = Date.parse(d.created_at || s.created_at || s.createdAt);
+    if (!Number.isNaN(created)) return created + Number(ttl) * 3600 * 1000;
+  }
+  return null;
+}
+function resolveExpireAtFromRequest(req) {
+  const cand = firstNonEmpty(
+    req?.expires_at, req?.expire_at, req?.expireAt, req?.expiration, req?.expiration_at, req?.expirationAt
+  );
+  if (cand) {
+    const ts = typeof cand === "number" ? (cand > 1e12 ? cand : cand * 1000) : Date.parse(String(cand));
+    if (Number.isFinite(ts)) return ts;
+  }
+  return resolveExpireAtFromService(req?.service);
+}
+const isExpiredRequest = (req, now = Date.now()) => {
+  const ts = resolveExpireAtFromRequest(req);
+  return ts ? now > ts : false;
+};
+
 /** Редактор изображений (DnD сортировка, удалить, очистить, обложка) */
 function ImagesEditor({
   images,
@@ -153,6 +212,7 @@ const Dashboard = () => {
 
   // Common fields
   const [title, setTitle] = useState("");
+  thead
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
@@ -221,114 +281,6 @@ const Dashboard = () => {
 
   // === Provider Inbox / Bookings ===
   const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
-
-  // === Deletion helpers for requests (manual + auto by expiration) ===
-  function parseTs(v) {
-    if (v === null || v === undefined) return null;
-    if (typeof v === "number") return v > 1e12 ? v : Math.round(v * 1000);
-    const s = String(v).trim();
-    if (!s) return null;
-    const n = Number(s);
-    if (!Number.isNaN(n)) return n > 1e12 ? n : Math.round(n * 1000);
-    const t = Date.parse(s);
-    return Number.isNaN(t) ? null : t;
-  }
-  function mergeDetails(obj) {
-    const maybeObj = (x) => {
-      if (!x) return null;
-      if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
-      return typeof x === "object" ? x : null;
-    };
-    const d = Object.assign(
-      {},
-      maybeObj(obj?.details),
-      maybeObj(obj?.detail),
-      maybeObj(obj?.meta),
-      maybeObj(obj?.params),
-      maybeObj(obj?.payload),
-      maybeObj(obj?.extra),
-      maybeObj(obj?.data),
-      maybeObj(obj?.info)
-    );
-    return d || {};
-  }
-  /** Return expiration timestamp (ms) for a request's service, by
-      1) details.expiration/expiration_at/expires_at
-      2) arrival/return dates (end_flight_date, returnFlightDate, endDate, hotel_check_out, checkOut)
-      3) created_at + ttl_hours fallback if present
-   */
-  function getRequestExpiryTs(req) {
-    const svc = req?.service || {};
-    const d = mergeDetails(svc);
-    const cand = [
-      svc.expires_at, svc.expire_at, svc.expireAt,
-      svc.expiration, d.expiration, d.expiration_at, d.expirationAt, d.expires_at,
-      d.end_flight_date, d.endFlightDate, d.returnFlightDate, d.arrivalDate,
-      d.endDate, svc.endDate, d.hotel_check_out, d.checkOut
-    ];
-    for (const v of cand) {
-      const ts = parseTs(v);
-      if (ts) return ts;
-    }
-    const ttl = d.ttl_hours ?? d.ttlHours ?? svc.ttl_hours ?? svc.ttlHours;
-    if (ttl && (svc.created_at || d.created_at)) {
-      const created = parseTs(svc.created_at || d.created_at);
-      if (created) return created + Number(ttl) * 3600 * 1000;
-    }
-    return null;
-  }
-  function isRequestExpired(req, nowTs = Date.now()) {
-    const ts = getRequestExpiryTs(req);
-    return ts !== null && ts <= nowTs;
-  }
-  async function deleteRequest(id) {
-    try {
-      await axios.delete(`${API_BASE}/api/requests/${id}`, config);
-      setRequestsInbox((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev);
-      setRequestsMy((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev);
-      toast(t("provider.requests_deleted") || "Запрос удалён");
-    } catch (e) {
-      console.error("deleteRequest failed", e);
-      toast(t("provider.requests_delete_error") || "Не удалось удалить запрос");
-    }
-  }
-  async function cleanupExpiredRequests({ silent = true } = {}) {
-    try {
-      // Fetch latest inbox list to check expirations
-      const res = await axios.get(`${API_BASE}/api/requests/provider/inbox`, config);
-      const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
-      const expired = list.filter((r) => isRequestExpired(r));
-      if (expired.length === 0) {
-        if (!silent) toast(t("provider.no_expired") || "Нет истёкших запросов");
-        return;
-      }
-      const ids = expired.map((r) => r.id).filter(Boolean);
-      const results = await Promise.allSettled(ids.map((id) => axios.delete(`${API_BASE}/api/requests/${id}`, config)));
-      const ok = results.filter((r) => r.status === "fulfilled").length;
-      if (!silent) toast((t("provider.cleaned_count") || "Удалено истёкших: ") + ok);
-      // refresh inbox UI if we keep a cached copy
-      try {
-        const res2 = await axios.get(`${API_BASE}/api/requests/provider/inbox`, config);
-        setRequestsInbox(Array.isArray(res2?.data) ? res2.data : (res2?.data?.items || []));
-      } catch {}
-    } catch (e) {
-      console.error("cleanupExpiredRequests failed", e);
-      if (!silent) toast(t("provider.cleanup_failed") || "Не удалось очистить истёкшие");
-    }
-  }
-
-  // Periodic auto-clean of expired requests (every 15 minutes)
-  useEffect(() => {
-    let mounted = true;
-    const tick = async () => {
-      if (!mounted) return;
-      try { await cleanupExpiredRequests({ silent: true }); } catch {}
-    };
-    // run once on mount and then periodically
-    tick();
-    const id = setInterval(tick, 15 * 60 * 1000);
-    return () => { mounted = false; clearInterval(id); };
-  }, []);
   const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
   const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
   const [loadingInbox, setLoadingInbox] = useState(false);
@@ -342,6 +294,73 @@ const Dashboard = () => {
 
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+  // Глобальные хелперы для ProviderInboxList: очистка и «От кого»
+  useEffect(() => {
+    // server-cleanup доступен глобально
+    window.__providerCleanupExpired = async () => {
+      const urls = [
+        `${API_BASE}/api/provider/cleanup-expired`,
+        `${API_BASE}/api/providers/cleanup-expired`,
+        `${API_BASE}/api/requests/cleanup`,
+        `${API_BASE}/api/cleanup/requests`,
+        `${API_BASE}/api/requests/purgeExpired`,
+      ];
+      for (const url of urls) {
+        try { await axios.post(url, {}, config); return true; } catch { /* try next */ }
+      }
+      return false;
+    };
+
+    // резолвер «От кого» доступен глобально
+    window.__providerClientNameResolver = async (req) => {
+      // 1) пробуем встроенные поля
+      const embedded = req?.client || req?.customer || req?.from || req?.sender || req?.created_by || {};
+      const inline = firstNonEmpty(
+        embedded?.name, embedded?.title, embedded?.display_name, embedded?.company_name,
+        req?.client_name, req?.from_name, req?.sender_name
+      );
+      if (inline) return inline;
+
+      // 2) пробуем подтянуть профиль по id
+      const id =
+        req?.client_id || req?.clientId ||
+        req?.customer_id || req?.customerId ||
+        req?.user_id || req?.created_by_id;
+
+      if (!id) return "—";
+      if (clientCache.has(id)) {
+        const cached = clientCache.get(id);
+        return cached || "—";
+      }
+
+      const endpoints = [
+        `${API_BASE}/api/clients/${id}`,
+        `${API_BASE}/api/client/${id}`,
+        `${API_BASE}/api/users/${id}`,
+        `${API_BASE}/api/user/${id}`,
+        `${API_BASE}/api/customers/${id}`,
+        `${API_BASE}/api/customer/${id}`,
+      ];
+      for (const url of endpoints) {
+        try {
+          const res = await axios.get(url, config);
+          const obj = res.data?.data || res.data?.item || res.data?.profile || res.data?.client || res.data?.user || res.data?.customer || res.data;
+          const name = firstNonEmpty(obj?.name, obj?.title, obj?.display_name, obj?.company_name);
+          if (name) { clientCache.set(id, name); return name; }
+        } catch { /* next */ }
+      }
+      clientCache.set(id, null);
+      return "—";
+    };
+
+    return () => {
+      // не обязательно чистить, но на всякий случай
+      delete window.__providerCleanupExpired;
+      delete window.__providerClientNameResolver;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_BASE, token]);
 
   const loadHotelOptions = async (inputValue) => {
     try {
@@ -610,14 +629,30 @@ const Dashboard = () => {
   }, []);
 
   /** ===== Provider inbox loaders/actions ===== */
+  // серверная очистка просроченных и локальная фильтрация (на всякий случай)
+  const serverCleanupExpired = async () => {
+    if (typeof window.__providerCleanupExpired === "function") {
+      try { await window.__providerCleanupExpired(); } catch {}
+    }
+  };
+
   const refreshInbox = async () => {
     try {
       setLoadingInbox(true);
+      // сначала пробуем почистить на сервере
+      await serverCleanupExpired();
+
       const [rq, bk] = await Promise.all([
         axios.get(`${API_BASE}/api/requests/provider`, config),
         axios.get(`${API_BASE}/api/bookings/provider`, config),
       ]);
-      setRequestsInbox(Array.isArray(rq.data) ? rq.data : []);
+
+      const now = Date.now();
+      const reqs = Array.isArray(rq.data) ? rq.data : [];
+      // локальная страховка от «просрочек»
+      const filtered = reqs.filter((r) => !isExpiredRequest(r, now));
+
+      setRequestsInbox(filtered);
       setBookingsInbox(Array.isArray(bk.data) ? bk.data : []);
     } catch (e) {
       console.error("Ошибка загрузки входящих/броней", e);
@@ -630,6 +665,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (token) refreshInbox();
+    // периодически чистим просрочки «на всякий случай»
+    const id = setInterval(() => { serverCleanupExpired(); }, 30 * 60 * 1000); // раз в 30 минут
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -1708,7 +1746,7 @@ const Dashboard = () => {
 
                   <input
                     type="text"
-                    value={details.ticketDetails || ""}
+                    value={details.ticketDetails || "")}
                     onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                     placeholder={t("ticket_details")}
                     className="w-full border px-3 py-2 rounded mb-2"
@@ -2465,7 +2503,7 @@ const Dashboard = () => {
 
                       <input
                         type="text"
-                        value={details.ticketDetails || ""}
+                        value={details.ticketDetails || ""} 
                         onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                         placeholder={t("ticket_details")}
                         className="w-full border px-3 py-2 rounded mb-2"
@@ -2599,17 +2637,13 @@ const Dashboard = () => {
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
           <section className="mt-8">
-
-          {/* Controls for requests maintenance */}
-          <div className="flex items-center justify-end mb-2">
-            <button
-              onClick={() => cleanupExpiredRequests({ silent: false })}
-              className="text-orange-600 hover:underline text-sm"
-            >
-              {t("provider.cleanup_expired") || "Очистить истёкшие запросы"}
-            </button>
-          </div>
-            <ProviderInboxList showHeader />
+            {/* Доп.параметры передаём безопасно: компонент может проигнорировать */}
+            <ProviderInboxList
+              showHeader
+              cleanupExpired={serverCleanupExpired}
+              nameResolver={typeof window !== "undefined" ? window.__providerClientNameResolver : undefined}
+              onAfterAction={refreshInbox}
+            />
           </section>
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
