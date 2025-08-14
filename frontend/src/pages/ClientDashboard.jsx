@@ -1,5 +1,4 @@
 // frontend/src/pages/ClientDashboard.jsx
-
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -162,12 +161,38 @@ function extractServiceFields(item) {
   return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, flatName, flatPhone, flatTg, status };
 }
 
-/* ===================== API fallbacks for tabs ===================== */
+/* ===================== Локальные «черновики» заявок ===================== */
+const draftsKey = (uid) => `client:${uid || "anon"}:req:drafts`;
+
+function loadDrafts(uid) {
+  try { return JSON.parse(localStorage.getItem(draftsKey(uid)) || "[]"); } catch { return []; }
+}
+function saveDrafts(uid, list) {
+  try { localStorage.setItem(draftsKey(uid), JSON.stringify(list.slice(0, 50))); } catch {}
+}
+function mergeRequests(apiList, drafts) {
+  const map = new Map();
+  const norm = (r) => r || {};
+  for (const r of [...apiList, ...drafts]) {
+    const rr = norm(r);
+    const key =
+      rr.id ||
+      `${rr.service_id || rr.serviceId || "svc"}@${rr.created_at || rr.createdAt || rr.created || ""}`;
+    if (!map.has(key)) map.set(key, rr);
+  }
+  // по дате убыв.
+  return [...map.values()].sort((a, b) => {
+    const ta = Date.parse(a.created_at || a.createdAt || 0) || 0;
+    const tb = Date.parse(b.created_at || b.createdAt || 0) || 0;
+    return tb - ta;
+  });
+}
+
+/* ===================== API fallbacks для табов ===================== */
 const arrify = (res) =>
   Array.isArray(res) ? res :
   res?.items || res?.data || res?.list || res?.results || [];
 
-// — «мои» заявки: пробуем несколько эндпоинтов, в крайнем случае фильтруем общий список по client id
 async function fetchClientRequestsSafe(myId) {
   const candidates = [
     "/api/requests/my",
@@ -177,7 +202,7 @@ async function fetchClientRequestsSafe(myId) {
     "/api/clients/requests",
     "/api/requests?mine=1",
     "/api/requests?me=1",
-    "/api/requests", // общий список — отфильтруем
+    "/api/requests", // общий список — если вернётся, попробуем отфильтровать
   ];
   for (const url of candidates) {
     try {
@@ -195,12 +220,11 @@ async function fetchClientRequestsSafe(myId) {
         });
       }
       return list;
-    } catch {/* try next */}
+    } catch {}
   }
   return [];
 }
 
-// — «мои» брони: аналогично
 async function fetchClientBookingsSafe() {
   const candidates = [
     "/api/bookings/my",
@@ -363,12 +387,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const supplierTg = renderTelegram(supplierTgRaw);
               const expireAt = resolveExpireAt(svc);
-              const baseNow = (typeof now === 'number' ? now : Date.now());
+              const baseNow = (typeof now === 'number' ? now : Date.now()); // now — из глобальной области, fallback на Date.now()
               const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
               const hasTimer = !!expireAt;
               const timerText = hasTimer ? formatLeft(leftMs) : null;
 
-              // подсказка (портал) — чтобы «выходила» за карточку
+              // подсказка (портал)
               const imgRef = useRef(null);
               const [tipOpen, setTipOpen] = useState(false);
               const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
@@ -404,7 +428,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </span>
                     )}
 
-                    {/* Сердечко (красное), ховер-текст и удаление */}
+                    {/* сердечко */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -426,7 +450,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
-                    {/* стеклянная подсказка (портал) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="pointer-events-none select-none rounded-2xl bg-gradient-to-b from-black/70 to-black/40 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
@@ -438,12 +461,11 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     </TooltipPortal>
                   </div>
 
-                  {/* ТЕЛО КАРТОЧКИ В ИЗБРАННОМ */}
+                  {/* тело карточки */}
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
                     {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price", { defaultValue: "Цена" })}: <span className="font-semibold">{prettyPrice}</span></div>)}
 
-                    {/* === блок поставщика под ценой === */}
                     {(supplierName || supplierPhone || supplierTg?.label) && (
                       <div className="mt-2 text-sm space-y-0.5">
                         {supplierName && (<div><span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span><span className="font-medium">{supplierName}</span></div>)}
@@ -463,7 +485,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                         )}
                       </div>
                     )}
-                    {/* === /блок поставщика === */}
 
                     <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {serviceId && (
@@ -510,20 +531,20 @@ export default function ClientDashboard() {
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ===== minute timer for stable countdown / no flicker =====
+  // minute tick для стабильного таймера
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
   useEffect(() => {
     const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
     return () => clearInterval(id);
   }, []);
-  const now = nowMin * 60000;
+  const now = nowMin * 60000; // используется в FavoritesList через fallback
 
   // Profile
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [telegram, setTelegram] = useState(""); // <— NEW
+  const [telegram, setTelegram] = useState("");
   const [avatarBase64, setAvatarBase64] = useState(null);
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -545,7 +566,7 @@ export default function ClientDashboard() {
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : "requests");
 
-  // Data for tabs
+  // Data
   const [requests, setRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -567,7 +588,7 @@ export default function ClientDashboard() {
   const [bkNote, setBkNote] = useState("");
   const [bkSending, setBkSending] = useState(false);
 
-  // мой id из профиля — пригодится для фильтрации общего списка, если спец. эндпоинта нет
+  // мой id (для фильтра фолбэков)
   const [myId, setMyId] = useState(null);
 
   useEffect(() => {
@@ -585,11 +606,10 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
-        setTelegram(me?.telegram || ""); // <— NEW
+        setTelegram(me?.telegram || "");
         setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
-        // сохраним id для последующей фильтрации в фолбэках
         setMyId(me?.id || me?._id || me?.user_id || me?.client_id || null);
       } catch {
         setError(t("errors.profile_load", { defaultValue: "Не удалось загрузить профиль" }));
@@ -619,8 +639,10 @@ export default function ClientDashboard() {
       try {
         setLoadingTab(true);
         if (activeTab === "requests") {
-          const data = await fetchClientRequestsSafe(myId);
-          if (!cancelled) setRequests(data);
+          const apiList = await fetchClientRequestsSafe(myId);
+          const drafts = loadDrafts(myId);
+          const merged = mergeRequests(apiList, drafts);
+          if (!cancelled) setRequests(merged);
         } else if (activeTab === "bookings") {
           const data = await fetchClientBookingsSafe();
           if (!cancelled) setBookings(data);
@@ -658,14 +680,14 @@ export default function ClientDashboard() {
   const handleSaveProfile = async () => {
     try {
       setSavingProfile(true); setMessage(null); setError(null);
-      const payload = { name, phone, telegram }; // <— NEW
+      const payload = { name, phone, telegram };
       if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
-      setTelegram(res?.telegram ?? telegram); // <— NEW
+      setTelegram(res?.telegram ?? telegram);
       if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
       else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
@@ -691,40 +713,35 @@ export default function ClientDashboard() {
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
-  // === Надёжный Quick Request (с фолбэками по маршрутам и формам тела)
   const handleQuickRequest = async (serviceId) => {
-    if (!serviceId) {
-      setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
-      return;
-    }
-    const note = window.prompt(
-      t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
-    ) || undefined;
-
-    const tryPost = async () => {
-      const urls = [
-        "/api/requests",
-        "/api/clients/requests",
-        "/api/client/requests",
-        "/api/my/requests"
-      ];
-      const bodies = [
-        { service_id: serviceId, note },
-        { serviceId, note },
-      ];
-      for (const url of urls) {
-        for (const body of bodies) {
-          try { await apiPost(url, body); return true; } catch {}
-        }
-      }
-      throw new Error("create-failed");
-    };
-
+    if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
+    const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
     try {
-      await tryPost();
+      const res = await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+
+      // строим локальную запись (на случай отсутствия GET на бэке)
+      const created = {
+        id: res?.id || res?.request_id || `local-${Date.now()}`,
+        service_id: serviceId,
+        status: res?.status || "new",
+        note,
+        created_at: new Date().toISOString(),
+        service: res?.service || (res?.service_title ? { title: res.service_title } : undefined),
+      };
+
+      // сохраним в черновики и в состояние
+      const drafts = loadDrafts(myId);
+      saveDrafts(myId, [created, ...drafts]);
+      setRequests((prev) => mergeRequests(prev, [created]));
+
       setActiveTab("requests");
-      try { setRequests(await fetchClientRequestsSafe(myId)); } catch {}
+      // если API доступен — подтянем свежие данные и сольём с черновиками
+      try {
+        const apiList = await fetchClientRequestsSafe(myId);
+        const merged = mergeRequests(apiList, loadDrafts(myId));
+        setRequests(merged);
+      } catch {}
     } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
     }
@@ -736,7 +753,7 @@ export default function ClientDashboard() {
       await apiPost(`/api/requests/${id}/accept`, {});
       setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
       const [r, b] = await Promise.allSettled([fetchClientRequestsSafe(myId), fetchClientBookingsSafe()]);
-      if (r.status === "fulfilled") setRequests(r.value);
+      if (r.status === "fulfilled") setRequests(mergeRequests(r.value, loadDrafts(myId)));
       if (b.status === "fulfilled") setBookings(b.value);
       setActiveTab("bookings");
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
@@ -749,7 +766,7 @@ export default function ClientDashboard() {
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
       const data = await fetchClientRequestsSafe(myId);
-      setRequests(data);
+      setRequests(mergeRequests(data, loadDrafts(myId)));
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
     finally { setActingReqId(null); }
   };
@@ -800,7 +817,7 @@ export default function ClientDashboard() {
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4">
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
+              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}{String(r.id).startsWith("local-") ? " • draft" : ""}</div>
               {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
               {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
 
@@ -903,15 +920,9 @@ export default function ClientDashboard() {
                 <label className="text-sm text-gray-600">{t("client.dashboard.phone", { defaultValue: "Телефон" })}</label>
                 <input className="mt-1 w-full border rounded-lg px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 ..." />
               </div>
-              {/* NEW: Telegram field */}
               <div>
                 <label className="text-sm text-gray-600">{t("telegram", { defaultValue: "Telegram" })}</label>
-                <input
-                  className="mt-1 w-full border rounded-lg px-3 py-2"
-                  value={telegram}
-                  onChange={(e) => setTelegram(e.target.value)}
-                  placeholder="@username"
-                />
+                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username" />
               </div>
 
               <div className="pt-2">
@@ -961,7 +972,8 @@ export default function ClientDashboard() {
                     try {
                       setLoadingTab(true);
                       if (activeTab === "requests") {
-                        setRequests(await fetchClientRequestsSafe(myId));
+                        const apiList = await fetchClientRequestsSafe(myId);
+                        setRequests(mergeRequests(apiList, loadDrafts(myId)));
                       } else if (activeTab === "bookings") {
                         setBookings(await fetchClientBookingsSafe());
                       } else {
