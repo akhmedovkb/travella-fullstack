@@ -6,7 +6,7 @@ dotenv.config();
 
 const app = express();
 
-/** CORS */
+/** ===================== CORS ===================== */
 const allowedOrigins = [
   "https://travella-fullstack.vercel.app",
   "https://travella-fullstack-8yle5am3l-komil.vercel.app",
@@ -16,6 +16,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, cb) {
+      // Разрешаем postman/серверные запросы без origin
       if (!origin) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("Not allowed by CORS: " + origin));
@@ -25,6 +26,8 @@ app.use(
     credentials: true,
   })
 );
+
+// Preflight
 app.options(
   "*",
   cors({
@@ -35,11 +38,11 @@ app.options(
   })
 );
 
-/** Body */
+/** ===================== Body ===================== */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-/** Routes */
+/** ===================== Routes ===================== */
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
 
@@ -52,8 +55,22 @@ app.use("/api/marketplace", marketplaceRoutes);
 const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
 
-const requestRoutes = require("./routes/requestRoutes");
-app.use("/api/requests", requestRoutes);
+/**
+ * requestRoutes может экспортировать:
+ * 1) только router  -> module.exports = router
+ * 2) объект { router, cleanupExpiredRequests, purgeExpiredRequests }
+ * Поддержим оба варианта.
+ */
+const _requestRoutes = require("./routes/requestRoutes");
+const requestRouter = _requestRoutes.router || _requestRoutes; // express.Router
+const cleanupExpiredFn =
+  _requestRoutes.cleanupExpiredRequests ||
+  (async () => []); // no-op, чтобы не падать
+const purgeExpiredFn =
+  _requestRoutes.purgeExpiredRequests ||
+  (async () => []); // no-op, чтобы не падать
+
+app.use("/api/requests", requestRouter);
 
 const bookingRoutes = require("./routes/bookingRoutes");
 app.use("/api/bookings", bookingRoutes);
@@ -69,14 +86,60 @@ app.use("/api/wishlist", wishlistRoutes);
 const reviewRoutes = require("./routes/reviewRoutes");
 app.use("/api/reviews", reviewRoutes);
 
-/** Debug */
+/** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
 
-/** Health */
+/** ===================== Aliases (Back-compat) ===================== */
+/**
+ * Эти пути дергает фронт. Чтобы не ловить 404 даже со старым фронтом,
+ * даем алиасы тут. Если в requestRoutes есть реальные функции — вызываем их.
+ */
+app.post("/api/providers/cleanup-expired", authenticateToken, async (req, res) => {
+  try {
+    const removed = await cleanupExpiredFn();
+    res.json({ success: true, removed });
+  } catch (e) {
+    console.error("POST /api/providers/cleanup-expired error:", e);
+    res.status(500).json({ error: "Failed to cleanup expired (providers alias)" });
+  }
+});
+
+app.post("/api/provider/cleanup-expired", authenticateToken, async (req, res) => {
+  try {
+    const removed = await cleanupExpiredFn();
+    res.json({ success: true, removed });
+  } catch (e) {
+    console.error("POST /api/provider/cleanup-expired error:", e);
+    res.status(500).json({ error: "Failed to cleanup expired (provider alias)" });
+  }
+});
+
+// Старые алиасы из фронта
+app.post("/api/requests/cleanup", authenticateToken, async (req, res) => {
+  try {
+    const removed = await cleanupExpiredFn();
+    res.json({ success: true, removed });
+  } catch (e) {
+    console.error("POST /api/requests/cleanup error:", e);
+    res.status(500).json({ error: "Failed to cleanup (alias)" });
+  }
+});
+
+app.post("/api/requests/purgeExpired", authenticateToken, async (req, res) => {
+  try {
+    const removed = await purgeExpiredFn();
+    res.json({ success: true, removed });
+  } catch (e) {
+    console.error("POST /api/requests/purgeExpired error:", e);
+    res.status(500).json({ error: "Failed to purge (alias)" });
+  }
+});
+
+/** ===================== Health ===================== */
 app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 
-/** Start */
+/** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
