@@ -1,199 +1,161 @@
+// backend/controllers/requestController.js
 const pool = require("../db");
 
-// Создать запрос (клиент)
-exports.createRequest = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    const role = req.user?.role; // "client"
-    if (!userId || role !== "client") {
-      return res.status(403).json({ message: "Only client can create requests" });
+/**
+ * Определяет timestamp истечения актуальности заявки
+ */
+function getExpirationTs(service) {
+  if (!service) return null;
+  const d = service.details || {};
+
+  // 1. Если есть details.expiration — используем его
+  if (d.expiration) {
+    const ts = Date.parse(d.expiration);
+    if (!isNaN(ts)) return ts;
+  }
+
+  // 2. Для авиабилетов
+  if (service.category === "refused_flight") {
+    if (d.returnDate) {
+      const ts = Date.parse(d.returnDate);
+      if (!isNaN(ts)) return ts;
+    }
+    if (d.startDate) {
+      const ts = Date.parse(d.startDate);
+      if (!isNaN(ts)) return ts;
+    }
+  }
+
+  // 3. Для отелей
+  if (service.category === "refused_hotel" && d.endDate) {
+    const ts = Date.parse(d.endDate);
+    if (!isNaN(ts)) return ts;
+  }
+
+  // 4. Для туров / событий
+  if (
+    (service.category === "refused_tour" ||
+      service.category === "author_tour" ||
+      service.category === "refused_event") &&
+    (d.endDate || d.startDate)
+  ) {
+    const ts = Date.parse(d.endDate || d.startDate);
+    if (!isNaN(ts)) return ts;
+  }
+
+  // 5. TTL = 30 дней от создания
+  if (service.created_at) {
+    const ts = new Date(service.created_at).getTime() + 30 * 24 * 60 * 60 * 1000;
+    return ts;
+  }
+
+  return null;
+}
+
+/**
+ * Автоочистка заявок
+ */
+async function autoCleanup(providerId) {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.created_at, s.category, s.details, s.created_at as service_created_at
+     FROM requests r
+     JOIN services s ON s.id = r.service_id
+     WHERE r.provider_id = $1`,
+    [providerId]
+  );
+
+  const now = Date.now();
+  const expiredIds = [];
+
+  for (const row of rows) {
+    let details;
+    try {
+      details = typeof row.details === "string" ? JSON.parse(row.details) : row.details || {};
+    } catch {
+      details = {};
     }
 
-    const { service_id, note } = req.body || {};
-    if (!service_id) return res.status(400).json({ message: "service_id is required" });
+    const expTs = getExpirationTs({
+      category: row.category,
+      details,
+      created_at: row.service_created_at,
+    });
 
-    // Проверяем, что услуга существует
-    const svc = await pool.query("SELECT id, provider_id, title FROM services WHERE id=$1", [service_id]);
-    if (!svc.rowCount) return res.status(404).json({ message: "Service not found" });
-
-    const q = await pool.query(
-      `INSERT INTO requests (service_id, client_id, status, note)
-       VALUES ($1,$2,'new',$3)
-       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
-      [service_id, userId, note || null]
-    );
-
-    res.status(201).json(q.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "createRequest error" });
-  }
-};
-
-// Мои запросы (клиент)
-exports.getMyRequests = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    const role = req.user?.role;
-    if (!userId || role !== "client") {
-      return res.status(403).json({ message: "Only client can view own requests" });
+    if (expTs && expTs < now) {
+      expiredIds.push(row.id);
     }
-
-    const q = await pool.query(
-      `SELECT r.*, s.title AS service_title, s.category, s.provider_id
-       FROM requests r
-       JOIN services s ON s.id = r.service_id
-       WHERE r.client_id = $1
-       ORDER BY r.created_at DESC`,
-      [userId]
-    );
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "getMyRequests error" });
   }
-};
 
-// Входящие запросы провайдера
+  if (expiredIds.length > 0) {
+    console.log("Auto-cleanup expired requests:", expiredIds);
+    await pool.query(`DELETE FROM requests WHERE id = ANY($1::int[])`, [expiredIds]);
+  }
+}
+
+/**
+ * GET /api/requests/provider — входящие заявки
+ */
 exports.getProviderRequests = async (req, res) => {
   try {
-    const providerId = req.user?.id;
-    const role = req.user?.role;
-    if (!providerId || role !== "provider") {
-      return res.status(403).json({ message: "Only provider can view incoming requests" });
-    }
+    const providerId = req.user.id;
 
-    const q = await pool.query(
-      `SELECT r.*, s.title AS service_title, s.category
+    // Автоочистка
+    await autoCleanup(providerId);
+
+    const { rows } = await pool.query(
+      `SELECT r.*, 
+              json_build_object('id', s.id, 'title', s.title, 'category', s.category, 'details', s.details) as service,
+              json_build_object('id', c.id, 'name', c.name, 'phone', c.phone, 'telegram', c.telegram) as client
        FROM requests r
        JOIN services s ON s.id = r.service_id
-       WHERE s.provider_id = $1
+       JOIN clients c ON c.id = r.client_id
+       WHERE r.provider_id = $1
        ORDER BY r.created_at DESC`,
       [providerId]
     );
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "getProviderRequests error" });
+
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("Ошибка получения заявок поставщика:", err);
+    res.status(500).json({ error: "Ошибка сервера" });
   }
 };
 
-// Провайдер отправляет предложение
-exports.addProposal = async (req, res) => {
+/**
+ * PATCH /api/requests/:id/status — отметить как обработано
+ */
+exports.updateRequestStatus = async (req, res) => {
   try {
-    const providerId = req.user?.id;
-    const role = req.user?.role;
-    if (!providerId || role !== "provider") {
-      return res.status(403).json({ message: "Only provider can send proposal" });
-    }
-
     const { id } = req.params;
-    const { price, currency, hotel, room, terms, message } = req.body || {};
+    const { status } = req.body;
 
-    // Проверяем, что запрос относится к услуге этого провайдера
-    const rq = await pool.query(
-      `SELECT r.id, r.client_id, r.service_id, s.provider_id
-       FROM requests r
-       JOIN services s ON s.id = r.service_id
-       WHERE r.id = $1`,
-      [id]
-    );
-    if (!rq.rowCount) return res.status(404).json({ message: "Request not found" });
-    if (rq.rows[0].provider_id !== providerId) {
-      return res.status(403).json({ message: "Forbidden for this request" });
-    }
-
-    const updated = await pool.query(
-      `UPDATE requests
-         SET proposal = jsonb_strip_nulls($2::jsonb),
-             status = 'proposed'
-       WHERE id = $1
-       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
-      [
-        id,
-        JSON.stringify({ price, currency, hotel, room, terms, message, ts: new Date().toISOString() }),
-      ]
+    await pool.query(
+      `UPDATE requests SET status = $1 WHERE id = $2 AND provider_id = $3`,
+      [status, id, req.user.id]
     );
 
-    res.json(updated.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "addProposal error" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Ошибка обновления статуса заявки:", err);
+    res.status(500).json({ error: "Ошибка сервера" });
   }
 };
 
-// Клиент принимает предложение → создаём бронь в статусе 'pending'
-exports.acceptRequest = async (req, res) => {
-  const clientId = req.user?.id;
-  const role = req.user?.role;
-  if (!clientId || role !== "client") {
-    return res.status(403).json({ message: "Only client can accept" });
-  }
-
-  const client = await pool.connect();
+/**
+ * DELETE /api/requests/:id — удалить вручную
+ */
+exports.deleteRequest = async (req, res) => {
   try {
-    await client.query("BEGIN");
-
     const { id } = req.params;
-    const rq = await client.query(
-      `SELECT r.*, s.provider_id
-       FROM requests r
-       JOIN services s ON s.id = r.service_id
-       WHERE r.id=$1 AND r.client_id=$2
-       FOR UPDATE`,
-      [id, clientId]
-    );
-    if (!rq.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Request not found" });
-    }
-    const r = rq.rows[0];
-    if (!r.proposal) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "No proposal to accept" });
-    }
 
-    // Обновляем статус запроса
-    await client.query(`UPDATE requests SET status='accepted' WHERE id=$1`, [id]);
+    await pool.query(`DELETE FROM requests WHERE id = $1 AND provider_id = $2`, [
+      id,
+      req.user.id,
+    ]);
 
-    // Создаём бронь (pending — дальше провайдер confirm/reject)
-    const booking = await client.query(
-      `INSERT INTO bookings (request_id, service_id, client_id, provider_id, status, price, currency, details)
-       VALUES ($1,$2,$3,$4,'pending', ($5->>'price')::numeric, $5->>'currency', $5)
-       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
-      [r.id, r.service_id, r.client_id, r.provider_id, r.proposal]
-    );
-
-    await client.query("COMMIT");
-    res.json({ ok: true, request_id: r.id, booking: booking.rows[0] });
-  } catch (e) {
-    await client.query("ROLLBACK");
-    console.error(e);
-    res.status(500).json({ message: "acceptRequest error" });
-  } finally {
-    client.release();
-  }
-};
-
-// Клиент отклоняет предложение
-exports.rejectRequest = async (req, res) => {
-  try {
-    const clientId = req.user?.id;
-    const role = req.user?.role;
-    if (!clientId || role !== "client") {
-      return res.status(403).json({ message: "Only client can reject" });
-    }
-
-    const { id } = req.params;
-    const upd = await pool.query(
-      `UPDATE requests SET status='rejected' WHERE id=$1 AND client_id=$2
-       RETURNING id, service_id, client_id, status, note, proposal, created_at`,
-      [id, clientId]
-    );
-    if (!upd.rowCount) return res.status(404).json({ message: "Request not found" });
-    res.json(upd.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "rejectRequest error" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Ошибка удаления заявки:", err);
+    res.status(500).json({ error: "Ошибка сервера" });
   }
 };
