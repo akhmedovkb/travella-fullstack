@@ -39,65 +39,74 @@ export default function Header() {
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0); // для ручного перезапроса счётчиков
 
-  // Provider counters (requests / bookings)
-  // Provider counters (requests / bookings) — без /api/notifications/counts
-useEffect(() => {
-  if (role !== "provider") return;
+  /* Provider counters (requests / bookings) — без /api/notifications/counts */
+  useEffect(() => {
+    if (role !== "provider") return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  const fetchCounts = async () => {
-    setLoading(true);
-    try {
-      // 1) заявки провайдера: берём "new"
-      const rs = await apiGet("/api/requests/provider/stats", role);
-      const requestsNew = Number(rs?.new || 0);
-
-      // 2) бронирования: пытаемся через /stats, иначе считаем из списка
-      let bookingsPending = 0;
-      let bookingsTotal = 0;
-
+    const fetchCounts = async () => {
+      setLoading(true);
       try {
-        const bs = await apiGet("/api/bookings/provider/stats", role);
-        bookingsPending = Number(
-          bs?.pending ?? bs?.awaiting ?? bs?.new ?? 0
-        );
-        bookingsTotal = Number(bs?.total ?? 0);
+        // 1) заявки провайдера: показываем именно "new"
+        const rs = await apiGet("/api/requests/provider/stats", role);
+        const requestsNew = Number(rs?.new || 0);
+
+        // 2) бронирования: сначала пытаемся взять готовые счётчики,
+        // если нет — считаем из списка (pending/total)
+        let bookingsPending = 0;
+        let bookingsTotal = 0;
+
+        try {
+          const bs = await apiGet("/api/bookings/provider/stats", role);
+          bookingsPending = Number(bs?.pending ?? bs?.awaiting ?? bs?.new ?? 0);
+          bookingsTotal = Number(bs?.total ?? 0);
+        } catch {
+          const bl = await apiGet("/api/bookings/provider", role);
+          const list = Array.isArray(bl) ? bl : bl?.items || [];
+          bookingsPending = list.filter(
+            (x) => String(x.status).toLowerCase() === "pending"
+          ).length;
+          bookingsTotal = list.length;
+        }
+
+        if (!cancelled) {
+          setCounts({
+            requests_open: requestsNew,  // тут — новые
+            requests_accepted: 0,        // чтобы сумма в бейдже = новые
+            bookings_pending: bookingsPending,
+            bookings_total: bookingsTotal,
+          });
+        }
       } catch {
-        const bl = await apiGet("/api/bookings/provider", role);
-        const list = Array.isArray(bl) ? bl : bl?.items || [];
-        bookingsPending = list.filter(
-          (x) => String(x.status).toLowerCase() === "pending"
-        ).length;
-        bookingsTotal = list.length;
+        if (!cancelled) setCounts(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    };
 
-      if (!cancelled) {
-        // заполняем под текущие вычисления (не трогаем JSX ниже)
-        setCounts({
-          requests_open: requestsNew, // показываем новые
-          requests_accepted: 0,       // чтобы сумма = новые
-          bookings_pending: bookingsPending,
-          bookings_total: bookingsTotal,
-        });
-      }
-    } catch {
-      if (!cancelled) setCounts(null);
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
-  };
+    fetchCounts();
+    const id = setInterval(fetchCounts, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [role, refreshTick]);
 
-  fetchCounts();
-  const id = setInterval(fetchCounts, 30000);
-  return () => {
-    cancelled = true;
-    clearInterval(id);
-  };
-}, [role]);
+  // дергаем обновление по событиям от списка заявок
+  useEffect(() => {
+    const bump = () => setRefreshTick((x) => x + 1);
+    window.addEventListener("provider:counts:refresh", bump);
+    window.addEventListener("provider:inbox:changed", bump);
+    return () => {
+      window.removeEventListener("provider:counts:refresh", bump);
+      window.removeEventListener("provider:inbox:changed", bump);
+    };
+  }, []);
 
-  // Client wishlist counter
+  /* Client wishlist counter */
   useEffect(() => {
     if (role !== "client") return;
 
@@ -113,11 +122,10 @@ useEffect(() => {
 
     fetchFavs();
 
-    // обновляем счётчик по кастомному событию
     const onFavChanged = () => fetchFavs();
     window.addEventListener("wishlist:changed", onFavChanged);
 
-    // и на смену роутов (на всякий случай)
+    // на смену роутов (как было)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchFavs(location.pathname + location.search);
 
@@ -142,8 +150,20 @@ useEffect(() => {
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
             <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
-            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+            <NavBadge
+              to="/dashboard/requests"
+              label={t("nav.requests")}
+              value={providerRequests}
+              loading={loading}
+              icon={<IconRequests />}
+            />
+            <NavBadge
+              to="/dashboard/bookings"
+              label={t("nav.bookings")}
+              value={bookingsBadge}
+              loading={loading}
+              icon={<IconBookings />}
+            />
           </nav>
         )}
 
