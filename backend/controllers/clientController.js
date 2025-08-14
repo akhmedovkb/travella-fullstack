@@ -3,20 +3,17 @@ const db = require("../db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-/* ===== Helpers ===== */
+/* ================= Helpers ================= */
 function signToken(payload) {
   const secret = process.env.JWT_SECRET || "secret";
   return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
-/* ======================
-   AUTH: register & login
-   ====================== */
-
+/* =============== AUTH =============== */
 // POST /api/clients/register
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, telegram, password } = req.body || {};
+    const { name, email, phone, password, telegram } = req.body || {};
 
     if (!name || !password || (!email && !phone)) {
       return res
@@ -26,22 +23,18 @@ exports.register = async (req, res) => {
 
     if (email) {
       const q = await db.query("SELECT id FROM clients WHERE email = $1", [email]);
-      if (q.rows.length > 0) {
-        return res.status(400).json({ message: "Email уже используется" });
-      }
+      if (q.rows.length > 0) return res.status(400).json({ message: "Email уже используется" });
     }
     if (phone) {
       const q = await db.query("SELECT id FROM clients WHERE phone = $1", [phone]);
-      if (q.rows.length > 0) {
-        return res.status(400).json({ message: "Телефон уже используется" });
-      }
+      if (q.rows.length > 0) return res.status(400).json({ message: "Телефон уже используется" });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
 
     const ins = await db.query(
-      `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at)
-       VALUES ($1,$2,$3,$4,$5, NOW())
+      `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5, NOW(), NOW())
        RETURNING id, name, email, phone, telegram, avatar_url`,
       [name, email || null, phone || null, telegram || null, password_hash]
     );
@@ -70,17 +63,12 @@ exports.login = async (req, res) => {
       "SELECT * FROM clients WHERE (email = $1 OR phone = $1) LIMIT 1",
       [identifier]
     );
-    if (q.rows.length === 0) {
-      return res.status(400).json({ message: "Клиент не найден" });
-    }
+    if (q.rows.length === 0) return res.status(400).json({ message: "Клиент не найден" });
 
     const client = q.rows[0];
     const ok =
       client.password_hash && (await bcrypt.compare(password, client.password_hash));
-
-    if (!ok) {
-      return res.status(400).json({ message: "Неверный пароль" });
-    }
+    if (!ok) return res.status(400).json({ message: "Неверный пароль" });
 
     const token = signToken({ id: client.id, role: "client" });
 
@@ -91,7 +79,7 @@ exports.login = async (req, res) => {
         name: client.name,
         email: client.email,
         phone: client.phone,
-        telegram: client.telegram, // ← добавлено
+        telegram: client.telegram,          // ← здесь
         avatar_url: client.avatar_url,
       },
     });
@@ -101,10 +89,7 @@ exports.login = async (req, res) => {
   }
 };
 
-/* ======================
-   PROFILE: me / profile
-   ====================== */
-
+/* ============ PROFILE (me / profile) ============ */
 // GET /api/clients/me
 exports.getMe = async (req, res) => {
   try {
@@ -130,25 +115,26 @@ exports.updateMe = async (req, res) => {
     }
     const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
+    // вычисляем, что писать в avatar_url
     let avatar_url = null;
     if (avatar_base64) {
-      // храним в текстовом поле data URL
+      // храним как data URL
       avatar_url = `data:image/jpeg;base64,${avatar_base64}`;
     } else if (!remove_avatar) {
-      // оставляем как было
       const cur = await db.query(
         "SELECT avatar_url FROM clients WHERE id=$1",
         [req.user.id]
       );
       avatar_url = cur.rows[0]?.avatar_url || null;
-    }
+    } // если remove_avatar = true, то avatar_url = null
 
     await db.query(
       `UPDATE clients
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
              telegram = COALESCE($3, telegram),
-             avatar_url = $4
+             avatar_url = $4,
+             updated_at = NOW()
        WHERE id = $5`,
       [name ?? null, phone ?? null, telegram ?? null, remove_avatar ? null : avatar_url, req.user.id]
     );
@@ -164,10 +150,7 @@ exports.updateMe = async (req, res) => {
   }
 };
 
-/* ==========
-   STATISTICS
-   ========== */
-
+/* ============== STATISTICS ============== */
 // GET /api/clients/stats
 exports.getStats = async (req, res) => {
   try {
@@ -176,7 +159,7 @@ exports.getStats = async (req, res) => {
     }
     const clientId = req.user.id;
 
-    // Примитивные подсчёты — подгоните под вашу схему
+    // Эти таблицы подгоняй под свою схему при необходимости
     const r1 = await db.query(
       "SELECT COUNT(*)::int AS c FROM change_requests WHERE client_id = $1",
       [clientId]
@@ -198,13 +181,12 @@ exports.getStats = async (req, res) => {
       [clientId]
     );
 
-    // Простейшая метрика рейтинга (можете заменить на реальную)
     const rating =
       b1.rows[0].c > 0
         ? Math.max(3, Math.min(5, 3 + (b2.rows[0].c - b3.rows[0].c) / Math.max(1, b1.rows[0].c)))
         : 3;
 
-    const points = b2.rows[0].c * 50; // 50 pts за выполненное
+    const points = b2.rows[0].c * 50;
     const tier =
       points >= 2000 ? "Platinum" :
       points >= 1000 ? "Gold" :
@@ -231,10 +213,7 @@ exports.getStats = async (req, res) => {
   }
 };
 
-/* ==============
-   CHANGE PASSWORD
-   ============== */
-
+/* ============ CHANGE PASSWORD ============ */
 // POST /api/clients/change-password
 exports.changePassword = async (req, res) => {
   try {
@@ -247,7 +226,7 @@ exports.changePassword = async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 10);
     await db.query(
-      "UPDATE clients SET password_hash = $1 WHERE id = $2",
+      "UPDATE clients SET password_hash = $1, updated_at = NOW() WHERE id = $2",
       [hash, req.user.id]
     );
     res.json({ ok: true });
@@ -257,6 +236,6 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-/* Алиасы под старые имена, если они используются в routes */
+/* Алиасы под старые имена, если где-то используются */
 exports.getProfile = exports.getMe;
 exports.updateProfile = exports.updateMe;
