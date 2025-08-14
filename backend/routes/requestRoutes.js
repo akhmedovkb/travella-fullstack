@@ -19,7 +19,15 @@ router.get("/provider/inbox", authenticateToken, getProviderRequests); // али
 router.get("/provider/stats", authenticateToken, getProviderStats);
 
 // Обновить статус (например, processed)
+// ожидает body: { status: 'processed' | 'rejected' | ... }
 router.put("/:id/status", authenticateToken, updateRequestStatus);
+
+// ✅ Алиас для старого фронта: PUT /:id/processed
+router.put("/:id/processed", authenticateToken, (req, res, next) => {
+  // принудительно подставляем нужный статус и пробрасываем в общий контроллер
+  req.body = { ...(req.body || {}), status: "processed" };
+  return updateRequestStatus(req, res, next);
+});
 
 // Удалить вручную
 router.delete("/:id", authenticateToken, deleteRequest);
