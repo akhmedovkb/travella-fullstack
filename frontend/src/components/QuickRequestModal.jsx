@@ -1,4 +1,3 @@
-// frontend/src/components/QuickRequestModal.jsx
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
