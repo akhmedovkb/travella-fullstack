@@ -124,13 +124,24 @@ const ProviderInboxList = ({ showHeader = false }) => {
     }
   };
 
+  // ── UI-счётчики из текущего списка (логика запросов не менялась)
+  const total = items.length;
+  const fresh = items.filter((x) => (x.status ?? "new") === "new").length;
+  const processed = items.filter((x) => x.status === "processed").length;
+
   return (
     <div className="space-y-4">
       {showHeader && (
         <div className="flex items-center justify-between">
-          <h3 className="text-[20px] font-semibold">
-            {t("provider.inbox.title", { defaultValue: "Входящие заявки" })}
-          </h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-[20px] font-semibold">
+              {t("provider.inbox.title", { defaultValue: "Входящие заявки" })}
+            </h3>
+            {/* круглый бейдж, как в сайдбаре */}
+            <span className="inline-flex min-w-[24px] h-6 items-center justify-center rounded-full bg-gray-100 px-2 text-xs font-semibold text-gray-700">
+              {fresh}
+            </span>
+          </div>
           <button
             onClick={load}
             disabled={loading}
@@ -142,6 +153,22 @@ const ProviderInboxList = ({ showHeader = false }) => {
           </button>
         </div>
       )}
+
+      {/* полоска «Всего / Новые / Обработанные» в минимал-стиле */}
+      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+        <span>
+          {t("provider.inbox.total", { defaultValue: "Всего" })}:{" "}
+          <b className="text-gray-900">{total}</b>
+        </span>
+        <span>
+          {t("provider.inbox.new", { defaultValue: "Новые" })}:{" "}
+          <b className="text-gray-900">{fresh}</b>
+        </span>
+        <span>
+          {t("provider.inbox.processed", { defaultValue: "Обработанные" })}:{" "}
+          <b className="text-gray-900">{processed}</b>
+        </span>
+      </div>
 
       {loading && (
         <div className="text-sm text-gray-500">
@@ -163,21 +190,14 @@ const ProviderInboxList = ({ showHeader = false }) => {
           const isProcessed = String(r.status) === "processed";
 
           return (
-            <div
-              key={r.id}
-              className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"
-            >
-              {/* Верхняя строка: заголовок услуги */}
+            <div key={r.id} className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <div className="text-[15px] font-semibold text-gray-900">
                 {r.service?.title || "—"}
               </div>
 
-              {/* Подзаголовок: от кого */}
               <div className="mt-1 text-sm text-gray-600">
                 {t("provider.inbox.from", { defaultValue: "От" })}:{" "}
-                <span className="font-medium text-gray-800">
-                  {r.client?.name || "—"}
-                </span>
+                <span className="font-medium text-gray-800">{r.client?.name || "—"}</span>
                 {phone ? (
                   <>
                     ,{" "}
@@ -204,37 +224,33 @@ const ProviderInboxList = ({ showHeader = false }) => {
                 ) : null}
               </div>
 
-              {/* Дата + статус-бейдж */}
               <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                 <span>{formatDate(r.created_at)}</span>
                 <span className="mx-1">•</span>
                 <StatusBadge status={r.status} />
               </div>
 
-              {/* Кнопки */}
               <div className="mt-3 flex items-center gap-8">
-                <div className="flex items-center gap-8">
-                  {!isProcessed && (
-                    <button
-                      onClick={() => handleMarkProcessed(r.id)}
-                      disabled={!!busy[r.id]}
-                      className={`px-3 py-1 rounded-md text-sm text-white ${
-                        busy[r.id] ? "bg-green-300 cursor-wait" : "bg-green-600 hover:bg-green-700"
-                      }`}
-                    >
-                      {t("provider.inbox.mark_processed", { defaultValue: "Обработано" })}
-                    </button>
-                  )}
+                {!isProcessed && (
                   <button
-                    onClick={() => handleDelete(r.id)}
-                    disabled={!!busyDel[r.id]}
+                    onClick={() => handleMarkProcessed(r.id)}
+                    disabled={!!busy[r.id]}
                     className={`px-3 py-1 rounded-md text-sm text-white ${
-                      busyDel[r.id] ? "bg-red-300 cursor-wait" : "bg-red-600 hover:bg-red-700"
+                      busy[r.id] ? "bg-green-300 cursor-wait" : "bg-green-600 hover:bg-green-700"
                     }`}
                   >
-                    {t("delete", { defaultValue: "Удалить" })}
+                    {t("provider.inbox.mark_processed", { defaultValue: "Обработано" })}
                   </button>
-                </div>
+                )}
+                <button
+                  onClick={() => handleDelete(r.id)}
+                  disabled={!!busyDel[r.id]}
+                  className={`px-3 py-1 rounded-md text-sm text-white ${
+                    busyDel[r.id] ? "bg-red-300 cursor-wait" : "bg-red-600 hover:bg-red-700"
+                  }`}
+                >
+                  {t("delete", { defaultValue: "Удалить" })}
+                </button>
               </div>
             </div>
           );
