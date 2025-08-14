@@ -3,27 +3,24 @@ const express = require("express");
 const router = express.Router();
 const authenticateToken = require("../middleware/authenticateToken");
 
-/** ======================== DB (optional) ======================== */
+/* ===================== DB handle (optional) ===================== */
 let db = null;
 try {
-  // Ожидаем модуль ../db с экспортом { query(sql, params) }
-  // Если его нет — просто работаем в памяти
-  // eslint-disable-next-line import/no-unresolved, global-require
-  db = require("../db");
+  db = require("../db"); // ожидается { query(sql, params) }
 } catch (_) {
   db = null;
 }
 const HAS_DB = !!(db && typeof db.query === "function");
 
-/** ================= in-memory fallback (dev) ==================== */
+/* =================== In-memory fallback (dev) =================== */
 const __mem = global.__travella_mem || {
-  services: new Map(),   // id -> { id, title, provider_id, ... }
-  users: new Map(),      // id -> { id, name, phone, telegram }
-  requests: [],          // { id, type, service_id, provider_id, client_id, note, status, created_at, service_title?, client_name? }
+  services: new Map(), // id -> { id, title, provider_id, ... }
+  users: new Map(),    // id -> { id, name, phone, telegram }
+  requests: [],        // { id, service_id, client_id, note, status, created_at }
 };
 global.__travella_mem = __mem;
 
-/** ======================== helpers ============================== */
+/* =========================== Helpers ============================ */
 async function getServiceById(id) {
   if (HAS_DB) {
     const { rows } = await db.query(
@@ -37,7 +34,6 @@ async function getServiceById(id) {
 
 async function getClientById(id) {
   if (HAS_DB) {
-    // В таблице clients по скринам есть name/phone. telegram может и не быть — вернём null.
     const { rows } = await db.query(
       "SELECT id, name, phone FROM clients WHERE id = $1 LIMIT 1",
       [id]
@@ -48,88 +44,53 @@ async function getClientById(id) {
   return __mem.users.get(String(id)) || null;
 }
 
-async function createQuickRequest(doc) {
+async function createQuickRequest({ service_id, client_id, note }) {
   if (HAS_DB) {
-    const {
-      service_id,
-      provider_id,
-      client_id,
-      note,
-      status = "new",
-      service_title = null,
-      client_name = null,
-    } = doc;
-
     const { rows } = await db.query(
-      `INSERT INTO requests
-         (type, service_id, provider_id, client_id, note, status, created_at, service_title, client_name)
-       VALUES
-         ('quick', $1, $2, $3, $4, $5, NOW(), $6, $7)
+      `INSERT INTO requests (service_id, client_id, status, note, created_at)
+       VALUES ($1, $2, 'new', $3, NOW())
        RETURNING id, created_at`,
-      [service_id, provider_id, client_id, note || null, status, service_title, client_name]
+      [service_id, client_id, note || null]
     );
-
     return {
       id: rows[0].id,
       created_at: rows[0].created_at,
-      type: "quick",
       service_id,
-      provider_id,
       client_id,
       note: note || null,
-      status,
-      service_title,
-      client_name,
+      status: "new",
     };
   }
 
-  // memory
   const id = String(Date.now()) + Math.random().toString(36).slice(2, 7);
-  const rec = { id, ...doc };
+  const rec = {
+    id,
+    service_id,
+    client_id,
+    note: note || null,
+    status: "new",
+    created_at: new Date().toISOString(),
+  };
   __mem.requests.push(rec);
   return rec;
 }
 
-/** ================== создание «быстрого» запроса ================= */
+/* =================== Create “quick” request ===================== */
 async function handleCreateQuick(req, res) {
   try {
     const clientId = req.user?.id;
     if (!clientId) return res.status(401).json({ error: "unauthorized" });
 
-    const { service_id, provider_id: providerIdFromBody, note, service_title } = req.body || {};
+    const { service_id, note } = req.body || {};
     if (!service_id) return res.status(400).json({ error: "service_id required" });
 
-    // Пытаемся получить услугу и из неё провайдера
-    let svc = null;
-    try { svc = await getServiceById(service_id); } catch (_) {}
-
-    let provider_id =
-      svc?.provider_id ||
-      svc?.providerId ||
-      svc?.owner_id ||
-      svc?.agency_id ||
-      svc?.user_id ||
-      null;
-
-    // Фолбэк: берём из тела
-    if (!provider_id && providerIdFromBody) provider_id = providerIdFromBody;
-    if (!provider_id) return res.status(404).json({ error: "service_not_found" });
-
-    // Снэпшоты (чтобы отображалось даже если потом данные изменят)
-    const clientFromDb = await getClientById(clientId);
-    const client_name = clientFromDb?.name || req.user?.name || null;
-    const serviceTitleSnapshot = service_title || svc?.title || svc?.name || null;
+    const svc = await getServiceById(service_id);
+    if (!svc) return res.status(404).json({ error: "service_not_found" });
 
     const rec = await createQuickRequest({
-      type: "quick",
       service_id,
-      provider_id,
       client_id: clientId,
       note: note || null,
-      status: "new",
-      created_at: new Date().toISOString(),
-      service_title: serviceTitleSnapshot,
-      client_name,
     });
 
     return res.json({ ok: true, id: rec.id });
@@ -139,9 +100,7 @@ async function handleCreateQuick(req, res) {
   }
 }
 
-/** ================== провайдерский инбокс ======================= */
-
-// Собираем все возможные ID провайдера (если в токене разные поля)
+/* ==================== Provider inbox loader ===================== */
 function collectProviderIdsFromUser(user) {
   const ids = [
     user?.id,
@@ -156,14 +115,13 @@ function collectProviderIdsFromUser(user) {
   return Array.from(new Set(ids));
 }
 
-async function findQuickRequestsByProviderMany(providerIds) {
+async function findRequestsForProviders(providerIds) {
   if (HAS_DB) {
-    // provider_id в БД, скорее всего, integer
+    // provider_id берём из services, т.к. его нет в requests
     const ids = providerIds
       .map((v) => Number(v))
       .filter((v) => Number.isFinite(v));
 
-    // Берём title услуги и ФИО клиента, если есть; иначе — снэпшоты из requests
     const { rows } = await db.query(
       `
       SELECT
@@ -173,79 +131,53 @@ async function findQuickRequestsByProviderMany(providerIds) {
         r.note,
         r.service_id,
         r.client_id,
-        COALESCE(s.title, r.service_title, '—') AS service_title,
-        COALESCE(c.name,  r.client_name,  '—') AS client_name,
-        c.phone AS client_phone
+        COALESCE(s.title, '—')     AS service_title,
+        COALESCE(c.name, '—')      AS client_name,
+        c.phone                    AS client_phone
       FROM requests r
-      LEFT JOIN services s ON s.id = r.service_id
+      JOIN services s ON s.id = r.service_id
       LEFT JOIN clients  c ON c.id = r.client_id
-      WHERE r.type = 'quick'
-        AND r.provider_id = ANY($1)
+      WHERE s.provider_id = ANY($1)
       ORDER BY r.created_at DESC
       `,
       [ids]
     );
-    return rows;
+    return rows.map((r) => ({
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status || "new",
+      note: r.note || null,
+      service: { id: r.service_id, title: r.service_title || "—" },
+      client:  { id: r.client_id,  name: r.client_name || "—", phone: r.client_phone || null, telegram: null },
+    }));
   }
 
-  // memory
-  return __mem.requests
-    .filter((r) => r.type === "quick" && providerIds.includes(String(r.provider_id)))
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  // in-memory
+  const out = [];
+  for (const r of __mem.requests) {
+    const svc = await getServiceById(r.service_id);
+    if (!svc) continue;
+    if (!providerIds.includes(String(svc.provider_id))) continue;
+    const cli = await getClientById(r.client_id);
+    out.push({
+      id: r.id,
+      created_at: r.created_at,
+      status: r.status || "new",
+      note: r.note || null,
+      service: { id: r.service_id, title: svc?.title || "—" },
+      client:  { id: cli?.id || r.client_id, name: cli?.name || "—", phone: cli?.phone || null, telegram: cli?.telegram || null },
+    });
+  }
+  // новее — выше
+  out.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return out;
 }
 
 async function providerInboxHandler(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
-
     const myIds = collectProviderIdsFromUser(req.user);
-    const rows = await findQuickRequestsByProviderMany(myIds);
-
-    if (HAS_DB) {
-      // Уже пришли готовые строки с service_title / client_name
-      const items = rows.map((r) => ({
-        id: r.id,
-        created_at: r.created_at,
-        status: r.status || "new",
-        note: r.note || null,
-        service: {
-          id: r.service_id,
-          title: r.service_title || "—",
-        },
-        client: {
-          id: r.client_id,
-          name: r.client_name || "—",
-          phone: r.client_phone || null,
-          telegram: null, // колонки может не быть — отдаём null
-        },
-      }));
-      return res.json({ items });
-    }
-
-    // memory-ветка
-    const items = await Promise.all(
-      rows.map(async (r) => {
-        const svc = await getServiceById(r.service_id);
-        const cli = await getClientById(r.client_id);
-        return {
-          id: r.id,
-          created_at: r.created_at,
-          status: r.status || "new",
-          note: r.note || null,
-          service: {
-            id: r.service_id,
-            title: svc?.title || svc?.name || r.service_title || "—",
-          },
-          client: {
-            id: cli?.id || r.client_id,
-            name: cli?.name || r.client_name || "—",
-            phone: cli?.phone || null,
-            telegram: cli?.telegram || null,
-          },
-        };
-      })
-    );
-
+    const items = await findRequestsForProviders(myIds);
     return res.json({ items });
   } catch (e) {
     console.error("inbox error:", e);
@@ -253,15 +185,13 @@ async function providerInboxHandler(req, res) {
   }
 }
 
-/** ======================= routes ================================ */
-
-// Создать «быстрый» запрос
+/* ========================== Routes ============================== */
+// создать быстрый запрос (новый и совместимый пути)
 router.post("/quick", authenticateToken, handleCreateQuick);
-// Алиас для обратной совместимости
-router.post("/", authenticateToken, handleCreateQuick);
+router.post("/",       authenticateToken, handleCreateQuick);
 
-// Входящие провайдера (новый и старый пути)
+// входящие провайдера (новый и совместимый пути)
 router.get("/provider/inbox", authenticateToken, providerInboxHandler);
-router.get("/provider", authenticateToken, providerInboxHandler);
+router.get("/provider",       authenticateToken, providerInboxHandler);
 
 module.exports = router;
