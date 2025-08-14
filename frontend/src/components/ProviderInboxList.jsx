@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
@@ -28,7 +28,9 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
     try {
       setLoading(true);
       const { data } = await axios.get(`${API_BASE}/api/requests/provider`, config);
-      setItems(Array.isArray(data) ? data : []);
+      // API может вернуть {items: [...] } или просто массив
+      const list = Array.isArray(data) ? data : data?.items || [];
+      setItems(list);
     } catch (e) {
       console.error(e);
       toast.error(e?.response?.data?.message || "Не удалось загрузить входящие");
@@ -75,20 +77,24 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
         {items.map((r) => {
           const id = r.id ?? r._id;
           const status = r.status || "new";
-          const created =
-            r.created_at || r.createdAt || r.created || r.date;
+          const created = r.created_at || r.createdAt || r.created || r.date;
           const dt = created ? new Date(created) : null;
 
+          // ⬇️ ключевой апдейт: сначала берём из service.title / client.name
           const serviceTitle =
-            r.service_title || r.service?.title || r.serviceTitle || r.service_name || "—";
+            r?.service?.title ??
+            r?.service_title ??
+            r?.serviceName ??
+            r?.serviceLabel ??
+            "—";
 
-          const fromName =
-            r.from_name ||
-            r.client_name ||
-            r.user?.name ||
-            r.fromUser?.name ||
-            r.client?.name ||
-            "Клиент";
+          const clientName =
+            r?.client?.name ??
+            r?.client_name ??
+            r?.from_name ??
+            r?.user?.name ??
+            r?.fromUser?.name ??
+            "—";
 
           const note = r.note || r.comment || r.message || "";
 
@@ -98,7 +104,7 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
               className={[
                 "relative rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition",
                 "border-gray-200",
-                "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:rounded-l-xl before:bg-orange-400"
+                "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:rounded-l-xl before:bg-orange-400",
               ].join(" ")}
             >
               {/* meta */}
@@ -112,7 +118,7 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
                   <>
                     <span className="select-none">•</span>
                     <time dateTime={dt.toISOString()}>
-                      {dt.toLocaleDateString()}&nbsp;{dt.toLocaleTimeString().slice(0,5)}
+                      {dt.toLocaleDateString()}&nbsp;{dt.toLocaleTimeString().slice(0, 5)}
                     </time>
                   </>
                 )}
@@ -127,7 +133,7 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
 
                 <div className="text-sm">
                   <span className="text-gray-500">От кого:&nbsp;</span>
-                  <span className="text-gray-900">{fromName}</span>
+                  <span className="text-gray-900">{clientName}</span>
                 </div>
 
                 {note && (
