@@ -152,47 +152,20 @@ function extractServiceFields(item) {
 
   const providerId = _firstNonEmpty(svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id, svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id);
 
-  const flatName = _firstNonEmpty(pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"]));
+  const flatName  = _firstNonEmpty(pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"]));
   const flatPhone = _firstNonEmpty(pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"]));
-  const flatTg = _firstNonEmpty(pick(bag, ["provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram","telegram","tg","telegram_username","telegram_link"]));
+  const flatTg    = _firstNonEmpty(pick(bag, ["provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram","telegram","tg","telegram_username","telegram_link"]));
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
   return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, flatName, flatPhone, flatTg, status };
 }
 
-/* ===================== Локальные «черновики» заявок ===================== */
-const draftsKey = (uid) => `client:${uid || "anon"}:req:drafts`;
-
-function loadDrafts(uid) {
-  try { return JSON.parse(localStorage.getItem(draftsKey(uid)) || "[]"); } catch { return []; }
-}
-function saveDrafts(uid, list) {
-  try { localStorage.setItem(draftsKey(uid), JSON.stringify(list.slice(0, 50))); } catch {}
-}
-function mergeRequests(apiList, drafts) {
-  const map = new Map();
-  const norm = (r) => r || {};
-  for (const r of [...apiList, ...drafts]) {
-    const rr = norm(r);
-    const key =
-      rr.id ||
-      `${rr.service_id || rr.serviceId || "svc"}@${rr.created_at || rr.createdAt || rr.created || ""}`;
-    if (!map.has(key)) map.set(key, rr);
-  }
-  // по дате убыв.
-  return [...map.values()].sort((a, b) => {
-    const ta = Date.parse(a.created_at || a.createdAt || 0) || 0;
-    const tb = Date.parse(b.created_at || b.createdAt || 0) || 0;
-    return tb - ta;
-  });
-}
-
-/* ===================== API fallbacks для табов ===================== */
+/* ===================== API fallbacks ===================== */
 const arrify = (res) =>
-  Array.isArray(res) ? res :
-  res?.items || res?.data || res?.list || res?.results || [];
+  Array.isArray(res) ? res : res?.items || res?.data || res?.list || res?.results || [];
 
+// «мои» заявки
 async function fetchClientRequestsSafe(myId) {
   const candidates = [
     "/api/requests/my",
@@ -202,7 +175,7 @@ async function fetchClientRequestsSafe(myId) {
     "/api/clients/requests",
     "/api/requests?mine=1",
     "/api/requests?me=1",
-    "/api/requests", // общий список — если вернётся, попробуем отфильтровать
+    "/api/requests",
   ];
   for (const url of candidates) {
     try {
@@ -210,12 +183,8 @@ async function fetchClientRequestsSafe(myId) {
       let list = arrify(r);
       if (url === "/api/requests" && myId) {
         list = list.filter((x) => {
-          const ids = [
-            x.client_id, x.clientId,
-            x.user_id, x.userId,
-            x.created_by, x.createdBy,
-            x.owner_id, x.ownerId,
-          ].filter((v) => v !== undefined && v !== null);
+          const ids = [x.client_id, x.clientId, x.user_id, x.userId, x.created_by, x.createdBy, x.owner_id, x.ownerId]
+            .filter((v) => v !== undefined && v !== null);
           return ids.some((v) => String(v) === String(myId));
         });
       }
@@ -225,6 +194,7 @@ async function fetchClientRequestsSafe(myId) {
   return [];
 }
 
+// «мои» брони
 async function fetchClientBookingsSafe() {
   const candidates = [
     "/api/bookings/my",
@@ -240,6 +210,33 @@ async function fetchClientBookingsSafe() {
   }
   return [];
 }
+
+/* ===================== Локальные черновики (без бэка) ===================== */
+const draftsKey = (id) => (id ? `client:req:drafts:${id}` : `client:req:drafts:anon`);
+const loadDrafts = (id) => {
+  try { const raw = localStorage.getItem(draftsKey(id)); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr) ? arr : []; }
+  catch { return []; }
+};
+const saveDrafts = (id, arr) => {
+  try { localStorage.setItem(draftsKey(id), JSON.stringify(arr)); } catch {}
+};
+const mergeRequests = (apiArr = [], draftArr = []) => {
+  const map = new Map();
+  apiArr.forEach((x) => map.set(String(x.id ?? x._id ?? Math.random()), { ...x }));
+  draftArr.forEach((d) => map.set(String(d.id ?? `d_${d.created_at}`), { ...d }));
+  // хотим черновики сверху
+  const drafts = [...draftArr];
+  const api    = [...apiArr].filter(a => !drafts.some(d => String(d.id) === String(a.id)));
+  return [...drafts, ...api];
+};
+const makeDraft = ({ serviceId, title }) => ({
+  id: `d_${Date.now()}`,
+  service_id: serviceId,
+  title: title || "Запрос",
+  status: "new",
+  created_at: new Date().toISOString(),
+  is_draft: true,
+});
 
 /* ===================== Mini Components ===================== */
 
@@ -353,12 +350,17 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 inlineProvider, providerId, flatName, flatPhone, flatTg,
               } = extractServiceFields(it);
 
-              const serviceId = svc.id ?? it.service_id ?? null;
+              // расширенное определение serviceId
+              const serviceId =
+                svc.id ?? svc._id ?? svc.service_id ?? svc.serviceId ??
+                it.service_id ?? it.serviceId ?? it.service?.id ?? null;
+
               const image =
                 (Array.isArray(svc.images) && svc.images[0]) ||
                 svc.cover || svc.cover_url || svc.image ||
                 it.cover || it.cover_url || it.image || null;
 
+              // (оставляю твои «хуки в map», чтоб ничего не ломать)
               const [provider, setProvider] = useState(null);
               useEffect(() => {
                 let alive = true;
@@ -387,7 +389,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               );
               const supplierTg = renderTelegram(supplierTgRaw);
               const expireAt = resolveExpireAt(svc);
-              const baseNow = (typeof now === 'number' ? now : Date.now()); // now — из глобальной области, fallback на Date.now()
+              const baseNow = Date.now();
               const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
               const hasTimer = !!expireAt;
               const timerText = hasTimer ? formatLeft(leftMs) : null;
@@ -428,7 +430,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </span>
                     )}
 
-                    {/* сердечко */}
+                    {/* Сердечко (удаление) */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -450,6 +452,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       </div>
                     </div>
 
+                    {/* стеклянная подсказка (портал) */}
                     <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
                       <div className="pointer-events-none select-none rounded-2xl bg-gradient-to-b from-black/70 to-black/40 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
                         <div className="font-semibold line-clamp-2">{title}</div>
@@ -461,7 +464,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     </TooltipPortal>
                   </div>
 
-                  {/* тело карточки */}
+                  {/* Тело карточки */}
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="font-semibold line-clamp-2">{title}</div>
                     {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price", { defaultValue: "Цена" })}: <span className="font-semibold">{prettyPrice}</span></div>)}
@@ -490,7 +493,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       {serviceId && (
                         <>
                           <button
-                            onClick={() => onQuickRequest?.(serviceId)}
+                            onClick={() => onQuickRequest?.(serviceId, { title })}
                             className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
                           >
                             {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
@@ -531,14 +534,6 @@ export default function ClientDashboard() {
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // minute tick для стабильного таймера
-  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
-  useEffect(() => {
-    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
-    return () => clearInterval(id);
-  }, []);
-  const now = nowMin * 60000; // используется в FavoritesList через fallback
-
   // Profile
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -566,7 +561,7 @@ export default function ClientDashboard() {
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : "requests");
 
-  // Data
+  // Data for tabs
   const [requests, setRequests] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -588,7 +583,7 @@ export default function ClientDashboard() {
   const [bkNote, setBkNote] = useState("");
   const [bkSending, setBkSending] = useState(false);
 
-  // мой id (для фильтра фолбэков)
+  // мой id из профиля (для фильтрации/ключа черновиков)
   const [myId, setMyId] = useState(null);
 
   useEffect(() => {
@@ -619,6 +614,20 @@ export default function ClientDashboard() {
     })();
   }, [t]);
 
+  // миграция «anon» черновиков в «мой» ключ, как только узнали myId
+  useEffect(() => {
+    if (!myId) return;
+    const anon = loadDrafts(null);
+    if (anon.length) {
+      const mine = loadDrafts(myId);
+      saveDrafts(myId, mergeRequests(mine, anon));
+      saveDrafts(null, []);
+      // если открыт таб запросов — сразу подмерджим в стейт
+      setRequests(prev => mergeRequests(prev, anon));
+    }
+  }, [myId]);
+
+  // загружаем статистику
   useEffect(() => {
     (async () => {
       try {
@@ -633,6 +642,7 @@ export default function ClientDashboard() {
     })();
   }, []);
 
+  // загрузка данных табов + подмешивание черновиков
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -640,9 +650,8 @@ export default function ClientDashboard() {
         setLoadingTab(true);
         if (activeTab === "requests") {
           const apiList = await fetchClientRequestsSafe(myId);
-          const drafts = loadDrafts(myId);
-          const merged = mergeRequests(apiList, drafts);
-          if (!cancelled) setRequests(merged);
+          const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+          if (!cancelled) setRequests(mergeRequests(apiList, drafts));
         } else if (activeTab === "bookings") {
           const data = await fetchClientBookingsSafe();
           if (!cancelled) setBookings(data);
@@ -664,6 +673,33 @@ export default function ClientDashboard() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, t, myId]);
+
+  // слушаем событие мгновенного создания (в т.ч. из маркетплейса)
+  useEffect(() => {
+    const onCreated = (e) => {
+      const { service_id, title } = e.detail || {};
+      if (!service_id) return;
+      const draft = makeDraft({ serviceId: service_id, title });
+      const keyId = myId || null;
+      const current = loadDrafts(keyId);
+      saveDrafts(keyId, [draft, ...current]);
+      setRequests((prev) => [draft, ...prev]);
+    };
+    const onStorage = (ev) => {
+      // синхронизация между вкладками
+      if (!ev.key) return;
+      if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
+        const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
+        setRequests(prev => mergeRequests(prev.filter(x => !x.is_draft), drafts));
+      }
+    };
+    window.addEventListener("request:created", onCreated);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("request:created", onCreated);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [myId]);
 
   const handleUploadClick = () => fileRef.current?.click();
   const handleFileChange = async (e) => {
@@ -713,34 +749,37 @@ export default function ClientDashboard() {
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
-  const handleQuickRequest = async (serviceId) => {
+  // quick request из «Избранного» (+локальный черновик)
+  const handleQuickRequest = async (serviceId, meta = {}) => {
     if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
     const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
+
     try {
-      const res = await apiPost("/api/requests", { service_id: serviceId, note });
+      await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
-      // строим локальную запись (на случай отсутствия GET на бэке)
-      const created = {
-        id: res?.id || res?.request_id || `local-${Date.now()}`,
-        service_id: serviceId,
-        status: res?.status || "new",
-        note,
-        created_at: new Date().toISOString(),
-        service: res?.service || (res?.service_title ? { title: res.service_title } : undefined),
-      };
+      // мгновенно кладём черновик (даже если GET 404)
+      const title = meta.title ||
+        favorites.find((f) => {
+          const sid =
+            f?.service?.id ?? f?.service_id ?? f?.serviceId ??
+            f?.id ?? null;
+          return String(sid) === String(serviceId);
+        })?.service?.title || "Запрос";
 
-      // сохраним в черновики и в состояние
-      const drafts = loadDrafts(myId);
-      saveDrafts(myId, [created, ...drafts]);
-      setRequests((prev) => mergeRequests(prev, [created]));
+      const draft = makeDraft({ serviceId, title });
+      const keyId = myId || null;
+      saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
+      setRequests((prev) => [draft, ...prev]);
+      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: serviceId, title } }));
 
       setActiveTab("requests");
-      // если API доступен — подтянем свежие данные и сольём с черновиками
+
+      // попробуем ещё раз дотянуть API и смёрджить
       try {
         const apiList = await fetchClientRequestsSafe(myId);
-        const merged = mergeRequests(apiList, loadDrafts(myId));
-        setRequests(merged);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        setRequests(mergeRequests(apiList, drafts));
       } catch {}
     } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
@@ -753,7 +792,7 @@ export default function ClientDashboard() {
       await apiPost(`/api/requests/${id}/accept`, {});
       setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
       const [r, b] = await Promise.allSettled([fetchClientRequestsSafe(myId), fetchClientBookingsSafe()]);
-      if (r.status === "fulfilled") setRequests(mergeRequests(r.value, loadDrafts(myId)));
+      if (r.status === "fulfilled") setRequests(mergeRequests(r.value, [...loadDrafts(myId), ...loadDrafts(null)]));
       if (b.status === "fulfilled") setBookings(b.value);
       setActiveTab("bookings");
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
@@ -766,7 +805,7 @@ export default function ClientDashboard() {
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
       const data = await fetchClientRequestsSafe(myId);
-      setRequests(mergeRequests(data, loadDrafts(myId)));
+      setRequests(mergeRequests(data, [...loadDrafts(myId), ...loadDrafts(null)]));
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
     finally { setActingReqId(null); }
   };
@@ -815,9 +854,12 @@ export default function ClientDashboard() {
           const p = r?.proposal || null;
 
           return (
-            <div key={r.id} className="bg-white border rounded-xl p-4">
+            <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
               <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}{String(r.id).startsWith("local-") ? " • draft" : ""}</div>
+              <div className="text-sm text-gray-500 mt-1">
+                {t("common.status", { defaultValue: "Статус" })}: {status}
+                {r.is_draft && <span className="ml-2 text-orange-600 text-xs">draft</span>}
+              </div>
               {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
               {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
 
@@ -883,7 +925,7 @@ export default function ClientDashboard() {
         page={favPage}
         perPage={8}
         onRemove={handleRemoveFavorite}
-        onQuickRequest={handleQuickRequest}
+        onQuickRequest={(id, meta) => handleQuickRequest(id, meta)}
         onBook={(serviceId) => openBooking(serviceId)}
         onPageChange={(p) => setFavPage(p)}
       />
@@ -973,7 +1015,8 @@ export default function ClientDashboard() {
                       setLoadingTab(true);
                       if (activeTab === "requests") {
                         const apiList = await fetchClientRequestsSafe(myId);
-                        setRequests(mergeRequests(apiList, loadDrafts(myId)));
+                        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+                        setRequests(mergeRequests(apiList, drafts));
                       } else if (activeTab === "bookings") {
                         setBookings(await fetchClientBookingsSafe());
                       } else {
@@ -1030,7 +1073,7 @@ export default function ClientDashboard() {
 
             <div className="mt-4 flex gap-2">
               <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
+                {bkSending ? t("common.sending", { defaultValue: "Отправка..." })} : {t("booking.submit", { defaultValue: "Забронировать" })}
               </button>
               <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
             </div>
