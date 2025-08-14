@@ -372,6 +372,17 @@
       "status": "Статус",
       "title": "Бронирования (Поставщик)"
     },
+    "inbox": {
+    "title": "Входящие заявки",
+    "total": "Всего",
+    "new": "Новые",
+    "processed": "Обработанные",
+    "from": "От",
+    "empty": "Нет заявок",
+    "mark_processed": "Обработано",
+    "confirm_delete": "Удалить заявку?"
+  }
+  },
     "requests": {
       "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.",
       "messagePlaceholder": "Сообщение клиенту…",
@@ -494,18 +505,9 @@
   "errors": { "request_send": "Не удалось отправить запрос", "loading_error": "Не удалось загрузить данные" },
   "countdown": { "until_end": "До окончания", "expired": "Время истекло" },
 
-  "inbox": {
-    "title": "Входящие заявки",
-    "total": "Всего",
-    "new": "Новые",
-    "processed": "Обработанные",
-    "from": "От",
-    "empty": "Нет заявок",
-    "mark_processed": "Обработано",
-    "confirm_delete": "Удалить заявку?"
-  }
 
 }
+
 
 
 
