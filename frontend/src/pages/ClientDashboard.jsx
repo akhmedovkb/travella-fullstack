@@ -468,6 +468,7 @@ export default function ClientDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [telegram, setTelegram] = useState(""); // <— NEW
   const [avatarBase64, setAvatarBase64] = useState(null);
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -526,6 +527,7 @@ export default function ClientDashboard() {
         const me = await apiGet("/api/clients/me");
         setName(me?.name || "");
         setPhone(me?.phone || "");
+        setTelegram(me?.telegram || ""); // <— NEW
         setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
@@ -596,12 +598,14 @@ export default function ClientDashboard() {
   const handleSaveProfile = async () => {
     try {
       setSavingProfile(true); setMessage(null); setError(null);
-      const payload = { name, phone };
+      const payload = { name, phone, telegram }; // <— NEW
       if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
-      setName(res?.name ?? name); setPhone(res?.phone ?? phone);
+      setName(res?.name ?? name);
+      setPhone(res?.phone ?? phone);
+      setTelegram(res?.telegram ?? telegram); // <— NEW
       if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
       else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
@@ -810,6 +814,16 @@ export default function ClientDashboard() {
               <div>
                 <label className="text-sm text-gray-600">{t("client.dashboard.phone", { defaultValue: "Телефон" })}</label>
                 <input className="mt-1 w-full border rounded-lg px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 ..." />
+              </div>
+              {/* NEW: Telegram field */}
+              <div>
+                <label className="text-sm text-gray-600">{t("telegram", { defaultValue: "Telegram" })}</label>
+                <input
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={telegram}
+                  onChange={(e) => setTelegram(e.target.value)}
+                  placeholder="@username"
+                />
               </div>
 
               <div className="pt-2">
