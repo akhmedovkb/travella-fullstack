@@ -1073,7 +1073,7 @@ export default function ClientDashboard() {
 
             <div className="mt-4 flex gap-2">
               <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                {bkSending ? t("common.sending", { defaultValue: "Отправка..." })} : {t("booking.submit", { defaultValue: "Забронировать" })}
+                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
               </button>
               <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
             </div>
