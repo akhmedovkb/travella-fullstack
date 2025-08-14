@@ -51,7 +51,7 @@ async function getClientById(clientId) {
 /**
  * POST /api/requests/quick
  * POST /api/requests                  (алиас)
- * body: { service_id: number, note?: string, provider_id?: number, service_title?: string }
+ * body: { service_id: number, note?: string }
  */
 async function handleCreateQuick(req, res) {
   try {
@@ -129,6 +129,43 @@ async function providerInboxHandler(req, res) {
   }
 }
 
+/* ===================== Provider Stats (счётчики) ===================== */
+/**
+ * GET /api/requests/provider/stats
+ * Возвращает: { total, new, processed }
+ */
+async function providerStatsHandler(req, res) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
+
+    const ids = collectProviderIdsFromUser(req.user);
+    if (!ids.length) return res.json({ total: 0, new: 0, processed: 0 });
+
+    const q = await db.query(
+      `SELECT COALESCE(status, 'new') AS status, COUNT(*)::int AS cnt
+         FROM requests r
+         JOIN services s ON s.id = r.service_id
+        WHERE s.provider_id = ANY($1::int[])
+        GROUP BY COALESCE(status, 'new')`,
+      [ids]
+    );
+
+    let total = 0;
+    let fresh = 0;
+    let processed = 0;
+    q.rows.forEach((r) => {
+      total += r.cnt;
+      if (r.status === "new") fresh += r.cnt;
+      if (r.status === "processed") processed += r.cnt;
+    });
+
+    res.json({ total, new: fresh, processed });
+  } catch (e) {
+    console.error("provider stats error:", e);
+    res.status(500).json({ error: "stats_failed" });
+  }
+}
+
 /* ===================== Client's own requests ===================== */
 /**
  * GET /api/requests/my
@@ -145,7 +182,7 @@ async function listMyRequests(req, res) {
         r.created_at,
         COALESCE(r.status, 'new') AS status,
         r.note,
-        r.proposal,                -- если храните предложение в JSON
+        r.proposal,
         json_build_object(
           'id', s.id,
           'title', COALESCE(s.title, '—')
@@ -175,6 +212,9 @@ router.post("/", authenticateToken, handleCreateQuick);
 // инбокс провайдера
 router.get("/provider", authenticateToken, providerInboxHandler);
 router.get("/provider/inbox", authenticateToken, providerInboxHandler);
+
+// счётчики провайдера
+router.get("/provider/stats", authenticateToken, providerStatsHandler);
 
 // запросы текущего клиента
 router.get("/my", authenticateToken, listMyRequests);
