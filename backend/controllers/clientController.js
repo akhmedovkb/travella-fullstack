@@ -9,6 +9,16 @@ function signToken(payload) {
   return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
+// Нормализация Telegram username: убираем @, посторонние символы, пустое -> null
+function normalizeTelegram(username) {
+  if (username === undefined || username === null) return null;
+  let u = String(username).trim();
+  if (!u) return null;
+  if (u.startsWith("@")) u = u.slice(1);
+  u = u.replace(/[^a-zA-Z0-9_]/g, "");
+  return u || null;
+}
+
 /* ======================
    AUTH: register & login
    ====================== */
@@ -42,7 +52,7 @@ exports.register = async (req, res) => {
     const ins = await db.query(
       `INSERT INTO clients (name, email, phone, password_hash, created_at)
        VALUES ($1,$2,$3,$4, NOW())
-       RETURNING id, name, email, phone, avatar_url`,
+       RETURNING id, name, email, phone, avatar_url, telegram`,
       [name, email || null, phone || null, password_hash]
     );
 
@@ -92,6 +102,7 @@ exports.login = async (req, res) => {
         email: client.email,
         phone: client.phone,
         avatar_url: client.avatar_url,
+        telegram: client.telegram || null,
       },
     });
   } catch (e) {
@@ -111,7 +122,7 @@ exports.getMe = async (req, res) => {
       return res.status(403).json({ message: "Only client" });
     }
     const q = await db.query(
-      "SELECT id, name, email, phone, avatar_url FROM clients WHERE id = $1",
+      "SELECT id, name, email, phone, avatar_url, telegram FROM clients WHERE id = $1",
       [req.user.id]
     );
     res.json(q.rows[0] || null);
@@ -127,7 +138,7 @@ exports.updateMe = async (req, res) => {
     if (req.user?.role !== "client") {
       return res.status(403).json({ message: "Only client" });
     }
-    const { name, phone, avatar_base64, remove_avatar } = req.body || {};
+    const { name, phone, avatar_base64, remove_avatar, telegram } = req.body || {};
 
     let avatar_url = null;
     if (avatar_base64) {
@@ -142,17 +153,21 @@ exports.updateMe = async (req, res) => {
       avatar_url = cur.rows[0]?.avatar_url || null;
     }
 
+    // нормализуем телеграм; undefined -> null (COALESCE сохранит старое)
+    const tgNorm = normalizeTelegram(telegram);
+
     await db.query(
       `UPDATE clients
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
-             avatar_url = $3
-       WHERE id = $4`,
-      [name ?? null, phone ?? null, remove_avatar ? null : avatar_url, req.user.id]
+             avatar_url = $3,
+             telegram = COALESCE($4, telegram)
+       WHERE id = $5`,
+      [name ?? null, phone ?? null, remove_avatar ? null : avatar_url, tgNorm, req.user.id]
     );
 
     const q = await db.query(
-      "SELECT id, name, email, phone, avatar_url FROM clients WHERE id=$1",
+      "SELECT id, name, email, phone, avatar_url, telegram FROM clients WHERE id=$1",
       [req.user.id]
     );
     res.json(q.rows[0] || null);
