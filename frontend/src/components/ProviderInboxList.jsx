@@ -1,152 +1,188 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/components/ProviderInboxList.jsx
+import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 
-const statusBadge = (status = "new") => {
-  const map = {
-    new: "bg-amber-100 text-amber-800",
-    viewed: "bg-blue-100 text-blue-800",
-    active: "bg-indigo-100 text-indigo-800",
-    done: "bg-emerald-100 text-emerald-800",
-    cancelled: "bg-red-100 text-red-800",
-  };
-  return map[status] || "bg-gray-100 text-gray-800";
-};
+function StatusBadge({ status }) {
+  const map =
+    status === "new"
+      ? "bg-yellow-100 text-yellow-800"
+      : status === "rejected"
+      ? "bg-red-100 text-red-700"
+      : status === "active"
+      ? "bg-blue-100 text-blue-700"
+      : "bg-gray-100 text-gray-700";
+  const label =
+    status === "new"
+      ? "New"
+      : status === "rejected"
+      ? "Rejected"
+      : status === "active"
+      ? "Active"
+      : status || "—";
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map}`}>
+      {label}
+    </span>
+  );
+}
 
-export default function ProviderInboxList({ showHeader = true, compact = false }) {
+function formatDate(ts) {
+  if (!ts) return "—";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
+}
+
+function makeTgHref(v) {
+  if (!v) return null;
+  let s = String(v).trim();
+  if (s.startsWith("http://") || s.startsWith("https://")) return s;
+  if (s.startsWith("@")) s = s.slice(1);
+  return `https://t.me/${s}`;
+}
+
+const ProviderInboxList = ({ showHeader = false }) => {
+  const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const token = localStorage.getItem("token");
-  const config = useMemo(
-    () => ({ headers: { Authorization: `Bearer ${token}` } }),
-    [token]
-  );
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  const refresh = async () => {
+  const load = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`${API_BASE}/api/requests/provider`, config);
-      // API может вернуть {items: [...] } или просто массив
-      const list = Array.isArray(data) ? data : data?.items || [];
-      setItems(list);
+      const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
+      setItems(Array.isArray(res.data?.items) ? res.data.items : []);
     } catch (e) {
-      console.error(e);
-      toast.error(e?.response?.data?.message || "Не удалось загрузить входящие");
+      console.error("Ошибка загрузки входящих:", e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (token) refresh();
+    if (token) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
-    <section>
+    <div>
       {showHeader && (
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold">Входящие запросы</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xl font-semibold">
+            {t("incoming_requests", { defaultValue: "Входящие запросы" })}
+          </h3>
           <button
-            onClick={refresh}
-            className="text-sm text-orange-600 hover:text-orange-700 underline disabled:opacity-60"
+            onClick={load}
+            className="text-orange-600 hover:text-orange-700 text-sm"
             disabled={loading}
           >
-            Обновить
+            {t("refresh", { defaultValue: "Обновить" })}
           </button>
         </div>
       )}
 
-      <div className="mt-3 space-y-3">
-        {loading && (
-          <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-4">
-            <div className="h-4 w-1/3 bg-gray-200 rounded mb-2" />
-            <div className="h-3 w-1/2 bg-gray-200 rounded mb-2" />
-            <div className="h-12 w-full bg-gray-100 rounded" />
-          </div>
-        )}
+      {loading && (
+        <div className="text-sm text-gray-500">
+          {t("loading", { defaultValue: "Загрузка..." })}
+        </div>
+      )}
 
-        {!loading && items.length === 0 && (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-gray-500 text-sm">
-            Запросов нет.
-          </div>
-        )}
+      {!loading && items.length === 0 && (
+        <div className="text-sm text-gray-500">
+          {t("no_inbox", { defaultValue: "Пока нет входящих запросов." })}
+        </div>
+      )}
 
+      <div className="space-y-4">
         {items.map((r) => {
-          const id = r.id ?? r._id;
-          const status = r.status || "new";
-          const created = r.created_at || r.createdAt || r.created || r.date;
-          const dt = created ? new Date(created) : null;
-
-          // ⬇️ ключевой апдейт: сначала берём из service.title / client.name
-          const serviceTitle =
-            r?.service?.title ??
-            r?.service_title ??
-            r?.serviceName ??
-            r?.serviceLabel ??
-            "—";
-
-          const clientName =
-            r?.client?.name ??
-            r?.client_name ??
-            r?.from_name ??
-            r?.user?.name ??
-            r?.fromUser?.name ??
-            "—";
-
-          const note = r.note || r.comment || r.message || "";
+          const phone = r?.client?.phone || null;
+          const tg = r?.client?.telegram || null;
+          const tgHref = makeTgHref(tg);
 
           return (
-            <article
-              key={id}
-              className={[
-                "relative rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition",
-                "border-gray-200",
-                "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:rounded-l-xl before:bg-orange-400",
-              ].join(" ")}
-            >
-              {/* meta */}
-              <div className="flex flex-wrap items-center gap-x-3 text-[13px] text-gray-500 mb-2">
-                <span className="font-medium text-gray-700">#{id}</span>
-                <span className="select-none">•</span>
-                <span className={`px-2 py-0.5 rounded-full ${statusBadge(status)} capitalize`}>
-                  {status}
-                </span>
-                {dt && (
-                  <>
-                    <span className="select-none">•</span>
-                    <time dateTime={dt.toISOString()}>
-                      {dt.toLocaleDateString()}&nbsp;{dt.toLocaleTimeString().slice(0, 5)}
-                    </time>
-                  </>
-                )}
+            <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="font-medium">#{r.id}</span>
+                <StatusBadge status={r.status} />
+                <span>•</span>
+                <span>{formatDate(r.created_at)}</span>
               </div>
 
-              {/* content */}
-              <div className={compact ? "space-y-1" : "space-y-2"}>
-                <div className="text-sm">
-                  <span className="text-gray-500">Услуга:&nbsp;</span>
-                  <span className="font-medium text-gray-900">{serviceTitle}</span>
+              <div className="mt-2">
+                <div className="text-sm text-gray-600">
+                  {t("service", { defaultValue: "Услуга" })}:
+                </div>
+                <div className="text-base font-semibold">
+                  {r.service?.title || "—"}
+                </div>
+              </div>
+
+              <div className="mt-2 text-sm">
+                <div className="text-gray-600">
+                  {t("from_whom", { defaultValue: "От кого" })}:
+                </div>
+                <div className="font-medium">
+                  {r.client?.name || "—"}
                 </div>
 
-                <div className="text-sm">
-                  <span className="text-gray-500">От кого:&nbsp;</span>
-                  <span className="text-gray-900">{clientName}</span>
+                {/* телефон и телеграм */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
+                  {phone ? (
+                    <a
+                      href={`tel:${phone}`}
+                      className="underline hover:no-underline"
+                      title={t("call", { defaultValue: "Позвонить" })}
+                    >
+                      {phone}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                  {tg ? (
+                    <a
+                      href={tgHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:no-underline"
+                      title="Открыть в Telegram"
+                    >
+                      {tg.startsWith("@") ? tg : `@${tg.replace(/^https?:\/\/t\.me\//i, "")}`}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </div>
+              </div>
 
-                {note && (
-                  <div className="text-[13px] leading-relaxed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
-                    <span className="text-gray-500">Комментарий:&nbsp;</span>
-                    {note}
+              {r.note && (
+                <div className="mt-3">
+                  <div className="text-sm text-gray-600">
+                    {t("comment", { defaultValue: "Комментарий" })}:
                   </div>
-                )}
-              </div>
-            </article>
+                  <div className="text-sm bg-gray-50 border rounded px-3 py-2">
+                    {r.note}
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
-    </section>
+    </div>
   );
-}
+};
+
+export default ProviderInboxList;
