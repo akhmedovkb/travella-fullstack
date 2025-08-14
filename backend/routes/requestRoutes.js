@@ -5,10 +5,10 @@ const router = express.Router();
 const db = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 
-/* ----------------------- helpers ----------------------- */
+/* ===================== Helpers ===================== */
 
 function collectProviderIdsFromUser(user) {
-  // на всякий: если токен выдаётся иным объектом
+  // Соберём все возможные идентификаторы (на случай разных схем)
   const ids = [
     user?.id,
     user?.provider_id,
@@ -19,45 +19,60 @@ function collectProviderIdsFromUser(user) {
   ]
     .filter((v) => v !== undefined && v !== null)
     .map((v) => Number(v))
-    .filter((v) => Number.isFinite(v));
+    .filter(Number.isFinite);
+
+  // уникальные
   return Array.from(new Set(ids));
 }
 
-/* ------------------ create quick request ------------------ */
+async function getServiceById(serviceId) {
+  const q = await db.query(
+    `SELECT id, title, provider_id
+       FROM services
+      WHERE id = $1
+      LIMIT 1`,
+    [serviceId]
+  );
+  return q.rows[0] || null;
+}
+
+async function getClientById(clientId) {
+  const q = await db.query(
+    `SELECT id, name, phone, telegram
+       FROM clients
+      WHERE id = $1
+      LIMIT 1`,
+    [clientId]
+  );
+  return q.rows[0] || null;
+}
+
+/* ===================== Create Quick Request ===================== */
 /**
- * POST /api/requests
  * POST /api/requests/quick
- * body: { service_id:number, note?:string, provider_id?:number, service_title?:string }
+ * POST /api/requests                  (алиас)
+ * body: { service_id: number, note?: string, provider_id?: number, service_title?: string }
  */
 async function handleCreateQuick(req, res) {
   try {
-    if (!req.user?.id || req.user?.role !== "client") {
-      return res.status(401).json({ error: "unauthorized" });
+    const clientId = req.user?.id;
+    if (!clientId) return res.status(401).json({ error: "unauthorized" });
+
+    const { service_id, note } = req.body || {};
+    if (!service_id) return res.status(400).json({ error: "service_id required" });
+
+    // найдём услугу и валидируем наличие провайдера
+    const svc = await getServiceById(service_id);
+    if (!svc || !svc.provider_id) {
+      return res.status(404).json({ error: "service_not_found" });
     }
 
-    const { service_id, note, provider_id: fromBody } = req.body || {};
-    if (!service_id) {
-      return res.status(400).json({ error: "service_id required" });
-    }
-
-    // попробуем достать provider_id из services, если он не передан
-    let providerId = fromBody ?? null;
-    if (!providerId) {
-      const s = await db.query(
-        "SELECT provider_id FROM services WHERE id = $1 LIMIT 1",
-        [service_id]
-      );
-      providerId = s.rows[0]?.provider_id ?? null;
-    }
-    if (!providerId) {
-      return res.status(404).json({ error: "service_or_provider_not_found" });
-    }
-
+    // создаём запись запроса
     const ins = await db.query(
-      `INSERT INTO requests (service_id, client_id, provider_id, status, note, created_at)
-       VALUES ($1, $2, $3, 'new', $4, NOW())
+      `INSERT INTO requests (service_id, client_id, status, note, created_at)
+       VALUES ($1, $2, 'new', $3, NOW())
        RETURNING id`,
-      [service_id, req.user.id, providerId, note || null]
+      [service_id, clientId, note || null]
     );
 
     return res.json({ ok: true, id: ins.rows[0].id });
@@ -67,165 +82,101 @@ async function handleCreateQuick(req, res) {
   }
 }
 
-router.post("/", authenticateToken, handleCreateQuick);
-router.post("/quick", authenticateToken, handleCreateQuick);
-
-/* ------------------ client: my requests ------------------ */
-/**
- * GET /api/requests/my
- * Список запросов текущего клиента
- */
-router.get("/my", authenticateToken, async (req, res) => {
-  try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ error: "only_client" });
-    }
-
-    const q = await db.query(
-      `SELECT
-         r.id,
-         r.created_at,
-         r.status,
-         r.note,
-         r.proposal,
-         s.id  AS service_id,
-         COALESCE(s.title, NULL) AS service_title
-       FROM requests r
-       LEFT JOIN services s ON s.id = r.service_id
-       WHERE r.client_id = $1
-       ORDER BY r.created_at DESC`,
-      [req.user.id]
-    );
-
-    const items = q.rows.map((r) => ({
-      id: r.id,
-      created_at: r.created_at,
-      status: r.status || "new",
-      note: r.note,
-      proposal: r.proposal && typeof r.proposal === "string"
-        ? (() => { try { return JSON.parse(r.proposal); } catch { return null; } })()
-        : r.proposal || null,
-      service: {
-        id: r.service_id,
-        title: r.service_title || "—",
-      },
-    }));
-
-    res.json({ items });
-  } catch (e) {
-    console.error("my requests error:", e);
-    res.status(500).json({ error: "my_requests_load_failed" });
-  }
-});
-
-/* ---------------- provider: inbox ---------------- */
+/* ===================== Provider Inbox ===================== */
 /**
  * GET /api/requests/provider
- * GET /api/requests/provider/inbox
- * Входящие запросы для текущего провайдера
+ * GET /api/requests/provider/inbox  (алиас)
+ * Возвращает входящие «быстрые» запросы для провайдера.
+ * Фильтрация — по services.provider_id (а НЕ requests.provider_id).
  */
 async function providerInboxHandler(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
 
-    const myIds = collectProviderIdsFromUser(req.user);
-    if (myIds.length === 0) {
-      return res.json({ items: [] });
-    }
+    const ids = collectProviderIdsFromUser(req.user);
+    if (!ids.length) return res.json({ items: [] });
 
     const q = await db.query(
-      `SELECT
-         r.id,
-         r.created_at,
-         r.status,
-         r.note,
-         s.id  AS service_id,
-         COALESCE(s.title, NULL) AS service_title,
-         c.id  AS client_id,
-         COALESCE(c.name,  '—')   AS client_name,
-         c.phone  AS client_phone,
-         c.telegram AS client_telegram
-       FROM requests r
-       LEFT JOIN services s ON s.id = r.service_id
-       LEFT JOIN clients  c ON c.id = r.client_id
-       WHERE r.provider_id = ANY($1::int[])
-       ORDER BY r.created_at DESC`,
-      [myIds]
+      `
+      SELECT
+        r.id,
+        r.created_at,
+        COALESCE(r.status, 'new') AS status,
+        r.note,
+        json_build_object(
+          'id', s.id,
+          'title', COALESCE(s.title, '—')
+        ) AS service,
+        json_build_object(
+          'id', c.id,
+          'name', COALESCE(c.name, '—'),
+          'phone', c.phone,
+          'telegram', c.telegram
+        ) AS client
+      FROM requests r
+      JOIN services s ON s.id = r.service_id
+      JOIN clients  c ON c.id = r.client_id
+      WHERE s.provider_id = ANY ($1::int[])
+      ORDER BY r.created_at DESC
+      `,
+      [ids]
     );
 
-    const items = q.rows.map((row) => ({
-      id: row.id,
-      created_at: row.created_at,
-      status: row.status || "new",
-      note: row.note || null,
-      service: {
-        id: row.service_id,
-        title: row.service_title || "—",
-      },
-      client: {
-        id: row.client_id,
-        name: row.client_name || "—",
-        phone: row.client_phone || null,
-        telegram: row.client_telegram || null, // ← вот он, Telegram
-      },
-    }));
-
-    res.json({ items });
+    return res.json({ items: q.rows });
   } catch (e) {
     console.error("provider inbox error:", e);
-    res.status(500).json({ error: "inbox_load_failed" });
+    return res.status(500).json({ error: "inbox_load_failed" });
   }
 }
 
+/* ===================== Client's own requests ===================== */
+/**
+ * GET /api/requests/my
+ * Список запросов клиента для вкладки «Мои запросы»
+ */
+async function listMyRequests(req, res) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
+
+    const q = await db.query(
+      `
+      SELECT
+        r.id,
+        r.created_at,
+        COALESCE(r.status, 'new') AS status,
+        r.note,
+        r.proposal,                -- если храните предложение в JSON
+        json_build_object(
+          'id', s.id,
+          'title', COALESCE(s.title, '—')
+        ) AS service
+      FROM requests r
+      JOIN services s ON s.id = r.service_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+      `,
+      [req.user.id]
+    );
+
+    res.json({ items: q.rows });
+  } catch (e) {
+    console.error("my requests error:", e);
+    return res.status(500).json({ error: "my_load_failed" });
+  }
+}
+
+/* ===================== Routes ===================== */
+
+// создать «быстрый запрос»
+router.post("/quick", authenticateToken, handleCreateQuick);
+// алиас под старый фронт
+router.post("/", authenticateToken, handleCreateQuick);
+
+// инбокс провайдера
 router.get("/provider", authenticateToken, providerInboxHandler);
 router.get("/provider/inbox", authenticateToken, providerInboxHandler);
 
-/* ---------------- accept / reject ---------------- */
-/**
- * POST /api/requests/:id/accept
- * POST /api/requests/:id/reject
- * Простое обновление статуса со стороны клиента
- */
-router.post("/:id/accept", authenticateToken, async (req, res) => {
-  try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ error: "only_client" });
-    }
-    const id = Number(req.params.id);
-    const upd = await db.query(
-      `UPDATE requests
-         SET status = 'accepted'
-       WHERE id = $1 AND client_id = $2
-       RETURNING id`,
-      [id, req.user.id]
-    );
-    if (upd.rowCount === 0) return res.status(404).json({ error: "not_found" });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("accept error:", e);
-    res.status(500).json({ error: "accept_failed" });
-  }
-});
-
-router.post("/:id/reject", authenticateToken, async (req, res) => {
-  try {
-    if (req.user?.role !== "client") {
-      return res.status(403).json({ error: "only_client" });
-    }
-    const id = Number(req.params.id);
-    const upd = await db.query(
-      `UPDATE requests
-         SET status = 'rejected'
-       WHERE id = $1 AND client_id = $2
-       RETURNING id`,
-      [id, req.user.id]
-    );
-    if (upd.rowCount === 0) return res.status(404).json({ error: "not_found" });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("reject error:", e);
-    res.status(500).json({ error: "reject_failed" });
-  }
-});
+// запросы текущего клиента
+router.get("/my", authenticateToken, listMyRequests);
 
 module.exports = router;
