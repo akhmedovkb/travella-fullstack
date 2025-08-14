@@ -1,152 +1,152 @@
-// backend/routes/requestRoutes.js
-const express = require("express");
-const router = express.Router();
-const authenticateToken = require("../middleware/authenticateToken");
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
 
-/** ===== In-memory fallback для dev =====
- * Замените функции ниже на реальные вызовы БД (Mongo/Prisma/SQL) при наличии.
- */
-const __mem = global.__travella_mem || {
-  services: new Map(), // id -> { id, title, provider_id, ... }
-  users: new Map(),    // id -> { id, name, phone, telegram, role }
-  requests: [],        // { id, type, service_id, provider_id, client_id, note, status, created_at, service_title?, client_name? }
+const statusBadge = (status = "new") => {
+  const map = {
+    new: "bg-amber-100 text-amber-800",
+    viewed: "bg-blue-100 text-blue-800",
+    active: "bg-indigo-100 text-indigo-800",
+    done: "bg-emerald-100 text-emerald-800",
+    cancelled: "bg-red-100 text-red-800",
+  };
+  return map[status] || "bg-gray-100 text-gray-800";
 };
-global.__travella_mem = __mem;
 
-async function getServiceById(id) {
-  // TODO: Service.findById(id)
-  return __mem.services.get(String(id)) || null;
+export default function ProviderInboxList({ showHeader = true, compact = false }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const token = localStorage.getItem("token");
+  const config = useMemo(
+    () => ({ headers: { Authorization: `Bearer ${token}` } }),
+    [token]
+  );
+
+  const refresh = async () => {
+    try {
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE}/api/requests/provider`, config);
+      // API может вернуть {items: [...] } или просто массив
+      const list = Array.isArray(data) ? data : data?.items || [];
+      setItems(list);
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.response?.data?.message || "Не удалось загрузить входящие");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  return (
+    <section>
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-semibold">Входящие запросы</h3>
+          <button
+            onClick={refresh}
+            className="text-sm text-orange-600 hover:text-orange-700 underline disabled:opacity-60"
+            disabled={loading}
+          >
+            Обновить
+          </button>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-3">
+        {loading && (
+          <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-4">
+            <div className="h-4 w-1/3 bg-gray-200 rounded mb-2" />
+            <div className="h-3 w-1/2 bg-gray-200 rounded mb-2" />
+            <div className="h-12 w-full bg-gray-100 rounded" />
+          </div>
+        )}
+
+        {!loading && items.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-gray-500 text-sm">
+            Запросов нет.
+          </div>
+        )}
+
+        {items.map((r) => {
+          const id = r.id ?? r._id;
+          const status = r.status || "new";
+          const created = r.created_at || r.createdAt || r.created || r.date;
+          const dt = created ? new Date(created) : null;
+
+          // ⬇️ ключевой апдейт: сначала берём из service.title / client.name
+          const serviceTitle =
+            r?.service?.title ??
+            r?.service_title ??
+            r?.serviceName ??
+            r?.serviceLabel ??
+            "—";
+
+          const clientName =
+            r?.client?.name ??
+            r?.client_name ??
+            r?.from_name ??
+            r?.user?.name ??
+            r?.fromUser?.name ??
+            "—";
+
+          const note = r.note || r.comment || r.message || "";
+
+          return (
+            <article
+              key={id}
+              className={[
+                "relative rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition",
+                "border-gray-200",
+                "before:absolute before:left-0 before:top-0 before:h-full before:w-[3px] before:rounded-l-xl before:bg-orange-400",
+              ].join(" ")}
+            >
+              {/* meta */}
+              <div className="flex flex-wrap items-center gap-x-3 text-[13px] text-gray-500 mb-2">
+                <span className="font-medium text-gray-700">#{id}</span>
+                <span className="select-none">•</span>
+                <span className={`px-2 py-0.5 rounded-full ${statusBadge(status)} capitalize`}>
+                  {status}
+                </span>
+                {dt && (
+                  <>
+                    <span className="select-none">•</span>
+                    <time dateTime={dt.toISOString()}>
+                      {dt.toLocaleDateString()}&nbsp;{dt.toLocaleTimeString().slice(0, 5)}
+                    </time>
+                  </>
+                )}
+              </div>
+
+              {/* content */}
+              <div className={compact ? "space-y-1" : "space-y-2"}>
+                <div className="text-sm">
+                  <span className="text-gray-500">Услуга:&nbsp;</span>
+                  <span className="font-medium text-gray-900">{serviceTitle}</span>
+                </div>
+
+                <div className="text-sm">
+                  <span className="text-gray-500">От кого:&nbsp;</span>
+                  <span className="text-gray-900">{clientName}</span>
+                </div>
+
+                {note && (
+                  <div className="text-[13px] leading-relaxed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
+                    <span className="text-gray-500">Комментарий:&nbsp;</span>
+                    {note}
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
-async function getUserById(id) {
-  // TODO: User.findById(id)
-  return __mem.users.get(String(id)) || null;
-}
-async function createQuickRequest(doc) {
-  // TODO: Request.create(doc)
-  const id = String(Date.now()) + Math.random().toString(36).slice(2, 7);
-  const rec = { id, ...doc };
-  __mem.requests.push(rec);
-  return rec;
-}
-
-/** ===== Общий хендлер создания быстрого запроса ===== */
-async function handleCreateQuick(req, res) {
-  try {
-    const clientId = req.user?.id;
-    if (!clientId) return res.status(401).json({ error: "unauthorized" });
-
-    const { service_id, provider_id: providerIdFromBody, note } = req.body || {};
-    if (!service_id) return res.status(400).json({ error: "service_id required" });
-
-    let svc = null;
-    try { svc = await getServiceById(service_id); } catch (_) {}
-
-    // 1) провайдер из услуги
-    let provider_id =
-      svc?.provider_id || svc?.providerId || svc?.owner_id || svc?.agency_id || svc?.user_id || null;
-
-    // 2) фолбэк — если фронт передал
-    if (!provider_id && providerIdFromBody) provider_id = providerIdFromBody;
-
-    if (!provider_id) return res.status(404).json({ error: "service_not_found" });
-
-    // ⬇️ НОВОЕ: денормализуем названия, чтобы инбокс мог показывать без join
-    const service_title =
-      svc?.title || svc?.name || null;
-    const client_name =
-      req.user?.name || req.user?.title || req.user?.login || req.user?.phone || "Клиент";
-
-    const rec = await createQuickRequest({
-      type: "quick",
-      service_id,
-      provider_id,
-      client_id: clientId,
-      note: note || null,       // комментарий клиента
-      status: "new",
-      created_at: new Date().toISOString(),
-      service_title,            // ⬅️ добавили
-      client_name,              // ⬅️ добавили
-    });
-
-    return res.json({ ok: true, id: rec.id });
-  } catch (e) {
-    console.error("quick request error:", e);
-    return res.status(500).json({ error: "request_create_failed" });
-  }
-}
-
-/** ===== Маршруты ===== */
-
-// создать «быстрый запрос»
-router.post("/quick", authenticateToken, handleCreateQuick);
-// алиас старого пути
-router.post("/", authenticateToken, handleCreateQuick);
-
-// ===== helper: какие ID считать "моими" для провайдера
-function collectProviderIdsFromUser(user) {
-  const ids = [
-    user?.id,
-    user?.provider_id,
-    user?.profile_id,
-    user?.company_id,
-    user?.agency_id,
-    user?.owner_id,
-  ].filter(Boolean).map(String);
-  return Array.from(new Set(ids));
-}
-
-// находим все быстрые запросы по нескольким провайдер-ID
-function findQuickRequestsByProviderMany(providerIds) {
-  return __mem.requests
-    .filter((r) => r.type === "quick" && providerIds.includes(String(r.provider_id)))
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-}
-
-// единый хендлер инбокса
-async function providerInboxHandler(req, res) {
-  try {
-    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
-
-    const myIds = collectProviderIdsFromUser(req.user);
-    const rows = findQuickRequestsByProviderMany(myIds);
-
-    const items = await Promise.all(
-      rows.map(async (r) => {
-        const svc = await getServiceById(r.service_id);
-        const cli = await getUserById(r.client_id);
-        return {
-          id: r.id,
-          created_at: r.created_at,
-          status: r.status || "new",
-          note: r.note || null,
-          // ⬇️ всегда есть заголовок услуги: либо из сервиса, либо из денорм. поля
-          service: svc
-            ? { id: svc.id, title: svc.title || svc.name || r.service_title || "Service" }
-            : { id: r.service_id, title: r.service_title || "Service" },
-          // ⬇️ всегда есть имя клиента: либо из пользователя, либо из денорм. поля
-          client: cli
-            ? {
-                id: cli.id,
-                name: cli.name || cli.title || r.client_name || "Клиент",
-                phone: cli.phone || null,
-                telegram: cli.telegram || cli.tg || null,
-              }
-            : { id: r.client_id, name: r.client_name || "Клиент" },
-        };
-      })
-    );
-
-    // можно вернуть {items}, но фронт уже умеет и чистый массив
-    res.json({ items });
-  } catch (e) {
-    console.error("inbox error:", e);
-    res.status(500).json({ error: "inbox_load_failed" });
-  }
-}
-
-// основной путь
-router.get("/provider/inbox", authenticateToken, providerInboxHandler);
-// алиас под старый фронт
-router.get("/provider", authenticateToken, providerInboxHandler);
-
-module.exports = router;
