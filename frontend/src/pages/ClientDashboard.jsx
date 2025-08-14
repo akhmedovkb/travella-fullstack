@@ -162,6 +162,62 @@ function extractServiceFields(item) {
   return { svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice, inlineProvider, providerId, flatName, flatPhone, flatTg, status };
 }
 
+/* ===================== API fallbacks for tabs ===================== */
+// — приведение ответа к массиву
+const arrify = (res) =>
+  Array.isArray(res) ? res :
+  res?.items || res?.data || res?.list || res?.results || [];
+
+// — «мои» заявки: пробуем несколько эндпоинтов, в крайнем случае фильтруем общий список по client id
+async function fetchClientRequestsSafe(myId) {
+  const candidates = [
+    "/api/requests/my",
+    "/api/requests/mine",
+    "/api/my/requests",
+    "/api/client/requests",
+    "/api/clients/requests",
+    "/api/requests?mine=1",
+    "/api/requests?me=1",
+    "/api/requests", // общий список — отфильтруем
+  ];
+  for (const url of candidates) {
+    try {
+      const r = await apiGet(url);
+      let list = arrify(r);
+      if (url === "/api/requests" && myId) {
+        list = list.filter((x) => {
+          const ids = [
+            x.client_id, x.clientId,
+            x.user_id, x.userId,
+            x.created_by, x.createdBy,
+            x.owner_id, x.ownerId,
+          ].filter((v) => v !== undefined && v !== null);
+          return ids.some((v) => String(v) === String(myId));
+        });
+      }
+      return list;
+    } catch { /* next */ }
+  }
+  return [];
+}
+
+// — «мои» брони: аналогично
+async function fetchClientBookingsSafe() {
+  const candidates = [
+    "/api/bookings/my",
+    "/api/bookings/mine",
+    "/api/my/bookings",
+    "/api/client/bookings",
+    "/api/clients/bookings",
+    "/api/bookings?mine=1",
+    "/api/bookings?me=1",
+  ];
+  for (const url of candidates) {
+    try { return arrify(await apiGet(url)); } catch {}
+  }
+  return [];
+}
+
 /* ===================== Mini Components ===================== */
 
 function Stars({ value = 0, size = 18, className = "" }) {
@@ -512,6 +568,9 @@ export default function ClientDashboard() {
   const [bkNote, setBkNote] = useState("");
   const [bkSending, setBkSending] = useState(false);
 
+  // мой id из профиля — пригодится для фильтрации общего списка, если спец. эндпоинта нет
+  const [myId, setMyId] = useState(null);
+
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", activeTab);
@@ -531,6 +590,8 @@ export default function ClientDashboard() {
         setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
         setAvatarServerUrl(me?.avatar_url || null);
         setRemoveAvatar(false);
+        // сохраним id для последующей фильтрации в фолбэках
+        setMyId(me?.id || me?._id || me?.user_id || me?.client_id || null);
       } catch {
         setError(t("errors.profile_load", { defaultValue: "Не удалось загрузить профиль" }));
       } finally {
@@ -559,11 +620,11 @@ export default function ClientDashboard() {
       try {
         setLoadingTab(true);
         if (activeTab === "requests") {
-          const data = await apiGet("/api/requests/my");
-          if (!cancelled) setRequests(Array.isArray(data) ? data : data?.items || []);
+          const data = await fetchClientRequestsSafe(myId);
+          if (!cancelled) setRequests(data);
         } else if (activeTab === "bookings") {
-          const data = await apiGet("/api/bookings/my");
-          if (!cancelled) setBookings(Array.isArray(data) ? data : data?.items || []);
+          const data = await fetchClientBookingsSafe();
+          if (!cancelled) setBookings(data);
         } else if (activeTab === "favorites") {
           const data = await apiGet("/api/wishlist?expand=service");
           const arr = Array.isArray(data) ? data : data?.items || [];
@@ -581,7 +642,7 @@ export default function ClientDashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, t]);
+  }, [activeTab, t, myId]);
 
   const handleUploadClick = () => fileRef.current?.click();
   const handleFileChange = async (e) => {
@@ -638,7 +699,7 @@ export default function ClientDashboard() {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
-      try { const data = await apiGet("/api/requests/my"); setRequests(Array.isArray(data) ? data : data?.items || []); } catch {}
+      try { setRequests(await fetchClientRequestsSafe(myId)); } catch {}
     } catch { setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" })); }
   };
 
@@ -647,9 +708,9 @@ export default function ClientDashboard() {
       setActingReqId(id); setError(null);
       await apiPost(`/api/requests/${id}/accept`, {});
       setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
-      const [r, b] = await Promise.allSettled([apiGet("/api/requests/my"), apiGet("/api/bookings/my")]);
-      if (r.status === "fulfilled") setRequests(Array.isArray(r.value) ? r.value : r.value?.items || []);
-      if (b.status === "fulfilled") setBookings(Array.isArray(b.value) ? b.value : b.value?.items || []);
+      const [r, b] = await Promise.allSettled([fetchClientRequestsSafe(myId), fetchClientBookingsSafe()]);
+      if (r.status === "fulfilled") setRequests(r.value);
+      if (b.status === "fulfilled") setBookings(b.value);
       setActiveTab("bookings");
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
     finally { setActingReqId(null); }
@@ -660,8 +721,8 @@ export default function ClientDashboard() {
       setActingReqId(id); setError(null);
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
-      const data = await apiGet("/api/requests/my");
-      setRequests(Array.isArray(data) ? data : data?.items || []);
+      const data = await fetchClientRequestsSafe(myId);
+      setRequests(data);
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
     finally { setActingReqId(null); }
   };
@@ -675,7 +736,7 @@ export default function ClientDashboard() {
       const details = { date: bkDate || undefined, time: bkTime || undefined, pax: Number(bkPax) || 1, note: bkNote || undefined };
       await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
       closeBooking(); setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" })); setActiveTab("bookings");
-      try { const data = await apiGet("/api/bookings/my"); setBookings(Array.isArray(data) ? data : data?.items || []); } catch {}
+      try { setBookings(await fetchClientBookingsSafe()); } catch {}
     } catch (e) { setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" })); }
     finally { setBkSending(false); }
   }
@@ -873,11 +934,9 @@ export default function ClientDashboard() {
                     try {
                       setLoadingTab(true);
                       if (activeTab === "requests") {
-                        const data = await apiGet("/api/requests/my");
-                        setRequests(Array.isArray(data) ? data : data?.items || []);
+                        setRequests(await fetchClientRequestsSafe(myId));
                       } else if (activeTab === "bookings") {
-                        const data = await apiGet("/api/bookings/my");
-                        setBookings(Array.isArray(data) ? data : data?.items || []);
+                        setBookings(await fetchClientBookingsSafe());
                       } else {
                         const data = await apiGet("/api/wishlist?expand=service");
                         const arr = Array.isArray(data) ? data : data?.items || [];
