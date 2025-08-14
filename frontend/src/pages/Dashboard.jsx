@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
+import ProviderInboxList from "../components/ProviderInboxList";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -45,6 +46,11 @@ const firstNonEmpty = (...vals) => {
   }
   return null;
 };
+const maybeParse = (x) => {
+  if (!x) return null;
+  if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
+  return typeof x === "object" ? x : null;
+};
 const clientCache = new Map();
 
 function resolveExpireAtFromService(service) {
@@ -59,6 +65,7 @@ function resolveExpireAtFromService(service) {
     const ts = typeof cand === "number" ? (cand > 1e12 ? cand : cand * 1000) : Date.parse(String(cand));
     if (Number.isFinite(ts)) return ts;
   }
+  // fallback по датам услуги (отели/перелеты/мероприятия)
   const dates = [
     d.hotel_check_out, d.endFlightDate, d.returnDate, d.end_flight_date,
     s.hotel_check_out, s.endFlightDate, s.returnDate, s.end_flight_date,
@@ -67,6 +74,7 @@ function resolveExpireAtFromService(service) {
     const ts = Date.parse(v);
     if (!Number.isNaN(ts)) return ts;
   }
+  // TTL (часы) от created_at
   const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? s.ttlHours;
   if (ttl) {
     const created = Date.parse(d.created_at || s.created_at || s.createdAt);
@@ -204,6 +212,7 @@ const Dashboard = () => {
 
   // Common fields
   const [title, setTitle] = useState("");
+  thead
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
@@ -271,9 +280,9 @@ const Dashboard = () => {
   });
 
   // === Provider Inbox / Bookings ===
-  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы
-  const [bookingsInbox, setBookingsInbox] = useState([]); // брони
-  const [proposalForms, setProposalForms] = useState({});
+  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
+  const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
+  const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
   const [loadingInbox, setLoadingInbox] = useState(false);
 
   const token = localStorage.getItem("token");
@@ -282,16 +291,13 @@ const Dashboard = () => {
   /** ===== Utils ===== */
   const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
-  const fmtDate = (v) => {
-    const d = v ? new Date(v) : null;
-    return d && !isNaN(d) ? d.toLocaleString() : "";
-  };
 
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-  // Глобальные хелперы для очистки и резолва имени
+  // Глобальные хелперы для ProviderInboxList: очистка и «От кого»
   useEffect(() => {
+    // server-cleanup доступен глобально
     window.__providerCleanupExpired = async () => {
       const urls = [
         `${API_BASE}/api/provider/cleanup-expired`,
@@ -301,12 +307,14 @@ const Dashboard = () => {
         `${API_BASE}/api/requests/purgeExpired`,
       ];
       for (const url of urls) {
-        try { await axios.post(url, {}, config); return true; } catch {}
+        try { await axios.post(url, {}, config); return true; } catch { /* try next */ }
       }
       return false;
     };
 
+    // резолвер «От кого» доступен глобально
     window.__providerClientNameResolver = async (req) => {
+      // 1) пробуем встроенные поля
       const embedded = req?.client || req?.customer || req?.from || req?.sender || req?.created_by || {};
       const inline = firstNonEmpty(
         embedded?.name, embedded?.title, embedded?.display_name, embedded?.company_name,
@@ -314,6 +322,7 @@ const Dashboard = () => {
       );
       if (inline) return inline;
 
+      // 2) пробуем подтянуть профиль по id
       const id =
         req?.client_id || req?.clientId ||
         req?.customer_id || req?.customerId ||
@@ -339,13 +348,14 @@ const Dashboard = () => {
           const obj = res.data?.data || res.data?.item || res.data?.profile || res.data?.client || res.data?.user || res.data?.customer || res.data;
           const name = firstNonEmpty(obj?.name, obj?.title, obj?.display_name, obj?.company_name);
           if (name) { clientCache.set(id, name); return name; }
-        } catch {}
+        } catch { /* next */ }
       }
       clientCache.set(id, null);
       return "—";
     };
 
     return () => {
+      // не обязательно чистить, но на всякий случай
       delete window.__providerCleanupExpired;
       delete window.__providerClientNameResolver;
     };
@@ -417,11 +427,13 @@ const Dashboard = () => {
 
     const processed = [];
     for (const f of toProcess) {
-      if (f.size > 6 * 1024 * 1024) continue;
+      if (f.size > 6 * 1024 * 1024) continue; // пропускаем >6MB
       try {
         const dataUrl = await resizeImageFile(f, 1600, 0.85, "image/jpeg");
         processed.push(dataUrl);
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
 
     if (processed.length) {
@@ -617,30 +629,17 @@ const Dashboard = () => {
   }, []);
 
   /** ===== Provider inbox loaders/actions ===== */
+  // серверная очистка просроченных и локальная фильтрация (на всякий случай)
   const serverCleanupExpired = async () => {
     if (typeof window.__providerCleanupExpired === "function") {
       try { await window.__providerCleanupExpired(); } catch {}
     }
   };
 
-  const enrichRequestsWithFrom = async (list) => {
-    if (typeof window.__providerClientNameResolver !== "function") return list;
-    const withNames = await Promise.all(
-      list.map(async (r) => {
-        try {
-          const name = await window.__providerClientNameResolver(r);
-          return { ...r, __fromName: name };
-        } catch {
-          return { ...r, __fromName: "—" };
-        }
-      })
-    );
-    return withNames;
-  };
-
   const refreshInbox = async () => {
     try {
       setLoadingInbox(true);
+      // сначала пробуем почистить на сервере
       await serverCleanupExpired();
 
       const [rq, bk] = await Promise.all([
@@ -650,10 +649,10 @@ const Dashboard = () => {
 
       const now = Date.now();
       const reqs = Array.isArray(rq.data) ? rq.data : [];
+      // локальная страховка от «просрочек»
       const filtered = reqs.filter((r) => !isExpiredRequest(r, now));
-      const enriched = await enrichRequestsWithFrom(filtered);
 
-      setRequestsInbox(enriched);
+      setRequestsInbox(filtered);
       setBookingsInbox(Array.isArray(bk.data) ? bk.data : []);
     } catch (e) {
       console.error("Ошибка загрузки входящих/броней", e);
@@ -666,7 +665,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (token) refreshInbox();
-    const id = setInterval(() => { serverCleanupExpired(); }, 30 * 60 * 1000);
+    // периодически чистим просрочки «на всякий случай»
+    const id = setInterval(() => { serverCleanupExpired(); }, 30 * 60 * 1000); // раз в 30 минут
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -1320,8 +1320,7 @@ const Dashboard = () => {
                     defaultOptions
                     loadOptions={loadHotelOptions}
                     value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                    placeholder={t("hotel")}
+                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                    placeholder={t("hotel")}
                     noOptionsMessage={() => t("hotel_not_found")}
                     className="mb-3"
                   />
@@ -1747,7 +1746,7 @@ const Dashboard = () => {
 
                   <input
                     type="text"
-                    value={details.ticketDetails || ""}
+                    value={details.ticketDetails || "")}
                     onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                     placeholder={t("ticket_details")}
                     className="w-full border px-3 py-2 rounded mb-2"
@@ -2025,8 +2024,7 @@ const Dashboard = () => {
                         defaultOptions
                         loadOptions={loadHotelOptions}
                         value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                        placeholder={t("hotel")}
+                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                        placeholder={t("hotel")}
                         noOptionsMessage={() => t("hotel_not_found")}
                         className="mb-3"
                       />
@@ -2505,7 +2503,7 @@ const Dashboard = () => {
 
                       <input
                         type="text"
-                        value={details.ticketDetails || ""}
+                        value={details.ticketDetails || ""} 
                         onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                         placeholder={t("ticket_details")}
                         className="w-full border px-3 py-2 rounded mb-2"
@@ -2637,49 +2635,15 @@ const Dashboard = () => {
             </>
           )}
 
-          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (локальный рендер) ===== */}
+          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
           <section className="mt-8">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xl font-semibold">Входящие запросы</h3>
-              <button onClick={refreshInbox} className="text-sm text-orange-600 hover:underline">
-                Обновить
-              </button>
-            </div>
-
-            {loadingInbox && <div className="text-sm text-gray-500">Загрузка…</div>}
-
-            <div className="space-y-3">
-              {requestsInbox.length === 0 && !loadingInbox && (
-                <div className="text-sm text-gray-500">Запросов нет.</div>
-              )}
-
-              {requestsInbox.map((r) => (
-                <div key={r.id} className="border rounded-lg p-4 bg-white">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <span className="text-blue-700">#{r.id}</span>
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100">New</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-500">{fmtDate(r.created_at || r.createdAt)}</span>
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    <div>
-                      Услуга:{" "}
-                      {r.service_title || r.service?.title || r.serviceName || r.title || "—"}
-                    </div>
-                    <div className="mt-1">
-                      От кого: <span className="font-medium">{r.__fromName || "—"}</span>
-                    </div>
-                    {r.comment && (
-                      <div className="mt-2">
-                        <div className="text-gray-500">Комментарий:</div>
-                        <div className="px-3 py-2 bg-gray-50 border rounded">{r.comment}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Доп.параметры передаём безопасно: компонент может проигнорировать */}
+            <ProviderInboxList
+              showHeader
+              cleanupExpired={serverCleanupExpired}
+              nameResolver={typeof window !== "undefined" ? window.__providerClientNameResolver : undefined}
+              onAfterAction={refreshInbox}
+            />
           </section>
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
