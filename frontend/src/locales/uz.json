@@ -346,6 +346,7 @@
       "reject": "Rad etish",
       "status": "Holat",
       "title": "Bronlar (Provayder)",
+    },
       "inbox":  {
       "title": "Kelib tushgan so'rovlar",
       "total": "Jami",
@@ -355,7 +356,7 @@
       "empty": "So'rovlar yo'q",
       "mark_processed": "Qayta ishlangan",
       "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
-                }
+    }
                },
     
     "requests": {
@@ -483,5 +484,6 @@
 
 
 }
+
 
 
