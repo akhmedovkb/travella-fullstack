@@ -221,11 +221,6 @@ const Dashboard = () => {
   });
 
   // === Provider Inbox / Bookings ===
-  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
-  const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
-  const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
-  const [loadingInbox, setLoadingInbox] = useState(false);
-
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
