@@ -307,6 +307,17 @@
       "status": "Status",
       "title": "Bookings (Provider)"
     },
+    "inbox": {
+    "title": "Incoming Requests",
+    "total": "Total",
+    "new": "New",
+    "processed": "Processed",
+    "from": "From",
+    "empty": "No requests",
+    "mark_processed": "Processed",
+    "confirm_delete": "Delete request?"
+  }
+  },
     "requests": {
       "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking.",
       "messagePlaceholder": "Message to client…",
@@ -474,17 +485,9 @@
   "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
   "countdown": { "until_end": "Time left", "expired": "Expired" },
 
-  "inbox": {
-    "title": "Incoming Requests",
-    "total": "Total",
-    "new": "New",
-    "processed": "Processed",
-    "from": "From",
-    "empty": "No requests",
-    "mark_processed": "Processed",
-    "confirm_delete": "Delete request?"
-  }
+
 }
+
 
 
 
