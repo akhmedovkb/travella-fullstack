@@ -467,8 +467,20 @@
   },
   "messages": { "request_sent": "So‘rov yuborildi" },
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
-  "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" }
+  "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" },
+
+  "inbox": {
+    "title": "Kelib tushgan so'rovlar",
+    "total": "Jami",
+    "new": "Yangi",
+    "processed": "Qayta ishlangan",
+    "from": "Kimdan",
+    "empty": "So'rovlar yo'q",
+    "mark_processed": "Qayta ishlangan",
+    "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
+  }
 }
+
 
 
 
