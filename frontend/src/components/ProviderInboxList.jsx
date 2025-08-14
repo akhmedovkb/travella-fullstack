@@ -1,15 +1,14 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
 /**
  * Список входящих запросов провайдера (read-only)
- * - Показывает: id, название услуги, статус, дату, комментарий клиента
- * - В правом верхнем углу — кнопка «Обновить»
+ * Показывает: услуга, от кого, комментарий, дата.
  *
  * Props:
- *  - showHeader?: boolean (по умолчанию true)
- *  - compact?: boolean (чуть меньшие отступы карточек)
+ *  - showHeader?: boolean (заголовок и кнопка "Обновить"), по умолчанию true
+ *  - compact?: boolean (уменьшенные отступы), по умолчанию false
  */
 export default function ProviderInboxList({ showHeader = true, compact = false }) {
   const [items, setItems] = useState([]);
@@ -71,41 +70,92 @@ export default function ProviderInboxList({ showHeader = true, compact = false }
         <div className="text-sm text-gray-500">Запросов нет.</div>
       ) : (
         <div className="space-y-3">
-          {items.map((r) => (
-            <div
-              key={r.id}
-              className={`rounded-2xl border shadow-sm ${
-                compact ? "p-3" : "p-4"
-              }`}
-            >
-              <div className="rounded-xl border bg-white/70 p-3">
-                <div className="text-sm text-gray-800 flex flex-wrap gap-x-3 gap-y-1">
-                  <span className="font-mono">#{r.id}</span>
-                  <span>• service:</span>
-                  <span className="font-medium">
-                    {r.service?.title || "Service"}
-                  </span>
-                  <span>• requests.status:</span>
-                  <span className="text-gray-700">{r.status || "new"}</span>
+          {items.map((r) => {
+            const svcTitle = r?.service?.title || "Service";
+            const cli = r?.client;
+            const cliName = cli?.name || "Клиент";
+            const cliPhone = cli?.phone;
+            const cliTg = cli?.telegram;
+
+            return (
+              <div
+                key={r.id}
+                className={`rounded-2xl border shadow-sm bg-white ${compact ? "p-3" : "p-4"}`}
+              >
+                {/* первая строка: id + дата + статус */}
+                <div className="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1 mb-2">
+                  <span className="font-mono text-gray-700">#{r.id}</span>
+                  {r.status && (
+                    <>
+                      <span>• статус:</span>
+                      <span className="text-gray-700">{r.status}</span>
+                    </>
+                  )}
                   {r.created_at && (
                     <>
                       <span>•</span>
-                      <span className="text-gray-500">
-                        {formatDateTime(r.created_at)}
-                      </span>
+                      <span>{formatDateTime(r.created_at)}</span>
                     </>
                   )}
                 </div>
 
+                {/* услуга */}
+                <div className="text-sm">
+                  <span className="text-gray-500">Услуга:</span>{" "}
+                  <span className="font-medium text-gray-900">{svcTitle}</span>
+                </div>
+
+                {/* от кого */}
+                <div className="text-sm mt-1">
+                  <span className="text-gray-500">От кого:</span>{" "}
+                  <span className="text-gray-900">{cliName}</span>
+                  {(cliPhone || cliTg) && (
+                    <span className="text-gray-500">
+                      {" "}
+                      •{" "}
+                      {cliPhone && (
+                        <>
+                          <a
+                            className="text-blue-600 hover:underline"
+                            href={`tel:${cliPhone}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {cliPhone}
+                          </a>
+                          {cliTg && <span> • </span>}
+                        </>
+                      )}
+                      {cliTg && (
+                        <a
+                          className="text-blue-600 hover:underline"
+                          href={
+                            cliTg.startsWith("@")
+                              ? `https://t.me/${cliTg.replace("@", "")}`
+                              : cliTg.startsWith("http")
+                              ? cliTg
+                              : `https://t.me/${cliTg}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {cliTg}
+                        </a>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* комментарий */}
                 {r.note && (
                   <div className="mt-2 text-sm">
                     <span className="text-gray-500 mr-1">Комментарий:</span>
-                    <span className="text-gray-800 break-words">{r.note}</span>
+                    <span className="text-gray-900 break-words">{r.note}</span>
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
