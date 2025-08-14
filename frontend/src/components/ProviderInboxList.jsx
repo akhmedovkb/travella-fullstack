@@ -3,10 +3,13 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 
+/* ===== Helpers ===== */
 function StatusBadge({ status }) {
   const map =
     status === "new"
       ? "bg-yellow-100 text-yellow-800"
+      : status === "processed"
+      ? "bg-green-100 text-green-700"
       : status === "rejected"
       ? "bg-red-100 text-red-700"
       : status === "active"
@@ -15,13 +18,17 @@ function StatusBadge({ status }) {
   const label =
     status === "new"
       ? "New"
+      : status === "processed"
+      ? "Processed"
       : status === "rejected"
       ? "Rejected"
       : status === "active"
       ? "Active"
       : status || "—";
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map}`}
+    >
       {label}
     </span>
   );
@@ -54,68 +61,75 @@ function makeTgHref(v) {
 const ProviderInboxList = ({ showHeader = false }) => {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
-  const [stats, setStats] = useState({ total: 0, new: 0, processed: 0 });
   const [loading, setLoading] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
 
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  const loadInbox = async () => {
+  const load = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
+      // авто-очистка перед загрузкой
+      await axios.delete(`${API_BASE}/api/requests/cleanup`, config);
+
+      const res = await axios.get(
+        `${API_BASE}/api/requests/provider`,
+        config
+      );
       setItems(Array.isArray(res.data?.items) ? res.data.items : []);
     } catch (e) {
       console.error("Ошибка загрузки входящих:", e);
-      setItems([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStats = async () => {
+  const markProcessed = async (id) => {
     try {
-      setStatsLoading(true);
-      const res = await axios.get(`${API_BASE}/api/requests/provider/stats`, config);
-      if (res?.data) setStats(res.data);
+      await axios.patch(
+        `${API_BASE}/api/requests/${id}/status`,
+        { status: "processed" },
+        config
+      );
+      setItems((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "processed" } : r))
+      );
     } catch (e) {
-      console.error("Ошибка загрузки статистики:", e);
-      setStats({ total: 0, new: 0, processed: 0 });
-    } finally {
-      setStatsLoading(false);
+      console.error("Ошибка обновления статуса:", e);
     }
   };
 
-  const reloadAll = async () => {
-    await Promise.all([loadInbox(), loadStats()]);
+  const removeRequest = async (id) => {
+    if (!window.confirm(t("confirm_delete", { defaultValue: "Удалить заявку?" })))
+      return;
+    try {
+      await axios.delete(`${API_BASE}/api/requests/${id}`, config);
+      setItems((prev) => prev.filter((r) => r.id !== id));
+    } catch (e) {
+      console.error("Ошибка удаления заявки:", e);
+    }
   };
 
   useEffect(() => {
-    if (token) reloadAll();
+    if (token) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
     <div>
       {showHeader && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-xl font-semibold">
             {t("incoming_requests", { defaultValue: "Входящие запросы" })}
           </h3>
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <span>{t("stats.total", { defaultValue: "Всего" })}: {statsLoading ? "…" : stats.total}</span>
-            <span>{t("stats.new", { defaultValue: "Новые" })}: {statsLoading ? "…" : stats.new}</span>
-            <span>{t("stats.processed", { defaultValue: "Обработанные" })}: {statsLoading ? "…" : stats.processed}</span>
-            <button
-              onClick={reloadAll}
-              className="text-orange-600 hover:text-orange-700 text-sm"
-              disabled={loading || statsLoading}
-            >
-              {t("refresh", { defaultValue: "Обновить" })}
-            </button>
-          </div>
+          <button
+            onClick={load}
+            className="text-orange-600 hover:text-orange-700 text-sm"
+            disabled={loading}
+          >
+            {t("refresh", { defaultValue: "Обновить" })}
+          </button>
         </div>
       )}
 
@@ -138,7 +152,10 @@ const ProviderInboxList = ({ showHeader = false }) => {
           const tgHref = makeTgHref(tg);
 
           return (
-            <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
+            <div
+              key={r.id}
+              className="border rounded-lg p-4 bg-white shadow-sm"
+            >
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <span className="font-medium">#{r.id}</span>
                 <StatusBadge status={r.status} />
@@ -184,7 +201,9 @@ const ProviderInboxList = ({ showHeader = false }) => {
                       className="underline hover:no-underline"
                       title="Открыть в Telegram"
                     >
-                      {tg.startsWith("@") ? tg : `@${tg.replace(/^https?:\/\/t\.me\//i, "")}`}
+                      {tg.startsWith("@")
+                        ? tg
+                        : `@${tg.replace(/^https?:\/\/t\.me\//i, "")}`}
                     </a>
                   ) : (
                     <span className="text-gray-400">—</span>
@@ -202,6 +221,24 @@ const ProviderInboxList = ({ showHeader = false }) => {
                   </div>
                 </div>
               )}
+
+              {/* Кнопки действий */}
+              <div className="mt-3 flex gap-3">
+                {r.status === "new" && (
+                  <button
+                    onClick={() => markProcessed(r.id)}
+                    className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200"
+                  >
+                    {t("mark_processed", { defaultValue: "Отметить как обработано" })}
+                  </button>
+                )}
+                <button
+                  onClick={() => removeRequest(r.id)}
+                  className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200"
+                >
+                  {t("delete", { defaultValue: "Удалить" })}
+                </button>
+              </div>
             </div>
           );
         })}
