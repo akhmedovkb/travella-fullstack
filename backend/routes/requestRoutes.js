@@ -31,7 +31,7 @@ function parseTs(v) {
 }
 
 /**
- * Возвращает UNIX(ms) истечения услуги (expiryTs) по rules:
+ * Возвращает UNIX(ms) истечения услуги (expiryTs) по правилам:
  * 1) details.expiration / expires_at / expiration_at
  * 2) авиабилеты: returnDate | returnFlightDate | endDate | startDate (one-way)
  * 3) отели: endDate
@@ -41,7 +41,7 @@ function parseTs(v) {
 function computeServiceExpiryMs(svc) {
   const now = Date.now();
 
-  const cat = (svc.category || "").toLowerCase();
+  const category = (svc.category || "").toLowerCase();
   const details = safeJSON(svc.details);
   const createdTs =
     parseTs(svc.created_at) ??
@@ -54,102 +54,95 @@ function computeServiceExpiryMs(svc) {
     parseTs(details.expiration) ??
     parseTs(details.expires_at) ??
     parseTs(details.expiration_at);
-
   if (explicit) return explicit;
 
-  // 2) по категориям
-  const byCatCandidates = [];
-
-  if (cat.includes("flight") || cat.includes("avia") || cat.includes("ticket")) {
-    byCatCandidates.push(
+  // 2-4) по категориям
+  const candidates = [];
+  if (category.includes("flight") || category.includes("avia")) {
+    candidates.push(
       details.returnDate,
       details.returnFlightDate,
       details.endDate,
       details.startDate
     );
-  } else if (cat.includes("hotel")) {
-    byCatCandidates.push(details.endDate);
+  } else if (category.includes("hotel")) {
+    candidates.push(details.endDate);
   } else if (
-    cat.includes("tour") ||
-    cat.includes("event") ||
-    cat.includes("refused_tour") ||
-    cat.includes("author_tour")
+    category.includes("tour") ||
+    category.includes("event") ||
+    category.includes("refused_tour") ||
+    category.includes("author_tour")
   ) {
-    byCatCandidates.push(details.endDate, details.startDate);
+    candidates.push(details.endDate, details.startDate);
   } else {
-    // универсальные поля
-    byCatCandidates.push(details.endDate, details.startDate);
+    // универсальные поля для прочих категорий
+    candidates.push(details.endDate, details.startDate);
   }
 
-  let catTs = null;
-  for (const c of byCatCandidates) {
+  for (const c of candidates) {
     const t = parseTs(c);
-    if (t) {
-      catTs = t;
-      break;
-    }
+    if (t) return t;
   }
-  if (catTs) return catTs;
 
-  // 5) TTL 30d
+  // 5) TTL 30 дней
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   return createdTs + THIRTY_DAYS;
 }
 
 /**
  * Удаляет просроченные заявки.
- * Возвращает массив удалённых request.id
+ * Возвращает массив удалённых request.id (строкой).
  */
 async function cleanupExpiredRequests() {
   const now = Date.now();
 
-  // тянем заявки вместе с нужными данными услуги
+  // тянем заявки вместе с данными услуги
   const { rows } = await db.query(
     `
-    SELECT r.id AS request_id,
+    SELECT r.id              AS request_id,
            r.service_id,
-           r.created_at AS request_created_at,
+           r.created_at      AS request_created_at,
            s.category,
            s.details,
            s.created_at
-    FROM requests r
-    JOIN services s ON s.id = r.service_id
+      FROM requests r
+      JOIN services s ON s.id = r.service_id
     `
   );
 
   const toDelete = [];
   for (const row of rows) {
-    const exp = computeServiceExpiryMs(row);
-    if (exp && now > exp) {
-      toDelete.push(row.request_id);
+    const expiry = computeServiceExpiryMs(row);
+    if (expiry && now > expiry) {
+      toDelete.push(String(row.request_id));
     }
   }
 
   if (toDelete.length === 0) return [];
 
-  // Удаляем пачкой
+  // Удаляем пачкой (через сравнение по id::text)
   await db.query(
-    `DELETE FROM requests WHERE id = ANY($1::uuid[]) OR id = ANY($1::int[])`,
+    `DELETE FROM requests WHERE id::text = ANY($1)`,
     [toDelete]
   );
 
   return toDelete;
 }
 
-/** Полная "очистка мусора" (пока = то же, что cleanup) */
+/** Полная «очистка мусора». Сейчас совпадает с cleanup. */
 async function purgeExpiredRequests() {
   return cleanupExpiredRequests();
 }
 
 /* =========================
-   Маршруты API заявок
+   API заявок
    ========================= */
 
 // Inbox провайдера
 router.get("/provider", authenticateToken, async (req, res) => {
   try {
     const providerId = req.user?.id;
-    const limit = Number(req.query.limit) || 20;
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 20));
 
     if (!providerId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -158,13 +151,13 @@ router.get("/provider", authenticateToken, async (req, res) => {
     const { rows } = await db.query(
       `
       SELECT r.*
-      FROM requests r
-      JOIN services s ON s.id = r.service_id
-      WHERE s.provider_id = $1
-      ORDER BY r.created_at DESC
-      LIMIT $2
+        FROM requests r
+        JOIN services s ON s.id = r.service_id
+       WHERE s.provider_id::text = $1::text
+       ORDER BY r.created_at DESC
+       LIMIT $2
       `,
-      [providerId, limit]
+      [String(providerId), limit]
     );
 
     res.json(rows || []);
@@ -177,13 +170,13 @@ router.get("/provider", authenticateToken, async (req, res) => {
 // Отметить как обработано (бейдж NEW -> пропадает)
 router.post("/:id/process", authenticateToken, async (req, res) => {
   try {
-    const id = req.params.id;
+    const id = String(req.params.id);
     await db.query(
       `
       UPDATE requests
          SET processed = TRUE,
              processed_at = NOW()
-       WHERE id = $1
+       WHERE id::text = $1
       `,
       [id]
     );
@@ -197,8 +190,8 @@ router.post("/:id/process", authenticateToken, async (req, res) => {
 // Удалить заявку вручную
 router.delete("/:id", authenticateToken, async (req, res) => {
   try {
-    const id = req.params.id;
-    await db.query(`DELETE FROM requests WHERE id = $1`, [id]);
+    const id = String(req.params.id);
+    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
     res.json({ success: true });
   } catch (e) {
     console.error("DELETE /api/requests/:id error:", e);
@@ -207,9 +200,9 @@ router.delete("/:id", authenticateToken, async (req, res) => {
 });
 
 /* =========================
-   Очистка (современные пути)
+   Очистка (основные пути)
    ========================= */
-router.post("/cleanup-expired", authenticateToken, async (req, res) => {
+router.post("/cleanup-expired", authenticateToken, async (_req, res) => {
   try {
     const removed = await cleanupExpiredRequests();
     res.json({ success: true, removed });
@@ -219,7 +212,7 @@ router.post("/cleanup-expired", authenticateToken, async (req, res) => {
   }
 });
 
-router.post("/purge-expired", authenticateToken, async (req, res) => {
+router.post("/purge-expired", authenticateToken, async (_req, res) => {
   try {
     const removed = await purgeExpiredRequests();
     res.json({ success: true, removed });
@@ -230,10 +223,9 @@ router.post("/purge-expired", authenticateToken, async (req, res) => {
 });
 
 /* =========================
-   Back-compat алиасы
-   (чтобы фронт с любыми старыми путями не ломался)
+   Алиасы для back-compat
    ========================= */
-router.post("/cleanup", authenticateToken, async (req, res) => {
+router.post("/cleanup", authenticateToken, async (_req, res) => {
   try {
     const removed = await cleanupExpiredRequests();
     res.json({ success: true, removed });
@@ -243,7 +235,7 @@ router.post("/cleanup", authenticateToken, async (req, res) => {
   }
 });
 
-router.post("/purgeExpired", authenticateToken, async (req, res) => {
+router.post("/purgeExpired", authenticateToken, async (_req, res) => {
   try {
     const removed = await purgeExpiredRequests();
     res.json({ success: true, removed });
