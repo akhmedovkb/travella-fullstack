@@ -4,8 +4,6 @@
   "actions": {
     "cancel": "Bekor qilish",
     "quick_request": "Tez so‘rov",
-    "quick_request": "Tez so‘rov",
-    "cancel": "Bekor qilish",
     "send": "YUBORISH"
   },
   "add_error": "Xizmatni qo‘shishda xatolik",
@@ -119,18 +117,15 @@
   },
   "comment": "Izoh",
   "common": {
-     "find": "Qidirish",
+    "find": "Qidirish",
     "loading": "Yuklanmoqda…",
     "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
-    "comment": "Izoh",
     "amount": "Summasi",
     "backToDashboard": "Kabinetga qaytish",
     "booking": "Bron qilish",
     "created": "Yaratilgan",
     "date": "Sana",
-    "loading": "Yuklanmoqda…",
     "loading_error": "Ma’lumotlarni yuklab bo‘lmadi",
-    "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
     "request": "So‘rov",
     "saving": "Saqlanmoqda…",
     "sending": "Yuborilmoqda…",
@@ -201,7 +196,6 @@
     "remove_error": "Sevimlilardan o‘chirib bo‘lmadi",
     "remove_from": "Sevimlilardan olib tashlash",
     "removed": "Sevimlilardan o‘chirildi",
-    "add": "Sevimlilarga qo‘shish",
     "remove": "Sevimlilardan olib tashlash",
     "added_toast": "Sevimlilarga qo‘shildi",
     "removed_toast": "Sevimlilardan olib tashlandi"
@@ -267,24 +261,14 @@
     "select_category": "Toifani tanlang",
     "start_date": "Boshlanish sanasi",
     "title": "E'lonlar doskasi",
-    "transport": "Transport",    
+    "transport": "Transport",
     "supplier": "Ta’minotchi",
     "phone": "Telefon",
     "telegram": "Telegram",
     "no_image": "Rasm yo‘q",
-    "price": "Narx",
     "no_results": "Natija topilmadi",
     "time_left": "Tugashiga qoldi",
-    "time_expired": "Muddati tugagan",
-    "select_category": "Toifani tanlang",
-    "guide": "Gid",
-    "transport": "Transport",
-    "package": "Turbaket",
-    "hotel": "Mehmonxona",
-    "flight": "Aviabilet",
-    "refused_event": "Rad etilgan tadbir bileti",
-    "reviews": "Xizmat sharhlari",
-    "search_placeholder": "Xizmatlar, davlatlar, shaharlar bo‘yicha qidirish…"
+    "time_expired": "Muddati tugagan"
   },
   "messages": {
     "booking_created": "Bron yaratildi",
@@ -336,7 +320,6 @@
     "saved": "Profil saqlandi"
   },
   "profile_updated": "Profil yangilandi",
-  
   "provider": {
     "bookings": {
       "cancel": "Bekor qilish",
@@ -345,9 +328,9 @@
       "noItems": "Bronlar yo‘q.",
       "reject": "Rad etish",
       "status": "Holat",
-      "title": "Bronlar (Provayder)",
+      "title": "Bronlar (Provayder)"
     },
-      "inbox":  {
+    "inbox": {
       "title": "Kelib tushgan so'rovlar",
       "total": "Jami",
       "new": "Yangi",
@@ -357,17 +340,15 @@
       "mark_processed": "Qayta ishlangan",
       "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
     }
-               },
-    
-    "requests": {
-      "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi.",
-      "messagePlaceholder": "Mijozga xabar…",
-      "noItems": "So‘rovlar yo‘q.",
-      "proposalPlaceholder": "JSON taklif (masalan {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-      "send": "Yuborish",
-      "sendProposal": "Taklif yuborish",
-      "title": "So‘rovlar (Provayder)"
-    }
+  },
+  "requests": {
+    "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi.",
+    "messagePlaceholder": "Mijozga xabar…",
+    "noItems": "So‘rovlar yo‘q.",
+    "proposalPlaceholder": "JSON taklif (masalan {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+    "send": "Yuborish",
+    "sendProposal": "Taklif yuborish",
+    "title": "So‘rovlar (Provayder)"
   },
   "provider_profile": "Ta'minotchi profili",
   "refused_hotel": "Rad etilgan mehmonxona",
@@ -395,7 +376,7 @@
     "title": "Ta'minotchini ro‘yxatdan o‘tkazish",
     "type": "Ta'minotchi turi"
   },
-  "requests": {
+  "requests_list": {
     "empty": "Hozircha so‘rovlar yo‘q.",
     "error": "So‘rovni yuborib bo‘lmadi",
     "item": "So‘rov",
@@ -473,17 +454,8 @@
   "view_certificate": "Sertifikatni ko‘rish",
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza yordami",
-  
   "tooltips": {
     "favorite_add": "Sevimlilarga qo‘shish",
     "favorite_remove": "Sevimlilardan olib tashlash"
-  },
-  "messages": { "request_sent": "So‘rov yuborildi" },
-  "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
-  "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" },
-
-
+  }
 }
-
-
-
