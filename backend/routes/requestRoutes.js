@@ -8,7 +8,6 @@ const authenticateToken = require("../middleware/authenticateToken");
 /* ===================== Helpers ===================== */
 
 function collectProviderIdsFromUser(user) {
-  // Соберём все возможные идентификаторы (на случай разных схем)
   const ids = [
     user?.id,
     user?.provider_id,
@@ -21,7 +20,6 @@ function collectProviderIdsFromUser(user) {
     .map((v) => Number(v))
     .filter(Number.isFinite);
 
-  // уникальные
   return Array.from(new Set(ids));
 }
 
@@ -32,17 +30,6 @@ async function getServiceById(serviceId) {
       WHERE id = $1
       LIMIT 1`,
     [serviceId]
-  );
-  return q.rows[0] || null;
-}
-
-async function getClientById(clientId) {
-  const q = await db.query(
-    `SELECT id, name, phone, telegram
-       FROM clients
-      WHERE id = $1
-      LIMIT 1`,
-    [clientId]
   );
   return q.rows[0] || null;
 }
@@ -61,13 +48,11 @@ async function handleCreateQuick(req, res) {
     const { service_id, note } = req.body || {};
     if (!service_id) return res.status(400).json({ error: "service_id required" });
 
-    // найдём услугу и валидируем наличие провайдера
     const svc = await getServiceById(service_id);
     if (!svc || !svc.provider_id) {
       return res.status(404).json({ error: "service_not_found" });
     }
 
-    // создаём запись запроса
     const ins = await db.query(
       `INSERT INTO requests (service_id, client_id, status, note, created_at)
        VALUES ($1, $2, 'new', $3, NOW())
@@ -86,8 +71,6 @@ async function handleCreateQuick(req, res) {
 /**
  * GET /api/requests/provider
  * GET /api/requests/provider/inbox  (алиас)
- * Возвращает входящие «быстрые» запросы для провайдера.
- * Фильтрация — по services.provider_id (а НЕ requests.provider_id).
  */
 async function providerInboxHandler(req, res) {
   try {
@@ -142,21 +125,21 @@ async function providerStatsHandler(req, res) {
     if (!ids.length) return res.json({ total: 0, new: 0, processed: 0 });
 
     const q = await db.query(
-      `SELECT COALESCE(status, 'new') AS status, COUNT(*)::int AS cnt
+      `SELECT COALESCE(r.status, 'new') AS status, COUNT(*)::int AS cnt
          FROM requests r
          JOIN services s ON s.id = r.service_id
         WHERE s.provider_id = ANY($1::int[])
-        GROUP BY COALESCE(status, 'new')`,
+        GROUP BY COALESCE(r.status, 'new')`,
       [ids]
     );
 
     let total = 0;
     let fresh = 0;
     let processed = 0;
-    q.rows.forEach((r) => {
-      total += r.cnt;
-      if (r.status === "new") fresh += r.cnt;
-      if (r.status === "processed") processed += r.cnt;
+    q.rows.forEach((row) => {
+      total += row.cnt;
+      if (row.status === "new") fresh += row.cnt;
+      if (row.status === "processed") processed += row.cnt;
     });
 
     res.json({ total, new: fresh, processed });
@@ -169,7 +152,6 @@ async function providerStatsHandler(req, res) {
 /* ===================== Client's own requests ===================== */
 /**
  * GET /api/requests/my
- * Список запросов клиента для вкладки «Мои запросы»
  */
 async function listMyRequests(req, res) {
   try {
@@ -206,12 +188,11 @@ async function listMyRequests(req, res) {
 
 // создать «быстрый запрос»
 router.post("/quick", authenticateToken, handleCreateQuick);
-// алиас под старый фронт
-router.post("/", authenticateToken, handleCreateQuick);
+router.post("/", authenticateToken, handleCreateQuick); // алиас
 
 // инбокс провайдера
 router.get("/provider", authenticateToken, providerInboxHandler);
-router.get("/provider/inbox", authenticateToken, providerInboxHandler);
+router.get("/provider/inbox", authenticateToken, providerInboxHandler); // алиас
 
 // счётчики провайдера
 router.get("/provider/stats", authenticateToken, providerStatsHandler);
