@@ -54,13 +54,15 @@ function makeTgHref(v) {
 const ProviderInboxList = ({ showHeader = false }) => {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
+  const [stats, setStats] = useState({ total: 0, new: 0, processed: 0 });
   const [loading, setLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  const load = async () => {
+  const loadInbox = async () => {
     try {
       setLoading(true);
       const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
@@ -72,25 +74,47 @@ const ProviderInboxList = ({ showHeader = false }) => {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      setStatsLoading(true);
+      const res = await axios.get(`${API_BASE}/api/requests/provider/stats`, config);
+      if (res?.data) setStats(res.data);
+    } catch (e) {
+      console.error("Ошибка загрузки статистики:", e);
+      setStats({ total: 0, new: 0, processed: 0 });
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const reloadAll = async () => {
+    await Promise.all([loadInbox(), loadStats()]);
+  };
+
   useEffect(() => {
-    if (token) load();
+    if (token) reloadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
     <div>
       {showHeader && (
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
           <h3 className="text-xl font-semibold">
             {t("incoming_requests", { defaultValue: "Входящие запросы" })}
           </h3>
-          <button
-            onClick={load}
-            className="text-orange-600 hover:text-orange-700 text-sm"
-            disabled={loading}
-          >
-            {t("refresh", { defaultValue: "Обновить" })}
-          </button>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <span>{t("stats.total", { defaultValue: "Всего" })}: {statsLoading ? "…" : stats.total}</span>
+            <span>{t("stats.new", { defaultValue: "Новые" })}: {statsLoading ? "…" : stats.new}</span>
+            <span>{t("stats.processed", { defaultValue: "Обработанные" })}: {statsLoading ? "…" : stats.processed}</span>
+            <button
+              onClick={reloadAll}
+              className="text-orange-600 hover:text-orange-700 text-sm"
+              disabled={loading || statsLoading}
+            >
+              {t("refresh", { defaultValue: "Обновить" })}
+            </button>
+          </div>
         </div>
       )}
 
@@ -138,7 +162,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
                   {r.client?.name || "—"}
                 </div>
 
-                {/* телефон и телеграм */}
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
                   {phone ? (
                     <a
