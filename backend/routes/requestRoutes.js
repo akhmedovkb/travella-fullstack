@@ -17,13 +17,6 @@ function safeJSON(x) {
     return {};
   }
 }
-function pickFirst(...vals) {
-  for (const v of vals) {
-    if (v === 0) return 0;
-    if (v !== undefined && v !== null && String(v).trim?.() !== "") return v;
-  }
-  return null;
-}
 function parseTs(v) {
   if (!v) return null;
   const n = Date.parse(v);
@@ -75,7 +68,6 @@ function computeServiceExpiryMs(svc) {
   ) {
     candidates.push(details.endDate, details.startDate);
   } else {
-    // универсальные поля для прочих категорий
     candidates.push(details.endDate, details.startDate);
   }
 
@@ -89,6 +81,10 @@ function computeServiceExpiryMs(svc) {
   return createdTs + THIRTY_DAYS;
 }
 
+/* =========================
+   Очистка просроченных заявок
+   ========================= */
+
 /**
  * Удаляет просроченные заявки.
  * Возвращает массив удалённых request.id (строкой).
@@ -96,7 +92,6 @@ function computeServiceExpiryMs(svc) {
 async function cleanupExpiredRequests() {
   const now = Date.now();
 
-  // тянем заявки вместе с данными услуги
   const { rows } = await db.query(
     `
     SELECT r.id              AS request_id,
@@ -120,25 +115,92 @@ async function cleanupExpiredRequests() {
 
   if (toDelete.length === 0) return [];
 
-  // Удаляем пачкой (через сравнение по id::text)
-  await db.query(
-    `DELETE FROM requests WHERE id::text = ANY($1)`,
-    [toDelete]
-  );
-
+  await db.query(`DELETE FROM requests WHERE id::text = ANY($1)`, [toDelete]);
   return toDelete;
 }
 
-/** Полная «очистка мусора». Сейчас совпадает с cleanup. */
 async function purgeExpiredRequests() {
   return cleanupExpiredRequests();
 }
 
 /* =========================
-   API заявок
+   Создание заявки (быстрый запрос)
    ========================= */
+/**
+ * POST /api/requests
+ * Тело (любые поля, минимум serviceId):
+ * {
+ *   serviceId: string|number,      // ОБЯЗАТЕЛЬНО
+ *   name?: string,                 // Имя отправителя
+ *   phone?: string,
+ *   telegram?: string,             // @ник или ссылка
+ *   comment?: string               // Комментарий
+ * }
+ *
+ * Если пользователь авторизован — client_id возьмём из токена.
+ * Роут без обязательной авторизации — можно слать и анонимные быстрые запросы.
+ */
+router.post("/", async (req, res) => {
+  try {
+    const {
+      serviceId,
+      name = null,
+      phone = null,
+      telegram = null,
+      comment = null,
+    } = req.body || {};
 
-// Inbox провайдера
+    if (!serviceId) {
+      return res.status(400).json({ error: "serviceId is required" });
+    }
+
+    // Попытаемся вытащить client_id из токена, если он есть
+    let clientId = null;
+    try {
+      // мягкая проверка — не падаем, если токена нет/он невалидный
+      await new Promise((resolve) =>
+        authenticateToken(req, res, resolve) // resolve без ответа => просто продолжим
+      );
+      clientId = req.user?.id || null;
+    } catch {
+      clientId = null;
+    }
+
+    // Проверим, что сервис существует
+    const s = await db.query(`SELECT id, provider_id FROM services WHERE id::text = $1`, [
+      String(serviceId),
+    ]);
+    if (!s.rows.length) {
+      return res.status(404).json({ error: "Service not found" });
+    }
+
+    // Вставка. Предполагаем такие колонки в requests:
+    // id (uuid default), service_id, client_id (nullable),
+    // name, phone, telegram, comment, processed (bool default false),
+    // created_at (default now()).
+    const { rows } = await db.query(
+      `
+      INSERT INTO requests (service_id, client_id, name, phone, telegram, comment)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+      `,
+      [String(serviceId), clientId, name, phone, telegram, comment]
+    );
+
+    res.status(201).json({ success: true, request: rows[0] });
+  } catch (e) {
+    console.error("POST /api/requests error:", e);
+    // Подстрахуемся: если таблица без некоторых колонок — вернём понятную ошибку
+    return res.status(500).json({
+      error:
+        "Failed to create request. Check that table 'requests' has columns: service_id, client_id (nullable), name, phone, telegram, comment, processed (default false), created_at (default now()).",
+    });
+  }
+});
+
+/* =========================
+   Inbox провайдера
+   ========================= */
 router.get("/provider", authenticateToken, async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -167,7 +229,9 @@ router.get("/provider", authenticateToken, async (req, res) => {
   }
 });
 
-// Отметить как обработано (бейдж NEW -> пропадает)
+/* =========================
+   Метки и удаление
+   ========================= */
 router.post("/:id/process", authenticateToken, async (req, res) => {
   try {
     const id = String(req.params.id);
@@ -187,7 +251,6 @@ router.post("/:id/process", authenticateToken, async (req, res) => {
   }
 });
 
-// Удалить заявку вручную
 router.delete("/:id", authenticateToken, async (req, res) => {
   try {
     const id = String(req.params.id);
@@ -223,7 +286,7 @@ router.post("/purge-expired", authenticateToken, async (_req, res) => {
 });
 
 /* =========================
-   Алиасы для back-compat
+   Алиасы (back-compat)
    ========================= */
 router.post("/cleanup", authenticateToken, async (_req, res) => {
   try {
