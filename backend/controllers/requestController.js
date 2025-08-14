@@ -6,16 +6,12 @@ const db = require("../db");
 function safeJSON(x) {
   if (!x) return {};
   if (typeof x === "object") return x;
-  try {
-    return JSON.parse(x);
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(x); } catch { return {}; }
 }
 
 function parseTs(v) {
   if (v == null) return null;
-  if (typeof v === "number") return v > 1e12 ? v : v * 1000; // сек → мс
+  if (typeof v === "number") return v > 1e12 ? v : v * 1000; // sec -> ms
   const n = Date.parse(String(v));
   return Number.isNaN(n) ? null : n;
 }
@@ -30,18 +26,17 @@ function collectProviderIdsFromUser(user) {
     user?.owner_id,
   ]
     .filter((v) => v !== undefined && v !== null)
-    .map((v) => Number(v))
+    .map(Number)
     .filter(Number.isFinite);
   return Array.from(new Set(ids));
 }
 
 /**
- * Определяет момент истечения услуги (ms) по правилам:
  * 1) details.expiration / expires_at / expiration_at
- * 2) авиабилеты: returnDate | returnFlightDate | endDate | startDate (one-way)
- * 3) отель: endDate
- * 4) тур/событие: endDate либо startDate (если конца нет)
- * 5) fallback TTL = 30 дней (service.created_at, если нет — request.created_at)
+ * 2) flight: returnDate | returnFlightDate | endDate | startDate
+ * 3) hotel: endDate
+ * 4) tour/event: endDate | startDate
+ * 5) TTL 30 days from created
  */
 function computeServiceExpiryMs(serviceRow, requestCreatedAt) {
   const cat = String(serviceRow.category || "").toLowerCase();
@@ -53,14 +48,12 @@ function computeServiceExpiryMs(serviceRow, requestCreatedAt) {
     null;
   const createdRequest = parseTs(requestCreatedAt) ?? Date.now();
 
-  // 1) явная дата истечения
   const explicit =
     parseTs(details.expiration) ??
     parseTs(details.expires_at) ??
     parseTs(details.expiration_at);
   if (explicit) return explicit;
 
-  // 2–4) по категориям
   const candidates = [];
   const isFlight = cat.includes("flight") || cat.includes("avia");
   const isHotel = cat.includes("hotel");
@@ -72,12 +65,7 @@ function computeServiceExpiryMs(serviceRow, requestCreatedAt) {
     cat.includes("refused_event_ticket");
 
   if (isFlight) {
-    candidates.push(
-      details.returnDate,
-      details.returnFlightDate,
-      details.endDate,
-      details.startDate
-    );
+    candidates.push(details.returnDate, details.returnFlightDate, details.endDate, details.startDate);
   } else if (isHotel) {
     candidates.push(details.endDate);
   } else if (isTourOrEvent) {
@@ -91,19 +79,14 @@ function computeServiceExpiryMs(serviceRow, requestCreatedAt) {
     if (t) return t;
   }
 
-  // 5) TTL 30 дней
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   const base = createdService ?? createdRequest;
   return base + THIRTY_DAYS;
 }
 
-/**
- * Удаляет просроченные заявки для набора provider_id (через services.provider_id).
- * Возвращает массив удалённых id (строкой).
- */
+/** авто-очистка просроченных заявок для набора provider_id */
 async function cleanupExpiredForProviders(providerIds) {
   if (!providerIds?.length) return [];
-
   const { rows } = await db.query(
     `
     SELECT
@@ -123,25 +106,48 @@ async function cleanupExpiredForProviders(providerIds) {
   const toDelete = [];
   for (const row of rows) {
     const expiry = computeServiceExpiryMs(row, row.request_created_at);
-    if (expiry && now > expiry) {
-      toDelete.push(String(row.request_id));
-    }
+    if (expiry && now > expiry) toDelete.push(String(row.request_id));
   }
-
   if (!toDelete.length) return [];
-  console.log("[auto-cleanup] removing expired requests:", toDelete);
-
-  // Безопасно: поддержка uuid/int (сравнение как текст)
   await db.query(`DELETE FROM requests WHERE id::text = ANY($1)`, [toDelete]);
   return toDelete;
 }
 
 /* ===================== Controllers ===================== */
 
-/**
- * GET /api/requests/provider
- * Загружает входящие заявки для провайдера. Перед этим делает авто-очистку.
- */
+/** POST /api/requests (алиас: /api/requests/quick) */
+exports.createQuickRequest = async (req, res) => {
+  try {
+    const clientId = req.user?.id;
+    if (!clientId) return res.status(401).json({ error: "unauthorized" });
+
+    const { service_id, note } = req.body || {};
+    if (!service_id) return res.status(400).json({ error: "service_id_required" });
+
+    // убедимся, что сервис существует и привязан к провайдеру
+    const svc = await db.query(
+      `SELECT id, title, provider_id FROM services WHERE id = $1`,
+      [service_id]
+    );
+    if (!svc.rowCount || !svc.rows[0]?.provider_id) {
+      return res.status(404).json({ error: "service_not_found" });
+    }
+
+    const ins = await db.query(
+      `INSERT INTO requests (service_id, client_id, status, note)
+       VALUES ($1, $2, 'new', $3)
+       RETURNING id, service_id, client_id, status, note, created_at`,
+      [service_id, clientId, note || null]
+    );
+
+    res.status(201).json(ins.rows[0]);
+  } catch (err) {
+    console.error("quick request error:", err);
+    res.status(500).json({ error: "request_create_failed" });
+  }
+};
+
+/** GET /api/requests/provider */
 exports.getProviderRequests = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -158,16 +164,8 @@ exports.getProviderRequests = async (req, res) => {
         r.created_at,
         COALESCE(r.status, 'new') AS status,
         r.note,
-        json_build_object(
-          'id', s.id,
-          'title', COALESCE(s.title, '—')
-        ) AS service,
-        json_build_object(
-          'id', c.id,
-          'name', COALESCE(c.name, '—'),
-          'phone', c.phone,
-          'telegram', c.telegram
-        ) AS client
+        json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
+        json_build_object('id', c.id, 'name', COALESCE(c.name, '—'), 'phone', c.phone, 'telegram', c.telegram) AS client
       FROM requests r
       JOIN services s ON s.id = r.service_id
       JOIN clients  c ON c.id = r.client_id
@@ -184,10 +182,7 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
-/**
- * GET /api/requests/provider/stats
- * Возвращает { total, new, processed }. Перед подсчётом — авто-очистка.
- */
+/** GET /api/requests/provider/stats */
 exports.getProviderStats = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -206,9 +201,7 @@ exports.getProviderStats = async (req, res) => {
       [providerIds]
     );
 
-    let total = 0;
-    let fresh = 0;
-    let processed = 0;
+    let total = 0, fresh = 0, processed = 0;
     q.rows.forEach((row) => {
       total += row.cnt;
       if (row.status === "new") fresh += row.cnt;
@@ -222,11 +215,7 @@ exports.getProviderStats = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/requests/:id/status
- * Обновляет статус заявки (например, processed).
- * Доступно только для владельца услуги (через services.provider_id).
- */
+/** PUT /api/requests/:id/status */
 exports.updateRequestStatus = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -238,7 +227,6 @@ exports.updateRequestStatus = async (req, res) => {
     const next = typeof status === "string" ? status.trim().toLowerCase() : "";
     if (!allowed.has(next)) return res.status(400).json({ error: "invalid_status" });
 
-    // Проверка владения заявкой
     const own = await db.query(
       `
       SELECT 1
@@ -266,10 +254,7 @@ exports.updateRequestStatus = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/requests/:id
- * Ручное удаление заявки. Доступно только владельцу услуги.
- */
+/** DELETE /api/requests/:id */
 exports.deleteRequest = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -289,7 +274,6 @@ exports.deleteRequest = async (req, res) => {
     if (!own.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
 
     await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
-
     res.json({ success: true });
   } catch (err) {
     console.error("delete request error:", err);
@@ -297,10 +281,7 @@ exports.deleteRequest = async (req, res) => {
   }
 };
 
-/**
- * POST /api/requests/cleanup-expired
- * Ручной запуск авто-очистки (по желанию).
- */
+/** POST /api/requests/cleanup-expired */
 exports.manualCleanupExpired = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
