@@ -9,16 +9,6 @@ function signToken(payload) {
   return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
-// Нормализация Telegram username: убираем @, посторонние символы, пустое -> null
-function normalizeTelegram(username) {
-  if (username === undefined || username === null) return null;
-  let u = String(username).trim();
-  if (!u) return null;
-  if (u.startsWith("@")) u = u.slice(1);
-  u = u.replace(/[^a-zA-Z0-9_]/g, "");
-  return u || null;
-}
-
 /* ======================
    AUTH: register & login
    ====================== */
@@ -26,7 +16,7 @@ function normalizeTelegram(username) {
 // POST /api/clients/register
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, password } = req.body || {};
+    const { name, email, phone, telegram, password } = req.body || {};
 
     if (!name || !password || (!email && !phone)) {
       return res
@@ -50,10 +40,10 @@ exports.register = async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10);
 
     const ins = await db.query(
-      `INSERT INTO clients (name, email, phone, password_hash, created_at)
-       VALUES ($1,$2,$3,$4, NOW())
-       RETURNING id, name, email, phone, avatar_url, telegram`,
-      [name, email || null, phone || null, password_hash]
+      `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at)
+       VALUES ($1,$2,$3,$4,$5, NOW())
+       RETURNING id, name, email, phone, telegram, avatar_url`,
+      [name, email || null, phone || null, telegram || null, password_hash]
     );
 
     const client = ins.rows[0];
@@ -101,8 +91,8 @@ exports.login = async (req, res) => {
         name: client.name,
         email: client.email,
         phone: client.phone,
+        telegram: client.telegram, // ← добавлено
         avatar_url: client.avatar_url,
-        telegram: client.telegram || null,
       },
     });
   } catch (e) {
@@ -122,7 +112,7 @@ exports.getMe = async (req, res) => {
       return res.status(403).json({ message: "Only client" });
     }
     const q = await db.query(
-      "SELECT id, name, email, phone, avatar_url, telegram FROM clients WHERE id = $1",
+      "SELECT id, name, email, phone, telegram, avatar_url FROM clients WHERE id = $1",
       [req.user.id]
     );
     res.json(q.rows[0] || null);
@@ -138,7 +128,7 @@ exports.updateMe = async (req, res) => {
     if (req.user?.role !== "client") {
       return res.status(403).json({ message: "Only client" });
     }
-    const { name, phone, avatar_base64, remove_avatar, telegram } = req.body || {};
+    const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
     let avatar_url = null;
     if (avatar_base64) {
@@ -153,21 +143,18 @@ exports.updateMe = async (req, res) => {
       avatar_url = cur.rows[0]?.avatar_url || null;
     }
 
-    // нормализуем телеграм; undefined -> null (COALESCE сохранит старое)
-    const tgNorm = normalizeTelegram(telegram);
-
     await db.query(
       `UPDATE clients
          SET name = COALESCE($1, name),
              phone = COALESCE($2, phone),
-             avatar_url = $3,
-             telegram = COALESCE($4, telegram)
+             telegram = COALESCE($3, telegram),
+             avatar_url = $4
        WHERE id = $5`,
-      [name ?? null, phone ?? null, remove_avatar ? null : avatar_url, tgNorm, req.user.id]
+      [name ?? null, phone ?? null, telegram ?? null, remove_avatar ? null : avatar_url, req.user.id]
     );
 
     const q = await db.query(
-      "SELECT id, name, email, phone, avatar_url, telegram FROM clients WHERE id=$1",
+      "SELECT id, name, email, phone, telegram, avatar_url FROM clients WHERE id=$1",
       [req.user.id]
     );
     res.json(q.rows[0] || null);
