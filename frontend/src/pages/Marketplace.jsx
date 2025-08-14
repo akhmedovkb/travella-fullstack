@@ -1,5 +1,3 @@
-// frontend/src/pages/Marketplace.jsx
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -257,30 +255,33 @@ export default function Marketplace() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrProviderId, setQrProviderId] = useState(null);
-  const openQuickRequest = (serviceId, providerId) => {
-   setQrServiceId(serviceId);
-   setQrProviderId(providerId);
-   setQrOpen(true);
+  const [qrServiceTitle, setQrServiceTitle] = useState(""); // NEW: снэпшот названия услуги
+
+  // NEW: открытие модалки с передачей всех нужных полей
+  const openQuickRequest = (serviceId, providerId, serviceTitle) => {
+    setQrServiceId(serviceId);
+    setQrProviderId(providerId || null);
+    setQrServiceTitle(serviceTitle || "");
+    setQrOpen(true);
   };
+
+  // NEW: отправка быстрого запроса (без axios/API_BASE/activeService)
   const submitQuickRequest = async (note) => {
     try {
-      await axios.post(`${API_BASE}/api/requests/quick`, {
-            service_id: activeService.id,
-            provider_id:
-              activeService.provider_id ||
-              activeService.providerId ||
-              activeService.owner_id ||
-              activeService.agency_id ||
-              activeService.user_id,
-            note,                       // то, что написал клиент
-            service_title: activeService.title, // ⚠️ добавили снэпшот названия
-          }, config);      
+      await apiPost("/api/requests", {
+        service_id: qrServiceId,
+        provider_id: qrProviderId || undefined,      // на случай, если бэку так проще
+        service_title: qrServiceTitle || undefined,  // снэпшот названия услуги
+        note: note || undefined,
+      });
       toast(t("messages.request_sent") || "Запрос отправлен");
-    } catch (e) {
+    } catch {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
     } finally {
       setQrOpen(false);
       setQrServiceId(null);
+      setQrProviderId(null);
+      setQrServiceTitle("");
     }
   };
 
@@ -579,7 +580,7 @@ export default function Marketplace() {
 
           <div className="mt-auto pt-3">
             <button
-              onClick={() => openQuickRequest(id, providerId)}
+              onClick={() => openQuickRequest(id, providerId, title)} // NEW: передаём title
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
               {t("actions.quick_request") || "Быстрый запрос"}
@@ -617,7 +618,7 @@ export default function Marketplace() {
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}</div>}
+        {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
         {!loading && !error && !items.length && (<div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>)}
         {!loading && !error && !!items.length && (
