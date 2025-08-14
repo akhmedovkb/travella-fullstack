@@ -4,6 +4,7 @@ const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
 const {
+  createQuickRequest,
   getProviderRequests,
   getProviderStats,
   updateRequestStatus,
@@ -11,28 +12,30 @@ const {
   manualCleanupExpired,
 } = require("../controllers/requestController");
 
-// Входящие провайдера (с авто-очисткой)
+/** Создание «быстрого запроса» с маркетплейса */
+router.post("/", authenticateToken, createQuickRequest);       // то, что дергает фронт
+router.post("/quick", authenticateToken, createQuickRequest);  // алиас
+
+/** Входящие провайдера (с авто-очисткой) */
 router.get("/provider", authenticateToken, getProviderRequests);
 router.get("/provider/inbox", authenticateToken, getProviderRequests); // алиас
 
-// Счётчики провайдера (тоже с авто-очисткой перед подсчётом)
+/** Счётчики провайдера (с авто-очисткой) */
 router.get("/provider/stats", authenticateToken, getProviderStats);
 
-// Обновить статус (например, processed)
-// ожидает body: { status: 'processed' | 'rejected' | ... }
+/** Обновить статус (например, processed) */
 router.put("/:id/status", authenticateToken, updateRequestStatus);
 
-// ✅ Алиас для старого фронта: PUT /:id/processed
+/** Алиас для старого фронта: PUT /:id/processed */
 router.put("/:id/processed", authenticateToken, (req, res, next) => {
-  // принудительно подставляем нужный статус и пробрасываем в общий контроллер
   req.body = { ...(req.body || {}), status: "processed" };
   return updateRequestStatus(req, res, next);
 });
 
-// Удалить вручную
+/** Удалить вручную */
 router.delete("/:id", authenticateToken, deleteRequest);
 
-// Ручной триггер авто-очистки (можно дергать с "Обновить")
+/** Ручной триггер авто-очистки */
 router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
 
 module.exports = router;
