@@ -4,9 +4,7 @@
   "actions": {
     "quick_request": "Quick request",
     "cancel": "Cancel",
-    "send": "SEND",
-    "cancel": "Cancel",
-    "quick_request": "Quick request"
+    "send": "SEND"
   },
   "add_error": "Failed to add service",
   "address": "Address",
@@ -103,7 +101,7 @@
     "login": {
       "loginBtn": "Login",
       "noAccount": "No account?",
-      "password": "password",
+      "password": "Password",
       "registerLink": "Register",
       "title": "Client login"
     },
@@ -111,7 +109,7 @@
       "haveAccount": "Already have an account?",
       "loginLink": "Login",
       "name": "Name",
-      "password": "password",
+      "password": "Password",
       "phone": "Phone",
       "registerBtn": "Register",
       "title": "Client registration"
@@ -122,16 +120,12 @@
     "find": "Find",
     "loading": "Loading…",
     "note_optional": "Request note (optional):",
-    "comment": "Comment",
     "amount": "Amount",
     "backToDashboard": "Dashboard",
     "booking": "Booking",
-    "comment": "Comment",
     "created": "Created",
     "date": "Date",
-    "loading": "Loading…",
     "loading_error": "Failed to load data",
-    "note_optional": "Request note (optional):",
     "request": "Request",
     "saving": "Saving…",
     "sending": "Sending…",
@@ -202,7 +196,6 @@
     "remove_error": "Failed to remove from favorites",
     "remove_from": "Remove from favorites",
     "removed": "Removed from favorites",
-    "add": "Add to favorites",
     "remove": "Remove from favorites",
     "added_toast": "Added to favorites",
     "removed_toast": "Removed from favorites"
@@ -244,7 +237,6 @@
   },
   "logout": "Logout",
   "make_cover": "Make cover",
-  
   "messages": {
     "booking_created": "Booking created",
     "favorite_removed": "Removed from favorites",
@@ -308,25 +300,24 @@
       "title": "Bookings (Provider)"
     },
     "inbox": {
-    "title": "Incoming Requests",
-    "total": "Total",
-    "new": "New",
-    "processed": "Processed",
-    "from": "From",
-    "empty": "No requests",
-    "mark_processed": "Processed",
-    "confirm_delete": "Delete request?"
-  }
-  },
-    "requests": {
-      "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking.",
-      "messagePlaceholder": "Message to client…",
-      "noItems": "No requests.",
-      "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-      "send": "Send",
-      "sendProposal": "Send proposal",
-      "title": "Requests (Provider)"
+      "title": "Incoming Requests",
+      "total": "Total",
+      "new": "New",
+      "processed": "Processed",
+      "from": "From",
+      "empty": "No requests",
+      "mark_processed": "Processed",
+      "confirm_delete": "Delete request?"
     }
+  },
+  "requests": {
+    "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking.",
+    "messagePlaceholder": "Message to client…",
+    "noItems": "No requests.",
+    "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+    "send": "Send",
+    "sendProposal": "Send proposal",
+    "title": "Requests (Provider)"
   },
   "provider_profile": "Provider Profile",
   "refused_hotel": "Refused hotel",
@@ -354,7 +345,7 @@
     "title": "Provider registration",
     "type": "Provider type"
   },
-  "requests": {
+  "requests_list": {
     "empty": "No requests yet.",
     "error": "Failed to send request",
     "item": "Request",
@@ -420,81 +411,4 @@
   },
   "transfer": "Transfer",
   "transfer_options": {
-    "group": "Group",
-    "individual": "Individual",
-    "none": "None",
-    "select": "Select transfer"
-  },
-  "transport": "Transport",
-  "type": "Provider Type",
-  "update_error": "Update failed",
-  "upload_images": "Images (multiple allowed):",
-  "view_certificate": "View certificate",
-  "visa_included": "Visa included",
-  "visa_support": "Visa support",
-
-  "marketplace": {
-    "adults": "Adults (12+)",
-    "children": "Children (2–11)",
-    "end_date": "End date",
-    "flight": "Refused airline ticket",
-    "guide": "Guide",
-    "hotel": "Refused hotel",
-    "infants": "Infants (0–1)",
-    "location": "Location",
-    "location_placeholder": "Enter location...",
-    "package": "Refused tour",
-    "price": "Price",
-    "propose_price": "Propose price",
-    "refused_event": "Refused event ticket",
-    "results": "Search results",
-    "reviews": "Service reviews",
-    "search": "Search",
-    "search_filters": "Search filters",
-    "search_in": "Search in {{category}}:",
-    "search_placeholder": "Search services, countries, cities…",
-    "searching": "Searching...",
-    "select_category": "Select a category",
-    "start_date": "Start date",
-    "title": "Marketplace",
-    "transport": "Transport",
-    "supplier": "Supplier",
-    "phone": "Phone",
-    "telegram": "Telegram",
-    "no_image": "No image",
-    "price": "Price",
-    "no_results": "No results",
-    "time_left": "Time left",
-    "time_expired": "Expired",
-    "select_category": "Select category",
-    "guide": "Guide",
-    "transport": "Transport",
-    "package": "Tour package",
-    "hotel": "Hotel",
-    "flight": "Flight ticket",
-    "refused_event": "Refused event ticket",
-    "reviews": "Service reviews",
-    "search_placeholder": "Search services, countries, cities…"
-  },
-  
-  "tooltips": {
-    "favorite_add": "Add to favorites",
-    "favorite_remove": "Remove from favorites"
-  },
-  "messages": { "request_sent": "Request sent" },
-  "errors": { "request_send": "Failed to send request", "loading_error": "Failed to load data" },
-  "countdown": { "until_end": "Time left", "expired": "Expired" },
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
+    "
