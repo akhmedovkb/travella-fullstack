@@ -46,11 +46,6 @@ const firstNonEmpty = (...vals) => {
   }
   return null;
 };
-const maybeParse = (x) => {
-  if (!x) return null;
-  if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
-  return typeof x === "object" ? x : null;
-};
 const clientCache = new Map();
 
 function resolveExpireAtFromService(service) {
@@ -65,7 +60,7 @@ function resolveExpireAtFromService(service) {
     const ts = typeof cand === "number" ? (cand > 1e12 ? cand : cand * 1000) : Date.parse(String(cand));
     if (Number.isFinite(ts)) return ts;
   }
-  // fallback по датам услуги (отели/перелеты/мероприятия)
+  // fallback по датам услуги (отели/перелёты/мероприятия)
   const dates = [
     d.hotel_check_out, d.endFlightDate, d.returnDate, d.end_flight_date,
     s.hotel_check_out, s.endFlightDate, s.returnDate, s.end_flight_date,
@@ -212,7 +207,6 @@ const Dashboard = () => {
 
   // Common fields
   const [title, setTitle] = useState("");
-  thead
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
@@ -312,9 +306,8 @@ const Dashboard = () => {
       return false;
     };
 
-    // резолвер «От кого» доступен глобально
+    // резолвер «От кого»
     window.__providerClientNameResolver = async (req) => {
-      // 1) пробуем встроенные поля
       const embedded = req?.client || req?.customer || req?.from || req?.sender || req?.created_by || {};
       const inline = firstNonEmpty(
         embedded?.name, embedded?.title, embedded?.display_name, embedded?.company_name,
@@ -322,7 +315,6 @@ const Dashboard = () => {
       );
       if (inline) return inline;
 
-      // 2) пробуем подтянуть профиль по id
       const id =
         req?.client_id || req?.clientId ||
         req?.customer_id || req?.customerId ||
@@ -355,7 +347,6 @@ const Dashboard = () => {
     };
 
     return () => {
-      // не обязательно чистить, но на всякий случай
       delete window.__providerCleanupExpired;
       delete window.__providerClientNameResolver;
     };
@@ -629,7 +620,6 @@ const Dashboard = () => {
   }, []);
 
   /** ===== Provider inbox loaders/actions ===== */
-  // серверная очистка просроченных и локальная фильтрация (на всякий случай)
   const serverCleanupExpired = async () => {
     if (typeof window.__providerCleanupExpired === "function") {
       try { await window.__providerCleanupExpired(); } catch {}
@@ -639,7 +629,6 @@ const Dashboard = () => {
   const refreshInbox = async () => {
     try {
       setLoadingInbox(true);
-      // сначала пробуем почистить на сервере
       await serverCleanupExpired();
 
       const [rq, bk] = await Promise.all([
@@ -649,7 +638,6 @@ const Dashboard = () => {
 
       const now = Date.now();
       const reqs = Array.isArray(rq.data) ? rq.data : [];
-      // локальная страховка от «просрочек»
       const filtered = reqs.filter((r) => !isExpiredRequest(r, now));
 
       setRequestsInbox(filtered);
@@ -665,8 +653,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (token) refreshInbox();
-    // периодически чистим просрочки «на всякий случай»
-    const id = setInterval(() => { serverCleanupExpired(); }, 30 * 60 * 1000); // раз в 30 минут
+    const id = setInterval(() => { serverCleanupExpired(); }, 30 * 60 * 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -1320,7 +1307,8 @@ const Dashboard = () => {
                     defaultOptions
                     loadOptions={loadHotelOptions}
                     value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                    placeholder={t("hotel")}
+                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
+                    placeholder={t("hotel")}
                     noOptionsMessage={() => t("hotel_not_found")}
                     className="mb-3"
                   />
@@ -1746,7 +1734,7 @@ const Dashboard = () => {
 
                   <input
                     type="text"
-                    value={details.ticketDetails || "")}
+                    value={details.ticketDetails || ""}
                     onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                     placeholder={t("ticket_details")}
                     className="w-full border px-3 py-2 rounded mb-2"
@@ -2024,7 +2012,8 @@ const Dashboard = () => {
                         defaultOptions
                         loadOptions={loadHotelOptions}
                         value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                        placeholder={t("hotel")}
+                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
+                        placeholder={t("hotel")}
                         noOptionsMessage={() => t("hotel_not_found")}
                         className="mb-3"
                       />
@@ -2503,7 +2492,7 @@ const Dashboard = () => {
 
                       <input
                         type="text"
-                        value={details.ticketDetails || ""} 
+                        value={details.ticketDetails || ""}
                         onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
                         placeholder={t("ticket_details")}
                         className="w-full border px-3 py-2 rounded mb-2"
@@ -2637,7 +2626,6 @@ const Dashboard = () => {
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
           <section className="mt-8">
-            {/* Доп.параметры передаём безопасно: компонент может проигнорировать */}
             <ProviderInboxList
               showHeader
               cleanupExpired={serverCleanupExpired}
