@@ -44,10 +44,10 @@ function ImagesEditor({
   onUpload,
   onRemove,
   onReorder,
-  onClear,          // опционально
+  onClear,
   dragItem,
   dragOverItem,
-  onMakeCover,      // опционально
+  onMakeCover,
   t,
 }) {
   return (
@@ -159,7 +159,6 @@ const Dashboard = () => {
   const [availability, setAvailability] = useState([]); // Date[]
   const [images, setImages] = useState([]); // string[] (dataURL/URL)
 
- 
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
@@ -221,6 +220,11 @@ const Dashboard = () => {
   });
 
   // === Provider Inbox / Bookings ===
+  const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
+  const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
+  const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
+  const [loadingInbox, setLoadingInbox] = useState(false);
+
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -451,52 +455,51 @@ const Dashboard = () => {
   }, [selectedCountry]);
 
   /** ===== Load profile + services + stats ===== */
-useEffect(() => {
-  // Profile
-  axios
-    .get(`${API_BASE}/api/providers/profile`, config)
-    .then((res) => {
-      setProfile(res.data || {});
-      setNewLocation(res.data?.location || "");
-      setNewSocial(res.data?.social || "");
-      setNewPhone(res.data?.phone || "");
-      setNewAddress(res.data?.address || "");
+  useEffect(() => {
+    // Profile
+    axios
+      .get(`${API_BASE}/api/providers/profile`, config)
+      .then((res) => {
+        setProfile(res.data || {});
+        setNewLocation(res.data?.location || "");
+        setNewSocial(res.data?.social || "");
+        setNewPhone(res.data?.phone || "");
+        setNewAddress(res.data?.address || "");
 
-      if (["guide", "transport"].includes(res.data?.type)) {
-        axios
-          .get(`${API_BASE}/api/providers/booked-dates`, config)
-          .then((response) => {
-            const formatted = (response.data || []).map((item) => new Date(item.date));
-            setBookedDates(formatted);
-          })
-          .catch((err) => {
-            console.error("Ошибка загрузки занятых дат", err);
-            toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-          });
-      }
-    })
-    .catch((err) => {
-      console.error("Ошибка загрузки профиля", err);
-      toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
-    });
+        if (["guide", "transport"].includes(res.data?.type)) {
+          axios
+            .get(`${API_BASE}/api/providers/booked-dates`, config)
+            .then((response) => {
+              const formatted = (response.data || []).map((item) => new Date(item.date));
+              setBookedDates(formatted);
+            })
+            .catch((err) => {
+              console.error("Ошибка загрузки занятых дат", err);
+              toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+            });
+        }
+      })
+      .catch((err) => {
+        console.error("Ошибка загрузки профиля", err);
+        toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
+      });
 
-  // Services
-  axios
-    .get(`${API_BASE}/api/providers/services`, config)
-    .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
-    .catch((err) => {
-      console.error("Ошибка загрузки услуг", err);
-      toast.error(t("services_load_error") || "Не удалось загрузить услуги");
-    });
+    // Services
+    axios
+      .get(`${API_BASE}/api/providers/services`, config)
+      .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
+      .catch((err) => {
+        console.error("Ошибка загрузки услуг", err);
+        toast.error(t("services_load_error") || "Не удалось загрузить услуги");
+      });
 
-  // Stats  <<< ДОБАВЬ ЭТО
-  axios
-    .get(`${API_BASE}/api/providers/stats`, config)
-    .then((res) => setStats(res.data || {}))
-    .catch(() => setStats({}));
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    // Stats
+    axios
+      .get(`${API_BASE}/api/providers/stats`, config)
+      .then((res) => setStats(res.data || {}))
+      .catch(() => setStats({}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** ===== Provider inbox loaders/actions ===== */
   const refreshInbox = async () => {
@@ -1009,24 +1012,23 @@ useEffect(() => {
           <div className="px-6 mt-6">
             <ProviderStatsHeader
               rating={Number(profile?.rating) || 0}
-                stats={{
-                    requests_total:  Number(stats?.requests_total)  || 0,
-                    requests_active: Number(stats?.requests_active) || 0,
-                    bookings_total:  Number(stats?.bookings_total)  || 0,
-                    completed:       Number(stats?.completed)       || 0,
-                    cancelled:       Number(stats?.cancelled)       || 0,
-                    points:          Number(stats?.points) || Number(stats?.completed) || 0, // если API вернёт points — используем его
-                       }}
-                   bonusTarget={500}
-                   t={t}
-             />
-           </div>
+              stats={{
+                requests_total:  Number(stats?.requests_total)  || 0,
+                requests_active: Number(stats?.requests_active) || 0,
+                bookings_total:  Number(stats?.bookings_total)  || 0,
+                completed:       Number(stats?.completed)       || 0,
+                cancelled:       Number(stats?.cancelled)       || 0,
+                points:          Number(stats?.points) || Number(stats?.completed) || 0,
+              }}
+              bonusTarget={500}
+              t={t}
+            />
+          </div>
 
           {/* Отзывы клиентов о провайдере */}
-           <div className="px-6 mt-6">
+          <div className="px-6 mt-6">
             <ProviderReviews providerId={profile?.id} t={t} />
-           </div>
-          
+          </div>
         </div>
        
         {/* Правый блок: услуги + входящие/брони */}
@@ -1876,8 +1878,7 @@ useEffect(() => {
                         defaultOptions
                         loadOptions={loadHotelOptions}
                         value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                        placeholder={t("hotel")}
+                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}                        placeholder={t("hotel")}
                         noOptionsMessage={() => t("hotel_not_found")}
                         className="mb-3"
                       />
@@ -2205,7 +2206,7 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-3">
-                        <label className="block font-medium mb-1">{t("flight_type")}</label>
+                        <label className="block text-sm font-medium mb-1">{t("flight_type")}</label>
                         <div className="flex gap-4">
                           <label className="inline-flex items-center">
                             <input
@@ -2488,12 +2489,11 @@ useEffect(() => {
             </>
           )}
 
-          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (E2E) ===== */}
-          
-          <section className="mt-6">
-            <ProviderInboxList showHeader={false} compact />
+          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
+          <section className="mt-8">
+            <ProviderInboxList showHeader />
           </section>
-          
+
           {/* ===== МОИ БРОНИ (E2E) ===== */}
           <div className="mt-8">
             <h3 className="text-xl font-semibold mb-3">Мои брони</h3>
