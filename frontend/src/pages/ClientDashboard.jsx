@@ -1,3 +1,5 @@
+// frontend/src/pages/ClientDashboard.jsx
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -412,7 +414,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       {serviceId && (
                         <>
                           <button
-                            onClick={() => onQuickRequest?.(serviceId, title)} // NEW: пробрасываем title
+                            onClick={() => onQuickRequest?.(serviceId)}
                             className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
                           >
                             {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
@@ -591,12 +593,45 @@ export default function ClientDashboard() {
   };
   const handleRemovePhoto = () => { setAvatarBase64(null); setAvatarServerUrl(null); setRemoveAvatar(true); };
 
-  // NEW: принимаем ещё и заголовок, пробрасываем его как service_title
-  const handleQuickRequest = async (serviceId, serviceTitle) => {
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true); setMessage(null); setError(null);
+      const payload = { name, phone };
+      if (avatarBase64) payload.avatar_base64 = stripDataUrlPrefix(avatarBase64);
+      if (removeAvatar) payload.remove_avatar = true;
+      const res = await apiPut("/api/clients/me", payload);
+      setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
+      setName(res?.name ?? name); setPhone(res?.phone ?? phone);
+      if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
+      else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
+      setRemoveAvatar(false);
+    } catch { setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" })); }
+    finally { setSavingProfile(false); }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) { setError(t("client.dashboard.passwordTooShort", { defaultValue: "Пароль должен быть не короче 6 символов" })); return; }
+    try {
+      setChangingPass(true); setError(null);
+      await apiPost("/api/clients/change-password", { password: newPassword });
+      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" })); setNewPassword("");
+    } catch { setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" })); }
+    finally { setChangingPass(false); }
+  };
+
+  const handleLogout = () => { try { localStorage.removeItem("clientToken"); } finally { window.location.href = "/client/login"; } };
+
+  const handleRemoveFavorite = async (itemId) => {
+    try { await apiPost("/api/wishlist/toggle", { itemId }); } catch {}
+    setFavorites((prev) => prev.filter((x) => x.id !== itemId));
+    setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
+  };
+
+  const handleQuickRequest = async (serviceId) => {
     if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
     const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
     try {
-      await apiPost("/api/requests", { service_id: serviceId, service_title: serviceTitle || undefined, note });
+      await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
       try { const data = await apiGet("/api/requests/my"); setRequests(Array.isArray(data) ? data : data?.items || []); } catch {}
@@ -739,7 +774,7 @@ export default function ClientDashboard() {
         page={favPage}
         perPage={8}
         onRemove={handleRemoveFavorite}
-        onQuickRequest={handleQuickRequest} // принимает (serviceId, serviceTitle)
+        onQuickRequest={handleQuickRequest}
         onBook={(serviceId) => openBooking(serviceId)}
         onPageChange={(p) => setFavPage(p)}
       />
