@@ -69,6 +69,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
       setItems(Array.isArray(res.data?.items) ? res.data.items : []);
     } catch (e) {
       console.error("Ошибка загрузки входящих:", e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -162,6 +163,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
                   {r.client?.name || "—"}
                 </div>
 
+                {/* телефон и телеграм */}
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
                   {phone ? (
                     <a
