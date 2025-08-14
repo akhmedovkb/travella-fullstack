@@ -163,7 +163,6 @@ function extractServiceFields(item) {
 }
 
 /* ===================== API fallbacks for tabs ===================== */
-// — приведение ответа к массиву
 const arrify = (res) =>
   Array.isArray(res) ? res :
   res?.items || res?.data || res?.list || res?.results || [];
@@ -196,7 +195,7 @@ async function fetchClientRequestsSafe(myId) {
         });
       }
       return list;
-    } catch { /* next */ }
+    } catch {/* try next */}
   }
   return [];
 }
@@ -369,7 +368,6 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const hasTimer = !!expireAt;
               const timerText = hasTimer ? formatLeft(leftMs) : null;
 
-
               // подсказка (портал) — чтобы «выходила» за карточку
               const imgRef = useRef(null);
               const [tipOpen, setTipOpen] = useState(false);
@@ -405,7 +403,8 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                         {timerText}
                       </span>
                     )}
-{/* Сердечко (красное), ховер-текст и удаление */}
+
+                    {/* Сердечко (красное), ховер-текст и удаление */}
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
@@ -692,15 +691,43 @@ export default function ClientDashboard() {
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
+  // === Надёжный Quick Request (с фолбэками по маршрутам и формам тела)
   const handleQuickRequest = async (serviceId) => {
-    if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
-    const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
+    if (!serviceId) {
+      setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
+      return;
+    }
+    const note = window.prompt(
+      t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
+    ) || undefined;
+
+    const tryPost = async () => {
+      const urls = [
+        "/api/requests",
+        "/api/clients/requests",
+        "/api/client/requests",
+        "/api/my/requests"
+      ];
+      const bodies = [
+        { service_id: serviceId, note },
+        { serviceId, note },
+      ];
+      for (const url of urls) {
+        for (const body of bodies) {
+          try { await apiPost(url, body); return true; } catch {}
+        }
+      }
+      throw new Error("create-failed");
+    };
+
     try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
+      await tryPost();
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
       setActiveTab("requests");
       try { setRequests(await fetchClientRequestsSafe(myId)); } catch {}
-    } catch { setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" })); }
+    } catch {
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    }
   };
 
   const handleAcceptProposal = async (id) => {
