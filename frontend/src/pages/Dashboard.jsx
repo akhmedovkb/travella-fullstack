@@ -2494,6 +2494,7 @@ useEffect(() => {
           )}
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ (E2E) ===== */}
+          
           <section className="mt-6">
             <ProviderInboxList showHeader={false} compact />
           </section>
