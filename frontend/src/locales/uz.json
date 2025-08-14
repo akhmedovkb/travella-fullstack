@@ -336,6 +336,7 @@
     "saved": "Profil saqlandi"
   },
   "profile_updated": "Profil yangilandi",
+  
   "provider": {
     "bookings": {
       "cancel": "Bekor qilish",
@@ -344,8 +345,19 @@
       "noItems": "Bronlar yo‘q.",
       "reject": "Rad etish",
       "status": "Holat",
-      "title": "Bronlar (Provayder)"
-    },
+      "title": "Bronlar (Provayder)",
+      "inbox":  {
+      "title": "Kelib tushgan so'rovlar",
+      "total": "Jami",
+      "new": "Yangi",
+      "processed": "Qayta ishlangan",
+      "from": "Kimdan",
+      "empty": "So'rovlar yo'q",
+      "mark_processed": "Qayta ishlangan",
+      "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
+                }
+               },
+    
     "requests": {
       "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi.",
       "messagePlaceholder": "Mijozga xabar…",
@@ -469,15 +481,7 @@
   "errors": { "request_send": "So‘rovni yuborib bo‘lmadi", "loading_error": "Ma’lumotlarni yuklab bo‘lmadi" },
   "countdown": { "until_end": "Tugashiga qoldi", "expired": "Muddati tugagan" },
 
-  "inbox": {
-    "title": "Kelib tushgan so'rovlar",
-    "total": "Jami",
-    "new": "Yangi",
-    "processed": "Qayta ishlangan",
-    "from": "Kimdan",
-    "empty": "So'rovlar yo'q",
-    "mark_processed": "Qayta ishlangan",
-    "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
-  }
+
 }
+
 
