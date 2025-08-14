@@ -25,7 +25,7 @@ function StatusBadge({ status }) {
       ? "Active"
       : status || "—";
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map}`}>
       {label}
     </span>
   );
@@ -41,6 +41,7 @@ function formatDate(ts) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
     });
   } catch {
     return ts;
@@ -59,8 +60,8 @@ const ProviderInboxList = ({ showHeader = false }) => {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState({});     // { [id]: true } на время PUT
-  const [busyDel, setBusyDel] = useState({}); // { [id]: true } на время DELETE
+  const [busy, setBusy] = useState({});
+  const [busyDel, setBusyDel] = useState({});
 
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -69,9 +70,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
   const load = async () => {
     try {
       setLoading(true);
-      // авто-очистка (не обязательно — можно пропустить, если сервер делает сам)
       try { await axios.post(`${API_BASE}/api/requests/cleanup-expired`, {}, config); } catch {}
-      // инбокс
       const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
       setItems(Array.isArray(res.data?.items) ? res.data.items : []);
     } catch (e) {
@@ -91,7 +90,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
     setBusy((b) => ({ ...b, [id]: true }));
     try {
       await axios.put(`${API_BASE}/api/requests/${id}/processed`, {}, config);
-      // оптимистично обновляем локальный список
       setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "processed" } : r)));
     } catch (e) {
       console.error("mark processed failed:", e?.response?.data || e?.message);
@@ -127,18 +125,20 @@ const ProviderInboxList = ({ showHeader = false }) => {
   };
 
   return (
-    <div>
+    <div className="space-y-4">
       {showHeader && (
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xl font-semibold">
-            {t("provider.inbox.title", { defaultValue: "Incoming Requests" })}
+        <div className="flex items-center justify-between">
+          <h3 className="text-[20px] font-semibold">
+            {t("provider.inbox.title", { defaultValue: "Входящие заявки" })}
           </h3>
           <button
             onClick={load}
-            className="text-orange-600 hover:text-orange-700 text-sm"
             disabled={loading}
+            className={`px-3 py-1 rounded-md text-white text-sm ${
+              loading ? "bg-blue-300 cursor-wait" : "bg-blue-500 hover:bg-blue-600"
+            }`}
           >
-            {t("common.refresh", { defaultValue: "Refresh" })}
+            {t("common.refresh", { defaultValue: "refresh" })}
           </button>
         </div>
       )}
@@ -155,7 +155,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {items.map((r) => {
           const phone = r?.client?.phone || null;
           const tg = r?.client?.telegram || null;
@@ -163,87 +163,78 @@ const ProviderInboxList = ({ showHeader = false }) => {
           const isProcessed = String(r.status) === "processed";
 
           return (
-            <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="font-medium">#{r.id}</span>
-                <StatusBadge status={r.status} />
-                <span>•</span>
-                <span>{formatDate(r.created_at)}</span>
+            <div
+              key={r.id}
+              className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"
+            >
+              {/* Верхняя строка: заголовок услуги */}
+              <div className="text-[15px] font-semibold text-gray-900">
+                {r.service?.title || "—"}
               </div>
 
-              <div className="mt-2">
-                <div className="text-sm text-gray-600">
-                  {t("service", { defaultValue: "Service" })}:
-                </div>
-                <div className="text-base font-semibold">
-                  {r.service?.title || "—"}
-                </div>
-              </div>
-
-              <div className="mt-2 text-sm">
-                <div className="text-gray-600">
-                  {t("provider.inbox.from", { defaultValue: "From" })}:
-                </div>
-                <div className="font-medium">
+              {/* Подзаголовок: от кого */}
+              <div className="mt-1 text-sm text-gray-600">
+                {t("provider.inbox.from", { defaultValue: "От" })}:{" "}
+                <span className="font-medium text-gray-800">
                   {r.client?.name || "—"}
-                </div>
-
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
-                  {phone ? (
-                    <a href={`tel:${phone}`} className="underline hover:no-underline">
+                </span>
+                {phone ? (
+                  <>
+                    ,{" "}
+                    <a
+                      href={`tel:${phone}`}
+                      className="text-gray-800 underline decoration-gray-300 hover:decoration-transparent"
+                    >
                       {phone}
                     </a>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                  {tg ? (
+                  </>
+                ) : null}
+                {tg ? (
+                  <>
+                    ,{" "}
                     <a
                       href={tgHref}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="underline hover:no-underline"
-                      title="Telegram"
+                      className="text-gray-800 underline decoration-gray-300 hover:decoration-transparent"
                     >
                       {tg.startsWith("@") ? tg : `@${tg.replace(/^https?:\/\/t\.me\//i, "")}`}
                     </a>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                </div>
+                  </>
+                ) : null}
               </div>
 
-              {r.note && (
-                <div className="mt-3">
-                  <div className="text-sm text-gray-600">
-                    {t("comment", { defaultValue: "Comment" })}:
-                  </div>
-                  <div className="text-sm bg-gray-50 border rounded px-3 py-2">
-                    {r.note}
-                  </div>
-                </div>
-              )}
+              {/* Дата + статус-бейдж */}
+              <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                <span>{formatDate(r.created_at)}</span>
+                <span className="mx-1">•</span>
+                <StatusBadge status={r.status} />
+              </div>
 
-              <div className="mt-4 flex items-center gap-2">
-                {!isProcessed && (
+              {/* Кнопки */}
+              <div className="mt-3 flex items-center gap-8">
+                <div className="flex items-center gap-8">
+                  {!isProcessed && (
+                    <button
+                      onClick={() => handleMarkProcessed(r.id)}
+                      disabled={!!busy[r.id]}
+                      className={`px-3 py-1 rounded-md text-sm text-white ${
+                        busy[r.id] ? "bg-green-300 cursor-wait" : "bg-green-600 hover:bg-green-700"
+                      }`}
+                    >
+                      {t("provider.inbox.mark_processed", { defaultValue: "Обработано" })}
+                    </button>
+                  )}
                   <button
-                    onClick={() => handleMarkProcessed(r.id)}
-                    disabled={!!busy[r.id]}
-                    className={`px-3 py-1 rounded text-sm text-white ${
-                      busy[r.id] ? "bg-green-300 cursor-wait" : "bg-green-600 hover:bg-green-700"
+                    onClick={() => handleDelete(r.id)}
+                    disabled={!!busyDel[r.id]}
+                    className={`px-3 py-1 rounded-md text-sm text-white ${
+                      busyDel[r.id] ? "bg-red-300 cursor-wait" : "bg-red-600 hover:bg-red-700"
                     }`}
                   >
-                    {t("provider.inbox.mark_processed", { defaultValue: "Processed" })}
+                    {t("delete", { defaultValue: "Удалить" })}
                   </button>
-                )}
-                <button
-                  onClick={() => handleDelete(r.id)}
-                  disabled={!!busyDel[r.id]}
-                  className={`px-3 py-1 rounded text-sm text-white ${
-                    busyDel[r.id] ? "bg-red-300 cursor-wait" : "bg-red-600 hover:bg-red-700"
-                  }`}
-                >
-                  {t("delete", { defaultValue: "Delete" })}
-                </button>
+                </div>
               </div>
             </div>
           );
