@@ -492,9 +492,20 @@
   },
   "messages": { "request_sent": "Запрос отправлен" },
   "errors": { "request_send": "Не удалось отправить запрос", "loading_error": "Не удалось загрузить данные" },
-  "countdown": { "until_end": "До окончания", "expired": "Время истекло" }
+  "countdown": { "until_end": "До окончания", "expired": "Время истекло" },
+
+  "inbox": {
+    "title": "Входящие заявки",
+    "total": "Всего",
+    "new": "Новые",
+    "processed": "Обработанные",
+    "from": "От",
+    "empty": "Нет заявок",
+    "mark_processed": "Обработано",
+    "confirm_delete": "Удалить заявку?"
 
 }
+
 
 
 
