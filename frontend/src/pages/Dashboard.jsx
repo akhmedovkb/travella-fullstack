@@ -221,6 +221,114 @@ const Dashboard = () => {
 
   // === Provider Inbox / Bookings ===
   const [requestsInbox, setRequestsInbox] = useState([]); // входящие запросы по услугам провайдера
+
+  // === Deletion helpers for requests (manual + auto by expiration) ===
+  function parseTs(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number") return v > 1e12 ? v : Math.round(v * 1000);
+    const s = String(v).trim();
+    if (!s) return null;
+    const n = Number(s);
+    if (!Number.isNaN(n)) return n > 1e12 ? n : Math.round(n * 1000);
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? null : t;
+  }
+  function mergeDetails(obj) {
+    const maybeObj = (x) => {
+      if (!x) return null;
+      if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
+      return typeof x === "object" ? x : null;
+    };
+    const d = Object.assign(
+      {},
+      maybeObj(obj?.details),
+      maybeObj(obj?.detail),
+      maybeObj(obj?.meta),
+      maybeObj(obj?.params),
+      maybeObj(obj?.payload),
+      maybeObj(obj?.extra),
+      maybeObj(obj?.data),
+      maybeObj(obj?.info)
+    );
+    return d || {};
+  }
+  /** Return expiration timestamp (ms) for a request's service, by
+      1) details.expiration/expiration_at/expires_at
+      2) arrival/return dates (end_flight_date, returnFlightDate, endDate, hotel_check_out, checkOut)
+      3) created_at + ttl_hours fallback if present
+   */
+  function getRequestExpiryTs(req) {
+    const svc = req?.service || {};
+    const d = mergeDetails(svc);
+    const cand = [
+      svc.expires_at, svc.expire_at, svc.expireAt,
+      svc.expiration, d.expiration, d.expiration_at, d.expirationAt, d.expires_at,
+      d.end_flight_date, d.endFlightDate, d.returnFlightDate, d.arrivalDate,
+      d.endDate, svc.endDate, d.hotel_check_out, d.checkOut
+    ];
+    for (const v of cand) {
+      const ts = parseTs(v);
+      if (ts) return ts;
+    }
+    const ttl = d.ttl_hours ?? d.ttlHours ?? svc.ttl_hours ?? svc.ttlHours;
+    if (ttl && (svc.created_at || d.created_at)) {
+      const created = parseTs(svc.created_at || d.created_at);
+      if (created) return created + Number(ttl) * 3600 * 1000;
+    }
+    return null;
+  }
+  function isRequestExpired(req, nowTs = Date.now()) {
+    const ts = getRequestExpiryTs(req);
+    return ts !== null && ts <= nowTs;
+  }
+  async function deleteRequest(id) {
+    try {
+      await axios.delete(`${API_BASE}/api/requests/${id}`, config);
+      setRequestsInbox((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev);
+      setRequestsMy((prev) => Array.isArray(prev) ? prev.filter((x) => x.id !== id) : prev);
+      toast(t("provider.requests_deleted") || "Запрос удалён");
+    } catch (e) {
+      console.error("deleteRequest failed", e);
+      toast(t("provider.requests_delete_error") || "Не удалось удалить запрос");
+    }
+  }
+  async function cleanupExpiredRequests({ silent = true } = {}) {
+    try {
+      // Fetch latest inbox list to check expirations
+      const res = await axios.get(`${API_BASE}/api/requests/provider/inbox`, config);
+      const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
+      const expired = list.filter((r) => isRequestExpired(r));
+      if (expired.length === 0) {
+        if (!silent) toast(t("provider.no_expired") || "Нет истёкших запросов");
+        return;
+      }
+      const ids = expired.map((r) => r.id).filter(Boolean);
+      const results = await Promise.allSettled(ids.map((id) => axios.delete(`${API_BASE}/api/requests/${id}`, config)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      if (!silent) toast((t("provider.cleaned_count") || "Удалено истёкших: ") + ok);
+      // refresh inbox UI if we keep a cached copy
+      try {
+        const res2 = await axios.get(`${API_BASE}/api/requests/provider/inbox`, config);
+        setRequestsInbox(Array.isArray(res2?.data) ? res2.data : (res2?.data?.items || []));
+      } catch {}
+    } catch (e) {
+      console.error("cleanupExpiredRequests failed", e);
+      if (!silent) toast(t("provider.cleanup_failed") || "Не удалось очистить истёкшие");
+    }
+  }
+
+  // Periodic auto-clean of expired requests (every 15 minutes)
+  useEffect(() => {
+    let mounted = true;
+    const tick = async () => {
+      if (!mounted) return;
+      try { await cleanupExpiredRequests({ silent: true }); } catch {}
+    };
+    // run once on mount and then periodically
+    tick();
+    const id = setInterval(tick, 15 * 60 * 1000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
   const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
   const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
   const [loadingInbox, setLoadingInbox] = useState(false);
@@ -2491,6 +2599,16 @@ const Dashboard = () => {
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
           <section className="mt-8">
+
+          {/* Controls for requests maintenance */}
+          <div className="flex items-center justify-end mb-2">
+            <button
+              onClick={() => cleanupExpiredRequests({ silent: false })}
+              className="text-orange-600 hover:underline text-sm"
+            >
+              {t("provider.cleanup_expired") || "Очистить истёкшие запросы"}
+            </button>
+          </div>
             <ProviderInboxList showHeader />
           </section>
 
