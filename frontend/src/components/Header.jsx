@@ -41,23 +41,61 @@ export default function Header() {
   const [favCount, setFavCount] = useState(0);
 
   // Provider counters (requests / bookings)
-  useEffect(() => {
-    if (role !== "provider") return;
-    const fetchCounts = async () => {
-      setLoading(true);
+  // Provider counters (requests / bookings) — без /api/notifications/counts
+useEffect(() => {
+  if (role !== "provider") return;
+
+  let cancelled = false;
+
+  const fetchCounts = async () => {
+    setLoading(true);
+    try {
+      // 1) заявки провайдера: берём "new"
+      const rs = await apiGet("/api/requests/provider/stats", role);
+      const requestsNew = Number(rs?.new || 0);
+
+      // 2) бронирования: пытаемся через /stats, иначе считаем из списка
+      let bookingsPending = 0;
+      let bookingsTotal = 0;
+
       try {
-        const data = await apiGet("/api/notifications/counts", role);
-        setCounts(data?.counts || null);
+        const bs = await apiGet("/api/bookings/provider/stats", role);
+        bookingsPending = Number(
+          bs?.pending ?? bs?.awaiting ?? bs?.new ?? 0
+        );
+        bookingsTotal = Number(bs?.total ?? 0);
       } catch {
-        setCounts(null);
-      } finally {
-        setLoading(false);
+        const bl = await apiGet("/api/bookings/provider", role);
+        const list = Array.isArray(bl) ? bl : bl?.items || [];
+        bookingsPending = list.filter(
+          (x) => String(x.status).toLowerCase() === "pending"
+        ).length;
+        bookingsTotal = list.length;
       }
-    };
-    fetchCounts();
-    const id = setInterval(fetchCounts, 30000);
-    return () => clearInterval(id);
-  }, [role]);
+
+      if (!cancelled) {
+        // заполняем под текущие вычисления (не трогаем JSX ниже)
+        setCounts({
+          requests_open: requestsNew, // показываем новые
+          requests_accepted: 0,       // чтобы сумма = новые
+          bookings_pending: bookingsPending,
+          bookings_total: bookingsTotal,
+        });
+      }
+    } catch {
+      if (!cancelled) setCounts(null);
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+  };
+
+  fetchCounts();
+  const id = setInterval(fetchCounts, 30000);
+  return () => {
+    cancelled = true;
+    clearInterval(id);
+  };
+}, [role]);
 
   // Client wishlist counter
   useEffect(() => {
