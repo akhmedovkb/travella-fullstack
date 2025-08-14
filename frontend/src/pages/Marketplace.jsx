@@ -264,7 +264,17 @@ export default function Marketplace() {
   };
   const submitQuickRequest = async (note) => {
     try {
-      await apiPost("/api/requests/quick", { service_id: qrServiceId, provider_id: qrProviderId, note });
+      await axios.post(`${API_BASE}/api/requests/quick`, {
+            service_id: activeService.id,
+            provider_id:
+              activeService.provider_id ||
+              activeService.providerId ||
+              activeService.owner_id ||
+              activeService.agency_id ||
+              activeService.user_id,
+            note,                       // то, что написал клиент
+            service_title: activeService.title, // ⚠️ добавили снэпшот названия
+          }, config);      
       toast(t("messages.request_sent") || "Запрос отправлен");
     } catch (e) {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
