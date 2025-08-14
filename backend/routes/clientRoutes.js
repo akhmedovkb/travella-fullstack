@@ -5,8 +5,8 @@ const router = express.Router();
 const {
   register,
   login,
-  getProfile,
-  updateProfile,
+  getProfile,     // = getMe
+  updateProfile,  // = updateMe
   getStats,
   changePassword,
 } = require("../controllers/clientController");
@@ -18,22 +18,21 @@ const wishlist = require("../controllers/wishlistController");
 router.post("/register", register);
 router.post("/login", login);
 
-// Private (совместимость: /profile и /me)
+// Private profile (совместимость: /profile и /me)
 router.get("/profile", authenticateToken, getProfile);
 router.put("/profile", authenticateToken, updateProfile);
 
 router.get("/me", authenticateToken, getProfile);
 router.put("/me", authenticateToken, updateProfile);
 
-// Прогресс/статистика клиента
+// Stats
 router.get("/stats", authenticateToken, getStats);
 
-// Смена пароля клиента
+// Change password
 router.post("/change-password", authenticateToken, changePassword);
 
-// wishlist
+// Wishlist
 router.get("/api/wishlist", authenticateToken, wishlist.listWishlist);
 router.post("/api/wishlist/toggle", authenticateToken, wishlist.toggleWishlist);
-
 
 module.exports = router;
