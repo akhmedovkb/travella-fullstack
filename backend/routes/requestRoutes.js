@@ -4,6 +4,8 @@ const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
 const {
+  createRequest,
+  getMyRequests,
   createQuickRequest,
   getProviderRequests,
   getProviderStats,
