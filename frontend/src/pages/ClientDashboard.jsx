@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { apiGet, apiPut, apiPost } from "../api";
+import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
 
 /* ===================== Helpers ===================== */
@@ -534,6 +534,14 @@ export default function ClientDashboard() {
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // минутный таймер для «ровного» отсчёта без мерцаний
+  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMin * 60000;
+
   // Profile
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -642,18 +650,6 @@ export default function ClientDashboard() {
     })();
   }, []);
 
-// Подцепимся к событиям создания запроса из Marketplace (мягкая синхронизация)
-  useEffect(() => {
-    const onCreated = async () => {
-      if (activeTab === "requests") {
-        try { setRequests(await fetchClientRequestsSafe(myId)); } catch {}
-      }
-    };
-    window.addEventListener("request:created", onCreated);
-    return () => window.removeEventListener("request:created", onCreated);
-  }, [activeTab, myId]);
-
-
   // загрузка данных табов + подмешивание черновиков
   useEffect(() => {
     let cancelled = false;
@@ -686,7 +682,7 @@ export default function ClientDashboard() {
     return () => { cancelled = true; };
   }, [activeTab, t, myId]);
 
-  // слушаем событие мгновенного создания (в т.ч. из маркетплейса)
+  // слушаем событие мгновенного создания (в т.ч. из маркетплейса) + синхронизация между вкладками
   useEffect(() => {
     const onCreated = (e) => {
       const { service_id, title } = e.detail || {};
@@ -698,7 +694,6 @@ export default function ClientDashboard() {
       setRequests((prev) => [draft, ...prev]);
     };
     const onStorage = (ev) => {
-      // синхронизация между вкладками
       if (!ev.key) return;
       if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
         const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
@@ -822,6 +817,27 @@ export default function ClientDashboard() {
     finally { setActingReqId(null); }
   };
 
+  // Удаление заявки (API или локальный черновик)
+  const handleDeleteRequest = async (id) => {
+    if (!id) return;
+    if (!window.confirm(t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" }))) return;
+    const isDraft = String(id).startsWith("d_");
+    if (isDraft) {
+      const keyId = myId || null;
+      const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(id));
+      saveDrafts(keyId, updated);
+      setRequests((prev) => prev.filter((x) => String(x.id) !== String(id)));
+      return;
+    }
+    try {
+      await apiDelete(`/api/requests/${id}`);
+      setRequests((prev) => prev.filter((x) => x.id !== id));
+      setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+    } catch {
+      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+    }
+  };
+
   function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
   function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
   async function createBooking() {
@@ -864,6 +880,10 @@ export default function ClientDashboard() {
           const status = r?.status || "new";
           const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
           const p = r?.proposal || null;
+          const expireAt = resolveRequestExpireAt(r);
+          const leftMs = expireAt ? Math.max(0, expireAt - now) : null; // now — минутный таймер выше
+          const hasTimer = !!expireAt;
+          const timerText = hasTimer ? formatLeft(leftMs) : null;
 
           return (
             <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
@@ -872,6 +892,18 @@ export default function ClientDashboard() {
                 {t("common.status", { defaultValue: "Статус" })}: {status}
                 {r.is_draft && <span className="ml-2 text-orange-600 text-xs">draft</span>}
               </div>
+
+              {hasTimer && (
+                <div className="mt-2">
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
+                    title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
+                  >
+                    {timerText}
+                  </span>
+                </div>
+              )}
+
               {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
               {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
 
@@ -896,7 +928,21 @@ export default function ClientDashboard() {
                   )}
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-gray-500">{t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}</div>
+                <div className="mt-2 text-sm text-gray-500">
+                  {t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}
+                </div>
+              )}
+
+              {/* Кнопка Удалить — отдельным блоком (и при p, и при его отсутствии) */}
+              {status !== "accepted" && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => handleDeleteRequest(r.id)}
+                    className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
+                  >
+                    {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -1085,7 +1131,7 @@ export default function ClientDashboard() {
 
             <div className="mt-4 flex gap-2">
               <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
+                {bkSending ? t("common.sending", { defaultValue: "Отправка..." })} : {t("booking.submit", { defaultValue: "Забронировать" })}
               </button>
               <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
             </div>
@@ -1121,6 +1167,24 @@ function resolveExpireAt(service) {
   const ts = Number(cand) || Date.parse(cand);
   return Number.isFinite(ts) ? ts : null;
 }
+
+function resolveRequestExpireAt(r) {
+  if (!r) return null;
+  // Явная дата
+  if (r.expires_at) {
+    const ts = Number(r.expires_at) || Date.parse(r.expires_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+  // TTL в часах + created_at
+  const details = typeof r.details === "string" ? (() => { try { return JSON.parse(r.details); } catch { return {}; } })() : (r.details || {});
+  const ttl = r.ttl_hours || r.ttlHours || details.ttl_hours || details.ttlHours;
+  if (ttl && r.created_at) {
+    const created = Date.parse(r.created_at);
+    if (!Number.isNaN(created)) return created + Number(ttl) * 3600 * 1000;
+  }
+  return null;
+}
+
 function formatLeft(ms) {
   if (ms <= 0) return "00:00:00";
   const total = Math.floor(ms / 1000);
