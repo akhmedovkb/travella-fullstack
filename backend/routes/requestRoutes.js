@@ -17,6 +17,11 @@ const {
 /** Создание «быстрого запроса» с маркетплейса */
 router.post("/", authenticateToken, createQuickRequest);       // то, что дергает фронт
 router.post("/quick", authenticateToken, createQuickRequest);  // алиас
+router.post("/", authenticateToken, createRequest);
+router.post("/quick", authenticateToken, createRequest);
+
+/** Заявки текущего клиента */
+router.get("/my", authenticateToken, getMyRequests);
 
 /** Входящие провайдера (с авто-очисткой) */
 router.get("/provider", authenticateToken, getProviderRequests);
