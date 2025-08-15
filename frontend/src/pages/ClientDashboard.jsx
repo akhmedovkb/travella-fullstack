@@ -642,6 +642,18 @@ export default function ClientDashboard() {
     })();
   }, []);
 
+// Подцепимся к событиям создания запроса из Marketplace (мягкая синхронизация)
+  useEffect(() => {
+    const onCreated = async () => {
+      if (activeTab === "requests") {
+        try { setRequests(await fetchClientRequestsSafe(myId)); } catch {}
+      }
+    };
+    window.addEventListener("request:created", onCreated);
+    return () => window.removeEventListener("request:created", onCreated);
+  }, [activeTab, myId]);
+
+
   // загрузка данных табов + подмешивание черновиков
   useEffect(() => {
     let cancelled = false;
