@@ -275,6 +275,7 @@ export default function Marketplace() {
         note: note || undefined,
       });
       toast(t("messages.request_sent") || "Запрос отправлен");
+      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrServiceTitle } }));
     } catch {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
     } finally {
