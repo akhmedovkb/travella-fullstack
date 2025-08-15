@@ -3,46 +3,91 @@ const express = require("express");
 const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
+
+// Тянем контроллеры из ПРАВИЛЬНОГО пути
+const ctrl = require("../controllers/requestController");
+
+// Достаём нужные хэндлеры (что есть — тем и пользуемся)
 const {
-  createRequest,
-  getMyRequests,
   createQuickRequest,
   getProviderRequests,
   getProviderStats,
   updateRequestStatus,
   deleteRequest,
   manualCleanupExpired,
-} = require("../controllers/requestController");
+  getMyRequests, // может и не быть — отработаем ниже
+} = ctrl || {};
 
-/** Создание «быстрого запроса» с маркетплейса */
-router.post("/", authenticateToken, createQuickRequest);       // то, что дергает фронт
-router.post("/quick", authenticateToken, createQuickRequest);  // алиас
-router.post("/", authenticateToken, createRequest);
-router.post("/quick", authenticateToken, createRequest);
+// ---------- Создать «быстрый запрос» (маркетплейс) ----------
+if (typeof createQuickRequest !== "function") {
+  throw new Error("requestController.createQuickRequest is not exported");
+}
+router.post("/", authenticateToken, createQuickRequest);
+router.post("/quick", authenticateToken, createQuickRequest);
 
-/** Заявки текущего клиента */
-router.get("/my", authenticateToken, getMyRequests);
+// ---------- Входящие провайдера + счётчики ----------
+if (typeof getProviderRequests === "function") {
+  router.get("/provider", authenticateToken, getProviderRequests);
+  router.get("/provider/inbox", authenticateToken, getProviderRequests);
+}
+if (typeof getProviderStats === "function") {
+  router.get("/provider/stats", authenticateToken, getProviderStats);
+}
 
-/** Входящие провайдера (с авто-очисткой) */
-router.get("/provider", authenticateToken, getProviderRequests);
-router.get("/provider/inbox", authenticateToken, getProviderRequests); // алиас
+// ---------- Обновить статус /processed алиас ----------
+if (typeof updateRequestStatus === "function") {
+  router.put("/:id/status", authenticateToken, updateRequestStatus);
 
-/** Счётчики провайдера (с авто-очисткой) */
-router.get("/provider/stats", authenticateToken, getProviderStats);
+  // фикс опечатки в спреде
+  router.put("/:id/processed", authenticateToken, (req, res, next) => {
+    req.body = { ...(req.body || {}), status: "processed" };
+    return updateRequestStatus(req, res, next);
+  });
+}
 
-/** Обновить статус (например, processed) */
-router.put("/:id/status", authenticateToken, updateRequestStatus);
+// ---------- Удалить и ручная очистка ----------
+if (typeof deleteRequest === "function") {
+  router.delete("/:id", authenticateToken, deleteRequest);
+}
+if (typeof manualCleanupExpired === "function") {
+  router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
+}
 
-/** Алиас для старого фронта: PUT /:id/processed */
-router.put("/:id/processed", authenticateToken, (req, res, next) => {
-  req.body = { ...(req.body || {}), status: "processed" };
-  return updateRequestStatus(req, res, next);
-});
+// ---------- Мои запросы клиента (для ClientDashboard) ----------
+if (typeof getMyRequests === "function") {
+  // если контроллер уже экспортирует — просто прокидываем
+  router.get("/my", authenticateToken, getMyRequests);
+} else {
+  // компактный фолбэк на месте, без изменения контроллера
+  const db = require("../db");
+  router.get("/my", authenticateToken, async (req, res) => {
+    try {
+      const clientId = req.user?.id;
+      if (!clientId) return res.status(401).json({ error: "unauthorized" });
 
-/** Удалить вручную */
-router.delete("/:id", authenticateToken, deleteRequest);
+      const q = await db.query(
+        `
+        SELECT
+          r.id,
+          r.created_at,
+          COALESCE(r.status,'new') AS status,
+          r.note,
+          r.proposal,
+          json_build_object('id', s.id, 'title', COALESCE(s.title,'—')) AS service
+        FROM requests r
+        JOIN services s ON s.id = r.service_id
+        WHERE r.client_id = $1
+        ORDER BY r.created_at DESC
+        `,
+        [clientId]
+      );
 
-/** Ручной триггер авто-очистки */
-router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
+      res.json({ items: q.rows });
+    } catch (e) {
+      console.error("my requests error:", e);
+      res.status(500).json({ error: "my_load_failed" });
+    }
+  });
+}
 
 module.exports = router;
