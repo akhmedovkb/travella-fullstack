@@ -293,3 +293,85 @@ exports.manualCleanupExpired = async (req, res) => {
     res.status(500).json({ error: "cleanup_failed" });
   }
 };
+
+// вверху файла (если не было)
+const pool = require("../db");
+
+// ...остальной код контроллера
+
+// ===== Клиент: список моих заявок с авто-очисткой просроченных =====
+exports.getMyRequests = async (req, res) => {
+  try {
+    const clientId = req.user?.id;
+    if (!clientId) return res.status(401).json({ error: "unauthorized" });
+
+    // Мягкая авто-очистка только моих просроченных
+    try {
+      await pool.query(
+        `DELETE FROM requests
+         WHERE client_id = $1
+           AND expires_at IS NOT NULL
+           AND expires_at < NOW()`,
+        [clientId]
+      );
+    } catch (e) {
+      console.error("cleanup for client failed:", e);
+      // не падаем, просто лог
+    }
+
+    // Отдаём свежий список
+    const q = await pool.query(
+      `
+      SELECT
+        r.id,
+        r.created_at,
+        r.expires_at,
+        COALESCE(r.status,'new') AS status,
+        r.note,
+        r.proposal,
+        json_build_object('id', s.id, 'title', COALESCE(s.title,'—')) AS service
+      FROM requests r
+      LEFT JOIN services s ON s.id = r.service_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+      `,
+      [clientId]
+    );
+
+    res.json({ items: q.rows });
+  } catch (e) {
+    console.error("getMyRequests error:", e);
+    res.status(500).json({ error: "my_load_failed" });
+  }
+};
+
+// ===== Универсальное удаление: клиент — свои, провайдер — свои =====
+exports.deleteRequest = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const me = req.user || {};
+    if (!id) return res.status(400).json({ error: "bad_id" });
+
+    const q = await pool.query(
+      `SELECT id, client_id, provider_id, status FROM requests WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    if (q.rowCount === 0) return res.status(404).json({ error: "not_found" });
+    const row = q.rows[0];
+
+    const isClientOwner = me.role === "client" && String(row.client_id) === String(me.id);
+    const isProviderOwner = me.role === "provider" && row.provider_id && String(row.provider_id) === String(me.id);
+    const isAdmin = me.role === "admin" || me.isAdmin === true;
+
+    if (!isClientOwner && !isProviderOwner && !isAdmin) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    await pool.query(`DELETE FROM requests WHERE id = $1`, [id]);
+    res.json({ ok: true, deleted: id });
+  } catch (e) {
+    console.error("deleteRequest error:", e);
+    res.status(500).json({ error: "delete_failed" });
+  }
+};
+
