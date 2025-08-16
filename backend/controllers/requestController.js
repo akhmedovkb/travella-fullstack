@@ -270,11 +270,7 @@ exports.manualCleanupExpired = async (req, res) => {
 // ===== Клиент: список моих заявок с авто-очисткой просроченных =====
 
 // безопасный парсер JSON
-function safeJson(x) {
-  if (!x) return null;
-  if (typeof x === "object") return x;
-  try { return JSON.parse(x); } catch { return null; }
-}
+
 function computeExpiresAt(row) {
   // если когда-то появится поле expires_at в SELECT — используем его мягко
   if (Object.prototype.hasOwnProperty.call(row, "expires_at") && row.expires_at) {
