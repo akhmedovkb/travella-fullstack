@@ -608,6 +608,10 @@ export default function ClientDashboard() {
   // мой id из профиля (для фильтрации/ключа черновиков)
   const [myId, setMyId] = useState(null);
 
+  // удаление моих запросов
+  const [delUI, setDelUI] = useState({ open: false, id: null, isDraft: false, sending: false });
+
+
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set("tab", activeTab);
@@ -832,25 +836,36 @@ export default function ClientDashboard() {
   };
 
   // Удаление заявки (API или локальный черновик)
-  const handleDeleteRequest = async (id) => {
-    if (!id) return;
-    if (!window.confirm(t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" }))) return;
-    const isDraft = String(id).startsWith("d_");
-    if (isDraft) {
+  function askDeleteRequest(id) {
+  if (!id) return;
+  setDelUI({ open: true, id, isDraft: String(id).startsWith("d_"), sending: false });
+}
+
+async function confirmDeleteRequest() {
+  if (!delUI.id) return;
+  setDelUI((s) => ({ ...s, sending: true }));
+  try {
+    if (delUI.isDraft) {
       const keyId = myId || null;
-      const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(id));
+      const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
       saveDrafts(keyId, updated);
-      setRequests((prev) => prev.filter((x) => String(x.id) !== String(id)));
-      return;
-    }
-    try {
-      await apiDelete(`/api/requests/${id}`);
-      setRequests((prev) => prev.filter((x) => x.id !== id));
+      setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+    } else {
+      await apiDelete(`/api/requests/${delUI.id}`);
+      setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
       setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
-    } catch {
-      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
     }
-  };
+  } catch {
+    setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+  } finally {
+    setDelUI({ open: false, id: null, isDraft: false, sending: false });
+  }
+}
+
+function closeDeleteModal() {
+  setDelUI({ open: false, id: null, isDraft: false, sending: false });
+}
+
 
   function openQuickRequestModal(serviceId, meta = {}) {
   if (!serviceId) return;
@@ -969,11 +984,11 @@ async function submitQuickRequest(note) {
           {t("actions.edit", { defaultValue: "Править" })}
         </button>
         <button
-          onClick={() => handleDeleteRequest(r.id)}
-          className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
-        >
-          {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
-        </button>
+            onClick={() => askDeleteRequest(r.id)}
+            className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
+          >
+            {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
+          </button>
       </div>
     </div>
   );
@@ -1174,6 +1189,17 @@ async function submitQuickRequest(note) {
       open={qrOpen}
       onClose={closeQuickRequestModal}
       onSubmit={submitQuickRequest}
+    />
+      <ConfirmModal
+      open={delUI.open}
+      danger
+      busy={delUI.sending}
+      title={t("actions.delete", { defaultValue: "Удалить" })}
+      message={t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" })}
+      confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
+      cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+      onConfirm={confirmDeleteRequest}
+      onClose={closeDeleteModal}
     />
     </div>
   );
