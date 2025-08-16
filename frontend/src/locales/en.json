@@ -395,7 +395,13 @@
     "tier": "Tier",
     "tier_label": "Tier"
   },
-  "status": "Status",
+  "status": {
+    "new": "new",
+    "processed": "processed",
+    "rejected": "rejected",
+    "active": "active",
+    "accepted": "accepted"
+  },
   "sum": "Amount",
   "tabs": {
     "favorites": "Favorites",
@@ -460,13 +466,5 @@
     "favorite_add": "Add to favorites",
     "favorite_remove": "Remove from favorites"
   },
-
-  "status": {
-    "new": "new",
-    "processed": "processed",
-    "rejected": "rejected",
-    "active": "active",
-    "accepted": "accepted"
-  }
+  "gross_price": "Client price (gross)"
 }
-
