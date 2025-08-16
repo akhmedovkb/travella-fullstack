@@ -3,11 +3,7 @@ const db = require("../db");
 
 /* ===================== Helpers ===================== */
 
-function safeJSON(x) {
-  if (!x) return {};
-  if (typeof x === "object") return x;
-  try { return JSON.parse(x); } catch { return {}; }
-}
+
 
 function parseTs(v) {
   if (v == null) return null;
@@ -270,7 +266,11 @@ exports.manualCleanupExpired = async (req, res) => {
 // ===== Клиент: список моих заявок с авто-очисткой просроченных =====
 
 // безопасный парсер JSON
-
+function safeJSON(x) {
+  if (!x) return {};
+  if (typeof x === "object") return x;
+  try { return JSON.parse(x); } catch { return {}; }
+}
 function computeExpiresAt(row) {
   // если когда-то появится поле expires_at в SELECT — используем его мягко
   if (Object.prototype.hasOwnProperty.call(row, "expires_at") && row.expires_at) {
