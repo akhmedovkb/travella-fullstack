@@ -426,7 +426,13 @@
     "tier": "Daraja",
     "tier_label": "Daraja"
   },
-  "status": "Holat",
+  "status": {
+    "new": "yangi",
+    "processed": "ko‘rib chiqildi",
+    "rejected": "rad etildi",
+    "active": "faol",
+    "accepted": "qabul qilindi"
+  },
   "sum": "Summasi",
   "tabs": {
     "favorites": "Sevimlilar",
@@ -458,13 +464,5 @@
     "favorite_add": "Sevimlilarga qo‘shish",
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
-
-  "status": {
-    "new": "yangi",
-    "processed": "ko‘rib chiqildi",
-    "rejected": "rad etildi",
-    "active": "faol",
-    "accepted": "qabul qilindi"
-  }
+  "gross_price": "Mijoz uchun narx (brutto)"
 }
-
