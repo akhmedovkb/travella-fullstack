@@ -32,28 +32,20 @@ function normalizeList(res) {
     const node = queue.shift();
 
     if (Array.isArray(node)) {
-      // массив с объектами — то, что нам нужно
       if (node.some(v => v && typeof v === "object")) return node;
-      // иначе продолжаем поиск
       continue;
     }
     if (typeof node !== "object") continue;
 
-    // Сначала обходим «популярные» ключи…
     for (const k of preferred) if (k in node) push(node[k]);
-    // …а затем все остальные
     for (const k of Object.keys(node)) if (!preferred.includes(k)) push(node[k]);
   }
 
   return [];
 }
 
-let list = normalizeList(res);
-if (!list.length) {
-  // В dev-окружении просто подсмотреть структуру
-  console.log("search: unexpected response shape", res);
-}
-
+// ❌ НИЧЕГО НЕ ДОЛЖНО БЫТЬ НА ВЕРХНЕМ УРОВНЕ ФАЙЛА, ЧТО ОБРАЩАЕТСЯ К res!
+// (удалено: let list = normalizeList(res); console.log(...);)
 
 function pick(obj, keys) {
   if (!obj) return null;
@@ -298,8 +290,8 @@ export default function Marketplace() {
     try {
       await apiPost("/api/requests", {
         service_id: qrServiceId,
-        provider_id: qrProviderId || undefined,      // на случай, если бэку так проще
-        service_title: qrServiceTitle || undefined,  // снэпшот названия услуги
+        provider_id: qrProviderId || undefined,
+        service_title: qrServiceTitle || undefined,
         note: note || undefined,
       });
       toast(t("messages.request_sent") || "Запрос отправлен");
@@ -326,48 +318,40 @@ export default function Marketplace() {
   
   const filters = useMemo(() => ({
     q: q?.trim() || undefined,
-    //location: q?.trim() || undefined,
     category: category || undefined,
   }), [q, category]);
 
   function buildHaystack(it) {
-  const s = it?.service || it || {};
-  const d = (typeof s.details === "string" ? (()=>{try{return JSON.parse(s.details)}catch{return {}}})() : s.details) || {};
+    const s = it?.service || it || {};
+    const d = (typeof s.details === "string" ? (()=>{try{return JSON.parse(s.details)}catch{return {}}})() : s.details) || {};
 
-  // попробуем найти объект поставщика в разных местах
-  const p =
-    s.provider || s.provider_profile ||
-    it.provider || it.provider_profile ||
-    d.provider || {};
+    const p =
+      s.provider || s.provider_profile ||
+      it.provider || it.provider_profile ||
+      d.provider || {};
 
-  // плоские варианты названия поставщика
-  const flatNames = [
-    it.provider_name, it.supplier_name, it.vendor_name, it.agency_name, it.company_name,
-    s.provider_name, s.supplier_name,
-    d.provider_name, d.supplier_name,
-  ];
+    const flatNames = [
+      it.provider_name, it.supplier_name, it.vendor_name, it.agency_name, it.company_name,
+      s.provider_name, s.supplier_name,
+      d.provider_name, d.supplier_name,
+    ];
 
-  return [
-    // поля услуги
-    s.title, s.name,
-    s.city, s.country, s.location, s.direction, s.direction_to, s.directionTo,
-    d.direction, d.directionCountry, d.direction_from, d.directionFrom,
-    d.direction_to, d.directionTo, d.location, d.eventName,
-    d.hotel, d.hotel_name, d.airline,
+    return [
+      s.title, s.name,
+      s.city, s.country, s.location, s.direction, s.direction_to, s.directionTo,
+      d.direction, d.directionCountry, d.direction_from, d.directionFrom,
+      d.direction_to, d.directionTo, d.location, d.eventName,
+      d.hotel, d.hotel_name, d.airline,
 
-    // 👇 поля поставщика — вот это и решает вашу проблему
-    p.name, p.title, p.display_name, p.company_name, p.brand,
-    ...flatNames,
+      p.name, p.title, p.display_name, p.company_name, p.brand,
+      ...flatNames,
 
-    // опционально: ищем и по контактам
-    p.telegram, p.tg, p.telegram_username, p.telegram_link,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-
+      p.telegram, p.tg, p.telegram_username, p.telegram_link,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
 
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -376,99 +360,87 @@ export default function Marketplace() {
   const [favIds, setFavIds] = useState(new Set());
 
   /* ===================== search ===================== */
-const search = async (opts = {}) => {
-  setLoading(true);
-  setError(null);
+  const search = async (opts = {}) => {
+    setLoading(true);
+    setError(null);
 
-  try {
-    // Подготовка payload (убираем пустые значения)
-    const rawPayload = opts?.all ? {} : filters;
-    const payload = Object.fromEntries(
-      Object.entries(rawPayload).filter(([, v]) =>
-        v != null && (typeof v === "number" ? true : String(v).trim() !== "")
-      )
-    );
-
-    // 1) Основной вызов
-    let res;
     try {
-      res = await apiPost("/api/marketplace/search", payload);
-    } catch (e) {
-      if (opts?.fallback !== false) {
-        const qs = new URLSearchParams(
-          Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
-        ).toString();
-        res = await apiGet(`/api/marketplace/search?${qs}`);
-      } else {
-        throw e;
-      }
-    }
+      const rawPayload = opts?.all ? {} : filters;
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, v]) =>
+          v != null && (typeof v === "number" ? true : String(v).trim() !== "")
+        )
+      );
 
-    let list = normalizeList(res);
-
-    // 2) Если пусто и есть текстовый запрос — делаем локальную фильтрацию
-    if (!list.length && filters?.q) {
-      const needle = String(filters.q).toLowerCase();
-
-      // 2a) Берём «всё» тем же эндпоинтом без фильтров
-      let all = [];
+      let res;
       try {
-        const resAll = await apiPost("/api/marketplace/search", {});
-        all = normalizeList(resAll);
-      } catch {}
+        res = await apiPost("/api/marketplace/search", payload);
+      } catch (e) {
+        if (opts?.fallback !== false) {
+          const qs = new URLSearchParams(
+            Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
+          ).toString();
+          res = await apiGet(`/api/marketplace/search?${qs}`);
+        } else {
+          throw e;
+        }
+      }
 
-      // Первая попытка: без обогащения
-      let filtered = all.filter((it) => {
-        try { return buildHaystack(it).includes(needle); } catch { return false; }
-      });
+      let list = normalizeList(res);
 
-      // 2b) Если всё ещё пусто — подтягиваем имена поставщиков по provider_id
-      if (!filtered.length && all.length) {
-        // Собираем уникальные provider_id
-        const ids = [...new Set(
-          all.map(x => (x?.service?.provider_id ?? x?.provider_id)).filter(Boolean)
-        )];
+      if (!list.length && filters?.q) {
+        const needle = String(filters.q).toLowerCase();
 
-        // Подготавливаем профили (кэш уже есть в fetchProviderProfile)
-        const profiles = await Promise.all(ids.map(id => fetchProviderProfile(id)));
-        const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
+        let all = [];
+        try {
+          const resAll = await apiPost("/api/marketplace/search", {});
+          all = normalizeList(resAll);
+        } catch {}
 
-        // «Вшиваем» профиль в элемент (в service.provider или it.provider)
-        const enriched = all.map((it) => {
-          const svc = it?.service || {};
-          const pid = svc.provider_id ?? it?.provider_id;
-          const prof = pid ? byId.get(pid) : null;
-          if (prof) {
-            return {
-              ...it,
-              service: {
-                ...svc,
-                provider: { ...(svc.provider || {}), ...prof }, // buildHaystack увидит имя
-              },
-            };
-          }
-          return it;
-        });
-
-        filtered = enriched.filter((it) => {
+        let filtered = all.filter((it) => {
           try { return buildHaystack(it).includes(needle); } catch { return false; }
         });
+
+        if (!filtered.length && all.length) {
+          const ids = [...new Set(
+            all.map(x => (x?.service?.provider_id ?? x?.provider_id)).filter(Boolean)
+          )];
+
+          const profiles = await Promise.all(ids.map(id => fetchProviderProfile(id)));
+          const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
+
+          const enriched = all.map((it) => {
+            const svc = it?.service || {};
+            const pid = svc.provider_id ?? it?.provider_id;
+            const prof = pid ? byId.get(pid) : null;
+            if (prof) {
+              return {
+                ...it,
+                service: {
+                  ...svc,
+                  provider: { ...(svc.provider || {}), ...prof },
+                },
+              };
+            }
+            return it;
+          });
+
+          filtered = enriched.filter((it) => {
+            try { return buildHaystack(it).includes(needle); } catch { return false; }
+          });
+        }
+
+        list = filtered;
       }
 
-      list = filtered;
+      setItems(list);
+    } catch {
+      setItems([]);
+      setError(t("common.loading_error") || "Не удалось загрузить данные");
+    } finally {
+      setLoading(false);
     }
-
-    // Если нужно скрывать черновики, раскомментируй:
-    // list = list.filter(it => (it.status || it.service?.status || "").toLowerCase() !== "draft");
-
-    setItems(list);
-  } catch {
-    setItems([]);
-    setError(t("common.loading_error") || "Не удалось загрузить данные");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
 
@@ -550,7 +522,6 @@ const search = async (opts = {}) => {
       flatTg
     );
     const supplierTg = renderTelegram(supplierTgRaw);
-    /* ------------------------------------------------------- */
 
     const rating = Number(svc.rating ?? it.rating ?? 0);
     const status = (typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft") ? null : statusRaw;
@@ -630,7 +601,6 @@ const search = async (opts = {}) => {
               </button>
             </div>
 
-            {/* Сердце: WishHeart внутри такого же «стеклянного» контейнера */}
             <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
               <WishHeart
                 active={isFav}
@@ -641,7 +611,6 @@ const search = async (opts = {}) => {
             </div>
           </div>
 
-          {/* стеклянная подсказка при ховере */}
           <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
@@ -655,7 +624,6 @@ const search = async (opts = {}) => {
           </div>
         </div>
 
-        {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
             <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
@@ -677,12 +645,10 @@ const search = async (opts = {}) => {
           </div>
         </TooltipPortal>
 
-        {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span></div>)}
 
-          {/* === блок поставщика под ценой === */}
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
               {supplierName && (<div><span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span><span className="font-medium">{supplierName}</span></div>)}
@@ -702,11 +668,10 @@ const search = async (opts = {}) => {
               )}
             </div>
           )}
-          {/* === /блок поставщика === */}
 
           <div className="mt-auto pt-3">
             <button
-              onClick={() => openQuickRequest(id, providerId, title)} // NEW: передаём title
+              onClick={() => openQuickRequest(id, providerId, title)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
             >
               {t("actions.quick_request") || "Быстрый запрос"}
@@ -719,7 +684,6 @@ const search = async (opts = {}) => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      {/* Панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
           value={q}
@@ -742,7 +706,6 @@ const search = async (opts = {}) => {
         </button>
       </div>
 
-      {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
         {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
@@ -754,7 +717,6 @@ const search = async (opts = {}) => {
         )}
       </div>
 
-      {/* Модалка быстрого запроса */}
       <QuickRequestModal
         open={qrOpen}
         onClose={() => setQrOpen(false)}
