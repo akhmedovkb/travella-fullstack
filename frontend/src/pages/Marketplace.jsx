@@ -7,12 +7,16 @@ import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
 
-function normalizeList(res) {
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res?.items)) return res.items;
-  if (Array.isArray(res?.data)) return res.data;
-  return [];
+let list = normalizeList(res);
+// не перефильтровываем ответ сервера; локальный фильтр — для fallback-а
+if (!list.length && filters.q) {
+  // попробуем подтянуть общий список и отфильтровать локально
+  const res2 = await apiGet("/api/services/public");
+  let list2 = normalizeList(res2);
+  const needle = filters.q.toLowerCase();
+  list = list2.filter((it) => buildHaystack(it).includes(needle));
 }
+
 
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
