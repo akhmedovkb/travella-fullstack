@@ -359,14 +359,17 @@ export default function Marketplace() {
     }
 
     if (!list.length && opts?.fallback !== false) {
-      const res2 = await apiGet("/api/services/public");
-      let list2 = normalizeList(res2);
-      if (filters.q) {
-        const needle = filters.q.toLowerCase();
-        list2 = list2.filter((it) => buildHaystack(it).includes(needle));
+        try {
+          const res2 = await apiPost("/api/marketplace/search", {}); // всё публичное
+          let list2 = normalizeList(res2);
+          if (filters.q) {
+            const needle = filters.q.toLowerCase();
+            list2 = list2.filter((it) => buildHaystack(it).includes(needle));
+          }
+          list = list2;
+        } catch {}
       }
-      list = list2;
-    }
+
 
     setItems(list);
   } catch {
