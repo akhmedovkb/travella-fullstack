@@ -890,7 +890,7 @@ export default function ClientDashboard() {
               <div className="font-semibold">{serviceTitle}</div>
               <div className="text-sm text-gray-500 mt-1">
                 {t("common.status", { defaultValue: "Статус" })}: {status}
-                {r.is_draft && <span className="ml-2 text-orange-600 text-xs">draft</span>}
+                {/*{r.is_draft && <span className="ml-2 text-orange-600 text-xs">draft</span>}*/}
               </div>
 
               {hasTimer && (
