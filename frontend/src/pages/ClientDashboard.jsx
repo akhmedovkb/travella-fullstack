@@ -940,6 +940,8 @@ async function submitQuickRequest(note) {
 
   const RequestsList = () => {
     const { t } = useTranslation();
+    const statusLabel = (code) =>
+      t(`status.${String(code ?? "").toLowerCase()}`, { defaultValue: code });
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!requests?.length) return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
     return (
@@ -958,7 +960,7 @@ async function submitQuickRequest(note) {
       <div className="font-semibold">{serviceTitle}</div>
 
       <div className="text-sm text-gray-500 mt-1">
-        {t("common.status", { defaultValue: "Статус" })}: {status}
+        {t("common.status", { defaultValue: "Статус" })}: {statusLabel(status)}
       </div>
 
       {hasTimer && (
