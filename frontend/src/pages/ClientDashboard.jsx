@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
 import QuickRequestModal from "../components/QuickRequestModal";
+import ConfirmModal from "../components/ConfirmModal";
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
