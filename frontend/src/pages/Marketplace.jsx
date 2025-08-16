@@ -6,6 +6,12 @@ import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
+function normalizeList(res) {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.items)) return res.items;
+  if (Array.isArray(res?.data)) return res.data;
+  return [];
+}
 
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
@@ -341,9 +347,19 @@ export default function Marketplace() {
   const [favIds, setFavIds] = useState(new Set());
 
   const search = async (opts = {}) => {
+  // локальный нормализатор ответа
+  const normalizeList = (res) => {
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.items)) return res.items;
+    if (Array.isArray(res?.data)) return res.data;
+    return [];
+  };
+
   setLoading(true);
   setError(null);
+
   try {
+    // чистим payload от пустых строк/undefined/null, но оставляем числовые нули
     const rawPayload = opts?.all ? {} : filters;
     const payload = Object.fromEntries(
       Object.entries(rawPayload).filter(([, v]) =>
@@ -351,10 +367,12 @@ export default function Marketplace() {
       )
     );
 
+    // 1) основной запрос — POST
     let res;
     try {
       res = await apiPost("/api/marketplace/search", payload);
     } catch (e) {
+      // 1a) запасной вариант — тот же эндпоинт, но GET с querystring
       if (opts?.fallback !== false) {
         const qs = new URLSearchParams(
           Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
@@ -367,20 +385,47 @@ export default function Marketplace() {
 
     let list = normalizeList(res);
 
-    // Фолбэк: если сервер ничего не вернул, пробуем общий список и локальную фильтрацию
-    if (!list.length && filters.q) {
+    // 2) если сервер вернул пусто и есть текстовый поиск — берём общий список и фильтруем локально
+    if (!list.length && filters?.q) {
+      const needle = String(filters.q).toLowerCase();
+
+      // 2a) пробуем получить "весь" список тем же эндпоинтом без фильтров
       try {
-        const res2 = await apiGet("/api/services/public");
-        const list2 = normalizeList(res2);
-        const needle = filters.q.toLowerCase();
-        list = list2.filter((it) => buildHaystack(it).includes(needle));
+        const resAll = await apiPost("/api/marketplace/search", {});
+        const listAll = normalizeList(resAll);
+        if (listAll.length) {
+          list = listAll.filter((it) => {
+            try {
+              return buildHaystack(it).includes(needle);
+            } catch {
+              return false;
+            }
+          });
+        }
       } catch {}
+
+      // 2b) если всё ещё пусто — последний фолбэк на старый публичный эндпоинт
+      if (!list.length) {
+        try {
+          const resPublic = await apiGet("/api/services/public");
+          const listPublic = normalizeList(resPublic);
+          if (listPublic.length) {
+            list = listPublic.filter((it) => {
+              try {
+                return buildHaystack(it).includes(needle);
+              } catch {
+                return false;
+              }
+            });
+          }
+        } catch {}
+      }
     }
 
     setItems(list);
   } catch {
-    setError(t("common.loading_error") || "Не удалось загрузить данные");
     setItems([]);
+    setError(t("common.loading_error") || "Не удалось загрузить данные");
   } finally {
     setLoading(false);
   }
