@@ -498,12 +498,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                           >
                             {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                           </button>
-                          <button
+                          {/*<button
                             onClick={() => onBook?.(serviceId)}
                             className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
                           >
                             {t("actions.book_now", { defaultValue: "Забронировать" })}
-                          </button>
+                          </button>*/}
                           <button
                             onClick={() => onRemove?.(it.id)}  // уже есть обработчик
                             className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-red-50 text-red-600"
