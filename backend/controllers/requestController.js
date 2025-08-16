@@ -254,33 +254,6 @@ exports.updateRequestStatus = async (req, res) => {
   }
 };
 
-/** DELETE /api/requests/:id */
-exports.deleteRequest = async (req, res) => {
-  try {
-    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
-    const providerIds = collectProviderIdsFromUser(req.user);
-    const id = String(req.params.id);
-
-    const own = await db.query(
-      `
-      SELECT 1
-      FROM requests r
-      JOIN services s ON s.id = r.service_id
-      WHERE r.id::text = $1 AND s.provider_id = ANY($2::int[])
-      LIMIT 1
-      `,
-      [id, providerIds]
-    );
-    if (!own.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
-
-    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error("delete request error:", err);
-    res.status(500).json({ error: "delete_failed" });
-  }
-};
-
 /** POST /api/requests/cleanup-expired */
 exports.manualCleanupExpired = async (req, res) => {
   try {
@@ -328,7 +301,7 @@ exports.getMyRequests = async (req, res) => {
     }
 
     // ВАЖНО: никаких r.expires_at в SQL
-    const q = await pool.query(
+    const q = await db.query(
       `
       SELECT
         r.id,
@@ -372,27 +345,40 @@ exports.getMyRequests = async (req, res) => {
 // ===== Универсальное удаление: клиент — свои, провайдер — свои =====
 exports.deleteRequest = async (req, res) => {
   try {
-    const id = req.params.id;
+    const id = String(req.params.id || "");
     const me = req.user || {};
     if (!id) return res.status(400).json({ error: "bad_id" });
 
-    const q = await pool.query(
-      `SELECT id, client_id, provider_id, status FROM requests WHERE id = $1 LIMIT 1`,
+    // узнаём владельцев (клиент и провайдер) через join
+    const q = await db.query(
+      `
+      SELECT r.id,
+             r.client_id,
+             COALESCE(r.status,'new') AS status,
+             s.provider_id
+        FROM requests r
+        LEFT JOIN services s ON s.id = r.service_id
+       WHERE r.id::text = $1
+       LIMIT 1
+      `,
       [id]
     );
     if (q.rowCount === 0) return res.status(404).json({ error: "not_found" });
-    const row = q.rows[0];
 
-    const isClientOwner = me.role === "client" && String(row.client_id) === String(me.id);
+    const row = q.rows[0];
+    const isClientOwner   = me.role === "client"   && String(row.client_id)  === String(me.id);
     const isProviderOwner = me.role === "provider" && row.provider_id && String(row.provider_id) === String(me.id);
-    const isAdmin = me.role === "admin" || me.isAdmin === true;
+    const isAdmin         = me.role === "admin" || me.isAdmin === true;
 
     if (!isClientOwner && !isProviderOwner && !isAdmin) {
       return res.status(403).json({ error: "forbidden" });
     }
 
-    await pool.query(`DELETE FROM requests WHERE id = $1`, [id]);
-    res.json({ ok: true, deleted: id });
+    // (опционально) запретить удаление уже "accepted"
+    // if (row.status === "accepted") return res.status(400).json({ error: "cannot_delete_accepted" });
+
+    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
+    res.json({ success: true, deleted: id });
   } catch (e) {
     console.error("deleteRequest error:", e);
     res.status(500).json({ error: "delete_failed" });
