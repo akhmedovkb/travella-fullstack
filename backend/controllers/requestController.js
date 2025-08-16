@@ -109,6 +109,58 @@ async function cleanupExpiredForProviders(providerIds) {
   return toDelete;
 }
 
+// --- helper: если заявка принадлежит провайдеру и она new — помечаем processed
+async function markProcessedIfNew(id, providerIds) {
+  const q = await db.query(
+    `
+    UPDATE requests r
+       SET status = 'processed',
+           processed_at = COALESCE(processed_at, NOW())
+      FROM services s
+     WHERE r.id::text = $1
+       AND s.id = r.service_id
+       AND s.provider_id = ANY($2::int[])
+       AND COALESCE(r.status, 'new') = 'new'
+    RETURNING r.id
+    `,
+    [id, providerIds]
+  );
+  return q.rowCount > 0;
+}
+
+/** POST /api/requests/:id/touch (provider) — пометь как processed, если была new */
+exports.touchByProvider = async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
+    const providerIds = collectProviderIdsFromUser(req.user);
+    const id = String(req.params.id);
+
+    const changed = await markProcessedIfNew(id, providerIds);
+
+    // если не поменяли, проверим владение — чтобы вернуть корректный 404/403
+    if (!changed) {
+      const own = await db.query(
+        `
+        SELECT 1
+          FROM requests r
+          JOIN services s ON s.id = r.service_id
+         WHERE r.id::text = $1
+           AND s.provider_id = ANY($2::int[])
+         LIMIT 1
+        `,
+        [id, providerIds]
+      );
+      if (!own.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+    }
+
+    res.json({ success: true, processed: changed });
+  } catch (e) {
+    console.error("touchByProvider error:", e);
+    res.status(500).json({ error: "touch_failed" });
+  }
+};
+
+
 /* ===================== Controllers ===================== */
 
 /** POST /api/requests (алиас: /api/requests/quick) */
@@ -237,11 +289,12 @@ exports.updateRequestStatus = async (req, res) => {
 
     await db.query(
       `UPDATE requests
-         SET status = $1,
-             processed_at = CASE WHEN $1='processed' THEN NOW() ELSE processed_at END
-       WHERE id::text = $2`,
+          SET status = $1,
+              processed_at = CASE WHEN $1 <> 'new' THEN COALESCE(processed_at, NOW()) ELSE processed_at END
+        WHERE id::text = $2`,
       [next, id]
     );
+
 
     res.json({ success: true });
   } catch (err) {
