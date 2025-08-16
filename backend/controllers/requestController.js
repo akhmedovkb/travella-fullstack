@@ -278,7 +278,7 @@ function computeExpiresAt(row) {
     if (Number.isFinite(ts)) return ts;
   }
   // иначе: TTL из details услуги + created_at заявки
-  const details = safeJson(row.service_details);
+  const details = safeJSON(row.service_details);
   const ttl = details?.ttl_hours ?? details?.ttlHours ?? null;
   if (ttl && row.created_at) {
     const createdTs = Date.parse(row.created_at);
