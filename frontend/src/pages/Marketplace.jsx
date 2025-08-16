@@ -308,42 +308,45 @@ export default function Marketplace() {
   const [favIds, setFavIds] = useState(new Set());
 
   const search = async (opts = {}) => {
-    setLoading(true);
-    setError(null);
+  setLoading(true);
+  setError(null);
+  try {
+    const payload = opts?.all ? {} : filters;
+
+    // 1) POST с фоллбэком на GET
+    let res;
     try {
-      const payload = opts?.all ? {} : filters;
-      let res = await apiPost("/api/marketplace/search", payload);
-      let list = normalizeList(res);
-
-      if (!list.length && opts?.fallback !== false) {
-        res = await apiGet("/api/services/public");
-        list = normalizeList(res);
+      res = await apiPost("/api/marketplace/search", payload);
+    } catch (e) {
+      if (opts?.fallback !== false) {
+        const qs = new URLSearchParams(
+          Object.entries(payload || {}).filter(
+            ([, v]) => v !== undefined && v !== null && String(v).trim() !== ""
+          )
+        ).toString();
+        res = await apiGet(`/api/marketplace/search?${qs}`);
+      } else {
+        throw e;
       }
-
-      if (filters.location) {
-        list = list.filter((it) => {
-          const s = it?.service || it;
-          const d = s.details || {};
-          const hay = [
-            s.location, s.city,
-            s.direction_to, s.directionTo,
-            d.direction_to, d.directionTo,
-            d.direction_to_city, d.directionToCity,
-            d.location, d.direction, d.directionTo, d.direction_from, d.directionFrom,
-            d.eventName
-          ].filter(Boolean).join(" ").toLowerCase();
-          return hay.includes(String(filters.location).toLowerCase());
-        });
-      }
-
-      setItems(list);
-    } catch {
-      setError(t("common.loading_error") || "Не удалось загрузить данные");
-      setItems([]);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // 2) нормализуем и при пустом списке берём публичные услуги
+    let list = normalizeList(res);
+    if (!list.length && opts?.fallback !== false) {
+      const res2 = await apiGet("/api/services/public");
+      list = normalizeList(res2);
+    }
+
+    setItems(list);
+    setError(null);
+  } catch {
+    setItems([]);
+    setError(t("common.loading_error") || "Не удалось загрузить данные");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
 
