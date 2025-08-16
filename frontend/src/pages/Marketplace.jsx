@@ -5,6 +5,11 @@ import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
 
+// Detect viewer role via tokens
+const __hasClient = !!localStorage.getItem("clientToken");
+const __hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+const __viewerRole = __hasClient ? "client" : (__hasProvider ? "provider" : null);
+
 /* ===================== utils ===================== */
 
 // универсальный нормализатор ответа (ищет массив в любой обёртке)
@@ -215,10 +220,14 @@ function extractServiceFields(item) {
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
 
-  const rawPrice = _firstNonEmpty(
-    details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, details?.grossPrice,
-    svc.netPrice, svc.price, item?.price
-  );
+  const rawPrice = (__viewerRole === "client")
+    ? _firstNonEmpty(
+        details?.grossPrice, details?.priceGross, details?.totalPrice, svc.grossPrice, svc.price_gross
+      )
+    : _firstNonEmpty(
+        details?.netPrice, details?.price, details?.totalPrice, details?.priceNet,
+        svc.netPrice, svc.price, item?.price, details?.grossPrice // last fallback
+      );
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
   const hotel = _firstNonEmpty(
