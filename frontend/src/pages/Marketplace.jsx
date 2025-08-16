@@ -13,19 +13,6 @@ function normalizeList(res) {
   return [];
 }
 
-function fmtPrice(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
-  return String(v);
-}
-function firstNonEmpty(...args) {
-  for (const v of args) {
-    if (v === 0) return 0;
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return null;
-}
 function pick(obj, keys) {
   if (!obj) return null;
   for (const k of keys) {
@@ -347,14 +334,7 @@ export default function Marketplace() {
   const [favIds, setFavIds] = useState(new Set());
 
   const search = async (opts = {}) => {
-  // локальный нормализатор ответа
-  const normalizeList = (res) => {
-    if (Array.isArray(res)) return res;
-    if (Array.isArray(res?.items)) return res.items;
-    if (Array.isArray(res?.data)) return res.data;
-    return [];
-  };
-
+  
   setLoading(true);
   setError(null);
 
