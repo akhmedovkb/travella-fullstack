@@ -15,7 +15,8 @@ const {
   updateRequestStatus,
   deleteRequest,
   manualCleanupExpired,
-  getMyRequests, // может и не быть — отработаем ниже
+  getMyRequests, 
+  updateMyRequest,
 } = ctrl || {};
 
 // ---------- Создать «быстрый запрос» (маркетплейс) ----------
@@ -88,6 +89,11 @@ if (typeof getMyRequests === "function") {
       res.status(500).json({ error: "my_load_failed" });
     }
   });
+}
+
+// Клиент обновляет заметку своей заявки
+if (typeof updateMyRequest === "function") {
+  router.put("/:id", authenticateToken, updateMyRequest);
 }
 
 module.exports = router;
