@@ -33,9 +33,14 @@ function normalizeServicePayload(body) {
   const availabilityArr = Array.isArray(availability) ? availability : [];
 
   let detailsObj = null;
-  if (details && isExtendedCategory(category)) {
+  if (details) {
     if (typeof details === "string") {
       try { detailsObj = JSON.parse(details); }
+      catch { detailsObj = { value: String(details) }; }
+    } else if (typeof details === "object") {
+      detailsObj = details;
+    }
+  }
       catch { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
@@ -228,7 +233,7 @@ const addService = async (req, res) => {
         category,
         JSON.stringify(imagesArr),        // -> []
         JSON.stringify(extended ? [] : availabilityArr), // simple cat: [], extended: []
-        JSON.stringify(extended ? (detailsObj ?? {}) : {}), // extended: {} или то, что пришло; simple: null
+        JSON.stringify(detailsObj ?? {}), // extended: {} или то, что пришло; simple: null
       ]
     );
 
@@ -288,7 +293,7 @@ const updateService = async (req, res) => {
         category,
         JSON.stringify(imagesArr),
         JSON.stringify(extended ? [] : availabilityArr),
-        JSON.stringify(extended ? (detailsObj ?? {}) : {}),
+        JSON.stringify(detailsObj ?? {}),
         serviceId,
         providerId,
       ]
