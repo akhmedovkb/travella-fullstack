@@ -381,7 +381,7 @@ const search = async (opts = {}) => {
   setError(null);
 
   try {
-    // чистим payload
+    // Подготовка payload (убираем пустые значения)
     const rawPayload = opts?.all ? {} : filters;
     const payload = Object.fromEntries(
       Object.entries(rawPayload).filter(([, v]) =>
@@ -389,12 +389,11 @@ const search = async (opts = {}) => {
       )
     );
 
-    // 1) основной запрос — POST
+    // 1) Основной вызов
     let res;
     try {
       res = await apiPost("/api/marketplace/search", payload);
     } catch (e) {
-      // 1a) тот же эндпоинт, но GET с querystring
       if (opts?.fallback !== false) {
         const qs = new URLSearchParams(
           Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
@@ -407,22 +406,60 @@ const search = async (opts = {}) => {
 
     let list = normalizeList(res);
 
-    // 2) если сервер ничего не дал, а у нас есть текст для поиска —
-    //    подтягиваем "всё" и фильтруем локально по хранилищу полей (включая поставщика)
+    // 2) Если пусто и есть текстовый запрос — делаем локальную фильтрацию
     if (!list.length && filters?.q) {
       const needle = String(filters.q).toLowerCase();
 
-      // 2a) та же ручка, но без фильтров (надежнее, чем /api/services/public)
+      // 2a) Берём «всё» тем же эндпоинтом без фильтров
+      let all = [];
       try {
         const resAll = await apiPost("/api/marketplace/search", {});
-        const listAll = normalizeList(resAll);
-        if (listAll.length) {
-          list = listAll.filter((it) => {
-            try { return buildHaystack(it).includes(needle); } catch { return false; }
-          });
-        }
-      } catch { /* игнор */ }
+        all = normalizeList(resAll);
+      } catch {}
+
+      // Первая попытка: без обогащения
+      let filtered = all.filter((it) => {
+        try { return buildHaystack(it).includes(needle); } catch { return false; }
+      });
+
+      // 2b) Если всё ещё пусто — подтягиваем имена поставщиков по provider_id
+      if (!filtered.length && all.length) {
+        // Собираем уникальные provider_id
+        const ids = [...new Set(
+          all.map(x => (x?.service?.provider_id ?? x?.provider_id)).filter(Boolean)
+        )];
+
+        // Подготавливаем профили (кэш уже есть в fetchProviderProfile)
+        const profiles = await Promise.all(ids.map(id => fetchProviderProfile(id)));
+        const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
+
+        // «Вшиваем» профиль в элемент (в service.provider или it.provider)
+        const enriched = all.map((it) => {
+          const svc = it?.service || {};
+          const pid = svc.provider_id ?? it?.provider_id;
+          const prof = pid ? byId.get(pid) : null;
+          if (prof) {
+            return {
+              ...it,
+              service: {
+                ...svc,
+                provider: { ...(svc.provider || {}), ...prof }, // buildHaystack увидит имя
+              },
+            };
+          }
+          return it;
+        });
+
+        filtered = enriched.filter((it) => {
+          try { return buildHaystack(it).includes(needle); } catch { return false; }
+        });
+      }
+
+      list = filtered;
     }
+
+    // Если нужно скрывать черновики, раскомментируй:
+    // list = list.filter(it => (it.status || it.service?.status || "").toLowerCase() !== "draft");
 
     setItems(list);
   } catch {
