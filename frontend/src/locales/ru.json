@@ -459,5 +459,14 @@
   "tooltips": {
     "favorite_add": "В избранное",
     "favorite_remove": "Убрать из избранного"
+  },
+
+  "status": {
+    "new": "новая",
+    "processed": "обработано",
+    "rejected": "отклонено",
+    "active": "активна",
+    "accepted": "принято"
   }
 }
+
