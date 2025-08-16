@@ -7,17 +7,6 @@ import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
 
-let list = normalizeList(res);
-// не перефильтровываем ответ сервера; локальный фильтр — для fallback-а
-if (!list.length && filters.q) {
-  // попробуем подтянуть общий список и отфильтровать локально
-  const res2 = await apiGet("/api/services/public");
-  let list2 = normalizeList(res2);
-  const needle = filters.q.toLowerCase();
-  list = list2.filter((it) => buildHaystack(it).includes(needle));
-}
-
-
 function fmtPrice(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -378,11 +367,14 @@ export default function Marketplace() {
 
     let list = normalizeList(res);
 
-    // локально фильтруем только если от сервера пусто
+    // Фолбэк: если сервер ничего не вернул, пробуем общий список и локальную фильтрацию
     if (!list.length && filters.q) {
-      const res2 = await apiGet("/api/services/public");
-      const needle = filters.q.toLowerCase();
-      list = normalizeList(res2).filter((it) => buildHaystack(it).includes(needle));
+      try {
+        const res2 = await apiGet("/api/services/public");
+        const list2 = normalizeList(res2);
+        const needle = filters.q.toLowerCase();
+        list = list2.filter((it) => buildHaystack(it).includes(needle));
+      } catch {}
     }
 
     setItems(list);
