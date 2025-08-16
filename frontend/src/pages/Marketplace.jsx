@@ -303,20 +303,42 @@ export default function Marketplace() {
   }), [q, category]);
 
   function buildHaystack(it) {
-      const s = it?.service || it || {};
-      const d = s.details || {};
-      return [
-        s.title, s.name,
-        s.city, s.country, s.location, s.direction,
-        s.direction_to, s.directionTo,
-        d.direction, d.directionCountry,
-        d.direction_from, d.directionFrom,
-        d.direction_to, d.directionTo,
-        d.location, d.eventName,
-        d.hotel, d.hotel_name,
-        d.airline,
-      ].filter(Boolean).join(" ").toLowerCase();
-    }
+  const s = it?.service || it || {};
+  const d = (typeof s.details === "string" ? (()=>{try{return JSON.parse(s.details)}catch{return {}}})() : s.details) || {};
+
+  // попробуем найти объект поставщика в разных местах
+  const p =
+    s.provider || s.provider_profile ||
+    it.provider || it.provider_profile ||
+    d.provider || {};
+
+  // плоские варианты названия поставщика
+  const flatNames = [
+    it.provider_name, it.supplier_name, it.vendor_name, it.agency_name, it.company_name,
+    s.provider_name, s.supplier_name,
+    d.provider_name, d.supplier_name,
+  ];
+
+  return [
+    // поля услуги
+    s.title, s.name,
+    s.city, s.country, s.location, s.direction, s.direction_to, s.directionTo,
+    d.direction, d.directionCountry, d.direction_from, d.directionFrom,
+    d.direction_to, d.directionTo, d.location, d.eventName,
+    d.hotel, d.hotel_name, d.airline,
+
+    // 👇 поля поставщика — вот это и решает вашу проблему
+    p.name, p.title, p.display_name, p.company_name, p.brand,
+    ...flatNames,
+
+    // опционально: ищем и по контактам
+    p.telegram, p.tg, p.telegram_username, p.telegram_link,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 
 
   const [loading, setLoading] = useState(false);
