@@ -457,5 +457,14 @@
   "tooltips": {
     "favorite_add": "Sevimlilarga qo‘shish",
     "favorite_remove": "Sevimlilardan olib tashlash"
+  },
+
+  "status": {
+    "new": "yangi",
+    "processed": "ko‘rib chiqildi",
+    "rejected": "rad etildi",
+    "active": "faol",
+    "accepted": "qabul qilindi"
   }
 }
+
