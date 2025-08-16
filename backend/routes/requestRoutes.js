@@ -17,6 +17,7 @@ const {
   manualCleanupExpired,
   getMyRequests, 
   updateMyRequest,
+  touchByProvider,
 } = ctrl || {};
 
 // ---------- Создать «быстрый запрос» (маркетплейс) ----------
@@ -94,6 +95,11 @@ if (typeof getMyRequests === "function") {
 // Клиент обновляет заметку своей заявки
 if (typeof updateMyRequest === "function") {
   router.put("/:id", authenticateToken, updateMyRequest);
+}
+
+// Провайдер «коснулся» заявки — если была new, станет processed
+if (typeof touchByProvider === "function") {
+  router.post("/:id/touch", authenticateToken, touchByProvider);
 }
 
 module.exports = router;
