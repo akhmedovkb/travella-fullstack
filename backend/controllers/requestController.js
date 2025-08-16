@@ -334,6 +334,30 @@ exports.getMyRequests = async (req, res) => {
   }
 };
 
+// Клиент правит свою заявку: меняем только note
+exports.updateMyRequest = async (req, res) => {
+  try {
+    const me = req.user;
+    if (!me?.id) return res.status(401).json({ error: "unauthorized" });
+
+    const id = String(req.params.id || "");
+    const { note } = req.body || {};
+
+    // владение заявкой
+    const own = await db.query(
+      `SELECT 1 FROM requests WHERE id::text=$1 AND client_id=$2 LIMIT 1`,
+      [id, me.id]
+    );
+    if (!own.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+
+    await db.query(`UPDATE requests SET note=$1 WHERE id::text=$2`, [note || null, id]);
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("updateMyRequest error:", e);
+    res.status(500).json({ error: "update_failed" });
+  }
+};
 
 // ===== Универсальное удаление: клиент — свои, провайдер — свои =====
 exports.deleteRequest = async (req, res) => {
