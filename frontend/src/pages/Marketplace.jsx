@@ -270,21 +270,31 @@ function extractServiceFields(item) {
   };
 }
 
-/* ---------- резолвер картинки ---------- */
+/* ---------- резолвер картинки (с санитизацией) ---------- */
 function firstImageFrom(val) {
   // строка
   if (typeof val === "string") {
-    const s = val.trim();
+    let s = val.trim();
     if (!s) return null;
 
-    // полноценный src (URL, data:, blob:, абсолютный / относительный путь)
-    if (/^(data:|https?:|blob:|file:|\/)/i.test(s)) return s;
-
-    // «голая» base64 без префикса
-    if (/^[A-Za-z0-9+/=]+$/.test(s) && s.length > 100) {
-      return `data:image/jpeg;base64,${s}`;
+    // data:image/... — чистим пробелы/переносы и добавляем запятую после ;base64 при необходимости
+    if (/^data:image\//i.test(s)) {
+      s = s.replace(/\s+/g, "");
+      if (/;base64(?!,)/i.test(s)) s = s.replace(/;base64/i, ";base64,");
+      return s;
     }
-    return null;
+
+    // «голая» base64 (включая строки с пробелами/переносами)
+    if (/^[A-Za-z0-9+/=\s]+$/.test(s) && s.replace(/\s+/g, "").length > 100) {
+      return `data:image/jpeg;base64,${s.replace(/\s+/g, "")}`;
+    }
+
+    // полноценный src (URL, blob, file, абсолютный /)
+    if (/^(https?:|blob:|file:|\/)/i.test(s)) return s;
+
+    // относительный путь без начального / — тащим к корню сайта
+    // (чтобы не получилось /marketplace/uploads/..., если приложение на роуте)
+    return `${window.location.origin}/${s.replace(/^\.?\//, "")}`;
   }
 
   // массив
@@ -296,15 +306,16 @@ function firstImageFrom(val) {
     return null;
   }
 
-  // объект {url|src|href|link|path|data}
+  // объект {url|src|href|link|path|data|base64}
   if (val && typeof val === "object") {
     return firstImageFrom(
-      val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data
+      val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64
     );
   }
 
   return null;
 }
+
 
 /* ===================== страница ===================== */
 
@@ -613,14 +624,12 @@ export default function Marketplace() {
 
     // -------- изображение (универсальный резолвер) --------
     const image = firstImageFrom([
-      svc.images,
-      svc.cover,
-      svc.image,
-      details?.images,
-      details?.cover,
-      details?.image,
+      svc.images, details?.images, it?.images,
+      svc.cover, svc.image, details?.cover, details?.image, it?.cover, it?.image,
+      details?.photo, details?.picture, details?.imageUrl,
+      svc.image_url, it?.image_url
     ]);
-    // -------------------------------------------------------
+
 
     /* --------- Поставщик: inline + подгрузка по id --------- */
     const [provider, setProvider] = useState(null);
@@ -710,7 +719,10 @@ export default function Marketplace() {
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title || t("marketplace.no_image")} className="w-full h-full object-cover" />
+            <img src={image} alt={title || t("marketplace.no_image")} 
+              className="w-full h-full object-cover"
+              onError={(e) => { e.currentTarget.src = ""; }} // если сломается — спрячется
+              />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
