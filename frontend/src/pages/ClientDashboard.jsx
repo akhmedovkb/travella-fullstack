@@ -504,6 +504,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                           >
                             {t("actions.book_now", { defaultValue: "Забронировать" })}
                           </button>
+                          <button
+                            onClick={() => onRemove?.(it.id)}  // уже есть обработчик
+                            className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-red-50 text-red-600"
+                          >
+                            {t("actions.remove", { defaultValue: "Удалить" })}
+                          </button>
                         </>
                       )}
                     </div>
@@ -876,77 +882,55 @@ export default function ClientDashboard() {
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
-          const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
-          const status = r?.status || "new";
-          const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
-          const p = r?.proposal || null;
-          const expireAt = resolveRequestExpireAt(r);
-          const leftMs = expireAt ? Math.max(0, expireAt - now) : null; // now — минутный таймер выше
-          const hasTimer = !!expireAt;
-          const timerText = hasTimer ? formatLeft(leftMs) : null;
+  const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
+  const status = r?.status || "new";
+  const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
+  const expireAt = resolveRequestExpireAt(r);
+  const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+  const hasTimer = !!expireAt;
+  const timerText = hasTimer ? formatLeft(leftMs) : null;
 
-          return (
-            <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
-              <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">
-                {t("common.status", { defaultValue: "Статус" })}: {status}
-                {/*{r.is_draft && <span className="ml-2 text-orange-600 text-xs">draft</span>}*/}
-              </div>
+  return (
+    <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
+      <div className="font-semibold">{serviceTitle}</div>
 
-              {hasTimer && (
-                <div className="mt-2">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
-                    title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
-                  >
-                    {timerText}
-                  </span>
-                </div>
-              )}
+      <div className="text-sm text-gray-500 mt-1">
+        {t("common.status", { defaultValue: "Статус" })}: {status}
+      </div>
 
-              {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
-              {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
+      {hasTimer && (
+        <div className="mt-2">
+          <span
+            className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
+            title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
+          >
+            {timerText}
+          </span>
+        </div>
+      )}
 
-              {p ? (
-                <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
-                  <div className="font-medium mb-1">{t("client.dashboard.offer", { defaultValue: "Предложение" })}</div>
-                  <div>{t("client.dashboard.price", { defaultValue: "Цена" })}: {p.price} {p.currency || "USD"}</div>
-                  {p.hotel && <div>Отель: {p.hotel}</div>}
-                  {p.room && <div>Размещение: {p.room}</div>}
-                  {p.terms && <div>Условия: {p.terms}</div>}
-                  {p.message && <div>Сообщение: {p.message}</div>}
+      {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
+      {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
 
-                  {status !== "accepted" && status !== "rejected" && (
-                    <div className="mt-3 flex gap-2">
-                      <button onClick={() => handleAcceptProposal(r.id)} disabled={actingReqId === r.id} className="px-3 py-1.5 rounded bg-orange-600 text-white disabled:opacity-60">
-                        {t("client.dashboard.accept", { defaultValue: "Принять" })}
-                      </button>
-                      <button onClick={() => handleRejectProposal(r.id)} disabled={actingReqId === r.id} className="px-3 py-1.5 rounded border disabled:opacity-60">
-                        {t("client.dashboard.reject", { defaultValue: "Отклонить" })}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">
-                  {t("client.dashboard.waitingOffer", { defaultValue: "Ожидает предложения…" })}
-                </div>
-              )}
+      {/* действия */}
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={() => openQuickEdit(r)}          // ← новая модалка (ниже)
+          className="px-3 py-1.5 rounded border hover:bg-gray-50"
+        >
+          {t("actions.edit", { defaultValue: "Править" })}
+        </button>
+        <button
+          onClick={() => handleDeleteRequest(r.id)}
+          className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
+        >
+          {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
+        </button>
+      </div>
+    </div>
+  );
+})}
 
-              {/* Кнопка Удалить — отдельным блоком (и при p, и при его отсутствии) */}
-              {status !== "accepted" && (
-                <div className="mt-3">
-                  <button
-                    onClick={() => handleDeleteRequest(r.id)}
-                    className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
-                  >
-                    {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
       </div>
     );
   };
