@@ -300,36 +300,53 @@ const pool = require("../db");
 // ...остальной код контроллера
 
 // ===== Клиент: список моих заявок с авто-очисткой просроченных =====
+// controllers/requestController.js
+const pool = require("../db");
+
+// безопасный парсер JSON
+function safeJson(x) {
+  if (!x) return null;
+  if (typeof x === "object") return x;
+  try { return JSON.parse(x); } catch { return null; }
+}
+function computeExpiresAt(row) {
+  // если когда-то появится поле expires_at в SELECT — используем его мягко
+  if (Object.prototype.hasOwnProperty.call(row, "expires_at") && row.expires_at) {
+    const ts = Number(row.expires_at) || Date.parse(row.expires_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+  // иначе: TTL из details услуги + created_at заявки
+  const details = safeJson(row.service_details);
+  const ttl = details?.ttl_hours ?? details?.ttlHours ?? null;
+  if (ttl && row.created_at) {
+    const createdTs = Date.parse(row.created_at);
+    if (!Number.isNaN(createdTs)) {
+      return createdTs + Number(ttl) * 3600 * 1000;
+    }
+  }
+  return null;
+}
+
 exports.getMyRequests = async (req, res) => {
   try {
     const clientId = req.user?.id;
-    if (!clientId) return res.status(401).json({ error: "unauthorized" });
-
-    // Мягкая авто-очистка только моих просроченных
-    try {
-      await pool.query(
-        `DELETE FROM requests
-         WHERE client_id = $1
-           AND expires_at IS NOT NULL
-           AND expires_at < NOW()`,
-        [clientId]
-      );
-    } catch (e) {
-      console.error("cleanup for client failed:", e);
-      // не падаем, просто лог
+    if (!clientId || (req.user?.role && req.user.role !== "client")) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
-    // Отдаём свежий список
+    // ВАЖНО: никаких r.expires_at в SQL
     const q = await pool.query(
       `
       SELECT
         r.id,
-        r.created_at,
-        r.expires_at,
-        COALESCE(r.status,'new') AS status,
+        r.service_id,
+        r.client_id,
+        r.status,
         r.note,
         r.proposal,
-        json_build_object('id', s.id, 'title', COALESCE(s.title,'—')) AS service
+        r.created_at,
+        s.title  AS service_title,
+        s.details AS service_details
       FROM requests r
       LEFT JOIN services s ON s.id = r.service_id
       WHERE r.client_id = $1
@@ -338,12 +355,26 @@ exports.getMyRequests = async (req, res) => {
       [clientId]
     );
 
-    res.json({ items: q.rows });
+    const rows = q.rows.map(row => ({
+      id: row.id,
+      service_id: row.service_id,
+      client_id: row.client_id,
+      status: row.status || "new",
+      note: row.note || null,
+      proposal: row.proposal || null,
+      created_at: row.created_at,
+      service: { id: row.service_id, title: row.service_title || "Запрос" },
+      // добавляем вычисленное поле — фронт уже умеет его показывать
+      expires_at: computeExpiresAt(row)
+    }));
+
+    return res.json(rows);
   } catch (e) {
     console.error("getMyRequests error:", e);
-    res.status(500).json({ error: "my_load_failed" });
+    return res.status(500).json({ message: "getMyRequests error" });
   }
 };
+
 
 // ===== Универсальное удаление: клиент — свои, провайдер — свои =====
 exports.deleteRequest = async (req, res) => {
