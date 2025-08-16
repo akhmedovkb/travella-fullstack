@@ -6,46 +6,50 @@ import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
+
+// универсальный нормализатор ответа (ищет массив в любой обёртке)
 function normalizeList(res) {
   if (!res) return [];
   if (Array.isArray(res)) return res;
 
-  // BFS по всем вложенным полям; ищем массив объектов
   const queue = [];
   const seen = new Set();
-
   const push = (node) => {
-    if (!node || seen.has(node)) return;
+    if (!node || typeof node !== "object") return;
+    if (seen.has(node)) return;
     seen.add(node);
     queue.push(node);
   };
 
   push(res);
 
-  // Поля, где чаще всего лежит список
   const preferred = [
-    "items", "data", "list", "rows", "results", "result",
-    "services", "docs", "records", "hits", "content", "payload"
+    "items",
+    "data",
+    "list",
+    "rows",
+    "results",
+    "result",
+    "services",
+    "docs",
+    "records",
+    "hits",
+    "content",
+    "payload",
   ];
 
   while (queue.length) {
     const node = queue.shift();
 
     if (Array.isArray(node)) {
-      if (node.some(v => v && typeof v === "object")) return node;
+      if (node.some((v) => v && typeof v === "object")) return node;
       continue;
     }
-    if (typeof node !== "object") continue;
-
     for (const k of preferred) if (k in node) push(node[k]);
     for (const k of Object.keys(node)) if (!preferred.includes(k)) push(node[k]);
   }
-
   return [];
 }
-
-// ❌ НИЧЕГО НЕ ДОЛЖНО БЫТЬ НА ВЕРХНЕМ УРОВНЕ ФАЙЛА, ЧТО ОБРАЩАЕТСЯ К res!
-// (удалено: let list = normalizeList(res); console.log(...);)
 
 function pick(obj, keys) {
   if (!obj) return null;
@@ -262,8 +266,44 @@ function extractServiceFields(item) {
 
   return {
     svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice,
-    inlineProvider, providerId, flatName, flatPhone, flatTg, status
+    inlineProvider, providerId, flatName, flatPhone, flatTg, status, details
   };
+}
+
+/* ---------- резолвер картинки ---------- */
+function firstImageFrom(val) {
+  // строка
+  if (typeof val === "string") {
+    const s = val.trim();
+    if (!s) return null;
+
+    // полноценный src (URL, data:, blob:, абсолютный / относительный путь)
+    if (/^(data:|https?:|blob:|file:|\/)/i.test(s)) return s;
+
+    // «голая» base64 без префикса
+    if (/^[A-Za-z0-9+/=]+$/.test(s) && s.length > 100) {
+      return `data:image/jpeg;base64,${s}`;
+    }
+    return null;
+  }
+
+  // массив
+  if (Array.isArray(val)) {
+    for (const v of val) {
+      const hit = firstImageFrom(v);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  // объект {url|src|href|link|path|data}
+  if (val && typeof val === "object") {
+    return firstImageFrom(
+      val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data
+    );
+  }
+
+  return null;
 }
 
 /* ===================== страница ===================== */
@@ -275,9 +315,8 @@ export default function Marketplace() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrProviderId, setQrProviderId] = useState(null);
-  const [qrServiceTitle, setQrServiceTitle] = useState(""); // NEW: снэпшот названия услуги
+  const [qrServiceTitle, setQrServiceTitle] = useState("");
 
-  // NEW: открытие модалки с передачей всех нужных полей
   const openQuickRequest = (serviceId, providerId, serviceTitle) => {
     setQrServiceId(serviceId);
     setQrProviderId(providerId || null);
@@ -285,7 +324,6 @@ export default function Marketplace() {
     setQrOpen(true);
   };
 
-  // NEW: отправка быстрого запроса (без axios/API_BASE/activeService)
   const submitQuickRequest = async (note) => {
     try {
       await apiPost("/api/requests", {
@@ -295,7 +333,11 @@ export default function Marketplace() {
         note: note || undefined,
       });
       toast(t("messages.request_sent") || "Запрос отправлен");
-      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrServiceTitle } }));
+      window.dispatchEvent(
+        new CustomEvent("request:created", {
+          detail: { service_id: qrServiceId, title: qrServiceTitle },
+        })
+      );
     } catch {
       toast(t("errors.request_send") || "Не удалось отправить запрос");
     } finally {
@@ -315,38 +357,74 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
-  
-  const filters = useMemo(() => ({
-    q: q?.trim() || undefined,
-    category: category || undefined,
-  }), [q, category]);
+
+  const filters = useMemo(
+    () => ({
+      q: q?.trim() || undefined,
+      //location: q?.trim() || undefined,
+      category: category || undefined,
+    }),
+    [q, category]
+  );
 
   function buildHaystack(it) {
     const s = it?.service || it || {};
-    const d = (typeof s.details === "string" ? (()=>{try{return JSON.parse(s.details)}catch{return {}}})() : s.details) || {};
+    const d =
+      (typeof s.details === "string"
+        ? (() => {
+            try {
+              return JSON.parse(s.details);
+            } catch {
+              return {};
+            }
+          })()
+        : s.details) || {};
 
     const p =
-      s.provider || s.provider_profile ||
-      it.provider || it.provider_profile ||
-      d.provider || {};
+      s.provider || s.provider_profile || it.provider || it.provider_profile || d.provider || {};
 
     const flatNames = [
-      it.provider_name, it.supplier_name, it.vendor_name, it.agency_name, it.company_name,
-      s.provider_name, s.supplier_name,
-      d.provider_name, d.supplier_name,
+      it.provider_name,
+      it.supplier_name,
+      it.vendor_name,
+      it.agency_name,
+      it.company_name,
+      s.provider_name,
+      s.supplier_name,
+      d.provider_name,
+      d.supplier_name,
     ];
 
     return [
-      s.title, s.name,
-      s.city, s.country, s.location, s.direction, s.direction_to, s.directionTo,
-      d.direction, d.directionCountry, d.direction_from, d.directionFrom,
-      d.direction_to, d.directionTo, d.location, d.eventName,
-      d.hotel, d.hotel_name, d.airline,
-
-      p.name, p.title, p.display_name, p.company_name, p.brand,
+      s.title,
+      s.name,
+      s.city,
+      s.country,
+      s.location,
+      s.direction,
+      s.direction_to,
+      s.directionTo,
+      d.direction,
+      d.directionCountry,
+      d.direction_from,
+      d.directionFrom,
+      d.direction_to,
+      d.directionTo,
+      d.location,
+      d.eventName,
+      d.hotel,
+      d.hotel_name,
+      d.airline,
+      p.name,
+      p.title,
+      p.display_name,
+      p.company_name,
+      p.brand,
       ...flatNames,
-
-      p.telegram, p.tg, p.telegram_username, p.telegram_link,
+      p.telegram,
+      p.tg,
+      p.telegram_username,
+      p.telegram_link,
     ]
       .filter(Boolean)
       .join(" ")
@@ -356,7 +434,6 @@ export default function Marketplace() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
-
   const [favIds, setFavIds] = useState(new Set());
 
   /* ===================== search ===================== */
@@ -372,6 +449,7 @@ export default function Marketplace() {
         )
       );
 
+      // 1) основной вызов
       let res;
       try {
         res = await apiPost("/api/marketplace/search", payload);
@@ -388,6 +466,7 @@ export default function Marketplace() {
 
       let list = normalizeList(res);
 
+      // 2) пусто + есть текст — локальная фильтрация
       if (!list.length && filters?.q) {
         const needle = String(filters.q).toLowerCase();
 
@@ -398,15 +477,18 @@ export default function Marketplace() {
         } catch {}
 
         let filtered = all.filter((it) => {
-          try { return buildHaystack(it).includes(needle); } catch { return false; }
+          try {
+            return buildHaystack(it).includes(needle);
+          } catch {
+            return false;
+          }
         });
 
         if (!filtered.length && all.length) {
-          const ids = [...new Set(
-            all.map(x => (x?.service?.provider_id ?? x?.provider_id)).filter(Boolean)
-          )];
-
-          const profiles = await Promise.all(ids.map(id => fetchProviderProfile(id)));
+          const ids = [
+            ...new Set(all.map((x) => x?.service?.provider_id ?? x?.provider_id).filter(Boolean)),
+          ];
+          const profiles = await Promise.all(ids.map((id) => fetchProviderProfile(id)));
           const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
 
           const enriched = all.map((it) => {
@@ -426,7 +508,11 @@ export default function Marketplace() {
           });
 
           filtered = enriched.filter((it) => {
-            try { return buildHaystack(it).includes(needle); } catch { return false; }
+            try {
+              return buildHaystack(it).includes(needle);
+            } catch {
+              return false;
+            }
           });
         }
 
@@ -442,7 +528,10 @@ export default function Marketplace() {
     }
   };
 
-  useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
+  useEffect(() => {
+    search({ all: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -460,14 +549,19 @@ export default function Marketplace() {
       const added = !!res?.added;
       setFavIds((prev) => {
         const next = new Set(prev);
-        if (added) next.add(id); else next.delete(id);
+        if (added) next.add(id);
+        else next.delete(id);
         return next;
       });
-      toast(added ? (t("favorites.added_toast") || "Добавлено в избранное")
-                  : (t("favorites.removed_toast") || "Удалено из избранного"));
+      toast(
+        added
+          ? t("favorites.added_toast") || "Добавлено в избранное"
+          : t("favorites.removed_toast") || "Удалено из избранного"
+      );
     } catch (e) {
       const msg = (e && (e.status || e.code || e.message)) || "";
-      if (String(msg).includes("401") || String(msg).includes("403")) toast(t("auth.login_required") || "Войдите как клиент");
+      if (String(msg).includes("401") || String(msg).includes("403"))
+        toast(t("auth.login_required") || "Войдите как клиент");
       else toast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
@@ -476,23 +570,57 @@ export default function Marketplace() {
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
     { value: "guide", label: t("marketplace.guide") || "Гид" },
     { value: "transport", label: t("marketplace.transport") || "Транспорт" },
-    { value: "refused_tour", label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур" },
-    { value: "refused_hotel", label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель" },
-    { value: "refused_flight", label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет" },
-    { value: "refused_event_ticket", label: t("marketplace.refused_event") || t("category.refused_event_ticket") || "Отказной билет" },
+    {
+      value: "refused_tour",
+      label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур",
+    },
+    {
+      value: "refused_hotel",
+      label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель",
+    },
+    {
+      value: "refused_flight",
+      label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет",
+    },
+    {
+      value: "refused_event_ticket",
+      label:
+        t("marketplace.refused_event") ||
+        t("category.refused_event_ticket") ||
+        "Отказной билет",
+    },
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
   const Card = ({ it, now }) => {
     const {
-      svc, title, hotel, accommodation, dates, prettyPrice,
-      inlineProvider, providerId, flatName, flatPhone, flatTg, status: statusRaw,
+      svc,
+      title,
+      hotel,
+      accommodation,
+      dates,
+      prettyPrice,
+      inlineProvider,
+      providerId,
+      flatName,
+      flatPhone,
+      flatTg,
+      status: statusRaw,
+      details,
     } = extractServiceFields(it);
 
     const id = svc.id ?? it.id;
 
-    const images = Array.isArray(svc.images) ? svc.images : [];
-    const image = images[0] || svc.cover || svc.image || null;
+    // -------- изображение (универсальный резолвер) --------
+    const image = firstImageFrom([
+      svc.images,
+      svc.cover,
+      svc.image,
+      details?.images,
+      details?.cover,
+      details?.image,
+    ]);
+    // -------------------------------------------------------
 
     /* --------- Поставщик: inline + подгрузка по id --------- */
     const [provider, setProvider] = useState(null);
@@ -503,28 +631,47 @@ export default function Marketplace() {
         const p = await fetchProviderProfile(providerId);
         if (alive) setProvider(p);
       })();
-      return () => { alive = false; };
+      return () => {
+        alive = false;
+      };
     }, [providerId]);
 
     const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
     const supplierName = _firstNonEmpty(
-      prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand,
+      prov?.name,
+      prov?.title,
+      prov?.display_name,
+      prov?.company_name,
+      prov?.brand,
       flatName
     );
     const supplierPhone = _firstNonEmpty(
-      prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile, prov?.whatsapp, prov?.whatsApp,
-      prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone,
+      prov?.phone,
+      prov?.phone_number,
+      prov?.phoneNumber,
+      prov?.tel,
+      prov?.mobile,
+      prov?.whatsapp,
+      prov?.whatsApp,
+      prov?.phones?.[0],
+      prov?.contacts?.phone,
+      prov?.contact_phone,
       flatPhone
     );
     const supplierTgRaw = _firstNonEmpty(
-      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link, prov?.contacts?.telegram, prov?.socials?.telegram,
+      prov?.telegram,
+      prov?.tg,
+      prov?.telegram_username,
+      prov?.telegram_link,
+      prov?.contacts?.telegram,
+      prov?.socials?.telegram,
       flatTg
     );
     const supplierTg = renderTelegram(supplierTgRaw);
 
     const rating = Number(svc.rating ?? it.rating ?? 0);
-    const status = (typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft") ? null : statusRaw;
+    const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
     const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
@@ -574,9 +721,10 @@ export default function Marketplace() {
             <div className="flex items-center gap-2">
               {hasTimer && (
                 <span
-                  className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow
-                    ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
-                  title={leftMs > 0 ? (t("countdown.until_end") || "До окончания") : (t("countdown.expired") || "Время истекло")}
+                  className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${
+                    leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"
+                  }`}
+                  title={leftMs > 0 ? t("countdown.until_end") || "До окончания" : t("countdown.expired") || "Время истекло"}
                 >
                   {timerText}
                 </span>
@@ -604,7 +752,10 @@ export default function Marketplace() {
             <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
               <WishHeart
                 active={isFav}
-                onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(id);
+                }}
                 size={18}
                 className="!p-0 !hover:bg-transparent"
               />
@@ -615,15 +766,36 @@ export default function Marketplace() {
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
-                {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
-                {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
-                {dates && (<div><span className="opacity-80">{t("common.date") || "Дата"}: </span><span className="font-medium">{dates}</span></div>)}
-                {prettyPrice && (<div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>)}
+                {hotel && (
+                  <div>
+                    <span className="opacity-80">Отель: </span>
+                    <span className="font-medium">{hotel}</span>
+                  </div>
+                )}
+                {accommodation && (
+                  <div>
+                    <span className="opacity-80">Размещение: </span>
+                    <span className="font-medium">{accommodation}</span>
+                  </div>
+                )}
+                {dates && (
+                  <div>
+                    <span className="opacity-80">{t("common.date") || "Дата"}: </span>
+                    <span className="font-medium">{dates}</span>
+                  </div>
+                )}
+                {prettyPrice && (
+                  <div>
+                    <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
+                    <span className="font-semibold">{prettyPrice}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
+        {/* тултип отзывов — через портал */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
             <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
@@ -637,7 +809,9 @@ export default function Marketplace() {
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
-                    <li key={r.id} className="line-clamp-2 opacity-90">{r.text || ""}</li>
+                    <li key={r.id} className="line-clamp-2 opacity-90">
+                      {r.text || ""}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -645,25 +819,41 @@ export default function Marketplace() {
           </div>
         </TooltipPortal>
 
+        {/* ТЕЛО КАРТОЧКИ */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span></div>)}
+          {prettyPrice && (
+            <div className="mt-1 text-sm">
+              {t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span>
+            </div>
+          )}
 
           {(supplierName || supplierPhone || supplierTg?.label) && (
             <div className="mt-2 text-sm space-y-0.5">
-              {supplierName && (<div><span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span><span className="font-medium">{supplierName}</span></div>)}
+              {supplierName && (
+                <div>
+                  <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
+                  <span className="font-medium">{supplierName}</span>
+                </div>
+              )}
               {supplierPhone && (
                 <div>
                   <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
-                  <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">{supplierPhone}</a>
+                  <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">
+                    {supplierPhone}
+                  </a>
                 </div>
               )}
               {supplierTg?.label && (
                 <div>
                   <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
                   {supplierTg.href ? (
-                    <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">{supplierTg.label}</a>
-                  ) : (<span className="font-medium">{supplierTg.label}</span>)}
+                    <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">
+                      {supplierTg.label}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{supplierTg.label}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -684,6 +874,7 @@ export default function Marketplace() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+      {/* Панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
           value={q}
@@ -697,7 +888,9 @@ export default function Marketplace() {
           className="w-full md:w-64 border rounded-lg px-3 py-2"
         >
           {categoryOptions.map((opt) => (
-            <option key={opt.value || "root"} value={opt.value}>{opt.label}</option>
+            <option key={opt.value || "root"} value={opt.value}>
+              {opt.label}
+            </option>
           ))}
         </select>
 
@@ -706,22 +899,24 @@ export default function Marketplace() {
         </button>
       </div>
 
+      {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
         {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
         {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (<div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>)}
+        {!loading && !error && !items.length && (
+          <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
+        )}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => (<Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />))}
+            {items.map((it) => (
+              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />
+            ))}
           </div>
         )}
       </div>
 
-      <QuickRequestModal
-        open={qrOpen}
-        onClose={() => setQrOpen(false)}
-        onSubmit={submitQuickRequest}
-      />
+      {/* Модалка быстрого запроса */}
+      <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
     </div>
   );
 }
