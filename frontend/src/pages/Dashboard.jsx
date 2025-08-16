@@ -234,7 +234,8 @@ const Dashboard = () => {
 
   // Details for agent categories
   const [details, setDetails] = useState({
-    direction: "",
+        grossPrice: "",
+direction: "",
     directionCountry: "",
     directionFrom: "",
     directionTo: "",
@@ -934,7 +935,7 @@ const Dashboard = () => {
       price: isExtendedCategory ? undefined : price,
       description: isExtendedCategory ? undefined : description,
       availability: isExtendedCategory ? undefined : availability,
-      details: isExtendedCategory ? details : undefined,
+      details: isExtendedCategory ? details : (details?.grossPrice ? { grossPrice: details.grossPrice } : undefined),
     };
 
     const data = compact(raw);
@@ -1397,7 +1398,15 @@ const Dashboard = () => {
                     placeholder={t("net_price")}
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
-                  <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
+                  
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                   <input
                     type="datetime-local"
                     value={details.expiration || ""}
@@ -1661,7 +1670,15 @@ const Dashboard = () => {
                     className="w-full border px-3 py-2 rounded mb-3"
                   />
 
-                  <div className="mb-3">
+                  
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <div className="mb-3">
                     <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                     <input
                       type="datetime-local"
@@ -1748,7 +1765,15 @@ const Dashboard = () => {
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
 
-                  <label className="inline-flex items-center mb-2">
+                  
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="inline-flex items-center mb-2">
                     <input
                       type="checkbox"
                       checked={details.isActive || false}
@@ -1804,7 +1829,15 @@ const Dashboard = () => {
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
 
-                  <label className="flex items-center space-x-2 mb-2">
+                  
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="flex items-center space-x-2 mb-2">
                     <input
                       type="checkbox"
                       checked={details.isActive}
@@ -2102,7 +2135,15 @@ const Dashboard = () => {
                         placeholder={t("net_price")}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
-                      <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
+                      
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                       <input
                         type="datetime-local"
                         value={details.expiration || ""}
@@ -2419,7 +2460,15 @@ const Dashboard = () => {
                         className="w-full border px-3 py-2 rounded mb-3"
                       />
 
-                      <div className="mb-3">
+                      
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <div className="mb-3">
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
@@ -2506,7 +2555,15 @@ const Dashboard = () => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <label className="inline-flex items-center mb-2">
+                      
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="inline-flex items-center mb-2">
                         <input
                           type="checkbox"
                           checked={details.isActive || false}
@@ -2560,7 +2617,15 @@ const Dashboard = () => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <label className="flex items-center space-x-2 mb-2">
+                      
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    <label className="flex items-center space-x-2 mb-2">
                         <input
                           type="checkbox"
                           checked={details.isActive}
@@ -2590,7 +2655,15 @@ const Dashboard = () => {
                         placeholder={t("price")}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
-                    </>
+                    
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                      />
+    </>
                   )}
 
                   {/* Блок изображений */}
