@@ -7,9 +7,26 @@ import WishHeart from "../components/WishHeart";
 
 /* ===================== utils ===================== */
 function normalizeList(res) {
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res?.items)) return res.items;
-  if (Array.isArray(res?.data)) return res.data;
+  if (!res) return [];
+  // если бэкенд заворачивает всё в data-объект
+  const root = (res && typeof res === "object" && !Array.isArray(res))
+    ? (Array.isArray(res.data) ? res : (res.data && typeof res.data === "object" ? res.data : res))
+    : res;
+
+  const candidates = [
+    root,                 // сам массив
+    root.items,
+    root.data,
+    root.list,
+    root.rows,
+    root.results,
+    root.result,
+    root.services,
+  ];
+
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
   return [];
 }
 
@@ -333,13 +350,13 @@ export default function Marketplace() {
 
   const [favIds, setFavIds] = useState(new Set());
 
-  const search = async (opts = {}) => {
-  
+  /* ===================== search ===================== */
+const search = async (opts = {}) => {
   setLoading(true);
   setError(null);
 
   try {
-    // чистим payload от пустых строк/undefined/null, но оставляем числовые нули
+    // чистим payload
     const rawPayload = opts?.all ? {} : filters;
     const payload = Object.fromEntries(
       Object.entries(rawPayload).filter(([, v]) =>
@@ -352,7 +369,7 @@ export default function Marketplace() {
     try {
       res = await apiPost("/api/marketplace/search", payload);
     } catch (e) {
-      // 1a) запасной вариант — тот же эндпоинт, но GET с querystring
+      // 1a) тот же эндпоинт, но GET с querystring
       if (opts?.fallback !== false) {
         const qs = new URLSearchParams(
           Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
@@ -365,41 +382,21 @@ export default function Marketplace() {
 
     let list = normalizeList(res);
 
-    // 2) если сервер вернул пусто и есть текстовый поиск — берём общий список и фильтруем локально
+    // 2) если сервер ничего не дал, а у нас есть текст для поиска —
+    //    подтягиваем "всё" и фильтруем локально по хранилищу полей (включая поставщика)
     if (!list.length && filters?.q) {
       const needle = String(filters.q).toLowerCase();
 
-      // 2a) пробуем получить "весь" список тем же эндпоинтом без фильтров
+      // 2a) та же ручка, но без фильтров (надежнее, чем /api/services/public)
       try {
         const resAll = await apiPost("/api/marketplace/search", {});
         const listAll = normalizeList(resAll);
         if (listAll.length) {
           list = listAll.filter((it) => {
-            try {
-              return buildHaystack(it).includes(needle);
-            } catch {
-              return false;
-            }
+            try { return buildHaystack(it).includes(needle); } catch { return false; }
           });
         }
-      } catch {}
-
-      // 2b) если всё ещё пусто — последний фолбэк на старый публичный эндпоинт
-      if (!list.length) {
-        try {
-          const resPublic = await apiGet("/api/services/public");
-          const listPublic = normalizeList(resPublic);
-          if (listPublic.length) {
-            list = listPublic.filter((it) => {
-              try {
-                return buildHaystack(it).includes(needle);
-              } catch {
-                return false;
-              }
-            });
-          }
-        } catch {}
-      }
+      } catch { /* игнор */ }
     }
 
     setItems(list);
@@ -410,7 +407,6 @@ export default function Marketplace() {
     setLoading(false);
   }
 };
-
 
   useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
 
