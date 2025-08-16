@@ -294,14 +294,7 @@ exports.manualCleanupExpired = async (req, res) => {
   }
 };
 
-// вверху файла (если не было)
-const pool = require("../db");
-
-// ...остальной код контроллера
-
 // ===== Клиент: список моих заявок с авто-очисткой просроченных =====
-// controllers/requestController.js
-const pool = require("../db");
 
 // безопасный парсер JSON
 function safeJson(x) {
