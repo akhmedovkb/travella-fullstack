@@ -36,12 +36,12 @@ function normalizeServicePayload(body) {
   if (details) {
     if (typeof details === "string") {
       try { detailsObj = JSON.parse(details); }
-      catch { detailsObj = { value: String(details) }; }
+      catch (err) { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
   }
-      catch { detailsObj = { value: String(details) }; }
+      catch (err) { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
@@ -506,12 +506,12 @@ const getProviderStats = async (req, res) => {
     try {
       const r1 = await pool.query(`SELECT id FROM services WHERE provider_id = $1`, [providerId]);
       serviceIds = r1.rows.map(x => x.id);
-    } catch {}
+    } catch (err) {}
     if (!serviceIds.length) {
       try {
         const r2 = await pool.query(`SELECT id FROM services WHERE "providerId" = $1`, [providerId]);
         serviceIds = r2.rows.map(x => x.id);
-      } catch {}
+      } catch (err) {}
     }
 
     let rating = 0, reviews_count = 0;
@@ -531,7 +531,7 @@ const getProviderStats = async (req, res) => {
     try {
       const r = await pool.query(`SELECT tier FROM providers WHERE id=$1`, [providerId]);
       tier = r.rows?.[0]?.tier || "Bronze";
-    } catch {}
+    } catch (err) {}
 
     res.json({
       tier,
