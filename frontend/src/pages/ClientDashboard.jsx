@@ -505,13 +505,13 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                             className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
                           >
                             {t("actions.book_now", { defaultValue: "Забронировать" })}
-                          </button>*/}
+                          </button>
                           <button
                             onClick={() => onRemove?.(it.id)}  // уже есть обработчик
                             className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-red-50 text-red-600"
                           >
                             {t("actions.remove", { defaultValue: "Удалить" })}
-                          </button>
+                          </button>*/}
                         </>
                       )}
                     </div>
