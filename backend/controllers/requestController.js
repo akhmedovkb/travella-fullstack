@@ -289,6 +289,7 @@ function computeExpiresAt(row) {
   return null;
 }
 
+// ===== Клиент: список моих заявок с авто-очисткой просроченных =====
 exports.getMyRequests = async (req, res) => {
   try {
     const clientId = req.user?.id;
@@ -296,7 +297,6 @@ exports.getMyRequests = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    // ВАЖНО: никаких r.expires_at в SQL
     const q = await db.query(
       `
       SELECT
@@ -305,7 +305,6 @@ exports.getMyRequests = async (req, res) => {
         r.client_id,
         r.status,
         r.note,
-        r.proposal,
         r.created_at,
         s.title  AS service_title,
         s.details AS service_details
@@ -323,10 +322,8 @@ exports.getMyRequests = async (req, res) => {
       client_id: row.client_id,
       status: row.status || "new",
       note: row.note || null,
-      proposal: row.proposal || null,
       created_at: row.created_at,
       service: { id: row.service_id, title: row.service_title || "Запрос" },
-      // добавляем вычисленное поле — фронт уже умеет его показывать
       expires_at: computeExpiresAt(row)
     }));
 
