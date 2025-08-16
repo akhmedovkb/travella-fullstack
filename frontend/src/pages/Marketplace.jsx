@@ -295,11 +295,29 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
+  
   const filters = useMemo(() => ({
     q: q?.trim() || undefined,
-    location: q?.trim() || undefined,
+    //location: q?.trim() || undefined,
     category: category || undefined,
   }), [q, category]);
+
+  function buildHaystack(it) {
+      const s = it?.service || it || {};
+      const d = s.details || {};
+      return [
+        s.title, s.name,
+        s.city, s.country, s.location, s.direction,
+        s.direction_to, s.directionTo,
+        d.direction, d.directionCountry,
+        d.direction_from, d.directionFrom,
+        d.direction_to, d.directionTo,
+        d.location, d.eventName,
+        d.hotel, d.hotel_name,
+        d.airline,
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+
 
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -311,18 +329,19 @@ export default function Marketplace() {
   setLoading(true);
   setError(null);
   try {
-    const payload = opts?.all ? {} : filters;
-
-    // 1) POST с фоллбэком на GET
+    const rawPayload = opts?.all ? {} : filters;
+    const payload = Object.fromEntries(
+    Object.entries(rawPayload).filter(([, v]) =>
+      v != null && (typeof v === "number" ? true : String(v).trim() !== "")
+    )
+      
     let res;
     try {
       res = await apiPost("/api/marketplace/search", payload);
     } catch (e) {
       if (opts?.fallback !== false) {
         const qs = new URLSearchParams(
-          Object.entries(payload || {}).filter(
-            ([, v]) => v !== undefined && v !== null && String(v).trim() !== ""
-          )
+          Object.entries(payload).filter(([,v]) => v != null && String(v).trim() !== "")
         ).toString();
         res = await apiGet(`/api/marketplace/search?${qs}`);
       } else {
@@ -330,22 +349,33 @@ export default function Marketplace() {
       }
     }
 
-    // 2) нормализуем и при пустом списке берём публичные услуги
     let list = normalizeList(res);
+
+    // локальный «умный» поиск по направлению/городу/стране и т.д.
+    if (filters.q) {
+      const needle = filters.q.toLowerCase();
+      list = list.filter((it) => buildHaystack(it).includes(needle));
+    }
+
     if (!list.length && opts?.fallback !== false) {
       const res2 = await apiGet("/api/services/public");
-      list = normalizeList(res2);
+      let list2 = normalizeList(res2);
+      if (filters.q) {
+        const needle = filters.q.toLowerCase();
+        list2 = list2.filter((it) => buildHaystack(it).includes(needle));
+      }
+      list = list2;
     }
 
     setItems(list);
-    setError(null);
   } catch {
-    setItems([]);
     setError(t("common.loading_error") || "Не удалось загрузить данные");
+    setItems([]);
   } finally {
     setLoading(false);
   }
 };
+
 
 
   useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
