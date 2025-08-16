@@ -3,8 +3,56 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 dotenv.config();
-
 const app = express();
+// ↑ где-то рядом с остальными require
+const cors = require('cors');
+
+// Разрешённые точные origin'ы
+const WHITELIST = new Set([
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://travella-fullstack.vercel.app',
+  'https://travella-fullstack-q0ayptios-komil.vercel.app', // твой превью-хост из логов
+]);
+
+// Разрешаем все превью-хосты твоего проекта на Vercel вида travella-fullstack-*.vercel.app
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // curl/Postman/сервер-сервер
+  try {
+    const url = new URL(origin);
+    const { hostname, protocol } = url;
+    if (!/^https?:$/.test(protocol)) return false;
+
+    if (WHITELIST.has(origin)) return true;
+
+    // превью Vercel: travella-fullstack-abc123.vercel.app и т.п.
+    const isVercelPreview =
+      hostname.endsWith('.vercel.app') &&
+      (hostname === 'travella-fullstack.vercel.app' ||
+       hostname.startsWith('travella-fullstack-'));
+
+    if (isVercelPreview) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// ВАЖНО: ставим до app.use('/api', .../роутов)
+app.use(cors({
+  origin(origin, cb) {
+    const ok = isAllowedOrigin(origin);
+    if (ok) return cb(null, true);
+    console.warn('CORS blocked:', origin);
+    return cb(new Error('Not allowed by CORS: ' + origin));
+  },
+  credentials: true,
+}));
+
+// Разрешаем preflight для любых путей
+app.options('*', cors());
+
 
 /** ===================== CORS ===================== */
 const allowedOrigins = [
