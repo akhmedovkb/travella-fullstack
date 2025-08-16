@@ -8,27 +8,52 @@ import WishHeart from "../components/WishHeart";
 /* ===================== utils ===================== */
 function normalizeList(res) {
   if (!res) return [];
-  // если бэкенд заворачивает всё в data-объект
-  const root = (res && typeof res === "object" && !Array.isArray(res))
-    ? (Array.isArray(res.data) ? res : (res.data && typeof res.data === "object" ? res.data : res))
-    : res;
+  if (Array.isArray(res)) return res;
 
-  const candidates = [
-    root,                 // сам массив
-    root.items,
-    root.data,
-    root.list,
-    root.rows,
-    root.results,
-    root.result,
-    root.services,
+  // BFS по всем вложенным полям; ищем массив объектов
+  const queue = [];
+  const seen = new Set();
+
+  const push = (node) => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+    queue.push(node);
+  };
+
+  push(res);
+
+  // Поля, где чаще всего лежит список
+  const preferred = [
+    "items", "data", "list", "rows", "results", "result",
+    "services", "docs", "records", "hits", "content", "payload"
   ];
 
-  for (const c of candidates) {
-    if (Array.isArray(c)) return c;
+  while (queue.length) {
+    const node = queue.shift();
+
+    if (Array.isArray(node)) {
+      // массив с объектами — то, что нам нужно
+      if (node.some(v => v && typeof v === "object")) return node;
+      // иначе продолжаем поиск
+      continue;
+    }
+    if (typeof node !== "object") continue;
+
+    // Сначала обходим «популярные» ключи…
+    for (const k of preferred) if (k in node) push(node[k]);
+    // …а затем все остальные
+    for (const k of Object.keys(node)) if (!preferred.includes(k)) push(node[k]);
   }
+
   return [];
 }
+
+let list = normalizeList(res);
+if (!list.length) {
+  // В dev-окружении просто подсмотреть структуру
+  console.log("search: unexpected response shape", res);
+}
+
 
 function pick(obj, keys) {
   if (!obj) return null;
