@@ -361,14 +361,14 @@ export default function Marketplace() {
         v != null && (typeof v === "number" ? true : String(v).trim() !== "")
       )
     );
-      
+
     let res;
     try {
       res = await apiPost("/api/marketplace/search", payload);
     } catch (e) {
       if (opts?.fallback !== false) {
         const qs = new URLSearchParams(
-          Object.entries(payload).filter(([,v]) => v != null && String(v).trim() !== "")
+          Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
         ).toString();
         res = await apiGet(`/api/marketplace/search?${qs}`);
       } else {
@@ -378,24 +378,12 @@ export default function Marketplace() {
 
     let list = normalizeList(res);
 
-    // локальный «умный» поиск по направлению/городу/стране и т.д.
-    if (filters.q) {
+    // локально фильтруем только если от сервера пусто
+    if (!list.length && filters.q) {
+      const res2 = await apiGet("/api/services/public");
       const needle = filters.q.toLowerCase();
-      list = list.filter((it) => buildHaystack(it).includes(needle));
+      list = normalizeList(res2).filter((it) => buildHaystack(it).includes(needle));
     }
-
-    if (!list.length && opts?.fallback !== false) {
-        try {
-          const res2 = await apiPost("/api/marketplace/search", {}); // всё публичное
-          let list2 = normalizeList(res2);
-          if (filters.q) {
-            const needle = filters.q.toLowerCase();
-            list2 = list2.filter((it) => buildHaystack(it).includes(needle));
-          }
-          list = list2;
-        } catch {}
-      }
-
 
     setItems(list);
   } catch {
@@ -405,7 +393,6 @@ export default function Marketplace() {
     setLoading(false);
   }
 };
-
 
 
   useEffect(() => { search({ all: true }); }, []); // eslint-disable-line
