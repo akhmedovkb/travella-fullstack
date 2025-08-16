@@ -879,6 +879,8 @@ direction: "",
     } else {
       setDescription(service.description || "");
       setPrice(service.price || "");
+      const sd = service.details || {};
+      setDetails((prev) => ({ ...prev, grossPrice: sd.grossPrice || "" })); // <-- добавлено
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
@@ -1847,6 +1849,46 @@ direction: "",
                   </label>
                 </>
               )}
+              {/* Fallback для простых категорий (guide/transport/hotel) в режиме редактирования */}
+                {!(
+                  ["refused_tour","author_tour","refused_hotel","refused_flight","refused_event_ticket","visa_support"].includes(category)
+                  && profile.type === "agent"
+                ) && (
+                  <>
+                    <div className="mb-2">
+                      <label className="block font-medium mb-1">{t("description")}</label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder={t("description")}
+                        className="w-full border px-3 py-2 rounded"
+                      />
+                    </div>
+                
+                    <div className="mb-2">
+                      <label className="block font-medium mb-1">{t("price")}</label>
+                      <input
+                        type="number"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        placeholder={t("price")}
+                        className="w-full border px-3 py-2 rounded"
+                      />
+                    </div>
+                
+                    <div className="mb-2">
+                      <label className="block font-medium mb-1">{t("gross_price")}</label>
+                      <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded"
+                      />
+                    </div>
+                  </>
+                )}
+
 
               {/* Блок изображений + действия */}
               <ImagesEditor
