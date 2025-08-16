@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
+import QuickRequestModal from "../components/QuickRequestModal";
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -591,6 +592,12 @@ export default function ClientDashboard() {
   const [actingReqId, setActingReqId] = useState(null);
 
   const [bookingUI, setBookingUI] = useState({ open: false, serviceId: null });
+  
+  // Quick Request (единый модал)
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrServiceId, setQrServiceId] = useState(null);
+  const [qrTitle, setQrTitle] = useState(""); // только для локального «черновика»
+
   const [bkDate, setBkDate] = useState("");
   const [bkTime, setBkTime] = useState("");
   const [bkPax, setBkPax] = useState(1);
@@ -844,6 +851,46 @@ export default function ClientDashboard() {
     }
   };
 
+  function openQuickRequestModal(serviceId, meta = {}) {
+  if (!serviceId) return;
+  setQrServiceId(serviceId);
+  setQrTitle(meta.title || "");
+  setQrOpen(true);
+}
+function closeQuickRequestModal() {
+  setQrOpen(false);
+  setQrServiceId(null);
+  setQrTitle("");
+}
+async function submitQuickRequest(note) {
+  if (!qrServiceId) return;
+  try {
+    // отправка на бэкенд
+    await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+
+    // мгновенный локальный «черновик» (чтобы карточка сразу появилась)
+    const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
+    const keyId = myId || null;
+    saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
+    setRequests((prev) => [draft, ...prev]);
+    window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrTitle } }));
+
+    setActiveTab("requests");
+
+    // мягко подтянем реальные данные
+    try {
+      const apiList = await fetchClientRequestsSafe(myId);
+      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+      setRequests(mergeRequests(apiList, drafts));
+    } catch {}
+  } catch {
+    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+  } finally {
+    closeQuickRequestModal();
+  }
+}
+
   function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
   function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
   async function createBooking() {
@@ -967,7 +1014,7 @@ export default function ClientDashboard() {
         page={favPage}
         perPage={8}
         onRemove={handleRemoveFavorite}
-        onQuickRequest={(id, meta) => handleQuickRequest(id, meta)}
+        onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
         onBook={(serviceId) => openBooking(serviceId)}
         onPageChange={(p) => setFavPage(p)}
       />
@@ -1122,6 +1169,11 @@ export default function ClientDashboard() {
           </div>
         </div>
       )}
+      <QuickRequestModal
+      open={qrOpen}
+      onClose={closeQuickRequestModal}
+      onSubmit={submitQuickRequest}
+    />
     </div>
   );
 }
