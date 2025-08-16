@@ -428,7 +428,13 @@
     "tier": "Уровень",
     "tier_label": "Уровень"
   },
-  "status": "Статус",
+  "status": {
+    "new": "новый",
+    "processed": "обработано",
+    "rejected": "отклонено",
+    "active": "активна",
+    "accepted": "принято"
+  },
   "sum": "Сумма",
   "tabs": {
     "favorites": "Избранное",
@@ -460,14 +466,5 @@
     "favorite_add": "В избранное",
     "favorite_remove": "Убрать из избранного"
   },
-
-  "status": {
-    "new": "новый",
-    "processed": "обработано",
-    "rejected": "отклонено",
-    "active": "активна",
-    "accepted": "принято"
-  }
+  "gross_price": "Цена для клиента (брутто)"
 }
-
-
