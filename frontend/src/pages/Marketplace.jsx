@@ -331,9 +331,10 @@ export default function Marketplace() {
   try {
     const rawPayload = opts?.all ? {} : filters;
     const payload = Object.fromEntries(
-    Object.entries(rawPayload).filter(([, v]) =>
-      v != null && (typeof v === "number" ? true : String(v).trim() !== "")
-    )
+      Object.entries(rawPayload).filter(([, v]) =>
+        v != null && (typeof v === "number" ? true : String(v).trim() !== "")
+      )
+    );
       
     let res;
     try {
