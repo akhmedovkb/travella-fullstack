@@ -1,37 +1,92 @@
 // backend/controllers/bookingController.js
 const pool = require("../db");
 
-/** ===================== helpers ===================== */
-const asArray = (v) => (Array.isArray(v) ? v : []);
-const onlyUnique = (arr) => Array.from(new Set(arr));
+/* ===================== DATE HELPERS ===================== */
+const toISODate = (s) => {
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
-function toISODate(d) {
-  // принимает "YYYY-MM-DD" или Date/строку и приводит к "YYYY-MM-DD"
-  if (!d) return null;
-  try {
-    // Если уже вида YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    const dt = new Date(d);
-    if (Number.isNaN(dt.getTime())) return null;
-    const y = dt.getUTCFullYear();
-    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(dt.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  } catch { return null; }
-}
-
-function normalizeDates(input) {
-  const norm = [];
-  for (const x of asArray(input)) {
-    const d = toISODate(x);
-    if (d) norm.push(d);
+const expandRange = (start, end) => {
+  const a = new Date(start + "T00:00:00Z");
+  const b = new Date(end + "T00:00:00Z");
+  const out = [];
+  for (let d = a; d <= b; d = new Date(d.getTime() + 86400000)) {
+    out.push(toISODate(d.toISOString()));
   }
-  return onlyUnique(norm).sort();
+  return out;
+};
+
+// Нормализуем даты брони из details/proposal.
+// Поддерживаем formats: { dates: string[] } или { startDate,endDate } / { start_date,end_date } / { returnDate }
+function extractBookingDates(details) {
+  if (!details || typeof details !== "object") return [];
+  if (Array.isArray(details.dates)) {
+    return [...new Set(details.dates.map(toISODate).filter(Boolean))];
+  }
+  const s = toISODate(details.startDate || details.start_date);
+  const e = toISODate(details.endDate || details.end_date || details.returnDate);
+  if (s && e) return expandRange(s, e);
+  if (s) return [s];
+  return [];
 }
 
-/** ===================== CREATE ===================== */
-// POST /api/bookings
-// Body: { service_id, request_id?, price?, currency?, details? { dates?: string[] } }
+/* ===================== DB HELPERS (dates) ===================== */
+// Проверка пересечений с ручными блокировками и живыми бронями (pending/active)
+async function checkDateConflicts(client, providerId, isoDates) {
+  if (!isoDates.length) return [];
+
+  const q = await client.query(
+    `
+    WITH input(d) AS (
+      SELECT UNNEST($2::date[])
+    )
+    SELECT d::text AS date, reason
+    FROM (
+      SELECT i.d,
+             CASE
+               WHEN pbd.date IS NOT NULL THEN 'blocked'
+               WHEN b.id IS NOT NULL  THEN 'booked'
+             END AS reason
+      FROM input i
+      LEFT JOIN provider_blocked_dates pbd
+        ON pbd.provider_id = $1 AND pbd.date = i.d
+      LEFT JOIN booking_dates bd
+        ON bd.date = i.d
+      LEFT JOIN bookings b
+        ON b.id = bd.booking_id
+       AND b.provider_id = $1
+       AND b.status IN ('pending','active')
+    ) t
+    WHERE reason IS NOT NULL
+    ORDER BY d
+    `,
+    [providerId, isoDates]
+  );
+  return q.rows; // [{date, reason}]
+}
+
+async function writeBookingDates(client, bookingId, isoDates) {
+  if (!isoDates.length) return;
+  const values = isoDates.map((_, i) => `($1,$${i + 2})`).join(",");
+  await client.query(
+    `INSERT INTO booking_dates (booking_id, date)
+     VALUES ${values}
+     ON CONFLICT DO NOTHING`,
+    [bookingId, ...isoDates]
+  );
+}
+
+/* ===================== CONTROLLERS ===================== */
+
+// Клиент создаёт бронь (обычно после оффера/принятия)
+// POST /api/bookings  Body: { service_id, request_id?, price?, currency?, details? }
 exports.createBooking = async (req, res) => {
   const clientId = req.user?.id;
   const role = req.user?.role;
@@ -48,7 +103,7 @@ exports.createBooking = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1) Сервис и провайдер
+    // Проверяем услугу и провайдера
     const svc = await client.query(
       "SELECT id, provider_id, title, category FROM services WHERE id=$1",
       [service_id]
@@ -59,14 +114,14 @@ exports.createBooking = async (req, res) => {
     }
     const providerId = svc.rows[0].provider_id;
 
-    // 2) Если есть request, подтянем предложение как baseline
     let proposal = null;
     if (request_id) {
+      // Проверяем запрос и достаём proposal (если было)
       const rq = await client.query(
         `SELECT r.*, s.provider_id
-           FROM requests r
-           JOIN services s ON s.id = r.service_id
-          WHERE r.id=$1 AND r.client_id=$2`,
+         FROM requests r
+         JOIN services s ON s.id = r.service_id
+         WHERE r.id=$1 AND r.client_id=$2`,
         [request_id, clientId]
       );
       if (!rq.rowCount) {
@@ -75,69 +130,55 @@ exports.createBooking = async (req, res) => {
       }
       if (rq.rows[0].service_id !== service_id) {
         await client.query("ROLLBACK");
-        return res.status(400).json({ message: "request.service_id mismatch with service_id" });
+        return res
+          .status(400)
+          .json({ message: "request.service_id mismatch with service_id" });
       }
       proposal = rq.rows[0].proposal || null;
     }
 
-    // 3) Сбор финальных полей
-    const finalPrice = price != null ? price : (proposal?.price ?? null);
+    // Итоговые поля (приоритет body > proposal)
+    const finalPrice =
+      price != null
+        ? price
+        : proposal?.price != null
+        ? proposal.price
+        : null;
+
     const finalCurrency = currency ?? (proposal?.currency ?? null);
+
     const finalDetails = (() => {
-      const base = (proposal && typeof proposal === "object") ? proposal : {};
-      if (details && typeof details === "object") return { ...base, ...details };
+      const base = proposal || {};
+      if (details && typeof details === "object") {
+        return { ...base, ...details };
+      }
       return Object.keys(base).length ? base : null;
     })();
 
-    // 4) Даты брони (для гида/транспорта): берём из body.details.dates или из proposal.dates
-    const requestedDates = normalizeDates(
-      (details && details.dates) || (proposal && proposal.dates) || []
-    );
+    // Нормализуем желаемые даты (сумма body + proposal)
+    const wantedDates = [
+      ...extractBookingDates(details),
+      ...extractBookingDates(proposal),
+    ].filter(Boolean);
+    const isoDates = [...new Set(wantedDates)];
 
-    // Если даты переданы — проверим на конфликты с блокировками и другими бронями
-    let conflictedBlocked = [];
-    let conflictedBooked = [];
-    if (requestedDates.length) {
-      // provider_blocked_dates
-      const qBlocked = await client.query(
-        `SELECT date::text AS date
-           FROM provider_blocked_dates
-          WHERE provider_id=$1 AND date = ANY($2::date[])`,
-        [providerId, requestedDates]
-      );
-      conflictedBlocked = qBlocked.rows.map((r) => r.date);
-
-      // booking_dates у "живых" броней
-      const qBooked = await client.query(
-        `SELECT bd.date::text AS date
-           FROM booking_dates bd
-           JOIN bookings b ON b.id = bd.booking_id
-          WHERE b.provider_id=$1
-            AND b.status IN ('pending','active')
-            AND bd.date = ANY($2::date[])`,
-        [providerId, requestedDates]
-      );
-      // не дублируем
-      const blockedSet = new Set(conflictedBlocked);
-      conflictedBooked = qBooked.rows.map((r) => r.date).filter((d) => !blockedSet.has(d));
+    // Проверка доступности дат ДО создания брони
+    if (isoDates.length) {
+      const conflicts = await checkDateConflicts(client, providerId, isoDates);
+      if (conflicts.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message: "Requested dates are not available",
+          conflicts, // [{date:'YYYY-MM-DD', reason:'booked'|'blocked'}]
+        });
+      }
     }
 
-    if ((conflictedBlocked.length + conflictedBooked.length) > 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "Dates conflict",
-        conflicts: {
-          blocked: conflictedBlocked.sort(),
-          booked: conflictedBooked.sort(),
-        },
-      });
-    }
-
-    // 5) Вставка самой брони
+    // Создаём бронь
     const ins = await client.query(
       `INSERT INTO bookings
         (request_id, service_id, client_id, provider_id, status, price, currency, details)
-       VALUES ($1,$2,$3,$4,'pending',$5,$6,$7)
+       VALUES ($1,$2,$3,$4,'pending', $5, $6, $7)
        RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
       [
         request_id || null,
@@ -149,19 +190,15 @@ exports.createBooking = async (req, res) => {
         finalDetails,
       ]
     );
-    const booking = ins.rows[0];
 
-    // 6) Если даты переданы — сразу "держим" их как занятые даже в pending
-    if (requestedDates.length) {
-      const values = requestedDates.map((_, i) => `($1, $${i + 2})`).join(",");
-      await client.query(
-        `INSERT INTO booking_dates (booking_id, date) VALUES ${values} ON CONFLICT DO NOTHING`,
-        [booking.id, ...requestedDates]
-      );
+    // Привязываем даты к брони (для календаря провайдера)
+    const bookingId = ins.rows[0].id;
+    if (isoDates.length) {
+      await writeBookingDates(client, bookingId, isoDates);
     }
 
     await client.query("COMMIT");
-    return res.status(201).json(booking);
+    return res.status(201).json(ins.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
@@ -171,21 +208,21 @@ exports.createBooking = async (req, res) => {
   }
 };
 
-/** ===================== LISTS ===================== */
-// GET /api/bookings/client
+// Клиент: список своих броней
 exports.listMyBookings = async (req, res) => {
   const userId = req.user?.id;
   const role = req.user?.role;
   if (!userId || role !== "client") {
     return res.status(403).json({ message: "Only client can view own bookings" });
   }
+
   try {
     const q = await pool.query(
       `SELECT b.*, s.title AS service_title, s.category
-         FROM bookings b
-         JOIN services s ON s.id = b.service_id
-        WHERE b.client_id=$1
-        ORDER BY b.created_at DESC`,
+       FROM bookings b
+       JOIN services s ON s.id = b.service_id
+       WHERE b.client_id=$1
+       ORDER BY b.created_at DESC`,
       [userId]
     );
     res.json(q.rows);
@@ -195,20 +232,21 @@ exports.listMyBookings = async (req, res) => {
   }
 };
 
-// GET /api/bookings/provider
+// Провайдер: список броней по его услугам
 exports.listProviderBookings = async (req, res) => {
   const providerId = req.user?.id;
   const role = req.user?.role;
   if (!providerId || role !== "provider") {
     return res.status(403).json({ message: "Only provider can view provider bookings" });
   }
+
   try {
     const q = await pool.query(
       `SELECT b.*, s.title AS service_title, s.category
-         FROM bookings b
-         JOIN services s ON s.id = b.service_id
-        WHERE b.provider_id=$1
-        ORDER BY b.created_at DESC`,
+       FROM bookings b
+       JOIN services s ON s.id = b.service_id
+       WHERE b.provider_id=$1
+       ORDER BY b.created_at DESC`,
       [providerId]
     );
     res.json(q.rows);
@@ -218,8 +256,7 @@ exports.listProviderBookings = async (req, res) => {
   }
 };
 
-/** ===================== ACTIONS ===================== */
-// POST /api/bookings/:id/confirm
+// Провайдер подтверждает бронь -> status: active
 exports.confirm = async (req, res) => {
   const providerId = req.user?.id;
   const role = req.user?.role;
@@ -231,9 +268,9 @@ exports.confirm = async (req, res) => {
   try {
     const upd = await pool.query(
       `UPDATE bookings
-          SET status='active'
-        WHERE id=$1 AND provider_id=$2 AND status='pending'
-        RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
+         SET status='active'
+       WHERE id=$1 AND provider_id=$2 AND status='pending'
+       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
       [id, providerId]
     );
     if (!upd.rowCount) {
@@ -246,7 +283,7 @@ exports.confirm = async (req, res) => {
   }
 };
 
-// POST /api/bookings/:id/reject
+// Провайдер отклоняет бронь -> status: rejected
 exports.reject = async (req, res) => {
   const providerId = req.user?.id;
   const role = req.user?.role;
@@ -256,102 +293,72 @@ exports.reject = async (req, res) => {
 
   const { id } = req.params;
   const { reason } = req.body || {};
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-
-    const upd = await client.query(
+    const upd = await pool.query(
       `UPDATE bookings
-          SET status='rejected',
-              details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
-                'rejected', jsonb_build_object('by','provider','reason',COALESCE($3,''),'ts',now())
-              )
-        WHERE id=$1 AND provider_id=$2 AND status IN ('pending')
-        RETURNING id`,
+         SET status='rejected',
+             details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
+               'rejected', jsonb_build_object('by','provider','reason',COALESCE($3,''),'ts',now())
+             )
+       WHERE id=$1 AND provider_id=$2 AND status IN ('pending')
+       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
       [id, providerId, reason || ""]
     );
     if (!upd.rowCount) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Booking not found or already processed" });
     }
-
-    // Освобождаем удержанные даты
-    await client.query(`DELETE FROM booking_dates WHERE booking_id=$1`, [id]);
-
-    await client.query("COMMIT");
-    res.json({ id, status: "rejected" });
+    res.json(upd.rows[0]);
   } catch (e) {
-    await client.query("ROLLBACK");
     console.error(e);
     res.status(500).json({ message: "reject error" });
-  } finally {
-    client.release();
   }
 };
 
-// POST /api/bookings/:id/cancel
-// Может вызвать клиент или провайдер; освобождаем даты
+// Клиент или провайдер отменяет -> status: cancelled
 exports.cancel = async (req, res) => {
   const userId = req.user?.id;
   const role = req.user?.role; // 'client' | 'provider'
-  if (!userId || !["client", "provider"].includes(role)) {
+  if (!userId || !['client','provider'].includes(role)) {
     return res.status(403).json({ message: "Unauthorized" });
   }
   const { id } = req.params;
   const { reason } = req.body || {};
-  const client = await pool.connect();
 
   try {
-    await client.query("BEGIN");
-
-    // Проверим владение
-    const q = await client.query(
-      `SELECT id, client_id, provider_id, status FROM bookings WHERE id=$1 FOR UPDATE`,
+    // Проверим владение бронью
+    const q = await pool.query(
+      `SELECT id, client_id, provider_id, status FROM bookings WHERE id=$1`,
       [id]
     );
-    if (!q.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Booking not found" });
-    }
+    if (!q.rowCount) return res.status(404).json({ message: "Booking not found" });
+
     const b = q.rows[0];
     const isOwner =
       (role === "client" && b.client_id === userId) ||
       (role === "provider" && b.provider_id === userId);
-    if (!isOwner) {
-      await client.query("ROLLBACK");
-      return res.status(403).json({ message: "Forbidden" });
-    }
+    if (!isOwner) return res.status(403).json({ message: "Forbidden" });
 
-    // Разрешим отменять из 'pending'/'active'
-    const upd = await client.query(
+    // Разрешим отменять из «живых» статусов
+    const upd = await pool.query(
       `UPDATE bookings
-          SET status='cancelled',
-              details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
-                'cancel', jsonb_build_object('by',$2,'reason',COALESCE($3,''),'ts',now())
-              )
-        WHERE id=$1 AND status IN ('pending','active')
-        RETURNING id`,
+         SET status='cancelled',
+             details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
+               'cancel', jsonb_build_object('by',$2,'reason',COALESCE($3,''),'ts',now())
+             )
+       WHERE id=$1 AND status IN ('pending','active')
+       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
       [id, role, reason || ""]
     );
     if (!upd.rowCount) {
-      await client.query("ROLLBACK");
       return res.status(409).json({ message: "Booking already finished" });
     }
-
-    // Освобождаем даты
-    await client.query(`DELETE FROM booking_dates WHERE booking_id=$1`, [id]);
-
-    await client.query("COMMIT");
-    res.json({ id, status: "cancelled" });
+    res.json(upd.rows[0]);
   } catch (e) {
-    await client.query("ROLLBACK");
     console.error(e);
     res.status(500).json({ message: "cancel error" });
-  } finally {
-    client.release();
   }
 };
 
-// Алиасы для обратной совместимости
+// Алиасы на случай, если где-то уже используются старые имена
 exports.getMyBookings = exports.listMyBookings;
 exports.getProviderBookings = exports.listProviderBookings;
