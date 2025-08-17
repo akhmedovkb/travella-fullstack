@@ -1,25 +1,22 @@
-import React, { useState } from "react";
+// frontend/src/components/BookingButton.jsx
+import { useState, useMemo } from "react";
 import BookServiceModal from "./BookServiceModal";
 
 /**
- * Универсальная кнопка «Забронировать».
- * Используем в карточках marketplace и избранного.
- *
- * props:
- *  - service: объект услуги
- *  - className?: string
- *  - children?: кастомный текст (по умолчанию "Забронировать")
+ * Универсальная кнопка «Забронировать» для карточек.
+ * Показывается ТОЛЬКО для guide/transport/transfer.
  */
 export default function BookingButton({ service, className = "", children }) {
   const [open, setOpen] = useState(false);
-  const isBookable = (() => {
-    const c = (service?.category || "").toLowerCase();
-    return (
-      c.includes("guide") ||
-      c.includes("transport") ||
-      c.includes("transfer")
-    );
-  })();
+
+  const category = useMemo(
+    () => String(service?.category || service?.service?.category || "").toLowerCase(),
+    [service]
+  );
+  const isBookable =
+    category.includes("guide") ||
+    category.includes("transport") ||
+    category.includes("transfer");
 
   if (!isBookable) return null;
 
@@ -36,11 +33,7 @@ export default function BookingButton({ service, className = "", children }) {
         {children || "Забронировать"}
       </button>
 
-      <BookServiceModal
-        open={open}
-        onClose={() => setOpen(false)}
-        service={service}
-      />
+      <BookServiceModal open={open} onClose={() => setOpen(false)} service={service} />
     </>
   );
 }
