@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
-//import BookingButton from "../components/BookingButton";
+import BookingButton from "../components/BookingButton";
 import { useNavigate } from "react-router-dom";
 
 
@@ -930,23 +930,19 @@ export default function Marketplace() {
           )}
 
           {/* Кнопка бронирования (авто-скрытие для нецелевых категорий) */}
-          <div className="mt-auto pt-3 space-y-2">
-            <button
-              onClick={() => handleBook(id, providerId, title)}
-              className="w-full bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-green-700"
-            >
-              {t("actions.book") || "Забронировать"}
-            </button>
-          
-            <button
-              onClick={() => openQuickRequest(id, providerId, title)}
-              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-            >
-              {t("actions.quick_request") || "Быстрый запрос"}
-            </button>
-          </div>
-
-        </div>
+          <div className="mt-auto pt-3">
+              {/* Быстрый запрос оставляем */}
+              <button
+                onClick={() => openQuickRequest(id, providerId, title)}
+                className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+              >
+                {t("actions.quick_request") || "Быстрый запрос"}
+              </button>
+            
+              {/* Кнопка брони — только для guide/transport */}
+              <BookingButton service={svc} />
+            </div>
+         </div>
       </div>
     );
   };
