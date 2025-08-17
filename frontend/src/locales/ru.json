@@ -466,5 +466,18 @@
     "favorite_add": "В избранное",
     "favorite_remove": "Убрать из избранного"
   },
-  "gross_price": "Цена для клиента (брутто)"
+  "gross_price": "Цена для клиента (брутто)",
+  
+  "expired": "Истекло",
+  "countdown": {
+    "until_end": "До окончания",
+    "expired": "Время истекло"
+  },
+  "favorites": {
+    "expired_badge": "Истекло",
+    "expired_title": "Эта услуга больше недоступна",
+    "remove_from": "Удалить из Избранного",
+    "no_image": "Нет изображения"
+  }
 }
+
