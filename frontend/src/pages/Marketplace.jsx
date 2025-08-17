@@ -1,3 +1,4 @@
+// frontend/src/pages/Marketplace.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -5,46 +6,15 @@ import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
 import BookingButton from "../components/BookingButton";
-import { useNavigate } from "react-router-dom";
 
-
-// Detect viewer role via tokens
+// роль зрителя по токенам
 const __hasClient = !!localStorage.getItem("clientToken");
 const __hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
 const __viewerRole = __hasClient ? "client" : (__hasProvider ? "provider" : null);
 
 /* ===================== utils ===================== */
 
-// фильтрация для вывода кнопки бронировать гида и транспорт
-
-function getRawCategory(svc) {
-  if (!svc) return "";
-  const details =
-    typeof svc.details === "string"
-      ? (() => { try { return JSON.parse(svc.details); } catch { return {}; } })()
-      : (svc.details || {});
-
-  const cand = [
-    svc.category, svc.type, svc.kind,
-    details.category, details.type, details.kind, details.serviceType, details.category_slug,
-  ].find(v => v != null && String(v).trim() !== "");
-
-  return (cand ? String(cand).toLowerCase() : "");
-}
-
-function isGuideOrTransport(svc) {
-  const raw = getRawCategory(svc);
-  if (!raw) return false;                    // строго: без категории — скрываем
-  const tokens = raw.split(/[^a-zа-я0-9]+/i);
-
-  const has = (arr) => tokens.some(t => arr.includes(t));
-  const isGuide = has(["guide", "гид"]);
-  const isTransport = has(["transport", "transfer", "трансфер", "driver", "водитель", "car", "авто", "машина"]);
-
-  return isGuide || isTransport;
-}
-
-// универсальный нормализатор ответа (ищет массив в любой обёртке)
+// нормализуем ответ (ищет массив где угодно)
 function normalizeList(res) {
   if (!res) return [];
   if (Array.isArray(res)) return res;
@@ -57,27 +27,15 @@ function normalizeList(res) {
     seen.add(node);
     queue.push(node);
   };
-
   push(res);
 
   const preferred = [
-    "items",
-    "data",
-    "list",
-    "rows",
-    "results",
-    "result",
-    "services",
-    "docs",
-    "records",
-    "hits",
-    "content",
-    "payload",
+    "items","data","list","rows","results","result",
+    "services","docs","records","hits","content","payload",
   ];
 
   while (queue.length) {
     const node = queue.shift();
-
     if (Array.isArray(node)) {
       if (node.some((v) => v && typeof v === "object")) return node;
       continue;
@@ -106,7 +64,6 @@ function toast(txt) {
 }
 
 /* ---------- срок действия / обратный счёт ---------- */
-
 function resolveExpireAt(service) {
   const s = service || {};
   const d = s.details || {};
@@ -145,7 +102,7 @@ function formatLeft(ms) {
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
-/* ---------- маленький компонент звёзд ---------- */
+/* ---------- звёзды ---------- */
 function Stars({ value = 0, size = 14 }) {
   const full = Math.round(Number(value) * 2) / 2;
   return (
@@ -171,7 +128,7 @@ function Stars({ value = 0, size = 14 }) {
   );
 }
 
-/* ---------- тултип через портал (над карточкой) ---------- */
+/* ---------- тултип через портал ---------- */
 function TooltipPortal({ visible, x, y, children }) {
   if (!visible) return null;
   return createPortal(
@@ -195,7 +152,6 @@ function renderTelegram(value) {
 }
 
 /* ======== provider fetch (cache + fallbacks) ======== */
-
 const providerCache = new Map();
 async function fetchProviderProfile(providerId) {
   if (!providerId) return null;
@@ -258,7 +214,7 @@ function extractServiceFields(item) {
       )
     : _firstNonEmpty(
         details?.netPrice, details?.price, details?.totalPrice, details?.priceNet,
-        svc.netPrice, svc.price, item?.price, details?.grossPrice // last fallback
+        svc.netPrice, svc.price, item?.price, details?.grossPrice
       );
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
@@ -279,20 +235,17 @@ function extractServiceFields(item) {
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
-  // inline объект, если есть
   const inlineProvider = _firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
     item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
     details?.provider
   ) || {};
 
-  // id провайдера (включая id из inline-объекта)
   const providerId = _firstNonEmpty(
     svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
     svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id
   );
 
-  // плоские поля — как запасной вариант
   const flatName = _firstNonEmpty(
     pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"])
   );
@@ -303,7 +256,6 @@ function extractServiceFields(item) {
     pick(bag, [
       "provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram",
       "telegram","tg","telegram_username","telegram_link",
-      // + варианты с social
       "provider_social","supplier_social","vendor_social","agency_social","company_social",
       "social","social_link"
     ])
@@ -317,33 +269,22 @@ function extractServiceFields(item) {
   };
 }
 
-/* ---------- резолвер картинки (с санитизацией) ---------- */
+/* ---------- резолвер картинки ---------- */
 function firstImageFrom(val) {
-  // строка
   if (typeof val === "string") {
     let s = val.trim();
     if (!s) return null;
-
-    // data:image/... — чистим пробелы/переносы и добавляем запятую после ;base64 при необходимости
     if (/^data:image\//i.test(s)) {
       s = s.replace(/\s+/g, "");
       if (/;base64(?!,)/i.test(s)) s = s.replace(/;base64/i, ";base64,");
       return s;
     }
-
-    // «голая» base64 (включая строки с пробелами/переносами)
     if (/^[A-Za-z0-9+/=\s]+$/.test(s) && s.replace(/\s+/g, "").length > 100) {
       return `data:image/jpeg;base64,${s.replace(/\s+/g, "")}`;
     }
-
-    // полноценный src (URL, blob, file, абсолютный /)
     if (/^(https?:|blob:|file:|\/)/i.test(s)) return s;
-
-    // относительный путь без начального / — тащим к корню сайта
     return `${window.location.origin}/${s.replace(/^\.?\//, "")}`;
   }
-
-  // массив
   if (Array.isArray(val)) {
     for (const v of val) {
       const hit = firstImageFrom(v);
@@ -351,17 +292,13 @@ function firstImageFrom(val) {
     }
     return null;
   }
-
-  // объект {url|src|href|link|path|data|base64}
   if (val && typeof val === "object") {
     return firstImageFrom(
       val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64
     );
   }
-
   return null;
 }
-
 
 /* ===================== страница ===================== */
 
@@ -418,7 +355,6 @@ export default function Marketplace() {
   const filters = useMemo(
     () => ({
       q: q?.trim() || undefined,
-      //location: q?.trim() || undefined,
       category: category || undefined,
     }),
     [q, category]
@@ -428,60 +364,24 @@ export default function Marketplace() {
     const s = it?.service || it || {};
     const d =
       (typeof s.details === "string"
-        ? (() => {
-            try {
-              return JSON.parse(s.details);
-            } catch {
-              return {};
-            }
-          })()
+        ? (() => { try { return JSON.parse(s.details); } catch { return {}; } })()
         : s.details) || {};
 
     const p =
       s.provider || s.provider_profile || it.provider || it.provider_profile || d.provider || {};
 
     const flatNames = [
-      it.provider_name,
-      it.supplier_name,
-      it.vendor_name,
-      it.agency_name,
-      it.company_name,
-      s.provider_name,
-      s.supplier_name,
-      d.provider_name,
-      d.supplier_name,
+      it.provider_name, it.supplier_name, it.vendor_name, it.agency_name, it.company_name,
+      s.provider_name, s.supplier_name, d.provider_name, d.supplier_name,
     ];
 
     return [
-      s.title,
-      s.name,
-      s.city,
-      s.country,
-      s.location,
-      s.direction,
-      s.direction_to,
-      s.directionTo,
-      d.direction,
-      d.directionCountry,
-      d.direction_from,
-      d.directionFrom,
-      d.direction_to,
-      d.directionTo,
-      d.location,
-      d.eventName,
-      d.hotel,
-      d.hotel_name,
-      d.airline,
-      p.name,
-      p.title,
-      p.display_name,
-      p.company_name,
-      p.brand,
-      ...flatNames,
-      p.telegram,
-      p.tg,
-      p.telegram_username,
-      p.telegram_link,
+      s.title, s.name, s.city, s.country, s.location,
+      s.direction, s.direction_to, s.directionTo,
+      d.direction, d.directionCountry, d.direction_from, d.directionFrom, d.direction_to, d.directionTo,
+      d.location, d.eventName, d.hotel, d.hotel_name, d.airline,
+      p.name, p.title, p.display_name, p.company_name, p.brand,
+      ...flatNames, p.telegram, p.tg, p.telegram_username, p.telegram_link,
     ]
       .filter(Boolean)
       .join(" ")
@@ -506,39 +406,26 @@ export default function Marketplace() {
         )
       );
 
-      // 1) основной вызов
-      let res;
-      try {
-        res = await apiPost("/api/marketplace/search", payload);
-      } catch (e) {
-        if (opts?.fallback !== false) {
-          const qs = new URLSearchParams(
-            Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
-          ).toString();
-          res = await apiGet(`/api/marketplace/search?${qs}`);
-        } else {
-          throw e;
-        }
-      }
+      // --- ВСЕГДА GET ---
+      const qs = new URLSearchParams(
+        Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
+      ).toString();
+      const res = await apiGet(`/api/marketplace/search${qs ? `?${qs}` : ""}`);
 
       let list = normalizeList(res);
 
-      // 2) пусто + есть текст — локальная фильтрация
+      // 2) пусто + есть текст — локальная фильтрация по всем
       if (!list.length && filters?.q) {
         const needle = String(filters.q).toLowerCase();
 
         let all = [];
         try {
-          const resAll = await apiPost("/api/marketplace/search", {});
+          const resAll = await apiGet(`/api/marketplace/search`);
           all = normalizeList(resAll);
         } catch {}
 
         let filtered = all.filter((it) => {
-          try {
-            return buildHaystack(it).includes(needle);
-          } catch {
-            return false;
-          }
+          try { return buildHaystack(it).includes(needle); } catch { return false; }
         });
 
         if (!filtered.length && all.length) {
@@ -565,11 +452,7 @@ export default function Marketplace() {
           });
 
           filtered = enriched.filter((it) => {
-            try {
-              return buildHaystack(it).includes(needle);
-            } catch {
-              return false;
-            }
+            try { return buildHaystack(it).includes(needle); } catch { return false; }
           });
         }
 
@@ -627,48 +510,22 @@ export default function Marketplace() {
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
     { value: "guide", label: t("marketplace.guide") || "Гид" },
     { value: "transport", label: t("marketplace.transport") || "Транспорт" },
-    {
-      value: "refused_tour",
-      label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур",
-    },
-    {
-      value: "refused_hotel",
-      label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель",
-    },
-    {
-      value: "refused_flight",
-      label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет",
-    },
-    {
-      value: "refused_event_ticket",
-      label:
-        t("marketplace.refused_event") ||
-        t("category.refused_event_ticket") ||
-        "Отказной билет",
-    },
+    { value: "refused_tour", label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур" },
+    { value: "refused_hotel", label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель" },
+    { value: "refused_flight", label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет" },
+    { value: "refused_event_ticket", label: t("marketplace.refused_event") || t("category.refused_event_ticket") || "Отказной билет" },
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
   const Card = ({ it, now }) => {
     const {
-      svc,
-      title,
-      hotel,
-      accommodation,
-      dates,
-      prettyPrice,
-      inlineProvider,
-      providerId,
-      flatName,
-      flatPhone,
-      flatTg,
-      status: statusRaw,
-      details,
+      svc, title, hotel, accommodation, dates, prettyPrice,
+      inlineProvider, providerId, flatName, flatPhone, flatTg, status: statusRaw, details,
     } = extractServiceFields(it);
 
     const id = svc.id ?? it.id;
 
-    // -------- изображение (универсальный резолвер) --------
+    // изображение
     const image = firstImageFrom([
       svc.images, details?.images, it?.images,
       svc.cover, svc.image, details?.cover, details?.image, it?.cover, it?.image,
@@ -676,7 +533,7 @@ export default function Marketplace() {
       svc.image_url, it?.image_url
     ]);
 
-    /* --------- Поставщик: inline + подгрузка по id --------- */
+    // provider: inline + подгрузка по id
     const [provider, setProvider] = useState(null);
     useEffect(() => {
       let alive = true;
@@ -685,43 +542,25 @@ export default function Marketplace() {
         const p = await fetchProviderProfile(providerId);
         if (alive) setProvider(p);
       })();
-      return () => {
-        alive = false;
-      };
+      return () => { alive = false; };
     }, [providerId]);
 
     const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
     const supplierName = _firstNonEmpty(
-      prov?.name,
-      prov?.title,
-      prov?.display_name,
-      prov?.company_name,
-      prov?.brand,
-      flatName
+      prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand, flatName
     );
     const supplierPhone = _firstNonEmpty(
-      prov?.phone,
-      prov?.phone_number,
-      prov?.phoneNumber,
-      prov?.tel,
-      prov?.mobile,
-      prov?.whatsapp,
-      prov?.whatsApp,
-      prov?.phones?.[0],
-      prov?.contacts?.phone,
-      prov?.contact_phone,
-      flatPhone
+      prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
+      prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone, flatPhone
     );
-    
+
     const supplierTgRaw = _firstNonEmpty(
       prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
       prov?.contacts?.telegram, prov?.socials?.telegram,
-      // + берём из профиля провайдера поле social
       prov?.social, prov?.social_link,
       flatTg
     );
-
     const supplierTg = renderTelegram(supplierTgRaw);
 
     const rating = Number(svc.rating ?? it.rating ?? 0);
@@ -759,28 +598,15 @@ export default function Marketplace() {
       }
     };
     const closeReviews = () => setRevOpen(false);
-    
-/* --------- кнопка бронировать из маркетплэйса --------- */
-    
-    const navigate = useNavigate();
-
-    function handleBook(serviceId, providerId, title) {
-      if (!localStorage.getItem("clientToken")) {
-        toast(t("auth.login_required") || "Войдите как клиент");
-        return;
-      }
-      navigate(`/book/${serviceId}`);
-    }
-
 
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title || t("marketplace.no_image")} 
+            <img src={image} alt={title || t("marketplace.no_image")}
               className="w-full h-full object-cover"
-              onError={(e) => { e.currentTarget.src = ""; }} // если сломается — спрячется
-              />
+              onError={(e) => { e.currentTarget.src = ""; }}
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
@@ -832,64 +658,32 @@ export default function Marketplace() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="absolute inset-x-0 bottom-0 p-3">
-              <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-                <div className="font-semibold line-clamp-2">{title}</div>
-                {hotel && (
-                  <div>
-                    <span className="opacity-80">Отель: </span>
-                    <span className="font-medium">{hotel}</span>
-                  </div>
-                )}
-                {accommodation && (
-                  <div>
-                    <span className="opacity-80">Размещение: </span>
-                    <span className="font-medium">{accommodation}</span>
-                  </div>
-                )}
-                {dates && (
-                  <div>
-                    <span className="opacity-80">{t("common.date") || "Дата"}: </span>
-                    <span className="font-medium">{dates}</span>
-                  </div>
-                )}
-                {prettyPrice && (
-                  <div>
-                    <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
-                    <span className="font-semibold">{prettyPrice}</span>
-                  </div>
+          {/* подсказка отзывов */}
+          <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
+            <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
+              <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
+              <div className="flex items-center gap-2">
+                <Stars value={revData.avg} />
+                <span className="opacity-80">({revData.count || 0})</span>
+              </div>
+              <div className="mt-1">
+                {!revData.items?.length ? (
+                  <span className="opacity-80">—</span>
+                ) : (
+                  <ul className="list-disc ml-4 space-y-1">
+                    {revData.items.slice(0, 2).map((r) => (
+                      <li key={r.id} className="line-clamp-2 opacity-90">
+                        {r.text || ""}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </div>
-          </div>
+          </TooltipPortal>
         </div>
 
-        {/* тултип отзывов — через портал */}
-        <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
-          <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
-            <div className="flex items-center gap-2">
-              <Stars value={revData.avg} />
-              <span className="opacity-80">({revData.count || 0})</span>
-            </div>
-            <div className="mt-1">
-              {!revData.items?.length ? (
-                <span className="opacity-80">—</span>
-              ) : (
-                <ul className="list-disc ml-4 space-y-1">
-                  {revData.items.slice(0, 2).map((r) => (
-                    <li key={r.id} className="line-clamp-2 opacity-90">
-                      {r.text || ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </TooltipPortal>
-
-        {/* ТЕЛО КАРТОЧКИ */}
+        {/* Тело карточки */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
           {prettyPrice && (
@@ -929,20 +723,22 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Кнопка бронирования (авто-скрытие для нецелевых категорий) */}
-          <div className="mt-auto pt-3">
-              {/* Быстрый запрос оставляем */}
-              <button
-                onClick={() => openQuickRequest(id, providerId, title)}
-                className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-              >
-                {t("actions.quick_request") || "Быстрый запрос"}
-              </button>
-            
-              {/* Кнопка брони — только для guide/transport */}
-              <BookingButton service={svc} />
-            </div>
-         </div>
+          {/* Кнопка бронирования (скрыта для нецелевых категорий внутри компонента) */}
+          <div className="mt-3">
+            <BookingButton service={svc} className="w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:opacity-90">
+              {t("actions.book") || "Забронировать"}
+            </BookingButton>
+          </div>
+
+          <div className="mt-2 pt-1">
+            <button
+              onClick={() => openQuickRequest(id, providerId, title)}
+              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.quick_request") || "Быстрый запрос"}
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
