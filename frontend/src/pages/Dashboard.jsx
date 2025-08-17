@@ -1768,6 +1768,7 @@ direction: "",
 
                   <input
                     type="date"
+                    min={DATE_MIN}
                     value={details.startDate || ""}
                     onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                     placeholder={t("event_date")}
