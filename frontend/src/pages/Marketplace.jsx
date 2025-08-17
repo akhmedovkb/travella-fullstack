@@ -919,7 +919,7 @@ export default function Marketplace() {
           className="w-full md:w-64 border rounded-lg px-3 py-2"
         >
           {categoryOptions.map((opt) => (
-            <option key={opt.value || "root")} value={opt.value}>
+            <option key={opt.value || "root"} value={opt.value}>
               {opt.label}
             </option>
           ))}
