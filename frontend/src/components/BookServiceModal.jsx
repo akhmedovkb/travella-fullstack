@@ -1,174 +1,149 @@
-import React, { useMemo, useState } from "react";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
-import axios from "axios";
-import { toast } from "react-toastify";
+// frontend/src/components/BookServiceModal.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { apiGet, apiPost } from "../api";
 
-/**
- * Модалка бронирования услуги (гид/транспорт).
- * props:
- *  - open: boolean
- *  - onClose: () => void
- *  - service: { id, title, category, provider_id? } | null
- *
- * details:
- *  - если выбран диапазон -> { startDate, endDate }
- *  - если выбран один день -> { dates: ["YYYY-MM-DD"] }
- */
+function normalizeService(svcLike) {
+  if (!svcLike) return null;
+  if (svcLike.service && (svcLike.service.id || svcLike.service.title)) return svcLike.service;
+  return svcLike;
+}
+
 export default function BookServiceModal({ open, onClose, service }) {
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const token = localStorage.getItem("token");
-
-  const [mode, setMode] = useState("range"); // 'range' | 'single'
-  const [selected, setSelected] = useState(undefined); // DayPicker value
-  const [note, setNote] = useState("");
+  const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  const title = service?.title || "";
-  const isGuideOrTransport = useMemo(() => {
-    const c = (service?.category || "").toLowerCase();
-    return (
-      c.includes("guide") ||
-      c.includes("transport") ||
-      c.includes("transfer")
-    );
-  }, [service]);
+  const svc = useMemo(() => normalizeService(service), [service]);
+  const serviceId = svc?.id ?? service?.id;
 
-  if (!open) return null;
-
-  const toIso = (d) => {
-    if (!d) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  const buildDetails = () => {
-    if (mode === "single") {
-      const day = selected;
-      const iso = day instanceof Date ? toIso(day) : null;
-      const base = iso ? { dates: [iso] } : {};
-      return note ? { ...base, note } : base;
-    }
-    // range
-    const r = selected || {};
-    const from = r?.from instanceof Date ? toIso(r.from) : null;
-    const to = r?.to instanceof Date ? toIso(r.to) : from;
-    const base =
-      from && to ? { startDate: from, endDate: to } : from ? { dates: [from] } : {};
-    return note ? { ...base, note } : base;
-  };
-
-  const canSubmit = useMemo(() => {
-    if (mode === "single") return selected instanceof Date;
-    if (!selected) return false;
-    return selected?.from instanceof Date;
-  }, [mode, selected]);
-
-  const onSubmit = async () => {
-    if (!service?.id) return;
-    if (!canSubmit) {
-      toast.warn("Выберите дату(ы)");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = {
-        service_id: service.id,
-        details: buildDetails(),
-      };
-      const res = await axios.post(`${API_BASE}/api/bookings`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success("Заявка на бронирование отправлена");
-      onClose?.();
-      setSelected(undefined);
+  useEffect(() => {
+    if (!open) {
+      // сбрасываем форму при закрытии
+      setErr("");
       setNote("");
-      return res.data;
-    } catch (e) {
-      const status = e?.response?.status;
-      if (status === 409 && Array.isArray(e?.response?.data?.conflicts)) {
-        const conflicts = e.response.data.conflicts
-          .map((x) => `${x.date} • ${x.reason === "booked" ? "занято" : "заблокировано"}`)
-          .join("\n");
-        toast.error(`Выбранные даты недоступны:\n${conflicts}`);
-      } else {
-        toast.error(e?.response?.data?.message || "Ошибка бронирования");
+      setDateFrom("");
+      setDateTo("");
+    }
+  }, [open]);
+
+  const title = useMemo(() => {
+    const d =
+      typeof svc?.details === "string"
+        ? (() => {
+            try { return JSON.parse(svc.details); } catch { return {}; }
+          })()
+        : (svc?.details || {});
+    return svc?.title || svc?.name || d?.title || d?.name || t("booking.new") || "Бронирование";
+  }, [svc, t]);
+
+  async function submit() {
+    try {
+      setErr("");
+      setSubmitting(true);
+
+      const clientToken = localStorage.getItem("clientToken");
+      if (!clientToken) {
+        alert(t("auth.login_required") || "Чтобы бронировать, войдите как клиент");
+        // перенаправление на клиентский логин, если есть
+        window.location.href = "/client/login";
+        return;
       }
+
+      const payload = {
+        service_id: Number(serviceId),
+        details: {
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          note: note || undefined,
+        },
+      };
+
+      await apiPost("/api/bookings", payload, "client");
+      alert(t("booking.created") || "Бронирование создано");
+      onClose?.();
+      // если есть страница «мои брони» клиента — откроем её
+      try { window.location.href = "/client/dashboard"; } catch {}
+    } catch (e) {
+      console.error(e);
+      setErr(e?.message || t("booking.create_error") || "Не удалось создать бронирование");
     } finally {
       setSubmitting(false);
     }
-  };
+  }
+
+  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-5">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div>
-            <h3 className="text-xl font-semibold">Бронирование</h3>
-            <div className="text-sm text-gray-600">{title}</div>
-          </div>
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/40">
+      <div className="w-[92%] max-w-lg bg-white rounded-xl shadow-xl border p-5">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-lg font-bold">{title}</h3>
           <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1 bg-gray-100 hover:bg-gray-200 text-sm"
+            onClick={() => onClose?.()}
+            className="text-gray-500 hover:text-gray-800"
+            aria-label="Close"
           >
             ✕
           </button>
         </div>
 
-        {/* Режим выбора дат */}
-        <div className="flex items-center gap-3 mb-3">
-          <label className="inline-flex items-center gap-2 text-sm">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              {t("booking.date_from") || "Дата начала (необязательно)"}
+            </label>
             <input
-              type="radio"
-              name="book_mode"
-              checked={mode === "range"}
-              onChange={() => setMode("range")}
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2"
             />
-            Диапазон дат
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm">
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              {t("booking.date_to") || "Дата конца (необязательно)"}
+            </label>
             <input
-              type="radio"
-              name="book_mode"
-              checked={mode === "single"}
-              onChange={() => setMode("single")}
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2"
             />
-            Один день
-          </label>
+          </div>
         </div>
 
-        {/* Календарь */}
-        <DayPicker
-          mode={mode === "single" ? "single" : "range"}
-          selected={selected}
-          onSelect={setSelected}
-          disabled={{ before: new Date() }}
-          className="border rounded-md p-3 mb-3"
-        />
+        <div className="mt-3">
+          <label className="block text-sm text-gray-600 mb-1">
+            {t("booking.note") || "Комментарий (необязательно)"}
+          </label>
+          <textarea
+            rows={4}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2"
+            placeholder={t("booking.note_ph") || "Пожелания, детали встречи и т.п."}
+          />
+        </div>
 
-        {/* Примечание */}
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={isGuideOrTransport ? "Пожелания по маршруту/часам" : "Комментарий"}
-          className="w-full border rounded-md px-3 py-2 mb-3"
-        />
+        {!!err && <div className="mt-3 text-red-600 text-sm">{err}</div>}
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="mt-5 flex gap-3">
           <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200"
+            disabled={submitting}
+            onClick={submit}
+            className="px-5 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-60"
           >
-            Отмена
+            {t("actions.book") || "Забронировать"}
           </button>
           <button
-            onClick={onSubmit}
-            disabled={!canSubmit || submitting}
-            className="px-4 py-2 rounded-md bg-orange-500 text-white font-semibold disabled:opacity-60"
+            onClick={() => onClose?.()}
+            className="px-5 py-2 rounded-lg border font-semibold"
           >
-            {submitting ? "Отправка..." : "Забронировать"}
+            {t("actions.cancel") || "Отмена"}
           </button>
         </div>
       </div>
