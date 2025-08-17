@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
@@ -15,6 +16,9 @@ import ClientDashboard from "./pages/ClientDashboard";
 // Провайдерские новые страницы
 import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
+
+// Новая страница создания брони
+import BookingCreate from "./pages/BookingCreate";
 
 import Header from "./components/Header";
 
@@ -59,7 +63,18 @@ export default function App() {
             }
           />
 
+          {/* Маркетплейс */}
           <Route path="/marketplace" element={<Marketplace />} />
+
+          {/* Создание бронирования (только клиент) */}
+          <Route
+            path="/book/:serviceId"
+            element={
+              <ClientPrivateRoute>
+                <BookingCreate />
+              </ClientPrivateRoute>
+            }
+          />
 
           {/* Клиент */}
           <Route path="/client/register" element={<ClientRegister />} />
