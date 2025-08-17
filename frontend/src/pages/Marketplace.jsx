@@ -5,6 +5,8 @@ import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
 import BookingButton from "../components/BookingButton"; // ⟵ добавлено
+import { useNavigate } from "react-router-dom";
+
 
 // Detect viewer role via tokens
 const __hasClient = !!localStorage.getItem("clientToken");
@@ -728,6 +730,19 @@ export default function Marketplace() {
       }
     };
     const closeReviews = () => setRevOpen(false);
+    
+/* --------- кнопка бронировать из маркетплэйса --------- */
+    
+    const navigate = useNavigate();
+
+    function handleBook(serviceId, providerId, title) {
+      if (!localStorage.getItem("clientToken")) {
+        toast(t("auth.login_required") || "Войдите как клиент");
+        return;
+      }
+      navigate(`/book/${serviceId}`);
+    }
+
 
     return (
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
@@ -886,11 +901,14 @@ export default function Marketplace() {
           )}
 
           {/* Кнопка бронирования (авто-скрытие для нецелевых категорий) */}
-          <div className="mt-3">
-            <BookingButton service={svc} className="w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:opacity-90" />
-          </div>
-
-          <div className="mt-2 pt-1">
+          <div className="mt-auto pt-3 space-y-2">
+            <button
+              onClick={() => handleBook(id, providerId, title)}
+              className="w-full bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-green-700"
+            >
+              {t("actions.book") || "Забронировать"}
+            </button>
+          
             <button
               onClick={() => openQuickRequest(id, providerId, title)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
@@ -898,6 +916,7 @@ export default function Marketplace() {
               {t("actions.quick_request") || "Быстрый запрос"}
             </button>
           </div>
+
         </div>
       </div>
     );
