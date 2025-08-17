@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
+import BookingButton from "../components/BookingButton"; // ⟵ добавлено
 
 // Detect viewer role via tokens
 const __hasClient = !!localStorage.getItem("clientToken");
@@ -268,21 +269,20 @@ function extractServiceFields(item) {
     pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"])
   );
   const flatTg = _firstNonEmpty(
-  pick(bag, [
-    "provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram",
-    "telegram","tg","telegram_username","telegram_link",
-    // + варианты с social
-    "provider_social","supplier_social","vendor_social","agency_social","company_social",
-    "social","social_link"
-  ])
-);
-
+    pick(bag, [
+      "provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram",
+      "telegram","tg","telegram_username","telegram_link",
+      // + варианты с social
+      "provider_social","supplier_social","vendor_social","agency_social","company_social",
+      "social","social_link"
+    ])
+  );
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
   return {
     svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice,
-    inlineProvider, providerId, flatName, flatPhone, flatTg, status, details
+    inlineProvider, providerId, flatName, flatPhone, flatTg, status
   };
 }
 
@@ -309,7 +309,6 @@ function firstImageFrom(val) {
     if (/^(https?:|blob:|file:|\/)/i.test(s)) return s;
 
     // относительный путь без начального / — тащим к корню сайта
-    // (чтобы не получилось /marketplace/uploads/..., если приложение на роуте)
     return `${window.location.origin}/${s.replace(/^\.?\//, "")}`;
   }
 
@@ -646,7 +645,6 @@ export default function Marketplace() {
       svc.image_url, it?.image_url
     ]);
 
-
     /* --------- Поставщик: inline + подгрузка по id --------- */
     const [provider, setProvider] = useState(null);
     useEffect(() => {
@@ -692,7 +690,6 @@ export default function Marketplace() {
       prov?.social, prov?.social_link,
       flatTg
     );
-
 
     const supplierTg = renderTelegram(supplierTgRaw);
 
@@ -888,7 +885,12 @@ export default function Marketplace() {
             </div>
           )}
 
-          <div className="mt-auto pt-3">
+          {/* Кнопка бронирования (авто-скрытие для нецелевых категорий) */}
+          <div className="mt-3">
+            <BookingButton service={svc} className="w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:opacity-90" />
+          </div>
+
+          <div className="mt-2 pt-1">
             <button
               onClick={() => openQuickRequest(id, providerId, title)}
               className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
@@ -917,7 +919,7 @@ export default function Marketplace() {
           className="w-full md:w-64 border rounded-lg px-3 py-2"
         >
           {categoryOptions.map((opt) => (
-            <option key={opt.value || "root"} value={opt.value}>
+            <option key={opt.value || "root")} value={opt.value}>
               {opt.label}
             </option>
           ))}
