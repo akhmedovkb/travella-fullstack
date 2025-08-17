@@ -1,4 +1,3 @@
-// /app/controllers/marketplaceController.js
 // Универсальный контроллер: поддерживает либо knex, либо node-postgres pool (db.query)
 
 const dbMod = require("../db");
@@ -7,22 +6,16 @@ const dbMod = require("../db");
 let knex = null;
 let pg = null;
 if (typeof dbMod === "function") {
-  // export = knex()
-  knex = dbMod;
+  knex = dbMod; // export = knex()
 } else if (dbMod && typeof dbMod.knex === "function") {
-  // module.exports = { knex }
-  knex = dbMod.knex;
+  knex = dbMod.knex; // module.exports = { knex }
 } else if (dbMod && typeof dbMod.default === "function") {
-  // ESM default
-  knex = dbMod.default;
+  knex = dbMod.default; // ESM default
 } else if (dbMod && typeof dbMod.query === "function") {
-  // node-postgres Pool
-  pg = dbMod;
+  pg = dbMod; // node-postgres Pool
 } else if (dbMod && dbMod.pool && typeof dbMod.pool.query === "function") {
-  // { pool }
-  pg = dbMod.pool;
+  pg = dbMod.pool; // { pool }
 }
-// Никаких падений здесь — просто выбросим понятную ошибку при первом запросе, если и knex, и pg не найдены.
 
 const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
 
@@ -48,8 +41,7 @@ function expandCategory(cat) {
   if (!cat) return null;
   const key = String(cat).trim();
   if (CATEGORY_ALIAS[key]) return CATEGORY_ALIAS[key];
-  // уже конечная категория
-  return [key];
+  return [key]; // уже конечная категория
 }
 
 function toNum(v) {
@@ -60,26 +52,30 @@ function toNum(v) {
 module.exports.search = async (req, res, next) => {
   try {
     if (!knex && !pg) {
-      throw new Error("DB driver is not available: expected knex function or pg Pool with .query()");
+      throw new Error("DB driver is not available: expected knex() or pg Pool with .query()");
     }
 
-    const {
-      q,
-      category,
-      location,
-      price_min,
-      price_max,
-      sort,
-      only_active = true,
-      limit = 60,
-      offset = 0,
-    } = req.body || {};
+    // не кэшируем выдачу, чтобы не ловить 304
+    res.set("Cache-Control", "no-store");
+
+    // поддерживаем и GET, и POST
+    const src = req.method === "GET" ? (req.query || {}) : (req.body || {});
+
+    const q           = src.q ?? undefined;
+    const category    = src.category ?? undefined;
+    const location    = src.location ?? undefined;
+    const price_min   = src.price_min ?? undefined;
+    const price_max   = src.price_max ?? undefined;
+    const sort        = src.sort ?? undefined;
+
+    // only_active может прийти строкой "false"
+    const onlyActive = String(src.only_active ?? "true") !== "false";
+    const lim        = Math.min(200, Math.max(1, Number(src.limit)  || 60));
+    const off        = Math.max(0, Number(src.offset) || 0);
 
     const cats = expandCategory(category);
-    const lim = Math.min(200, Math.max(1, Number(limit) || 60));
-    const off = Math.max(0, Number(offset) || 0);
 
-    // ---------- ВЕТКА KNEX ----------
+    /* ---------- ВЕТКА KNEX ---------- */
     if (knex) {
       const rowsQ = knex("services")
         .select([
@@ -96,22 +92,17 @@ module.exports.search = async (req, res, next) => {
           "details",
           "expiration_at",
         ])
-        // только активные + неистёкшие
         .modify((qb) => {
-          if (only_active) {
+          if (onlyActive) {
             qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
               .andWhere((q2) =>
                 q2.whereNull("expiration_at").orWhereRaw("expiration_at > now()")
               );
           }
         })
-        // категория / алиасы
         .modify((qb) => {
-          if (cats && cats.length) {
-            qb.whereIn("category", cats);
-          }
+          if (cats && cats.length) qb.whereIn("category", cats);
         })
-        // текстовый поиск
         .modify((qb) => {
           if (q && String(q).trim()) {
             const like = `%${String(q).trim()}%`;
@@ -122,7 +113,6 @@ module.exports.search = async (req, res, next) => {
             });
           }
         })
-        // фильтр по локации (город прибытия/место)
         .modify((qb) => {
           if (location && String(location).trim()) {
             const like = `%${String(location).trim()}%`;
@@ -134,27 +124,18 @@ module.exports.search = async (req, res, next) => {
             });
           }
         })
-        // диапазон цены (нетто/price)
         .modify((qb) => {
           const pmin = toNum(price_min);
           const pmax = toNum(price_max);
           if (pmin != null) qb.andWhereRaw(`${PRICE_SQL} >= ?`, [pmin]);
           if (pmax != null) qb.andWhereRaw(`${PRICE_SQL} <= ?`, [pmax]);
         })
-        // сортировка
         .modify((qb) => {
           switch (sort) {
-            case "newest":
-              qb.orderBy("created_at", "desc");
-              break;
-            case "price_asc":
-              qb.orderByRaw(`${PRICE_SQL} asc nulls last`);
-              break;
-            case "price_desc":
-              qb.orderByRaw(`${PRICE_SQL} desc nulls last`);
-              break;
-            default:
-              qb.orderBy("created_at", "desc");
+            case "newest":     qb.orderBy("created_at", "desc"); break;
+            case "price_asc":  qb.orderByRaw(`${PRICE_SQL} asc nulls last`); break;
+            case "price_desc": qb.orderByRaw(`${PRICE_SQL} desc nulls last`); break;
+            default:           qb.orderBy("created_at", "desc");
           }
         })
         .limit(lim)
@@ -164,19 +145,17 @@ module.exports.search = async (req, res, next) => {
       return res.json({ items, limit: lim, offset: off });
     }
 
-    // ---------- ВЕТКА PG (node-postgres) ----------
-    // Собираем where вручную
+    /* ---------- ВЕТКА PG (node-postgres) ---------- */
     const where = [];
     const params = [];
     let p = 1;
 
-    if (only_active) {
+    if (onlyActive) {
       where.push(`COALESCE((details->>'isActive')::boolean, true) = true`);
       where.push(`(expiration_at IS NULL OR expiration_at > now())`);
     }
 
     if (cats && cats.length) {
-      // category IN (...)
       const ph = cats.map(() => `$${p++}`).join(",");
       params.push(...cats);
       where.push(`category IN (${ph})`);
@@ -203,26 +182,14 @@ module.exports.search = async (req, res, next) => {
 
     const pmin = toNum(price_min);
     const pmax = toNum(price_max);
-    if (pmin != null) {
-      params.push(pmin);
-      where.push(`${PRICE_SQL} >= $${p++}`);
-    }
-    if (pmax != null) {
-      params.push(pmax);
-      where.push(`${PRICE_SQL} <= $${p++}`);
-    }
+    if (pmin != null) { params.push(pmin); where.push(`${PRICE_SQL} >= $${p++}`); }
+    if (pmax != null) { params.push(pmax); where.push(`${PRICE_SQL} <= $${p++}`); }
 
     let orderBy = "created_at DESC";
     switch (sort) {
-      case "newest":
-        orderBy = "created_at DESC";
-        break;
-      case "price_asc":
-        orderBy = `${PRICE_SQL} ASC NULLS LAST`;
-        break;
-      case "price_desc":
-        orderBy = `${PRICE_SQL} DESC NULLS LAST`;
-        break;
+      case "newest":     orderBy = "created_at DESC"; break;
+      case "price_asc":  orderBy = `${PRICE_SQL} ASC NULLS LAST`; break;
+      case "price_desc": orderBy = `${PRICE_SQL} DESC NULLS LAST`; break;
     }
 
     params.push(lim, off);
