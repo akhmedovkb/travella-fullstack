@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
-//import BookingButton from "../components/BookingButton"; // ⟵ добавлено
+import BookingButton from "../components/BookingButton";
 import { useNavigate } from "react-router-dom";
 
 
@@ -43,24 +43,6 @@ function isGuideOrTransport(svc) {
 
   return isGuide || isTransport;
 }
-
-// компонент кнопки брони
-function BookingButton({ service, className = "" }) {
-  const nav = useNavigate();
-  const { t } = useTranslation();
-  if (!service?.id) return null;
-  if (!isGuideOrTransport(service)) return null;  // показываем только гид/транспорт
-
-  return (
-    <button
-      onClick={() => nav(`/book/${service.id}`)}
-      className={`w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:opacity-90 ${className}`}
-    >
-      {t("actions.book") || "Забронировать"}
-    </button>
-  );
-}
-
 
 // универсальный нормализатор ответа (ищет массив в любой обёртке)
 function normalizeList(res) {
