@@ -185,6 +185,23 @@ function ImagesEditor({
   );
 }
 
+// --- min для date / datetime-local (локальное время, без UTC-смещения)
+const pad = (n) => String(n).padStart(2, "0");
+const todayLocalDate = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+};
+const nowLocalDateTime = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// Удобные константы, пересчёт на каждый рендер ок:
+const DATE_MIN = todayLocalDate();
+const DATETIME_MIN = nowLocalDateTime();
+
+
+
 /** ================= Main ================= */
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -1278,6 +1295,7 @@ direction: "",
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                       <input
                         type="date"
+                        min={DATE_MIN}
                         value={details.startFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1287,6 +1305,7 @@ direction: "",
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                       <input
                         type="date"
+                        min={details.startFlightDate || DATE_MIN}   // конец не раньше начала
                         value={details.endFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1474,6 +1493,7 @@ direction: "",
                       <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                       <input
                         type="date"
+                        min={DATE_MIN}
                         value={details.startDate}
                         onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1483,6 +1503,7 @@ direction: "",
                       <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                       <input
                         type="date"
+                        min={details.startDate || DATE_MIN}
                         value={details.endDate}
                         onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -2055,6 +2076,7 @@ direction: "",
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                           <input
                             type="date"
+                            min={DATE_MIN}
                             value={details.startFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2064,6 +2086,7 @@ direction: "",
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                           <input
                             type="date"
+                            min={details.startFlightDate || DATE_MIN}   // конец не раньше начала
                             value={details.endFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2249,6 +2272,7 @@ direction: "",
                           <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                           <input
                             type="date"
+                            min={DATE_MIN}
                             value={details.startDate}
                             onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2258,6 +2282,7 @@ direction: "",
                           <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                           <input
                             type="date"
+                            min={details.startDate || DATE_MIN}
                             value={details.endDate}
                             onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
