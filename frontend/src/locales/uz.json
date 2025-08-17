@@ -464,5 +464,18 @@
     "favorite_add": "Sevimlilarga qo‘shish",
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
-  "gross_price": "Mijoz uchun narx (brutto)"
+  "gross_price": "Mijoz uchun narx (brutto)",
+  
+  "expired": "Muddati tugagan",
+  "countdown": {
+    "until_end": "Tugashigacha",
+    "expired": "Muddati tugadi"
+  },
+  "favorites": {
+    "expired_badge": "Muddati tugagan",
+    "expired_title": "Bu taklif endi mavjud emas",
+    "remove_from": "Sevimlilardan olib tashlash",
+    "no_image": "Rasm yo'q"
+  }
 }
+
