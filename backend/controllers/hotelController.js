@@ -8,12 +8,17 @@ const TTL_MS = 60 * 60 * 1000; // 1 час
 function memoKey(p) {
   return JSON.stringify(p);
 }
+// --- кэш с провайдером ---
 function getCached(key) {
   const hit = cache.get(key);
   if (!hit) return null;
   if (Date.now() > hit.expireAt) { cache.delete(key); return null; }
-  return hit.data;
+  return hit; // { data, provider, expireAt }
 }
+function setCached(key, data, provider) {
+  cache.set(key, { data, provider, expireAt: Date.now() + TTL_MS });
+}
+
 function setCached(key, data) {
   cache.set(key, { data, expireAt: Date.now() + TTL_MS });
 }
@@ -85,36 +90,49 @@ exports.searchHotels = async (req, res) => {
     const query = String(req.query.query || req.query.q || "").trim();
     if (!query || query.length < 2) return res.json([]);
 
-    const country = (req.query.country || "").trim(); // ISO2, например AE
+    const country = (req.query.country || "").trim();
     const lang = (req.query.lang || "").trim();
 
-    const key = memoKey({ query, country, lang, provider: process.env.HOTEL_AUTOCOMPLETE_PROVIDER || "google" });
+    // Можно временно форсировать провайдера: ?provider=google|geonames
+    const providerPref = (req.query.provider ||
+      process.env.HOTEL_AUTOCOMPLETE_PROVIDER ||
+      "google").toLowerCase();
+
+    const key = memoKey({ query, country, lang, provider: providerPref });
     const cached = getCached(key);
-    if (cached) return res.json(cached);
+    if (cached) {
+      res.set("X-Hotel-Cache", "HIT");
+      if (cached.provider) res.set("X-Hotel-Provider", cached.provider);
+      return res.json(cached.data);
+    }
 
     let result = [];
-    const provider = (process.env.HOTEL_AUTOCOMPLETE_PROVIDER || "google").toLowerCase();
+    let providerUsed = "unknown";
 
-    if (provider === "google") {
+    if (providerPref === "google") {
       try {
         result = await searchGooglePlaces({ query, country, lang });
+        if (result.length) providerUsed = "google";
       } catch (e) {
-        console.warn("Hotels: Google failed → fallback to GeoNames. Reason:", e.response?.data || e.message);
+        console.warn("Hotels: Google failed → fallback to GeoNames.", e.response?.data || e.message);
       }
     }
 
     if (!result.length) {
       try {
         result = await searchGeoNames({ query, country, lang });
+        if (result.length) providerUsed = "geonames";
       } catch (e) {
         console.warn("Hotels: GeoNames failed:", e.response?.data || e.message);
       }
     }
 
-    setCached(key, result);
+    setCached(key, result, providerUsed);
+    res.set("X-Hotel-Cache", "MISS");
+    res.set("X-Hotel-Provider", providerUsed);
     return res.json(result);
   } catch (e) {
     console.error("Hotels search error:", e.response?.data || e.message);
-    return res.json([]); // мягко
+    return res.json([]);
   }
 };
