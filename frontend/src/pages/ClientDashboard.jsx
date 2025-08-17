@@ -1221,6 +1221,7 @@ function resolveExpireAt(service) {
     d.expiration, d.expiration_at, d.expirationAt,
     d.expiration_ts, d.expirationTs,
   ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+
   if (!cand) {
     const ttl = d.ttl_hours || d.ttlHours || s.ttl_hours || s.ttlHours;
     if (ttl) {
@@ -1233,18 +1234,23 @@ function resolveExpireAt(service) {
     }
     return null;
   }
-  
-  let ts: number | null = null;
-    if (typeof cand === "number") {
-      ts = cand > 1e12 ? cand : cand * 1000;
-    } else {
-      const n = Number(cand);
-      if (Number.isFinite(n)) ts = n > 1e12 ? n : n * 1000;
-      else ts = Date.parse(String(cand));
-    }
-  return Number.isFinite(ts!) ? ts! : null;
 
+  let ts = null;
+  if (typeof cand === "number") {
+    // если меньше 1e12 — это секунды, домножаем до мс
+    ts = cand > 1e12 ? cand : cand * 1000;
+  } else {
+    const n = Number(cand);
+    if (Number.isFinite(n)) {
+      ts = n > 1e12 ? n : n * 1000;
+    } else {
+      const parsed = Date.parse(String(cand));
+      ts = Number.isNaN(parsed) ? null : parsed;
+    }
+  }
+  return (typeof ts === "number" && Number.isFinite(ts)) ? ts : null;
 }
+
 
 function resolveRequestExpireAt(r) {
   if (!r) return null;
