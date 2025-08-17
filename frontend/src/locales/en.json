@@ -466,5 +466,19 @@
     "favorite_add": "Add to favorites",
     "favorite_remove": "Remove from favorites"
   },
-  "gross_price": "Client price (gross)"
+  "gross_price": "Client price (gross)",
+  "expired": "Expired",
+  "countdown": {
+    "until_end": "Time left",
+    "expired": "Expired"
+  },
+  "favorites": {
+    "expired_badge": "Expired",
+    "expired_title": "This offer is no longer available",
+    "remove_from": "Remove from Favorites",
+    "no_image": "No image"
+  }
+
+  
 }
+
