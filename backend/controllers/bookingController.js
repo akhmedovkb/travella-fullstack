@@ -1,4 +1,65 @@
+// backend/controllers/bookingController.js
 const pool = require("../db");
+
+/** ================== УТИЛИТЫ ДАТ ================== */
+/** Нормализуем массив дат в ['YYYY-MM-DD'] с дедупликацией */
+function normalizeDates(arr) {
+  const seen = new Set();
+  return (Array.isArray(arr) ? arr : [])
+    .map((x) => String(x).slice(0, 10))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .filter((d) => {
+      const k = d;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+}
+
+/**
+ * Проверяем, что все даты свободны у провайдера:
+ * — нет пересечений с активными/ожидающими бронями
+ * — нет пересечений с заблокированными провайдером датами
+ * Бросает ошибку { status:409, conflicts:[...]} при конфликте.
+ */
+async function assertDatesFree(providerId, dates, client) {
+  const norm = normalizeDates(dates);
+  if (!norm.length) return norm;
+
+  const clash = await client.query(
+    `
+      WITH wanted AS (SELECT UNNEST($2::date[]) AS d)
+      SELECT w.d::text
+      FROM wanted w
+      WHERE EXISTS (
+        SELECT 1
+        FROM booking_dates bd
+        JOIN bookings b ON b.id = bd.booking_id
+        WHERE b.provider_id = $1
+          AND b.status IN ('pending','active')
+          AND bd.date::date = w.d
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM provider_blocked_dates pbd
+        WHERE pbd.provider_id = $1
+          AND pbd.date::date = w.d
+      )
+    `,
+    [providerId, norm]
+  );
+
+  if (clash.rows.length) {
+    const bad = clash.rows.map((r) => r.d);
+    const err = new Error(`Даты недоступны: ${bad.join(", ")}`);
+    err.status = 409;
+    err.conflicts = bad;
+    throw err;
+  }
+  return norm;
+}
+
+/** ================== КОНТРОЛЛЕРЫ ================== */
 
 // Клиент создаёт бронь (обычно после оффера/принятия)
 // Точка входа: POST /api/bookings
@@ -60,17 +121,29 @@ exports.createBooking = async (req, res) => {
         : proposal?.price != null
         ? proposal.price
         : null;
-    const finalCurrency =
-      currency ?? (proposal?.currency ?? null);
+
+    const finalCurrency = currency ?? (proposal?.currency ?? null);
+
     const finalDetails = (() => {
       // Складываем детали из body.details и proposal, proposal — как baseline
-      const base = proposal || {};
+      const base = (proposal && typeof proposal === "object") ? proposal : {};
       if (details && typeof details === "object") {
         return { ...base, ...details };
       }
       return Object.keys(base).length ? base : null;
     })();
 
+    // Выцепляем даты из body.details / proposal / (их слияния)
+    const candidateDates =
+      (details && details.dates) ||
+      (proposal && proposal.dates) ||
+      (finalDetails && finalDetails.dates) ||
+      [];
+
+    // Проверяем конфликты, если даты передали
+    const safeDates = await assertDatesFree(providerId, candidateDates, client);
+
+    // Создаём бронь
     const ins = await client.query(
       `INSERT INTO bookings
         (request_id, service_id, client_id, provider_id, status, price, currency, details)
@@ -87,10 +160,27 @@ exports.createBooking = async (req, res) => {
       ]
     );
 
+    const booking = ins.rows[0];
+
+    // Если даты есть — фиксируем их как занятые для этой брони
+    if (safeDates.length) {
+      await client.query(
+        `
+          INSERT INTO booking_dates (booking_id, date)
+          SELECT $1, d::date
+          FROM UNNEST($2::date[]) t(d)
+        `,
+        [booking.id, safeDates]
+      );
+    }
+
     await client.query("COMMIT");
-    return res.status(201).json(ins.rows[0]);
+    return res.status(201).json(booking);
   } catch (e) {
     await client.query("ROLLBACK");
+    if (e.status === 409) {
+      return res.status(409).json({ message: e.message, conflicts: e.conflicts });
+    }
     console.error(e);
     return res.status(500).json({ message: "createBooking error" });
   } finally {
