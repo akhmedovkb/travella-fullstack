@@ -156,7 +156,15 @@ function extractServiceFields(item) {
 
   const flatName  = _firstNonEmpty(pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"]));
   const flatPhone = _firstNonEmpty(pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"]));
-  const flatTg    = _firstNonEmpty(pick(bag, ["provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram","telegram","tg","telegram_username","telegram_link"]));
+  const flatTg = _firstNonEmpty(
+    pick(bag, [
+      "provider_telegram","supplier_telegram","vendor_telegram","agency_telegram","company_telegram",
+      "telegram","tg","telegram_username","telegram_link",
+      "provider_social","supplier_social","vendor_social","agency_social","company_social",
+      "social","social_link"
+    ])
+  );
+
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
@@ -386,9 +394,12 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                 flatPhone
               );
               const supplierTgRaw = _firstNonEmpty(
-                prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link, prov?.contacts?.telegram, prov?.socials?.telegram,
+                prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
+                prov?.contacts?.telegram, prov?.socials?.telegram,
+                prov?.social, prov?.social_link,
                 flatTg
               );
+
               const supplierTg = renderTelegram(supplierTgRaw);
               const expireAt = resolveExpireAt(svc);
               const baseNow = Date.now();
