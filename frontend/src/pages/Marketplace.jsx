@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
-import BookingButton from "../components/BookingButton";
+//import BookingButton from "../components/BookingButton";
 import { useNavigate } from "react-router-dom";
 
 
