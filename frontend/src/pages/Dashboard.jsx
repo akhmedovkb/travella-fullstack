@@ -1647,6 +1647,7 @@ direction: "",
                       <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                       <input
                         type="date"
+                        min={DATE_MIN}
                         value={details.startDate || ""}
                         onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1657,6 +1658,7 @@ direction: "",
                         <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                         <input
                           type="date"
+                          min={details.startDate || DATE_MIN}   // возврат не раньше вылета
                           value={details.returnDate || ""}
                           onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
