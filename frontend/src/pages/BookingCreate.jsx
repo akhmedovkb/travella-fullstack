@@ -1,4 +1,4 @@
-frontend/src/pages/BookingCreate.jsx
+//frontend/src/pages/BookingCreate.jsx
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
