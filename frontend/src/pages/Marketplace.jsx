@@ -15,6 +15,53 @@ const __viewerRole = __hasClient ? "client" : (__hasProvider ? "provider" : null
 
 /* ===================== utils ===================== */
 
+// фильтрация для вывода кнопки бронировать гида и транспорт
+
+function getRawCategory(svc) {
+  if (!svc) return "";
+  const details =
+    typeof svc.details === "string"
+      ? (() => { try { return JSON.parse(svc.details); } catch { return {}; } })()
+      : (svc.details || {});
+
+  const cand = [
+    svc.category, svc.type, svc.kind,
+    details.category, details.type, details.kind, details.serviceType, details.category_slug,
+  ].find(v => v != null && String(v).trim() !== "");
+
+  return (cand ? String(cand).toLowerCase() : "");
+}
+
+function isGuideOrTransport(svc) {
+  const raw = getRawCategory(svc);
+  if (!raw) return false;                    // строго: без категории — скрываем
+  const tokens = raw.split(/[^a-zа-я0-9]+/i);
+
+  const has = (arr) => tokens.some(t => arr.includes(t));
+  const isGuide = has(["guide", "гид"]);
+  const isTransport = has(["transport", "transfer", "трансфер", "driver", "водитель", "car", "авто", "машина"]);
+
+  return isGuide || isTransport;
+}
+
+// компонент кнопки брони
+function BookingButton({ service, className = "" }) {
+  const nav = useNavigate();
+  const { t } = useTranslation();
+  if (!service?.id) return null;
+  if (!isGuideOrTransport(service)) return null;  // показываем только гид/транспорт
+
+  return (
+    <button
+      onClick={() => nav(`/book/${service.id}`)}
+      className={`w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:opacity-90 ${className}`}
+    >
+      {t("actions.book") || "Забронировать"}
+    </button>
+  );
+}
+
+
 // универсальный нормализатор ответа (ищет массив в любой обёртке)
 function normalizeList(res) {
   if (!res) return [];
