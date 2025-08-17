@@ -394,6 +394,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               const baseNow = Date.now();
               const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
               const hasTimer = !!expireAt;
+              const expired  = hasTimer && leftMs <= 0;
               const timerText = hasTimer ? formatLeft(leftMs) : null;
 
               // подсказка (портал)
@@ -407,7 +408,7 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
               };
 
               return (
-                <div key={it.id} className="group relative w-full bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col">
+                <div key={it.id} className={`group relative w-full bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col ${expired ? "opacity-75" : ""}`}>
                   <div
                     className="aspect-[4/3] bg-gray-100 relative"
                     ref={imgRef}
@@ -495,10 +496,13 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                       {serviceId && (
                         <>
                           <button
-                            onClick={() => onQuickRequest?.(serviceId, { title })}
-                            className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold hover:bg-orange-600"
-                          >
-                            {t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
+                            onClick={() => !expired && onQuickRequest?.(serviceId, { title })}
+                            disabled={expired}
+                            title={expired ? (t("countdown.expired", { defaultValue: "Срок истёк" })) : undefined}
+                            className={`w-full rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold
+                            ${expired ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-orange-500 text-white hover:bg-orange-600"}`}
+                            >
+                            {expired ? (t("expired", { defaultValue: "Истекло" })) : t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
                           </button>
                           {/*<button
                             onClick={() => onBook?.(serviceId)}
@@ -1229,8 +1233,17 @@ function resolveExpireAt(service) {
     }
     return null;
   }
-  const ts = Number(cand) || Date.parse(cand);
-  return Number.isFinite(ts) ? ts : null;
+  
+  let ts: number | null = null;
+    if (typeof cand === "number") {
+      ts = cand > 1e12 ? cand : cand * 1000;
+    } else {
+      const n = Number(cand);
+      if (Number.isFinite(n)) ts = n > 1e12 ? n : n * 1000;
+      else ts = Date.parse(String(cand));
+    }
+  return Number.isFinite(ts!) ? ts! : null;
+
 }
 
 function resolveRequestExpireAt(r) {
