@@ -53,6 +53,11 @@ const corsOptions = {
   credentials: true,
 };
 
+/** ===================== availabilityRoutes ===================== */
+
+const availabilityRoutes = require("./routes/availabilityRoutes");
+app.use("/api/availability", availabilityRoutes);
+
 // Ставим ПЕРЕД роутами
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
