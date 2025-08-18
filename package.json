@@ -1,0 +1,14 @@
+{
+  "name": "travella-monorepo",
+  "private": true,
+  "scripts": {
+    "prepare": "husky install",
+    "lint:secrets": "secretlint \"**/*\" -f @secretlint/formatter-stylish"
+  },
+  "devDependencies": {
+    "@secretlint/cli": "^9.0.0",
+    "@secretlint/formatter-stylish": "^9.0.0",
+    "@secretlint/secretlint-rule-preset-recommend": "^9.0.0",
+    "husky": "^9.0.0"
+  }
+}
