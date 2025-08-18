@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import toast from "../ui/toast"; 
+import toast from "../ui/toast"; // дефолтный экспорт-объект: { success, error, promise, ... }
 
 const Register = () => {
   const { t } = useTranslation();
@@ -25,13 +25,38 @@ const Register = () => {
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // стабильный дебаунс между рендерами
+  // стабильный дебаунс для автоподсказок
   const debounceRef = useRef(null);
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // ---------- helpers ----------
+  const getErrorMessage = (err) => {
+    const d = err?.response?.data;
+    if (!d) return err?.message || "Ошибка";
+    if (typeof d === "string") return d;
+    if (Array.isArray(d?.errors)) {
+      // например, express-validator
+      return d.errors.map((e) => e.msg || e.message).join("\n");
+    }
+    return d.error || d.message || JSON.stringify(d);
+  };
+
+  const normalizePhone = (raw) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    // 9 цифр — локальный формат (например, 901234567) → +998901234567
+    if (/^\d{9}$/.test(digits)) return `+998${digits}`;
+    // 998XXXXXXXXX (12 цифр) → +998XXXXXXXXX
+    if (/^998\d{9}$/.test(digits)) return `+${digits}`;
+    // уже корректный формат, начинающийся с +
+    if (/^\+\d{9,15}$/.test(raw)) return raw;
+    // просто цифры 9–15 → добавим +
+    if (/^\d{9,15}$/.test(raw)) return `+${raw}`;
+    return null; // невалидный
+  };
 
   const fetchCities = async (query) => {
     const q = (query || "").trim();
@@ -60,7 +85,10 @@ const Register = () => {
       setLocationSuggestions(cities);
     } catch (err) {
       // Лимиты RapidAPI (429) или сеть — не шумим тостами
-      console.warn("GeoDB autocomplete error:", err?.response?.status || err?.message);
+      console.warn(
+        "GeoDB autocomplete error:",
+        err?.response?.status || err?.message
+      );
       setLocationSuggestions([]);
     }
   };
@@ -96,31 +124,52 @@ const Register = () => {
     e.preventDefault();
     if (submitting) return;
 
+    // Мягкая клиентская валидация
+    const phoneNorm = normalizePhone(formData.phone);
+    if (!phoneNorm) {
+      toast.error(
+        t("register.phone_invalid") ||
+          "Неверный телефон. Укажите, например: +998901234567"
+      );
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      toast.error(t("register.email_invalid") || "Неверный email.");
+      return;
+    }
+
+    if ((formData.password || "").length < 6) {
+      toast.error(
+        t("register.password_short") || "Пароль должен быть не менее 6 символов."
+      );
+      return;
+    }
+
     const payload = {
       ...formData,
+      phone: phoneNorm,
       location: [formData.location], // бэк ждёт массив
     };
 
     try {
       setSubmitting(true);
       await toast.promise(
-          axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, payload, {
-            headers: { "Content-Type": "application/json" },
-          }),
-          {
-            loading: t("register.loading") || "Отправка…",
-            success: t("register.success"),
-            error: (err) =>
-              err?.response?.data?.error ||
-              err?.message ||
-              t("register.error"),
-          }
-        );
-
+        axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
+          payload,
+          { headers: { "Content-Type": "application/json" } }
+        ),
+        {
+          loading: t("register.loading") || "Отправка…",
+          success: t("register.success"),
+          error: (err) => getErrorMessage(err) || t("register.error"),
+        }
+      );
       navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error);
-      // сообщение уже показано в toast.promise
+      // Сообщение уже показано в toast.promise
     } finally {
       setSubmitting(false);
     }
@@ -188,7 +237,9 @@ const Register = () => {
             )}
 
             <div className="mt-4">
-              <label className="block font-medium mb-1">{t("register.photo")}</label>
+              <label className="block font-medium mb-1">
+                {t("register.photo")}
+              </label>
               <div className="flex items-center gap-4">
                 <label className="bg-orange-500 text-white py-2 px-4 rounded cursor-pointer hover:bg-orange-600">
                   {t("register.select_file")}
@@ -201,7 +252,9 @@ const Register = () => {
                   />
                 </label>
                 <span className="text-sm text-gray-600">
-                  {formData.photo ? t("register.file_chosen") : t("register.no_file")}
+                  {formData.photo
+                    ? t("register.file_chosen")
+                    : t("register.no_file")}
                 </span>
               </div>
             </div>
@@ -255,7 +308,9 @@ const Register = () => {
               : "bg-orange-600 hover:bg-orange-700"
           }`}
         >
-          {submitting ? t("register.loading") || "Отправка…" : t("register.button")}
+          {submitting
+            ? t("register.loading") || "Отправка…"
+            : t("register.button")}
         </button>
       </form>
     </div>
