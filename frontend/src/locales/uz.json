@@ -472,10 +472,16 @@
     "expired": "Muddati tugadi"
   },
   "favorites": {
+    "add" : "Sevimlilarga qo`shish",
     "expired_badge": "Muddati tugagan",
     "expired_title": "Bu taklif endi mavjud emas",
     "remove_from": "Sevimlilardan olib tashlash",
-    "no_image": "Rasm yo'q"
+    "no_image": "Rasm yo'q",
+    "added_toast": "Sevimlilarga qo‘shildi",
+    "removed_toast": "Sevimlilardan olib tashlandi",
+    "add_error": "Sevimlilarga qo‘shib bo‘lmadi",
+    "remove_error": "Sevimlilardan olib tashlab bo‘lmadi"
   }
 }
+
 
