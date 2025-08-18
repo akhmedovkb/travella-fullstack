@@ -13,31 +13,38 @@ const normalizePhone = (raw = "") =>
 const isValidE164 = (p) => /^\+\d{7,15}$/.test(p);
 
 const parseErrorMessage = (err, t) => {
-  const msg =
-    err?.response?.data?.error ||
-    err?.response?.data?.message ||
-    err?.message ||
+  const raw =
+    err?.response?.data?.error ??
+    err?.response?.data?.message ??
+    err?.message ??
     "";
 
-  // если сервер прислал ключ локали (например, "register.phone_invalid")
-  if (typeof msg === "string" && msg.startsWith("register.")) {
-    return t(msg);
+  // Если сервер прислал ключ локали — просто переводим
+  if (typeof raw === "string" && raw.startsWith("register.")) {
+    return t(raw);
   }
 
-  // частые варианты с разных бэков:
-  const lower = String(msg).toLowerCase();
-  if (lower.includes("email") && (lower.includes("exist") || lower.includes("used") || lower.includes("taken"))) {
+  const s = String(raw).toLowerCase();
+
+  // Email занят — ловим англ/рус/уз вариант
+  if (/email/.test(s) && /(exist|used|taken|занят|использ|mavjud|ishlatilgan)/.test(s)) {
     return t("register.errors.email_taken");
   }
-  if (lower.includes("phone") && (lower.includes("invalid") || lower.includes("format"))) {
+
+  // Телефон некорректный
+  if (/(phone|телефон|raqam)/.test(s) && /(invalid|format|неверн|noto‘g‘ri|noto'g'ri)/.test(s)) {
     return t("register.errors.phone_invalid");
   }
-  if (lower.includes("required") || lower.includes("must not be empty")) {
+
+  // Поля не заполнены / обязательны
+  if (/(required|must|обязат|требует|пуст|kerak|bo‘sh|bo'sh|empty)/.test(s)) {
     return t("register.errors.required");
   }
 
+  // Фоллбек
   return t("register.error");
 };
+
 // ---------------------------------------------------------------------
 
 const Register = () => {
@@ -139,17 +146,16 @@ const Register = () => {
     try {
       setSubmitting(true);
       await toast.promise(
-        axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-          payload,
-          { headers: { "Content-Type": "application/json" } }
-        ),
+        axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, payload, {
+          headers: { "Content-Type": "application/json" },
+        }),
         {
           loading: t("register.loading"),
           success: t("register.success"),
           error: (err) => parseErrorMessage(err, t),
         }
       );
+
       navigate("/login");
     } catch {
       // текст уже показан через toast.promise
