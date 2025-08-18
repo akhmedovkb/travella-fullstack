@@ -17,15 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
 
       - name: Install & Audit (${{ matrix.dir }})
         run: |
           set -e
           cd ${{ matrix.dir }}
+          # Create lockfile if missing so 'npm ci' works
           if [ ! -f package-lock.json ]; then
-            echo "No package-lock.json found → generating with 'npm i --package-lock-only'"
             npm i --package-lock-only
           fi
           npm ci
