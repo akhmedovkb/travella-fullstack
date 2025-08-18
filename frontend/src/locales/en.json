@@ -492,6 +492,7 @@
     "success": "Registration successful!",
 
     "errors": {
+      "required": "Fils this field",
       "generic": "Something went wrong. Please try again.",
       "required_name": "Enter the name.",
       "required_location": "Specify the region or city.",
