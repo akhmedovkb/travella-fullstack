@@ -489,5 +489,10 @@
     "phone_hint": "Telefon raqamini xalqaro formatda kiriting, masalan +998 90 123 45 67",
     "phone_error": "Telefon formati noto‘g‘ri. Misol: +998 90 123 45 67",
     "phone_invalid": "Telefon raqami noto‘g‘ri"
+  },
+  "form": {
+    "required": "Заполните это поле.",
+    "email_invalid": "Введите корректный e-mail.",
+    "password_short": "Минимальная длина пароля — 6 символов."
   }
 }
