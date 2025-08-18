@@ -470,24 +470,24 @@
   "expired": "Muddati tugagan",
 
   "register": {
-    "title": "Provider Registration",
-    "name": "Name",
-    "type": "Provider type",
-    "phone": "Phone",
+    "title": "Ta’minotchini ro‘yxatdan o‘tkazish",
+    "name": "Nomi",
+    "type": "Ta’minotchi turi",
+    "phone": "Telefon",
     "email": "Email",
-    "social": "Social link",
-    "password": "Password",
-    "photo": "Profile photo",
-    "select_file": "Choose file",
-    "file_chosen": "File selected",
-    "no_file": "No file chosen",
-    "location_placeholder": "Region or city (e.g., Tashkent)",
-    "button": "Register",
-    "loading": "Submitting…",
-    "success": "Registration completed successfully!",
-    "error": "Registration error",
-    "phone_hint": "Enter the number in international format, e.g. +998 90 123 45 67",
-    "phone_error": "Phone format is invalid. Example: +998 90 123 45 67",
-    "phone_invalid": "Phone is invalid"
-}
+    "social": "Ijtimoiy tarmoq havolasi",
+    "password": "Parol",
+    "photo": "Profil rasmi",
+    "select_file": "Fayl tanlash",
+    "file_chosen": "Fayl tanlandi",
+    "no_file": "Fayl tanlanmagan",
+    "location_placeholder": "Hudud yoki shahar (masalan, Toshkent)",
+    "button": "Ro‘yxatdan o‘tish",
+    "loading": "Yuborilmoqda…",
+    "success": "Ro‘yxatdan o‘tish muvaffaqiyatli yakunlandi!",
+    "error": "Ro‘yxatdan o‘tishda xatolik",
+    "phone_hint": "Telefon raqamini xalqaro formatda kiriting, masalan +998 90 123 45 67",
+    "phone_error": "Telefon formati noto‘g‘ri. Misol: +998 90 123 45 67",
+    "phone_invalid": "Telefon raqami noto‘g‘ri"
+  }
 }
