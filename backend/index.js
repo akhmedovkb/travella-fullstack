@@ -70,9 +70,6 @@ app.use(express.urlencoded({ extended: true }));
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
 
-const providerCalendarRoutes = require("./routes/providerCalendarRoutes"); // <-- добавить
-app.use("/api/providers", providerCalendarRoutes);                        // <-- добавить
-
 const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
