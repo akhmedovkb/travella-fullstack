@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
+import { toast } from "../ui/toast"; // ✅ единый тост
 
 const Register = () => {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ const Register = () => {
   });
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
-  let debounceTimeout = null;
+  const debounceRef = useRef(null); // ✅ стабильный дебаунс между рендерами
 
   const fetchCities = async (query) => {
     if (!query) return setLocationSuggestions([]);
@@ -64,8 +65,8 @@ const Register = () => {
       reader.readAsDataURL(files[0]);
     } else if (name === "location") {
       setFormData((prev) => ({ ...prev, [name]: value }));
-      if (debounceTimeout) clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
         fetchCities(value);
       }, 300);
     } else {
@@ -90,7 +91,11 @@ await axios.post(
       navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error.response?.data || error.message);
-      alert(t("register.error"));
+      const msg =
+        error?.response?.data?.error ||
+        error?.message ||
+        t("register.error");
+      toast.error(msg); // ✅ тост об ошибке
     }
   };
 
