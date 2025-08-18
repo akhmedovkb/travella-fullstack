@@ -1,20 +1,20 @@
-// Unified toast wrapper (react-hot-toast)
-import { toast as _toast } from "react-hot-toast";
+// frontend/src/ui/toast.js
+// Единая обёртка для уведомлений на базе react-hot-toast.
+// Экспортируем ОРИГИНАЛЬНЫЙ toast, чтобы были доступны .success/.error/.promise/…
 
-export const toast = (msg, opts) => _toast(msg, opts);
-export const toastSuccess = (msg, opts) => _toast.success(msg, opts);
-export const toastError   = (msg, opts) => _toast.error(msg, opts);
-export const toastInfo    = (msg, opts) => _toast(msg, opts);
-export const toastWarn    = (msg, opts) => _toast(msg, opts);
-export const toastPromise = (p, labels, opts) => _toast.promise(p, labels, opts);
-export const toastCustom  = (render, opts) => _toast.custom(render, opts);
+import hotToast, { Toaster } from "react-hot-toast";
 
-export default {
-  toast,
-  success: toastSuccess,
-  error: toastError,
-  info: toastInfo,
-  warn: toastWarn,
-  promise: toastPromise,
-  custom: toastCustom,
-};
+// Оригинальный toast-инстанс со всеми методами
+export const toast = hotToast;
+export { Toaster };
+
+// Необязательные алиасы (если где-то удобнее короткие имена)
+export const toastSuccess = (msg, opts) => hotToast.success(msg, opts);
+export const toastError   = (msg, opts) => hotToast.error(msg, opts);
+export const toastInfo    = (msg, opts) => hotToast(msg, opts);
+export const toastWarn    = (msg, opts) => hotToast(msg, { icon: "⚠️", ...opts });
+export const toastPromise = (promise, labels, opts) =>
+  hotToast.promise(promise, labels, opts);
+
+// На случай импорта по умолчанию
+export default toast;
