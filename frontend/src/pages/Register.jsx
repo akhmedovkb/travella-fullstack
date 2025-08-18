@@ -1,43 +1,26 @@
 // frontend/src/pages/Register.jsx
-import React, { useState, useRef, useEffect } from "react";
+// frontend/src/pages/Register.jsx
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import { toast } from "../ui/toast"; // наш обёрнутый react-hot-toast
+import { toast } from "../ui/toast"; // наша обёртка над react-hot-toast
 
-/** ----------------- helpers: телефон UZ -> E.164 ------------------ */
-const onlyDigits = (s = "") => String(s).replace(/\D+/g, "");
+const isValidE164 = (phone) => /^\+\d{7,15}$/.test((phone || "").trim());
 
-// Приводим разные локальные варианты к +998XXXXXXXXX
-const normalizePhoneUZ = (input = "") => {
-  const d = onlyDigits(input);
-
-  if (!d) return "";
-  // Уже в международном без плюса
-  if (d.startsWith("998") && d.length >= 12) return `+${d}`;
-
-  // +998... (с плюсом) — просто нормализуем
-  if (String(input).trim().startsWith("+")) return `+${d}`;
-
-  // 0XXXXXXXXX  -> +998XXXXXXXXX
-  if (d.length === 10 && d.startsWith("0")) return `+998${d.slice(1)}`;
-
-  // 9 локальных цифр -> +998XXXXXXXXX
-  if (d.length === 9) return `+998${d}`;
-
-  // 8XXXXXXXXX (встречается) -> +998XXXXXXXXX (берём последние 9)
-  if (d.length >= 10 && d.startsWith("8")) return `+998${d.slice(-9)}`;
-
-  // дефолт: подставим плюс
-  return `+${d}`;
+const normalizePhone = (raw) => {
+  if (!raw) return "";
+  // приводим к +цифры
+  const s = String(raw).replace(/[^\d+]/g, "");
+  // если начинаются просто с цифр и похоже на UZ, подставим +998
+  if (/^\d{9,12}$/.test(s) && !s.startsWith("+")) {
+    if (s.length === 9) return `+998${s}`;
+    if (s.length === 12 && s.startsWith("998")) return `+${s}`;
+  }
+  return s.startsWith("+") ? s : `+${s}`;
 };
-
-// Универсальная валидация E.164 (до 15 цифр)
-const isValidE164 = (phone = "") => /^\+[1-9]\d{7,14}$/.test(String(phone).trim());
-
-/** ------------------------------------------------------------------ */
 
 const Register = () => {
   const { t } = useTranslation();
@@ -56,40 +39,44 @@ const Register = () => {
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-
-  // для показа подсказки под телефоном только после взаимодействия
   const [phoneTouched, setPhoneTouched] = useState(false);
 
-  // стабильный дебаунс между рендерами
+  // стабильный дебаунс
   const debounceRef = useRef(null);
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+  useEffect(() => () => debounceRef.current && clearTimeout(debounceRef.current), []);
 
-  /** ------------------- GeoDB автоподсказки ------------------- */
+  /** ====== локализация нативных подсказок браузера ====== */
+  const handleInvalid = (e) => {
+    const el = e.target;
+    const v = el.validity;
+    let msg = "";
+
+    if (v.valueMissing) msg = t("form.required");
+    else if (el.name === "email" && v.typeMismatch) msg = t("form.email_invalid");
+    else if (el.name === "password" && v.tooShort) msg = t("form.password_short");
+
+    // показать локализованный текст
+    el.setCustomValidity(msg || "");
+  };
+
+  const clearValidity = (e) => e.target.setCustomValidity("");
+
+  /** ====== автоподсказки городов через GeoDB ====== */
   const fetchCities = async (query) => {
     const q = (query || "").trim();
-    if (!q || q.length < 2) {
-      setLocationSuggestions([]);
-      return;
-    }
+    if (!q || q.length < 2) return setLocationSuggestions([]);
 
     try {
-      const res = await axios.get("https://wft-geo-db.p.rapidapi.com/v1/geo/cities", {
+      const resp = await axios.get("https://wft-geo-db.p.rapidapi.com/v1/geo/cities", {
         params: { namePrefix: q, limit: 5, sort: "-population", countryIds: "UZ" },
         headers: {
           "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
           "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
         },
       });
-
-      const cities = (res.data?.data || []).map((c) => c.city);
-      setLocationSuggestions(cities);
-    } catch (err) {
-      // Часто 429 — не шумим тостами
-      console.warn("GeoDB autocomplete error:", err?.response?.status || err?.message);
+      setLocationSuggestions((resp.data?.data || []).map((c) => c.city));
+    } catch {
+      // 429 и прочее — молча
       setLocationSuggestions([]);
     }
   };
@@ -99,18 +86,13 @@ const Register = () => {
     setLocationSuggestions([]);
   };
 
+  /** ====== change handlers ====== */
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
-    if (name === "phone") {
-      if (!phoneTouched) setPhoneTouched(true);
-    }
-
-    if (name === "photo" && files && files.length > 0) {
+    if (name === "photo" && files?.length) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((p) => ({ ...p, photo: String(reader.result || "") }));
-      };
+      reader.onloadend = () => setFormData((p) => ({ ...p, photo: String(reader.result || "") }));
       reader.readAsDataURL(files[0]);
       return;
     }
@@ -122,83 +104,71 @@ const Register = () => {
       return;
     }
 
+    if (name === "phone") {
+      setPhoneTouched(true);
+      setFormData((p) => ({ ...p, phone: value }));
+      return;
+    }
+
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
-  /** ----------------------- SUBMIT ----------------------- */
+  /** ====== submit ====== */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
 
-    // Нормализуем и валидируем телефон
-    const normalizedPhone = normalizePhoneUZ(formData.phone);
-    const phoneOk = isValidE164(normalizedPhone);
-
-    if (!phoneOk) {
-      setPhoneTouched(true);
+    const normalized = normalizePhone(formData.phone);
+    if (!isValidE164(normalized)) {
       toast.error(t("register.phone_invalid"));
+      setPhoneTouched(true);
       return;
     }
 
     const payload = {
       ...formData,
-      phone: normalizedPhone,
+      phone: normalized,
       location: [formData.location], // бэк ждёт массив
     };
 
     try {
       setSubmitting(true);
-
       await toast.promise(
-        axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-          payload,
-          { headers: { "Content-Type": "application/json" } }
-        ),
+        axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, payload, {
+          headers: { "Content-Type": "application/json" },
+        }),
         {
-          loading: t("register.loading") || "Отправка…",
+          loading: t("register.loading") || "Sending…",
           success: t("register.success"),
-          error: (err) => {
-            const raw =
-              err?.response?.data?.error?.toString?.() ||
-              err?.message ||
-              t("register.error");
-
-            const low = raw.toLowerCase();
-            if (low.includes("email") && (low.includes("exist") || low.includes("used") || low.includes("taken"))) {
-              return t("register.email_taken");
-            }
-            if (low.includes("phone") && (low.includes("invalid") || low.includes("format"))) {
-              return t("register.phone_invalid");
-            }
-            return raw; // пусть покажет, что вернул бэк
-          },
+          error: (err) =>
+            err?.response?.data?.error ||
+            err?.message ||
+            t("register.error"),
         }
       );
-
       navigate("/login");
-    } catch (err) {
-      // текст ошибки уже показан внутри toast.promise
-      console.error("Register error:", err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  /** вычисления для UI */
-  const phoneNormalized = normalizePhoneUZ(formData.phone);
+  const phoneNormalized = normalizePhone(formData.phone);
   const phoneInvalid = phoneTouched && !isValidE164(phoneNormalized);
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
-      <form onSubmit={handleSubmit} className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
+      >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-orange-600">{t("register.title")}</h2>
           <LanguageSelector />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Левая колонка */}
+          {/* left */}
           <div>
             <label className="block mb-1">{t("register.name")}</label>
             <input
@@ -206,6 +176,8 @@ const Register = () => {
               required
               lang={i18n.language}
               onChange={handleChange}
+              onInvalid={handleInvalid}
+              onInput={clearValidity}
               className="w-full border p-2 mb-4"
             />
 
@@ -229,16 +201,18 @@ const Register = () => {
               required
               lang={i18n.language}
               onChange={handleChange}
+              onInvalid={handleInvalid}
+              onInput={clearValidity}
               placeholder={t("register.location_placeholder")}
               className="w-full border p-2 mb-1"
             />
             {locationSuggestions.length > 0 && (
-              <ul className="bg-white border mt-0 -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
-                {locationSuggestions.map((city, idx) => (
+              <ul className="bg-white border -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
+                {locationSuggestions.map((city, i) => (
                   <li
-                    key={`${city}-${idx}`}
-                    onClick={() => handleLocationSelect(city)}
+                    key={`${city}-${i}`}
                     className="p-2 border-b cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleLocationSelect(city)}
                   >
                     {city}
                   </li>
@@ -266,32 +240,37 @@ const Register = () => {
             </div>
           </div>
 
-          {/* Правая колонка */}
+          {/* right */}
           <div>
             <label className="block mb-1">{t("register.phone")}</label>
             <input
               name="phone"
-              value={formData.phone}
               required
               lang={i18n.language}
               onChange={handleChange}
-              onBlur={() => setPhoneTouched(true)}
+              onInvalid={handleInvalid}
+              onInput={clearValidity}
               className={`w-full border p-2 mb-1 ${
-                phoneInvalid ? "border-red-500 focus:border-red-500" : ""
+                phoneInvalid ? "border-red-500 ring-1 ring-red-300" : ""
               }`}
-              placeholder="+998 ** *** ** **"
             />
-            <div className={`text-xs mb-3 ${phoneInvalid ? "text-red-600" : "text-gray-500"}`}>
+            <p
+              className={`text-xs mt-1 ${
+                phoneInvalid ? "text-red-600" : "text-gray-500"
+              }`}
+            >
               {t("register.phone_hint")}
-            </div>
+            </p>
 
-            <label className="block mb-1">{t("register.email")}</label>
+            <label className="block mb-1 mt-4">{t("register.email")}</label>
             <input
               name="email"
               type="email"
               required
               lang={i18n.language}
               onChange={handleChange}
+              onInvalid={handleInvalid}
+              onInput={clearValidity}
               className="w-full border p-2 mb-4"
             />
 
@@ -307,8 +286,11 @@ const Register = () => {
               name="password"
               type="password"
               required
+              minLength={6}
               lang={i18n.language}
               onChange={handleChange}
+              onInvalid={handleInvalid}
+              onInput={clearValidity}
               className="w-full border p-2 font-bold border-2 border-orange-500"
             />
           </div>
@@ -321,7 +303,7 @@ const Register = () => {
             submitting ? "bg-orange-400 cursor-not-allowed" : "bg-orange-600 hover:bg-orange-700"
           }`}
         >
-          {submitting ? t("register.loading") || "Отправка…" : t("register.button")}
+          {submitting ? t("register.loading") || "Sending…" : t("register.button")}
         </button>
       </form>
     </div>
