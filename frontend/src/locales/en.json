@@ -103,7 +103,9 @@
       "noAccount": "No account?",
       "password": "Password",
       "registerLink": "Register",
-      "title": "Client login"
+      "title": "Client login",
+      "success": "Logged in",
+      "error": "Login error"
     },
     "register": {
       "haveAccount": "Already have an account?",
@@ -112,7 +114,9 @@
       "password": "Password",
       "phone": "Phone",
       "registerBtn": "Register",
-      "title": "Client registration"
+      "title": "Client registration",
+      "success": "Registration successful",
+      "error": "Registration error"
     }
   },
   "comment": "Comment",
@@ -133,8 +137,8 @@
   },
   "confirm_delete": "Delete this item?",
   "countdown": {
-    "expired": "Expired",
-    "until_end": "Time left"
+    "until_end": "Time left",
+    "expired": "Expired"
   },
   "country_not_chosen": "No countries found",
   "cover": "Cover",
@@ -188,17 +192,14 @@
   "expiration_timer": "Expiration timer",
   "favorites": {
     "add": "Add to favorites",
-    "added": "Added to favorites",
-    "empty_desc": "Add services to favorites to find them quickly later",
-    "empty_subtitle": "Add interesting services to favorites and come back later.",
-    "empty_title": "Nothing here yet",
+    "expired_badge": "Expired",
+    "expired_title": "This offer is no longer available",
+    "remove_from": "Remove from Favorites",
     "no_image": "No image",
-    "remove_error": "Failed to remove from favorites",
-    "remove_from": "Remove from favorites",
-    "removed": "Removed from favorites",
-    "remove": "Remove from favorites",
     "added_toast": "Added to favorites",
-    "removed_toast": "Removed from favorites"
+    "removed_toast": "Removed from favorites",
+    "add_error": "Couldn't add to favorites",
+    "remove_error": "Couldn't remove from favorites"
   },
   "file_chosen": "Files chosen",
   "fill_all_fields": "Please fill in all fields and select dates",
@@ -233,7 +234,8 @@
     "error": "Email or password is incorrect",
     "no_account": "No account?",
     "password": "Password",
-    "title": "Supplier login"
+    "title": "Supplier login",
+    "success": "Logged in"
   },
   "logout": "Logout",
   "make_cover": "Make cover",
@@ -467,26 +469,5 @@
     "favorite_remove": "Remove from favorites"
   },
   "gross_price": "Client price (gross)",
-  "expired": "Expired",
-  "countdown": {
-    "until_end": "Time left",
-    "expired": "Expired"
-  },
-  "favorites": {
-    "add": "Add to favorites",
-    "expired_badge": "Expired",
-    "expired_title": "This offer is no longer available",
-    "remove_from": "Remove from Favorites",
-    "no_image": "No image",
-    "added_toast": "Added to favorites",
-    "removed_toast": "Removed from favorites",
-    "add_error": "Couldn't add to favorites",
-    "remove_error": "Couldn't remove from favorites"
-  
-  }
-
-  
+  "expired": "Expired"
 }
-
-
-

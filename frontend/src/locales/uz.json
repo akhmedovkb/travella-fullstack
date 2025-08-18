@@ -103,7 +103,9 @@
       "noAccount": "Hisob yo‘qmi?",
       "password": "Parol",
       "registerLink": "Ro‘yxatdan o‘tish",
-      "title": "Mijoz kirishi"
+      "title": "Mijoz kirishi",
+      "success": "Muvaffaqiyatli kirildi",
+      "error": "Kirish xatosi"
     },
     "register": {
       "haveAccount": "Hisobingiz bormi?",
@@ -112,7 +114,9 @@
       "password": "parol",
       "phone": "Telefon",
       "registerBtn": "Ro‘yxatdan o‘tish",
-      "title": "Mijoz ro‘yxatdan o‘tishi"
+      "title": "Mijoz ro‘yxatdan o‘tishi",
+      "success": "Ro‘yxatdan o‘tish muvaffaqiyatli",
+      "error": "Ro‘yxatdan o‘tishda xato"
     }
   },
   "comment": "Izoh",
@@ -133,8 +137,8 @@
   },
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
   "countdown": {
-    "expired": "Muddati tugagan",
-    "until_end": "Tugashiga qoldi"
+    "until_end": "Tugashigacha",
+    "expired": "Muddati tugadi"
   },
   "country_not_chosen": "Mamlakatlar topilmadi",
   "cover": "Muqova",
@@ -187,18 +191,15 @@
   "event_name": "Tadbir nomi",
   "expiration_timer": "Amal qilish taymeri",
   "favorites": {
-    "add": "Sevimlilarga qo‘shish",
-    "added": "Sevimlilarga qo‘shildi",
-    "empty_desc": "Keyin tez topish uchun xizmatlarni sevimlilarga qo‘shing",
-    "empty_subtitle": "Qiziqarli xizmatlarni sevimlilarga qo‘shing va keyinroq qayting.",
-    "empty_title": "Hozircha hech narsa yo‘q",
-    "no_image": "Rasm yo‘q",
-    "remove_error": "Sevimlilardan o‘chirib bo‘lmadi",
+    "add": "Sevimlilarga qo`shish",
+    "expired_badge": "Muddati tugagan",
+    "expired_title": "Bu taklif endi mavjud emas",
     "remove_from": "Sevimlilardan olib tashlash",
-    "removed": "Sevimlilardan o‘chirildi",
-    "remove": "Sevimlilardan olib tashlash",
+    "no_image": "Rasm yo'q",
     "added_toast": "Sevimlilarga qo‘shildi",
-    "removed_toast": "Sevimlilardan olib tashlandi"
+    "removed_toast": "Sevimlilardan olib tashlandi",
+    "add_error": "Sevimlilarga qo‘shib bo‘lmadi",
+    "remove_error": "Sevimlilardan olib tashlab bo‘lmadi"
   },
   "file_chosen": "Fayllar tanlandi",
   "fill_all_fields": "Iltimos, barcha maydonlarni to‘ldiring va sanalarni tanlang",
@@ -233,7 +234,8 @@
     "error": "Email yoki parol noto‘g‘ri",
     "no_account": "Akkauntingiz yo‘qmi?",
     "password": "Parol",
-    "title": "Ta'minotchilar uchun kirish"
+    "title": "Ta'minotchilar uchun kirish",
+    "success": "Muvaffaqiyatli kirildi"
   },
   "logout": "Chiqish",
   "make_cover": "Muqova qilish",
@@ -465,23 +467,5 @@
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
   "gross_price": "Mijoz uchun narx (brutto)",
-  
-  "expired": "Muddati tugagan",
-  "countdown": {
-    "until_end": "Tugashigacha",
-    "expired": "Muddati tugadi"
-  },
-  "favorites": {
-    "add" : "Sevimlilarga qo`shish",
-    "expired_badge": "Muddati tugagan",
-    "expired_title": "Bu taklif endi mavjud emas",
-    "remove_from": "Sevimlilardan olib tashlash",
-    "no_image": "Rasm yo'q",
-    "added_toast": "Sevimlilarga qo‘shildi",
-    "removed_toast": "Sevimlilardan olib tashlandi",
-    "add_error": "Sevimlilarga qo‘shib bo‘lmadi",
-    "remove_error": "Sevimlilardan olib tashlab bo‘lmadi"
-  }
+  "expired": "Muddati tugagan"
 }
-
-
