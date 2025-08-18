@@ -4,7 +4,6 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
-import LanguageSelector from "../components/LanguageSelector";
 import { toast } from "../ui/toast"; // реэкспорт react-hot-toast
 
 // --- утилиты ---------------------------------------------------------
@@ -164,8 +163,7 @@ const Register = () => {
       <form onSubmit={handleSubmit} className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-orange-600">{t("register.title")}</h2>
-          {/* ОДИН переключатель языка */}
-          <LanguageSelector />
+          
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
