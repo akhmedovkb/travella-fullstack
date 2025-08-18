@@ -491,6 +491,11 @@
     "phone_hint": "Enter the number in international format, e.g. +998 90 123 45 67",
     "phone_error": "Phone format is invalid. Example: +998 90 123 45 67",
     "phone_invalid": "Phone is invalid"
-}
+},
+  "form": {
+    "required": "Ushbu maydonni to‘ldiring.",
+    "email_invalid": "Yaroqli e-pochta kiriting.",
+    "password_short": "Parolning eng kam uzunligi — 6 ta belgi."
+  }
 
 }
