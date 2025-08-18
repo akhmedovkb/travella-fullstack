@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import { toast } from "../ui/toast"; // реэкспорт из react-hot-toast
+import toast from "../ui/toast"; 
 
 const Register = () => {
   const { t } = useTranslation();
@@ -104,20 +104,19 @@ const Register = () => {
     try {
       setSubmitting(true);
       await toast.promise(
-        axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-          payload,
-          { headers: { "Content-Type": "application/json" } }
-        ),
-        {
-          loading: t("register.loading") || "Отправка…",
-          success: t("register.success"),
-          error: (err) =>
-            err?.response?.data?.error ||
-            err?.message ||
-            t("register.error"),
-        }
-      );
+          axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/providers/register`, payload, {
+            headers: { "Content-Type": "application/json" },
+          }),
+          {
+            loading: t("register.loading") || "Отправка…",
+            success: t("register.success"),
+            error: (err) =>
+              err?.response?.data?.error ||
+              err?.message ||
+              t("register.error"),
+          }
+        );
+
       navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error);
