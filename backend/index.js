@@ -7,15 +7,29 @@ dotenv.config();
 const app = express();
 
 /** ===================== CORS (унифицированный) ===================== */
-// Явные хосты и локалка
-const WHITELIST = new Set([
+/**
+ * 1) Базовый список (локалка, прод-варианты фронта)
+ * 2) Плюс домены из ENV CORS_ORIGINS (через запятую, без пробелов)
+ * 3) Поддержка превью на Vercel для проекта travella-fullstack
+ */
+const BASE_WHITELIST = [
   "http://localhost:3000",
   "http://localhost:5173",
+  "https://travella.uz",
+  "https://www.travella.uz",
   "https://travella-fullstack.vercel.app",
   "https://travella-fullstack-q0ayptios-komil.vercel.app", // из логов
   "https://travella-fullstack-8yle5am3l-komil.vercel.app", // старое превью
-  process.env.FRONTEND_URL || "",                            // если задан в env
-]);
+  process.env.FRONTEND_URL || "",
+];
+
+// добираем из ENV (если задано)
+const ENV_WHITELIST = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const WHITELIST = new Set([...BASE_WHITELIST, ...ENV_WHITELIST]);
 
 function isAllowedOrigin(origin) {
   if (!origin) return true; // curl/Postman/сервер-сервер
@@ -33,9 +47,7 @@ function isAllowedOrigin(origin) {
       (hostname === "travella-fullstack.vercel.app" ||
         hostname.startsWith("travella-fullstack-"));
 
-    if (isVercelPreview) return true;
-
-    return false;
+    return isVercelPreview;
   } catch {
     return false;
   }
@@ -50,23 +62,23 @@ const corsOptions = {
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
+  credentials: true,              // оставил, если используются cookie
+  optionsSuccessStatus: 204,      // корректный код для preflight
 };
 
-/** ===================== availabilityRoutes ===================== */
-
-const availabilityRoutes = require("./routes/availabilityRoutes");
-app.use("/api/availability", availabilityRoutes);
-
-// Ставим ПЕРЕД роутами
+// ВАЖНО: CORS должен стоять ПЕРЕД ЛЮБЫМИ РОУТАМИ
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
+/** ===================== /CORS ===================== */
 
 /** ===================== Body ===================== */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 /** ===================== Routes ===================== */
+const availabilityRoutes = require("./routes/availabilityRoutes");
+app.use("/api/availability", availabilityRoutes);
+
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
 
@@ -83,7 +95,6 @@ app.use("/api/clients", clientRoutes);
  * requestRoutes может экспортировать:
  * 1) только router  -> module.exports = router
  * 2) объект { router, cleanupExpiredRequests, purgeExpiredRequests }
- * Поддержим оба варианта.
  */
 const _requestRoutes = require("./routes/requestRoutes");
 const requestRouter = _requestRoutes.router || _requestRoutes; // express.Router
@@ -113,10 +124,6 @@ const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
 
 /** ===================== Aliases (Back-compat) ===================== */
-/**
- * Эти пути дергает фронт. Чтобы не ловить 404 даже со старым фронтом,
- * даем алиасы тут. Если в requestRoutes есть реальные функции — вызываем их.
- */
 app.post("/api/providers/cleanup-expired", authenticateToken, async (_req, res) => {
   try {
     const removed = await cleanupExpiredFn();
@@ -164,5 +171,6 @@ app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 /** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
+  console.log("[CORS] allowed:", Array.from(WHITELIST));
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
