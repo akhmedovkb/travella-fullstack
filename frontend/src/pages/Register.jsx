@@ -87,7 +87,7 @@ await axios.post(
   payload,
   { headers: { "Content-Type": "application/json" } }
 );
-      alert(t("register.success"));
+      toast.success(t("register.success")); // ✅ красивый тост об успехе
       navigate("/login");
     } catch (error) {
       console.error("Ошибка регистрации:", error.response?.data || error.message);
