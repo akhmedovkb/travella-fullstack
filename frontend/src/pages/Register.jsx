@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import { toast } from "../ui/toast"; // единый тост (реэкспорт react-hot-toast)
+import { toast } from "../ui/toast"; // реэкспорт из react-hot-toast
 
 const Register = () => {
   const { t } = useTranslation();
@@ -22,19 +22,20 @@ const Register = () => {
     password: "",
   });
 
-  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   // стабильный дебаунс между рендерами
-  const debounceRef = useRef<number | null>(null);
+  const debounceRef = useRef(null);
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 
-  const fetchCities = async (query: string) => {
-    if (!query || query.trim().length < 2) {
+  const fetchCities = async (query) => {
+    const q = (query || "").trim();
+    if (!q || q.length < 2) {
       setLocationSuggestions([]);
       return;
     }
@@ -44,7 +45,7 @@ const Register = () => {
         "https://wft-geo-db.p.rapidapi.com/v1/geo/cities",
         {
           params: {
-            namePrefix: query,
+            namePrefix: q,
             limit: 5,
             sort: "-population",
             countryIds: "UZ",
@@ -55,22 +56,22 @@ const Register = () => {
           },
         }
       );
-      const cities = (response.data?.data || []).map((city: any) => city.city);
+      const cities = (response.data?.data || []).map((city) => city.city);
       setLocationSuggestions(cities);
-    } catch (err: any) {
-      // Лимиты RapidAPI (429) или сеть — не шумим тостами, просто очищаем подсказки
+    } catch (err) {
+      // Лимиты RapidAPI (429) или сеть — не шумим тостами
       console.warn("GeoDB autocomplete error:", err?.response?.status || err?.message);
       setLocationSuggestions([]);
     }
   };
 
-  const handleLocationSelect = (city: string) => {
+  const handleLocationSelect = (city) => {
     setFormData((prev) => ({ ...prev, location: city }));
     setLocationSuggestions([]);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, files } = e.target as HTMLInputElement;
+  const handleChange = (e) => {
+    const { name, value, files } = e.target;
 
     if (name === "photo" && files && files.length > 0) {
       const reader = new FileReader();
@@ -84,16 +85,14 @@ const Register = () => {
     if (name === "location") {
       setFormData((prev) => ({ ...prev, location: value }));
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = window.setTimeout(() => {
-        fetchCities(value.trim());
-      }, 500); // помягче, чтобы не ловить 429
+      debounceRef.current = setTimeout(() => fetchCities(value), 500); // мягче, чтобы не ловить 429
       return;
     }
 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
 
@@ -121,8 +120,8 @@ const Register = () => {
       );
       navigate("/login");
     } catch (error) {
-      // Ошибка уже показана в toast.promise
       console.error("Ошибка регистрации:", error);
+      // сообщение уже показано в toast.promise
     } finally {
       setSubmitting(false);
     }
