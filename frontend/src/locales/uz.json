@@ -491,6 +491,7 @@
 
     "errors": {
       "generic": "Nimadir notoʻgʻri ketdi. Iltimos, yana urinib koʻring.",
+      "required": "Bu maydonni to`ldirin",
       "required_name": "Nomini kiriting.",
       "required_location": "Hudud yoki shaharni kiriting.",
       "required_phone": "Telefon raqamini kiriting.",
