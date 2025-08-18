@@ -479,19 +479,34 @@
     "email": "Email",
     "social": "Social link",
     "password": "Password",
+
+    "location_placeholder": "Region or city (e.g., Tashkent)",
     "photo": "Profile photo",
     "select_file": "Choose file",
-    "file_chosen": "File selected",
+    "file_chosen": "File chosen",
     "no_file": "No file chosen",
-    "location_placeholder": "Region or city (e.g., Tashkent)",
+
+    "phone_hint": "Enter the number in international format, e.g. +998 90 123 45 67",
     "button": "Register",
     "loading": "Submitting…",
-    "success": "Registration completed successfully!",
-    "error": "Registration error",
-    "phone_hint": "Enter the number in international format, e.g. +998 90 123 45 67",
-    "phone_error": "Phone format is invalid. Example: +998 90 123 45 67",
-    "phone_invalid": "Phone is invalid"
-},
+    "success": "Registration successful!",
+
+    "errors": {
+      "generic": "Something went wrong. Please try again.",
+      "required_name": "Enter the name.",
+      "required_location": "Specify the region or city.",
+      "required_phone": "Enter the phone number.",
+      "required_email": "Enter the email.",
+      "required_password": "Enter the password.",
+      "email_invalid": "Invalid email.",
+      "phone_invalid": "Invalid phone number. Example: +998 90 123 45 67",
+      "password_weak": "Password is too short (min 6 characters).",
+      "email_taken": "This email is already in use.",
+      "phone_taken": "This phone number is already in use.",
+      "duplicate": "A record with these data already exists."
+    }
+  },
+  
   "form": {
     "required": "Ushbu maydonni to‘ldiring.",
     "email_invalid": "Yaroqli e-pochta kiriting.",
