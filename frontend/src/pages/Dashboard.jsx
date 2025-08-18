@@ -858,7 +858,6 @@ direction: "",
     ) {
       const d = service.details || {};
       setDetails({
-        grossPrice: d.grossPrice || d.priceGross || service.grossPrice || service.price_gross || \"\",
         direction: d.direction || "",
         directionCountry: d.directionCountry || "",
         directionFrom: d.directionFrom || "",
@@ -898,7 +897,7 @@ direction: "",
       setDescription(service.description || "");
       setPrice(service.price || "");
       const sd = service.details || {};
-      setDetails((prev) => ({ ...prev, grossPrice: (sd.grossPrice ?? sd.priceGross ?? service.price_gross ?? service.grossPrice ?? \"\") })); // <-- добавлено
+      setDetails((prev) => ({ ...prev, grossPrice: sd.grossPrice || "" })); // <-- добавлено
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
@@ -948,14 +947,6 @@ direction: "",
         })
       );
 
-const __grossNum = (() => {
-  const g = details?.grossPrice;
-  if (g === "" || g === null || g === undefined) return undefined;
-  const n = Number(g);
-  return Number.isFinite(n) ? n : undefined;
-})();
-
-
     const raw = {
       title,
       category,
@@ -963,7 +954,7 @@ const __grossNum = (() => {
       price: isExtendedCategory ? undefined : price,
       description: isExtendedCategory ? undefined : description,
       availability: isExtendedCategory ? undefined : availability,
-      details: isExtendedCategory ? { ...details, ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}) } : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
+      details: isExtendedCategory ? details : (details?.grossPrice ? { grossPrice: details.grossPrice } : undefined),
     };
 
     const data = compact(raw);
