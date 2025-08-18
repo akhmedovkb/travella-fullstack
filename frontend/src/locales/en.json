@@ -499,7 +499,7 @@
       "registerBtn": "Register",
       "title": "Client registration",
       "success": "Registration successful",
-      "error": "Registration error"
+      "error": "Registration error",
 
     "errors": {
       "required": "Fill this field",
