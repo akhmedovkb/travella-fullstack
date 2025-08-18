@@ -1,14 +1,16 @@
-import React, { useState, useRef } from "react";
+// frontend/src/pages/Register.jsx
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import { toast } from "../ui/toast"; // ✅ единый тост
+import { toast } from "../ui/toast"; // единый тост (реэкспорт react-hot-toast)
 
 const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     name: "",
     type: "guide",
@@ -17,24 +19,35 @@ const Register = () => {
     phone: "",
     email: "",
     social: "",
-    password: ""
+    password: "",
   });
 
-  const [locationSuggestions, setLocationSuggestions] = useState([]);
-  const debounceRef = useRef(null); // ✅ стабильный дебаунс между рендерами
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
-  const fetchCities = async (query) => {
-    if (!query) return setLocationSuggestions([]);
+  // стабильный дебаунс между рендерами
+  const debounceRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const fetchCities = async (query: string) => {
+    if (!query || query.trim().length < 2) {
+      setLocationSuggestions([]);
+      return;
+    }
 
     try {
       const response = await axios.get(
-        `https://wft-geo-db.p.rapidapi.com/v1/geo/cities`,
+        "https://wft-geo-db.p.rapidapi.com/v1/geo/cities",
         {
           params: {
             namePrefix: query,
             limit: 5,
             sort: "-population",
-            countryIds: "UZ"
+            countryIds: "UZ",
           },
           headers: {
             "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
@@ -42,60 +55,76 @@ const Register = () => {
           },
         }
       );
-      const cities = response.data.data.map((city) => city.city);
+      const cities = (response.data?.data || []).map((city: any) => city.city);
       setLocationSuggestions(cities);
-    } catch (err) {
-      console.error("Ошибка автоподсказки:", err);
+    } catch (err: any) {
+      // Лимиты RapidAPI (429) или сеть — не шумим тостами, просто очищаем подсказки
+      console.warn("GeoDB autocomplete error:", err?.response?.status || err?.message);
       setLocationSuggestions([]);
     }
   };
 
-  const handleLocationSelect = (city) => {
+  const handleLocationSelect = (city: string) => {
     setFormData((prev) => ({ ...prev, location: city }));
     setLocationSuggestions([]);
   };
 
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === "photo" && files.length > 0) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, files } = e.target as HTMLInputElement;
+
+    if (name === "photo" && files && files.length > 0) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, photo: reader.result }));
+        setFormData((prev) => ({ ...prev, photo: String(reader.result || "") }));
       };
       reader.readAsDataURL(files[0]);
-    } else if (name === "location") {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        fetchCities(value);
-      }, 300);
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      return;
     }
+
+    if (name === "location") {
+      setFormData((prev) => ({ ...prev, location: value }));
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = window.setTimeout(() => {
+        fetchCities(value.trim());
+      }, 500); // помягче, чтобы не ловить 429
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const payload = {
-  ...formData,
-  location: [formData.location], // оборачиваем location в массив
-};
+    if (submitting) return;
 
-await axios.post(
-  `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
-  payload,
-  { headers: { "Content-Type": "application/json" } }
-);
-      toast.success(t("register.success")); // ✅ красивый тост об успехе
+    const payload = {
+      ...formData,
+      location: [formData.location], // бэк ждёт массив
+    };
+
+    try {
+      setSubmitting(true);
+      await toast.promise(
+        axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
+          payload,
+          { headers: { "Content-Type": "application/json" } }
+        ),
+        {
+          loading: t("register.loading") || "Отправка…",
+          success: t("register.success"),
+          error: (err) =>
+            err?.response?.data?.error ||
+            err?.message ||
+            t("register.error"),
+        }
+      );
       navigate("/login");
     } catch (error) {
-      console.error("Ошибка регистрации:", error.response?.data || error.message);
-      const msg =
-        error?.response?.data?.error ||
-        error?.message ||
-        t("register.error");
-      toast.error(msg); // ✅ тост об ошибке
+      // Ошибка уже показана в toast.promise
+      console.error("Ошибка регистрации:", error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -114,7 +143,7 @@ await axios.post(
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label>{t("register.name")}</label>
+            <label className="block mb-1">{t("register.name")}</label>
             <input
               name="name"
               required
@@ -123,7 +152,7 @@ await axios.post(
               className="w-full border p-2 mb-4"
             />
 
-            <label>{t("register.type")}</label>
+            <label className="block mb-1">{t("register.type")}</label>
             <select
               name="type"
               value={formData.type}
@@ -136,7 +165,7 @@ await axios.post(
               <option value="hotel">{t("hotel")}</option>
             </select>
 
-            <label>{t("location")}</label>
+            <label className="block mb-1">{t("location")}</label>
             <input
               name="location"
               value={formData.location}
@@ -144,13 +173,13 @@ await axios.post(
               lang={i18n.language}
               onChange={handleChange}
               placeholder={t("register.location_placeholder")}
-              className="w-full border p-2 mb-4"
+              className="w-full border p-2 mb-1"
             />
             {locationSuggestions.length > 0 && (
-              <ul className="bg-white border mt-0 -mt-4 max-h-40 overflow-y-auto z-10 relative">
+              <ul className="bg-white border mt-0 -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
                 {locationSuggestions.map((city, index) => (
                   <li
-                    key={index}
+                    key={`${city}-${index}`}
                     onClick={() => handleLocationSelect(city)}
                     className="p-2 border-b cursor-pointer hover:bg-gray-100"
                   >
@@ -160,7 +189,7 @@ await axios.post(
               </ul>
             )}
 
-            <div className="mb-4">
+            <div className="mt-4">
               <label className="block font-medium mb-1">{t("register.photo")}</label>
               <div className="flex items-center gap-4">
                 <label className="bg-orange-500 text-white py-2 px-4 rounded cursor-pointer hover:bg-orange-600">
@@ -181,7 +210,7 @@ await axios.post(
           </div>
 
           <div>
-            <label>{t("register.phone")}</label>
+            <label className="block mb-1">{t("register.phone")}</label>
             <input
               name="phone"
               required
@@ -190,7 +219,7 @@ await axios.post(
               className="w-full border p-2 mb-4"
             />
 
-            <label>{t("register.email")}</label>
+            <label className="block mb-1">{t("register.email")}</label>
             <input
               name="email"
               type="email"
@@ -200,14 +229,14 @@ await axios.post(
               className="w-full border p-2 mb-4"
             />
 
-            <label>{t("register.social")}</label>
+            <label className="block mb-1">{t("register.social")}</label>
             <input
               name="social"
               onChange={handleChange}
               className="w-full border p-2 mb-4"
             />
 
-            <label>{t("register.password")}</label>
+            <label className="block mb-1">{t("register.password")}</label>
             <input
               name="password"
               type="password"
@@ -221,9 +250,14 @@ await axios.post(
 
         <button
           type="submit"
-          className="mt-6 w-full bg-orange-600 text-white py-3 rounded font-bold"
+          disabled={submitting}
+          className={`mt-6 w-full text-white py-3 rounded font-bold transition ${
+            submitting
+              ? "bg-orange-400 cursor-not-allowed"
+              : "bg-orange-600 hover:bg-orange-700"
+          }`}
         >
-          {t("register.button")}
+          {submitting ? t("register.loading") || "Отправка…" : t("register.button")}
         </button>
       </form>
     </div>
