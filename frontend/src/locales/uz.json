@@ -470,26 +470,41 @@
   "expired": "Muddati tugagan",
 
   "register": {
-    "title": "Ta’minotchini ro‘yxatdan o‘tkazish",
+    "title": "Taʼminotchini roʻyxatdan oʻtkazish",
     "name": "Nomi",
-    "type": "Ta’minotchi turi",
+    "type": "Taʼminotchi turi",
     "phone": "Telefon",
     "email": "Email",
     "social": "Ijtimoiy tarmoq havolasi",
     "password": "Parol",
+
+    "location_placeholder": "Hudud yoki shahar (masalan, Toshkent)",
     "photo": "Profil rasmi",
     "select_file": "Fayl tanlash",
     "file_chosen": "Fayl tanlandi",
-    "no_file": "Fayl tanlanmagan",
-    "location_placeholder": "Hudud yoki shahar (masalan, Toshkent)",
-    "button": "Ro‘yxatdan o‘tish",
+    "no_file": "Fayl tanlanmadi",
+
+    "phone_hint": "Raqamni xalqaro formatda kiriting, masalan +998 90 123 45 67",
+    "button": "Roʻyxatdan oʻtish",
     "loading": "Yuborilmoqda…",
-    "success": "Ro‘yxatdan o‘tish muvaffaqiyatli yakunlandi!",
-    "error": "Ro‘yxatdan o‘tishda xatolik",
-    "phone_hint": "Telefon raqamini xalqaro formatda kiriting, masalan +998 90 123 45 67",
-    "phone_error": "Telefon formati noto‘g‘ri. Misol: +998 90 123 45 67",
-    "phone_invalid": "Telefon raqami noto‘g‘ri"
+    "success": "Roʻyxatdan oʻtish muvaffaqiyatli yakunlandi!",
+
+    "errors": {
+      "generic": "Nimadir notoʻgʻri ketdi. Iltimos, yana urinib koʻring.",
+      "required_name": "Nomini kiriting.",
+      "required_location": "Hudud yoki shaharni kiriting.",
+      "required_phone": "Telefon raqamini kiriting.",
+      "required_email": "Email kiriting.",
+      "required_password": "Parol kiriting.",
+      "email_invalid": "Email notoʻgʻri.",
+      "phone_invalid": "Telefon raqami notoʻgʻri. Masalan: +998 90 123 45 67",
+      "password_weak": "Parol juda qisqa (kamida 6 ta belgi).",
+      "email_taken": "Bu email allaqachon ishlatilmoqda.",
+      "phone_taken": "Bu telefon raqami allaqachon ishlatilmoqda.",
+      "duplicate": "Shu maʼlumotlar bilan yozuv allaqachon mavjud."
+    }
   },
+  
   "form": {
     "required": "Заполните это поле.",
     "email_invalid": "Введите корректный e-mail.",
