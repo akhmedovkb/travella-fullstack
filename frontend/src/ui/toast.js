@@ -1,15 +1,13 @@
-// unified toast wrapper for the whole app (react-toastify underneath)
-// Pages/components should always import from "../ui/toast"
-import { toast as _toast } from "react-toastify";
+// Unified toast wrapper (react-hot-toast)
+import { toast as _toast } from "react-hot-toast";
 
 export const toast = (msg, opts) => _toast(msg, opts);
 export const toastSuccess = (msg, opts) => _toast.success(msg, opts);
 export const toastError   = (msg, opts) => _toast.error(msg, opts);
-export const toastInfo    = (msg, opts) => _toast.info(msg, opts);
-export const toastWarn    = (msg, opts) => _toast.warn(msg, opts);
-
-export const toastPromise = (promise, { loading, success, error }, opts) =>
-  _toast.promise(promise, { loading, success, error }, opts);
+export const toastInfo    = (msg, opts) => _toast(msg, opts);
+export const toastWarn    = (msg, opts) => _toast(msg, opts);
+export const toastPromise = (p, labels, opts) => _toast.promise(p, labels, opts);
+export const toastCustom  = (render, opts) => _toast.custom(render, opts);
 
 export default {
   toast,
@@ -18,4 +16,5 @@ export default {
   info: toastInfo,
   warn: toastWarn,
   promise: toastPromise,
+  custom: toastCustom,
 };
