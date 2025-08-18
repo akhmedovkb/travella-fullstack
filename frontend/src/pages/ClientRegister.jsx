@@ -104,9 +104,6 @@ export default function ClientRegister() {
     <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{t("client.register.title")}</h1>
-        <div className="scale-90">
-          <LanguageSelector />
-        </div>
       </div>
 
       {err && (
