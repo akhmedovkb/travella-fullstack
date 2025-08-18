@@ -5,17 +5,39 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import LanguageSelector from "../components/LanguageSelector";
-import { toast } from "../ui/toast"; // единый реэкспорт react-hot-toast
+import { toast } from "../ui/toast"; // наш обёрнутый react-hot-toast
 
-// Простая нормализация и валидация номера телефона (E.164)
-const normalizePhone = (raw = "") => {
-  const trimmed = String(raw).trim();
-  // оставляем только + и цифры
-  const plus = trimmed.startsWith("+") ? "+" : "";
-  const digits = trimmed.replace(/[^\d]/g, "");
-  return plus + digits;
+/** ----------------- helpers: телефон UZ -> E.164 ------------------ */
+const onlyDigits = (s = "") => String(s).replace(/\D+/g, "");
+
+// Приводим разные локальные варианты к +998XXXXXXXXX
+const normalizePhoneUZ = (input = "") => {
+  const d = onlyDigits(input);
+
+  if (!d) return "";
+  // Уже в международном без плюса
+  if (d.startsWith("998") && d.length >= 12) return `+${d}`;
+
+  // +998... (с плюсом) — просто нормализуем
+  if (String(input).trim().startsWith("+")) return `+${d}`;
+
+  // 0XXXXXXXXX  -> +998XXXXXXXXX
+  if (d.length === 10 && d.startsWith("0")) return `+998${d.slice(1)}`;
+
+  // 9 локальных цифр -> +998XXXXXXXXX
+  if (d.length === 9) return `+998${d}`;
+
+  // 8XXXXXXXXX (встречается) -> +998XXXXXXXXX (берём последние 9)
+  if (d.length >= 10 && d.startsWith("8")) return `+998${d.slice(-9)}`;
+
+  // дефолт: подставим плюс
+  return `+${d}`;
 };
-const isValidE164 = (phone) => /^\+[1-9]\d{7,14}$/.test(phone); // от 8 до 15 цифр после +
+
+// Универсальная валидация E.164 (до 15 цифр)
+const isValidE164 = (phone = "") => /^\+[1-9]\d{7,14}$/.test(String(phone).trim());
+
+/** ------------------------------------------------------------------ */
 
 const Register = () => {
   const { t } = useTranslation();
@@ -34,9 +56,11 @@ const Register = () => {
 
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // для показа подсказки под телефоном только после взаимодействия
   const [phoneTouched, setPhoneTouched] = useState(false);
 
-  // стабильный дебаунс для подсказок
+  // стабильный дебаунс между рендерами
   const debounceRef = useRef(null);
   useEffect(() => {
     return () => {
@@ -44,25 +68,28 @@ const Register = () => {
     };
   }, []);
 
+  /** ------------------- GeoDB автоподсказки ------------------- */
   const fetchCities = async (query) => {
     const q = (query || "").trim();
     if (!q || q.length < 2) {
       setLocationSuggestions([]);
       return;
     }
+
     try {
-      const resp = await axios.get("https://wft-geo-db.p.rapidapi.com/v1/geo/cities", {
+      const res = await axios.get("https://wft-geo-db.p.rapidapi.com/v1/geo/cities", {
         params: { namePrefix: q, limit: 5, sort: "-population", countryIds: "UZ" },
         headers: {
           "X-RapidAPI-Key": import.meta.env.VITE_GEODB_API_KEY,
           "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
         },
       });
-      const cities = (resp.data?.data || []).map((c) => c.city);
+
+      const cities = (res.data?.data || []).map((c) => c.city);
       setLocationSuggestions(cities);
     } catch (err) {
-      // Часто 429 — не шумим пользователю, просто убираем список
-      console.warn("GeoDB autocomplete:", err?.response?.status || err?.message);
+      // Часто 429 — не шумим тостами
+      console.warn("GeoDB autocomplete error:", err?.response?.status || err?.message);
       setLocationSuggestions([]);
     }
   };
@@ -74,6 +101,10 @@ const Register = () => {
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
+
+    if (name === "phone") {
+      if (!phoneTouched) setPhoneTouched(true);
+    }
 
     if (name === "photo" && files && files.length > 0) {
       const reader = new FileReader();
@@ -91,36 +122,33 @@ const Register = () => {
       return;
     }
 
-    if (name === "phone") {
-      // позволяем вводить в свободной форме, но сохраняем нормализованную копию рядом
-      setFormData((p) => ({ ...p, phone: value }));
-      if (!phoneTouched) setPhoneTouched(true);
-      return;
-    }
-
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
+  /** ----------------------- SUBMIT ----------------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
 
-    // валидация телефона
-    const normalized = normalizePhone(formData.phone);
-    if (!isValidE164(normalized)) {
-      toast.error(t("register.phone_error"));
+    // Нормализуем и валидируем телефон
+    const normalizedPhone = normalizePhoneUZ(formData.phone);
+    const phoneOk = isValidE164(normalizedPhone);
+
+    if (!phoneOk) {
       setPhoneTouched(true);
+      toast.error(t("register.phone_invalid"));
       return;
     }
 
     const payload = {
       ...formData,
-      phone: normalized,           // отправляем нормализованный
-      location: [formData.location] // бэк ждёт массив
+      phone: normalizedPhone,
+      location: [formData.location], // бэк ждёт массив
     };
 
     try {
       setSubmitting(true);
+
       await toast.promise(
         axios.post(
           `${import.meta.env.VITE_API_BASE_URL}/api/providers/register`,
@@ -130,22 +158,35 @@ const Register = () => {
         {
           loading: t("register.loading") || "Отправка…",
           success: t("register.success"),
-          error: (err) =>
-            err?.response?.data?.error ||
-            err?.message ||
-            t("register.error"),
+          error: (err) => {
+            const raw =
+              err?.response?.data?.error?.toString?.() ||
+              err?.message ||
+              t("register.error");
+
+            const low = raw.toLowerCase();
+            if (low.includes("email") && (low.includes("exist") || low.includes("used") || low.includes("taken"))) {
+              return t("register.email_taken");
+            }
+            if (low.includes("phone") && (low.includes("invalid") || low.includes("format"))) {
+              return t("register.phone_invalid");
+            }
+            return raw; // пусть покажет, что вернул бэк
+          },
         }
       );
+
       navigate("/login");
     } catch (err) {
+      // текст ошибки уже показан внутри toast.promise
       console.error("Register error:", err);
-      // сообщение уже показано в toast.promise
     } finally {
       setSubmitting(false);
     }
   };
 
-  const phoneNormalized = normalizePhone(formData.phone);
+  /** вычисления для UI */
+  const phoneNormalized = normalizePhoneUZ(formData.phone);
   const phoneInvalid = phoneTouched && !isValidE164(phoneNormalized);
 
   return (
@@ -158,7 +199,7 @@ const Register = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Левая колонка */}
-          <div className="relative">
+          <div>
             <label className="block mb-1">{t("register.name")}</label>
             <input
               name="name"
@@ -192,7 +233,7 @@ const Register = () => {
               className="w-full border p-2 mb-1"
             />
             {locationSuggestions.length > 0 && (
-              <ul className="absolute z-10 w-full bg-white border max-h-40 overflow-y-auto">
+              <ul className="bg-white border mt-0 -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
                 {locationSuggestions.map((city, idx) => (
                   <li
                     key={`${city}-${idx}`}
@@ -235,14 +276,16 @@ const Register = () => {
               lang={i18n.language}
               onChange={handleChange}
               onBlur={() => setPhoneTouched(true)}
-              className={`w-full border p-2 ${phoneInvalid ? "border-red-500" : ""}`}
-              placeholder="+998 90 123 45 67"
+              className={`w-full border p-2 mb-1 ${
+                phoneInvalid ? "border-red-500 focus:border-red-500" : ""
+              }`}
+              placeholder="+998 ** *** ** **"
             />
-            <p className={`mt-1 text-sm ${phoneInvalid ? "text-red-600" : "text-gray-500"}`}>
-              {phoneInvalid ? t("register.phone_error") : t("register.phone_hint")}
-            </p>
+            <div className={`text-xs mb-3 ${phoneInvalid ? "text-red-600" : "text-gray-500"}`}>
+              {t("register.phone_hint")}
+            </div>
 
-            <label className="block mb-1 mt-4">{t("register.email")}</label>
+            <label className="block mb-1">{t("register.email")}</label>
             <input
               name="email"
               type="email"
