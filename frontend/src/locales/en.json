@@ -469,5 +469,26 @@
     "favorite_remove": "Remove from favorites"
   },
   "gross_price": "Client price (gross)",
-  "expired": "Expired"
+  "expired": "Expired",
+
+  "register": {
+    "title": "Provider Registration",
+    "name": "Name",
+    "type": "Provider type",
+    "phone": "Phone",
+    "email": "Email",
+    "social": "Social link",
+    "password": "Password",
+    "photo": "Profile photo",
+    "select_file": "Choose file",
+    "file_chosen": "File selected",
+    "no_file": "No file chosen",
+    "location_placeholder": "Region or city (e.g., Tashkent)",
+    "button": "Register",
+    "loading": "Submitting…",
+    "success": "Registration completed successfully!",
+    "error": "Registration error",
+    "phone_hint": "Enter the number in international format, e.g. +998 90 123 45 67",
+    "phone_error": "Phone format is invalid. Example: +998 90 123 45 67",
+    "phone_invalid": "Phone is invalid"
 }
