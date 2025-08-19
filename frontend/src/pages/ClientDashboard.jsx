@@ -6,6 +6,7 @@ import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
+import ServiceCard from "../components/ServiceCard"; // ⬅️ добавлено
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -164,7 +165,6 @@ function extractServiceFields(item) {
       "social","social_link"
     ])
   );
-
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
@@ -339,7 +339,17 @@ function EmptyFavorites() {
   );
 }
 
-function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQuickRequest, onBook }) {
+/** ==================== НОВЫЙ FavoritesList: рендер через ServiceCard ==================== */
+function FavoritesList({
+  items,
+  page,
+  perPage = 8,
+  onPageChange,
+  favIds,
+  onToggleFavorite,
+  onQuickRequest,
+  now,
+}) {
   const { t } = useTranslation();
   const total = items?.length || 0;
   const pages = Math.max(1, Math.ceil(total / perPage));
@@ -347,209 +357,77 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
   const start = (current - 1) * perPage;
   const pageItems = items.slice(start, start + perPage);
 
+  // helper для id услуги внутри элемента избранного
+  const getServiceId = (row) => {
+    const svc = row?.service || row || {};
+    return (
+      svc.id ??
+      row?.service_id ??
+      row?.serviceId ??
+      svc._id ??
+      row?._id ??
+      null
+    );
+  };
+
   return (
     <div>
       {total === 0 ? (
         <EmptyFavorites />
       ) : (
         <>
-          <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
-            {pageItems.map((it) => {
-              const {
-                svc, title, hotel, accommodation, dates, prettyPrice,
-                inlineProvider, providerId, flatName, flatPhone, flatTg,
-              } = extractServiceFields(it);
-
-              // расширенное определение serviceId
-              const serviceId =
-                svc.id ?? svc._id ?? svc.service_id ?? svc.serviceId ??
-                it.service_id ?? it.serviceId ?? it.service?.id ?? null;
-
-              const image =
-                (Array.isArray(svc.images) && svc.images[0]) ||
-                svc.cover || svc.cover_url || svc.image ||
-                it.cover || it.cover_url || it.image || null;
-
-              // (оставляю твои «хуки в map», чтоб ничего не ломать)
-              const [provider, setProvider] = useState(null);
-              useEffect(() => {
-                let alive = true;
-                (async () => {
-                  if (!providerId) return;
-                  const p = await fetchProviderProfile(providerId);
-                  if (alive) setProvider(p);
-                })();
-                return () => { alive = false; };
-              }, [providerId]);
-
-              const prov = { ...(inlineProvider || {}), ...(provider || {}) };
-
-              const supplierName = _firstNonEmpty(
-                prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand,
-                flatName
-              );
-              const supplierPhone = _firstNonEmpty(
-                prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile, prov?.whatsapp, prov?.whatsApp,
-                prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone,
-                flatPhone
-              );
-              const supplierTgRaw = _firstNonEmpty(
-                prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
-                prov?.contacts?.telegram, prov?.socials?.telegram,
-                prov?.social, prov?.social_link,
-                flatTg
-              );
-
-              const supplierTg = renderTelegram(supplierTgRaw);
-              const expireAt = resolveExpireAt(svc);
-              const baseNow = Date.now();
-              const leftMs = expireAt ? Math.max(0, expireAt - baseNow) : null;
-              const hasTimer = !!expireAt;
-              const expired  = hasTimer && leftMs <= 0;
-              const timerText = hasTimer ? formatLeft(leftMs) : null;
-
-              // подсказка (портал)
-              const imgRef = useRef(null);
-              const [tipOpen, setTipOpen] = useState(false);
-              const [tipPos, setTipPos] = useState({ x: 0, y: 0, w: 0 });
-              const computePos = () => {
-                const r = imgRef.current?.getBoundingClientRect();
-                if (!r) return;
-                setTipPos({ x: r.left, y: r.top + 40, w: Math.floor(r.width) });
-              };
-
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {pageItems.map((row) => {
+              const sid = getServiceId(row);
               return (
-                <div key={it.id} className={`group relative w-full bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col ${expired ? "opacity-75" : ""}`}>
-                  <div
-                    className="aspect-[4/3] bg-gray-100 relative"
-                    ref={imgRef}
-                    onMouseEnter={() => { computePos(); setTipOpen(true); }}
-                    onMouseMove={computePos}
-                    onMouseLeave={() => setTipOpen(false)}
-                  >
-                    {image ? (
-                      <img src={image} alt={title || "Service"} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-sm">{t("favorites.no_image", { defaultValue: "Нет изображения" })}</span>
-                      </div>
-                    )}
-
-                    {hasTimer && (
-                      <span
-                        className={`absolute top-2 left-2 z-20 pointer-events-none px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"}`}
-                        title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
-                      >
-                        {timerText}
-                      </span>
-                    )}
-
-                    {/* Сердечко (удаление) */}
-                    <div className="absolute top-2 right-2 z-20">
-                      <div className="relative group/heart">
-                        <button
-                            type="button"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove?.(it.id); }}
-                            aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                            aria-pressed="true"
-                            className="
-                              w-9 h-9 grid place-items-center rounded-full text-red-500
-                              backdrop-blur ring-1 ring-white/30 shadow-md
-                              bg-[radial-gradient(120%_120%_at_30%_25%,rgba(255,255,255,.70),rgba(255,255,255,.38)_40%,rgba(0,0,0,.18)_70%,rgba(0,0,0,.38))]
-                              hover:shadow-lg active:scale-[.97] transition
-                            "
-                          >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z"/>
-                            </svg>
-                          </button>
-                        <div className="absolute -top-2 right-8 -translate-y-full opacity-0 group-hover/heart:opacity-100 transition-opacity pointer-events-none">
-                          <div className="relative bg-black/80 text-white text-xs px-2 py-1 rounded-md shadow backdrop-blur-md">
-                            {t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                            <div className="absolute -bottom-1 right-2 w-2 h-2 bg-black/80 rotate-45" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* стеклянная подсказка (портал) */}
-                    <TooltipPortal visible={tipOpen} x={tipPos.x} y={tipPos.y} width={tipPos.w}>
-                      <div className="pointer-events-none select-none rounded-2xl bg-gradient-to-b from-black/70 to-black/40 text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-2xl backdrop-blur-md">
-                        <div className="font-semibold line-clamp-2">{title}</div>
-                        {hotel && (<div><span className="opacity-80">{t("hotel", { defaultValue: "Отель" })}: </span><span className="font-medium">{hotel}</span></div>)}
-                        {accommodation && (<div><span className="opacity-80">{t("accommodation", { defaultValue: "Размещение" })}: </span><span className="font-medium">{accommodation}</span></div>)}
-                        {dates && (<div><span className="opacity-80">{t("date", { defaultValue: "Дата" })}: </span><span className="font-medium">{dates}</span></div>)}
-                        {prettyPrice && (<div><span className="opacity-80">{t("marketplace.price", { defaultValue: "Цена" })}: </span><span className="font-semibold">{prettyPrice}</span></div>)}
-                      </div>
-                    </TooltipPortal>
-                  </div>
-
-                  {/* Тело карточки */}
-                  <div className="p-3 flex-1 flex flex-col">
-                    <div className="font-semibold line-clamp-2">{title}</div>
-                    {prettyPrice && (<div className="mt-1 text-sm">{t("marketplace.price", { defaultValue: "Цена" })}: <span className="font-semibold">{prettyPrice}</span></div>)}
-
-                    {(supplierName || supplierPhone || supplierTg?.label) && (
-                      <div className="mt-2 text-sm space-y-0.5">
-                        {supplierName && (<div><span className="text-gray-500">{t("supplier", { defaultValue: "Поставщик" })}: </span><span className="font-medium">{supplierName}</span></div>)}
-                        {supplierPhone && (
-                          <div>
-                            <span className="text-gray-500">{t("phone", { defaultValue: "Телефон" })}: </span>
-                            <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline" onClick={(e) => e.stopPropagation()}>{supplierPhone}</a>
-                          </div>
-                        )}
-                        {supplierTg?.label && (
-                          <div>
-                            <span className="text-gray-500">{t("telegram", { defaultValue: "Телеграм" })}: </span>
-                            {supplierTg.href ? (
-                              <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline" onClick={(e) => e.stopPropagation()}>{supplierTg.label}</a>
-                            ) : (<span className="font-medium">{supplierTg.label}</span>)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-auto pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {serviceId && (
-                        <>
-                          <button
-                            onClick={() => !expired && onQuickRequest?.(serviceId, { title })}
-                            disabled={expired}
-                            title={expired ? (t("countdown.expired", { defaultValue: "Срок истёк" })) : undefined}
-                            className={`w-full rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] font-semibold
-                            ${expired ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-orange-500 text-white hover:bg-orange-600"}`}
-                            >
-                            {expired ? (t("expired", { defaultValue: "Истекло" })) : t("actions.quick_request", { defaultValue: "Быстрый запрос" })}
-                          </button>
-                          {/*<button
-                            onClick={() => onBook?.(serviceId)}
-                            className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-gray-50"
-                          >
-                            {t("actions.book_now", { defaultValue: "Забронировать" })}
-                          </button>
-                          <button
-                            onClick={() => onRemove?.(it.id)}  // уже есть обработчик
-                            className="w-full border rounded-lg px-3 py-2 text-sm sm:text-[13px] leading-tight whitespace-normal break-words min-h-[40px] hover:bg-red-50 text-red-600"
-                          >
-                            {t("actions.remove", { defaultValue: "Удалить" })}
-                          </button>*/}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <ServiceCard
+                  key={sid || JSON.stringify(row)}
+                  item={row?.service ?? row}
+                  now={now}
+                  favActive={sid ? favIds?.has(String(sid)) : false}
+                  onToggleFavorite={() => sid && onToggleFavorite?.(sid)}
+                  onQuickRequest={(serviceId, providerId, title) =>
+                    onQuickRequest?.(serviceId ?? sid, { title })
+                  }
+                />
               );
             })}
           </div>
 
-          <div className="flex items-center justify-center gap-2 mt-6">
-            <button className="px-3 py-1.5 rounded-lg border disabled:opacity-40" onClick={() => onPageChange?.(current - 1)} disabled={current <= 1}>{t("pagination.prev", { defaultValue: "←" })}</button>
-            {Array.from({ length: pages }).map((_, i) => {
-              const p = i + 1; const active = p === current;
-              return (<button key={p} onClick={() => onPageChange?.(p)} className={`px-3 py-1.5 rounded-lg border ${active ? "bg-gray-900 text-white" : "bg-white"}`}>{p}</button>);
-            })}
-            <button className="px-3 py-1.5 rounded-lg border disabled:opacity-40" onClick={() => onPageChange?.(current + 1)} disabled={current >= pages}>{t("pagination.next", { defaultValue: "→" })}</button>
-          </div>
+          {/* Пагинация */}
+          {total > perPage && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
+                onClick={() => onPageChange?.(current - 1)}
+                disabled={current <= 1}
+              >
+                {t("pagination.prev", { defaultValue: "←" })}
+              </button>
+              {Array.from({ length: pages }).map((_, i) => {
+                const p = i + 1;
+                const active = p === current;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => onPageChange?.(p)}
+                    className={`px-3 py-1.5 rounded-lg border ${
+                      active ? "bg-gray-900 text-white" : "bg-white"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button
+                className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
+                onClick={() => onPageChange?.(current + 1)}
+                disabled={current >= pages}
+              >
+                {t("pagination.next", { defaultValue: "→" })}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -632,6 +510,8 @@ export default function ClientDashboard() {
   // удаление моих запросов
   const [delUI, setDelUI] = useState({ open: false, id: null, isDraft: false, sending: false });
 
+  // 🔴 Set of избранных serviceId (для сердечек и мгновенного hidden)
+  const [favIds, setFavIds] = useState(new Set());
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -721,6 +601,20 @@ export default function ClientDashboard() {
     return () => { cancelled = true; };
   }, [activeTab, t, myId]);
 
+  // подгружаем ids избранного (для сердечка) при входе на таб
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (activeTab !== "favorites") return;
+      try {
+        const ids = await apiGet("/api/wishlist/ids");
+        const arr = Array.isArray(ids) ? ids : [];
+        if (!cancelled) setFavIds(new Set(arr.map(String)));
+      } catch { if (!cancelled) setFavIds(new Set()); }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
   // слушаем событие мгновенного создания (в т.ч. из маркетплейса) + синхронизация между вкладками
   useEffect(() => {
     const onCreated = (e) => {
@@ -789,13 +683,59 @@ export default function ClientDashboard() {
 
   const handleLogout = () => { try { localStorage.removeItem("clientToken"); } finally { window.location.href = "/client/login"; } };
 
+  // старый remove по itemId (оставляю — может вызывать из других мест)
   const handleRemoveFavorite = async (itemId) => {
     try { await apiPost("/api/wishlist/toggle", { itemId }); } catch {}
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
   };
 
-  // quick request из «Избранного» (+локальный черновик)
+  // 🔴 новый тоггл по serviceId для сердечка ServiceCard
+  const toggleFavoriteClient = async (serviceId) => {
+    const key = String(serviceId);
+    try {
+      const res = await apiPost("/api/wishlist/toggle", { serviceId });
+      const added = !!res?.added;
+
+      // обновляем set id
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (added) next.add(key); else next.delete(key);
+        return next;
+      });
+
+      // если сняли — сразу убираем карточку
+      if (!added) {
+        setFavorites((prev) =>
+          prev.filter((row) => {
+            const sid =
+              row?.service?.id ??
+              row?.service_id ??
+              row?.serviceId ??
+              row?.id ??
+              null;
+            return String(sid) !== key;
+          })
+        );
+        // подправим пагинацию, чтоб не оставалась пустая страница
+        setFavPage((p) => {
+          const total = Math.max(0, (favorites?.length || 0) - 1);
+          const max = Math.max(1, Math.ceil(total / 8));
+          return Math.min(p, max);
+        });
+      }
+
+      setMessage(
+        added
+          ? t("messages.favorite_added", { defaultValue: "Добавлено в избранное" })
+          : t("messages.favorite_removed", { defaultValue: "Удалено из избранного" })
+      );
+    } catch {
+      setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
+    }
+  };
+
+  // quick request из «Избранного» (+локальный черновик) — оставил как было
   const handleQuickRequest = async (serviceId, meta = {}) => {
     if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
     const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
@@ -804,7 +744,6 @@ export default function ClientDashboard() {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
-      // мгновенно кладём черновик (даже если GET 404)
       const title = meta.title ||
         favorites.find((f) => {
           const sid =
@@ -821,7 +760,6 @@ export default function ClientDashboard() {
 
       setActiveTab("requests");
 
-      // попробуем ещё раз дотянуть API и смёрджить
       try {
         const apiList = await fetchClientRequestsSafe(myId);
         const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
@@ -858,75 +796,71 @@ export default function ClientDashboard() {
 
   // Удаление заявки (API или локальный черновик)
   function askDeleteRequest(id) {
-  if (!id) return;
-  setDelUI({ open: true, id, isDraft: String(id).startsWith("d_"), sending: false });
-}
+    if (!id) return;
+    setDelUI({ open: true, id, isDraft: String(id).startsWith("d_"), sending: false });
+  }
 
-async function confirmDeleteRequest() {
-  if (!delUI.id) return;
-  setDelUI((s) => ({ ...s, sending: true }));
-  try {
-    if (delUI.isDraft) {
-      const keyId = myId || null;
-      const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
-      saveDrafts(keyId, updated);
-      setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
-    } else {
-      await apiDelete(`/api/requests/${delUI.id}`);
-      setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
-      setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+  async function confirmDeleteRequest() {
+    if (!delUI.id) return;
+    setDelUI((s) => ({ ...s, sending: true }));
+    try {
+      if (delUI.isDraft) {
+        const keyId = myId || null;
+        const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
+        saveDrafts(keyId, updated);
+        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+      } else {
+        await apiDelete(`/api/requests/${delUI.id}`);
+        setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+      }
+    } catch {
+      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+    } finally {
+      setDelUI({ open: false, id: null, isDraft: false, sending: false });
     }
-  } catch {
-    setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
-  } finally {
+  }
+
+  function closeDeleteModal() {
     setDelUI({ open: false, id: null, isDraft: false, sending: false });
   }
-}
-
-function closeDeleteModal() {
-  setDelUI({ open: false, id: null, isDraft: false, sending: false });
-}
-
 
   function openQuickRequestModal(serviceId, meta = {}) {
-  if (!serviceId) return;
-  setQrServiceId(serviceId);
-  setQrTitle(meta.title || "");
-  setQrOpen(true);
-}
-function closeQuickRequestModal() {
-  setQrOpen(false);
-  setQrServiceId(null);
-  setQrTitle("");
-}
-async function submitQuickRequest(note) {
-  if (!qrServiceId) return;
-  try {
-    // отправка на бэкенд
-    await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
-    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
-
-    // мгновенный локальный «черновик» (чтобы карточка сразу появилась)
-    const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
-    const keyId = myId || null;
-    saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
-    setRequests((prev) => [draft, ...prev]);
-    window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrTitle } }));
-
-    setActiveTab("requests");
-
-    // мягко подтянем реальные данные
-    try {
-      const apiList = await fetchClientRequestsSafe(myId);
-      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-      setRequests(mergeRequests(apiList, drafts));
-    } catch {}
-  } catch {
-    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-  } finally {
-    closeQuickRequestModal();
+    if (!serviceId) return;
+    setQrServiceId(serviceId);
+    setQrTitle(meta.title || "");
+    setQrOpen(true);
   }
-}
+  function closeQuickRequestModal() {
+    setQrOpen(false);
+    setQrServiceId(null);
+    setQrTitle("");
+  }
+  async function submitQuickRequest(note) {
+    if (!qrServiceId) return;
+    try {
+      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+
+      const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
+      const keyId = myId || null;
+      saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
+      setRequests((prev) => [draft, ...prev]);
+      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrTitle } }));
+
+      setActiveTab("requests");
+
+      try {
+        const apiList = await fetchClientRequestsSafe(myId);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        setRequests(mergeRequests(apiList, drafts));
+      } catch {}
+    } catch {
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    } finally {
+      closeQuickRequestModal();
+    }
+  }
 
   function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
   function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
@@ -1052,10 +986,11 @@ async function submitQuickRequest(note) {
         items={favorites}
         page={favPage}
         perPage={8}
-        onRemove={handleRemoveFavorite}
+        favIds={favIds}
+        onToggleFavorite={toggleFavoriteClient}
         onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
-        onBook={(serviceId) => openBooking(serviceId)}
         onPageChange={(p) => setFavPage(p)}
+        now={now}
       />
     );
   };
@@ -1151,6 +1086,11 @@ async function submitQuickRequest(note) {
                         const data = await apiGet("/api/wishlist?expand=service");
                         const arr = Array.isArray(data) ? data : data?.items || [];
                         setFavorites(arr);
+                        try {
+                          const ids = await apiGet("/api/wishlist/ids");
+                          const list = Array.isArray(ids) ? ids : [];
+                          setFavIds(new Set(list.map(String)));
+                        } catch {}
                       }
                     } finally {
                       setLoadingTab(false);
@@ -1165,7 +1105,18 @@ async function submitQuickRequest(note) {
 
             {activeTab === "requests" && <RequestsList />}
             {activeTab === "bookings" && <BookingsList />}
-            {activeTab === "favorites" && <FavoritesTab />}
+            {activeTab === "favorites" && (
+              <FavoritesList
+                items={favorites}
+                page={favPage}
+                perPage={8}
+                favIds={favIds}
+                onToggleFavorite={toggleFavoriteClient}
+                onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
+                onPageChange={(p) => setFavPage(p)}
+                now={now}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -1209,21 +1160,21 @@ async function submitQuickRequest(note) {
         </div>
       )}
       <QuickRequestModal
-      open={qrOpen}
-      onClose={closeQuickRequestModal}
-      onSubmit={submitQuickRequest}
-    />
+        open={qrOpen}
+        onClose={closeQuickRequestModal}
+        onSubmit={submitQuickRequest}
+      />
       <ConfirmModal
-      open={delUI.open}
-      danger
-      busy={delUI.sending}
-      title={t("actions.delete", { defaultValue: "Удалить" })}
-      message={t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" })}
-      confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
-      cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
-      onConfirm={confirmDeleteRequest}
-      onClose={closeDeleteModal}
-    />
+        open={delUI.open}
+        danger
+        busy={delUI.sending}
+        title={t("actions.delete", { defaultValue: "Удалить" })}
+        message={t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" })}
+        confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        onConfirm={confirmDeleteRequest}
+        onClose={closeDeleteModal}
+      />
     </div>
   );
 }
@@ -1267,7 +1218,6 @@ function resolveExpireAt(service) {
   }
   return (typeof ts === "number" && Number.isFinite(ts)) ? ts : null;
 }
-
 
 function resolveRequestExpireAt(r) {
   if (!r) return null;
