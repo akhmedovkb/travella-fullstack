@@ -760,7 +760,7 @@ export default function Marketplace() {
             })}
       </div>
       )}
-
+   </div> 
       {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
     </div>
