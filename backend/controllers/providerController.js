@@ -278,22 +278,19 @@ const updateService = async (req, res) => {
 };
 // Удаление услуги
 
-module.exports.deleteService =
-  (typeof deleteService !== "undefined" ? deleteService : async (req, res) => {
-    try {
-      const providerId = req.user.id;
-      const serviceId = req.params.id;
-      const del = await pool.query(
-        "DELETE FROM services WHERE id=$1 AND provider_id=$2",
-        [serviceId, providerId]
-      );
-      if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-      res.json({ message: "Удалено" });
-    } catch (err) {
-      console.error("❌ Ошибка удаления услуги (fallback):", err);
-      res.status(500).json({ message: "Ошибка сервера" });
-    }
-  });
+const deleteService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [serviceId, providerId]);
+    if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json({ message: "Удалено" });
+  } catch (err) {
+    console.error("❌ Ошибка удаления услуги:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 // Только обновление картинок (ЭТО ВАЖНАЯ ФУНКЦИЯ — БЫЛА ПОТЕРЯНА)
 const updateServiceImagesOnly = async (req, res) => {
   try {
