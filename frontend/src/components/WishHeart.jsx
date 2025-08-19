@@ -1,3 +1,5 @@
+//frontend/src/components/WishHeart.jsx
+
 import { useTranslation } from "react-i18next";
 
 export default function WishHeart({
