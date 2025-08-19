@@ -2849,7 +2849,7 @@ const __grossNum = (() => {
             </>
           )}
 
-          {
+          
           {/* ===== ТАБЫ: Мои запросы | Избранное | Мои брони ===== */}
           <section className="mt-8">
             <div className="flex items-center gap-6 border-b">
