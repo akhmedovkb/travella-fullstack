@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
-import ServiceCard from "../components/ServiceCard";
+import WishHeart from "../components/WishHeart";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 
 
@@ -464,11 +464,7 @@ export default function Marketplace() {
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [favIds, setFavIds] = useState(new Set());
-  // единый helper для id услуги
-  const getServiceId = (it) => {
-    const svc = it?.service || it || {};
-    return svc.id ?? it?.id ?? svc._id ?? it?._id ?? null;
-  };
+
   /* ===================== search ===================== */
   const search = async (opts = {}) => {
     setLoading(true);
@@ -705,7 +701,290 @@ export default function Marketplace() {
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
-  
+  const Card = ({ it, now }) => {
+    const {
+      svc,
+      title,
+      hotel,
+      accommodation,
+      dates,
+      prettyPrice,
+      inlineProvider,
+      providerId,
+      flatName,
+      flatPhone,
+      flatTg,
+      status: statusRaw,
+      details,
+    } = extractServiceFields(it);
+
+    const id = svc.id ?? it.id;
+
+    // -------- изображение (универсальный резолвер) --------
+    const image = firstImageFrom([
+      svc.images, details?.images, it?.images,
+      svc.cover, svc.image, details?.cover, details?.image, it?.cover, it?.image,
+      details?.photo, details?.picture, details?.imageUrl,
+      svc.image_url, it?.image_url
+    ]);
+
+
+    /* --------- Поставщик: inline + подгрузка по id --------- */
+    const [provider, setProvider] = useState(null);
+    useEffect(() => {
+      let alive = true;
+      (async () => {
+        if (!providerId) return;
+        const p = await fetchProviderProfile(providerId);
+        if (alive) setProvider(p);
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [providerId]);
+
+    const prov = { ...(inlineProvider || {}), ...(provider || {}) };
+
+    const supplierName = _firstNonEmpty(
+      prov?.name,
+      prov?.title,
+      prov?.display_name,
+      prov?.company_name,
+      prov?.brand,
+      flatName
+    );
+    const supplierPhone = _firstNonEmpty(
+      prov?.phone,
+      prov?.phone_number,
+      prov?.phoneNumber,
+      prov?.tel,
+      prov?.mobile,
+      prov?.whatsapp,
+      prov?.whatsApp,
+      prov?.phones?.[0],
+      prov?.contacts?.phone,
+      prov?.contact_phone,
+      flatPhone
+    );
+    
+    const supplierTgRaw = _firstNonEmpty(
+      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
+      prov?.contacts?.telegram, prov?.socials?.telegram,
+      // + берём из профиля провайдера поле social
+      prov?.social, prov?.social_link,
+      flatTg
+    );
+
+
+    const supplierTg = renderTelegram(supplierTgRaw);
+
+    const rating = Number(svc.rating ?? it.rating ?? 0);
+    const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
+    const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+
+    const isFav = favIds.has(String(id));
+    
+    const expireAt = resolveExpireAt(svc);
+    const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+    const hasTimer = !!expireAt;
+    const timerText = hasTimer ? formatLeft(leftMs) : null;
+
+    const [revOpen, setRevOpen] = useState(false);
+    const [revPos, setRevPos] = useState({ x: 0, y: 0 });
+    const [revData, setRevData] = useState({ avg: 0, count: 0, items: [] });
+    const revBtnRef = useRef(null);
+
+    const openReviews = async () => {
+      if (revBtnRef.current) {
+        const r = revBtnRef.current.getBoundingClientRect();
+        setRevPos({ x: r.left - 8, y: r.top - 8 });
+      }
+      setRevOpen(true);
+      try {
+        const res = await apiGet(`/api/reviews/service/${id}?limit=3`);
+        const data = res && typeof res === "object" ? res : {};
+        setRevData({
+          avg: Number(data.avg) || 0,
+          count: Number(data.count) || 0,
+          items: Array.isArray(data.items) ? data.items : [],
+        });
+      } catch {
+        setRevData({ avg: 0, count: 0, items: [] });
+      }
+    };
+    const closeReviews = () => setRevOpen(false);
+
+    return (
+      <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div className="aspect-[16/10] bg-gray-100 relative">
+          {image ? (
+            <img src={image} alt={title || t("marketplace.no_image")} 
+              className="w-full h-full object-cover"
+              onError={(e) => { e.currentTarget.src = ""; }} // если сломается — спрячется
+              />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
+            </div>
+          )}
+
+          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+            <div className="flex items-center gap-2">
+              {hasTimer && (
+                <span
+                  className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${
+                    leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"
+                  }`}
+                  title={leftMs > 0 ? t("countdown.until_end") || "До окончания" : t("countdown.expired") || "Время истекло"}
+                >
+                  {timerText}
+                </span>
+              )}
+
+              {!hasTimer && badge && (
+                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                  {badge}
+                </span>
+              )}
+
+              <button
+                ref={revBtnRef}
+                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
+                onMouseEnter={openReviews}
+                onMouseLeave={closeReviews}
+                title={t("marketplace.reviews") || "Отзывы об услуге"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
+              <WishHeart
+                  active={isFav}
+                  size={42}                           // чтобы кружок был как на скрине
+                  className="pointer-events-auto"     // если он в overlay с pointer-events
+                  onClick={(e) => {
+                    // этот onClick уже предотвращает скролл/проклик —
+                    // но на всякий случай оставим stopPropagation и тут:
+                    e.stopPropagation();
+                    toggleFavorite(id);
+                  }}
+                />
+
+            </div>
+          </div>
+
+          <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-x-0 bottom-0 p-3">
+              <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+                <div className="font-semibold line-clamp-2">{title}</div>
+                {hotel && (
+                  <div>
+                    <span className="opacity-80">Отель: </span>
+                    <span className="font-medium">{hotel}</span>
+                  </div>
+                )}
+                {accommodation && (
+                  <div>
+                    <span className="opacity-80">Размещение: </span>
+                    <span className="font-medium">{accommodation}</span>
+                  </div>
+                )}
+                {dates && (
+                  <div>
+                    <span className="opacity-80">{t("common.date") || "Дата"}: </span>
+                    <span className="font-medium">{dates}</span>
+                  </div>
+                )}
+                {prettyPrice && (
+                  <div>
+                    <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
+                    <span className="font-semibold">{prettyPrice}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* тултип отзывов — через портал */}
+        <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
+          <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
+            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
+            <div className="flex items-center gap-2">
+              <Stars value={revData.avg} />
+              <span className="opacity-80">({revData.count || 0})</span>
+            </div>
+            <div className="mt-1">
+              {!revData.items?.length ? (
+                <span className="opacity-80">—</span>
+              ) : (
+                <ul className="list-disc ml-4 space-y-1">
+                  {revData.items.slice(0, 2).map((r) => (
+                    <li key={r.id} className="line-clamp-2 opacity-90">
+                      {r.text || ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </TooltipPortal>
+
+        {/* ТЕЛО КАРТОЧКИ */}
+        <div className="p-3 flex-1 flex flex-col">
+          <div className="font-semibold line-clamp-2">{title}</div>
+          {prettyPrice && (
+            <div className="mt-1 text-sm">
+              {t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span>
+            </div>
+          )}
+
+          {(supplierName || supplierPhone || supplierTg?.label) && (
+            <div className="mt-2 text-sm space-y-0.5">
+              {supplierName && (
+                <div>
+                  <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
+                  <span className="font-medium">{supplierName}</span>
+                </div>
+              )}
+              {supplierPhone && (
+                <div>
+                  <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
+                  <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">
+                    {supplierPhone}
+                  </a>
+                </div>
+              )}
+              {supplierTg?.label && (
+                <div>
+                  <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
+                  {supplierTg.href ? (
+                    <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">
+                      {supplierTg.label}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{supplierTg.label}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-auto pt-3">
+            <button
+              onClick={() => openQuickRequest(id, providerId, title)}
+              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.quick_request") || "Быстрый запрос"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -743,23 +1022,12 @@ export default function Marketplace() {
         )}
         {!loading && !error && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => {
-              const sid = getServiceId(it);
-              return (
-                <ServiceCard
-                  key={sid || JSON.stringify(it)}
-                  item={it}
-                  now={now}
-                  favActive={sid ? favIds.has(String(sid)) : false}
-                  onToggleFavorite={() => sid && toggleFavorite(sid)}
-                  onQuickRequest={(serviceId, providerId, title) =>
-                    openQuickRequest(serviceId ?? sid, providerId, title)
-                  }
-                />
-              );
-            })}
+            {items.map((it) => (
+              <Card key={it.id || it.service?.id || JSON.stringify(it)} it={it} now={now} />
+            ))}
           </div>
         )}
+      </div>
 
       {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
