@@ -196,19 +196,15 @@ export default function ProviderFavorites() {
                         )}
                       </div>
 
-                      <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
+                      <div className="absolute top-3 right-3 z-10">
                         <WishHeart
-                          active={isFav}
-                          size={42}                           // чтобы кружок был как на скрине
-                          className="pointer-events-auto"     // если он в overlay с pointer-events
-                          onClick={(e) => {
-                            // этот onClick уже предотвращает скролл/проклик —
-                            // но на всякий случай оставим stopPropagation и тут:
-                            e.stopPropagation();
-                            toggleFavorite(id);
-                          }}
+                          active={true} // в избранном провайдера всегда “активно”
+                          onClick={() => handleRemoveFavorite(serviceId)} // удаляем
+                          size={36}
+                          titleRemove="Удалить из избранного"
                         />
                       </div>
+
                     </div>
                   </div>
 
