@@ -578,6 +578,7 @@ export default function Marketplace() {
                 .map(x => x.service_id ?? x.service?.id ?? x.id) // берём id услуги
                 .filter(Boolean)
             .map(x => String(x));
+            setFavIds(new Set(ids));
           } else {
             // гость — пусто
             setFavIds(new Set());
