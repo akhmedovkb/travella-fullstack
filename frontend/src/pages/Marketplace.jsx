@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import WishHeart from "../components/WishHeart";
+import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
+
 
 // Detect viewer role via tokens
 const __hasClient = !!localStorage.getItem("clientToken");
@@ -561,37 +563,75 @@ export default function Marketplace() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const ids = await apiGet("/api/wishlist/ids");
-        const arr = Array.isArray(ids) ? ids : [];
-        setFavIds(new Set(arr));
-      } catch {}
-    })();
-  }, []);
+      (async () => {
+        try {
+          if (__viewerRole === "client") {
+            // клиентское избранное (как было)
+            const ids = await apiGet("/api/wishlist/ids");
+            const arr = Array.isArray(ids) ? ids : [];
+            setFavIds(new Set(arr));
+          } else if (__viewerRole === "provider") {
+            // провайдерское избранное
+            const list = await apiProviderFavorites();
+            const ids =
+              (Array.isArray(list) ? list : [])
+                .map(x => x.service_id ?? x.service?.id ?? x.id) // берём id услуги
+                .filter(Boolean);
+            setFavIds(new Set(ids));
+          } else {
+            // гость — пусто
+            setFavIds(new Set());
+          }
+        } catch {
+          setFavIds(new Set());
+        }
+      })();
+    }, [__viewerRole]);
 
-  const toggleFavorite = async (id) => {
-    try {
-      const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
-      const added = !!res?.added;
-      setFavIds((prev) => {
-        const next = new Set(prev);
-        if (added) next.add(id);
-        else next.delete(id);
-        return next;
-      });
-      toast(
-        added
-          ? t("favorites.added_toast") || "Добавлено в избранное"
-          : t("favorites.removed_toast") || "Удалено из избранного"
-      );
-    } catch (e) {
-      const msg = (e && (e.status || e.code || e.message)) || "";
-      if (String(msg).includes("401") || String(msg).includes("403"))
-        toast(t("auth.login_required") || "Войдите как клиент");
-      else toast(t("toast.favoriteError") || "Не удалось изменить избранное");
-    }
-  };
+      const toggleFavorite = async (id) => {
+        try {
+          if (__viewerRole === "client") {
+            // клиентский тоггл (как было)
+            const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
+            const added = !!res?.added;
+            setFavIds(prev => {
+              const next = new Set(prev);
+              if (added) next.add(id); else next.delete(id);
+              return next;
+            });
+            toast(added
+              ? t("favorites.added_toast") || "Добавлено в избранное"
+              : t("favorites.removed_toast") || "Удалено из избранного");
+          } else if (__viewerRole === "provider") {
+            // провайдерский тоггл
+            const res = await apiToggleProviderFavorite(id);
+            const added = !!res?.added;
+            setFavIds(prev => {
+              const next = new Set(prev);
+              if (added) next.add(id); else next.delete(id);
+              return next;
+            });
+            // обновим бейдж в Header
+            window.dispatchEvent(new Event("provider:favorites:changed"));
+            toast(added
+              ? t("favorites.added_toast") || "Добавлено в избранное"
+              : t("favorites.removed_toast") || "Удалено из избранного");
+          } else {
+            // гость
+            toast(t("auth.login_required") || "Войдите как клиент/поставщик");
+          }
+        } catch (e) {
+          const msg = (e && (e.status || e.code || e.message)) || "";
+          const needLogin = String(msg).includes("401") || String(msg).includes("403");
+          toast(
+            needLogin
+              ? (__viewerRole === "provider"
+                  ? (t("auth.provider_login_required") || "Войдите как поставщик")
+                  : (t("auth.login_required") || "Войдите как клиент"))
+              : (t("toast.favoriteError") || "Не удалось изменить избранное")
+          );
+        }
+      };
 
   const categoryOptions = [
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
