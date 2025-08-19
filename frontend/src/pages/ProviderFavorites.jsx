@@ -199,10 +199,7 @@ export default function ProviderFavorites() {
                       <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
                         <WishHeart
                           active={isFav}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(id);
-                          }}
+                          onToggle={() => toggleFavorite(id)}
                           size={18}
                           className="!p-0 !hover:bg-transparent"
                         />
