@@ -159,7 +159,7 @@ const updateProviderProfile = async (req, res) => {
     );
     res.json({ message: "Профиль обновлён успешно" });
   } catch (err) {
-    console.error("❌ Ошибка обновления профиля:", err);
+    console.error("❌ Ошибка обновления профиля:", err, err.message, err.detail);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
