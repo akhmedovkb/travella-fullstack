@@ -106,8 +106,9 @@
       "title": "Client login",
       "success": "Logged in",
       "error": "Login error"
-    },
-   
+    }
+  },
+  
   "comment": "Comment",
   "common": {
     "find": "Find",
