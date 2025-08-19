@@ -864,10 +864,7 @@ export default function Marketplace() {
               <WishHeart
                 key={`${id}-${isFav ? 1 : 0}`}
                 active={isFav}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFavorite(id);
-                }}
+                onToggle={() => toggleFavorite(id)}
                 size={18}
                 className="!p-0 !hover:bg-transparent"
               />
