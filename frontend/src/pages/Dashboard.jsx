@@ -243,6 +243,7 @@ const Dashboard = () => {
   const [newLocation, setNewLocation] = useState("");
   const [newSocial, setNewSocial] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
 
@@ -810,22 +811,30 @@ direction: "",
       });
   };
 
-  const handleChangePassword = () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.warn(t("password_too_short") || "Минимум 6 символов");
-      return;
-    }
-    axios
-      .put(`${API_BASE}/api/providers/password`, { password: newPassword }, config)
-      .then(() => {
-        setNewPassword("");
-        toast.success(t("password_changed") || "Пароль обновлён");
-      })
-      .catch((err) => {
-        console.error("Ошибка смены пароля", err);
-        toast.error(t("password_error") || "Ошибка смены пароля");
-      });
-  };
+   const handleChangePassword = () => {
+       if (!oldPassword) {
+         toast.warn(t("enter_current_password") || "Введите текущий пароль");
+         return;
+       }
+       if (!newPassword || newPassword.length < 6) {
+         toast.warn(t("password_too_short") || "Минимум 6 символов");
+         return;
+       }
+       axios
+         .put(`${API_BASE}/api/providers/password`, { oldPassword, newPassword }, config)
+         .then(() => {
+           setOldPassword("");
+           setNewPassword("");
+           toast.success(t("password_changed") || "Пароль обновлён");
+         })
+         .catch((err) => {
+           console.error("Ошибка смены пароля", err);
+           // если хочешь показывать серверное сообщение:
+           // toastApiError(t, err, ["password_error"], "Ошибка смены пароля");
+           toast.error(t("password_error") || (err?.response?.data?.message) || "Ошибка смены пароля");
+         });
+     };
+
 
   /** ===== Service helpers ===== */
   const resetServiceForm = () => {
@@ -1184,6 +1193,13 @@ const __grossNum = (() => {
               {/* Смена пароля */}
               <div className="mt-4">
                 <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
+                <input
+                  type="password"
+                  placeholder={t("current_password") || "Текущий пароль"}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="border px-3 py-2 mb-2 rounded w-full"
+                />
                 <input
                   type="password"
                   placeholder={t("new_password")}
