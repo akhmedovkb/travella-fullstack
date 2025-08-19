@@ -1,3 +1,5 @@
+// backend/controllers/providerController.js
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
@@ -18,7 +20,7 @@ function toArray(val) {
   if (Array.isArray(val)) return val;
   if (typeof val === "string") {
     try { const arr = JSON.parse(val); return Array.isArray(arr) ? arr : []; }
-    catch (err) { return []; }
+    catch { return []; }
   }
   return [];
 }
@@ -42,7 +44,7 @@ function normalizeServicePayload(body) {
   if (details) {
     if (typeof details === "string") {
       try { detailsObj = JSON.parse(details); }
-      catch (err) { detailsObj = { value: String(details) }; }
+      catch { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
@@ -140,13 +142,13 @@ const updateProviderProfile = async (req, res) => {
     );
     if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const old = oldQ.rows[0];
-    
-    const toTextArray = (v, fallback) => {
-    if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
-    if (typeof v === "string") return [v.trim()].filter(Boolean);
-    return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
-    };
 
+    // location как массив (text[])
+    const toTextArray = (v, fallback) => {
+      if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+      if (typeof v === "string") return [v.trim()].filter(Boolean);
+      return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
+    };
 
     const updated = {
       name: req.body.name ?? old.name,
@@ -166,7 +168,7 @@ const updateProviderProfile = async (req, res) => {
     );
     res.json({ message: "Профиль обновлён успешно" });
   } catch (err) {
-    console.error("❌ Ошибка обновления профиля:", err, err.message, err.detail);
+    console.error("❌ Ошибка обновления профиля:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -274,6 +276,7 @@ const updateService = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+// Удаление услуги
 
 const deleteService = async (req, res) => {
   try {
@@ -288,7 +291,7 @@ const deleteService = async (req, res) => {
   }
 };
 
-// Только обновление картинок
+// Только обновление картинок (ЭТО ВАЖНАЯ ФУНКЦИЯ — БЫЛА ПОТЕРЯНА)
 const updateServiceImagesOnly = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -325,7 +328,6 @@ const getProviderPublicById = async (req, res) => {
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    // Предполагаем наличие таблицы provider_blocked_dates(date date, provider_id int)
     const r = await pool.query(
       `SELECT day::date AS date FROM provider_blocked_dates WHERE provider_id=$1 ORDER BY day`,
       [providerId]
@@ -344,7 +346,6 @@ const saveBlockedDates = async (req, res) => {
     const addArr = toArray(add);
     const remArr = toArray(remove);
 
-    // Создаём таблицу, если её нет
     await pool.query(
       `CREATE TABLE IF NOT EXISTS provider_blocked_dates (
          provider_id integer not null,
@@ -393,9 +394,8 @@ const saveBlockedDates = async (req, res) => {
 // ---------- Stats (safe placeholder) ----------
 const getProviderStats = async (req, res) => {
   try {
-    // Заглушка, чтобы не ломать Header: вернём нули
     res.json({ new: 0, booked: 0 });
-  } catch (err) {
+  } catch {
     res.json({ new: 0, booked: 0 });
   }
 };
@@ -477,7 +477,7 @@ module.exports = {
   getServices,
   updateService,
   deleteService,
-  updateServiceImagesOnly,
+  updateServiceImagesOnly,   // <= есть в файле
   getProviderPublicById,
   getBookedDates,
   saveBlockedDates,

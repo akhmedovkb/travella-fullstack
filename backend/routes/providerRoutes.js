@@ -1,3 +1,4 @@
+// backend/routes/providerRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -54,12 +55,12 @@ router.patch("/services/:id/images", authenticateToken, requireProvider, updateS
 router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
 
-// Public provider page
-router.get("/:id(\\d+)", getProviderPublicById);
-
 // Favorites (provider)
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
+
+// Public provider page (keep last)
+router.get("/:id(\\d+)", getProviderPublicById);
 
 module.exports = router;
