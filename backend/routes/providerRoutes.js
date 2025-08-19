@@ -18,6 +18,9 @@ const {
   saveBlockedDates,
   getProviderPublicById,
   getProviderStats,
+  listProviderFavorites,
+  toggleProviderFavorite,
+  removeProviderFavorite,
 } = require("../controllers/providerController");
 
 // Simple role guard: token already decoded by authenticateToken
