@@ -1,37 +1,66 @@
-// frontend/src/pages/ProviderFavorites.jsx
+// src/pages/ProviderFavorites.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
-import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 import WishHeart from "../components/WishHeart";
 import QuickRequestModal from "../components/QuickRequestModal";
+import {
+  apiProviderFavorites,
+  apiToggleProviderFavorite,
+} from "../api/providerFavorites";
 
-/* ===================== utils, как в Marketplace ===================== */
+/* ========= те же утилиты, что в Marketplace ========= */
 function toast(txt) {
   const el = document.createElement("div");
   el.textContent = txt;
   el.className =
     "fixed top-16 right-6 z-[3000] bg-white shadow-xl border rounded-xl px-4 py-2 text-sm";
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1800);
+  setTimeout(() => el.remove(), 1700);
 }
-
 function _firstNonEmpty(...args) {
-  for (const v of args) if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
+  for (const v of args)
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== ""))
+      return v;
   return null;
 }
 function _maybeParse(obj) {
   if (!obj) return null;
-  if (typeof obj === "string") { try { return JSON.parse(obj); } catch { return null; } }
+  if (typeof obj === "string") {
+    try {
+      return JSON.parse(obj);
+    } catch {
+      return null;
+    }
+  }
   return typeof obj === "object" ? obj : null;
 }
 function _mergeDetails(svc, it) {
   const cands = [
-    svc?.details, it?.details, svc?.detail, it?.detail,
-    svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
-  ].map(_maybeParse).filter(Boolean);
+    svc?.details,
+    it?.details,
+    svc?.detail,
+    it?.detail,
+    svc?.meta,
+    svc?.params,
+    svc?.payload,
+    svc?.extra,
+    svc?.data,
+    svc?.info,
+  ]
+    .map(_maybeParse)
+    .filter(Boolean);
   return Object.assign({}, ...cands);
+}
+function pick(obj, keys) {
+  if (!obj) return null;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== ""))
+      return v;
+  }
+  return null;
 }
 function extractServiceFields(item) {
   const svc = item?.service || item || {};
@@ -39,51 +68,160 @@ function extractServiceFields(item) {
   const bag = { ...details, ...svc, ...item };
 
   const title = _firstNonEmpty(
-    svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
+    svc.title,
+    svc.name,
+    details?.title,
+    details?.name,
+    details?.eventName,
+    item?.title,
+    item?.name
   );
 
-  // провайдер видит net в приоритете, но показываем и gross если есть
-  const rawPriceNet = _firstNonEmpty(details?.netPrice, details?.price, svc.netPrice, svc.price, item?.price);
-  const rawPriceGross = _firstNonEmpty(details?.grossPrice, details?.priceGross, svc.grossPrice, svc.price_gross);
-  const prettyNet = rawPriceNet == null ? null : new Intl.NumberFormat().format(Number(rawPriceNet));
-  const prettyGross = rawPriceGross == null ? null : new Intl.NumberFormat().format(Number(rawPriceGross));
+  // провайдеру показываем net (если есть), и как запасной — gross
+  const rawPrice = _firstNonEmpty(
+    details?.netPrice,
+    details?.price,
+    details?.totalPrice,
+    details?.priceNet,
+    svc.netPrice,
+    svc.price,
+    item?.price,
+    details?.grossPrice
+  );
+  const prettyPrice =
+    rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
   const hotel = _firstNonEmpty(
-    details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
-    svc.hotel, svc.hotel_name, svc.refused_hotel_name
+    details?.hotel,
+    details?.hotelName,
+    details?.hotel?.name,
+    details?.refused_hotel_name,
+    svc.hotel,
+    svc.hotel_name,
+    svc.refused_hotel_name
   );
   const accommodation = _firstNonEmpty(
-    details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category,
-    svc.accommodation, svc.room, svc.room_type
+    details?.accommodation,
+    details?.accommodationCategory,
+    details?.room,
+    details?.roomType,
+    details?.room_category,
+    svc.accommodation,
+    svc.room,
+    svc.room_type
   );
 
   const left = _firstNonEmpty(
-    bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
+    bag.hotel_check_in,
+    bag.checkIn,
+    bag.startDate,
+    bag.start_flight_date,
+    bag.startFlightDate,
+    bag.departureFlightDate
   );
   const right = _firstNonEmpty(
-    bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
+    bag.hotel_check_out,
+    bag.checkOut,
+    bag.returnDate,
+    bag.end_flight_date,
+    bag.endFlightDate,
+    bag.returnFlightDate
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
-  const inlineProvider = _firstNonEmpty(
-    svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
-    item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
-    details?.provider
-  ) || {};
+  const inlineProvider =
+    _firstNonEmpty(
+      svc.provider,
+      svc.provider_profile,
+      svc.supplier,
+      svc.vendor,
+      svc.agency,
+      svc.owner,
+      item.provider,
+      item.provider_profile,
+      item.supplier,
+      item.vendor,
+      item.agency,
+      item.owner,
+      details?.provider
+    ) || {};
 
   const providerId = _firstNonEmpty(
-    svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
-    svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id
+    svc.provider_id,
+    svc.providerId,
+    item.provider_id,
+    item.providerId,
+    details?.provider_id,
+    svc.owner_id,
+    svc.agency_id,
+    inlineProvider?.id,
+    inlineProvider?._id
+  );
+
+  const flatName = _firstNonEmpty(
+    pick(bag, [
+      "provider_name",
+      "supplier_name",
+      "vendor_name",
+      "agency_name",
+      "company_name",
+      "providerTitle",
+      "display_name",
+    ])
+  );
+  const flatPhone = _firstNonEmpty(
+    pick(bag, [
+      "provider_phone",
+      "supplier_phone",
+      "vendor_phone",
+      "agency_phone",
+      "company_phone",
+      "contact_phone",
+      "phone",
+      "whatsapp",
+      "whats_app",
+    ])
+  );
+  const flatTg = _firstNonEmpty(
+    pick(bag, [
+      "provider_telegram",
+      "supplier_telegram",
+      "vendor_telegram",
+      "agency_telegram",
+      "company_telegram",
+      "telegram",
+      "tg",
+      "telegram_username",
+      "telegram_link",
+      "provider_social",
+      "supplier_social",
+      "vendor_social",
+      "agency_social",
+      "company_social",
+      "social",
+      "social_link",
+    ])
   );
 
   const status = _firstNonEmpty(svc.status, item.status, details?.status);
 
   return {
-    svc, details, title, hotel, accommodation, dates,
-    prettyNet, prettyGross, inlineProvider, providerId, status
+    svc,
+    details,
+    title,
+    hotel,
+    accommodation,
+    dates,
+    rawPrice,
+    prettyPrice,
+    inlineProvider,
+    providerId,
+    flatName,
+    flatPhone,
+    flatTg,
+    status,
   };
 }
-
 function firstImageFrom(val) {
   if (typeof val === "string") {
     let s = val.trim();
@@ -100,23 +238,34 @@ function firstImageFrom(val) {
     return `${window.location.origin}/${s.replace(/^\.?\//, "")}`;
   }
   if (Array.isArray(val)) {
-    for (const v of val) { const hit = firstImageFrom(v); if (hit) return hit; }
+    for (const v of val) {
+      const r = firstImageFrom(v);
+      if (r) return r;
+    }
     return null;
   }
   if (val && typeof val === "object") {
-    return firstImageFrom(val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64);
+    return firstImageFrom(
+      val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64
+    );
   }
   return null;
 }
-
 function resolveExpireAt(service) {
   const s = service || {};
   const d = s.details || {};
   const cand = [
-    s.expires_at, s.expire_at, s.expireAt,
-    d.expires_at, d.expire_at, d.expiresAt,
-    d.expiration, d.expiration_at, d.expirationAt,
-    d.expiration_ts, d.expirationTs,
+    s.expires_at,
+    s.expire_at,
+    s.expireAt,
+    d.expires_at,
+    d.expire_at,
+    d.expiresAt,
+    d.expiration,
+    d.expiration_at,
+    d.expirationAt,
+    d.expiration_ts,
+    d.expirationTs,
   ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
   let ts = null;
   if (cand !== undefined && cand !== null) {
@@ -153,9 +302,16 @@ function Stars({ value = 0, size = 14 }) {
       {Array.from({ length: 5 }).map((_, i) => {
         const filled = i + 1 <= full;
         return (
-          <svg key={i} width={size} height={size} viewBox="0 0 24 24"
+          <svg
+            key={i}
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
             className={filled ? "text-amber-400" : "text-gray-400"}
-            fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
+            fill={filled ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
             <path d="M12 .587l3.668 7.431L24 9.748l-6 5.847L19.335 24 12 20.202 4.665 24 6 15.595 0 9.748l8.332-1.73z" />
           </svg>
         );
@@ -165,112 +321,235 @@ function Stars({ value = 0, size = 14 }) {
 }
 function TooltipPortal({ visible, x, y, children }) {
   if (!visible) return null;
-  return createPortal(<div className="fixed z-[3000] pointer-events-none" style={{ top: y, left: x }}>{children}</div>, document.body);
+  return createPortal(
+    <div className="fixed z-[3000] pointer-events-none" style={{ top: y, left: x }}>
+      {children}
+    </div>,
+    document.body
+  );
+}
+function renderTelegram(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null;
+  let label = s;
+  if (/^https?:\/\//i.test(s)) href = s;
+  else if (s.startsWith("@")) {
+    href = `https://t.me/${s.slice(1)}`;
+    label = s;
+  } else if (/^[A-Za-z0-9_]+$/.test(s)) {
+    href = `https://t.me/${s}`;
+    label = `@${s}`;
+  }
+  return { href, label };
 }
 
-/* ===================== страница ===================== */
+/* ====================== страница ====================== */
 export default function ProviderFavorites() {
   const { t } = useTranslation();
 
-  // список
-  const [items, setItems] = useState([]);
-  const [favIds, setFavIds] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // таймер (как в маркетплейсе)
-  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
-  useEffect(() => { const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000); return () => clearInterval(id); }, []);
-  const now = nowMin * 60000;
-
-  // модалка быстрого запроса
+  // модалка “Быстрый запрос”
   const [qrOpen, setQrOpen] = useState(false);
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrProviderId, setQrProviderId] = useState(null);
   const [qrServiceTitle, setQrServiceTitle] = useState("");
   const openQuickRequest = (serviceId, providerId, serviceTitle) => {
-    setQrServiceId(serviceId); setQrProviderId(providerId || null); setQrServiceTitle(serviceTitle || ""); setQrOpen(true);
+    setQrServiceId(serviceId);
+    setQrProviderId(providerId || null);
+    setQrServiceTitle(serviceTitle || "");
+    setQrOpen(true);
   };
   const submitQuickRequest = async (note) => {
     try {
-      await apiPost("/api/requests", { service_id: qrServiceId, provider_id: qrProviderId || undefined, service_title: qrServiceTitle || undefined, note: note || undefined });
+      await apiPost("/api/requests", {
+        service_id: qrServiceId,
+        provider_id: qrProviderId || undefined,
+        service_title: qrServiceTitle || undefined,
+        note: note || undefined,
+      });
       toast(t("messages.request_sent") || "Запрос отправлен");
-    } catch { toast(t("errors.request_send") || "Не удалось отправить запрос"); }
-    finally { setQrOpen(false); setQrServiceId(null); setQrProviderId(null); setQrServiceTitle(""); }
+    } catch {
+      toast(t("errors.request_send") || "Не удалось отправить запрос");
+    } finally {
+      setQrOpen(false);
+      setQrServiceId(null);
+      setQrProviderId(null);
+      setQrServiceTitle("");
+    }
   };
 
-  // загрузка избранного
+  const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
   useEffect(() => {
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const list = await apiProviderFavorites();
-        const arr = Array.isArray(list) ? list : [];
-        setItems(arr);
-        const ids = arr.map(x => x.service_id ?? x.service?.id ?? x.id).filter(Boolean).map(x => String(x));
-        setFavIds(new Set(ids));
-      } catch { setError(t("common.loading_error") || "Не удалось загрузить данные"); }
-      finally { setLoading(false); }
-    })();
+    const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMin * 60000;
+
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]); // храним оригинальные элементы из API
+  const [favIds, setFavIds] = useState(new Set()); // Set строковых id
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const list = await apiProviderFavorites();
+      const arr = Array.isArray(list) ? list : [];
+      setItems(arr);
+      const ids = arr
+        .map((x) => x.service_id ?? x.service?.id ?? x.id)
+        .filter(Boolean)
+        .map(String);
+      setFavIds(new Set(ids));
+    } catch {
+      setItems([]);
+      setFavIds(new Set());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
-  // тоггл сердца
-  const toggleFavorite = async (serviceId) => {
-    const key = String(serviceId);
-    const flipTo = !favIds.has(key); // оптимистично
-    setFavIds(prev => { const next = new Set(prev); if (flipTo) next.add(key); else next.delete(key); return next; });
-    if (!flipTo) {
-      // из списка на этой странице удаляем сразу
-      setItems(prev => prev.filter(it => String(it.service_id ?? it.service?.id ?? it.id) !== key));
-    }
+  // провайдерский тоггл (оптимистично)
+  const toggleFavorite = async (id) => {
+    const key = String(id);
+    const flipTo = !favIds.has(key); // true — добавляем, false — удаляем
     try {
-      const res = await apiToggleProviderFavorite(serviceId);
-      // если бэкенд прислал flag и он не совпал — поправим
-      if (typeof res?.added === "boolean" && res.added !== flipTo) {
-        setFavIds(prev => { const next = new Set(prev); if (res.added) next.add(key); else next.delete(key); return next; });
-        if (!res.added) setItems(prev => prev.filter(it => String(it.service_id ?? it.service?.id ?? it.id) !== key));
-      }
-      window.dispatchEvent(new Event("provider:favorites:changed"));
-      toast(flipTo ? (t("favorites.added_toast") || "Добавлено в избранное") : (t("favorites.removed_toast") || "Удалено из избранного"));
-    } catch (e) {
-      // откатим оптимизм
-      setFavIds(prev => { const next = new Set(prev); if (flipTo) next.delete(key); else next.add(key); return next; });
-      setItems(prev => {
-        const exists = prev.some(it => String(it.service_id ?? it.service?.id ?? it.id) === key);
-        return exists ? prev : [{ id: serviceId }, ...prev];
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (flipTo) next.add(key);
+        else next.delete(key);
+        return next;
       });
-      const msg = (e && (e.status || e.code || e.message)) || "";
-      const needLogin = String(msg).includes("401") || String(msg).includes("403");
-      toast(needLogin ? (t("auth.provider_login_required") || "Войдите как поставщик") : (t("toast.favoriteError") || "Не удалось изменить избранное"));
+      // если удаляем — сразу убираем карточку со страницы
+      if (!flipTo) {
+        setItems((prev) =>
+          prev.filter((x) => String(x.service_id ?? x.service?.id ?? x.id) !== key)
+        );
+      }
+
+      const res = await apiToggleProviderFavorite(id);
+
+      // подстрахуемся, если бекенд вернул явный флаг, отличный от нашей догадки
+      if (typeof res?.added === "boolean" && res.added !== flipTo) {
+        setFavIds((prev) => {
+          const next = new Set(prev);
+          if (res.added) next.add(key);
+          else next.delete(key);
+          return next;
+        });
+        if (!res.added) {
+          setItems((prev) =>
+            prev.filter((x) => String(x.service_id ?? x.service?.id ?? x.id) !== key)
+          );
+        }
+      }
+
+      window.dispatchEvent(new Event("provider:favorites:changed"));
+      toast(
+        flipTo
+          ? t("favorites.added_toast") || "Добавлено в избранное"
+          : t("favorites.removed_toast") || "Удалено из избранного"
+      );
+    } catch (e) {
+      // откат при ошибке
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (flipTo) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      toast(t("toast.favoriteError") || "Не удалось изменить избранное");
     }
   };
 
-  /* карточка как в маркетплейсе */
-  const Card = ({ it }) => {
-    const svc = it?.service || it || {};
+  // Карточка — 1:1 как в Marketplace
+  const Card = ({ it, now }) => {
     const {
-      title, hotel, accommodation, dates,
-      prettyNet, prettyGross, inlineProvider, providerId, status
+      svc,
+      title,
+      hotel,
+      accommodation,
+      dates,
+      prettyPrice,
+      inlineProvider,
+      providerId,
+      flatName,
+      flatPhone,
+      flatTg,
+      status: statusRaw,
+      details,
     } = extractServiceFields(it);
 
-    const id = svc.id ?? it.id ?? it.service_id;
-    const details = _maybeParse(svc.details) || {};
+    const id = svc.id ?? it.id;
+
     const image = firstImageFrom([
-      svc.images, details.images, it.images,
-      svc.cover, svc.image, details.cover, details.image, it.cover, it.image,
-      details.photo, details.picture, details.imageUrl,
-      svc.image_url, it.image_url
+      svc.images,
+      details?.images,
+      it?.images,
+      svc.cover,
+      svc.image,
+      details?.cover,
+      details?.image,
+      it?.cover,
+      it?.image,
+      details?.photo,
+      details?.picture,
+      details?.imageUrl,
+      svc.image_url,
+      it?.image_url,
     ]);
 
+    const prov = { ...(inlineProvider || {}) };
+    const supplierName = _firstNonEmpty(
+      prov?.name,
+      prov?.title,
+      prov?.display_name,
+      prov?.company_name,
+      prov?.brand,
+      flatName
+    );
+    const supplierPhone = _firstNonEmpty(
+      prov?.phone,
+      prov?.phone_number,
+      prov?.phoneNumber,
+      prov?.tel,
+      prov?.mobile,
+      prov?.whatsapp,
+      prov?.whatsApp,
+      prov?.phones?.[0],
+      prov?.contacts?.phone,
+      prov?.contact_phone,
+      flatPhone
+    );
+    const supplierTgRaw = _firstNonEmpty(
+      prov?.telegram,
+      prov?.tg,
+      prov?.telegram_username,
+      prov?.telegram_link,
+      prov?.contacts?.telegram,
+      prov?.socials?.telegram,
+      prov?.social,
+      prov?.social_link,
+      flatTg
+    );
+    const supplierTg = renderTelegram(supplierTgRaw);
+
     const rating = Number(svc.rating ?? it.rating ?? 0);
+    const status =
+      typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft"
+        ? null
+        : statusRaw;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+
+    const isFav = favIds.has(String(id));
 
     const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
     const hasTimer = !!expireAt;
     const timerText = hasTimer ? formatLeft(leftMs) : null;
-
-    const isFav = favIds.has(String(id));
 
     const [revOpen, setRevOpen] = useState(false);
     const [revPos, setRevPos] = useState({ x: 0, y: 0 });
@@ -301,11 +580,19 @@ export default function ProviderFavorites() {
       <div className="group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="aspect-[16/10] bg-gray-100 relative">
           {image ? (
-            <img src={image} alt={title || "image"} className="w-full h-full object-cover"
-                 onError={(e) => { e.currentTarget.src = ""; }} />
+            <img
+              src={image}
+              alt={title || t("marketplace.no_image")}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = "";
+              }}
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-sm">Нет изображения</span>
+              <span className="text-sm">
+                {t("marketplace.no_image") || "Нет изображения"}
+              </span>
             </div>
           )}
 
@@ -316,24 +603,37 @@ export default function ProviderFavorites() {
                   className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${
                     leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"
                   }`}
-                  title={leftMs > 0 ? "До окончания" : "Время истекло"}
+                  title={
+                    leftMs > 0
+                      ? t("countdown.until_end") || "До окончания"
+                      : t("countdown.expired") || "Время истекло"
+                  }
                 >
                   {timerText}
                 </span>
               )}
+
               {!hasTimer && badge && (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {badge}
                 </span>
               )}
+
               <button
                 ref={revBtnRef}
                 className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
                 onMouseEnter={openReviews}
                 onMouseLeave={closeReviews}
-                title="Отзывы об услуге"
+                title={t("marketplace.reviews") || "Отзывы об услуге"}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
                 </svg>
               </button>
@@ -342,9 +642,10 @@ export default function ProviderFavorites() {
             <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
               <WishHeart
                 active={isFav}
-                onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
-                size={18}
-                className="!p-0 !hover:bg-transparent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(id);
+                }}
               />
             </div>
           </div>
@@ -353,15 +654,32 @@ export default function ProviderFavorites() {
             <div className="absolute inset-x-0 bottom-0 p-3">
               <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
                 <div className="font-semibold line-clamp-2">{title}</div>
-                {hotel && (<div><span className="opacity-80">Отель: </span><span className="font-medium">{hotel}</span></div>)}
-                {accommodation && (<div><span className="opacity-80">Размещение: </span><span className="font-medium">{accommodation}</span></div>)}
-                {dates && (<div><span className="opacity-80">Дата: </span><span className="font-medium">{dates}</span></div>)}
-                {(prettyNet || prettyGross) && (
+                {hotel && (
                   <div>
-                    <span className="opacity-80">Цена: </span>
-                    <span className="font-semibold">
-                      {prettyNet ? `Net ${prettyNet}` : ""}{prettyNet && prettyGross ? " • " : ""}{prettyGross ? `Gross ${prettyGross}` : ""}
+                    <span className="opacity-80">Отель: </span>
+                    <span className="font-medium">{hotel}</span>
+                  </div>
+                )}
+                {accommodation && (
+                  <div>
+                    <span className="opacity-80">Размещение: </span>
+                    <span className="font-medium">{accommodation}</span>
+                  </div>
+                )}
+                {dates && (
+                  <div>
+                    <span className="opacity-80">
+                      {t("common.date") || "Дата"}:{" "}
                     </span>
+                    <span className="font-medium">{dates}</span>
+                  </div>
+                )}
+                {prettyPrice && (
+                  <div>
+                    <span className="opacity-80">
+                      {t("marketplace.price") || "Цена"}:{" "}
+                    </span>
+                    <span className="font-semibold">{prettyPrice}</span>
                   </div>
                 )}
               </div>
@@ -372,7 +690,9 @@ export default function ProviderFavorites() {
         {/* тултип отзывов */}
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">Отзывы об услуге</div>
+            <div className="mb-1 font-semibold">
+              {t("marketplace.reviews") || "Отзывы об услуге"}
+            </div>
             <div className="flex items-center gap-2">
               <Stars value={revData.avg} />
               <span className="opacity-80">({revData.count || 0})</span>
@@ -383,7 +703,9 @@ export default function ProviderFavorites() {
               ) : (
                 <ul className="list-disc ml-4 space-y-1">
                   {revData.items.slice(0, 2).map((r) => (
-                    <li key={r.id} className="line-clamp-2 opacity-90">{r.text || ""}</li>
+                    <li key={r.id} className="line-clamp-2 opacity-90">
+                      {r.text || ""}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -391,16 +713,74 @@ export default function ProviderFavorites() {
           </div>
         </TooltipPortal>
 
-        {/* тело */}
+        {/* тело карточки */}
         <div className="p-3 flex-1 flex flex-col">
           <div className="font-semibold line-clamp-2">{title}</div>
-          {(prettyNet || prettyGross) && (
+
+          {prettyPrice && (
             <div className="mt-1 text-sm">
-              Цена: <span className="font-semibold">
-                {prettyNet ? `Net ${prettyNet}` : ""}{prettyNet && prettyGross ? " • " : ""}{prettyGross ? `Gross ${prettyGross}` : ""}
-              </span>
+              {t("marketplace.price") || "Цена"}:{" "}
+              <span className="font-semibold">{prettyPrice}</span>
             </div>
           )}
+
+          {/* контакт провайдера, если есть */}
+          {(() => {
+            const supplierTg = renderTelegram(
+              _firstNonEmpty(details?.provider?.telegram)
+            ); // уже есть общий supplierTg выше; оставим компактный блок
+            const name =
+              _firstNonEmpty(details?.provider?.name) || _firstNonEmpty(flatName);
+            const phone =
+              _firstNonEmpty(details?.provider?.phone) ||
+              _firstNonEmpty(flatPhone);
+            if (!name && !phone && !supplierTg?.label) return null;
+            return (
+              <div className="mt-2 text-sm space-y-0.5">
+                {name && (
+                  <div>
+                    <span className="text-gray-500">
+                      {t("marketplace.supplier") || "Поставщик"}:{" "}
+                    </span>
+                    <span className="font-medium">{name}</span>
+                  </div>
+                )}
+                {phone && (
+                  <div>
+                    <span className="text-gray-500">
+                      {t("marketplace.phone") || "Телефон"}:{" "}
+                    </span>
+                    <a
+                      href={`tel:${String(phone).replace(/\s+/g, "")}`}
+                      className="underline"
+                    >
+                      {phone}
+                    </a>
+                  </div>
+                )}
+                {supplierTg?.label && (
+                  <div>
+                    <span className="text-gray-500">
+                      {t("marketplace.telegram") || "Телеграм"}:{" "}
+                    </span>
+                    {supplierTg.href ? (
+                      <a
+                        href={supplierTg.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        {supplierTg.label}
+                      </a>
+                    ) : (
+                      <span className="font-medium">{supplierTg.label}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="mt-auto pt-3">
             <button
               onClick={() => openQuickRequest(id, providerId, title)}
@@ -416,25 +796,46 @@ export default function ProviderFavorites() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <h2 className="text-xl font-semibold mb-4">{t("provider.favorites.tab") || "Избранное"}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold">
+          {t("provider.favorites.tab") || "Избранное"}
+        </h2>
+        <button
+          onClick={load}
+          className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 text-sm"
+          disabled={loading}
+        >
+          {t("common.refresh") || "Обновить"}
+        </button>
+      </div>
 
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
-        {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (
-          <div className="text-gray-500">{t("common.empty") || "Избранного пока нет."}</div>
+        {loading && (
+          <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>
         )}
-        {!loading && !error && !!items.length && (
+        {!loading && !items.length && (
+          <div className="text-gray-500">
+            {t("provider.favorites.empty") || "Избранного пока нет."}
+          </div>
+        )}
+        {!loading && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => {
-              const key = it.id || it.service?.id || it.service_id || JSON.stringify(it);
-              return <Card key={key} it={it} />;
-            })}
+            {items.map((it) => (
+              <Card
+                key={it.id || it.service?.id || it.service_id || JSON.stringify(it)}
+                it={it}
+                now={now}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
+      <QuickRequestModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onSubmit={submitQuickRequest}
+      />
     </div>
   );
 }
