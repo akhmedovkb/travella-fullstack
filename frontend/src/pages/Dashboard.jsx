@@ -10,8 +10,9 @@ import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
-import { apiProviderFavorites, apiRemoveProviderFavorite } from "../api/providerFavorites";
 
+
+import { apiProviderFavorites, apiRemoveProviderFavorite } from "../api/providerFavorites";
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
   const dataUrl = await new Promise((resolve, reject) => {
@@ -326,38 +327,15 @@ direction: "",
   const [bookingsInbox, setBookingsInbox] = useState([]); // брони по услугам провайдера
   const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
   const [loadingInbox, setLoadingInbox] = useState(false);
-
+  // === Tabs & Favorites ===
   const [activeTab, setActiveTab] = useState("requests"); // "requests" | "favorites" | "bookings"
   const [favorites, setFavorites] = useState([]);
   const [favLoaded, setFavLoaded] = useState(false);
   const [loadingFav, setLoadingFav] = useState(false);
 
+
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
-
-    // ---- Favorites API ----
-  async function fetchFavorites() {
-        try {
-          setLoadingFav(true);
-          const list = await apiProviderFavorites();
-          setFavorites(Array.isArray(list) ? list : []);
-          setFavLoaded(true);
-        } catch (e) {
-          console.error("Ошибка загрузки избранного", e);
-          toast.error(t("errors.favorites_load_failed") || "Не удалось загрузить избранное");
-        } finally {
-          setLoadingFav(false);
-        }
-      }
-    
-      async function handleRemoveFavorite(serviceId) {
-        const ok = await apiRemoveProviderFavorite(serviceId);
-        if (ok) setFavorites((prev) => prev.filter((x) => (x.id ?? x.service_id) !== serviceId));
-      }
-    
-    useEffect(() => {
-    if (activeTab === "favorites" && !favLoaded) fetchFavorites();
-    }, [activeTab]);
 
   /** ===== Utils ===== */
   const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
@@ -727,6 +705,31 @@ direction: "",
       setLoadingInbox(false);
     }
   };
+
+  // ---- Favorites API ----
+  async function fetchFavorites() {
+    try {
+      setLoadingFav(true);
+      const list = await apiProviderFavorites();
+      setFavorites(Array.isArray(list) ? list : []);
+      setFavLoaded(true);
+    } catch (e) {
+      console.error("Ошибка загрузки избранного", e);
+      toast.error(t("errors.favorites_load_failed") || "Не удалось загрузить избранное");
+    } finally {
+      setLoadingFav(false);
+    }
+  }
+
+  async function handleRemoveFavorite(serviceId) {
+    const ok = await apiRemoveProviderFavorite(serviceId);
+    if (ok) setFavorites((prev) => prev.filter((x) => (x.id ?? x.service_id) !== serviceId));
+  }
+
+  useEffect(() => {
+    if (activeTab === "favorites" && !favLoaded) fetchFavorites();
+  }, [activeTab]);
+
 
   useEffect(() => {
     if (token) refreshInbox();
@@ -2850,8 +2853,33 @@ const __grossNum = (() => {
             </>
           )}
 
-          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
-          <section className={"mt-8 " + (activeTab !== "requests" ? "hidden" : "")}>
+          
+          {/* ===== ТАБЫ: Мои запросы | Избранное | Мои брони ===== */}
+          <section className="mt-8">
+            <div className="flex items-center gap-6 border-b">
+              {[
+                { key: "requests", label: t("provider.requests.tab") || "Мои запросы" },
+                { key: "favorites", label: t("provider.favorites.tab") || "Избранное" },
+                { key: "bookings", label: t("provider.bookings.tab") || "Мои брони" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={[
+                    "py-2 -mb-px border-b-2 text-sm font-medium",
+                    activeTab === tab.key
+                      ? "border-orange-500 text-orange-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  ].join(" ")}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </section>
+{/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
+          <section className="mt-8 " + (activeTab !== "requests" ? "hidden" : "") + "">
             <ProviderInboxList
               showHeader
               cleanupExpired={serverCleanupExpired}
@@ -2871,8 +2899,10 @@ const __grossNum = (() => {
                   const category = svc.category || svc.details?.category || "—";
                   const gross = svc.gross_price ?? svc.grossPrice ?? svc.details?.grossPrice ?? svc.details?.brutto;
                   const net = svc.price ?? svc.details?.netPrice ?? svc.details?.price;
+                  const img = Array.isArray(svc.images) ? svc.images[0] : (svc.cover || null);
                   return (
                     <div key={id} className="border rounded-lg p-3 flex flex-col gap-2">
+                      {img ? <img src={img} alt="" className="w-full h-28 object-cover rounded" /> : null}
                       <div className="font-medium">{title}</div>
                       <div className="text-xs text-gray-500">{category}</div>
                       <div className="text-sm">
@@ -2895,6 +2925,7 @@ const __grossNum = (() => {
               <div className="text-sm text-gray-500">{t("provider.favorites.empty") || "Избранного пока нет."}</div>
             )}
           </div>
+
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
           <div className={"mt-8 " + (activeTab !== "bookings" ? "hidden" : "")}>
