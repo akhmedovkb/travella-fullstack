@@ -448,15 +448,21 @@ function FavoritesList({ items, page, perPage = 8, onPageChange, onRemove, onQui
                     <div className="absolute top-2 right-2 z-20">
                       <div className="relative group/heart">
                         <button
-                          onClick={() => onRemove?.(it.id)}
-                          className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-red-500 backdrop-blur-md ring-1 ring-white/20"
-                          aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                          title={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z" />
-                          </svg>
-                        </button>
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove?.(it.id); }}
+                            aria-label={t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
+                            aria-pressed="true"
+                            className="
+                              w-9 h-9 grid place-items-center rounded-full text-red-500
+                              backdrop-blur ring-1 ring-white/30 shadow-md
+                              bg-[radial-gradient(120%_120%_at_30%_25%,rgba(255,255,255,.70),rgba(255,255,255,.38)_40%,rgba(0,0,0,.18)_70%,rgba(0,0,0,.38))]
+                              hover:shadow-lg active:scale-[.97] transition
+                            "
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 21s-7-4.534-9.5-8.25C1.1 10.3 2.5 6 6.5 6c2.2 0 3.5 1.6 3.5 1.6S11.8 6 14 6c4 0 5.4 4.3 4 6.75C19 16.466 12 21 12 21z"/>
+                            </svg>
+                          </button>
                         <div className="absolute -top-2 right-8 -translate-y-full opacity-0 group-hover/heart:opacity-100 transition-opacity pointer-events-none">
                           <div className="relative bg-black/80 text-white text-xs px-2 py-1 rounded-md shadow backdrop-blur-md">
                             {t("favorites.remove_from", { defaultValue: "Удалить из Избранного" })}
