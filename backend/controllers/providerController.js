@@ -140,10 +140,17 @@ const updateProviderProfile = async (req, res) => {
     );
     if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const old = oldQ.rows[0];
+    
+    const toTextArray = (v, fallback) => {
+    if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+    if (typeof v === "string") return [v.trim()].filter(Boolean);
+    return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
+    };
+
 
     const updated = {
       name: req.body.name ?? old.name,
-      location: req.body.location ?? old.location,
+      location: toTextArray(req.body.location, old.location),
       phone: req.body.phone ?? old.phone,
       social: req.body.social ?? old.social,
       photo: req.body.photo ?? old.photo,
