@@ -1032,7 +1032,7 @@ const __grossNum = (() => {
               {/* Фото */}
               <div className="relative flex flex-col items-center">
                 <img
-                  src={newPhoto || profile.photo || "https://via.placeholder.com/96x96"}
+                  src={newPhoto || profile.photo || "https://via.placehold.co/96x96"}
                   className="w-24 h-24 rounded-full object-cover mb-2"
                   alt="Фото"
                 />
