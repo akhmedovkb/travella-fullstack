@@ -589,51 +589,91 @@ export default function Marketplace() {
       })();
     }, [__viewerRole]);
 
-      const toggleFavorite = async (id) => {
-        try {
-          const key = String(id);
-          if (__viewerRole === "client") {
-            // клиентский тоггл (как было)
-            const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
-            const added = !!res?.added;
-            setFavIds(prev => {
-              const next = new Set(prev);
-              if (added) next.add(key); else next.delete(key);
-              return next;
-            });
-            toast(added
-              ? t("favorites.added_toast") || "Добавлено в избранное"
-              : t("favorites.removed_toast") || "Удалено из избранного");
-          } else if (__viewerRole === "provider") {
-            // провайдерский тоггл
-            const res = await apiToggleProviderFavorite(id);
-            const added = !!res?.added;
-            setFavIds(prev => {
-              const next = new Set(prev);
-              if (added) next.add(key); else next.delete(key);
-              return next;
-            });
-            // обновим бейдж в Header
-            window.dispatchEvent(new Event("provider:favorites:changed"));
-            toast(added
-              ? t("favorites.added_toast") || "Добавлено в избранное"
-              : t("favorites.removed_toast") || "Удалено из избранного");
-          } else {
-            // гость
-            toast(t("auth.login_required") || "Войдите как клиент/поставщик");
-          }
-        } catch (e) {
-          const msg = (e && (e.status || e.code || e.message)) || "";
-          const needLogin = String(msg).includes("401") || String(msg).includes("403");
-          toast(
-            needLogin
-              ? (__viewerRole === "provider"
-                  ? (t("auth.provider_login_required") || "Войдите как поставщик")
-                  : (t("auth.login_required") || "Войдите как клиент"))
-              : (t("toast.favoriteError") || "Не удалось изменить избранное")
-          );
-        }
-      };
+  {/* тут тоггл сердечка из маркетплэйс */}
+  
+  const toggleFavorite = async (id) => {
+  const key = String(id);
+
+  // ----- КЛИЕНТ -----
+  if (__viewerRole === "client") {
+    try {
+      const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
+      const added = !!res?.added;
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (added) next.add(key); else next.delete(key);
+        return next;
+      });
+      toast(
+        added
+          ? t("favorites.added_toast") || "Добавлено в избранное"
+          : t("favorites.removed_toast") || "Удалено из избранного"
+      );
+    } catch (e) {
+      const msg = (e && (e.status || e.code || e.message)) || "";
+      const needLogin = String(msg).includes("401") || String(msg).includes("403");
+      toast(
+        needLogin
+          ? (t("auth.login_required") || "Войдите как клиент")
+          : (t("toast.favoriteError") || "Не удалось изменить избранное")
+      );
+    }
+    return;
+  }
+
+  // ----- ПРОВАЙДЕР -----
+  if (__viewerRole === "provider") {
+    // оптимистично переворачиваем локальное состояние
+    const flipTo = !favIds.has(key);
+    setFavIds((prev) => {
+      const next = new Set(prev);
+      if (flipTo) next.add(key); else next.delete(key);
+      return next;
+    });
+
+    try {
+      const res = await apiToggleProviderFavorite(id);
+
+      // если сервер явно прислал added — синхронизируемся
+      if (typeof res?.added === "boolean" && res.added !== flipTo) {
+        setFavIds((prev) => {
+          const next = new Set(prev);
+          if (res.added) next.add(key); else next.delete(key);
+          return next;
+        });
+      }
+
+      // обновим бейдж в шапке
+      window.dispatchEvent(new Event("provider:favorites:changed"));
+
+      toast(
+        flipTo
+          ? t("favorites.added_toast") || "Добавлено в избранное"
+          : t("favorites.removed_toast") || "Удалено из избранного"
+      );
+    } catch (e) {
+      // откат при ошибке
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (flipTo) next.delete(key); else next.add(key);
+        return next;
+      });
+
+      const msg = (e && (e.status || e.code || e.message)) || "";
+      const needLogin = String(msg).includes("401") || String(msg).includes("403");
+      toast(
+        needLogin
+          ? (t("auth.provider_login_required") || "Войдите как поставщик")
+          : (t("toast.favoriteError") || "Не удалось изменить избранное")
+      );
+    }
+    return;
+  }
+
+  // ----- ГОСТЬ -----
+  toast(t("auth.login_required") || "Войдите как клиент/поставщик");
+};
+
 
   const categoryOptions = [
     { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
