@@ -1,3 +1,4 @@
+// backend/controllers/providerController.js
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
@@ -37,7 +38,6 @@ function normalizeServicePayload(body) {
   const imagesArr = sanitizeImages(images);
   const availabilityArr = Array.isArray(availability) ? availability : toArray(availability);
 
-  // details разрешаем для всех категорий, т.к. тут теперь живёт grossPrice
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
@@ -68,19 +68,16 @@ function normalizeServicePayload(body) {
 const registerProvider = async (req, res) => {
   try {
     const { name, email, password, type, location, phone, social, photo, address } = req.body || {};
-
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
-
     const existing = await pool.query("SELECT 1 FROM providers WHERE email = $1", [email]);
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
     }
-
     const hashed = await bcrypt.hash(password, 10);
     await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
@@ -140,17 +137,10 @@ const updateProviderProfile = async (req, res) => {
     );
     if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const old = oldQ.rows[0];
-    
-    const toTextArray = (v, fallback) => {
-    if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
-    if (typeof v === "string") return [v.trim()].filter(Boolean);
-    return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
-    };
-
 
     const updated = {
       name: req.body.name ?? old.name,
-      location: toTextArray(req.body.location, old.location),
+      location: req.body.location ?? old.location,
       phone: req.body.phone ?? old.phone,
       social: req.body.social ?? old.social,
       photo: req.body.photo ?? old.photo,
@@ -166,7 +156,7 @@ const updateProviderProfile = async (req, res) => {
     );
     res.json({ message: "Профиль обновлён успешно" });
   } catch (err) {
-    console.error("❌ Ошибка обновления профиля:", err, err.message, err.detail);
+    console.error("❌ Ошибка обновления профиля:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -288,24 +278,6 @@ const deleteService = async (req, res) => {
   }
 };
 
-// Только обновление картинок
-const updateServiceImagesOnly = async (req, res) => {
-  try {
-    const providerId = req.user.id;
-    const serviceId = req.params.id;
-    const imagesArr = sanitizeImages(req.body.images);
-    const upd = await pool.query(
-      `UPDATE services SET images=$1::jsonb WHERE id=$2 AND provider_id=$3 RETURNING *`,
-      [JSON.stringify(imagesArr), serviceId, providerId]
-    );
-    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-    res.json(upd.rows[0]);
-  } catch (err) {
-    console.error("❌ Ошибка обновления картинок:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
-  }
-};
-
 // ---------- Public provider card ----------
 const getProviderPublicById = async (req, res) => {
   try {
@@ -321,11 +293,10 @@ const getProviderPublicById = async (req, res) => {
   }
 };
 
-// ---------- Calendar (booked / blocked dates) ----------
+// ---------- Calendar ----------
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    // Предполагаем наличие таблицы provider_blocked_dates(date date, provider_id int)
     const r = await pool.query(
       `SELECT day::date AS date FROM provider_blocked_dates WHERE provider_id=$1 ORDER BY day`,
       [providerId]
@@ -344,7 +315,6 @@ const saveBlockedDates = async (req, res) => {
     const addArr = toArray(add);
     const remArr = toArray(remove);
 
-    // Создаём таблицу, если её нет
     await pool.query(
       `CREATE TABLE IF NOT EXISTS provider_blocked_dates (
          provider_id integer not null,
@@ -390,10 +360,9 @@ const saveBlockedDates = async (req, res) => {
   }
 };
 
-// ---------- Stats (safe placeholder) ----------
-const getProviderStats = async (req, res) => {
+// ---------- Stats (заглушка) ----------
+const getProviderStats = async (_req, res) => {
   try {
-    // Заглушка, чтобы не ломать Header: вернём нули
     res.json({ new: 0, booked: 0 });
   } catch (err) {
     res.json({ new: 0, booked: 0 });
@@ -426,7 +395,6 @@ const toggleProviderFavorite = async (req, res) => {
     const { service_id } = req.body || {};
     if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
 
-    // попытка добавить
     const ins = await pool.query(
       `INSERT INTO provider_favorites(provider_id, service_id)
        VALUES ($1,$2)
@@ -439,7 +407,6 @@ const toggleProviderFavorite = async (req, res) => {
       return res.json({ added: true });
     }
 
-    // если уже было — удалить
     await pool.query(
       `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
       [providerId, service_id]
