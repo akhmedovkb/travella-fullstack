@@ -569,15 +569,15 @@ export default function Marketplace() {
             // клиентское избранное (как было)
             const ids = await apiGet("/api/wishlist/ids");
             const arr = Array.isArray(ids) ? ids : [];
-            setFavIds(new Set(arr));
+            setFavIds(new Set(arr.map(x => String(x))));
           } else if (__viewerRole === "provider") {
             // провайдерское избранное
             const list = await apiProviderFavorites();
             const ids =
               (Array.isArray(list) ? list : [])
                 .map(x => x.service_id ?? x.service?.id ?? x.id) // берём id услуги
-                .filter(Boolean);
-            setFavIds(new Set(ids));
+                .filter(Boolean)
+            .map(x => String(x));
           } else {
             // гость — пусто
             setFavIds(new Set());
@@ -590,13 +590,14 @@ export default function Marketplace() {
 
       const toggleFavorite = async (id) => {
         try {
+          const key = String(id);
           if (__viewerRole === "client") {
             // клиентский тоггл (как было)
             const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
             const added = !!res?.added;
             setFavIds(prev => {
               const next = new Set(prev);
-              if (added) next.add(id); else next.delete(id);
+              if (added) next.add(key); else next.delete(key);
               return next;
             });
             toast(added
@@ -608,7 +609,7 @@ export default function Marketplace() {
             const added = !!res?.added;
             setFavIds(prev => {
               const next = new Set(prev);
-              if (added) next.add(id); else next.delete(id);
+              if (added) next.add(key); else next.delete(key);
               return next;
             });
             // обновим бейдж в Header
@@ -740,8 +741,8 @@ export default function Marketplace() {
     const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
     const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
-    const isFav = (svc.id && favIds.has(svc.id)) || favIds.has(it.id);
-
+    const isFav = favIds.has(String(id));
+    
     const expireAt = resolveExpireAt(svc);
     const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
     const hasTimer = !!expireAt;
