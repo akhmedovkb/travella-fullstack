@@ -107,18 +107,7 @@
       "success": "Logged in",
       "error": "Login error"
     },
-    "register": {
-      "haveAccount": "Already have an account?",
-      "loginLink": "Login",
-      "name": "Name",
-      "password": "Password",
-      "phone": "Phone",
-      "registerBtn": "Register",
-      "title": "Client registration",
-      "success": "Registration successful",
-      "error": "Registration error"
-    }
-  },
+   
   "comment": "Comment",
   "common": {
     "find": "Find",
@@ -472,6 +461,16 @@
   "expired": "Expired",
 
   "register": {
+   "haveAccount": "Already have an account?",
+   "loginLink": "Login",
+   "name": "Name",
+   "password": "Password",
+   "phone": "Phone",
+   "registerBtn": "Register",
+   "title": "Client registration",
+   "success": "Registration successful",
+    "error": "Registration error",
+    
     "title": "Provider Registration",
     "name": "Name",
     "type": "Provider type",
