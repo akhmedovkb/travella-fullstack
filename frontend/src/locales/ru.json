@@ -289,6 +289,7 @@
     "requests": "Запросы"
   },
   "net_price": "Цена нетто",
+  "current_password": "Старый пароль",
   "new_password": "Новый пароль",
   "new_refused_airtkt": "Добавление нового отказного авиабилета:",
   "new_refused_event_ticket": "Отказной билет на мероприятие",
