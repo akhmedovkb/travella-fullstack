@@ -10,7 +10,6 @@ import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
-import ProviderFavorites from "../components/ProviderFavorites"
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
@@ -235,9 +234,6 @@ const DATETIME_MIN = nowLocalDateTime();
 /** ================= Main ================= */
 const Dashboard = () => {
   const { t } = useTranslation();
-  
-  // --- НОВОЕ: табы ---
-  const [tab, setTab] = useState("inbox"); // inbox | favorites | bookings
 
   // Profile
   const [profile, setProfile] = useState({});
