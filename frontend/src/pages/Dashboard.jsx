@@ -2820,7 +2820,7 @@ const __grossNum = (() => {
             </>
           )}
 
-          {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
+          {/*  ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== 
           <section className="mt-8">
             <ProviderInboxList
               showHeader
@@ -2828,7 +2828,7 @@ const __grossNum = (() => {
               nameResolver={typeof window !== "undefined" ? window.__providerClientNameResolver : undefined}
               onAfterAction={refreshInbox}
             />
-          </section>
+          </section> */}
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
           <div className="mt-8">
