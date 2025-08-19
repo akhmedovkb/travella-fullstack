@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
+import { apiProviderFavorites } from "../api/providerFavorites";
 
 /* --- Inline SVG иконки --- */
 const IconDashboard = (p) => (
@@ -40,6 +41,26 @@ export default function Header() {
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0); // для ручного перезапроса счётчиков
+
+   // провайдерское избранное – считаем элементы
+   useEffect(() => {
+     if (role !== "provider") return;
+     let alive = true;
+     const load = async () => {
+       try {
+         const list = await apiProviderFavorites();
+         if (alive) setFavCount(Array.isArray(list) ? list.length : 0);
+       } catch {
+         if (alive) setFavCount(0);
+       }
+     };
+     load();
+     // обновлять бейдж при изменениях
+     const onChanged = () => load();
+     window.addEventListener("provider:favorites:changed", onChanged);
+     return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
+   }, [role]);
+
 
   /* Provider counters (requests / bookings) — без /api/notifications/counts */
   useEffect(() => {
@@ -156,6 +177,13 @@ export default function Header() {
               value={providerRequests}
               loading={loading}
               icon={<IconRequests />}
+            />
+            <NavBadge
+              to="/dashboard/favorites"
+              label={t("nav.favorites") || "Избранное"}
+              value={favCount}
+              loading={false}
+              icon={<IconHeart />}
             />
             <NavBadge
               to="/dashboard/bookings"
