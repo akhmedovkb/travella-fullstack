@@ -27,7 +27,10 @@ export default function WishHeart({
         "bg-black/35 hover:bg-black/45",
         className,
       ].join(" ")}
-      style={{ width: size, height: size }}
+      style={{
+  width: size, height: size,
+  background: "radial-gradient(120% 120% at 30% 30%, rgba(255,255,255,.25), rgba(0,0,0,.35))"
+}}
     >
       <svg
         width={icon}
