@@ -10,6 +10,7 @@ import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
+import { apiProviderFavorites, apiRemoveProviderFavorite } from "../api/providerFavorites";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -326,8 +327,37 @@ direction: "",
   const [proposalForms, setProposalForms] = useState({});  // { [requestId]: {price, currency, hotel, room, terms, message} }
   const [loadingInbox, setLoadingInbox] = useState(false);
 
+  const [activeTab, setActiveTab] = useState("requests"); // "requests" | "favorites" | "bookings"
+  const [favorites, setFavorites] = useState([]);
+  const [favLoaded, setFavLoaded] = useState(false);
+  const [loadingFav, setLoadingFav] = useState(false);
+
   const token = localStorage.getItem("token");
   const config = { headers: { Authorization: `Bearer ${token}` } };
+
+    // ---- Favorites API ----
+  async function fetchFavorites() {
+        try {
+          setLoadingFav(true);
+          const list = await apiProviderFavorites();
+          setFavorites(Array.isArray(list) ? list : []);
+          setFavLoaded(true);
+        } catch (e) {
+          console.error("Ошибка загрузки избранного", e);
+          toast.error(t("errors.favorites_load_failed") || "Не удалось загрузить избранное");
+        } finally {
+          setLoadingFav(false);
+        }
+      }
+    
+      async function handleRemoveFavorite(serviceId) {
+        const ok = await apiRemoveProviderFavorite(serviceId);
+        if (ok) setFavorites((prev) => prev.filter((x) => (x.id ?? x.service_id) !== serviceId));
+      }
+    
+    useEffect(() => {
+    if (activeTab === "favorites" && !favLoaded) fetchFavorites();
+    }, [activeTab]);
 
   /** ===== Utils ===== */
   const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
@@ -2821,7 +2851,7 @@ const __grossNum = (() => {
           )}
 
           {/* ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== */}
-          <section className="mt-8">
+          <section className={"mt-8 " + (activeTab !== "requests" ? "hidden" : "")}>
             <ProviderInboxList
               showHeader
               cleanupExpired={serverCleanupExpired}
@@ -2829,9 +2859,45 @@ const __grossNum = (() => {
               onAfterAction={refreshInbox}
             />
           </section>
+          {/* ===== ИЗБРАННОЕ ===== */}
+          <div className={"mt-8 " + (activeTab !== "favorites" ? "hidden" : "")}>
+            {loadingFav ? (
+              <div className="text-sm text-gray-500">Загрузка…</div>
+            ) : favorites?.length ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {favorites.map((svc) => {
+                  const id = svc.id ?? svc.service_id;
+                  const title = svc.title || svc.details?.title || "Без названия";
+                  const category = svc.category || svc.details?.category || "—";
+                  const gross = svc.gross_price ?? svc.grossPrice ?? svc.details?.grossPrice ?? svc.details?.brutto;
+                  const net = svc.price ?? svc.details?.netPrice ?? svc.details?.price;
+                  return (
+                    <div key={id} className="border rounded-lg p-3 flex flex-col gap-2">
+                      <div className="font-medium">{title}</div>
+                      <div className="text-xs text-gray-500">{category}</div>
+                      <div className="text-sm">
+                        <span className="mr-2">Net: {net ?? "—"}</span>
+                        <span>Gross: {gross ?? "—"}</span>
+                      </div>
+                      <div className="mt-1 flex gap-2">
+                        <button
+                          className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+                          onClick={() => handleRemoveFavorite(id)}
+                        >
+                          {t("remove") || "Удалить"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">{t("provider.favorites.empty") || "Избранного пока нет."}</div>
+            )}
+          </div>
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
-          <div className="mt-8">
+          <div className={"mt-8 " + (activeTab !== "bookings" ? "hidden" : "")}>
             <h3 className="text-xl font-semibold mb-3">Мои брони</h3>
             <div className="space-y-3">
               {bookingsInbox.length === 0 && (
