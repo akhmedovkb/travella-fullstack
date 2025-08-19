@@ -1,3 +1,4 @@
+// backend/routes/providerRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -18,12 +19,13 @@ const {
   saveBlockedDates,
   getProviderPublicById,
   getProviderStats,
+  // NEW: избранное провайдера
   listProviderFavorites,
   toggleProviderFavorite,
   removeProviderFavorite,
 } = require("../controllers/providerController");
 
-// Simple role guard: token already decoded by authenticateToken
+// Simple role guard
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
@@ -54,12 +56,12 @@ router.patch("/services/:id/images", authenticateToken, requireProvider, updateS
 router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
 
-// Public provider page
-router.get("/:id(\\d+)", getProviderPublicById);
-
-// Favorites (provider)
+// Favorites (place before public :id to avoid shadowing)
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
+
+// Public provider page
+router.get("/:id(\\d+)", getProviderPublicById);
 
 module.exports = router;
