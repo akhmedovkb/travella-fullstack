@@ -54,4 +54,9 @@ router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDat
 // Public provider page
 router.get("/:id(\\d+)", getProviderPublicById);
 
+// Favorites (provider)
+router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
+router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
+router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
+
 module.exports = router;
