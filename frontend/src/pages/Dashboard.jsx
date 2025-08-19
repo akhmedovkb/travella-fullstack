@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
-import { tSuccess, tError, tInfo, tWarn } from "./shared/toast";
+import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
