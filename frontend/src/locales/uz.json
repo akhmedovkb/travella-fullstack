@@ -289,6 +289,7 @@
     "requests": "So‘rovlar"
   },
   "net_price": "Netto narx",
+  "current_password": "Eski parol",
   "new_password": "Yangi parol",
   "new_refused_airtkt": "Yangi rad etilgan aviachipta qo‘shish:",
   "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
