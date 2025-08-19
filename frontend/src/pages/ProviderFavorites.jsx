@@ -196,14 +196,16 @@ export default function ProviderFavorites() {
                         )}
                       </div>
 
-                      <div className="absolute top-3 right-3 z-10">
+                      <div className="pointer-events-auto">
                         <WishHeart
-                          active={true} // в избранном провайдера всегда “активно”
-                          onClick={() => handleRemoveFavorite(serviceId)} // удаляем
-                          size={36}
-                          titleRemove="Удалить из избранного"
+                          active={isFav}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(id);
+                          }}
                         />
                       </div>
+
 
                     </div>
                   </div>
