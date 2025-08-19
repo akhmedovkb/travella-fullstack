@@ -453,6 +453,7 @@
     "time_left": "Time left",
     "time_expired": "Expired"
   },
+    
   "tooltips": {
     "favorite_add": "Add to favorites",
     "favorite_remove": "Remove from favorites"
@@ -516,7 +517,7 @@
       "duplicate": "A record with these data already exists."
     }
   },
-  
+    
   "form": {
     "required": "Ushbu maydonni to‘ldiring.",
     "email_invalid": "Yaroqli e-pochta kiriting.",
