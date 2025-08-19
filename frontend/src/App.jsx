@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-
+import { ToastMount } from "@/shared/toast";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -26,6 +26,7 @@ function ClientPrivateRoute({ children }) {
 export default function App() {
   return (
     <Router>
+      <ToastMount />
       <div className="min-h-screen bg-gray-100 p-4">
         <Header />
 
