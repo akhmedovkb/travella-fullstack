@@ -1,4 +1,5 @@
 // backend/controllers/providerController.js
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
@@ -19,7 +20,7 @@ function toArray(val) {
   if (Array.isArray(val)) return val;
   if (typeof val === "string") {
     try { const arr = JSON.parse(val); return Array.isArray(arr) ? arr : []; }
-    catch (err) { return []; }
+    catch { return []; }
   }
   return [];
 }
@@ -38,11 +39,12 @@ function normalizeServicePayload(body) {
   const imagesArr = sanitizeImages(images);
   const availabilityArr = Array.isArray(availability) ? availability : toArray(availability);
 
+  // details разрешаем для всех категорий, т.к. тут теперь живёт grossPrice
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
       try { detailsObj = JSON.parse(details); }
-      catch (err) { detailsObj = { value: String(details) }; }
+      catch { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
@@ -68,16 +70,19 @@ function normalizeServicePayload(body) {
 const registerProvider = async (req, res) => {
   try {
     const { name, email, password, type, location, phone, social, photo, address } = req.body || {};
+
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
+
     const existing = await pool.query("SELECT 1 FROM providers WHERE email = $1", [email]);
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
     }
+
     const hashed = await bcrypt.hash(password, 10);
     await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
@@ -138,9 +143,16 @@ const updateProviderProfile = async (req, res) => {
     if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const old = oldQ.rows[0];
 
+    // location как массив (text[])
+    const toTextArray = (v, fallback) => {
+      if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+      if (typeof v === "string") return [v.trim()].filter(Boolean);
+      return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
+    };
+
     const updated = {
       name: req.body.name ?? old.name,
-      location: req.body.location ?? old.location,
+      location: toTextArray(req.body.location, old.location),
       phone: req.body.phone ?? old.phone,
       social: req.body.social ?? old.social,
       photo: req.body.photo ?? old.photo,
@@ -265,15 +277,20 @@ const updateService = async (req, res) => {
   }
 };
 
-const deleteService = async (req, res) => {
+// Только обновление картинок (ЭТО ВАЖНАЯ ФУНКЦИЯ — БЫЛА ПОТЕРЯНА)
+const updateServiceImagesOnly = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [serviceId, providerId]);
-    if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-    res.json({ message: "Удалено" });
+    const imagesArr = sanitizeImages(req.body.images);
+    const upd = await pool.query(
+      `UPDATE services SET images=$1::jsonb WHERE id=$2 AND provider_id=$3 RETURNING *`,
+      [JSON.stringify(imagesArr), serviceId, providerId]
+    );
+    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json(upd.rows[0]);
   } catch (err) {
-    console.error("❌ Ошибка удаления услуги:", err);
+    console.error("❌ Ошибка обновления картинок:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -293,7 +310,7 @@ const getProviderPublicById = async (req, res) => {
   }
 };
 
-// ---------- Calendar ----------
+// ---------- Calendar (booked / blocked dates) ----------
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -360,11 +377,11 @@ const saveBlockedDates = async (req, res) => {
   }
 };
 
-// ---------- Stats (заглушка) ----------
-const getProviderStats = async (_req, res) => {
+// ---------- Stats (safe placeholder) ----------
+const getProviderStats = async (req, res) => {
   try {
     res.json({ new: 0, booked: 0 });
-  } catch (err) {
+  } catch {
     res.json({ new: 0, booked: 0 });
   }
 };
@@ -395,6 +412,7 @@ const toggleProviderFavorite = async (req, res) => {
     const { service_id } = req.body || {};
     if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
 
+    // попытка добавить
     const ins = await pool.query(
       `INSERT INTO provider_favorites(provider_id, service_id)
        VALUES ($1,$2)
@@ -407,6 +425,7 @@ const toggleProviderFavorite = async (req, res) => {
       return res.json({ added: true });
     }
 
+    // если уже было — удалить
     await pool.query(
       `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
       [providerId, service_id]
@@ -444,7 +463,7 @@ module.exports = {
   getServices,
   updateService,
   deleteService,
-  updateServiceImagesOnly,
+  updateServiceImagesOnly,   // <= есть в файле
   getProviderPublicById,
   getBookedDates,
   saveBlockedDates,
