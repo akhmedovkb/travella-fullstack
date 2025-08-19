@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
+import { tSuccess, tError, tInfo, tWarn } from "@/shared/toast";
 
 /** ================= Helpers ================= */
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
@@ -47,6 +48,33 @@ const firstNonEmpty = (...vals) => {
   return null;
 };
 const clientCache = new Map();
+
+// NEW: локализованный “первый подходящий перевод”
+function makeTr(t) {
+return function tr(keys, fallback = "") {
+  for (const k of Array.isArray(keys) ? keys : [keys]) {
+    const v = t(k, { defaultValue: "" });
+    if (v) return v;           // найден перевод
+  }
+  return fallback;             // дефолт
+};
+}
+
+// NEW: извлекаем сообщение сервера (если есть)
+const pickServerMessage = (err) =>
+err?.response?.data?.message || err?.message || "";
+
+// NEW: единая обертка для ошибок API
+function toastApiError(t, err, keys, fallback) {
+const tr = makeTr(t);
+const msg = pickServerMessage(err) || tr(keys, fallback);
+toast.error(msg);
+}
+
+// NEW: сахара для success/info/warn
+function toastSuccessT(t, keys, fallback) { toast.success(makeTr(t)(keys, fallback)); }
+function toastInfoT(t, keys, fallback)    { toast.info(makeTr(t)(keys, fallback)); }
+function toastWarnT(t, keys, fallback)    { toast.warn(makeTr(t)(keys, fallback)); }
 
 function resolveExpireAtFromService(service) {
   const s = service || {};
