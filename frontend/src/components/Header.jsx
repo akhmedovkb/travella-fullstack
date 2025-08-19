@@ -143,7 +143,7 @@ export default function Header() {
           className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
           aria-label="Go to marketplace"
         >
-          Travella
+          MARKETPLACE
         </Link>
 
         {/* Provider nav */}
