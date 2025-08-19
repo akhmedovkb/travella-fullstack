@@ -248,6 +248,7 @@
     "requests": "Requests"
   },
   "net_price": "Net price",
+  "current_password": "Old password",
   "new_password": "New password",
   "new_refused_airtkt": "Add a new refused flight ticket:",
   "new_refused_event_ticket": "Refused event ticket",
