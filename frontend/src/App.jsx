@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
 import Marketplace from "./pages/Marketplace";
+import ProviderFavorites from "./pages/ProviderFavorites";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -59,7 +60,14 @@ export default function App() {
               </PrivateRoute>
             }
           />
-
+          <Route
+            path="/dashboard/favorites"
+            element={
+              <PrivateRoute>
+                <ProviderFavorites />
+              </PrivateRoute>
+            }
+          />
           <Route path="/marketplace" element={<Marketplace />} />
 
           {/* Клиент */}
