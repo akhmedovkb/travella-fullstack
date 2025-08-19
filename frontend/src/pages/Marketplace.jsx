@@ -822,6 +822,7 @@ export default function Marketplace() {
 
             <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
               <WishHeart
+                key={`${id}-${isFav ? 1 : 0}`}
                 active={isFav}
                 onClick={(e) => {
                   e.stopPropagation();
