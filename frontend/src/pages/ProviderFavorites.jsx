@@ -199,9 +199,14 @@ export default function ProviderFavorites() {
                       <div className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20">
                         <WishHeart
                           active={isFav}
-                          onToggle={() => toggleFavorite(id)}
-                          size={18}
-                          className="!p-0 !hover:bg-transparent"
+                          size={42}                           // чтобы кружок был как на скрине
+                          className="pointer-events-auto"     // если он в overlay с pointer-events
+                          onClick={(e) => {
+                            // этот onClick уже предотвращает скролл/проклик —
+                            // но на всякий случай оставим stopPropagation и тут:
+                            e.stopPropagation();
+                            toggleFavorite(id);
+                          }}
                         />
                       </div>
                     </div>
