@@ -1,30 +1,25 @@
-import { ToastContainer, toast, ToastOptions } from "react-toastify";
+// src/shared/toast.tsx
+import React from "react";
+import { ToastContainer, toast, Slide } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-export const TOAST_OPTS: ToastOptions = {
-  position: "top-right",
-  autoClose: 2500,
-  hideProgressBar: false,
-  closeOnClick: true,
-  pauseOnHover: true,
-  draggable: true,
-  theme: "colored",
-  // если в register/client/register используются классы — оставь те же:
-  className: "toast-app",
-  progressClassName: "toast-app__progress",
-};
+export const ToastMount: React.FC = () => (
+  <ToastContainer
+    position="top-right"
+    autoClose={3500}
+    hideProgressBar
+    newestOnTop
+    closeOnClick
+    pauseOnFocusLoss
+    draggable
+    pauseOnHover
+    theme="light"
+    transition={Slide}
+  />
+);
 
-export const ToastMount = () => <ToastContainer {...TOAST_OPTS} />;
-
-// единые обёртки
-export const tSuccess = (msg: string, opts?: ToastOptions) =>
-  toast.success(msg, { ...TOAST_OPTS, ...opts });
-
-export const tError = (msg: string, opts?: ToastOptions) =>
-  toast.error(msg, { ...TOAST_OPTS, ...opts });
-
-export const tInfo = (msg: string, opts?: ToastOptions) =>
-  toast.info(msg, { ...TOAST_OPTS, ...opts });
-
-export const tWarn = (msg: string, opts?: ToastOptions) =>
-  toast.warn(msg, { ...TOAST_OPTS, ...opts });
+// Единые обёртки — используй их для одинакового стиля
+export const tSuccess = (msg: string, opts?: any) => toast.success(msg, opts);
+export const tError   = (msg: string, opts?: any) => toast.error(msg, opts);
+export const tInfo    = (msg: string, opts?: any) => toast.info(msg, opts);
+export const tWarn    = (msg: string, opts?: any) => toast.warn(msg, opts);
