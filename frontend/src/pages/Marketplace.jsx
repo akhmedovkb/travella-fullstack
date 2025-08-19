@@ -594,7 +594,7 @@ export default function Marketplace() {
       })();
     }, [__viewerRole]);
 
-  {/* тут тоггл сердечка из маркетплэйс */}
+  // тут тоггл сердечка из маркетплэйс *
   
   const toggleFavorite = async (id) => {
   const key = String(id);
@@ -759,6 +759,7 @@ export default function Marketplace() {
               );
             })}
       </div>
+      )}
 
       {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
