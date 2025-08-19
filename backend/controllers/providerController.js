@@ -400,6 +400,72 @@ const getProviderStats = async (req, res) => {
   }
 };
 
+// ===== Provider Favorites =====
+const listProviderFavorites = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const q = await pool.query(
+      `SELECT s.*,
+              COALESCE( (s.details->>'netPrice')::numeric, s.price ) AS net_price
+         FROM provider_favorites f
+         JOIN services s ON s.id = f.service_id
+        WHERE f.provider_id = $1
+        ORDER BY f.created_at DESC`,
+      [providerId]
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error("❌ listProviderFavorites:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const toggleProviderFavorite = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const { service_id } = req.body || {};
+    if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
+
+    // попытка добавить
+    const ins = await pool.query(
+      `INSERT INTO provider_favorites(provider_id, service_id)
+       VALUES ($1,$2)
+       ON CONFLICT (provider_id, service_id) DO NOTHING
+       RETURNING id`,
+      [providerId, service_id]
+    );
+
+    if (ins.rowCount) {
+      return res.json({ added: true });
+    }
+
+    // если уже было — удалить
+    await pool.query(
+      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
+      [providerId, service_id]
+    );
+    res.json({ added: false });
+  } catch (err) {
+    console.error("❌ toggleProviderFavorite:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const removeProviderFavorite = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = Number(req.params.serviceId);
+    await pool.query(
+      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
+      [providerId, serviceId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ removeProviderFavorite:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 module.exports = {
   isExtendedCategory,
   registerProvider,
@@ -416,4 +482,7 @@ module.exports = {
   getBookedDates,
   saveBlockedDates,
   getProviderStats,
+  listProviderFavorites,
+  toggleProviderFavorite,
+  removeProviderFavorite,
 };
