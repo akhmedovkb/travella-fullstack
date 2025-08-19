@@ -816,7 +816,7 @@ direction: "",
       return;
     }
     axios
-      .put(`${API_BASE}/api/provider/change-password`, { password: newPassword }, config)
+      .put(`${API_BASE}/api/providers/change-password`, { password: newPassword }, config)
       .then(() => {
         setNewPassword("");
         toast.success(t("password_changed") || "Пароль обновлён");
