@@ -113,6 +113,7 @@ export default function ProviderFavorites() {
       window.dispatchEvent(new Event("provider:favorites:changed"));
       toast(
         (res?.added ? tSuccess : tInfo)(
+          res?.added
           ? (t("favorites.added_toast") || "Добавлено в избранное")
           : (t("favorites.removed_toast") || "Удалено из избранного")
         { autoClose: 1800 }
