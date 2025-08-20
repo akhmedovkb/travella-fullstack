@@ -1669,14 +1669,7 @@ const __grossNum = (() => {
 
               {category === "refused_flight" && profile.type === "agent" && (
                 <>
-                     <input
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder={t("title")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
-
-                      <div className="flex gap-4 mb-2">
+                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
@@ -1835,14 +1828,7 @@ const __grossNum = (() => {
 
               {category === "refused_event_ticket" && profile.type === "agent" && (
                 <>
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder={t("event_name")}
-                    className="w-full border px-3 py-2 rounded mb-2"
-                  />
-
-                  <Select
+                   <Select
                     options={[
                       { value: "concert", label: t("event_category_concert") },
                       { value: "exhibition", label: t("event_category_exhibition") },
@@ -1929,16 +1915,6 @@ const __grossNum = (() => {
 
               {category === "visa_support" && profile.type === "agent" && (
                 <>
-                  <h3 className="text-xl font-bold text-orange-600 mb-4">{t("new_visa_support")}</h3>
-
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder={t("title")}
-                    className="w-full border px-3 py-2 rounded mb-2"
-                  />
-
                   <Select
                     options={countryOptions}
                     value={countryOptions.find((option) => option.value === details.visaCountry) || null}
