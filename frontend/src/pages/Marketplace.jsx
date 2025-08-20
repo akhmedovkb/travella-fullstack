@@ -647,7 +647,7 @@ export default function Marketplace() {
         flipTo
           ? t("favorites.added_toast") || "Добавлено в избранное"
           : t("favorites.removed_toast") || "Удалено из избранного",
-        { autoClose: 1800 }
+        { autoClose: 1800, toastId: `fav-${id}-${flipTo ? "add" : "rem"}` }
       );
     } catch (e) {
       // откат при ошибке
@@ -663,7 +663,7 @@ export default function Marketplace() {
         needLogin
           ? (t("auth.provider_login_required") || "Войдите как поставщик")
           : (t("toast.favoriteError") || "Не удалось изменить избранное"),
-        { autoClose: 1800 }
+        { aautoClose: 1800, toastId: `fav-${id}-${flipTo ? "add" : "rem"}` }
       );
     }
     return;
