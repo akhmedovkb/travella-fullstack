@@ -1669,9 +1669,7 @@ const __grossNum = (() => {
 
               {category === "refused_flight" && profile.type === "agent" && (
                 <>
-                 <h3 className="text-xl font-semibold mb-2">{t("new_refused_airtkt")}</h3>
-
-                      <input
+                     <input
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder={t("title")}
