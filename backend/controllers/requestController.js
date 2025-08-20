@@ -163,7 +163,7 @@ async function ensureClientIdForUser(userId) {
 
   // провайдер?
   const p = await db.query(
-    `SELECT id, name, phone, telegram, email FROM providers WHERE id = $1`,
+    `SELECT id, name, phone, email, social FROM providers WHERE id = $1`,
     [userId]
   );
   if (p.rowCount === 0) return null; // неизвестный пользователь
@@ -184,7 +184,7 @@ async function ensureClientIdForUser(userId) {
     `INSERT INTO clients (name, email, phone, telegram)
      VALUES ($1, $2, $3, $4)
      RETURNING id`,
-    [prov.name || "Provider", prov.email || null, prov.phone || null, prov.telegram || null]
+    [prov.name || "Provider", prov.email || null, prov.phone || null, prov.social || null]
   );
   return ins.rows[0].id;
 }
@@ -255,7 +255,7 @@ exports.getProviderRequests = async (req, res) => {
           'id', COALESCE(c.id, p.id),
           'name', COALESCE(c.name, p.name, '—'),
           'phone', COALESCE(c.phone, p.phone),
-          'telegram', COALESCE(c.telegram, p.telegram)
+          'telegram', COALESCE(c.telegram, p.social)
         ) AS client
       FROM requests r
       JOIN services s ON s.id = r.service_id
