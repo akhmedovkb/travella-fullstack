@@ -286,7 +286,8 @@
   "nav": {
     "bookings": "Бронирования",
     "dashboard": "Управление",
-    "requests": "Запросы"
+    "requests": "Запросы",
+    "favorites": "Избранное",
   },
   "net_price": "Цена нетто",
   "current_password": "Старый пароль",
