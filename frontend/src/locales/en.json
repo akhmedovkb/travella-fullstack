@@ -168,6 +168,7 @@
     "profile_load": "Failed to load profile",
     "profile_save": "Failed to save profile",
     "request_send": "Failed to send request",
+    "self_request_forbidden": "You can’t send a quick request to yourself!",
     "service_unknown": "Service not found",
     "tab_load": "Failed to load tab"
   },
