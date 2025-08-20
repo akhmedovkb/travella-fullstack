@@ -384,6 +384,7 @@ function FavoritesList({
                   key={sid || JSON.stringify(row)}
                   item={row?.service ?? row}
                   now={now}
+                  viewerRole="client"
                   favActive={sid ? favIds?.has(String(sid)) : false}
                   onToggleFavorite={() => sid && onToggleFavorite?.(sid)}
                   onQuickRequest={(serviceId, providerId, title) =>
