@@ -892,9 +892,9 @@ direction: "",
         service.category
       )
     ) {
-      const d = service.details || {};
+      const d = (service && service.details && typeof service.details === "object") ? service.details : {};
       setDetails({
-        grossPrice: d.grossPrice || d.priceGross || service.grossPrice || service.price_gross || "",
+        grossPrice: d.grossPrice ?? "",
         direction: d.direction || "",
         directionCountry: d.directionCountry || "",
         directionFrom: d.directionFrom || "",
@@ -912,7 +912,7 @@ direction: "",
         transfer: d.transfer || "",
         changeable: d.changeable || false,
         visaIncluded: d.visaIncluded || false,
-        netPrice: d.netPrice || "",
+        netPrice: d.netPrice ?? "",
         expiration: d.expiration || "",
         isActive: d.isActive ?? true,
         flightType: d.flightType || "one_way",
@@ -933,8 +933,11 @@ direction: "",
     } else {
       setDescription(service.description || "");
       setPrice(service.price || "");
-      const sd = service.details || {};
-      setDetails((prev) => ({ ...prev, grossPrice: (sd.grossPrice ?? sd.priceGross ?? service.price_gross ?? service.grossPrice ?? "") })); // <-- добавлено
+      const sd = (service && service.details && typeof service.details === "object") ? service.details : {};
+      setDetails((prev) => ({
+        ...prev,
+        ...sd,
+        }));
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
