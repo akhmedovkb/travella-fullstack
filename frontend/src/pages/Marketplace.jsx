@@ -662,7 +662,7 @@ export default function Marketplace() {
       tError(
         needLogin
           ? (t("auth.provider_login_required") || "Войдите как поставщик")
-          : (t("toast.favoriteError") || "Не удалось изменить избранное")
+          : (t("toast.favoriteError") || "Не удалось изменить избранное"),
         { autoClose: 1800 }
       );
     }
