@@ -115,7 +115,7 @@ export default function ProviderFavorites() {
         res?.added
           ? (t("favorites.added_toast") || "Добавлено в избранное")
           : (t("favorites.removed_toast") || "Удалено из избранного"),
-        { autoClose: 1800 }
+        { autoClose: 1800, toastId: `fav-${serviceId}-${res?.added ? "add" : "rem"}` }
       );
     } catch {
       // откат при ошибке
