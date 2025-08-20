@@ -58,20 +58,41 @@ export default function ProviderFavorites() {
       })
     );
   } catch (err) {
-    const code =
-      (err && (err.data?.error || err.error || err.code || err.message)) || "";
+  // максимально надёжный разбор
+  const status =
+    err?.status ||
+    err?.response?.status ||
+    err?.data?.status ||
+    (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
 
-    if (String(code).includes("self_request_forbidden") || err?.status === 400) {
-      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
-        autoClose: 2200,
-        toastId: "self-req",
-      });
-    } else {
-      tError(t("errors.request_send") || "Не удалось отправить запрос", {
-        autoClose: 1800,
-      });
-    }
-  } finally {
+  const code =
+    err?.data?.error ||
+    err?.response?.data?.error ||
+    err?.error ||
+    err?.code ||
+    (typeof err?.message === "string" ? err.message : "") ||
+    (typeof err === "string" ? err : "");
+
+  const msgStr = String(code).toLowerCase();
+
+  if (status === 400 || msgStr.includes("self_request_forbidden") || msgStr.includes("bad request")) {
+    tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
+      autoClose: 2200,
+      toastId: "self-req",
+    });
+    return;
+  }
+
+  if (status === 401 || status === 403 || msgStr.includes("unauthorized")) {
+    tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+      autoClose: 2000,
+      toastId: "login-required",
+    });
+    return;
+  }
+
+  tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+} finally {
     setQrOpen(false);
     setQrServiceId(null);
     setQrProviderId(null);
