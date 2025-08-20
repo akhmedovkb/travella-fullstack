@@ -1,6 +1,4 @@
-//frontend/src/components
-
-// src/components/ServiceCard.jsx
+//frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
