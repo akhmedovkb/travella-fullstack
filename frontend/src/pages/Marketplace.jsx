@@ -744,6 +744,7 @@ export default function Marketplace() {
                    key={sid || JSON.stringify(it)}
                    item={it}
                    now={now}
+                   viewerRole={__viewerRole} 
                    isFav={sid ? favIds.has(String(sid)) : false}
                    onToggleFavorite={() => sid && toggleFavorite(sid)}
                    onQuickRequest={(serviceId, providerId, title) =>
