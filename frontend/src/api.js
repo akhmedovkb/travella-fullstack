@@ -18,9 +18,23 @@ export function getAuthHeaders(role = null) {
 }
 
 async function handle(res) {
-  let data; try { data = await res.json(); } catch { data = {}; }
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
-  return data;
+  // Читаем как текст и парсим JSON (устойчиво к пустым/не-JSON ответам)
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+  if (!res.ok) {
+    const err = new Error(
+      (data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`
+    );
+    // Нормализуем, чтобы catch в UI мог проверять err.status / err.data.error
+    err.status = res.status;
+    err.data = data || {};
+    // Доп. удобство: err.code как синоним error/code из payload
+    if (data && (data.error || data.code)) err.code = data.error || data.code;
+    throw err;
+  }
+  return (data === null ? {} : data);
 }
 
 // withAuthOrRole: true | false | "client" | "provider"
