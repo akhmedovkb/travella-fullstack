@@ -381,7 +381,7 @@ export default function Marketplace() {
 
      if (String(code).includes("self_request_forbidden") || status === 400) {
       // отправка запроса на собственную услугу
-      tInfo("Вы не можете отправить себе быстрый запрос!", {
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
         autoClose: 2200,
         toastId: "self-req",
       });
