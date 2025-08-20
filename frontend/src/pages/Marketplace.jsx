@@ -670,7 +670,7 @@ export default function Marketplace() {
   }
 
   // ----- ГОСТЬ -----
-  toast(t("auth.login_required") || "Войдите как клиент/поставщик");
+  tInfo(t("auth.login_required") || "Войдите как клиент/поставщик", { autoClose: 1800 });
 };
 
 
