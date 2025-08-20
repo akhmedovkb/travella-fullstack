@@ -5,32 +5,11 @@ import { apiPost } from "../api";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 import ServiceCard from "../components/ServiceCard";
 import QuickRequestModal from "../components/QuickRequestModal";
+import { tSuccess, tInfo, tError } from "../shared/toast";
 
 // роль здесь всегда провайдер
 const __viewerRole = "provider";
 
-/* ========== мини-тост ========== */
-function toast(txt) {
-  const el = document.createElement("div");
-  el.textContent = txt;
-  Object.assign(el.style, {
-    position: "fixed",
-    left: "50%",
-    bottom: "24px",
-    transform: "translateX(-50%)",
-    zIndex: 4000,
-    background: "rgba(0,0,0,.85)",
-    color: "white",
-    padding: "10px 14px",
-    borderRadius: "10px",
-    fontSize: "14px",
-    boxShadow: "0 6px 20px rgba(0,0,0,.25)",
-    pointerEvents: "none",
-  });
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .25s"; }, 1600);
-  setTimeout(() => { el.remove(); }, 1900);
-}
 
 /* ========== helpers ========== */
 const firstNonEmpty = (...vals) => {
@@ -70,9 +49,9 @@ export default function ProviderFavorites() {
         service_title: qrServiceTitle || undefined,
         note: note || undefined,
       });
-      toast(t("messages.request_sent") || "Запрос отправлен");
+      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
     } catch {
-      toast(t("errors.request_send") || "Не удалось отправить запрос");
+      tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
     } finally {
       setQrOpen(false);
       setQrServiceId(null);
@@ -133,9 +112,10 @@ export default function ProviderFavorites() {
       // обновим бейдж в Header.jsx
       window.dispatchEvent(new Event("provider:favorites:changed"));
       toast(
-        res?.added
+        (res?.added ? tSuccess : tInfo)(
           ? (t("favorites.added_toast") || "Добавлено в избранное")
           : (t("favorites.removed_toast") || "Удалено из избранного")
+        { autoClose: 1800 }
       );
     } catch {
       // откат при ошибке
@@ -152,7 +132,7 @@ export default function ProviderFavorites() {
           // ничего, список уже без неё; в следующий fetch вернётся
         }
       }
-      toast(t("errors.favorite_toggle") || "Не удалось обновить избранное");
+      tError(t("errors.favorite_toggle") || "Не удалось обновить избранное", { autoClose: 1800 });
     }
   };
 
