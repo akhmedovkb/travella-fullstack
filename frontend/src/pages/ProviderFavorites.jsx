@@ -115,7 +115,7 @@ export default function ProviderFavorites() {
         (res?.added ? tSuccess : tInfo)(
           res?.added
           ? (t("favorites.added_toast") || "Добавлено в избранное")
-          : (t("favorites.removed_toast") || "Удалено из избранного")
+          : (t("favorites.removed_toast") || "Удалено из избранного"),
         { autoClose: 1800 }
       );
     } catch {
