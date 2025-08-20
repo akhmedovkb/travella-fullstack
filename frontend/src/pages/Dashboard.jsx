@@ -5,7 +5,6 @@ import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
-import { toast } from "react-toastify";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
@@ -68,13 +67,13 @@ err?.response?.data?.message || err?.message || "";
 function toastApiError(t, err, keys, fallback) {
 const tr = makeTr(t);
 const msg = pickServerMessage(err) || tr(keys, fallback);
-toast.error(msg);
+tError(msg);
 }
 
 // NEW: сахара для success/info/warn
-function toastSuccessT(t, keys, fallback) { toast.success(makeTr(t)(keys, fallback)); }
-function toastInfoT(t, keys, fallback)    { toast.info(makeTr(t)(keys, fallback)); }
-function toastWarnT(t, keys, fallback)    { toast.warn(makeTr(t)(keys, fallback)); }
+function toastSuccessT(t, keys, fallback) { tSuccess(makeTr(t)(keys, fallback)); }
+function toastInfoT(t, keys, fallback)    { tInfo(makeTr(t)(keys, fallback)); }
+function toastWarnT(t, keys, fallback)    { tWarn(makeTr(t)(keys, fallback)); }
 
 function resolveExpireAtFromService(service) {
   const s = service || {};
@@ -408,7 +407,7 @@ direction: "",
       return (res.data || []).map((x) => ({ value: x.label || x.name || x, label: x.label || x.name || x }));
     } catch (err) {
       console.error("Ошибка загрузки отелей:", err);
-      toast.error(t("hotels_load_error") || "Не удалось загрузить отели");
+      tError(t("hotels_load_error") || "Не удалось загрузить отели");
       return [];
     }
   };
@@ -517,11 +516,11 @@ direction: "",
         { dates: payload },
         config
       );
-      toast.success(t("calendar.saved_successfully") || "Даты сохранены");
+      tSuccess(t("calendar.saved_successfully") || "Даты сохранены");
     } catch (err) {
       console.error("Ошибка сохранения дат", err);
       const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
-      toast.error(msg);
+      tError(msg);
     } finally {
       setSaving(false);
     }
@@ -540,11 +539,11 @@ direction: "",
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== serviceToDelete));
         if (selectedService?.id === serviceToDelete) setSelectedService(null);
-        toast.success(t("service_deleted", { defaultValue: "Услуга удалена" }));
+        tSuccess(t("service_deleted", { defaultValue: "Услуга удалена" }));
       })
       .catch((err) => {
         console.error("Ошибка удаления услуги", err);
-        toast.error(t("delete_error", { defaultValue: "Ошибка удаления услуги" }));
+        tError(t("delete_error", { defaultValue: "Ошибка удаления услуги" }));
       })
       .finally(() => {
         setDeleteConfirmOpen(false);
@@ -640,13 +639,13 @@ direction: "",
             })
             .catch((err) => {
               console.error("Ошибка загрузки занятых дат", err);
-              toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+              tError(t("calendar.load_error") || "Не удалось загрузить занятые даты");
             });
         }
       })
       .catch((err) => {
         console.error("Ошибка загрузки профиля", err);
-        toast.error(t("profile_load_error") || "Не удалось загрузить профиль");
+        tError(t("profile_load_error") || "Не удалось загрузить профиль");
       });
 
     // Services
@@ -655,7 +654,7 @@ direction: "",
       .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         console.error("Ошибка загрузки услуг", err);
-        toast.error(t("services_load_error") || "Не удалось загрузить услуги");
+        tError(t("services_load_error") || "Не удалось загрузить услуги");
       });
 
     // Stats
@@ -692,7 +691,7 @@ direction: "",
     } catch (e) {
       console.error("Ошибка загрузки входящих/броней", e);
       const msg = e?.response?.data?.message || "Ошибка загрузки входящих";
-      toast.error(msg);
+      tError(msg);
     } finally {
       setLoadingInbox(false);
     }
@@ -714,12 +713,12 @@ direction: "",
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/requests/${id}/proposal`, body, config);
-      toast.success("Предложение отправлено");
+      tSuccess("Предложение отправлено");
       await refreshInbox();
     } catch (e) {
       console.error("Ошибка отправки предложения", e);
       const msg = e?.response?.data?.message || "Ошибка отправки предложения";
-      toast.error(msg);
+      tError(msg);
     } finally {
       setLoadingInbox(false);
     }
@@ -729,11 +728,11 @@ direction: "",
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/confirm`, {}, config);
-      toast.success("Бронь подтверждена");
+      tSuccess("Бронь подтверждена");
       await refreshInbox();
     } catch (e) {
       console.error("Ошибка подтверждения", e);
-      toast.error(e?.response?.data?.message || "Ошибка подтверждения");
+      tError(e?.response?.data?.message || "Ошибка подтверждения");
     } finally {
       setLoadingInbox(false);
     }
@@ -743,11 +742,11 @@ direction: "",
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, config);
-      toast.success("Бронь отклонена");
+      tSuccess("Бронь отклонена");
       await refreshInbox();
     } catch (e) {
       console.error("Ошибка отклонения", e);
-      toast.error(e?.response?.data?.message || "Ошибка отклонения");
+      tError(e?.response?.data?.message || "Ошибка отклонения");
     } finally {
       setLoadingInbox(false);
     }
@@ -757,11 +756,11 @@ direction: "",
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, config);
-      toast.success("Бронь отменена");
+      tSuccess("Бронь отменена");
       await refreshInbox();
     } catch (e) {
       console.error("Ошибка отмены", e);
-      toast.error(e?.response?.data?.message || "Ошибка отмены");
+      tError(e?.response?.data?.message || "Ошибка отмены");
     } finally {
       setLoadingInbox(false);
     }
@@ -794,7 +793,7 @@ direction: "",
     if (newCertificate) updated.certificate = newCertificate;
 
     if (Object.keys(updated).length === 0) {
-      toast.info(t("no_changes") || "Изменений нет");
+      tInfo(t("no_changes") || "Изменений нет");
       return;
     }
 
@@ -803,21 +802,21 @@ direction: "",
       .then(() => {
         setProfile((prev) => ({ ...prev, ...updated }));
         setIsEditing(false);
-        toast.success(t("profile_updated") || "Профиль обновлён");
+        tSuccess(t("profile_updated") || "Профиль обновлён");
       })
       .catch((err) => {
         console.error("Ошибка обновления профиля", err);
-        toast.error(t("update_error") || "Ошибка обновления профиля");
+        tError(t("update_error") || "Ошибка обновления профиля");
       });
   };
 
    const handleChangePassword = () => {
        if (!oldPassword) {
-         toast.warn(t("enter_current_password") || "Введите текущий пароль");
+         tWarn(t("enter_current_password") || "Введите текущий пароль");
          return;
        }
        if (!newPassword || newPassword.length < 6) {
-         toast.warn(t("password_too_short") || "Минимум 6 символов");
+         tWarn(t("password_too_short") || "Минимум 6 символов");
          return;
        }
        axios
@@ -825,13 +824,13 @@ direction: "",
          .then(() => {
            setOldPassword("");
            setNewPassword("");
-           toast.success(t("password_changed") || "Пароль обновлён");
+           tSuccess(t("password_changed") || "Пароль обновлён");
          })
          .catch((err) => {
            console.error("Ошибка смены пароля", err);
            // если хочешь показывать серверное сообщение:
            // toastApiError(t, err, ["password_error"], "Ошибка смены пароля");
-           toast.error(t("password_error") || (err?.response?.data?.message) || "Ошибка смены пароля");
+           tError(t("password_error") || (err?.response?.data?.message) || "Ошибка смены пароля");
          });
      };
 
@@ -971,7 +970,7 @@ direction: "",
       (!details.returnDate || details.returnDate === "");
 
     if (hasEmpty || needsReturnDate) {
-      toast.warn(t("fill_all_fields") || "Заполните все обязательные поля");
+      tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
       return;
     }
 
@@ -1017,16 +1016,16 @@ const __grossNum = (() => {
       .then((res) => {
         if (selectedService) {
           setServices((prev) => prev.map((s) => (s.id === selectedService.id ? res.data : s)));
-          toast.success(t("service_updated") || "Услуга обновлена");
+          tSuccess(t("service_updated") || "Услуга обновлена");
         } else {
           setServices((prev) => [...prev, res.data]);
-          toast.success(t("service_added") || "Услуга добавлена");
+          tSuccess(t("service_added") || "Услуга добавлена");
         }
         resetServiceForm();
       })
       .catch((err) => {
         console.error(selectedService ? "Ошибка обновления услуги" : "Ошибка добавления услуги", err);
-        toast.error(t(selectedService ? "update_error" : "add_error") || "Ошибка");
+        tError(t(selectedService ? "update_error" : "add_error") || "Ошибка");
       });
   };
 
