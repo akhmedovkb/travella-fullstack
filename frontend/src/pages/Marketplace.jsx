@@ -746,16 +746,16 @@ export default function Marketplace() {
             {items.map((it) => {
               const sid = getServiceId(it);
               return (
-                <ServiceCard
-                  key={sid || JSON.stringify(it)}
-                  item={it}
-                  now={now}
-                  favActive={sid ? favIds.has(String(sid)) : false}
-                  onToggleFavorite={() => sid && toggleFavorite(sid)}
-                  onQuickRequest={(serviceId, providerId, title) =>
-                    openQuickRequest(serviceId ?? sid, providerId, title)
-                  }
-                />
+                 <ServiceCard
+                   key={sid || JSON.stringify(it)}
+                   item={it}
+                   now={now}
+                   isFav={sid ? favIds.has(String(sid)) : false}
+                   onToggleFavorite={() => sid && toggleFavorite(sid)}
+                   onQuickRequest={(serviceId, providerId, title) =>
+                     openQuickRequest(serviceId ?? sid, providerId, title)
+                   }
+                 />
               );
             })}
       </div>
