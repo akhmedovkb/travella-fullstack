@@ -178,6 +178,7 @@
     "profile_load": "Profilni yuklab bo‘lmadi",
     "profile_save": "Profilni saqlab bo‘lmadi",
     "request_send": "So‘rovni yuborib bo‘lmadi",
+    "self_request_forbidden": "O‘zingizga tezkor so‘rov yubora olmaysiz!"
     "service_unknown": "Xizmat topilmadi",
     "tab_load": "Yorliqni yuklab bo‘lmadi"
   },
