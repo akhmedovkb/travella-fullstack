@@ -207,7 +207,7 @@ function _mergeDetails(svc, it) {
   ].map(_maybeParse).filter(Boolean);
   return Object.assign({}, ...cands);
 }
-function extractServiceFields(item) {
+function extractServiceFields(item, viewerRole = getRole()) {
   const svc = item?.service || item || {};
   const details = _mergeDetails(svc, item);
   const bag = { ...details, ...svc, ...item };
@@ -216,7 +216,7 @@ function extractServiceFields(item) {
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
 
-  const rawPrice = (__viewerRole === "client")
+  const rawPrice = (viewerRole === "client")
     ? _firstNonEmpty(
         details?.grossPrice, details?.priceGross, details?.totalPrice, svc.grossPrice, svc.price_gross
       )
@@ -692,7 +692,7 @@ export default function Marketplace() {
         needLogin
           ? (t("auth.provider_login_required") || "Войдите как поставщик")
           : (t("toast.favoriteError") || "Не удалось изменить избранное"),
-        { aautoClose: 1800, toastId: `fav-${id}-${flipTo ? "add" : "rem"}` }
+        { autoClose: 1800, toastId: `fav-${id}-${flipTo ? "add" : "rem"}` }
       );
     }
     return;
@@ -773,7 +773,7 @@ export default function Marketplace() {
                    key={sid || JSON.stringify(it)}
                    item={it}
                    now={now}
-                   viewerRole={__viewerRole} 
+                   viewerRole={role} 
                    isFav={sid ? favIds.has(String(sid)) : false}
                    onToggleFavorite={() => sid && toggleFavorite(sid)}
                    onQuickRequest={(serviceId, providerId, title) =>
