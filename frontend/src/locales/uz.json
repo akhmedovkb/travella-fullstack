@@ -286,7 +286,8 @@
   "nav": {
     "bookings": "Bronlar",
     "dashboard": "Boshqaruv",
-    "requests": "So‘rovlar"
+    "requests": "So‘rovlar",
+    "favorites": "Sevimlilar",
   },
   "net_price": "Netto narx",
   "current_password": "Eski parol",
