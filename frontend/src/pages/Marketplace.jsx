@@ -7,10 +7,12 @@ import ServiceCard from "../components/ServiceCard";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 import { tSuccess, tInfo, tError } from "../shared/toast";
 
-// Detect viewer role via tokens
-const __hasClient = !!localStorage.getItem("clientToken");
-const __hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
-const __viewerRole = __hasClient ? "client" : (__hasProvider ? "provider" : null);
+// актуальная роль из localStorage
+function getRole() {
+  const hasClient = !!localStorage.getItem("clientToken");
+  const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+  return hasClient ? "client" : (hasProvider ? "provider" : null);
+}
 
 /* ===================== utils ===================== */
 
@@ -331,6 +333,17 @@ function firstImageFrom(val) {
 
 export default function Marketplace() {
   const { t } = useTranslation();
+    const [role, setRole] = useState(getRole());
+  // обновляем роль при изменении localStorage (логин/логаут в этом/другом табе)
+  useEffect(() => {
+    const onAuthChanged = () => setRole(getRole());
+    window.addEventListener("storage", onAuthChanged);
+    window.addEventListener("auth:changed", onAuthChanged); // см. ниже про ClientLogin
+    return () => {
+      window.removeEventListener("storage", onAuthChanged);
+      window.removeEventListener("auth:changed", onAuthChanged);
+    };
+  }, []);
 
   // модалка быстрого запроса
   const [qrOpen, setQrOpen] = useState(false);
@@ -578,12 +591,12 @@ export default function Marketplace() {
   useEffect(() => {
       (async () => {
         try {
-          if (__viewerRole === "client") {
+          if (role === "client") {
             // клиентское избранное (как было)
             const ids = await apiGet("/api/wishlist/ids");
             const arr = Array.isArray(ids) ? ids : [];
             setFavIds(new Set(arr.map(x => String(x))));
-          } else if (__viewerRole === "provider") {
+          } else if (role === "provider") {
             // провайдерское избранное
             const list = await apiProviderFavorites();
             const ids =
@@ -600,7 +613,7 @@ export default function Marketplace() {
           setFavIds(new Set());
         }
       })();
-    }, [__viewerRole]);
+    }, [role]);
 
   // тут тоггл сердечка из маркетплэйс *
   
@@ -608,7 +621,7 @@ export default function Marketplace() {
   const key = String(id);
 
   // ----- КЛИЕНТ -----
-  if (__viewerRole === "client") {
+  if (role === "client") {
     try {
       const res = await apiPost("/api/wishlist/toggle", { serviceId: id });
       const added = !!res?.added;
@@ -635,7 +648,7 @@ export default function Marketplace() {
   }
 
   // ----- ПРОВАЙДЕР -----
-  if (__viewerRole === "provider") {
+  if (role === "provider") {
     // оптимистично переворачиваем локальное состояние
     const flipTo = !favIds.has(key);
     setFavIds((prev) => {
