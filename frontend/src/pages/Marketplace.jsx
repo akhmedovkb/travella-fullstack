@@ -346,28 +346,44 @@ export default function Marketplace() {
   };
 
   const submitQuickRequest = async (note) => {
-    try {
-      await apiPost("/api/requests", {
-        service_id: qrServiceId,
-        provider_id: qrProviderId || undefined,
-        service_title: qrServiceTitle || undefined,
-        note: note || undefined,
+  try {
+    await apiPost("/api/requests", {
+      service_id: qrServiceId,
+      provider_id: qrProviderId || undefined,
+      service_title: qrServiceTitle || undefined,
+      note: note || undefined,
+    });
+
+    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+
+    window.dispatchEvent(
+      new CustomEvent("request:created", {
+        detail: { service_id: qrServiceId, title: qrServiceTitle },
+      })
+    );
+  } catch (err) {
+    const code =
+      (err && (err.data?.error || err.error || err.code || err.message)) || "";
+
+    if (String(code).includes("self_request_forbidden")) {
+      // отправка запроса на собственную услугу
+      tInfo("Вы не можете отправить себе быстрый запрос!", {
+        autoClose: 2200,
+        toastId: "self-req",
       });
-      tSuccess(t("messages.request_sent") || "Запрос отправлен");
-      window.dispatchEvent(
-        new CustomEvent("request:created", {
-          detail: { service_id: qrServiceId, title: qrServiceTitle },
-        })
-      );
-    } catch {
-      tSuccess(t("errors.request_send") || "Не удалось отправить запрос");
-    } finally {
-      setQrOpen(false);
-      setQrServiceId(null);
-      setQrProviderId(null);
-      setQrServiceTitle("");
+    } else {
+      tError(t("errors.request_send") || "Не удалось отправить запрос", {
+        autoClose: 1800,
+      });
     }
-  };
+  } finally {
+    setQrOpen(false);
+    setQrServiceId(null);
+    setQrProviderId(null);
+    setQrServiceTitle("");
+  }
+};
+
 
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
   useEffect(() => {
