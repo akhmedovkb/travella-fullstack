@@ -332,9 +332,12 @@ export default function ServiceCard({
   };
   const closeReviews = () => setRevOpen(false);
 
-  const activeFav = typeof isFav === "boolean"
-    ? isFav
-    : (favoriteIds ? favoriteIds.has(String(id)) : false);
+   const activeFav =
+   typeof isFav === "boolean"
+     ? isFav
+     : typeof favActive === "boolean"
+       ? favActive
+       : (favoriteIds ? favoriteIds.has(String(id)) : false);
 
   return (
     <div className={["group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col", className].join(" ")}>
