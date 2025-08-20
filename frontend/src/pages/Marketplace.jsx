@@ -377,16 +377,18 @@ export default function Marketplace() {
   } catch (err) {
     const code =
       (err && (err.data?.error || err.error || err.code || err.message)) || "";
+     const status = err?.status || err?.response?.status || err?.data?.status;
 
-    if (String(code).includes("self_request_forbidden")) {
+     if (String(code).includes("self_request_forbidden") || status === 400) {
       // отправка запроса на собственную услугу
       tInfo("Вы не можете отправить себе быстрый запрос!", {
         autoClose: 2200,
         toastId: "self-req",
       });
-    } else {
-      tError(t("errors.request_send") || "Не удалось отправить запрос", {
-        autoClose: 1800,
+    } else if (status === 401 || status === 403) {
+      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+        autoClose: 2000,
+        toastId: "login-required",
       });
     }
   } finally {
