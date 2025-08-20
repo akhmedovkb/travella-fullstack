@@ -5,7 +5,7 @@ import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ServiceCard from "../components/ServiceCard";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
-
+import { tSuccess, tInfo, tError } from "../shared/toast";
 
 // Detect viewer role via tokens
 const __hasClient = !!localStorage.getItem("clientToken");
@@ -65,14 +65,6 @@ function pick(obj, keys) {
     if (v === 0 || (v !== undefined && v !== null && String(v).trim() !== "")) return v;
   }
   return null;
-}
-function toast(txt) {
-  const el = document.createElement("div");
-  el.textContent = txt;
-  el.className =
-    "fixed top-16 right-6 z-[3000] bg-white shadow-xl border rounded-xl px-4 py-2 text-sm";
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1800);
 }
 
 /* ---------- срок действия / обратный счёт ---------- */
@@ -361,14 +353,14 @@ export default function Marketplace() {
         service_title: qrServiceTitle || undefined,
         note: note || undefined,
       });
-      toast(t("messages.request_sent") || "Запрос отправлен");
+      tSuccess(t("messages.request_sent") || "Запрос отправлен");
       window.dispatchEvent(
         new CustomEvent("request:created", {
           detail: { service_id: qrServiceId, title: qrServiceTitle },
         })
       );
     } catch {
-      toast(t("errors.request_send") || "Не удалось отправить запрос");
+      tSuccess(t("errors.request_send") || "Не удалось отправить запрос");
     } finally {
       setQrOpen(false);
       setQrServiceId(null);
@@ -609,7 +601,7 @@ export default function Marketplace() {
         if (added) next.add(key); else next.delete(key);
         return next;
       });
-      toast(
+      tSuccess(
         added
           ? t("favorites.added_toast") || "Добавлено в избранное"
           : t("favorites.removed_toast") || "Удалено из избранного"
@@ -617,7 +609,7 @@ export default function Marketplace() {
     } catch (e) {
       const msg = (e && (e.status || e.code || e.message)) || "";
       const needLogin = String(msg).includes("401") || String(msg).includes("403");
-      toast(
+      tError(
         needLogin
           ? (t("auth.login_required") || "Войдите как клиент")
           : (t("toast.favoriteError") || "Не удалось изменить избранное")
@@ -651,10 +643,11 @@ export default function Marketplace() {
       // обновим бейдж в шапке
       window.dispatchEvent(new Event("provider:favorites:changed"));
 
-      toast(
+      (flipTo ? tSuccess : tInfo)(
         flipTo
           ? t("favorites.added_toast") || "Добавлено в избранное"
           : t("favorites.removed_toast") || "Удалено из избранного"
+        { autoClose: 1800 }
       );
     } catch (e) {
       // откат при ошибке
@@ -666,10 +659,11 @@ export default function Marketplace() {
 
       const msg = (e && (e.status || e.code || e.message)) || "";
       const needLogin = String(msg).includes("401") || String(msg).includes("403");
-      toast(
+      tError(
         needLogin
           ? (t("auth.provider_login_required") || "Войдите как поставщик")
           : (t("toast.favoriteError") || "Не удалось изменить избранное")
+        { autoClose: 1800 }
       );
     }
     return;
