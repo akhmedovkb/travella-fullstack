@@ -646,7 +646,7 @@ export default function Marketplace() {
       (flipTo ? tSuccess : tInfo)(
         flipTo
           ? t("favorites.added_toast") || "Добавлено в избранное"
-          : t("favorites.removed_toast") || "Удалено из избранного"
+          : t("favorites.removed_toast") || "Удалено из избранного",
         { autoClose: 1800 }
       );
     } catch (e) {
