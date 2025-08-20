@@ -62,7 +62,7 @@ export default function ProviderFavorites() {
       (err && (err.data?.error || err.error || err.code || err.message)) || "";
 
     if (String(code).includes("self_request_forbidden") || err?.status === 400) {
-      tInfo("Вы не можете отправить себе быстрый запрос!", {
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
         autoClose: 2200,
         toastId: "self-req",
       });
