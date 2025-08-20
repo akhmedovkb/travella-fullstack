@@ -1,27 +1,44 @@
 // frontend/src/api/providerFavorites.js
 import axios from "axios";
-import { toast } from "react-toastify";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
+// Собираем заголовок авторизации: token || providerToken
 function authConfig() {
-  const token = localStorage.getItem("token");
-  return { headers: { Authorization: `Bearer ${token}` } };
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("providerToken");
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return { headers };
 }
 
-const pickServerMessage = (err) =>
-  err?.response?.data?.message || err?.message || "Ошибка запроса";
+// Приводим ошибку axios к единому формату: err.status, err.data, err.message
+function normalizeAxiosError(e) {
+  const status = e?.response?.status;
+  const data = e?.response?.data;
+  const message =
+    data?.error || data?.message || e?.message || "http_error";
+  const err = new Error(message);
+  err.status = status;
+  err.data = data;
+  throw err;
+}
 
+// Список избранного провайдера
 export async function apiProviderFavorites() {
   try {
-    const { data } = await axios.get(`${API_BASE}/api/providers/favorites`, authConfig());
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    toast.error(pickServerMessage(err));
-    return [];
+    const { data } = await axios.get(
+      `${API_BASE}/api/providers/favorites`,
+      authConfig()
+    );
+    // сервер может вернуть массив или объект с items
+    return Array.isArray(data) ? data : (data?.items || []);
+  } catch (e) {
+    normalizeAxiosError(e);
   }
 }
 
+// Тоггл избранного (возвращаем единый формат для UI)
 export async function apiToggleProviderFavorite(serviceId) {
   try {
     const { data } = await axios.post(
@@ -29,26 +46,21 @@ export async function apiToggleProviderFavorite(serviceId) {
       { service_id: serviceId },
       authConfig()
     );
-    if (data?.added) {
-      toast.success("Добавлено в избранное");
-      return true;
-    } else {
-      toast.info("Убрано из избранного");
-      return false;
-    }
-  } catch (err) {
-    toast.error(pickServerMessage(err));
-    return null;
+    return { added: !!data?.added };
+  } catch (e) {
+    normalizeAxiosError(e);
   }
 }
 
+// Удаление из избранного
 export async function apiRemoveProviderFavorite(serviceId) {
   try {
-    await axios.delete(`${API_BASE}/api/providers/favorites/${serviceId}`, authConfig());
-    toast.success("Удалено из избранного");
+    await axios.delete(
+      `${API_BASE}/api/providers/favorites/${serviceId}`,
+      authConfig()
+    );
     return true;
-  } catch (err) {
-    toast.error(pickServerMessage(err));
-    return false;
+  } catch (e) {
+    normalizeAxiosError(e);
   }
 }
