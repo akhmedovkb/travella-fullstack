@@ -56,12 +56,7 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
 }
 
 /* ===== value helpers ===== */
-function fmtPrice(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
-  return String(v);
-}
+
 function firstNonEmpty(...args) {
   for (const v of args) {
     if (v === 0) return 0;
@@ -85,25 +80,9 @@ function buildDates(d = {}) {
   if (hotelOut) return String(hotelOut);
   return null;
 }
-/* форматирование Telegram */
-function renderTelegram(value) {
-  if (!value) return null;
-  const s = String(value).trim();
-  let href = null, label = s;
-  if (/^https?:\/\//i.test(s)) href = s;
-  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
-  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
-  return { href, label };
-}
 
 /* ============ Портал (подсказка) ============ */
-function TooltipPortal({ visible, x, y, width, children }) {
-  if (!visible) return null;
-  return createPortal(
-    <div className="fixed z-10 pointer-events-none" style={{ left: x, top: y, width, opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(-4px)", transition: "opacity 120ms ease, transform 120ms ease" }}>{children}</div>,
-    document.body
-  );
-}
+
 
 /* ======== provider fetch (cache + fallbacks) ======== */
 const providerCache = new Map();
@@ -907,6 +886,7 @@ export default function ClientDashboard() {
     if (!qrServiceId) return;
     try {
       await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
       const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
@@ -924,6 +904,15 @@ export default function ClientDashboard() {
       } catch {}
     } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+         const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
+   const status = err?.status || err?.response?.status;
+   if (msg.includes("self_request_forbidden") || status === 400) {
+     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
+   } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+     tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
+   } else {
+     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+   }
     } finally {
       closeQuickRequestModal();
     }
