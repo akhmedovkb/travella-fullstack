@@ -524,6 +524,8 @@
   "direction_to_not_found": "Город прибытия не найден",
 
   "auth": {
-    "login": "Войти"
+    "login": "Войти",
+    "login_client": "Войти как клиент",
+    "login_provider": "Войти как поставщик"
   }
 }
