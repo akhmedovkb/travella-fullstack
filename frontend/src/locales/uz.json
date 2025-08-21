@@ -525,6 +525,8 @@
   "direction_to_not_found": "Kelish shahri topilmadi",
 
   "auth": {
-    "login": "Kirish"
+    "login": "Kirish",
+    "login_client": "Mijoz sifatida kirish",
+    "login_provider": "Ta’minotchi sifatida kirish"
   }
 }
