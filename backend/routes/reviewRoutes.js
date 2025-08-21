@@ -29,6 +29,9 @@ router.post("/service/:serviceId", authenticateToken, requireClient, addServiceR
 // оставить отзыв провайдером о клиенте
 router.post("/client/:clientId", authenticateToken, requireProvider, addClientReview);
 
+// + оставить отзыв КЛИЕНТОМ о ПРОВАЙДЕРЕ
+router.post("/provider/:providerId", authenticateToken, requireClient, addProviderReview);
+
 // списки/агрегаты (публично)
 router.get("/service/:serviceId", getServiceReviews);
 router.get("/provider/:providerId", getProviderReviews);
