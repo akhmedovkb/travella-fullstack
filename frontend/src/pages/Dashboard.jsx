@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
+import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -11,6 +12,29 @@ import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
+function HotelSelect({ value, onChange, loadOptions, t }) {
+  return (
+    <AsyncCreatableSelect
+      cacheOptions
+      defaultOptions
+      loadOptions={loadOptions}
+      isClearable
+      placeholder={t("hotel.search_placeholder") || "Найдите отель или введите свой вариант…"}
+      value={value ? { value, label: value } : null}
+      onChange={(opt) => onChange(opt?.value || "")}
+      onCreateOption={(inputValue) => onChange(inputValue)}
+      formatCreateLabel={(inputValue) =>
+        `${t("common.add") || "Добавить"}: "${inputValue}"`
+      }
+      noOptionsMessage={() => t("hotel.no_options") || "Ничего не найдено"}
+      styles={{
+        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+      }}
+      menuPortalTarget={document.body}
+    />
+  );
+}
+
 async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
   const dataUrl = await new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -1379,16 +1403,13 @@ const __grossNum = (() => {
                   </div>
 
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("hotel")}</label>
-                  <AsyncSelect
-                    cacheOptions
-                    defaultOptions
-                    loadOptions={loadHotelOptions}
-                    value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                    onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                    placeholder={t("hotel")}
-                    noOptionsMessage={() => t("hotel_not_found")}
-                    className="mb-3"
-                  />
+                   
+                  <HotelSelect
+                     t={t}
+                     loadOptions={loadHotelOptions}
+                     value={details.hotel}
+                     onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
+                   />
 
                   <div className="mb-4">
                     <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
@@ -1531,16 +1552,12 @@ const __grossNum = (() => {
 
                   <div className="mb-2">
                     <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
-                    <AsyncSelect
-                      cacheOptions
-                      loadOptions={loadHotelOptions}
-                      defaultOptions
-                      value={details.hotel ? { label: details.hotel, value: details.hotel } : null}
-                      onChange={(selected) =>
-                        setDetails({ ...details, hotel: selected?.value || "" })
-                      }
-                      placeholder={t("select_hotel")}
-                    />
+                      <HotelSelect
+                       t={t}
+                       loadOptions={loadHotelOptions}
+                       value={details.hotel}
+                       onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
+                     />
                   </div>
 
                   <div className="flex gap-4 mb-2">
@@ -2192,16 +2209,12 @@ const __grossNum = (() => {
                       </div>
 
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("hotel")}</label>
-                      <AsyncSelect
-                        cacheOptions
-                        defaultOptions
-                        loadOptions={loadHotelOptions}
-                        value={details.hotel ? { value: details.hotel, label: details.hotel } : null}
-                        onChange={(selected) => setDetails((prev) => ({ ...prev, hotel: selected ? selected.value : "" }))}
-                        placeholder={t("hotel")}
-                        noOptionsMessage={() => t("hotel_not_found")}
-                        className="mb-3"
-                      />
+                        <HotelSelect
+                           t={t}
+                           loadOptions={loadHotelOptions}
+                           value={details.hotel}
+                           onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
+                         />
 
                       <div className="mb-4">
                         <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
@@ -2344,14 +2357,13 @@ const __grossNum = (() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
-                        <AsyncSelect
-                          cacheOptions
-                          loadOptions={loadHotelOptions}
-                          defaultOptions
-                          onChange={(selected) => setDetails({ ...details, hotel: selected?.value || "" })}
-                          placeholder={t("refused_hotel_select")}
-                        />
+                       <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
+                          <HotelSelect
+                             t={t}
+                             loadOptions={loadHotelOptions}
+                             value={details.hotel}
+                             onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
+                           />
                       </div>
 
                       <div className="flex gap-4 mb-2">
