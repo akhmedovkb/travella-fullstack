@@ -437,6 +437,77 @@ export default function Marketplace() {
     [q, category]
   );
 
+// --- normalize & transliterate helpers ---
+const norm = (s) =>
+  String(s ?? "")
+    .toLowerCase()
+    .replace(/[ё]/g, "е")
+    .replace(/\s/g, " ")
+    .trim();
+
+const cyr2lat = (s) =>
+  norm(s)
+    .replace(/shch/g, "shch") // защита от повторной замены
+    .replace(/щ/g, "shch")
+    .replace(/ш/g, "sh")
+    .replace(/ч/g, "ch")
+    .replace(/ж/g, "zh")
+    .replace(/ю/g, "yu")
+    .replace(/я/g, "ya")
+    .replace(/й/g, "y")
+    .replace(/ё/g, "e")
+    .replace(/ъ|’|ʻ|`/g, "")
+    .replace(/ь/g, "")
+    .replace(/х/g, "kh")
+    .replace(/ц/g, "ts")
+    .replace(/а/g, "a").replace(/б/g, "b").replace(/в/g, "v").replace(/г/g, "g")
+    .replace(/д/g, "d").replace(/е/g, "e").replace(/з/g, "z").replace(/и/g, "i")
+    .replace(/к/g, "k").replace(/л/g, "l").replace(/м/g, "m").replace(/н/g, "n")
+    .replace(/о/g, "o").replace(/п/g, "p").replace(/р/g, "r").replace(/с/g, "s")
+    .replace(/т/g, "t").replace(/у/g, "u").replace(/ф/g, "f").replace(/ы/g, "y");
+
+const lat2cyr = (s) => {
+  let x = norm(s);
+  x = x.replace(/shch/g, "щ").replace(/sch/g, "щ");
+  x = x.replace(/sh/g, "ш").replace(/ch/g, "ч").replace(/zh/g, "ж");
+  x = x.replace(/ya/g, "я").replace(/yu/g, "ю").replace(/yo/g, "ё");
+  x = x.replace(/kh/g, "х").replace(/ts/g, "ц");
+  x = x
+    .replace(/a/g, "а").replace(/b/g, "б").replace(/v/g, "в").replace(/g/g, "г")
+    .replace(/d/g, "д").replace(/e/g, "е").replace(/z/g, "з").replace(/i/g, "и")
+    .replace(/j/g, "й").replace(/k/g, "к").replace(/l/g, "л").replace(/m/g, "м")
+    .replace(/n/g, "н").replace(/o/g, "о").replace(/p/g, "п").replace(/r/g, "р")
+    .replace(/s/g, "с").replace(/t/g, "т").replace(/u/g, "у").replace(/f/g, "ф")
+    .replace(/y/g, "ы").replace(/h/g, "х").replace(/c/g, "к").replace(/w/g, "в")
+    .replace(/q/g, "к").replace(/x/g, "кс");
+  return x;
+};
+
+// обёртка над buildHaystack для нормализованных вариантов
+const buildSearchIndex = (it) => {
+  const raw = buildHaystack(it);      // ваша текущая сборка полей
+  const n   = norm(raw);
+  return { n, n_lat: cyr2lat(n), n_cyr: lat2cyr(n) };
+};
+
+// токенизированный матчинг с RU⇄EN
+const matchQuery = (query, it) => {
+  const idx = buildSearchIndex(it);
+  const tokens = norm(query).split(/\s/).filter(Boolean);
+  if (!tokens.length) return true;
+  return tokens.every((tok) => {
+    const t1 = tok;
+    const t2 = cyr2lat(tok);
+    const t3 = lat2cyr(tok);
+    return (
+      idx.n.includes(t1)     || idx.n.includes(t2)     || idx.n.includes(t3) ||
+      idx.n_lat.includes(t1) || idx.n_lat.includes(t2) || idx.n_lat.includes(t3) ||
+      idx.n_cyr.includes(t1) || idx.n_cyr.includes(t2) || idx.n_cyr.includes(t3)
+    );
+  });
+};
+
+  
   function buildHaystack(it) {
     const s = it?.service || it || {};
     const d =
@@ -551,13 +622,7 @@ export default function Marketplace() {
           all = normalizeList(resAll);
         } catch {}
 
-        let filtered = all.filter((it) => {
-          try {
-            return buildHaystack(it).includes(needle);
-          } catch {
-            return false;
-          }
-        });
+        let filtered = all.filter((it) => matchQuery(filters.q, it));
 
         if (!filtered.length && all.length) {
           const ids = [
@@ -582,16 +647,9 @@ export default function Marketplace() {
             return it;
           });
 
-          filtered = enriched.filter((it) => {
-            try {
-              return buildHaystack(it).includes(needle);
-            } catch {
-              return false;
-            }
-          });
-        }
+          filtered = enriched.filter((it) => matchQuery(filters.q, it));
 
-        list = filtered;
+        list = list.filter(it => matchQuery(filters.q, it));
       }
 
       setItems(list);
