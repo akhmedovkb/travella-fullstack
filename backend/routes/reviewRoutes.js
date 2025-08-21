@@ -6,16 +6,16 @@ const authenticateToken = require("../middleware/authenticateToken");
 const {
   addServiceReview,
   addClientReview,
-  addProviderReview,
+  addProviderReview,        // клиент И/ИЛИ провайдер → провайдер
   getServiceReviews,
   getProviderReviews,
   getClientReviews,
 } = require("../controllers/reviewController");
 
-// Небольшие role-guards. Если роли у токена нет — пропускаем (back-compat).
+// простые role-guards (оставляем для специфичных эндпоинтов)
 function requireClient(req, res, next) {
   if (req.user?.role === "client" || req.user?.clientId) return next();
-  if (!req.user?.role) return next();
+  if (!req.user?.role) return next(); // на всякий случай — не ломаем совместимость
   return res.status(403).json({ error: "client_required" });
 }
 function requireProvider(req, res, next) {
@@ -24,12 +24,16 @@ function requireProvider(req, res, next) {
   return res.status(403).json({ error: "provider_required" });
 }
 
-/** CREATE */
+// клиент → услуге
 router.post("/service/:serviceId", authenticateToken, requireClient, addServiceReview);
+// провайдер → клиенту
 router.post("/client/:clientId", authenticateToken, requireProvider, addClientReview);
-router.post("/provider/:providerId", authenticateToken, requireClient, addProviderReview);
 
-/** READ (публичные) */
+// КЛИЕНТ И/ИЛИ ПРОВАЙДЕР → ПРОВАЙДЕРУ
+// guard не ставим — проверка роли и запрет «сам себе» внутри контроллера
+router.post("/provider/:providerId", authenticateToken, addProviderReview);
+
+// списки (публично)
 router.get("/service/:serviceId", getServiceReviews);
 router.get("/provider/:providerId", getProviderReviews);
 router.get("/client/:clientId", getClientReviews);
