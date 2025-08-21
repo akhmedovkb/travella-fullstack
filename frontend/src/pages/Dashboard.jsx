@@ -24,7 +24,7 @@ function HotelSelect({ value, onChange, loadOptions, t }) {
       onChange={(opt) => onChange(opt?.value || "")}
       onCreateOption={(inputValue) => onChange(inputValue)}
       formatCreateLabel={(inputValue) =>
-        `${t("common.add") || "Добавить"}: "${inputValue}"`
+        `${t("common.add_hotel") || "Добавить"}: "${inputValue}"`
       }
       noOptionsMessage={() => t("hotel.no_options") || "Ничего не найдено"}
       styles={{
