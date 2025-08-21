@@ -111,6 +111,7 @@
   
   "comment": "Comment",
   "common": {
+    "add_hotel": "Add your hotel",
     "direction": "Direction",
     "find": "Find",
     "loading": "Loading…",
