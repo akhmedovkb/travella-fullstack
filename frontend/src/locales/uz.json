@@ -225,6 +225,7 @@
   "hotel_check_out": "Chiqish (check-out) sanasi",
   "hotel_not_found": "Mehmonxona topilmadi",
   "hotel_transfer": "Mehmonxonadan transfer",
+  "hotel.no_options": "Otel topilmadi",
   "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
   "inf": "Go‘daklar (INF)",
   "is_active": "Faol",
