@@ -860,7 +860,7 @@ const search = async (opts = {}) => {
               {t("auth.login_client") || "Войти как клиент"}
             </a>
             <a
-              href={`/provider/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+              href={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
             >
               {t("auth.login_provider") || "Войти как поставщик"}
