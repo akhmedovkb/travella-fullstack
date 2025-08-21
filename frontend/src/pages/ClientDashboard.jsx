@@ -9,7 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import ServiceCard from "../components/ServiceCard";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 
-const FAV_PAGE_SIZE = 8;
+const FAV_PAGE_SIZE = 6;
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -358,7 +358,7 @@ function FavoritesList({
         <EmptyFavorites />
       ) : (
         <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {pageItems.map((row) => {
               const sid = getServiceId(row);
               return (
