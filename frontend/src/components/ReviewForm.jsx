@@ -1,69 +1,91 @@
 // components/ReviewForm.jsx
-import React, { useState } from "react";
-import axios from "axios";
+
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { tSuccess, tError, tInfo } from "../shared/toast";
+import { createReview } from "../api/reviews";
 
 export default function ReviewForm({
-  mode = "service",       // 'service' | 'client'
-  targetId,               // serviceId (для service) или clientId (для client)
-  bookingId = null,       // опционально
-  onDone,
-  t,
+  targetType,        // 'provider' | 'client'
+  targetId,          // number
+  targetName,        // string
+  serviceId,         // optional
+  requestId,         // optional
+  onCreated,         // callback
 }) {
+  const { t } = useTranslation();
   const [rating, setRating] = useState(5);
-  const [text, setText]     = useState("");
-  const [loading, setLoading] = useState(false);
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const submit = async () => {
-    if (!targetId) return;
-    setLoading(true);
+    if (rating < 1 || rating > 5) {
+      tInfo(t("reviews.bad_rating") || "Выберите оценку 1–5");
+      return;
+    }
+    setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const url =
-        mode === "service"
-          ? `${API_BASE}/api/reviews/service/${targetId}`
-          : `${API_BASE}/api/reviews/client/${targetId}`;
-      await axios.post(url, { rating, text, bookingId }, config);
-      onDone?.();
-    } catch (e) {
-      console.error("submit review:", e);
-      alert(t("reviews.save_error"));
+      await createReview({
+        target_type: targetType,
+        target_id: targetId,
+        rating,
+        text: text?.trim() || undefined,
+        service_id: serviceId || undefined,
+        request_id: requestId || undefined,
+      });
+      tSuccess(t("reviews.saved") || "Отзыв сохранён", { autoClose: 1800 });
+      setText("");
+      setRating(5);
+      onCreated?.();
+    } catch (err) {
+      const code = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString();
+      if (code.includes("no_interaction")) {
+        tInfo(t("reviews.no_interaction") || "Нельзя оставить отзыв без взаимодействия");
+      } else if (code.includes("self_review_forbidden")) {
+        tInfo(t("reviews.self_forbidden") || "Нельзя оценивать себя");
+      } else {
+        tError(t("reviews.save_error") || "Не удалось сохранить отзыв");
+      }
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="border rounded-xl p-4 bg-gray-50">
-      <div className="font-semibold mb-2">
-        {mode === "service" ? t("reviews.leave_service") : t("reviews.leave_client")}
+    <div className="border rounded-xl p-4 bg-white shadow-sm">
+      <div className="text-sm text-gray-600 mb-1">
+        {t("reviews.your_rating") || "Ваша оценка"}
       </div>
-      <div className="flex items-center gap-2 mb-2">
-        <label className="text-sm">{t("reviews.rating")}:</label>
-        <select
-          value={rating}
-          onChange={(e) => setRating(Number(e.target.value))}
-          className="border rounded px-2 py-1 bg-white"
-        >
-          {[5,4,3,2,1].map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
+      <div className="flex gap-2 mb-3">
+        {[1,2,3,4,5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={`px-3 py-1.5 rounded border ${n <= rating ? "bg-amber-100 border-amber-300" : "bg-white"}`}
+            onClick={() => setRating(n)}
+          >
+            {n}★
+          </button>
+        ))}
       </div>
+
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="w-full border rounded px-3 py-2 bg-white"
-        placeholder={t("reviews.placeholder")}
+        placeholder={t("reviews.placeholder") || "Поделитесь впечатлением…"}
+        className="w-full border rounded-lg px-3 py-2 min-h-[96px] mb-3"
       />
-      <button
-        disabled={loading}
-        onClick={submit}
-        className="mt-3 px-4 py-2 rounded bg-orange-500 text-white font-semibold disabled:opacity-60"
-      >
-        {t("reviews.send")}
-      </button>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className="px-4 py-2 rounded-lg bg-gray-900 text-white"
+          onClick={submit}
+          disabled={saving}
+        >
+          {t("actions.save") || "Сохранить"}
+        </button>
+      </div>
     </div>
   );
 }
