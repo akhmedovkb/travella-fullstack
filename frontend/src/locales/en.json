@@ -216,9 +216,7 @@
   "hotel_check_out": "Check-out date",
   "hotel_not_found": "Hotel not found",
   "hotel_transfer": "Hotel transfer",
-  "hotel": {
-    "no_options": "No options",
-  },
+  "hotel.no_options": "No options",
   
   "images_hint": "Up to 10 images, ≤ 3 MB each",
   "inf": "Infants (INF)",
