@@ -1,3 +1,5 @@
+//frontend/src/pages/ProviderProfile.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
