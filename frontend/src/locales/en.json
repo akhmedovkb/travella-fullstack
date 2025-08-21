@@ -111,6 +111,7 @@
   
   "comment": "Comment",
   "common": {
+    "direction": "Direction"
     "find": "Find",
     "loading": "Loading…",
     "note_optional": "Request note (optional):",
