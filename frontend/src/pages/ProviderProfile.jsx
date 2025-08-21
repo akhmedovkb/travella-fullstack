@@ -1,4 +1,3 @@
-// frontend/src/pages/ProviderProfile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -8,8 +7,21 @@ import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
 
 /* ---------- helpers ---------- */
-const first = (...vals) => { for (const v of vals) { if (v === 0) return 0; if (v !== undefined && v !== null && String(v).trim?.() !== "") return v; } return null; };
-const maybeParse = (x) => { if (!x) return null; if (typeof x === "object") return x; if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } } return null; };
+const first = (...vals) => {
+  for (const v of vals) {
+    if (v === 0) return 0;
+    if (v !== undefined && v !== null && String(v).trim?.() !== "") return v;
+  }
+  return null;
+};
+const maybeParse = (x) => {
+  if (!x) return null;
+  if (typeof x === "object") return x;
+  if (typeof x === "string") {
+    try { return JSON.parse(x); } catch { return null; }
+  }
+  return null;
+};
 const firstImageFrom = (val) => {
   if (!val) return null;
   if (typeof val === "string") {
@@ -24,7 +36,7 @@ const firstImageFrom = (val) => {
   return null;
 };
 
-// поиск профиля провайдера (несколько fallback-эндпоинтов)
+// fallback’ы, если бэкенд отдаёт профиль по разным роутам
 async function fetchProviderProfile(providerId) {
   const endpoints = [
     `/api/providers/${providerId}`,
@@ -46,7 +58,6 @@ async function fetchProviderProfile(providerId) {
   return null;
 }
 
-// мой provider_id из localStorage (как в Marketplace)
 function getMyProviderId() {
   for (const key of ["user", "profile", "me", "auth"]) {
     const raw = localStorage.getItem(key);
@@ -66,7 +77,7 @@ function getMyProviderId() {
 
 /* ---------- page ---------- */
 export default function ProviderProfile() {
-  const { id } = useParams();                // /profile/provider/:id
+  const { id } = useParams();       // /profile/provider/:id
   const pid = Number(id);
   const { t } = useTranslation();
 
@@ -107,29 +118,42 @@ export default function ProviderProfile() {
     return () => { alive = false; };
   }, [pid]);
 
-  // кто может оставить отзыв: клиент или провайдер (но не о себе)
   const hasClientToken = !!localStorage.getItem("clientToken");
   const hasProviderToken = !!(localStorage.getItem("token") || localStorage.getItem("providerToken"));
   const myProviderId = useMemo(() => getMyProviderId(), []);
   const canReview = hasClientToken || (hasProviderToken && myProviderId && myProviderId !== pid);
 
+  // «как в Dashboard»: забираем реальные поля из таблицы providers + возможные json details
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
     const contacts = prov?.contacts || {};
     const socials  = prov?.socials || {};
 
-    const name = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
-    const about = first(d?.about, d?.description, prov?.about, prov?.description);
-    const city = first(d?.city, prov?.city, contacts?.city, prov?.location?.city);
-    const country = first(d?.country, prov?.country, contacts?.country, prov?.location?.country);
+    const name  = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
+    const type  = first(prov?.type, d?.type);
+    const region = first(prov?.location, d?.location, prov?.region);
     const phone = first(prov?.phone, prov?.phone_number, prov?.phoneNumber, contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp);
     const email = first(prov?.email, contacts?.email, d?.email);
-    const telegram = first(prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram);
-    const website = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
-    const logo = firstImageFrom(first(prov?.logo, d?.logo, prov?.image, d?.image));
-    const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
+    const address = first(prov?.address, contacts?.address, d?.address);
 
-    return { name, about, city, country, phone, email, telegram, website, logo, cover };
+    // social — может быть и t.me, и сайт
+    let social = first(prov?.social, socials?.telegram, socials?.site, d?.social);
+    let telegram = first(prov?.telegram, prov?.tg, d?.telegram);
+    let website = first(prov?.website, d?.website);
+
+    if (!telegram && social && (String(social).includes("t.me") || String(social).startsWith("@"))) {
+      telegram = social;
+    } else if (!website && social && /^https?:\/\//.test(String(social))) {
+      website = social;
+    }
+
+    const certificate = first(prov?.certificate, d?.certificate);
+    const about = first(d?.about, d?.description, prov?.about, prov?.description);
+
+    const avatar = firstImageFrom(first(prov?.photo, prov?.logo, d?.photo, d?.logo, prov?.image, d?.image));
+    const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner));
+
+    return { name, type, region, phone, email, address, telegram, website, certificate, about, avatar, cover };
   }, [prov]);
 
   const submitReview = async ({ rating, text }) => {
@@ -150,42 +174,46 @@ export default function ProviderProfile() {
             <img src={details.cover} alt="" className="w-full h-full object-cover" />
           </div>
         )}
+
         <div className="p-4 md:p-6 flex items-start gap-4">
-          {details.logo && (
-            <img src={details.logo} alt="" className="w-16 h-16 rounded-xl object-cover ring-1 ring-black/5" />
+          {details.avatar && (
+            <img
+              src={details.avatar}
+              alt=""
+              className="w-20 h-20 rounded-full object-cover ring-1 ring-black/5"
+            />
           )}
+
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl md:text-2xl font-semibold">
-                {details.name || (t("marketplace.supplier") || "Поставщик")}
+                {details.name || t("marketplace.supplier") || "Поставщик"}
               </h1>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <RatingStars value={reviewsAgg.avg} size={16} />
                 <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">· {reviewsAgg.count || 0} {(t("reviews.count") || "отзыв(ов)")}</span>
+                <span className="opacity-70">· {reviewsAgg.count || 0} {t("reviews.count") || "отзыв(ов)"} </span>
               </div>
             </div>
 
-            {(details.city || details.country) && (
-              <div className="mt-1 text-gray-600">
-                {details.city && <span>{t("common.city") || "Город"}: <b>{details.city}</b></span>}
-                {details.city && details.country && <span className="mx-2">·</span>}
-                {details.country && <span>{t("common.country") || "Страна"}: <b>{details.country}</b></span>}
-              </div>
-            )}
-
-            {details.about && (
-              <div className="mt-3">
-                <div className="text-gray-500 text-sm mb-1">{t("common.about") || "О компании"}</div>
-                <div className="whitespace-pre-line">{details.about}</div>
-              </div>
-            )}
-
-            <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm">
+            {/* info grid как в Dashboard */}
+            <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+              {details.type && (
+                <div><span className="text-gray-500">{t("provider.type") || "Тип поставщика"}: </span><b>{details.type}</b></div>
+              )}
+              {details.region && (
+                <div><span className="text-gray-500">{t("provider.region") || "Регион/место"}: </span><b>{details.region}</b></div>
+              )}
               {details.phone && (
                 <div>
                   <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
                   <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g, "")}`}>{details.phone}</a>
+                </div>
+              )}
+              {details.email && (
+                <div>
+                  <span className="text-gray-500">Email: </span>
+                  <a className="underline" href={`mailto:${details.email}`}>{details.email}</a>
                 </div>
               )}
               {details.telegram && (
@@ -193,16 +221,7 @@ export default function ProviderProfile() {
                   <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
                   {String(details.telegram).startsWith("@")
                     ? <a className="underline" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
-                    : /^https?:\/\//.test(String(details.telegram))
-                      ? <a className="underline" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
-                      : <span>{details.telegram}</span>
-                  }
-                </div>
-              )}
-              {details.email && (
-                <div>
-                  <span className="text-gray-500">Email: </span>
-                  <a className="underline" href={`mailto:${details.email}`}>{details.email}</a>
+                    : <a className="underline" href={/^https?:\/\//.test(details.telegram) ? details.telegram : `https://t.me/${details.telegram}`} target="_blank" rel="noreferrer">{details.telegram}</a>}
                 </div>
               )}
               {details.website && (
@@ -213,7 +232,28 @@ export default function ProviderProfile() {
                   </a>
                 </div>
               )}
+              {details.certificate && (
+                <div>
+                  <span className="text-gray-500">{t("provider.certificate") || "Сертификат"}: </span>
+                  <a className="underline" href={details.certificate} target="_blank" rel="noreferrer">
+                    {t("provider.view_certificate") || "посмотреть сертификат"}
+                  </a>
+                </div>
+              )}
+              {details.address && (
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <span className="text-gray-500">{t("provider.address") || "Адрес"}: </span>
+                  <span>{details.address}</span>
+                </div>
+              )}
             </div>
+
+            {details.about && (
+              <div className="mt-4">
+                <div className="text-gray-500 text-sm mb-1">{t("common.about") || "О компании"}</div>
+                <div className="whitespace-pre-line">{details.about}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
