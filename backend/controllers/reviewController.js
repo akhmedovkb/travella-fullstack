@@ -71,6 +71,32 @@ exports.addClientReview = async (req, res) => {
   }
 };
 
+//КЛИЕНТОМ о ПРОВАЙДЕРЕ
+exports.addProviderReview = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId)) return res.status(400).json({ error: "bad_provider_id" });
+
+    const { rating, text, booking_id } = req.body || {};
+    const r = Math.max(1, Math.min(5, Number(rating || 0)));
+    if (!Number.isFinite(r)) return res.status(400).json({ error: "bad_rating" });
+
+    const authorId = req.user?.id;
+    if (!authorId) return res.status(401).json({ error: "unauthorized" });
+
+    const q = await db.query(
+      `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
+       VALUES ('provider', $1, 'client', $2, $3, $4, $5)
+       RETURNING id, target_id, rating, text, created_at`,
+      [providerId, authorId, (booking_id ? Number(booking_id) : null), r, text || null]
+    );
+    res.status(201).json(q.rows[0]);
+  } catch (e) {
+    console.error("addProviderReview:", e);
+    res.status(500).json({ error: "review_create_failed" });
+  }
+};
+
 /** ====== READ (list + agg) ====== */
 
 async function listWithAgg(targetType, targetId, req, res) {
