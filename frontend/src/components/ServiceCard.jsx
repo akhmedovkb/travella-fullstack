@@ -493,10 +493,24 @@ export default function ServiceCard({
           <div className="mt-2 text-sm space-y-0.5">
             {supplierName && (
               <div>
-                <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
-                <span className="font-medium">{supplierName}</span>
+                <span className="text-gray-500">
+                  {t("marketplace.supplier") || "Поставщик"}:{" "}
+                </span>
+            
+                {providerId ? (
+                  <a
+                    href={`/profile/provider/${providerId}`}
+                    className="underline hover:text-gray-900"
+                    onClick={(e) => e.stopPropagation()} // чтобы клик по ссылке не триггерил клики карточки
+                  >
+                    {supplierName}
+                  </a>
+                ) : (
+                  <span className="font-medium">{supplierName}</span>
+                )}
               </div>
             )}
+
             {supplierPhone && (
               <div>
                 <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
