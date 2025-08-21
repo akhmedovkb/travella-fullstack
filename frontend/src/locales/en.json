@@ -537,7 +537,7 @@
   "direction_to_not_found": "Arrival city not found",
 
   "auth": {
-    "login": "Войти"
+    "login": "Log in"
   }
 
 }
