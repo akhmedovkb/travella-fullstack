@@ -1,38 +1,42 @@
 // frontend/src/api/reviews.js
 import { apiGet, apiPost } from "../api";
 
-/** Нормализация ответа бэка в единый формат */
-function normalize(res) {
-  // поддержка обоих вариантов: {stats,items} или {avg,count,items}
-  const avg   = Number(res?.stats?.avg ?? res?.avg ?? 0) || 0;
-  const count = Number(res?.stats?.count ?? res?.count ?? 0) || 0;
-  const items = Array.isArray(res?.items) ? res.items : [];
-  return { stats: { avg, count }, items };
-}
+/** ===== READ ===== */
 
-/** ===== Provider ===== */
+// провайдер: { stats: {avg, count}, items: [...] }
 export async function getProviderReviews(providerId, { limit = 10, offset = 0 } = {}) {
   const res = await apiGet(`/api/reviews/provider/${providerId}?limit=${limit}&offset=${offset}`);
-  return normalize(res);
-}
-export async function addProviderReview(providerId, { rating, text, booking_id } = {}) {
-  return apiPost(`/api/reviews/provider/${providerId}`, { rating, text, booking_id });
+  if (res && res.stats) return res;
+  // бэкап на случай старого формата
+  return { stats: { avg: Number(res?.avg) || 0, count: Number(res?.count) || 0 }, items: res?.items || [] };
 }
 
-/** ===== Service ===== */
 export async function getServiceReviews(serviceId, { limit = 10, offset = 0 } = {}) {
-  const res = await apiGet(`/api/reviews/service/${serviceId}?limit=${limit}&offset=${offset}`);
-  return normalize(res);
+  return apiGet(`/api/reviews/service/${serviceId}?limit=${limit}&offset=${offset}`);
 }
-export async function addServiceReview(serviceId, { rating, text, booking_id } = {}) {
-  return apiPost(`/api/reviews/service/${serviceId}`, { rating, text, booking_id });
+export async function getClientReviews(clientId, { limit = 10, offset = 0 } = {}) {
+  return apiGet(`/api/reviews/client/${clientId}?limit=${limit}&offset=${offset}`);
 }
 
-/** ===== Client ===== */
-export async function getClientReviews(clientId, { limit = 10, offset = 0 } = {}) {
-  const res = await apiGet(`/api/reviews/client/${clientId}?limit=${limit}&offset=${offset}`);
-  return normalize(res);
-}
-export async function addClientReview(clientId, { rating, text, booking_id } = {}) {
-  return apiPost(`/api/reviews/client/${clientId}`, { rating, text, booking_id });
-}
+/** ===== CREATE ===== */
+
+// клиент И/ИЛИ провайдер → провайдеру
+export const addProviderReview = (providerId, { rating, text, booking_id } = {}) =>
+  apiPost(`/api/reviews/provider/${providerId}`, { rating, text, booking_id });
+
+// используется формой отзыва об услуге (клиент → услуге)
+export const createServiceReview = (serviceId, { rating, text, request_id, booking_id } = {}) =>
+  apiPost(`/api/reviews/service/${serviceId}`, {
+    rating,
+    text,
+    booking_id: booking_id ?? request_id ?? undefined,
+  });
+
+// используется формой отзыва о клиенте (провайдер → клиенту)
+export const createClientReview = (clientId, { rating, text, service_id, request_id, booking_id } = {}) =>
+  apiPost(`/api/reviews/client/${clientId}`, {
+    rating,
+    text,
+    booking_id: booking_id ?? request_id ?? undefined,
+    service_id: service_id ?? undefined,
+  });
