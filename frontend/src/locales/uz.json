@@ -226,6 +226,7 @@
   "hotel_not_found": "Mehmonxona topilmadi",
   "hotel_transfer": "Mehmonxonadan transfer",
   "hotel.no_options": "Otel topilmadi",
+  "hotel.search_placeholder": "Otel nomini kiriting",
   "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
   "inf": "Go‘daklar (INF)",
   "is_active": "Faol",
