@@ -515,5 +515,10 @@
     "email_invalid": "Введите корректный e-mail.",
     "password_short": "Минимальная длина пароля — 6 символов."
   }
-}
+},
+  "enter_current_password": "Введите текущий пароль",
+  "hotels_load_error": "Не удалось загрузить отели",
+  "country_not_found": "Страна не найдена",
+  "direction_from_not_found": "Город вылета не найден",
+  "direction_to_not_found": "Город прибытия не найден"
 }
