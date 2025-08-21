@@ -227,7 +227,8 @@
   "hotel_not_found": "Отель не найден",
   "hotel_transfer": "Трансфер от отеля",
   "hotel.no_options": "Нет вариантов",
-    
+  "hotel.search_placeholder": "Введите название отеля",
+ 
   "images_hint": "До 10 изображений, ≤ 3 МБ каждое",
   "inf": "Младенцы (INF)",
   "is_active": "Актуально",
