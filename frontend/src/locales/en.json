@@ -537,7 +537,10 @@
   "direction_to_not_found": "Arrival city not found",
 
   "auth": {
-    "login": "Log in"
+    "login": "Log in",
+    "login_client": "Log in as client",
+    "login_provider": "Log in as provider"
+    
   }
 
 }
