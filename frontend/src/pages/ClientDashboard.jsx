@@ -6,7 +6,9 @@ import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
-import ServiceCard from "../components/ServiceCard"; // ⬅️ добавлено
+import ServiceCard from "../components/ServiceCard";
+import { tSuccess, tError, tInfo } from "../shared/toast";
+
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -662,13 +664,17 @@ export default function ClientDashboard() {
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
+      tSuccess(t("messages.profile_saved") || "Профиль сохранён", { autoClose: 1800 });
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
       setTelegram(res?.telegram ?? telegram);
       if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
       else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
-    } catch { setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" })); }
+    } catch {
+   setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
+   tError(t("errors.profile_save") || "Не удалось сохранить профиль", { autoClose: 2000 });
+ }
     finally { setSavingProfile(false); }
   };
 
