@@ -5,6 +5,9 @@ import { apiGet, apiPost } from "../api";
 export async function getProviderReviews(id, { limit = 10, offset = 0 } = {}) {
   return apiGet(`/api/reviews/provider/${id}?limit=${limit}&offset=${offset}`);
 }
+export const addProviderReview = async (providerId, body) =>
+  apiPost(`/api/reviews/provider/${providerId}`, body); // если бэкенд принимает POST /provider/:id
+
 export async function getClientReviews(id, { limit = 10, offset = 0 } = {}) {
   return apiGet(`/api/reviews/client/${id}?limit=${limit}&offset=${offset}`);
 }
