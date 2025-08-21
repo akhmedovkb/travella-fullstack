@@ -521,5 +521,9 @@
   "hotels_load_error": "Не удалось загрузить отели",
   "country_not_found": "Страна не найдена",
   "direction_from_not_found": "Город вылета не найден",
-  "direction_to_not_found": "Город прибытия не найден"
+  "direction_to_not_found": "Город прибытия не найден",
+
+  "auth": {
+    "login": "Войти"
+  }
 }
