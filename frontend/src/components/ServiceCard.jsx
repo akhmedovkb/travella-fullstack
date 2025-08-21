@@ -274,6 +274,7 @@ export default function ServiceCard({
     flatTg,
     status: statusRaw,
     details,
+    direction
   } = extractServiceFields(item, viewerRole);
 
   const id = svc.id ?? item.id;
