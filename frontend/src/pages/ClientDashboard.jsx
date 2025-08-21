@@ -693,7 +693,14 @@ export default function ClientDashboard() {
     finally { setChangingPass(false); }
   };
 
-  const handleLogout = () => { try { localStorage.removeItem("clientToken"); } finally { window.location.href = "/client/login"; } };
+   const handleLogout = () => {
+   try {
+     localStorage.removeItem("clientToken");
+     localStorage.removeItem("token");
+   } finally {
+     window.location.href = "/client/login";
+   }
+ };
 
   // старый remove по itemId (оставляю — может вызывать из других мест)
   const handleRemoveFavorite = async (itemId) => {
