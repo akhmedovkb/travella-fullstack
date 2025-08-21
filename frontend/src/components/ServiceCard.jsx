@@ -253,6 +253,7 @@ export default function ServiceCard({
   viewerRole = null,        // 'client' | 'provider' | null
   favoriteIds,              // Set<string> (optional)
   isFav,                    // boolean (optional; overrides favoriteIds)
+  favActive,
   onToggleFavorite,         // (serviceId) => void|Promise<void>
   onQuickRequest,           // (serviceId, providerId, title) => void
   now = Date.now(),
