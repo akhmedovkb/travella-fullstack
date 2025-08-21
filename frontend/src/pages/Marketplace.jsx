@@ -359,6 +359,24 @@ export default function Marketplace() {
   };
 
   const submitQuickRequest = async (note) => {
+  // --- мгновенный гард: провайдер не может отправить запрос на свою услугу
+  const myProviderId = Number(
+    localStorage.getItem("providerId") ||
+    localStorage.getItem("owner_id") ||
+    localStorage.getItem("id")
+  );
+  if (qrProviderId && Number(qrProviderId) === myProviderId) {
+    tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить запрос самому себе!", {
+      autoClose: 2200,
+      toastId: "self-req",
+    });
+    setQrOpen(false);
+    setQrServiceId(null);
+    setQrProviderId(null);
+    setQrServiceTitle("");
+    return;
+  }
+
   try {
     await apiPost("/api/requests", {
       service_id: qrServiceId,
@@ -375,47 +393,51 @@ export default function Marketplace() {
       })
     );
   } catch (err) {
-  // максимально надёжный разбор
-  const status =
-    err?.status ||
-    err?.response?.status ||
-    err?.data?.status ||
-    (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
+    // --- надёжный разбор ошибки из api.js / axios / fetch
+    const status =
+      err?.status ||
+      err?.response?.status ||
+      err?.data?.status ||
+      (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
 
-  const code =
-    err?.data?.error ||
-    err?.response?.data?.error ||
-    err?.error ||
-    err?.code ||
-    (typeof err?.message === "string" ? err.message : "") ||
-    (typeof err === "string" ? err : "");
+    const code =
+      err?.data?.error ||
+      err?.response?.data?.error ||
+      err?.error ||
+      err?.code ||
+      (typeof err?.message === "string" ? err.message : "") ||
+      (typeof err === "string" ? err : "");
 
-  const msgStr = String(code).toLowerCase();
+    const msgStr = String(code).toLowerCase();
+    const isSelfByStatus =
+      status === 400 && qrProviderId && Number(qrProviderId) === myProviderId;
 
-  if (status === 400 || msgStr.includes("self_request_forbidden") || msgStr.includes("bad request")) {
-    tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
-      autoClose: 2200,
-      toastId: "self-req",
-    });
-    return;
-  }
+    if (msgStr.includes("self_request_forbidden") || isSelfByStatus) {
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить запрос самому себе!", {
+        autoClose: 2200,
+        toastId: "self-req",
+      });
+      return;
+    }
 
-  if (status === 401 || status === 403 || msgStr.includes("unauthorized")) {
-    tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
-      autoClose: 2000,
-      toastId: "login-required",
-    });
-    return;
-  }
+    if (status === 401 || status === 403 || msgStr.includes("unauthorized")) {
+      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+        autoClose: 2000,
+        toastId: "login-required",
+      });
+      return;
+    }
 
-  tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-} finally {
+    tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+  } finally {
+    // сброс модалки и временных значений
     setQrOpen(false);
     setQrServiceId(null);
     setQrProviderId(null);
     setQrServiceTitle("");
   }
 };
+
 
 
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
