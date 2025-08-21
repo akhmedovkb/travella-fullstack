@@ -121,6 +121,7 @@
   },
   "comment": "Izoh",
   "common": {
+    "direction": "Yo‘nalish",
     "find": "Qidirish",
     "loading": "Yuklanmoqda…",
     "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
