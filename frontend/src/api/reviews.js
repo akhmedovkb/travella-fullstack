@@ -5,6 +5,10 @@ import { apiGet, apiPost } from "../api";
 export async function getProviderReviews(id, { limit = 10, offset = 0 } = {}) {
   return apiGet(`/api/reviews/provider/${id}?limit=${limit}&offset=${offset}`);
 }
+const res = await getProviderReviews(id, { limit, offset });
+setStats(res?.stats || { count: 0, avg: 0 });
+setItems(Array.isArray(res?.items) ? res.items : []);
+
 export const addProviderReview = async (providerId, body) =>
   apiPost(`/api/reviews/provider/${providerId}`, body); // если бэкенд принимает POST /provider/:id
 
