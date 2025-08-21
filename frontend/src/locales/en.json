@@ -525,6 +525,14 @@
     "required": "Ushbu maydonni to‘ldiring.",
     "email_invalid": "Yaroqli e-pochta kiriting.",
     "password_short": "Parolning eng kam uzunligi — 6 ta belgi."
-  }
+  },
+
+  "enter_current_password": "Enter current password",
+  "hotels_load_error": "Failed to load hotels",
+  "profile_load_error": "Failed to load profile",
+  "services_load_error": "Failed to load services",
+  "country_not_found": "Country not found",
+  "direction_from_not_found": "Departure city not found",
+  "direction_to_not_found": "Arrival city not found"
 
 }
