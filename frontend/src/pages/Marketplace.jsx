@@ -583,83 +583,83 @@ const matchQuery = (query, it) => {
   };
 
   /* ===================== search ===================== */
-  const search = async (opts = {}) => {
-    setLoading(true);
-    setError(null);
+const search = async (opts = {}) => {
+  setLoading(true);
+  setError(null);
 
+  try {
+    const rawPayload = opts?.all ? {} : filters;
+    const payload = Object.fromEntries(
+      Object.entries(rawPayload).filter(([, v]) =>
+        v != null && (typeof v === "number" ? true : String(v).trim() !== "")
+      )
+    );
+
+    // 1) основной вызов
+    let res;
     try {
-      const rawPayload = opts?.all ? {} : filters;
-      const payload = Object.fromEntries(
-        Object.entries(rawPayload).filter(([, v]) =>
-          v != null && (typeof v === "number" ? true : String(v).trim() !== "")
-        )
-      );
-
-      // 1) основной вызов
-      let res;
-      try {
-        res = await apiPost("/api/marketplace/search", payload);
-      } catch (e) {
-        if (opts?.fallback !== false) {
-          const qs = new URLSearchParams(
-            Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
-          ).toString();
-          res = await apiGet(`/api/marketplace/search?${qs}`);
-        } else {
-          throw e;
-        }
+      res = await apiPost("/api/marketplace/search", payload);
+    } catch (e) {
+      if (opts?.fallback !== false) {
+        const qs = new URLSearchParams(
+          Object.entries(payload).filter(([, v]) => v != null && String(v).trim() !== "")
+        ).toString();
+        res = await apiGet(`/api/marketplace/search?${qs}`);
+      } else {
+        throw e;
       }
-
-      let list = normalizeList(res);
-
-      // 2) пусто + есть текст — локальная фильтрация
-      if (!list.length && filters?.q) {
-        const needle = String(filters.q).toLowerCase();
-
-        let all = [];
-        try {
-          const resAll = await apiPost("/api/marketplace/search", {});
-          all = normalizeList(resAll);
-        } catch {}
-
-        let filtered = all.filter((it) => matchQuery(filters.q, it));
-
-        if (!filtered.length && all.length) {
-          const ids = [
-            ...new Set(all.map((x) => x?.service?.provider_id ?? x?.provider_id).filter(Boolean)),
-          ];
-          const profiles = await Promise.all(ids.map((id) => fetchProviderProfile(id)));
-          const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
-
-          const enriched = all.map((it) => {
-            const svc = it?.service || {};
-            const pid = svc.provider_id ?? it?.provider_id;
-            const prof = pid ? byId.get(pid) : null;
-            if (prof) {
-              return {
-                ...it,
-                service: {
-                  ...svc,
-                  provider: { ...(svc.provider || {}), ...prof },
-                },
-              };
-            }
-            return it;
-          });
-
-          filtered = enriched.filter((it) => matchQuery(filters.q, it));
-
-        list = list.filter(it => matchQuery(filters.q, it));
-      }
-
-      setItems(list);
-    } catch {
-      setItems([]);
-      setError(t("common.loading_error") || "Не удалось загрузить данные");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    let list = normalizeList(res);
+
+    // (опц.) поджать результаты сервера локально, чтобы учесть RU⇄EN и направления
+    if (filters?.q) {
+      list = list.filter((it) => matchQuery(filters.q, it));
+    }
+
+    // 2) если пусто и есть текст запроса — локальная фильтрация по "всем"
+    if (!list.length && filters?.q) {
+      let all = [];
+      try {
+        const resAll = await apiPost("/api/marketplace/search", {});
+        all = normalizeList(resAll);
+      } catch {}
+
+      let filtered = all.filter((it) => matchQuery(filters.q, it));
+
+      // если всё ещё пусто — обогащаем провайдерами и пробуем снова
+      if (!filtered.length && all.length) {
+        const ids = [
+          ...new Set(all.map((x) => x?.service?.provider_id ?? x?.provider_id).filter(Boolean)),
+        ];
+        const profiles = await Promise.all(ids.map((id) => fetchProviderProfile(id)));
+        const byId = new Map(ids.map((id, i) => [id, profiles[i]]));
+
+        const enriched = all.map((it) => {
+          const svc = it?.service || {};
+          const pid = svc.provider_id ?? it?.provider_id;
+          const prof = pid ? byId.get(pid) : null;
+          return prof
+            ? { ...it, service: { ...svc, provider: { ...(svc.provider || {}), ...prof } } }
+            : it;
+        });
+
+        filtered = enriched.filter((it) => matchQuery(filters.q, it));
+      }
+
+      // ⬅️ важно: сохранить результат фильтрации
+      list = filtered;
+    }
+
+    setItems(list);
+  } catch {
+    setItems([]);
+    setError(t("common.loading_error") || "Не удалось загрузить данные");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     search({ all: true });
