@@ -522,5 +522,9 @@
   "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
   "country_not_found": "Mamlakat topilmadi",
   "direction_from_not_found": "Jo‘nash shahri topilmadi",
-  "direction_to_not_found": "Kelish shahri topilmadi"
+  "direction_to_not_found": "Kelish shahri topilmadi",
+
+  "auth": {
+    "login": "Kirish"
+  }
 }
