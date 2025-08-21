@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
-import { createReview } from "../api/reviews";
+import { createServiceReview, createClientReview } from "../api/reviews";
 
 export default function ReviewForm({
   targetType,        // 'provider' | 'client'
@@ -25,14 +25,28 @@ export default function ReviewForm({
     }
     setSaving(true);
     try {
-      await createReview({
-        target_type: targetType,
-        target_id: targetId,
-        rating,
-        text: text?.trim() || undefined,
-        service_id: serviceId || undefined,
-        request_id: requestId || undefined,
-      });
+         if (targetType === "provider") {
+     // По текущему контракту отзыв провайдеру идёт через конкретную услугу
+     if (!serviceId) {
+       tInfo(t("reviews.need_service") || "Выберите услугу, чтобы оставить отзыв провайдеру");
+       setSaving(false);
+       return;
+     }
+     await createServiceReview(serviceId, {
+       rating,
+       text: text?.trim() || undefined,
+       request_id: requestId || undefined,
+     });
+   } else if (targetType === "client") {
+     await createClientReview(targetId, {
+       rating,
+       text: text?.trim() || undefined,
+       service_id: serviceId || undefined,
+       request_id: requestId || undefined,
+     });
+   } else {
+     throw new Error("bad_target_type");
+   }
       tSuccess(t("reviews.saved") || "Отзыв сохранён", { autoClose: 1800 });
       setText("");
       setRating(5);
