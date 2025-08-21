@@ -1045,7 +1045,7 @@ export default function ClientDashboard() {
       <FavoritesList
         items={favorites}
         page={favPage}
-        perPage={8}
+        perPage={FAV_PAGE_SIZE}
         favIds={favIds}
         onToggleFavorite={toggleFavoriteClient}
         onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
@@ -1169,7 +1169,7 @@ export default function ClientDashboard() {
               <FavoritesList
                 items={favorites}
                 page={favPage}
-                perPage={8}
+                perPage={FAV_PAGE_SIZE}
                 favIds={favIds}
                 onToggleFavorite={toggleFavoriteClient}
                 onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
