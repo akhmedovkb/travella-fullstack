@@ -534,6 +534,10 @@
   "services_load_error": "Failed to load services",
   "country_not_found": "Country not found",
   "direction_from_not_found": "Departure city not found",
-  "direction_to_not_found": "Arrival city not found"
+  "direction_to_not_found": "Arrival city not found",
+
+  "auth": {
+    "login": "Войти"
+  }
 
 }
