@@ -1,12 +1,11 @@
-//frontend/src/pages/ProviderProfile.jsx
-
+// frontend/src/pages/ProviderProfile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
-import { getProviderReviews, addProviderReview } from "../api/reviews"; // <- у вас уже есть файл reviews.js
+import { getProviderReviews, addProviderReview } from "../api/reviews";
 
 /* ---------- helpers ---------- */
 const first = (...vals) => {
@@ -16,7 +15,6 @@ const first = (...vals) => {
   }
   return null;
 };
-
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
@@ -25,7 +23,6 @@ const maybeParse = (x) => {
   }
   return null;
 };
-
 const firstImageFrom = (val) => {
   if (!val) return null;
   if (typeof val === "string") {
@@ -55,7 +52,7 @@ const firstImageFrom = (val) => {
   return null;
 };
 
-/* множественные end-points, как в ServiceCard */
+/* множественные end-points (как в карточках) */
 async function fetchProviderProfile(providerId) {
   const endpoints = [
     `/api/providers/${providerId}`,
@@ -86,6 +83,7 @@ export default function ProviderProfile() {
 
   const [prov, setProv] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState(null);
 
   // отзывы + агрегаты
   const [reviewsAgg, setReviewsAgg] = useState({ avg: 0, count: 0 });
@@ -95,101 +93,82 @@ export default function ProviderProfile() {
     let alive = true;
     (async () => {
       setLoading(true);
+      setLoadErr(null);
       try {
         const p = await fetchProviderProfile(pid);
         if (alive) setProv(p || null);
+      } catch (e) {
+        if (alive) setLoadErr("load_failed");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
   }, [pid]);
 
-  // загрузка
-useEffect(() => {
-  let alive = true;
-  (async () => {
-    try {
-      const data = await getProviderReviews(pid); // { stats, items }
-      if (!alive) return;
-      const avg = Number(data?.stats?.avg ?? data?.avg) || 0;
-      const count = Number(data?.stats?.count ?? data?.count) || 0;
-      setReviewsAgg({ avg, count });
-      setReviews(Array.isArray(data?.items) ? data.items : []);
-    } catch {
-      if (!alive) return;
-      setReviewsAgg({ avg: 0, count: 0 });
-      setReviews([]);
-    }
-  })();
-  return () => { alive = false; };
-}, [pid]);
-
-// после submit
-const submitReview = async ({ rating, text }) => {
-  await addProviderReview(pid, { rating, text });
-  const data = await getProviderReviews(pid);
-  const avg = Number(data?.stats?.avg ?? data?.avg) || 0;
-  const count = Number(data?.stats?.count ?? data?.count) || 0;
-  setReviewsAgg({ avg, count });
-  setReviews(Array.isArray(data?.items) ? data.items : []);
-};
-
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await getProviderReviews(pid); // -> { stats:{avg,count}, items:[] }
+        if (!alive) return;
+        setReviewsAgg({
+          avg: Number(data?.stats?.avg) || 0,
+          count: Number(data?.stats?.count) || 0,
+        });
+        setReviews(Array.isArray(data?.items) ? data.items : []);
+      } catch {
+        if (!alive) return;
+        setReviewsAgg({ avg: 0, count: 0 });
+        setReviews([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [pid]);
 
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
     const contacts = prov?.contacts || {};
     const socials  = prov?.socials || {};
 
-    const name = first(
-      prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name
-    );
+    const name = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
+    const about = first(d?.about, d?.description, prov?.about, prov?.description);
 
-    const about = first(
-      d?.about, d?.description, prov?.about, prov?.description
-    );
-
-    const city = first(
-      d?.city, prov?.city, contacts?.city, prov?.location?.city
-    );
-    const country = first(
-      d?.country, prov?.country, contacts?.country, prov?.location?.country
-    );
+    const type = first(prov?.type, d?.type, prov?.provider_type, d?.provider_type);
+    const city = first(d?.city, prov?.city, contacts?.city, prov?.location?.city);
+    const country = first(d?.country, prov?.country, contacts?.country, prov?.location?.country);
 
     const phone = first(
-      prov?.phone, prov?.phone_number, prov?.phoneNumber, contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp
+      prov?.phone, prov?.phone_number, prov?.phoneNumber,
+      contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp
     );
     const email = first(prov?.email, contacts?.email, d?.email);
-    const telegram = first(
-      prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram
-    );
+    const telegram = first(prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram);
     const website = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
+    const address = first(prov?.address, d?.address, prov?.location?.address);
 
-    const logo = firstImageFrom(first(prov?.logo, d?.logo, prov?.image, d?.image));
+    const certificate = first(prov?.certificate, d?.certificate);
+    const logo = firstImageFrom(first(prov?.logo, d?.logo, prov?.image, d?.image, prov?.photo));
     const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
 
-    const address = first(prov?.address, prov?.location?.address, maybeParse(prov?.details)?.address);
-    const certificate = first(prov?.certificate, maybeParse(prov?.details)?.certificate);
-    return { name, about, city, country, phone, email, telegram, website, logo, cover, address, certificate };
-
+    return { name, about, type, city, country, phone, email, telegram, website, address, certificate, logo, cover };
   }, [prov]);
 
-  const canReview = useMemo(() => {
-    // простая проверка: есть clientToken => клиент
-    return !!localStorage.getItem("clientToken");
-  }, []);
+  const canReview = !!localStorage.getItem("clientToken");
 
   const submitReview = async ({ rating, text }) => {
     await addProviderReview(pid, { rating, text });
-    // перезагрузить список
     const data = await getProviderReviews(pid);
-    setReviewsAgg({ avg: Number(data?.avg) || 0, count: Number(data?.count) || 0 });
+    setReviewsAgg({
+      avg: Number(data?.stats?.avg) || 0,
+      count: Number(data?.stats?.count) || 0,
+    });
     setReviews(Array.isArray(data?.items) ? data.items : []);
   };
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
-      {/* HEADER */}
+      {/* HEADER / SUMMARY */}
       <div className="bg-white rounded-xl border shadow overflow-hidden mb-6">
         {details.cover && (
           <div className="h-40 sm:h-56 w-full overflow-hidden">
@@ -216,8 +195,10 @@ const submitReview = async ({ rating, text }) => {
               </div>
             </div>
 
-            {(details.city || details.country) && (
+            {(details.type || details.city || details.country) && (
               <div className="mt-1 text-gray-600">
+                {details.type && <span>{t("provider.type") || "Тип"}: <b>{details.type}</b></span>}
+                {(details.type && (details.city || details.country)) && <span className="mx-2">·</span>}
                 {details.city && <span>{t("common.city") || "Город"}: <b>{details.city}</b></span>}
                 {details.city && details.country && <span className="mx-2">·</span>}
                 {details.country && <span>{t("common.country") || "Страна"}: <b>{details.country}</b></span>}
@@ -240,21 +221,6 @@ const submitReview = async ({ rating, text }) => {
                   </a>
                 </div>
               )}
-              {details.address && (
-                  <div>
-                    <span className="text-gray-500">{t("address") || "Адрес"}: </span>
-                    <span>{details.address}</span>
-                  </div>
-                )}
-                {details.certificate && (
-                  <div>
-                    <span className="text-gray-500">{t("certificate") || "Сертификат"}: </span>
-                    <a className="underline" href={details.certificate} target="_blank" rel="noreferrer">
-                      {t("view_certificate") || "Посмотреть сертификат"}
-                    </a>
-                  </div>
-                )}
-
               {details.telegram && (
                 <div>
                   <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
@@ -285,7 +251,25 @@ const submitReview = async ({ rating, text }) => {
                   </a>
                 </div>
               )}
+              {details.address && (
+                <div>
+                  <span className="text-gray-500">{t("common.address") || "Адрес"}: </span>
+                  <span>{details.address}</span>
+                </div>
+              )}
+              {details.certificate && (
+                <div>
+                  <span className="text-gray-500">{t("provider.certificate") || "Сертификат"}: </span>
+                  <span>{details.certificate}</span>
+                </div>
+              )}
             </div>
+
+            {loadErr && (
+              <div className="mt-3 text-sm text-red-600">
+                {t("common.loading_error") || "Не удалось загрузить данные профиля."}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -301,9 +285,16 @@ const submitReview = async ({ rating, text }) => {
               <li key={r.id} className="border rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <RatingStars value={r.rating || 0} size={16} />
-                  <div className="text-xs text-gray-500">{new Date(r.created_at || r.date || Date.now()).toLocaleString()}</div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(r.created_at || r.date || Date.now()).toLocaleString()}
+                  </div>
                 </div>
                 {r.text && <div className="mt-2 whitespace-pre-line">{r.text}</div>}
+                {r.author?.name && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    {t("reviews.author") || "Автор"}: {r.author.name}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
