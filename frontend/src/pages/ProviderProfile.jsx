@@ -105,22 +105,36 @@ export default function ProviderProfile() {
     return () => { alive = false; };
   }, [pid]);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const data = await getProviderReviews(pid); // { avg, count, items }
-        if (!alive) return;
-        setReviewsAgg({ avg: Number(data?.avg) || 0, count: Number(data?.count) || 0 });
-        setReviews(Array.isArray(data?.items) ? data.items : []);
-      } catch {
-        if (!alive) return;
-        setReviewsAgg({ avg: 0, count: 0 });
-        setReviews([]);
-      }
-    })();
-    return () => { alive = false; };
-  }, [pid]);
+  // загрузка
+useEffect(() => {
+  let alive = true;
+  (async () => {
+    try {
+      const data = await getProviderReviews(pid); // { stats, items }
+      if (!alive) return;
+      const avg = Number(data?.stats?.avg ?? data?.avg) || 0;
+      const count = Number(data?.stats?.count ?? data?.count) || 0;
+      setReviewsAgg({ avg, count });
+      setReviews(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      if (!alive) return;
+      setReviewsAgg({ avg: 0, count: 0 });
+      setReviews([]);
+    }
+  })();
+  return () => { alive = false; };
+}, [pid]);
+
+// после submit
+const submitReview = async ({ rating, text }) => {
+  await addProviderReview(pid, { rating, text });
+  const data = await getProviderReviews(pid);
+  const avg = Number(data?.stats?.avg ?? data?.avg) || 0;
+  const count = Number(data?.stats?.count ?? data?.count) || 0;
+  setReviewsAgg({ avg, count });
+  setReviews(Array.isArray(data?.items) ? data.items : []);
+};
+
 
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
@@ -154,7 +168,10 @@ export default function ProviderProfile() {
     const logo = firstImageFrom(first(prov?.logo, d?.logo, prov?.image, d?.image));
     const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
 
-    return { name, about, city, country, phone, email, telegram, website, logo, cover };
+    const address = first(prov?.address, prov?.location?.address, maybeParse(prov?.details)?.address);
+    const certificate = first(prov?.certificate, maybeParse(prov?.details)?.certificate);
+    return { name, about, city, country, phone, email, telegram, website, logo, cover, address, certificate };
+
   }, [prov]);
 
   const canReview = useMemo(() => {
@@ -223,6 +240,21 @@ export default function ProviderProfile() {
                   </a>
                 </div>
               )}
+              {details.address && (
+                  <div>
+                    <span className="text-gray-500">{t("address") || "Адрес"}: </span>
+                    <span>{details.address}</span>
+                  </div>
+                )}
+                {details.certificate && (
+                  <div>
+                    <span className="text-gray-500">{t("certificate") || "Сертификат"}: </span>
+                    <a className="underline" href={details.certificate} target="_blank" rel="noreferrer">
+                      {t("view_certificate") || "Посмотреть сертификат"}
+                    </a>
+                  </div>
+                )}
+
               {details.telegram && (
                 <div>
                   <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
