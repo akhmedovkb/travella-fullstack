@@ -278,7 +278,7 @@ function extractServiceFields(item, viewerRole = getRole()) {
 
   return {
     svc, details, title, hotel, accommodation, dates, rawPrice, prettyPrice,
-    inlineProvider, providerId, flatName, flatPhone, flatTg, status, details
+    inlineProvider, providerId, flatName, flatPhone, flatTg, status
   };
 }
 
@@ -332,7 +332,20 @@ function firstImageFrom(val) {
 /* ===================== страница ===================== */
 
 export default function Marketplace() {
+  
   const { t } = useTranslation();
+  
+    // авторизация: считаем залогиненным, если есть любой из токенов
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!(localStorage.getItem("token") || localStorage.getItem("clientToken"))
+  );
+  useEffect(() => {
+    const onStorage = () =>
+      setIsLoggedIn(!!(localStorage.getItem("token") || localStorage.getItem("clientToken")));
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  
     const [role, setRole] = useState(getRole());
   // обновляем роль при изменении localStorage (логин/логаут в этом/другом табе)
   useEffect(() => {
@@ -467,7 +480,7 @@ const norm = (s) =>
   String(s ?? "")
     .toLowerCase()
     .replace(/[ё]/g, "е")
-    .replace(/\s/g, " ")
+    .replace(/\s+/g, " ")   // схлопываем
     .trim();
 
 const cyr2lat = (s) =>
@@ -518,7 +531,7 @@ const buildSearchIndex = (it) => {
 // токенизированный матчинг с RU⇄EN
 const matchQuery = (query, it) => {
   const idx = buildSearchIndex(it);
-  const tokens = norm(query).split(/\s/).filter(Boolean);
+  const tokens = norm(query).split(/\s+/).filter(Boolean);
   if (!tokens.length) return true;
   return tokens.every((tok) => {
     const t1 = tok;
@@ -835,6 +848,17 @@ const search = async (opts = {}) => {
   
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+            {/* Top login button for guests */}
+      {!isLoggedIn && (
+        <div className="mb-4 flex justify-end">
+          <a
+            href="/client/login"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
+          >
+            {t("auth.login") || "Войти"}
+          </a>
+        </div>
+      )}
       {/* Панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
