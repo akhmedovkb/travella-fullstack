@@ -358,14 +358,31 @@ export default function Marketplace() {
     setQrOpen(true);
   };
 
+  function getMyProviderId() {
+  // 1) сначала пробуем JSON-записи
+  for (const key of ["user", "profile", "me", "auth"]) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const o = JSON.parse(raw);
+      const cand =
+        o?.provider_id ?? o?.providerId ?? o?.provider?.id ??
+        o?.company?.id ?? o?.id;
+      if (cand != null) return Number(cand);
+    } catch {}
+  }
+  // 2) затем — плоские ключи
+  for (const key of ["provider_id", "providerId", "owner_id", "id"]) {
+    const v = localStorage.getItem(key);
+    if (v != null) return Number(v);
+  }
+  return null;
+}
+
   const submitQuickRequest = async (note) => {
-  // --- мгновенный гард: провайдер не может отправить запрос на свою услугу
-  const myProviderId = Number(
-    localStorage.getItem("providerId") ||
-    localStorage.getItem("owner_id") ||
-    localStorage.getItem("id")
-  );
-  if (qrProviderId && Number(qrProviderId) === myProviderId) {
+  // мгновенный клиентский блок: свой же provider_id
+  const myProviderId = getMyProviderId();
+  if (qrProviderId && myProviderId && Number(qrProviderId) === myProviderId) {
     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить запрос самому себе!", {
       autoClose: 2200,
       toastId: "self-req",
@@ -384,33 +401,19 @@ export default function Marketplace() {
       service_title: qrServiceTitle || undefined,
       note: note || undefined,
     });
-
     tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
-
-    window.dispatchEvent(
-      new CustomEvent("request:created", {
-        detail: { service_id: qrServiceId, title: qrServiceTitle },
-      })
-    );
+    window.dispatchEvent(new CustomEvent("request:created", {
+      detail: { service_id: qrServiceId, title: qrServiceTitle },
+    }));
   } catch (err) {
-    // --- надёжный разбор ошибки из api.js / axios / fetch
     const status =
-      err?.status ||
-      err?.response?.status ||
-      err?.data?.status ||
-      (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
-
+      err?.status || err?.response?.status || err?.data?.status;
     const code =
-      err?.data?.error ||
-      err?.response?.data?.error ||
-      err?.error ||
-      err?.code ||
-      (typeof err?.message === "string" ? err.message : "") ||
-      (typeof err === "string" ? err : "");
-
+      err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
     const msgStr = String(code).toLowerCase();
+
     const isSelfByStatus =
-      status === 400 && qrProviderId && Number(qrProviderId) === myProviderId;
+      status === 400 && qrProviderId && myProviderId && Number(qrProviderId) === myProviderId;
 
     if (msgStr.includes("self_request_forbidden") || isSelfByStatus) {
       tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить запрос самому себе!", {
@@ -428,9 +431,9 @@ export default function Marketplace() {
       return;
     }
 
+    // request_create_failed и прочее
     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
   } finally {
-    // сброс модалки и временных значений
     setQrOpen(false);
     setQrServiceId(null);
     setQrProviderId(null);
