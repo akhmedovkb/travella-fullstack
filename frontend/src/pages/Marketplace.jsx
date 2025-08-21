@@ -848,17 +848,26 @@ const search = async (opts = {}) => {
   
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+      
             {/* Top login button for guests */}
+      
       {!isLoggedIn && (
-        <div className="mb-4 flex justify-end">
-          <a
-            href="/client/login"
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
-          >
-            {t("auth.login") || "Войти"}
-          </a>
-        </div>
-      )}
+          <div className="mb-4 flex justify-end gap-2">
+            <a
+              href={`/client/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
+            >
+              {t("auth.login_client") || "Войти как клиент"}
+            </a>
+            <a
+              href={`/provider/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
+            >
+              {t("auth.login_provider") || "Войти как поставщик"}
+            </a>
+          </div>
+        )}
+
       {/* Панель поиска */}
       <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
         <input
