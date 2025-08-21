@@ -1,26 +1,25 @@
 // backend/controllers/reviewController.js
 const db = require("../db");
 
-/* -------------------- helpers -------------------- */
-const toInt = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-const pagin = (req) => {
-  const limit = Math.min(100, Math.max(1, toInt(req.query.limit) ?? 10));
+/* ===================== utils ===================== */
+function toInt(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+function pagin(req) {
+  const limit  = Math.min(100, Math.max(1, toInt(req.query.limit)  ?? 10));
   const offset = Math.max(0, toInt(req.query.offset) ?? 0);
   return { limit, offset };
-};
-const rowsToPublic = (rows) =>
-  rows.map((r) => ({
+}
+function rowsToPublic(list) {
+  return list.map(r => ({
     id: r.id,
     rating: r.rating,
     text: r.text,
     created_at: r.created_at,
     author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
   }));
+}
 
-/* -------------------- CREATE -------------------- */
+/* ===================== CREATE ===================== */
+
 // клиент → услуге
 exports.addServiceReview = async (req, res) => {
   try {
@@ -73,7 +72,7 @@ exports.addClientReview = async (req, res) => {
   }
 };
 
-// клиент → провайдеру
+// КЛИЕНТ ИЛИ ПРОВАЙДЕР → ПРОВАЙДЕРУ
 exports.addProviderReview = async (req, res) => {
   try {
     const providerId = toInt(req.params.providerId);
@@ -86,11 +85,20 @@ exports.addProviderReview = async (req, res) => {
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
 
+    // роль автора: провайдер или клиент
+    const authorRole =
+      (req.user?.role === "provider" || req.user?.providerId) ? "provider" : "client";
+
+    // запрет «сам себе»
+    if (authorRole === "provider" && Number(authorId) === Number(providerId)) {
+      return res.status(400).json({ error: "self_review_forbidden" });
+    }
+
     const q = await db.query(
       `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
-       VALUES ('provider', $1, 'client', $2, $3, $4, $5)
+       VALUES ('provider', $1, $2, $3, $4, $5, $6)
        RETURNING id, target_id, rating, text, created_at`,
-      [providerId, authorId, toInt(booking_id), r, text || null]
+      [providerId, authorRole, authorId, toInt(booking_id), r, text || null]
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
@@ -99,7 +107,8 @@ exports.addProviderReview = async (req, res) => {
   }
 };
 
-/* -------------------- READ (list + agg) -------------------- */
+/* ===================== READ (list + agg) ===================== */
+
 async function listWithAgg(targetType, targetId, req, res) {
   if (!targetId) return res.status(400).json({ error: "bad_target_id" });
   const { limit, offset } = pagin(req);
