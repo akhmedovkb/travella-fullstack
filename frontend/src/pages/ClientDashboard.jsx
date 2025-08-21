@@ -9,6 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import ServiceCard from "../components/ServiceCard";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 
+const FAV_PAGE_SIZE = 8;
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
