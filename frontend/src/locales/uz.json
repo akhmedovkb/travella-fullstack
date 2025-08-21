@@ -121,6 +121,7 @@
   },
   "comment": "Izoh",
   "common": {
+    "add_hotel": "O`z otelizni qo`shish",
     "direction": "Yo‘nalish",
     "find": "Qidirish",
     "loading": "Yuklanmoqda…",
