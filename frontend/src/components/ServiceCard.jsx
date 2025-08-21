@@ -200,7 +200,20 @@ function extractServiceFields(item, viewerRole) {
     bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
-
+  
+    // ---------- direction (for refused_flight, etc.) ----------
+  const dirFrom = firstNonEmpty(
+    details?.directionFrom, details?.from, details?.cityFrom, details?.origin, details?.departureCity,
+    svc.directionFrom, svc.from, svc.cityFrom, svc.origin, svc.departureCity,
+    item.directionFrom, item.from, item.cityFrom, item.origin
+  );
+  const dirTo = firstNonEmpty(
+    details?.directionTo, details?.to, details?.cityTo, details?.destination, details?.arrivalCity,
+    svc.directionTo, svc.to, svc.cityTo, svc.destination, svc.arrivalCity,
+    item.directionTo, item.to, item.cityTo, item.destination
+  );
+  const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
+  
   const inlineProvider = firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
     item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
@@ -228,7 +241,7 @@ function extractServiceFields(item, viewerRole) {
   const status = firstNonEmpty(svc.status, item.status, details?.status);
 
   return {
-    svc, details, title, hotel, accommodation, dates,
+    svc, details, title, hotel, accommodation, dates, direction,
     rawPrice, prettyPrice,
     inlineProvider, providerId, flatName, flatPhone, flatTg, status
   };
@@ -405,6 +418,13 @@ export default function ServiceCard({
           <div className="absolute inset-x-0 bottom-0 p-3">
             <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
               <div className="font-semibold line-clamp-2">{title}</div>
+                            {/* Направление только для отказных авиабилетов */}
+              {svc?.category === "refused_flight" && direction && (
+                <div>
+                  <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
+                  <span className="font-medium">{direction}</span>
+                </div>
+              )}
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
