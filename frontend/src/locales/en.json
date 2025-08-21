@@ -217,6 +217,7 @@
   "hotel_not_found": "Hotel not found",
   "hotel_transfer": "Hotel transfer",
   "hotel.no_options": "No options",
+  "hotel.search_placeholder": "Enter hotel name",
   
   "images_hint": "Up to 10 images, ≤ 3 MB each",
   "inf": "Infants (INF)",
