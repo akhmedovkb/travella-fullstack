@@ -6,7 +6,9 @@ import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
+import { tInfo } from "../shared/toast";
 
+/* ---- helpers ---- */
 const first = (...vals) => {
   for (const v of vals) {
     if (v === 0) return 0;
@@ -17,7 +19,9 @@ const first = (...vals) => {
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
-  if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
+  if (typeof x === "string") {
+    try { return JSON.parse(x); } catch { return null; }
+  }
   return null;
 };
 const firstImageFrom = (val) => {
@@ -30,8 +34,9 @@ const firstImageFrom = (val) => {
       if (/;base64(?!,)/i.test(s)) s = s.replace(/;base64/i, ";base64,");
       return s;
     }
-    if (/^[A-Za-z0-9+/=\s]+$/.test(s) && s.replace(/\s+/g, "").length > 100)
+    if (/^[A-Za-z0-9+/=\s]+$/.test(s) && s.replace(/\s+/g, "").length > 100) {
       return `data:image/jpeg;base64,${s.replace(/\s+/g, "")}`;
+    }
     if (/^(https?:|blob:|file:|\/)/i.test(s)) return s;
     return `${window.location.origin}/${s.replace(/^\.?\//, "")}`;
   }
@@ -39,17 +44,23 @@ const firstImageFrom = (val) => {
     for (const v of val) { const r = firstImageFrom(v); if (r) return r; }
     return null;
   }
-  if (typeof val === "object")
+  if (typeof val === "object") {
     return firstImageFrom(val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64);
+  }
   return null;
 };
 
-async function fetchProviderProfile(id) {
+// множественные эндпоинты (как в карточке)
+async function fetchProviderProfile(providerId) {
   const endpoints = [
-    `/api/providers/${id}`, `/api/provider/${id}`,
-    `/api/companies/${id}`, `/api/company/${id}`,
-    `/api/agencies/${id}`,  `/api/agency/${id}`,
-    `/api/users/${id}`,     `/api/user/${id}`,
+    `/api/providers/${providerId}`,
+    `/api/provider/${providerId}`,
+    `/api/companies/${providerId}`,
+    `/api/company/${providerId}`,
+    `/api/agencies/${providerId}`,
+    `/api/agency/${providerId}`,
+    `/api/users/${providerId}`,
+    `/api/user/${providerId}`,
   ];
   for (const url of endpoints) {
     try {
@@ -63,167 +74,143 @@ async function fetchProviderProfile(id) {
 
 export default function ProviderProfile() {
   const { id } = useParams();
-  const pid = Number(id);
+  const providerId = Number(id);
   const { t } = useTranslation();
 
   const [prov, setProv] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [agg, setAgg] = useState({ avg: 0, count: 0 });
-  const [items, setItems] = useState([]);
+  const [reviewsAgg, setReviewsAgg] = useState({ count: 0, avg: 0 });
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const p = await fetchProviderProfile(pid);
+        const p = await fetchProviderProfile(providerId);
         if (alive) setProv(p || null);
-      } finally { if (alive) setLoading(false); }
-    })();
-    return () => { alive = false; };
-  }, [pid]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await getProviderReviews(pid, { limit: 20, offset: 0 });
-        if (!alive) return;
-        setAgg(res?.stats || { avg: 0, count: 0 });
-        setItems(Array.isArray(res?.items) ? res.items : []);
-      } catch {
-        if (!alive) return;
-        setAgg({ avg: 0, count: 0 });
-        setItems([]);
+      } finally {
+        if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [pid]);
+  }, [providerId]);
+
+  const reloadReviews = async () => {
+    const data = await getProviderReviews(providerId, { limit: 20, offset: 0 });
+    const stats = data?.stats || { count: Number(data?.count) || 0, avg: Number(data?.avg) || 0 };
+    setReviewsAgg({ count: Number(stats.count) || 0, avg: Number(stats.avg) || 0 });
+    setReviews(Array.isArray(data?.items) ? data.items : []);
+  };
+
+  useEffect(() => { reloadReviews(); }, [providerId]);
 
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
+    const contacts = prov?.contacts || {};
+    const socials = prov?.socials || {};
     const name = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
 
-    const type   = first(prov?.type, d?.type, d?.provider_type, prov?.provider_type);
-    const region = first(prov?.region, d?.region, prov?.location, d?.location, prov?.city, d?.city, prov?.country, d?.country);
-
-    const phone = first(prov?.phone, d?.phone, prov?.phone_number, prov?.whatsapp, prov?.whatsApp);
-    const email = first(prov?.email, d?.email);
-    const telegram = first(prov?.telegram, d?.telegram, prov?.social, d?.social, prov?.social_link);
-    const website = first(prov?.website, d?.website, prov?.site);
-    const certificate = first(prov?.certificate, d?.certificate);
-    const address = first(prov?.address, d?.address);
-
-    const logo  = firstImageFrom(first(prov?.logo, d?.logo, prov?.photo, d?.photo, prov?.image, d?.image));
-    const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
-
-    return { name, type, region, phone, email, telegram, website, certificate, address, logo, cover };
+    return {
+      name,
+      type: first(prov?.type, d?.type),
+      region: first(prov?.region, d?.region, prov?.location, d?.location, d?.country),
+      address: first(prov?.address, d?.address),
+      phone: first(prov?.phone, contacts?.phone, d?.phone, prov?.whatsapp),
+      telegram: first(prov?.telegram, contacts?.telegram, socials?.telegram, prov?.social, d?.telegram),
+      logo: firstImageFrom(first(prov?.photo, prov?.logo, d?.logo, prov?.image)),
+    };
   }, [prov]);
 
-  const myProviderId = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("user") || localStorage.getItem("profile") || "{}";
-      const u = JSON.parse(raw);
-      return Number(u?.provider_id ?? u?.id ?? null) || null;
-    } catch { return null; }
-  }, []);
-  const isClient   = !!localStorage.getItem("clientToken");
-  const isProvider = !!(localStorage.getItem("token") || localStorage.getItem("providerToken"));
-  const canReview  = (isClient || isProvider) && (!isProvider || myProviderId !== pid);
+  // Разрешаем оставлять отзыв клиенту ИЛИ провайдеру
+  const canReview = !!(localStorage.getItem("clientToken") || localStorage.getItem("token") || localStorage.getItem("providerToken"));
 
   const submitReview = async ({ rating, text }) => {
-    await addProviderReview(pid, { rating, text });
-    const res = await getProviderReviews(pid, { limit: 20, offset: 0 });
-    setAgg(res?.stats || { avg: 0, count: 0 });
-    setItems(Array.isArray(res?.items) ? res.items : []);
+    if (!canReview) {
+      tInfo(t("auth.login_required") || "Войдите, чтобы оставить отзыв");
+      throw new Error("login_required");
+    }
+    await addProviderReview(providerId, { rating, text });
+    await reloadReviews();
   };
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
-      <div className="bg-white rounded-xl border shadow overflow-hidden mb-6">
-        {details.cover && (
-          <div className="h-40 sm:h-56 w-full overflow-hidden">
-            <img src={details.cover} alt="" className="w-full h-full object-cover" />
-          </div>
-        )}
-        <div className="p-4 md:p-6 flex items-start gap-4">
-          {details.logo && (
-            <img src={details.logo} alt="" className="w-16 h-16 rounded-xl object-cover ring-1 ring-black/5" />
-          )}
+      {/* HEADER */}
+      <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
+        <div className="flex items-start gap-4">
+          {details.logo && <img src={details.logo} alt="" className="w-16 h-16 rounded-xl object-cover ring-1 ring-black/5" />}
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl md:text-2xl font-semibold">
-                {details.name || t("marketplace.supplier") || "Поставщик"}
-              </h1>
+              <h1 className="text-xl md:text-2xl font-semibold">{details.name || "Provider"}</h1>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <RatingStars value={agg.avg} size={16} />
-                <span className="font-medium">{(agg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">· {agg.count || 0} {t("reviews.count") || "отзыв(ов)"} </span>
+                <RatingStars value={reviewsAgg.avg} size={16} />
+                <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
+                <span className="opacity-70">· {reviewsAgg.count || 0} {t("reviews.count") || "отзыв(ов)"} </span>
               </div>
             </div>
 
-            <div className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-gray-700">
-              {details.type    && <div><span className="text-gray-500">{t("provider.type")    || "Тип"}: </span><b>{details.type}</b></div>}
-              {details.region  && <div><span className="text-gray-500">{t("provider.region")  || "Регион/место"}: </span><b>{details.region}</b></div>}
-              {details.phone   && <div><span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
-                                     <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g,"")}`}>{details.phone}</a></div>}
-              {details.email   && <div><span className="text-gray-500">Email: </span>
-                                     <a className="underline" href={`mailto:${details.email}`}>{details.email}</a></div>}
+            <div className="mt-1 text-gray-700 text-sm space-x-2">
+              {details.type && <span>provider.type: <b>{details.type}</b></span>}
+              {details.region && <span>provider.region: <b>{details.region}</b></span>}
+            </div>
+
+            <div className="mt-1 text-sm text-gray-700">
+              {details.phone && (
+                <>
+                  {t("marketplace.phone") || "Телефон"}:{" "}
+                  <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g, "")}`}>{details.phone}</a>
+                </>
+              )}
+            </div>
+
+            <div className="mt-1 text-sm text-gray-700">
               {details.telegram && (
-                <div>
-                  <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
-                  {/^https?:\/\//.test(String(details.telegram)) ? (
-                    <a className="underline" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
-                  ) : String(details.telegram).startsWith("@") ? (
+                <>
+                  Телеграм:{" "}
+                  {String(details.telegram).startsWith("@") ? (
                     <a className="underline" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">
                       {details.telegram}
                     </a>
-                  ) : (<span>{details.telegram}</span>)}
-                </div>
-              )}
-              {details.website && (
-                <div>
-                  <span className="text-gray-500">{t("marketplace.website") || "Сайт"}: </span>
-                  <a className="underline" href={/^https?:\/\//.test(details.website) ? details.website : `https://${details.website}`} target="_blank" rel="noreferrer">
-                    {details.website}
-                  </a>
-                </div>
-              )}
-              {details.certificate && (
-                <div>
-                  <span className="text-gray-500">{t("provider.certificate") || "Сертификат"}: </span>
-                  <a className="underline" href={details.certificate} target="_blank" rel="noreferrer">
-                    {t("provider.view_certificate") || "Посмотреть сертификат"}
-                  </a>
-                </div>
-              )}
-              {details.address && (
-                <div>
-                  <span className="text-gray-500">{t("marketplace.address") || "Адрес"}: </span>
-                  <span>{details.address}</span>
-                </div>
+                  ) : /^https?:\/\//.test(String(details.telegram)) ? (
+                    <a className="underline" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
+                  ) : (
+                    <span>{details.telegram}</span>
+                  )}
+                </>
               )}
             </div>
+
+            {details.address && (
+              <div className="mt-1 text-sm text-gray-700">
+                marketplace.address: {details.address}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* отзывов список */}
+      {/* REVIEWS LIST */}
       <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
         <div className="text-lg font-semibold mb-3">{t("reviews.list") || "Отзывы"}</div>
-        {!items.length ? (
+        {!reviews.length ? (
           <div className="text-gray-500">{t("reviews.empty") || "Пока нет отзывов."}</div>
         ) : (
           <ul className="space-y-4">
-            {items.map(r => (
+            {reviews.map((r) => (
               <li key={r.id} className="border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <RatingStars value={r.rating || 0} size={16}/>
+                  <RatingStars value={r.rating || 0} size={16} />
                   <div className="text-xs text-gray-500">
-                    {new Date(r.created_at || r.date || Date.now()).toLocaleString()}
+                    {new Date(r.created_at || Date.now()).toLocaleString()}
                   </div>
                 </div>
+                {r.author?.name && (
+                  <div className="text-xs text-gray-600 mt-1">
+                    {r.author.name} ({r.author.role})
+                  </div>
+                )}
                 {r.text && <div className="mt-2 whitespace-pre-line">{r.text}</div>}
               </li>
             ))}
@@ -231,7 +218,7 @@ export default function ProviderProfile() {
         )}
       </div>
 
-      {/* форма оставить отзыв */}
+      {/* LEAVE REVIEW */}
       {canReview && (
         <div className="bg-white rounded-xl border shadow p-4 md:p-6">
           <div className="text-lg font-semibold mb-3">{t("reviews.leave") || "Оставить отзыв"}</div>
