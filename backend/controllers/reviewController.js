@@ -1,14 +1,13 @@
 // backend/controllers/reviewController.js
 const db = require("../db");
 
-/* ===================== utils ===================== */
-function toInt(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
-function pagin(req) {
+function toInt(v){ const n = Number(v); return Number.isFinite(n) ? n : null; }
+function pagin(req){
   const limit  = Math.min(100, Math.max(1, toInt(req.query.limit)  ?? 10));
   const offset = Math.max(0, toInt(req.query.offset) ?? 0);
   return { limit, offset };
 }
-function rowsToPublic(list) {
+function rowsToPublic(list){
   return list.map(r => ({
     id: r.id,
     rating: r.rating,
@@ -18,7 +17,7 @@ function rowsToPublic(list) {
   }));
 }
 
-/* ===================== CREATE ===================== */
+/* ========= CREATE ========= */
 
 // клиент → услуге
 exports.addServiceReview = async (req, res) => {
@@ -46,7 +45,7 @@ exports.addServiceReview = async (req, res) => {
   }
 };
 
-// провайдер → клиенту
+// провайдер → клиент
 exports.addClientReview = async (req, res) => {
   try {
     const clientId = toInt(req.params.clientId);
@@ -72,7 +71,7 @@ exports.addClientReview = async (req, res) => {
   }
 };
 
-// КЛИЕНТ ИЛИ ПРОВАЙДЕР → ПРОВАЙДЕРУ
+// клиент ИЛИ провайдер → провайдеру
 exports.addProviderReview = async (req, res) => {
   try {
     const providerId = toInt(req.params.providerId);
@@ -85,12 +84,13 @@ exports.addProviderReview = async (req, res) => {
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
 
-    // роль автора: провайдер или клиент
-    const authorRole =
-      (req.user?.role === "provider" || req.user?.providerId) ? "provider" : "client";
+    // определяем роль автора
+    let authorRole = "client";
+    const role = (req.user?.role || "").toLowerCase();
+    if (role === "provider" || req.user?.providerId || req.user?.isProvider) authorRole = "provider";
 
-    // запрет «сам себе»
-    if (authorRole === "provider" && Number(authorId) === Number(providerId)) {
+    // запрет на самооценку провайдером себя
+    if (authorRole === "provider" && Number(authorId) === providerId) {
       return res.status(400).json({ error: "self_review_forbidden" });
     }
 
@@ -107,9 +107,9 @@ exports.addProviderReview = async (req, res) => {
   }
 };
 
-/* ===================== READ (list + agg) ===================== */
+/* ========= READ (list + agg) ========= */
 
-async function listWithAgg(targetType, targetId, req, res) {
+async function listWithAgg(targetType, targetId, req, res){
   if (!targetId) return res.status(400).json({ error: "bad_target_id" });
   const { limit, offset } = pagin(req);
 
@@ -134,10 +134,7 @@ async function listWithAgg(targetType, targetId, req, res) {
     [targetType, targetId, limit, offset]
   );
 
-  res.json({
-    stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
-    items: rowsToPublic(list.rows),
-  });
+  res.json({ stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) }, items: rowsToPublic(list.rows) });
 }
 
 exports.getServiceReviews  = (req, res) => listWithAgg("service",  toInt(req.params.serviceId),  req, res);
