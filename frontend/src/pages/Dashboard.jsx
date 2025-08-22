@@ -249,8 +249,6 @@ const nowLocalDateTime = () => {
 
 // Удобные константы, пересчёт на каждый рендер ок:
 const DATE_MIN = todayLocalDate();
-const DATETIME_MIN = nowLocalDateTime();
-
 
 
 /** ================= Main ================= */
@@ -363,70 +361,6 @@ direction: "",
 
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
-  // Глобальные хелперы для ProviderInboxList: очистка и «От кого»
-  useEffect(() => {
-    // server-cleanup доступен глобально
-    window.__providerCleanupExpired = async () => {
-      const urls = [
-        `${API_BASE}/api/provider/cleanup-expired`,
-        `${API_BASE}/api/providers/cleanup-expired`,
-        `${API_BASE}/api/requests/cleanup`,
-        `${API_BASE}/api/cleanup/requests`,
-        `${API_BASE}/api/requests/purgeExpired`,
-      ];
-      for (const url of urls) {
-        try { await axios.post(url, {}, config); return true; } catch { /* try next */ }
-      }
-      return false;
-    };
-
-    // резолвер «От кого»
-    window.__providerClientNameResolver = async (req) => {
-      const embedded = req?.client || req?.customer || req?.from || req?.sender || req?.created_by || {};
-      const inline = firstNonEmpty(
-        embedded?.name, embedded?.title, embedded?.display_name, embedded?.company_name,
-        req?.client_name, req?.from_name, req?.sender_name
-      );
-      if (inline) return inline;
-
-      const id =
-        req?.client_id || req?.clientId ||
-        req?.customer_id || req?.customerId ||
-        req?.user_id || req?.created_by_id;
-
-      if (!id) return "—";
-      if (clientCache.has(id)) {
-        const cached = clientCache.get(id);
-        return cached || "—";
-      }
-
-      const endpoints = [
-        `${API_BASE}/api/clients/${id}`,
-        `${API_BASE}/api/client/${id}`,
-        `${API_BASE}/api/users/${id}`,
-        `${API_BASE}/api/user/${id}`,
-        `${API_BASE}/api/customers/${id}`,
-        `${API_BASE}/api/customer/${id}`,
-      ];
-      for (const url of endpoints) {
-        try {
-          const res = await axios.get(url, config);
-          const obj = res.data?.data || res.data?.item || res.data?.profile || res.data?.client || res.data?.user || res.data?.customer || res.data;
-          const name = firstNonEmpty(obj?.name, obj?.title, obj?.display_name, obj?.company_name);
-          if (name) { clientCache.set(id, name); return name; }
-        } catch { /* next */ }
-      }
-      clientCache.set(id, null);
-      return "—";
-    };
-
-    return () => {
-      delete window.__providerCleanupExpired;
-      delete window.__providerClientNameResolver;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [API_BASE, token]);
 
   const loadHotelOptions = async (inputValue) => {
     try {
