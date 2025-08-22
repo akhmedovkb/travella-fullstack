@@ -1,4 +1,4 @@
-// routes/reviewRoutes.js
+// backend/routes/reviewRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -12,30 +12,38 @@ const {
   getClientReviews,
 } = require("../controllers/reviewController");
 
-// простые role-guards
-function requireClient(req, _res, next) {
+// ── Guards ─────────────────────────────────────────
+function requireClient(req, res, next) {
   if (req.user?.role === "client" || req.user?.clientId) return next();
-  if (!req.user?.role) return next(); // пропускаем «старые» токены без role
-  return next({ status: 403, message: "client_required" });
+  if (!req.user?.role) return next(); // мягко: если роли нет в токене
+  return res.status(403).json({ error: "client_required" });
 }
-function requireProvider(req, _res, next) {
+function requireProvider(req, res, next) {
   if (req.user?.role === "provider" || req.user?.providerId) return next();
   if (!req.user?.role) return next();
-  return next({ status: 403, message: "provider_required" });
+  return res.status(403).json({ error: "provider_required" });
 }
-function requireClientOrProvider(req, _res, next) {
-  if (req.user?.role === "client" || req.user?.clientId ||
-      req.user?.role === "provider" || req.user?.providerId) return next();
+// клиент ИЛИ провайдер
+function requireClientOrProvider(req, res, next) {
+  if (
+    req.user?.role === "client" ||
+    req.user?.clientId ||
+    req.user?.role === "provider" ||
+    req.user?.providerId
+  ) {
+    return next();
+  }
   if (!req.user?.role) return next();
-  return next({ status: 403, message: "client_or_provider_required" });
+  return res.status(403).json({ error: "client_or_provider_required" });
 }
 
-// CREATE
+// ── Create ─────────────────────────────────────────
 router.post("/service/:serviceId",  authenticateToken, requireClient,           addServiceReview);
-router.post("/client/:clientId",    authenticateToken, requireProvider,         addClientReview);
-router.post("/provider/:providerId",authenticateToken, requireClientOrProvider, addProviderReview);
+router.post("/client/:clientId",     authenticateToken, requireProvider,         addClientReview);
+// теперь отзыв о провайдере может оставить и клиент, и другой провайдер
+router.post("/provider/:providerId", authenticateToken, requireClientOrProvider, addProviderReview);
 
-// READ
+// ── Read (public) ──────────────────────────────────
 router.get("/service/:serviceId",   getServiceReviews);
 router.get("/provider/:providerId", getProviderReviews);
 router.get("/client/:clientId",     getClientReviews);
