@@ -136,7 +136,17 @@
     "saving": "Сохранение…",
     "sending": "Отправка…",
     "status": "Статус"
+    "about": "О компании",
+    "city": "Город",
+    "country": "Страна",
+    "phone": "Телефон",
+    "telegram": "Телеграм",
+    "email": "Email",
+    "website": "Сайт",
+    "save": "Сохранить",
+    "cancel": "Отмена"
   },
+    
   "confirm_delete": "Удалить элемент?",
   "countdown": {
     "until_end": "До окончания",
@@ -247,6 +257,9 @@
   "logout": "Выйти",
   "make_cover": "Сделать обложкой",
   "marketplace": {
+    "telegram": "Телеграм",
+    "website": "Сайт",
+    "address": "Адрес",
     "adults": "Взрослые (12+)",
     "children": "Дети (2–11)",
     "end_date": "Дата окончания",
@@ -362,7 +375,14 @@
     "sendProposal": "Отправить предложение",
     "title": "Запросы (Поставщик)"
   },
+  
   "provider_profile": "Профиль поставщика",
+  "providerProfile": {
+    "type": "Тип поставщика",
+    "region": "Регион поставщика",
+    "address": "Адрес"
+  },
+  
   "refused_hotel": "Отказной отель",
   "refused_hotel_city": "Город",
   "refused_hotel_name": "Название отказного отеля",
@@ -398,16 +418,30 @@
   "return_date": "Дата возвращения",
   "reviews": {
     "count": "отзыв(ов)",
+    "count_one": "{{count}} отзыв",
+    "count_few": "{{count}} отзыва",
+    "count_many": "{{count}} отзывов",
+    "count_other": "{{count}} отзывов",
     "empty": "Пока нет отзывов.",
     "leave_client": "Оставить отзыв о клиенте",
     "leave_service": "Оставить отзыв об услуге",
+    "list": "Отзывы",
     "placeholder": "Коротко опишите опыт",
     "rating": "Оценка",
     "save_error": "Не удалось сохранить отзыв",
+    "saved": "Отзыв сохранён",
     "send": "Отправить",
     "title_provider": "Отзывы клиентов",
-    "title_service": "Отзывы об услуге"
+    "title_service": "Отзывы об услуге",
+    "your_rating": "Ваша оценка",
   },
+
+  "roles": {
+    "client": "Клиент",
+    "provider": "Поставщик",
+    "admin": "Админ"
+  },
+  
   "room_rent": "Аренда номера",
   "round_trip": "Туда-обратно",
   "save": "Сохранить",
@@ -531,6 +565,8 @@
   "auth": {
     "login": "Войти",
     "login_client": "Войти как клиент",
-    "login_provider": "Войти как поставщик"
+    "login_provider": "Войти как поставщик",
+    "login_required": "Войдите, чтобы продолжить",
+    "provider_login_required": "Войдите как поставщик"
   }
 }
