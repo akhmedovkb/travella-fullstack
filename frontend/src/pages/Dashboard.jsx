@@ -269,9 +269,11 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
-  const providerId = Number(
-   (profile && profile.id) || localStorage.getItem("provider_id") || localStorage.getItem("id")
- );
+  //review
+  const providerIdRaw =
+  profile?.id ?? localStorage.getItem("provider_id") ?? localStorage.getItem("id");
+  const providerId = providerIdRaw != null ? Number(providerIdRaw) : null;
+  const hasProviderId = Number.isFinite(providerId) && providerId > 0;
 
   // Services
   const [services, setServices] = useState([]);
@@ -1262,7 +1264,7 @@ const __grossNum = (() => {
 
           {/* Отзывы клиентов о провайдере */}
           <div className="px-6 mt-6">
-            {providerId ? <ProviderReviews providerId={providerId} t={t} /> : null}
+            {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
           </div>
         </div>
        
