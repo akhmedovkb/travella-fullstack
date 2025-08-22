@@ -269,7 +269,9 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
-  const providerId = provider?.id ?? Number(localStorage.getItem("provider_id"));
+  const providerId = Number(
+   (profile && profile.id) || localStorage.getItem("provider_id") || localStorage.getItem("id")
+ );
 
   // Services
   const [services, setServices] = useState([]);
@@ -1260,7 +1262,7 @@ const __grossNum = (() => {
 
           {/* Отзывы клиентов о провайдере */}
           <div className="px-6 mt-6">
-            <ProviderReviews providerId={providerId} />
+            {providerId ? <ProviderReviews providerId={providerId} t={t} /> : null}
           </div>
         </div>
        
