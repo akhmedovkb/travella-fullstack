@@ -330,6 +330,9 @@
   },
   "profile_updated": "Profil yangilandi",
   "provider": {
+    "type": "Ta'minotchi turi",
+    "region": "Ta'minotchi mintaqasi",
+  
     "bookings": {
       "cancel": "Bekor qilish",
       "confirm": "Tasdiqlash",
@@ -348,6 +351,12 @@
       "empty": "So'rovlar yo'q",
       "mark_processed": "Qayta ishlangan",
       "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
+    },
+    "types": {
+      "agent": "Turagent",
+      "guide": "Gid",
+      "transport": "Transport",
+      "hotel": "Mehmonxona"
     }
   },
   "requests": {
