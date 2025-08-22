@@ -288,7 +288,9 @@
     "password_changed": "Password updated",
     "saved": "Profile saved"
   },
+  
   "profile_updated": "Profile updated",
+  
   "provider": {
     "type": "Provider type",
     "region": "Provider region",
@@ -297,6 +299,7 @@
       "guide": "Guide",
       "transport": "Transport",
       "hotel": "Hotel",
+    },
     "bookings": {
       "cancel": "Cancel",
       "confirm": "Confirm",
@@ -317,6 +320,7 @@
       "confirm_delete": "Delete request?"
     }
   },
+    
   "requests": {
     "afterAcceptNote": "After the client accepts the proposal (status = accepted), they can make a booking.",
     "messagePlaceholder": "Message to client…",
@@ -326,6 +330,7 @@
     "sendProposal": "Send proposal",
     "title": "Requests (Provider)"
   },
+    
   "provider_profile": "Provider Profile",
   "refused_hotel": "Refused hotel",
   "refused_hotel_city": "City",
@@ -334,6 +339,7 @@
   "refused_hotel_select_city": "Enter the city",
   "refused_ticket": "Refused airline ticket",
   "refused_tour": "Refused tour",
+    
   "register": {
     "button": "Register",
     "email": "Email",
@@ -447,6 +453,7 @@
   "view_certificate": "View certificate",
   "visa_included": "Visa included",
   "visa_support": "Visa support",
+    
   "marketplace": {
     "address": "Address",
     "adults": "Adults (12+)",
