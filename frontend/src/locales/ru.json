@@ -346,6 +346,14 @@
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
   "provider": {
+    "type": "Тип поставщика",
+    "types": {
+      "agent": "Турагент",
+      "guide": "Гид",
+      "transport": "Транспорт",
+      "hotel": "Отель"
+    },
+    "region": "Регион поставщика",
     "bookings": {
       "cancel": "Отменить",
       "confirm": "Подтвердить",
