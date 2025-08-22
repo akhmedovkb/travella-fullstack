@@ -290,6 +290,13 @@
   },
   "profile_updated": "Profile updated",
   "provider": {
+    "type": "Provider type",
+    "region": "Provider region",
+    "types": {
+      "agent": "Travel agent",
+      "guide": "Guide",
+      "transport": "Transport",
+      "hotel": "Hotel",
     "bookings": {
       "cancel": "Cancel",
       "confirm": "Confirm",
@@ -354,17 +361,28 @@
   },
   "return_date": "Return date",
   "reviews": {
+    
     "count": "review(s)",
     "empty": "No reviews yet.",
+    "leave": "Leave a review",
     "leave_client": "Leave a review about the client",
     "leave_service": "Leave a review about the service",
+    "list": "Reviews",
     "placeholder": "Describe your experience",
     "rating": "Rating",
     "save_error": "Failed to save review",
     "send": "Send",
     "title_provider": "Customer reviews",
-    "title_service": "Service reviews"
+    "title_service": "Service reviews",
+    "your_rating": "Your rating",
   },
+
+  "roles": {
+    "client": "client",
+    "provider": "provider",
+    "admin": "admin"
+  },
+    
   "room_rent": "Room rental",
   "round_trip": "Round trip",
   "save": "Save",
@@ -430,6 +448,7 @@
   "visa_included": "Visa included",
   "visa_support": "Visa support",
   "marketplace": {
+    "address": "Address",
     "adults": "Adults (12+)",
     "children": "Children (2–11)",
     "end_date": "End date",
