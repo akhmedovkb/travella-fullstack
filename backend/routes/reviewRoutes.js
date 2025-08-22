@@ -6,25 +6,29 @@ const authenticateToken = require("../middleware/authenticateToken");
 const {
   addServiceReview,
   addClientReview,
-  addProviderReview,      // ← добавили
+  addProviderReview,
   getServiceReviews,
   getProviderReviews,
   getClientReviews,
 } = require("../controllers/reviewController");
 
-// оставить отзыв клиентом об услуге
-router.post("/service/:serviceId", authenticateToken, addServiceReview);
+// простая проверка роли: пускаем клиентов, провайдеров и админа.
+// если req.user.role отсутствует (старые токены) — тоже пускаем, чтобы не ломать.
+function requireClientOrProvider(req, res, next) {
+  const role = req.user?.role;
+  if (!role) return next();
+  if (role === "client" || role === "provider" || role === "admin") return next();
+  return res.status(403).json({ error: "forbidden" });
+}
 
-// оставить отзыв провайдером о клиенте
-router.post("/client/:clientId", authenticateToken, addClientReview);
+// Создать отзыв
+router.post("/service/:serviceId",  authenticateToken, requireClientOrProvider, addServiceReview);
+router.post("/client/:clientId",    authenticateToken, requireClientOrProvider, addClientReview);
+router.post("/provider/:providerId",authenticateToken, requireClientOrProvider, addProviderReview);
 
-// оставить отзыв о провайдере (клиент ИЛИ провайдер)
-// контроллер сам определит роль автора
-router.post("/provider/:providerId", authenticateToken, addProviderReview);
-
-// списки/агрегаты (публично)
-router.get("/service/:serviceId", getServiceReviews);
+// Прочитать отзывы/агрегаты
+router.get("/service/:serviceId",   getServiceReviews);
+router.get("/client/:clientId",     getClientReviews);
 router.get("/provider/:providerId", getProviderReviews);
-router.get("/client/:clientId", getClientReviews);
 
 module.exports = router;
