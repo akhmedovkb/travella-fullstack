@@ -18,9 +18,7 @@ const first = (...vals) => {
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
-  if (typeof x === "string") {
-    try { return JSON.parse(x); } catch { return null; }
-  }
+  if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
   return null;
 };
 const firstImageFrom = (val) => {
@@ -77,9 +75,12 @@ async function fetchProviderProfile(providerId) {
 
 /* ───────── page ───────── */
 export default function ProviderProfile() {
-  const { id } = useParams();          // /profile/provider/:id
+  const { id } = useParams(); // /profile/provider/:id
   const pid = Number(id);
   const { t } = useTranslation();
+
+  // удобный хелпер с фолбэком
+  const tr = (key, fallback) => t(key, { defaultValue: fallback });
 
   const [prov, setProv] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,10 +127,7 @@ export default function ProviderProfile() {
     const contacts = prov?.contacts || {};
     const socials  = prov?.socials || {};
 
-    const name = first(
-      prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name
-    );
-
+    const name = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
     const about = first(d?.about, d?.description, prov?.about, prov?.description);
 
     const city    = first(d?.city,    prov?.city,    contacts?.city,    prov?.location?.city);
@@ -156,8 +154,7 @@ export default function ProviderProfile() {
   const canReview = useMemo(() => {
     const isClient   = !!localStorage.getItem("clientToken");
     const isProvider = !!(localStorage.getItem("token") || localStorage.getItem("providerToken"));
-    const myProvId =
-      Number(localStorage.getItem("provider_id") || localStorage.getItem("id") || NaN);
+    const myProvId = Number(localStorage.getItem("provider_id") || localStorage.getItem("id") || NaN);
     const isSelfProvider = isProvider && myProvId === pid;
     return (isClient || isProvider) && !isSelfProvider;
   }, [pid]);
@@ -171,6 +168,8 @@ export default function ProviderProfile() {
     });
     setReviews(Array.isArray(data?.items) ? data.items : []);
   };
+
+  const roleLabel = (role) => tr(`roles.${role}`, role);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
@@ -194,23 +193,21 @@ export default function ProviderProfile() {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl md:text-2xl font-semibold">
-                {details.name || t("marketplace.supplier") || "Поставщик"}
+                {tr("marketplace.supplier", "Поставщик")}: {details.name}
               </h1>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <RatingStars value={reviewsAgg.avg} size={16} />
                 <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">
-                  · {reviewsAgg.count || 0} {t("reviews.count") || "отзыв(ов)"}
-                </span>
+                <span className="opacity-70">· {reviewsAgg.count || 0} {tr("reviews.count", "отзыв(ов)")} </span>
               </div>
             </div>
 
             <div className="mt-1 text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-              {details.type    && <span>provider.type: <b>{details.type}</b></span>}
-              {details.region  && <span>provider.region: <b>{details.region}</b></span>}
+              {details.type    && <span>{tr("provider.type","Тип поставщика")}: <b>{details.type}</b></span>}
+              {details.region  && <span>{tr("provider.region","Регион поставщика")}: <b>{details.region}</b></span>}
               {details.phone   && (
                 <span>
-                  {t("marketplace.phone") || "Телефон"}:{" "}
+                  {tr("marketplace.phone","Телефон")}:{" "}
                   <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g, "")}`}>
                     {details.phone}
                   </a>
@@ -218,7 +215,7 @@ export default function ProviderProfile() {
               )}
               {details.telegram && (
                 <span>
-                  {t("marketplace.telegram") || "Телеграм"}:{" "}
+                  {tr("marketplace.telegram","Телеграм")}:{" "}
                   {String(details.telegram).startsWith("@") ? (
                     <a className="underline" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">
                       {details.telegram}
@@ -232,12 +229,12 @@ export default function ProviderProfile() {
                   )}
                 </span>
               )}
-              {details.address && <span>marketplace.address: <b>{details.address}</b></span>}
+              {details.address && <span>{tr("marketplace.address","Адрес")}: <b>{details.address}</b></span>}
             </div>
 
             {details.about && (
               <div className="mt-3">
-                <div className="text-gray-500 text-sm mb-1">{t("common.about") || "О компании"}</div>
+                <div className="text-gray-500 text-sm mb-1">{tr("common.about","О компании")}</div>
                 <div className="whitespace-pre-line">{details.about}</div>
               </div>
             )}
@@ -247,10 +244,10 @@ export default function ProviderProfile() {
 
       {/* REVIEWS LIST */}
       <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
-        <div className="text-lg font-semibold mb-3">{t("reviews.list") || "Отзывы"}</div>
+        <div className="text-lg font-semibold mb-3">{tr("reviews.list","Отзывы")}</div>
 
         {!reviews.length ? (
-          <div className="text-gray-500">{t("reviews.empty") || "Пока нет отзывов."}</div>
+          <div className="text-gray-500">{tr("reviews.empty","Пока нет отзывов.")}</div>
         ) : (
           <ul className="space-y-4">
             {reviews.map((r) => (
@@ -260,7 +257,7 @@ export default function ProviderProfile() {
                     <RatingStars value={r.rating || 0} size={16} />
                     {r.author?.name && (
                       <span className="text-sm text-gray-600">
-                        {r.author.name} ({r.author.role})
+                        {r.author.name} ({roleLabel(r.author.role)})
                       </span>
                     )}
                   </div>
@@ -278,8 +275,8 @@ export default function ProviderProfile() {
       {/* LEAVE REVIEW */}
       {canReview && (
         <div className="bg-white rounded-xl border shadow p-4 md:p-6">
-          <div className="text-lg font-semibold mb-3">{t("reviews.leave") || "Оставить отзыв"}</div>
-          <ReviewForm onSubmit={submitReview} submitLabel={t("reviews.send") || "Отправить"} />
+          <div className="text-lg font-semibold mb-3">{tr("reviews.leave","Оставить отзыв")}</div>
+          <ReviewForm onSubmit={submitReview} submitLabel={tr("reviews.send","Отправить")} />
         </div>
       )}
     </div>
