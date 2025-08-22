@@ -298,7 +298,7 @@
       "agent": "Travel agent",
       "guide": "Guide",
       "transport": "Transport",
-      "hotel": "Hotel",
+      "hotel": "Hotel"
     },
     "bookings": {
       "cancel": "Cancel",
