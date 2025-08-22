@@ -1,26 +1,21 @@
-// backend/controllers/reviewController.js
+// controllers/reviewController.js
 const db = require("../db");
 
-/* -------- utils -------- */
-const toInt = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
+const toInt = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 const pagin = (req) => {
-  const limit = Math.min(100, Math.max(1, toInt(req.query.limit) ?? 10));
-  const offset = Math.max(0, toInt(req.query.offset) ?? 0);
+  const limit  = Math.min(100, Math.max(1, toInt(req.query.limit)  ?? 10));
+  const offset = Math.max(0,   toInt(req.query.offset) ?? 0);
   return { limit, offset };
 };
-const rowsToPublic = (rows) =>
-  rows.map((r) => ({
-    id: r.id,
-    rating: r.rating,
-    text: r.text,
-    created_at: r.created_at,
-    author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
-  }));
+const rowsToPublic = (list) => list.map(r => ({
+  id: r.id,
+  rating: r.rating,
+  text: r.text,
+  created_at: r.created_at,
+  author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
+}));
 
-/* -------- CREATE -------- */
+/* ---------- CREATE ---------- */
 
 // клиент → услуге
 exports.addServiceReview = async (req, res) => {
@@ -40,7 +35,6 @@ exports.addServiceReview = async (req, res) => {
        RETURNING id, target_id, rating, text, created_at`,
       [serviceId, authorId, toInt(req.body?.booking_id), r, req.body?.text || null]
     );
-
     res.status(201).json(q.rows[0]);
   } catch (e) {
     console.error("addServiceReview:", e);
@@ -66,7 +60,6 @@ exports.addClientReview = async (req, res) => {
        RETURNING id, target_id, rating, text, created_at`,
       [clientId, authorId, toInt(req.body?.booking_id), r, req.body?.text || null]
     );
-
     res.status(201).json(q.rows[0]);
   } catch (e) {
     console.error("addClientReview:", e);
@@ -83,19 +76,22 @@ exports.addProviderReview = async (req, res) => {
     const r = Math.max(1, Math.min(5, Number(req.body?.rating || 0)));
     if (!Number.isFinite(r)) return res.status(400).json({ error: "bad_rating" });
 
+    // кто оставляет отзыв
+    const role = (req.user?.role === "provider" || req.user?.providerId) ? "provider" : "client";
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
 
-    // определяем роль автора (если нет — считаем клиентом, для обратной совместимости)
-    const authorRole = req.user?.role === "provider" ? "provider" : "client";
+    // запрет на «о себе»
+    if (role === "provider" && Number(authorId) === providerId) {
+      return res.status(400).json({ error: "self_review_forbidden" });
+    }
 
     const q = await db.query(
       `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
        VALUES ('provider', $1, $2, $3, $4, $5, $6)
        RETURNING id, target_id, rating, text, created_at`,
-      [providerId, authorRole, authorId, toInt(req.body?.booking_id), r, req.body?.text || null]
+      [providerId, role, authorId, toInt(req.body?.booking_id), r, req.body?.text || null]
     );
-
     res.status(201).json(q.rows[0]);
   } catch (e) {
     console.error("addProviderReview:", e);
@@ -103,8 +99,7 @@ exports.addProviderReview = async (req, res) => {
   }
 };
 
-/* -------- READ (list + aggregates) -------- */
-
+/* ---------- READ (agg + list) ---------- */
 async function listWithAgg(targetType, targetId, req, res) {
   if (!targetId) return res.status(400).json({ error: "bad_target_id" });
   const { limit, offset } = pagin(req);
@@ -133,6 +128,6 @@ async function listWithAgg(targetType, targetId, req, res) {
   res.json({ stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) }, items: rowsToPublic(list.rows) });
 }
 
-exports.getServiceReviews  = (req, res) => listWithAgg("service",  toInt(req.params.serviceId),  req, res);
-exports.getProviderReviews = (req, res) => listWithAgg("provider", toInt(req.params.providerId), req, res);
-exports.getClientReviews   = (req, res) => listWithAgg("client",   toInt(req.params.clientId),   req, res);
+exports.getServiceReviews  = (req, res) => listWithAgg('service',  toInt(req.params.serviceId),  req, res);
+exports.getProviderReviews = (req, res) => listWithAgg('provider', toInt(req.params.providerId), req, res);
+exports.getClientReviews   = (req, res) => listWithAgg('client',   toInt(req.params.clientId),   req, res);
