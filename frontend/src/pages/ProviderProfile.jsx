@@ -73,6 +73,65 @@ async function fetchProviderProfile(providerId) {
   return null;
 }
 
+// вытаскиваем тип поставщика - турагент/гид/транспорт/отель
+
+const tr = (t) => (key, fallback) => t(key, { defaultValue: fallback });
+
+// нормализация и маппинг типов поставщика → ключи i18n
+function providerTypeKey(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return null;
+
+  // быстрые точные соответствия
+  const direct = {
+    agent: "agent",
+    "travel_agent": "agent",
+    "travelagent": "agent",
+    "тур агент": "agent",
+    "турагент": "agent",
+    "tour_agent": "agent",
+
+    guide: "guide",
+    "tour_guide": "guide",
+    "tourguide": "guide",
+    "гид": "guide",
+    "экскурсовод": "guide",
+
+    transport: "transport",
+    "transfer": "transport",
+    "car": "transport",
+    "driver": "transport",
+    "taxi": "transport",
+    "авто": "transport",
+    "транспорт": "transport",
+    "трансфер": "transport",
+
+    hotel: "hotel",
+    "guesthouse": "hotel",
+    "accommodation": "hotel",
+    "otel": "hotel",
+    "отель": "hotel",
+  };
+  if (direct[s]) return direct[s];
+
+  // эвристики по вхождениям (на всякий случай)
+  if (/guide|гид|экскур/.test(s)) return "guide";
+  if (/hotel|guest|accom|otel|отел/.test(s)) return "hotel";
+  if (/trans|taxi|driver|car|bus|авто|трансфер|транспорт/.test(s)) return "transport";
+  if (/agent|agency|travel|тур|агент/.test(s)) return "agent";
+
+  return null; // неизвестно
+}
+
+// возвращает уже локализованную подпись («Турагент»/«Guide»/…)
+function providerTypeLabel(raw, t) {
+  const key = providerTypeKey(raw);
+  if (!key) return raw || ""; // показываем как есть, если не распознали
+  const _tr = tr(t);
+  const fallback = { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
+  return _tr(`provider.types.${key}`, fallback);
+}
+
 /* ───────── page ───────── */
 export default function ProviderProfile() {
   const { id } = useParams(); // /profile/provider/:id
@@ -203,7 +262,12 @@ export default function ProviderProfile() {
             </div>
 
             <div className="mt-1 text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-              {details.type    && <span>{tr("provider.type","Тип поставщика")}: <b>{details.type}</b></span>}
+              {details.type && (
+                <span>
+                  {tr(t)("provider.type", "Тип поставщика")}:{" "}
+                  <b>{providerTypeLabel(details.type, t)}</b>
+                </span>
+              )}
               {details.region  && <span>{tr("provider.region","Регион поставщика")}: <b>{details.region}</b></span>}
               {details.phone   && (
                 <span>
