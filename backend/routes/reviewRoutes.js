@@ -1,4 +1,4 @@
-// backend/routes/reviewRoutes.js
+// routes/reviewRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -12,23 +12,32 @@ const {
   getClientReviews,
 } = require("../controllers/reviewController");
 
-// простая проверка роли: пускаем клиентов, провайдеров и админа.
-// если req.user.role отсутствует (старые токены) — тоже пускаем, чтобы не ломать.
-function requireClientOrProvider(req, res, next) {
-  const role = req.user?.role;
-  if (!role) return next();
-  if (role === "client" || role === "provider" || role === "admin") return next();
-  return res.status(403).json({ error: "forbidden" });
+// простые role-guards
+function requireClient(req, _res, next) {
+  if (req.user?.role === "client" || req.user?.clientId) return next();
+  if (!req.user?.role) return next(); // пропускаем «старые» токены без role
+  return next({ status: 403, message: "client_required" });
+}
+function requireProvider(req, _res, next) {
+  if (req.user?.role === "provider" || req.user?.providerId) return next();
+  if (!req.user?.role) return next();
+  return next({ status: 403, message: "provider_required" });
+}
+function requireClientOrProvider(req, _res, next) {
+  if (req.user?.role === "client" || req.user?.clientId ||
+      req.user?.role === "provider" || req.user?.providerId) return next();
+  if (!req.user?.role) return next();
+  return next({ status: 403, message: "client_or_provider_required" });
 }
 
-// Создать отзыв
-router.post("/service/:serviceId",  authenticateToken, requireClientOrProvider, addServiceReview);
-router.post("/client/:clientId",    authenticateToken, requireClientOrProvider, addClientReview);
+// CREATE
+router.post("/service/:serviceId",  authenticateToken, requireClient,           addServiceReview);
+router.post("/client/:clientId",    authenticateToken, requireProvider,         addClientReview);
 router.post("/provider/:providerId",authenticateToken, requireClientOrProvider, addProviderReview);
 
-// Прочитать отзывы/агрегаты
+// READ
 router.get("/service/:serviceId",   getServiceReviews);
-router.get("/client/:clientId",     getClientReviews);
 router.get("/provider/:providerId", getProviderReviews);
+router.get("/client/:clientId",     getClientReviews);
 
 module.exports = router;
