@@ -1003,6 +1003,19 @@ export default function ClientDashboard() {
   const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
   const hasTimer = !!expireAt;
   const timerText = hasTimer ? formatLeft(leftMs) : null;
+    // 👇 ВЛАДЕЛЕЦ КАРТОЧКИ (для ссылки и подписи)
+  const providerId =
+    r?.provider?.id ??
+    r?.service?.provider_id ?? r?.service?.providerId ??
+    r?.provider_id ?? r?.providerId ?? null;
+  const providerName =
+    r?.provider?.name ?? r?.provider_name ?? r?.service?.provider_name ?? r?.service?.providerTitle ?? null;
+  const providerType =
+    r?.provider?.type ?? r?.provider_type ?? r?.service?.provider_type ?? null;
+  const providerPhone =
+    r?.provider?.phone ?? r?.provider_phone ?? r?.phone ?? null;
+  const providerTg =
+    r?.provider?.telegram ?? r?.provider?.social ?? r?.provider_telegram ?? r?.telegram ?? null;
 
   return (
     <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
