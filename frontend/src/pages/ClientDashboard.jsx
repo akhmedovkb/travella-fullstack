@@ -504,22 +504,6 @@ export default function ClientDashboard() {
     setSearchParams(params, { replace: true });
   }, [activeTab, favPage]); // eslint-disable-line
 
-  // 🔁 NEW: keep React state in sync with URL query (so header links like ?tab=favorites work)
-  useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    const pageParamRaw = searchParams.get("page");
-    const pageParam = Number(pageParamRaw || 1);
-
-    if (tabParam && tabParam !== activeTab && tabs.some((t) => t.key === tabParam)) {
-      setActiveTab(tabParam);
-    }
-    if (tabParam === "favorites") {
-      const np = isNaN(pageParam) ? 1 : pageParam;
-      if (np !== favPage) setFavPage(np);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
   useEffect(() => {
     (async () => {
       try {
@@ -771,7 +755,7 @@ export default function ClientDashboard() {
       err?.status ||
       err?.response?.status ||
       err?.data?.status ||
-      (typeof err?.message === "string" && /(^|\\s)4\\d\\d(\\s|$)/.test(err.message) ? 400 : undefined);
+      (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
 
     if (status === 401 || status === 403) {
       tInfo(t("auth.login_required") || "Войдите, чтобы использовать избранное", {
@@ -857,401 +841,47 @@ export default function ClientDashboard() {
   };
 
   // Удаление заявки (API или локальный черновик)
-   function askDeleteRequest(id) {
-     if (!id) return;
-     // Черновик = id начинается с "d_" или флаг в текущем списке
-     const isDraftFromState = requests?.some((x) => String(x.id) === String(id) && x.is_draft);
-     const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
-     setDelUI({ open: true, id, isDraft, sending: false });
-   }
+  function askDeleteRequest(id) {
+    if (!id) return;
+    setDelUI({ open: true, id, isDraft: String(id).startsWith("d_"), sending: false });
+  }
 
   async function confirmDeleteRequest() {
-    if (!delUI.id) return;
-    setDelUI((s) => ({ ...s, sending: true }));
-    try {
-      if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
-        const keyId = myId || null;
-        const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
-        saveDrafts(keyId, updated);
-        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
-      } else {
-        await apiDelete(`/api/requests/${delUI.id}`);
-        setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
-        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
-      }
-    } catch {
-      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
-    } finally {
-      setDelUI({ open: false, id: null, isDraft: false, sending: false });
+  if (!delUI.id) return;
+  setDelUI((s) => ({ ...s, sending: true }));
+  try {
+    // Локальный черновик — удаляем без API
+    if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
+      const keyId = myId || null;
+      const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
+      saveDrafts(keyId, updated);
+      setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+      setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+      tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
+    } else {
+      await apiDelete(`/api/requests/${delUI.id}`);
+      setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+      setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+      tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
     }
-  }
-
-  function closeDeleteModal() {
+  } catch (err) {
+    const status = err?.status || err?.response?.status;
+    const msgText = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
+    // Если на бэке уже нет записи → считаем успехом и просто убираем из UI
+    if (status === 404 || msgText.includes("not found")) {
+      setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+      setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+      tInfo(t("client.dashboard.requestDeleted") || "Заявка удалена (уже была удалена)", {
+        autoClose: 1600,
+        toastId: `req-del-${delUI.id}-404`
+      });
+    } else {
+      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+      tError(t("client.dashboard.requestDeleteFailed") || "Не удалось удалить заявку", { autoClose: 1800 });
+    }
+  } finally {
     setDelUI({ open: false, id: null, isDraft: false, sending: false });
   }
-
-  function openQuickRequestModal(serviceId, meta = {}) {
-    if (!serviceId) return;
-    setQrServiceId(serviceId);
-    setQrTitle(meta.title || "");
-    setQrOpen(true);
-  }
-  function closeQuickRequestModal() {
-    setQrOpen(false);
-    setQrServiceId(null);
-    setQrTitle("");
-  }
-  async function submitQuickRequest(note) {
-    if (!qrServiceId) return;
-    try {
-      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
-      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
-      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
-
-      const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
-      const keyId = myId || null;
-      saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
-      setRequests((prev) => [draft, ...prev]);
-      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrTitle } }));
-
-      setActiveTab("requests");
-
-      try {
-        const apiList = await fetchClientRequestsSafe(myId);
-        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-        setRequests(mergeRequests(apiList, drafts));
-      } catch {}
-    } catch {
-      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-         const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-   const status = err?.status || err?.response?.status;
-   if (msg.includes("self_request_forbidden") || status === 400) {
-     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
-   } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-     tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
-   } else {
-     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-   }
-    } finally {
-      closeQuickRequestModal();
-    }
-  }
-
-  function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
-  function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
-  async function createBooking() {
-    if (!bookingUI.serviceId) return;
-    setBkSending(true);
-    try {
-      const details = { date: bkDate || undefined, time: bkTime || undefined, pax: Number(bkPax) || 1, note: bkNote || undefined };
-      await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
-      closeBooking(); setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" })); setActiveTab("bookings");
-      try { setBookings(await fetchClientBookingsSafe()); } catch {}
-    } catch (e) { setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" })); }
-    finally { setBkSending(false); }
-  }
-
-  /* -------- Render helpers -------- */
-
-  const Avatar = () => {
-    const src = avatarBase64 || avatarServerUrl || null;
-    if (src) return <img src={src} alt="" className="w-24 h-24 rounded-full object-cover border" />;
-    return <div className="w-24 h-24 rounded-full bg-gray-200 border flex items-center justify-center text-xl font-semibold text-gray-600">{initials(name)}</div>;
-  };
-
-  const TabButton = ({ tabKey, children }) => {
-    const active = activeTab === tabKey;
-    return (
-      <button onClick={() => setActiveTab(tabKey)} className={`px-4 py-2 rounded-lg border-b-2 font-medium ${active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"}`}>
-        {children}
-      </button>
-    );
-  };
-
-  const RequestsList = () => {
-    const { t } = useTranslation();
-    const statusLabel = (code) =>
-      t(`status.${String(code ?? "").toLowerCase()}`, { defaultValue: code });
-    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!requests?.length) return <div className="text-gray-500">{t("empty.no_requests", { defaultValue: "Пока нет запросов." })}</div>;
-    return (
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {requests.map((r) => {
-  const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
-  const status = r?.status || "new";
-  const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
-  const expireAt = resolveRequestExpireAt(r);
-  const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
-  const hasTimer = !!expireAt;
-  const timerText = hasTimer ? formatLeft(leftMs) : null;
-
-  return (
-    <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
-      <div className="font-semibold">{serviceTitle}</div>
-
-      <div className="text-sm text-gray-500 mt-1">
-        {t("common.status", { defaultValue: "Статус" })}: {statusLabel(status)}
-      </div>
-
-      {hasTimer && (
-        <div className="mt-2">
-          <span
-            className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
-            title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
-          >
-            {timerText}
-          </span>
-        </div>
-      )}
-
-      {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
-      {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
-
-      {/* действия */}
-      <div className="mt-3 flex gap-2">
-        <button
-          onClick={() => openQuickEdit(r)}          // ← новая модалка (ниже)
-          className="px-3 py-1.5 rounded border hover:bg-gray-50"
-        >
-          {t("actions.edit", { defaultValue: "Править" })}
-        </button>
-        <button
-            onClick={() => askDeleteRequest(r.id)}
-            className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
-          >
-            {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
-          </button>
-      </div>
-    </div>
-  );
-})}
-
-      </div>
-    );
-  };
-
-  const BookingsList = () => {
-    const { t } = useTranslation();
-    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!bookings?.length) return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
-    return (
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {bookings.map((b) => {
-          const serviceTitle = b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
-          const status = b?.status || "new";
-          const date = b?.date || b?.created_at;
-          const when = date ? new Date(date).toLocaleString() : "";
-          return (
-            <div key={b.id} className="bg-white border rounded-xl p-4">
-              <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
-              {when && <div className="text-xs text-gray-400 mt-1">{t("common.date", { defaultValue: "Дата" })}: {when}</div>}
-              {b?.price && <div className="text-sm text-gray-600 mt-2">{t("common.amount", { defaultValue: "Сумма" })}: {b.price}</div>}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const FavoritesTab = () => {
-    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    return (
-      <FavoritesList
-        items={favorites}
-        page={favPage}
-        perPage={FAV_PAGE_SIZE}
-        favIds={favIds}
-        onToggleFavorite={toggleFavoriteClient}
-        onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
-        onPageChange={(p) => setFavPage(p)}
-        now={now}
-      />
-    );
-  };
-
-  return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: Profile */}
-        <div className="md:col-span-1">
-          <div className="bg-white rounded-xl shadow p-6 border">
-            <div className="flex items-center gap-4">
-              <Avatar />
-              <div className="flex flex-col gap-2">
-                <button onClick={handleUploadClick} className="px-3 py-2 text-sm bg-gray-900 text-white rounded-lg">
-                  {avatarBase64 || avatarServerUrl ? t("client.dashboard.changePhoto", { defaultValue: "Сменить фото" }) : t("client.dashboard.uploadPhoto", { defaultValue: "Загрузить фото" })}
-                </button>
-                {(avatarBase64 || avatarServerUrl) && (
-                  <button onClick={handleRemovePhoto} className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
-                    {t("client.dashboard.removePhoto", { defaultValue: "Удалить фото" })}
-                  </button>
-                )}
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              <div>
-                <label className="text-sm text-gray-600">{t("client.dashboard.name", { defaultValue: "Наименование" })}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("client.dashboard.name", { defaultValue: "Ваше имя" })} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600">{t("client.dashboard.phone", { defaultValue: "Телефон" })}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 ..." />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600">{t("telegram", { defaultValue: "Telegram" })}</label>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username" />
-              </div>
-
-              <div className="pt-2">
-                <button onClick={handleSaveProfile} disabled={savingProfile || loadingProfile} className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                  {savingProfile ? t("common.saving", { defaultValue: "Сохранение..." }) : t("client.dashboard.saveBtn", { defaultValue: "Сохранить" })}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-8 border-t pt-6">
-              <div className="text-sm text-gray-600 mb-2">{t("client.dashboard.changePassword", { defaultValue: "Смена пароля" })}</div>
-              <div className="flex gap-2">
-                <input type="password" className="flex-1 border rounded-lg px-3 py-2" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("client.dashboard.newPassword", { defaultValue: "Новый пароль" })} />
-                <button onClick={handleChangePassword} disabled={changingPass} className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-60">{changingPass ? "..." : t("client.dashboard.changeBtn", { defaultValue: "Сменить" })}</button>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <button onClick={handleLogout} className="w-full px-4 py-2 rounded-lg border text-red-600 hover:bg-red-50">{t("client.dashboard.logout", { defaultValue: "Выйти" })}</button>
-            </div>
-
-            {(message || error) && (
-              <div className="mt-4 text-sm">
-                {message && <div className="text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{message}</div>}
-                {error && <div className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">{error}</div>}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Stats + Tabs */}
-        <div className="md:col-span-2">
-          {loadingStats ? (
-            <div className="bg-white rounded-xl shadow p-6 border text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>
-          ) : (
-            <ClientStatsBlock stats={stats} />
-          )}
-
-          <div className="mt-6 bg-white rounded-xl shadow p-6 border">
-            <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
-              <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
-              <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
-              <div className="ml-auto">
-                <button
-                  onClick={async () => {
-                    try {
-                      setLoadingTab(true);
-                      if (activeTab === "requests") {
-                        const apiList = await fetchClientRequestsSafe(myId);
-                        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-                        setRequests(mergeRequests(apiList, drafts));
-                      } else if (activeTab === "bookings") {
-                        setBookings(await fetchClientBookingsSafe());
-                      } else {
-                        const data = await apiGet("/api/wishlist?expand=service");
-                        const arr = Array.isArray(data) ? data : data?.items || [];
-                        setFavorites(arr);
-                        try {
-                          const ids = await apiGet("/api/wishlist/ids");
-                          const list = Array.isArray(ids) ? ids : [];
-                          setFavIds(new Set(list.map(String)));
-                        } catch {}
-                      }
-                    } finally {
-                      setLoadingTab(false);
-                    }
-                  }}
-                  className="text-orange-600 hover:underline text-sm"
-                >
-                  {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
-                </button>
-              </div>
-            </div>
-
-            {activeTab === "requests" && <RequestsList />}
-            {activeTab === "bookings" && <BookingsList />}
-            {activeTab === "favorites" && (
-              <FavoritesList
-                items={favorites}
-                page={favPage}
-                perPage={FAV_PAGE_SIZE}
-                favIds={favIds}
-                onToggleFavorite={toggleFavoriteClient}
-                onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
-                onPageChange={(p) => setFavPage(p)}
-                now={now}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Booking modal */}
-      {bookingUI.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow p-5">
-            <div className="text-lg font-semibold mb-3">{t("booking.title", { defaultValue: "Быстрое бронирование" })}</div>
-
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm text-gray-600">{t("booking.date", { defaultValue: "Дата" })}</label>
-                  <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkDate} onChange={(e) => setBkDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">{t("booking.time", { defaultValue: "Время" })}</label>
-                  <input type="time" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkTime} onChange={(e) => setBkTime(e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-600">{t("booking.pax", { defaultValue: "Кол-во людей" })}</label>
-                <input type="number" min="1" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkPax} onChange={(e) => setBkPax(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-600">{t("common.note_optional", { defaultValue: "Комментарий (необязательно)" })}</label>
-                <textarea rows={3} className="mt-1 w-full border rounded-lg px-3 py-2" value={bkNote} onChange={(e) => setBkNote(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
-              </button>
-              <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
-            </div>
-          </div>
-        </div>
-      )}
-      <QuickRequestModal
-        open={qrOpen}
-        onClose={closeQuickRequestModal}
-        onSubmit={submitQuickRequest}
-      />
-      <ConfirmModal
-        open={delUI.open}
-        danger
-        busy={delUI.sending}
-        title={t("actions.delete", { defaultValue: "Удалить" })}
-        message={t("client.dashboard.confirmDeleteRequest", { defaultValue: "Удалить эту заявку?" })}
-        confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
-        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
-        onConfirm={confirmDeleteRequest}
-        onClose={closeDeleteModal}
-      />
-    </div>
-  );
 }
 
 /* ---------- срок действия / обратный счёт ---------- */
