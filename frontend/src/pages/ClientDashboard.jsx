@@ -617,27 +617,33 @@ export default function ClientDashboard() {
 
   // слушаем событие мгновенного создания (в т.ч. из маркетплейса) + синхронизация между вкладками
   useEffect(() => {
-    
-    const onCreated = async () => {
+  let mounted = true;
+
+  const onCreated = async () => {
+    try {
       const apiList = await fetchClientRequestsSafe(myId);
       const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-      setRequests(mergeRequests(apiList, drafts));
-    };
+      if (mounted) setRequests(mergeRequests(apiList, drafts));
+    } catch {}
+  };
 
-    const onStorage = (ev) => {
-      if (!ev.key) return;
-      if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
-        const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
-        setRequests(prev => mergeRequests(prev.filter(x => !x.is_draft), drafts));
-      }
-    };
-    window.addEventListener("request:created", onCreated);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("request:created", onCreated);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, [myId]);
+  const onStorage = (ev) => {
+    if (!ev.key) return;
+    if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
+      const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
+      if (mounted) setRequests(prev => mergeRequests(prev.filter(x => !x.is_draft), drafts));
+    }
+  };
+
+  window.addEventListener("request:created", onCreated);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    mounted = false;
+    window.removeEventListener("request:created", onCreated);
+    window.removeEventListener("storage", onStorage);
+  };
+}, [myId]);
+
 
   const handleUploadClick = () => fileRef.current?.click();
   const handleFileChange = async (e) => {
