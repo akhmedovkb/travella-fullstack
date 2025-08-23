@@ -152,6 +152,46 @@ exports.touchByProvider = async (req, res) => {
   }
 };
 
+/** GET /api/requests/provider/outgoing — заявки, отправленные этим провайдером другим провайдерам */
+exports.getProviderOutgoingRequests = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "unauthorized" });
+
+    // у провайдера гарантированно получаем client_id (зеркальный клиент)
+    const clientId = await ensureClientIdForUser(userId);
+    if (!clientId) return res.status(403).json({ error: "forbidden" });
+
+    const q = await db.query(
+      `
+      SELECT
+        r.id,
+        r.created_at,
+        COALESCE(r.status, 'new') AS status,
+        r.note,
+        json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
+        json_build_object(
+          'id', s.provider_id,
+          'name', COALESCE(p.name, '—'),
+          'phone', p.phone,
+          'telegram', p.social,
+          'type', p.type
+        ) AS provider
+      FROM requests r
+      JOIN services  s ON s.id = r.service_id
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+      `,
+      [clientId]
+    );
+
+    res.json({ items: q.rows });
+  } catch (err) {
+    console.error("provider outbox error:", err);
+    res.status(500).json({ error: "outbox_load_failed" });
+  }
+};
 
 // ============ helper: гарантированно получить client_id для текущего пользователя ============
 // - Если это обычный клиент — возвращаем его id (он есть в clients).
