@@ -15,100 +15,77 @@ const first = (...vals) => {
   }
   return null;
 };
-
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
   if (typeof x === "string") {
-    try { return JSON.parse(x); } catch { return null; }
+    const s = x.trim();
+    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+      try { return JSON.parse(s); } catch { return null; }
+    }
   }
   return null;
 };
 
-/** Абсолютный URL для медиа.
- *  - если http/https/data: → вернуть как есть
- *  - если начинается с /storage, /uploads и т.п. → приклеиваем текущий origin (https)
- *  - иначе пробуем приклеить API_BASE
- *  - апгрейдим http→https, если сайт открыт по https и хост совпадает
- */
-const toAbsoluteUrl = (u) => {
-  if (!u) return "";
-  let s = String(u).trim();
-  if (/^(data:|https?:\/\/)/i.test(s)) return s;
-
-  const origin = window.location.origin; // всегда https на проде
-  const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
-  const path = s.replace(/^\/+/, "");
-
-  // пути статики часто отдаются с фронтового домена
-  const looksStatic = /^(storage|uploads|images|img|files|media)\b/i.test(path);
-  let url = looksStatic
-    ? `${origin}/${path}`
-    : (base ? `${base}/${path}` : `${origin}/${path}`);
-
-  try {
-    const uObj = new URL(url);
-    // апгрейд протокола, если домен совпадает и страница https
-    if (window.location.protocol === "https:" && uObj.protocol === "http:" && uObj.host === window.location.host) {
-      uObj.protocol = "https:";
-      url = uObj.toString();
-    }
-  } catch { /* ignore */ }
-
-  return url;
+// делаем абсолютный URL из относительного
+const makeAbsolute = (u) => {
+  if (!u) return null;
+  const s = String(u).trim();
+  if (/^(data:|https?:|blob:)/i.test(s)) return s;
+  if (s.startsWith("//")) return `${window.location.protocol}${s}`;
+  const base = (import.meta.env.VITE_API_BASE_URL || window.location.origin || "").replace(/\/+$/,"");
+  return `${base}/${s.replace(/^\/+/, "")}`;
 };
 
-// Берём первую адекватную картинку из строки/массива/объекта
+// извлекаем первую картинку из разных форматов (строка, объект, массив)
 const firstImageFrom = (val) => {
-  const pickObj = (o) => first(o?.url, o?.src, o?.image, o?.photo, o?.logo, o?.path);
-  const extract = (x) => {
-    if (!x) return null;
+  if (!val) return null;
 
-    if (typeof x === "string") {
-      const s = x.trim();
-      const parsed = maybeParse(s);
-      if (parsed) return extract(parsed);
+  // если пришла строка
+  if (typeof val === "string") {
+    const s = val.trim();
 
-      // возможен список через запятую
-      if (s.includes(",")) {
-        for (const part of s.split(",").map((p) => p.trim()).filter(Boolean)) {
-          const r = extract(part);
-          if (r) return r;
-        }
-        return null;
-      }
+    // JSON в строке?
+    const parsed = maybeParse(s);
+    if (parsed) return firstImageFrom(parsed);
 
-      if (/^data:/.test(s)) return s;
-      return toAbsoluteUrl(s);
+    // data:, http(s):, blob:
+    if (/^(data:|https?:|blob:)/i.test(s)) return s;
+
+    // относительный путь
+    if (/^\/?(storage|uploads|files|images)\b/i.test(s)) return makeAbsolute(s);
+
+    // иногда приходит csv/первый элемент массива в строке
+    if (s.includes(",") || s.includes("|")) {
+      const candidate = s.split(/[,\|]/).map((x) => x.trim()).find(Boolean);
+      return firstImageFrom(candidate);
     }
 
-    if (Array.isArray(x)) {
-      for (const item of x) {
-        const r = extract(item);
-        if (r) return r;
-      }
-      return null;
-    }
+    // как есть (на случай, если уже абсолютный без протокола)
+    return makeAbsolute(s);
+  }
 
-    if (typeof x === "object") {
-      return extract(pickObj(x));
+  // если массив
+  if (Array.isArray(val)) {
+    for (const item of val) {
+      const found = firstImageFrom(item);
+      if (found) return found;
     }
-
     return null;
-  };
+  }
 
-  return extract(val);
-};
+  // объект с разными полями
+  if (typeof val === "object") {
+    const hit = first(
+      val.url, val.src, val.image, val.photo, val.logo,
+      // иногда внутри есть массивы/объекты
+      Array.isArray(val.images) ? val.images[0] : val.images,
+      Array.isArray(val.photos) ? val.photos[0] : val.photos,
+      Array.isArray(val.gallery) ? val.gallery[0] : val.gallery
+    );
+    return firstImageFrom(hit);
+  }
 
-// Телеграм из разных форматов/полей
-const toTelegramUrl = (v) => {
-  if (!v) return null;
-  let s = String(v).trim();
-
-  const mUrl = s.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/([A-Za-z0-9_]+)/i);
-  if (mUrl) return `https://t.me/${mUrl[1]}`;
-  if (s.startsWith("@")) return `https://t.me/${s.slice(1)}`;
-  if (/^[A-Za-z0-9_]+$/.test(s)) return `https://t.me/${s}`;
   return null;
 };
 
@@ -135,7 +112,8 @@ const tr = (t) => (key, fallback) => t(key, { defaultValue: fallback });
 // нормализация типа → ключ i18n
 function providerTypeKey(raw) {
   const s = String(raw || "").trim().toLowerCase();
-  const direct = { agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
+  const direct = {
+    agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
     guide:"guide","tour_guide":"guide","tourguide":"guide","гид":"guide","экскурсовод":"guide",
     transport:"transport","transfer":"transport","car":"transport","driver":"transport","taxi":"transport","авто":"transport","транспорт":"transport","трансфер":"transport",
     hotel:"hotel","guesthouse":"hotel","accommodation":"hotel","otel":"hotel","отель":"hotel",
@@ -156,23 +134,13 @@ function providerTypeLabel(raw, t) {
   return _(`provider.types.${key}`, fallback);
 }
 
-// SVG-плейсхолдер на случай onError
-const FALLBACK_SVG =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'>
-       <rect width='100%' height='100%' fill='#f3f4f6'/>
-       <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
-             font-family='sans-serif' font-size='14' fill='#9ca3af'>Нет фото</text>
-     </svg>`
-  );
-
 /* page */
 export default function ProviderProfile() {
   const { id } = useParams();
   const pid = Number(id);
   const { t } = useTranslation();
 
+  // локальный хелпер перевода
   const tx = (key, fallback) => t(key, { defaultValue: fallback });
 
   const [prov, setProv] = useState(null);
@@ -217,37 +185,26 @@ export default function ProviderProfile() {
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
     const contacts = prov?.contacts || {};
-    const socials = prov?.socials || {};
+    const socials  = prov?.socials  || {};
 
-    const name = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
-    const about = first(d?.about, d?.description, prov?.about, prov?.description);
+    const name     = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
+    const about    = first(d?.about, d?.description, prov?.about, prov?.description);
+    const city     = first(d?.city, prov?.city, contacts?.city, prov?.location?.city);
+    const country  = first(d?.country, prov?.country, contacts?.country, prov?.location?.country);
+    const phone    = first(prov?.phone, prov?.phone_number, prov?.phoneNumber, contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp);
+    const email    = first(prov?.email, contacts?.email, d?.email);
+    const telegram = first(prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram, prov?.social);
+    const website  = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
 
-    const city = first(d?.city, prov?.city, contacts?.city, prov?.location?.city);
-    const country = first(d?.country, prov?.country, contacts?.country, prov?.location?.country);
+    // ! ВАЖНО: учитываем поле photo тоже
+    const logo     = firstImageFrom(first(
+      prov?.logo, d?.logo, prov?.photo, d?.photo, prov?.image, d?.image, prov?.avatar, d?.avatar, prov?.images, d?.images
+    ));
+    const cover    = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images, d?.images));
 
-    const phone = first(
-      prov?.phone, prov?.phone_number, prov?.phoneNumber,
-      contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp
-    );
-    const email = first(prov?.email, contacts?.email, d?.email);
-
-    // читаем Telegram, включая поле social
-    const rawTelegram = first(
-      prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram,
-      prov?.social, d?.social, contacts?.social, socials?.social
-    );
-    const telegram = toTelegramUrl(rawTelegram);
-
-    const website = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
-
-    // ВАЖНО: учитываем providers.photo и абсолютируем
-    const logo = firstImageFrom(first(prov?.photo, prov?.logo, d?.photo, d?.logo, prov?.image, d?.image));
-    const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
-
-    const type = first(prov?.type, d?.type, prov?.provider_type, d?.provider_type);
-    const region = first(prov?.region, d?.region, prov?.location, d?.location);
-
-    const address = first(d?.address, prov?.address, contacts?.address);
+    const type     = first(prov?.type, d?.type, prov?.provider_type, d?.provider_type);
+    const region   = first(prov?.region, d?.region, prov?.location, d?.location);
+    const address  = first(d?.address, prov?.address, contacts?.address);
 
     return { name, about, city, country, phone, email, telegram, website, logo, cover, type, region, address };
   }, [prov]);
@@ -271,6 +228,14 @@ export default function ProviderProfile() {
 
   const roleLabel = (role) => tx(`roles.${role}`, role);
 
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto p-4 md:p-6">
+        <div className="animate-pulse h-32 bg-gray-100 rounded-xl" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
       <div className="bg-white rounded-xl border shadow overflow-hidden mb-6">
@@ -280,16 +245,11 @@ export default function ProviderProfile() {
           </div>
         )}
         <div className="p-4 md:p-6 flex items-start gap-4">
-          {/* BIG logo/photo (не маленькое) */}
+          {/* BIG logo/photo */}
           <div className="shrink-0">
             <div className="w-32 h-32 md:w-48 md:h-48 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center ring-1 ring-black/5">
               {details.logo ? (
-                <img
-                  src={details.logo}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.src = FALLBACK_SVG; }}
-                />
+                <img src={details.logo} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xs text-gray-400 px-2">Нет фото</span>
               )}
@@ -299,12 +259,12 @@ export default function ProviderProfile() {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl md:text-2xl font-semibold">
-                {tx("marketplace.supplier", "Поставщик")}: {details.name}
+                {tx("marketplace.supplier","Поставщик")}: {details.name || "-"}
               </h1>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <RatingStars value={reviewsAgg.avg} size={16} />
                 <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">· {reviewsAgg.count || 0} {tx("reviews.count", "отзыв(ов)")} </span>
+                <span className="opacity-70">· {reviewsAgg.count || 0} {tx("reviews.count","отзыв(ов)")} </span>
               </div>
             </div>
 
@@ -320,9 +280,11 @@ export default function ProviderProfile() {
               {details.telegram && (
                 <span>
                   {tx("marketplace.telegram","Телеграм")}:{" "}
-                  <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">
-                    {details.telegram.replace(/^https?:\/\/t\.me\//, "@")}
-                  </a>
+                  {String(details.telegram).startsWith("@")
+                    ? <a className="underline break-all" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
+                    : /^https?:\/\//.test(String(details.telegram))
+                      ? <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
+                      : <span>{details.telegram}</span>}
                 </span>
               )}
               {details.address && <span>{tx("marketplace.address","Адрес")}: <b>{details.address}</b></span>}
@@ -351,7 +313,7 @@ export default function ProviderProfile() {
                     <RatingStars value={r.rating || 0} size={16} />
                     {r.author?.name && (
                       <span className="text-sm text-gray-600">
-                        {r.author.name} ({roleLabel(r.author.role)})
+                        {r.author.name} ({tx(`roles.${r.author.role}`, r.author.role)})
                       </span>
                     )}
                   </div>
