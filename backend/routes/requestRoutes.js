@@ -18,6 +18,8 @@ const {
   getMyRequests, 
   updateMyRequest,
   touchByProvider,
+  // 👇 ДОБАВЛЕНО: исходящие заявки провайдера
+  getProviderOutgoingRequests,
 } = ctrl || {};
 
 // ---------- Создать «быстрый запрос» (маркетплейс) ----------
@@ -34,6 +36,12 @@ if (typeof getProviderRequests === "function") {
 }
 if (typeof getProviderStats === "function") {
   router.get("/provider/stats", authenticateToken, getProviderStats);
+}
+
+// ---------- Исходящие провайдера (НОВОЕ) ----------
+if (typeof getProviderOutgoingRequests === "function") {
+  router.get("/provider/outgoing", authenticateToken, getProviderOutgoingRequests);
+  router.get("/provider/outbox", authenticateToken, getProviderOutgoingRequests); // алиас опционально
 }
 
 // ---------- Обновить статус /processed алиас ----------
