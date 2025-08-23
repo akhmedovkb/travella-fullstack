@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPut, apiPost, apiDelete } from "../api";
-import { createPortal } from "react-dom";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
 import ServiceCard from "../components/ServiceCard";
@@ -1056,12 +1055,12 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     r?.provider?.telegram ?? r?.provider?.social ?? r?.provider_telegram ?? r?.telegram ?? null;
 
   return (
-    <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
-      <div className="font-semibold">{serviceTitle}</div>
+    <div key={r.id} className={`bg-white border rounded-xl p-4 overflow-hidden ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
+      <div className="font-semibold leading-tight break-words line-clamp-2">{serviceTitle}</div>
                   {providerId && (
-              <div className="mt-2 text-sm text-gray-700">
+              <div className="mt-2 text-sm text-gray-700 min-w-0">
                 <div className="flex items-center gap-2">
-                  <a href={`/providers/${providerId}`} className="underline hover:no-underline">
+                  <a href={`/providers/${providerId}`} className="underline hover:no-underline truncate">
                     {providerName || "—"}
                   </a>
                   {providerType && (
@@ -1098,7 +1097,11 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
       )}
 
       {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
-      {r?.note && <div className="text-sm text-gray-600 mt-2">{t("common.comment", { defaultValue: "Комментарий" })}: {r.note}</div>}
+       {r?.note && (
+          <div className="text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
+            {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
+          </div>
+           )}
 
       {/* действия */}
       <div className="mt-3 flex gap-2">
