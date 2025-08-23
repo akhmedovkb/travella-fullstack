@@ -818,22 +818,31 @@ export default function ClientDashboard() {
         const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
         setRequests(mergeRequests(apiList, drafts));
       } catch {}
-     } catch (err) {
-      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-         const status = err?.status || err?.response?.status;
-         const code = err?.response?.data?.error || err?.data?.error || err?.message || "";
-         const msg = String(code).toLowerCase();
-         if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
-           tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", { toastId: "req-already", autoClose: 2000 });
-           return;
-         }
-   const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-   if (msg.includes("self_request_forbidden")) {
-     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
-   } else {
-     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-   }
- }
+       } catch (err) {
+    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    const status =
+      err?.status || err?.response?.status || err?.data?.status;
+    const code =
+      err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
+    const msg = String(code).toLowerCase();
+
+    // Повторный быстрый запрос на ту же услугу
+    if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
+      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
+        autoClose: 2000,
+        toastId: "req-already",
+      });
+      return;
+    }
+
+    if (msg.includes("self_request_forbidden")) {
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
+    } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
+    } else {
+      tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+    }
+  }
   };
 
   const handleAcceptProposal = async (id) => {
