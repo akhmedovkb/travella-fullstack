@@ -1,7 +1,7 @@
 // frontend/src/pages/ClientDashboard.jsx
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
@@ -1060,9 +1060,9 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   {providerId && (
               <div className="mt-2 text-sm text-gray-700 min-w-0">
                 <div className="flex items-center gap-2">
-                  <a href={`/provider/${providerId}`} className="underline hover:no-underline truncate">
+                  <Link to={`/profile/provider/${providerId}`} className="underline hover:no-underline truncate block max-w-full">
                     {providerName || "—"}
-                  </a>
+                  </Link>
                   {providerType && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
                       {{
@@ -1075,8 +1075,8 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   )}
                 </div>
                 <div className="flex gap-4 mt-1">
-                  {providerPhone && <a className="hover:underline" href={`tel:${String(providerPhone).replace(/[^+\d]/g,"")}`}>{providerPhone}</a>}
-                  {providerTg && <a className="hover:underline" href={`https://t.me/${String(providerTg).replace(/^@/,"")}`} target="_blank" rel="noreferrer">@{String(providerTg).replace(/^@/,"")}</a>}
+                  {providerPhone && <a className="hover:underline break-all" href={`tel:${...}`}>{providerPhone}</a>}
+                  {providerTg && <a className="hover:underline break-all" href={`https://t.me/${...}`} ...>@{...}</a>}
                 </div>
               </div>
             )}
