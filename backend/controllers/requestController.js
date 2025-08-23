@@ -153,40 +153,59 @@ exports.touchByProvider = async (req, res) => {
 };
 
 
-// обеспечить корректный client_id для текущего пользователя:
-// - если это клиент: вернуть его id
-// - если это провайдер: найти/создать «теневого клиента» по данным провайдера
+// ✅ Надёжное сопоставление client_id для текущего пользователя.
+// - Если пользователь уже есть в clients → вернуть его id.
+// - Если это провайдер → найти клиента по email/phone, иначе создать “зеркального” клиента.
+// - Устойчиво к UNIQUE-конфликтам: при 23505 делаем повторный SELECT.
 async function ensureClientIdForUser(userId) {
-  // уже клиент?
-  const q1 = await db.query(`SELECT id FROM clients WHERE id = $1`, [userId]);
-  if (q1.rowCount > 0) return q1.rows[0].id;
+  // Уже клиент?
+  const c = await db.query(`SELECT id FROM clients WHERE id = $1`, [userId]);
+  if (c.rowCount > 0) return c.rows[0].id;
 
-  // провайдер?
+  // Провайдер?
   const p = await db.query(
     `SELECT id, name, phone, email, social FROM providers WHERE id = $1`,
     [userId]
   );
   if (p.rowCount === 0) return null; // неизвестный пользователь
-  const prov = p.rows[0];
 
-  // попробовать сопоставить уже существующего клиента по email/phone
+  const prov = p.rows[0];
+  const email = prov.email || null;
+  const phone = prov.phone || null;
+
+  // Попытаться сопоставить существующего клиента по email/phone (только если значения не null)
   const q2 = await db.query(
     `SELECT id FROM clients
-       WHERE (email IS NOT DISTINCT FROM $1 AND $1 IS NOT NULL)
-          OR (phone IS NOT DISTINCT FROM $2 AND $2 IS NOT NULL)
-     LIMIT 1`,
-    [prov.email || null, prov.phone || null]
+      WHERE ($1 IS NOT NULL AND email IS NOT DISTINCT FROM $1)
+         OR ($2 IS NOT NULL AND phone IS NOT DISTINCT FROM $2)
+      ORDER BY id LIMIT 1`,
+    [email, phone]
   );
   if (q2.rowCount > 0) return q2.rows[0].id;
 
-  // создать «теневого клиента»
-  const ins = await db.query(
-    `INSERT INTO clients (name, email, phone, telegram)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id`,
-    [prov.name || "Provider", prov.email || null, prov.phone || null, prov.social || null]
-  );
-  return ins.rows[0].id;
+  // Создать “зеркального” клиента; при конфликте — безопасно перечитать
+  try {
+    const ins = await db.query(
+      `INSERT INTO clients (name, email, phone, telegram)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [prov.name || `Provider #${prov.id}`, email, phone, prov.social || null]
+    );
+    return ins.rows[0].id;
+  } catch (e) {
+    // 23505 = UNIQUE violation (например, по email/phone) — перечитать
+    if (e && e.code === '23505') {
+      const q3 = await db.query(
+        `SELECT id FROM clients
+          WHERE ($1 IS NOT NULL AND email IS NOT DISTINCT FROM $1)
+             OR ($2 IS NOT NULL AND phone IS NOT DISTINCT FROM $2)
+          ORDER BY id LIMIT 1`,
+        [email, phone]
+      );
+      if (q3.rowCount > 0) return q3.rows[0].id;
+    }
+    throw e;
+  }
 }
 
 
@@ -198,6 +217,13 @@ async function ensureClientIdForUser(userId) {
  *  - НЕ создаёт «теневого клиента»
  *  - client_id = текущий userId как есть
  *  - при дубле возвращает существующую заявку (200), а не падает
+ */
+/** ✅ POST /api/requests — быстрый запрос (клиент/провайдер)
+ *  - Проверка сервиса.
+ *  - Блок самозаявки (провайдер → свой сервис).
+ *  - client_id = реальный client.id (для провайдера создаём/находим “зеркального клиента”).
+ *  - При дубле возвращаем существующую запись (200).
+ *  - В ошибках не шлём 500 без нужды.
  */
 exports.createQuickRequest = async (req, res) => {
   try {
@@ -215,15 +241,16 @@ exports.createQuickRequest = async (req, res) => {
     const svc = svcQ.rows[0];
     if (!svc) return res.status(404).json({ error: "service_not_found" });
 
-    // 2) провайдер не может отправить запрос на свой же сервис
+    // 2) запрет самозаявки (провайдер не может отправить на свой же сервис)
     if (Number(svc.provider_id) === Number(userId)) {
       return res.status(400).json({ error: "self_request_forbidden" });
     }
 
-    // 3) client_id = текущий userId (для клиента — id клиента, для провайдера — id провайдера)
-    const clientId = Number(userId);
+    // 3) получить корректный client_id (для клиента — это он сам; для провайдера — “зеркальный клиент”)
+    const clientId = await ensureClientIdForUser(userId);
+    if (!clientId) return res.status(403).json({ error: "forbidden" });
 
-    // 4) защита от дублей: вернуть последнюю существующую заявку
+    // 4) защита от дублей (вернуть существующую заявку)
     const dup = await db.query(
       `SELECT id, service_id, client_id, status, note, created_at
          FROM requests
@@ -236,18 +263,16 @@ exports.createQuickRequest = async (req, res) => {
       return res.status(200).json(dup.rows[0]);
     }
 
-    // 5) создать новую заявку
+    // 5) вставка новой заявки
     const ins = await db.query(
       `INSERT INTO requests (service_id, client_id, status, note)
        VALUES ($1, $2, 'new', $3)
        RETURNING id, service_id, client_id, status, note, created_at`,
       [service_id, clientId, note || null]
     );
-
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("quick request error:", err);
-    // отдаём понятный код, без 500
     return res.status(400).json({ error: "request_create_failed" });
   }
 };
