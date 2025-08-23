@@ -66,6 +66,7 @@
   "city_tour": "Shahar bo‘ylab sayohat",
   "clear_all": "Hammasini tozalash",
   "clear_all_images_confirm": "Barcha rasmlarni o‘chirasizmi?",
+  
   "client": {
     "dashboard": {
       "avatarUrl": "Avatar havolasi",
@@ -87,6 +88,7 @@
       "refresh": "Yangilash",
       "refusedTours": "Rad etilgan turlar",
       "removePhoto": "Rasmni olib tashlash",
+      "requestDeleted": "So`rov o`chirildi",
       "saveBtn": "Saqlash",
       "tabs": {
         "myBookings": "Bronlarim",
