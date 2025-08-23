@@ -25,18 +25,40 @@ const maybeParse = (x) => {
   return null;
 };
 
-// префикс для относительных URL от API
+/** Абсолютный URL для медиа.
+ *  - если http/https/data: → вернуть как есть
+ *  - если начинается с /storage, /uploads и т.п. → приклеиваем текущий origin (https)
+ *  - иначе пробуем приклеить API_BASE
+ *  - апгрейдим http→https, если сайт открыт по https и хост совпадает
+ */
 const toAbsoluteUrl = (u) => {
   if (!u) return "";
-  const s = String(u).trim();
-  if (/^data:/.test(s)) return s;
-  if (/^https?:\/\//i.test(s)) return s;
+  let s = String(u).trim();
+  if (/^(data:|https?:\/\/)/i.test(s)) return s;
+
+  const origin = window.location.origin; // всегда https на проде
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
   const path = s.replace(/^\/+/, "");
-  return base ? `${base}/${path}` : `/${path}`;
+
+  // пути статики часто отдаются с фронтового домена
+  const looksStatic = /^(storage|uploads|images|img|files|media)\b/i.test(path);
+  let url = looksStatic
+    ? `${origin}/${path}`
+    : (base ? `${base}/${path}` : `${origin}/${path}`);
+
+  try {
+    const uObj = new URL(url);
+    // апгрейд протокола, если домен совпадает и страница https
+    if (window.location.protocol === "https:" && uObj.protocol === "http:" && uObj.host === window.location.host) {
+      uObj.protocol = "https:";
+      url = uObj.toString();
+    }
+  } catch { /* ignore */ }
+
+  return url;
 };
 
-// берём первую адекватную картинку из строки/массива/объекта
+// Берём первую адекватную картинку из строки/массива/объекта
 const firstImageFrom = (val) => {
   const pickObj = (o) => first(o?.url, o?.src, o?.image, o?.photo, o?.logo, o?.path);
   const extract = (x) => {
@@ -78,22 +100,15 @@ const firstImageFrom = (val) => {
   return extract(val);
 };
 
-// извлекаем телеграм из разных форматов/полей
+// Телеграм из разных форматов/полей
 const toTelegramUrl = (v) => {
   if (!v) return null;
   let s = String(v).trim();
 
-  // ссылка на телеграм
   const mUrl = s.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/([A-Za-z0-9_]+)/i);
   if (mUrl) return `https://t.me/${mUrl[1]}`;
-
-  // @username
   if (s.startsWith("@")) return `https://t.me/${s.slice(1)}`;
-
-  // просто username
   if (/^[A-Za-z0-9_]+$/.test(s)) return `https://t.me/${s}`;
-
-  // если это другая ссылка — не считаем телеграмом
   return null;
 };
 
@@ -141,13 +156,23 @@ function providerTypeLabel(raw, t) {
   return _(`provider.types.${key}`, fallback);
 }
 
+// SVG-плейсхолдер на случай onError
+const FALLBACK_SVG =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'>
+       <rect width='100%' height='100%' fill='#f3f4f6'/>
+       <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+             font-family='sans-serif' font-size='14' fill='#9ca3af'>Нет фото</text>
+     </svg>`
+  );
+
 /* page */
 export default function ProviderProfile() {
   const { id } = useParams();
   const pid = Number(id);
   const { t } = useTranslation();
 
-  // локальный хелпер перевода (НЕ затираем внешний tr)
   const tx = (key, fallback) => t(key, { defaultValue: fallback });
 
   const [prov, setProv] = useState(null);
@@ -206,7 +231,7 @@ export default function ProviderProfile() {
     );
     const email = first(prov?.email, contacts?.email, d?.email);
 
-    // добавлено: читаем Telegram из поля social тоже
+    // читаем Telegram, включая поле social
     const rawTelegram = first(
       prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram,
       prov?.social, d?.social, contacts?.social, socials?.social
@@ -215,7 +240,7 @@ export default function ProviderProfile() {
 
     const website = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
 
-    // добавлено: учитываем providers.photo и абсолютируем
+    // ВАЖНО: учитываем providers.photo и абсолютируем
     const logo = firstImageFrom(first(prov?.photo, prov?.logo, d?.photo, d?.logo, prov?.image, d?.image));
     const cover = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images));
 
@@ -259,7 +284,12 @@ export default function ProviderProfile() {
           <div className="shrink-0">
             <div className="w-32 h-32 md:w-48 md:h-48 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center ring-1 ring-black/5">
               {details.logo ? (
-                <img src={details.logo} alt="" className="w-full h-full object-cover" />
+                <img
+                  src={details.logo}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.src = FALLBACK_SVG; }}
+                />
               ) : (
                 <span className="text-xs text-gray-400 px-2">Нет фото</span>
               )}
@@ -290,13 +320,9 @@ export default function ProviderProfile() {
               {details.telegram && (
                 <span>
                   {tx("marketplace.telegram","Телеграм")}:{" "}
-                  {String(details.telegram).startsWith("http")
-                    ? (
-                      <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">
-                        {details.telegram.replace(/^https?:\/\/t\.me\//, "@")}
-                      </a>
-                    )
-                    : <span>{details.telegram}</span>}
+                  <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">
+                    {details.telegram.replace(/^https?:\/\/t\.me\//, "@")}
+                  </a>
                 </span>
               )}
               {details.address && <span>{tx("marketplace.address","Адрес")}: <b>{details.address}</b></span>}
