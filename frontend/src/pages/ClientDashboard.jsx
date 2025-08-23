@@ -504,6 +504,22 @@ export default function ClientDashboard() {
     setSearchParams(params, { replace: true });
   }, [activeTab, favPage]); // eslint-disable-line
 
+  // 🔁 NEW: keep React state in sync with URL query (so header links like ?tab=favorites work)
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const pageParamRaw = searchParams.get("page");
+    const pageParam = Number(pageParamRaw || 1);
+
+    if (tabParam && tabParam !== activeTab && tabs.some((t) => t.key === tabParam)) {
+      setActiveTab(tabParam);
+    }
+    if (tabParam === "favorites") {
+      const np = isNaN(pageParam) ? 1 : pageParam;
+      if (np !== favPage) setFavPage(np);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -755,7 +771,7 @@ export default function ClientDashboard() {
       err?.status ||
       err?.response?.status ||
       err?.data?.status ||
-      (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
+      (typeof err?.message === "string" && /(^|\\s)4\\d\\d(\\s|$)/.test(err.message) ? 400 : undefined);
 
     if (status === 401 || status === 403) {
       tInfo(t("auth.login_required") || "Войдите, чтобы использовать избранное", {
@@ -843,7 +859,7 @@ export default function ClientDashboard() {
   // Удаление заявки (API или локальный черновик)
   function askDeleteRequest(id) {
     if (!id) return;
-    setDelUI({ open: true, id, isDraft: String(id).startsWith("d_"), sending: false });
+    setDelUI({ open: true, id, isDraft: false, sending: false });
   }
 
   async function confirmDeleteRequest() {
