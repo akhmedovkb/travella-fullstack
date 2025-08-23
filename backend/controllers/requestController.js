@@ -157,45 +157,66 @@ exports.touchByProvider = async (req, res) => {
 // - Если это обычный клиент — возвращаем его id (он есть в clients).
 // - Если это провайдер — берём из provider_client_map, иначе создаём "зеркального клиента",
 //   записываем связку в map и возвращаем новый client_id.
+// ✅ Гарантированно получить client_id для текущего пользователя.
+// - Если это обычный клиент — вернём его id.
+// - Если это провайдер — найдём/создадим "зеркального клиента" в clients,
+//   УЧИТЫВАЯ NOT NULL на password_hash.
 async function ensureClientIdForUser(userId) {
-  // Пользователь уже клиент?
+  // Уже клиент?
   const c = await db.query(`SELECT id FROM clients WHERE id = $1`, [userId]);
   if (c.rowCount > 0) return c.rows[0].id;
 
-  // Пользователь провайдер?
+  // Провайдер?
   const p = await db.query(
     `SELECT id, name, email, phone, social FROM providers WHERE id = $1`,
     [userId]
   );
-  if (p.rowCount === 0) return null;
+  if (p.rowCount === 0) return null; // неизвестный пользователь
   const prov = p.rows[0];
 
-  // Есть готовое сопоставление?
-  const m = await db.query(
-    `SELECT client_id FROM provider_client_map WHERE provider_id = $1`,
-    [prov.id]
-  );
-  if (m.rowCount > 0) return m.rows[0].client_id;
+  const email = prov.email || null;
+  const phone = prov.phone || null;
 
-  // Создаём "зеркального" клиента c теми же полями
-  const insClient = await db.query(
-    `INSERT INTO clients (name, email, phone, telegram)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id`,
-    [prov.name || `Provider #${prov.id}`, prov.email || null, prov.phone || null, prov.social || null]
+  // Попробовать сопоставить существующего клиента по email/phone
+  const q2 = await db.query(
+    `SELECT id FROM clients
+       WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
+          OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
+       ORDER BY id LIMIT 1`,
+    [email, phone]
   );
-  const clientId = insClient.rows[0].id;
+  if (q2.rowCount > 0) return q2.rows[0].id;
 
-  // Фиксируем сопоставление (идемпотентно)
-  await db.query(
-    `INSERT INTO provider_client_map (provider_id, client_id)
-     VALUES ($1, $2)
-     ON CONFLICT (provider_id) DO UPDATE SET client_id = EXCLUDED.client_id`,
-    [prov.id, clientId]
-  );
+  // Создать "зеркального клиента".
+  // ВАЖНО: password_hash у вас NOT NULL → ставим фиктивное значение,
+  // которое НЕ используется для логина (такие записи не предназначены для входа).
+  // Если хотите ещё безопаснее — заведите default в БД, но этот вариант уже самодостаточен.
+  const DUMMY_HASH = '__no_login__'; // не null, не пустая строка
 
-  return clientId;
+  try {
+    const ins = await db.query(
+      `INSERT INTO clients (name, email, phone, telegram, password_hash)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [prov.name || `Provider #${prov.id}`, email, phone, prov.social || null, DUMMY_HASH]
+    );
+    return ins.rows[0].id;
+  } catch (e) {
+    if (e && e.code === '23505') {
+      // UNIQUE по email/phone: перечитать и вернуть того, кто уже есть
+      const q3 = await db.query(
+        `SELECT id FROM clients
+           WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
+              OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
+           ORDER BY id LIMIT 1`,
+        [email, phone]
+      );
+      if (q3.rowCount > 0) return q3.rows[0].id;
+    }
+    throw e;
+  }
 }
+
 
 
 /* ===================== Controllers ===================== */
