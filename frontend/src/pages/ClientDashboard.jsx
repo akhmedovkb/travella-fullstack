@@ -481,6 +481,7 @@ export default function ClientDashboard() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrTitle, setQrTitle] = useState(""); // только для локального «черновика»
+  const [qrSending, setQrSending] = useState(false);
 
   const [bkDate, setBkDate] = useState("");
   const [bkTime, setBkTime] = useState("");
@@ -940,7 +941,8 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     setQrTitle("");
   }
   async function submitQuickRequest(note) {
-  if (!qrServiceId) return;
+  if (!qrServiceId || qrSending) return;
+    setQrSending(true);
 
   try {
     await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
@@ -983,6 +985,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
       tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
     }
   } finally {
+    setQrSending(false);
     closeQuickRequestModal();
   }
 }
@@ -1328,6 +1331,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
         open={qrOpen}
         onClose={closeQuickRequestModal}
         onSubmit={submitQuickRequest}
+        busy={qrSending}
       />
       <ConfirmModal
         open={delUI.open}
