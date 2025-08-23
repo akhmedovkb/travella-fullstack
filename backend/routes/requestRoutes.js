@@ -70,16 +70,25 @@ if (typeof getMyRequests === "function") {
       const q = await db.query(
         `
         SELECT
-          r.id,
-          r.created_at,
-          COALESCE(r.status,'new') AS status,
-          r.note,
-          r.proposal,
-          json_build_object('id', s.id, 'title', COALESCE(s.title,'—')) AS service
-        FROM requests r
-        JOIN services s ON s.id = r.service_id
-        WHERE r.client_id = $1
-        ORDER BY r.created_at DESC
+            r.id,
+            r.created_at,
+            COALESCE(r.status, 'new') AS status,
+            r.note,
+            r.proposal,
+            json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
+            json_build_object(
+              'id', pr.id,
+              'name', COALESCE(pr.name, '—'),
+              'type', pr.type,
+              'phone', pr.phone,
+              'telegram', pr.social
+            ) AS provider
+          FROM requests r
+          JOIN services  s  ON s.id = r.service_id
+          JOIN providers pr ON pr.id = s.provider_id
+          WHERE r.client_id = $1
+          ORDER BY r.created_at DESC
+
         `,
         [clientId]
       );
