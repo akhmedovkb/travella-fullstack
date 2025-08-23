@@ -253,7 +253,10 @@ exports.createQuickRequest = async (req, res) => {
         LIMIT 1`,
       [service_id, clientId]
     );
-    if (dup.rowCount > 0) return res.status(200).json(dup.rows[0]);
+      if (dup.rowCount > 0) {
+    // Уже отправляли запрос на эту услугу этим пользователем (клиент/провайдер)
+    return res.status(409).json({ error: "request_already_sent", id: dup.rows[0].id });
+  }
 
     // новая заявка
     const ins = await db.query(
