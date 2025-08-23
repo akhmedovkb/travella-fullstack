@@ -859,18 +859,14 @@ export default function ClientDashboard() {
   // Удаление заявки (API или локальный черновик)
   function askDeleteRequest(id) {
     if (!id) return;
-    // detect drafts by id prefix and by current state flag, to avoid accidental API DELETEs
-    const isDraftFromState = requests?.some((x) => String(x.id) === String(id) && x.is_draft);
-    const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
-    setDelUI({ open: true, id, isDraft, sending: false });
-  });
+    setDelUI({ open: true, id, isDraft: false, sending: false });
   }
 
   async function confirmDeleteRequest() {
     if (!delUI.id) return;
     setDelUI((s) => ({ ...s, sending: true }));
     try {
-      if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
+      if (delUI.isDraft) {
         const keyId = myId || null;
         const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
         saveDrafts(keyId, updated);
