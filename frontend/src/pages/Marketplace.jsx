@@ -424,6 +424,14 @@ export default function Marketplace() {
     const code =
       err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
     const msgStr = String(code).toLowerCase();
+        // Повторный быстрый запрос на ту же услугу
+    if (status === 409 || msgStr.includes("request_already_sent") || msgStr.includes("already")) {
+      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
+        autoClose: 2000,
+        toastId: "req-already",
+      });
+      return;
+    }
 
     const isSelfByStatus =
       status === 400 && qrProviderId && myProviderId && Number(qrProviderId) === myProviderId;
