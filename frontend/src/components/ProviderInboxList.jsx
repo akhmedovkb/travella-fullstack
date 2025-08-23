@@ -1,4 +1,4 @@
-// src/components/ProviderInboxList.jsx
+//src/components/ProviderInboxList.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
