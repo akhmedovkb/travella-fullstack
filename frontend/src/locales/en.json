@@ -4,7 +4,8 @@
   "actions": {
     "quick_request": "Quick request",
     "cancel": "Cancel",
-    "send": "SEND"
+    "delete": "Delete",
+    "send": "Send"
   },
   "add_error": "Failed to add service",
   "address": "Address",
@@ -72,6 +73,7 @@
       "changeBtn": "Change",
       "changePassword": "Change password",
       "changePhoto": "Change photo",
+      "confirmDeleteRequest": "Delete this request?",
       "languagesCsv": "languages_csv",
       "logout": "Logout",
       "name": "Name",
