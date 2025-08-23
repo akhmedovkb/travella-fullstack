@@ -1,6 +1,4 @@
-
 //src/components/ProviderInboxList.jsx
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -200,6 +198,8 @@ const ProviderInboxList = ({ showHeader = false }) => {
                 .replace(/^https?:\/\/t\.me\//i, "")
                 .replace(/^t\.me\//i, "")
             : null;
+      
+        const isProcessed = String(r?.status || "").toLowerCase() === "processed";
 
           return (
             <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
