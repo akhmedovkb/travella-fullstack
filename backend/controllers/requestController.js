@@ -153,78 +153,54 @@ exports.touchByProvider = async (req, res) => {
 };
 
 
-// ✅ Надёжное сопоставление client_id для текущего пользователя.
-// - Если пользователь уже есть в clients → вернуть его id.
-// - Если это провайдер → найти клиента по email/phone, иначе создать “зеркального” клиента.
-// - Устойчиво к UNIQUE-конфликтам: при 23505 делаем повторный SELECT.
+// ============ helper: гарантированно получить client_id для текущего пользователя ============
+// - Если это обычный клиент — возвращаем его id (он есть в clients).
+// - Если это провайдер — берём из provider_client_map, иначе создаём "зеркального клиента",
+//   записываем связку в map и возвращаем новый client_id.
 async function ensureClientIdForUser(userId) {
-  // Уже клиент?
+  // Пользователь уже клиент?
   const c = await db.query(`SELECT id FROM clients WHERE id = $1`, [userId]);
   if (c.rowCount > 0) return c.rows[0].id;
 
-  // Провайдер?
+  // Пользователь провайдер?
   const p = await db.query(
-    `SELECT id, name, phone, email, social FROM providers WHERE id = $1`,
+    `SELECT id, name, email, phone, social FROM providers WHERE id = $1`,
     [userId]
   );
-  if (p.rowCount === 0) return null; // неизвестный пользователь
-
+  if (p.rowCount === 0) return null;
   const prov = p.rows[0];
-  const email = prov.email || null;
-  const phone = prov.phone || null;
 
-    // Попытаться сопоставить существующего клиента по email/phone (приводим параметры к text)
-  const q2 = await db.query(
-    `SELECT id FROM clients
-       WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
-          OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
-       ORDER BY id LIMIT 1`,
-    [email, phone]
+  // Есть готовое сопоставление?
+  const m = await db.query(
+    `SELECT client_id FROM provider_client_map WHERE provider_id = $1`,
+    [prov.id]
   );
-  if (q2.rowCount > 0) return q2.rows[0].id;
+  if (m.rowCount > 0) return m.rows[0].client_id;
 
-  // Создать “зеркального” клиента; при конфликте — безопасно перечитать
-  try {
-    const ins = await db.query(
-      `INSERT INTO clients (name, email, phone, telegram)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id`,
-      [prov.name || `Provider #${prov.id}`, email, phone, prov.social || null]
-    );
-    return ins.rows[0].id;
-  } catch (e) {
-    // 23505 = UNIQUE violation (например, по email/phone) — перечитать
-    if (e && e.code === '23505') {
-            const q3 = await db.query(
-        `SELECT id FROM clients
-           WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
-              OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
-           ORDER BY id LIMIT 1`,
-        [email, phone]
-      );
-      if (q3.rowCount > 0) return q3.rows[0].id;
-    }
-    throw e;
-  }
+  // Создаём "зеркального" клиента c теми же полями
+  const insClient = await db.query(
+    `INSERT INTO clients (name, email, phone, telegram)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [prov.name || `Provider #${prov.id}`, prov.email || null, prov.phone || null, prov.social || null]
+  );
+  const clientId = insClient.rows[0].id;
+
+  // Фиксируем сопоставление (идемпотентно)
+  await db.query(
+    `INSERT INTO provider_client_map (provider_id, client_id)
+     VALUES ($1, $2)
+     ON CONFLICT (provider_id) DO UPDATE SET client_id = EXCLUDED.client_id`,
+    [prov.id, clientId]
+  );
+
+  return clientId;
 }
 
 
 /* ===================== Controllers ===================== */
 
-/** POST /api/requests (алиас: /api/requests/quick)
- *  Работает и для клиента, и для провайдера:
- *  - запрещает самозаявку (провайдер → свой же сервис)
- *  - НЕ создаёт «теневого клиента»
- *  - client_id = текущий userId как есть
- *  - при дубле возвращает существующую заявку (200), а не падает
- */
-/** ✅ POST /api/requests — быстрый запрос (клиент/провайдер)
- *  - Проверка сервиса.
- *  - Блок самозаявки (провайдер → свой сервис).
- *  - client_id = реальный client.id (для провайдера создаём/находим “зеркального клиента”).
- *  - При дубле возвращаем существующую запись (200).
- *  - В ошибках не шлём 500 без нужды.
- */
+/** POST /api/requests — быстрый запрос (клиент/провайдер) */
 exports.createQuickRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -233,24 +209,21 @@ exports.createQuickRequest = async (req, res) => {
     const { service_id, note } = req.body || {};
     if (!service_id) return res.status(400).json({ error: "service_id_required" });
 
-    // 1) сервис существует?
-    const svcQ = await db.query(
-      `SELECT id, provider_id FROM services WHERE id = $1`,
-      [service_id]
-    );
+    // сервис существует?
+    const svcQ = await db.query(`SELECT id, provider_id FROM services WHERE id = $1`, [service_id]);
     const svc = svcQ.rows[0];
     if (!svc) return res.status(404).json({ error: "service_not_found" });
 
-    // 2) запрет самозаявки (провайдер не может отправить на свой же сервис)
+    // запрет самозаявки (провайдер → свой же сервис)
     if (Number(svc.provider_id) === Number(userId)) {
       return res.status(400).json({ error: "self_request_forbidden" });
     }
 
-    // 3) получить корректный client_id (для клиента — это он сам; для провайдера — “зеркальный клиент”)
+    // получить валидный client_id (для FK)
     const clientId = await ensureClientIdForUser(userId);
     if (!clientId) return res.status(403).json({ error: "forbidden" });
 
-    // 4) защита от дублей (вернуть существующую заявку)
+    // дубль? вернём существующую запись
     const dup = await db.query(
       `SELECT id, service_id, client_id, status, note, created_at
          FROM requests
@@ -259,11 +232,9 @@ exports.createQuickRequest = async (req, res) => {
         LIMIT 1`,
       [service_id, clientId]
     );
-    if (dup.rowCount > 0) {
-      return res.status(200).json(dup.rows[0]);
-    }
+    if (dup.rowCount > 0) return res.status(200).json(dup.rows[0]);
 
-    // 5) вставка новой заявки
+    // новая заявка
     const ins = await db.query(
       `INSERT INTO requests (service_id, client_id, status, note)
        VALUES ($1, $2, 'new', $3)
@@ -273,6 +244,7 @@ exports.createQuickRequest = async (req, res) => {
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("quick request error:", err);
+    // без 500 — даём код, который фронт уже обрабатывает
     return res.status(400).json({ error: "request_create_failed" });
   }
 };
