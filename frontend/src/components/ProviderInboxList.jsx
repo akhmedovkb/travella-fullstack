@@ -211,11 +211,34 @@ const ProviderInboxList = ({ showHeader = false }) => {
               </div>
 
               {/* От кого */}
+              
               <div className="mt-2 text-sm">
                 <div className="text-gray-600">
                   {t("provider.inbox.from", { defaultValue: "От" })}:
                 </div>
-                <div className="font-medium">{r.client?.name || "—"}</div>
+                                <div className="font-medium flex items-center gap-2">
+                  {r?.client?.provider_id ? (
+                    <a
+                      href={`/providers/${r.client.provider_id}`}
+                      className="underline hover:no-underline"
+                    >
+                      {r.client?.name || "—"}
+                    </a>
+                  ) : (
+                    <span>{r.client?.name || "—"}</span>
+                  )}
+                  {!!r.client?.type && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
+                      {{
+                        client: t("labels.client", { defaultValue: "Клиент" }),
+                        agent: t("labels.agent", { defaultValue: "Турагент" }),
+                        guide: t("labels.guide", { defaultValue: "Гид" }),
+                        transport: t("labels.transport", { defaultValue: "Транспорт" }),
+                        hotel: t("labels.hotel", { defaultValue: "Отель" }),
+                      }[r.client.type] || r.client.type}
+                    </span>
+                  )}
+                </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
                   {phone ? (
