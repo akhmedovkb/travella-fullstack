@@ -1024,22 +1024,22 @@ export default function ClientDashboard() {
               <div className="mt-2 text-sm text-gray-700">
                 <div className="flex items-center gap-2">
                   <a href={`/providers/${providerId}`} className="underline hover:no-underline">
-                    {flatName || "—"}
+                    {providerName || "—"}
                   </a>
-                  {flatType && (
+                  {providerType && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
                       {{
                         agent: "Турагент",
                         guide: "Гид",
                         transport: "Транспорт",
                         hotel: "Отель",
-                      }[flatType] || "Провайдер"}
+                      }[String(providerType).toLowerCase()] || "Провайдер"}
                     </span>
                   )}
                 </div>
                 <div className="flex gap-4 mt-1">
-                  {flatPhone && <a className="hover:underline" href={`tel:${String(flatPhone).replace(/[^+\d]/g,"")}`}>{flatPhone}</a>}
-                  {flatTg && <a className="hover:underline" href={`https://t.me/${String(flatTg).replace(/^@/,"")}`} target="_blank" rel="noreferrer">@{String(flatTg).replace(/^@/,"")}</a>}
+                  {providerPhone && <a className="hover:underline" href={`tel:${String(providerPhone).replace(/[^+\d]/g,"")}`}>{providerPhone}</a>}
+                  {providerTg && <a className="hover:underline" href={`https://t.me/${String(providerTg).replace(/^@/,"")}`} target="_blank" rel="noreferrer">@{String(providerTg).replace(/^@/,"")}</a>}
                 </div>
               </div>
             )}
