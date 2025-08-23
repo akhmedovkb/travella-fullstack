@@ -274,6 +274,27 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
+/** DELETE /api/requests/:id (удаление своей заявки клиентом) */
+exports.deleteRequest = async (req, res) => {
+  try {
+    const clientId = req.user?.id;
+    if (!clientId) return res.status(401).json({ error: "unauthorized" });
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ error: "id_required" });
+
+    const q = await db.query(
+      `DELETE FROM requests WHERE id::text = $1 AND client_id = $2`,
+      [id, Number(clientId)]
+    );
+    if (!q.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+    return res.json({ success: true, deleted: id });
+  } catch (e) {
+    console.error("deleteRequest (client) error:", e);
+    return res.status(500).json({ error: "delete_failed" });
+  }
+};
+
+
 /** GET /api/requests/provider/stats */
 exports.getProviderStats = async (req, res) => {
   try {
