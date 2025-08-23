@@ -358,25 +358,47 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
-/** DELETE /api/requests/:id (удаление своей заявки клиентом) */
+/** DELETE /api/requests/:id
+ *  Клиент (создатель) ИЛИ провайдер-владелец услуги может удалить заявку
+ */
 exports.deleteRequest = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    if (!clientId) return res.status(401).json({ error: "unauthorized" });
+    const userId = req.user?.id;
+    const providerId = req.user?.provider_id || req.user?.providerId || null;
+    if (!userId) return res.status(401).json({ error: "unauthorized" });
+
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    const q = await db.query(
-      `DELETE FROM requests WHERE id::text = $1 AND client_id = $2`,
-      [id, Number(clientId)]
+    // Берём владельцев записи
+    const row = await db.query(
+      `SELECT r.id, r.client_id, s.provider_id
+         FROM requests r
+         JOIN services s ON s.id = r.service_id
+        WHERE r.id::text = $1`,
+      [id]
     );
-    if (!q.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+    if (row.rowCount === 0) {
+      return res.status(404).json({ error: "not_found_or_forbidden" });
+    }
+
+    const rec = row.rows[0];
+    const isOwner = String(rec.client_id) === String(userId);
+    const isServiceOwner = providerId && String(rec.provider_id) === String(providerId);
+
+    if (!isOwner && !isServiceOwner) {
+      // сохраняем старое поведение ради совместимости с фронтом
+      return res.status(404).json({ error: "not_found_or_forbidden" });
+    }
+
+    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
     return res.json({ success: true, deleted: id });
   } catch (e) {
-    console.error("deleteRequest (client) error:", e);
+    console.error("deleteRequest (client|provider) error:", e);
     return res.status(500).json({ error: "delete_failed" });
   }
 };
+
 
 
 /** GET /api/requests/provider/stats */
