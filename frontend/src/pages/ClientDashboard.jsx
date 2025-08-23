@@ -17,6 +17,52 @@ function initials(name = "") {
   const second = parts[1]?.[0] || "";
   return (first + second).toUpperCase() || "U";
 }
+
+function normalizeTelegram(v) {
+  if (!v) return null;
+  let s = String(v).trim();
+  if (!s) return null;
+
+  // убираем пробелы внутри (на случай переносов строк/копипаста)
+  s = s.replace(/\s+/g, "");
+
+  // tg://resolve?domain=username
+  const mResolve = s.match(/tg:\/\/resolve\?domain=([\w\d_]+)/i);
+  if (mResolve) {
+    const u = mResolve[1];
+    return { href: `https://t.me/${u}`, label: `@${u}` };
+  }
+
+  // инвайты/группы (+XXXX или joinchat/XXXX) — просто кликабельная t.me-ссылка
+  const mInvite = s.match(
+    /(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/(joinchat\/[A-Za-z0-9_-]+|\+[A-Za-z0-9_-]+)/i
+  );
+  if (mInvite) {
+    const p = mInvite[1];
+    return { href: `https://t.me/${p}`, label: `t.me/${p}` };
+  }
+
+  // обычные ссылки на пользователя
+  const mUrl = s.match(
+    /(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/(@?[\w\d_]+)/i
+  );
+  if (mUrl) {
+    const u = mUrl[1].replace(/^@/, "");
+    return { href: `https://t.me/${u}`, label: `@${u}` };
+  }
+
+  // просто никнейм или с @
+  const mUser = s.match(/^@?([\w\d_]{3,})$/);
+  if (mUser) {
+    const u = mUser[1];
+    return { href: `https://t.me/${u}`, label: `@${u}` };
+  }
+
+  // запасной вариант — пытаемся открыть как есть
+  return { href: `https://t.me/${s.replace(/^@/, "")}`, label: s };
+}
+
+
 function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
   if (!b64OrDataUrl) return null;
   return String(b64OrDataUrl).startsWith("data:") ? b64OrDataUrl : `data:${mime};base64,${b64OrDataUrl}`;
@@ -1087,16 +1133,20 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                       </a>
                    )}
                   
-                  {providerTg && (
-                      <a
-                        className="hover:underline break-all"
-                        href={`https://t.me/${String(providerTg).replace(/^@/, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        @{String(providerTg).replace(/^@/, "")}
-                      </a>
-                    )}
+                  {(() => {
+                      const tg = normalizeTelegram(providerTg);
+                      return tg ? (
+                        <a
+                          className="hover:underline break-all"
+                          href={tg.href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {tg.label}
+                        </a>
+                      ) : null;
+                    })()}
+
                 </div>
               </div>
             )}
