@@ -4,7 +4,7 @@
   "actions": {
     "quick_request": "Быстрый запрос",
     "cancel": "Отмена",
-    "send": "ОТПРАВИТЬ"
+    "send": "Отправить"
   },
   "address": "Адрес",
   "add_error": "Ошибка добавления",
@@ -72,6 +72,7 @@
       "changeBtn": "Сменить",
       "changePassword": "Сменить пароль",
       "changePhoto": "Сменить фото",
+      "confirmDeleteRequest": "Удалить эту заявку?",
       "languagesCsv": "languages_csv",
       "logout": "Выйти",
       "name": "Наименование",
