@@ -1060,7 +1060,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   {providerId && (
               <div className="mt-2 text-sm text-gray-700 min-w-0">
                 <div className="flex items-center gap-2">
-                  <a href={`/providers/${providerId}`} className="underline hover:no-underline truncate">
+                  <a href={`/provider/${providerId}`} className="underline hover:no-underline truncate">
                     {providerName || "—"}
                   </a>
                   {providerType && (
