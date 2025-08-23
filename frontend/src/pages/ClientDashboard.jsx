@@ -6,10 +6,7 @@ import { apiGet, apiPut, apiPost, apiDelete } from "../api";
 import { createPortal } from "react-dom";
 import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
-import ServiceCard from "../components/ServiceCard";
-import { tSuccess, tError, tInfo } from "../shared/toast";
-
-const FAV_PAGE_SIZE = 6;
+import ServiceCard from "../components/ServiceCard"; // ⬅️ добавлено
 
 /* ===================== Helpers ===================== */
 function initials(name = "") {
@@ -56,7 +53,12 @@ function cropAndResizeToDataURL(file, size = 512, quality = 0.9) {
 }
 
 /* ===== value helpers ===== */
-
+function fmtPrice(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if (Number.isFinite(n)) return new Intl.NumberFormat().format(n);
+  return String(v);
+}
 function firstNonEmpty(...args) {
   for (const v of args) {
     if (v === 0) return 0;
@@ -80,9 +82,25 @@ function buildDates(d = {}) {
   if (hotelOut) return String(hotelOut);
   return null;
 }
+/* форматирование Telegram */
+function renderTelegram(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null, label = s;
+  if (/^https?:\/\//i.test(s)) href = s;
+  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
+  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
+  return { href, label };
+}
 
 /* ============ Портал (подсказка) ============ */
-
+function TooltipPortal({ visible, x, y, width, children }) {
+  if (!visible) return null;
+  return createPortal(
+    <div className="fixed z-10 pointer-events-none" style={{ left: x, top: y, width, opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(-4px)", transition: "opacity 120ms ease, transform 120ms ease" }}>{children}</div>,
+    document.body
+  );
+}
 
 /* ======== provider fetch (cache + fallbacks) ======== */
 const providerCache = new Map();
@@ -358,7 +376,7 @@ function FavoritesList({
         <EmptyFavorites />
       ) : (
         <>
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {pageItems.map((row) => {
               const sid = getServiceId(row);
               return (
@@ -366,7 +384,6 @@ function FavoritesList({
                   key={sid || JSON.stringify(row)}
                   item={row?.service ?? row}
                   now={now}
-                  viewerRole="client"
                   favActive={sid ? favIds?.has(String(sid)) : false}
                   onToggleFavorite={() => sid && onToggleFavorite?.(sid)}
                   onQuickRequest={(serviceId, providerId, title) =>
@@ -458,6 +475,13 @@ export default function ClientDashboard() {
   ];
   const initialTab = searchParams.get("tab") || "requests";
   const [activeTab, setActiveTab] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : "requests");
+  // Sync state when the URL query (?tab=...) changes (e.g. user clicked top "Избранное" shortcut)
+  useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    if (!urlTab) return;
+    const normalized = urlTab === "favorites" ? "favorites" : (urlTab === "bookings" ? "bookings" : (urlTab === "requests" ? "requests" : urlTab));
+    if (normalized !== activeTab) setActiveTab(normalized);
+  }, [searchParams]);
 
   // Data for tabs
   const [requests, setRequests] = useState([]);
@@ -644,17 +668,13 @@ export default function ClientDashboard() {
       if (removeAvatar) payload.remove_avatar = true;
       const res = await apiPut("/api/clients/me", payload);
       setMessage(t("messages.profile_saved", { defaultValue: "Профиль сохранён" }));
-      tSuccess(t("messages.profile_saved") || "Профиль сохранён", { autoClose: 1800 });
       setName(res?.name ?? name);
       setPhone(res?.phone ?? phone);
       setTelegram(res?.telegram ?? telegram);
       if (res?.avatar_base64) { setAvatarBase64(toDataUrl(res.avatar_base64)); setAvatarServerUrl(null); }
       else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
-    } catch {
-   setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
-   tError(t("errors.profile_save") || "Не удалось сохранить профиль", { autoClose: 2000 });
- }
+    } catch { setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" })); }
     finally { setSavingProfile(false); }
   };
 
@@ -663,112 +683,64 @@ export default function ClientDashboard() {
     try {
       setChangingPass(true); setError(null);
       await apiPost("/api/clients/change-password", { password: newPassword });
-      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
-      tSuccess(t("client.dashboard.passwordChanged") || "Пароль изменён", { autoClose: 1800 });
-     } catch {
-   setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
-   tError(t("errors.password_change") || "Не удалось изменить пароль", { autoClose: 2000 });
- }
+      setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" })); setNewPassword("");
+    } catch { setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" })); }
     finally { setChangingPass(false); }
   };
 
-   const handleLogout = () => {
-   try {
-     localStorage.removeItem("clientToken");
-     localStorage.removeItem("token");
-   } finally {
-     window.location.href = "/client/login";
-   }
- };
+  const handleLogout = () => { try { localStorage.removeItem("clientToken"); } finally { window.location.href = "/client/login"; } };
 
   // старый remove по itemId (оставляю — может вызывать из других мест)
   const handleRemoveFavorite = async (itemId) => {
     try { await apiPost("/api/wishlist/toggle", { itemId }); } catch {}
     setFavorites((prev) => prev.filter((x) => x.id !== itemId));
     setMessage(t("messages.favorite_removed", { defaultValue: "Удалено из избранного" }));
-    tInfo(t("favorites.removed_toast") || "Удалено из избранного", { autoClose: 1500 });
   };
 
   // 🔴 новый тоггл по serviceId для сердечка ServiceCard
   const toggleFavoriteClient = async (serviceId) => {
-  const key = String(serviceId || "");
+    const key = String(serviceId);
+    try {
+      const res = await apiPost("/api/wishlist/toggle", { serviceId });
+      const added = !!res?.added;
 
-  if (!key) {
-    tError(t("toast.favoriteError") || "Не удалось изменить избранное", { autoClose: 2000 });
-    setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
-    return;
-  }
+      // обновляем set id
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (added) next.add(key); else next.delete(key);
+        return next;
+      });
 
-  try {
-    // сервер может вернуть либо { added: true/false }, либо завернуть это в data
-    const res = await apiPost("/api/wishlist/toggle", { serviceId });
-    const added = !!(res?.added ?? res?.data?.added);
-
-    // тост, как у провайдера
-    (added ? tSuccess : tInfo)(
-      added
-        ? (t("favorites.added_toast") || "Добавлено в избранное")
-        : (t("favorites.removed_toast") || "Удалено из избранного"),
-      { autoClose: 1800, toastId: `fav-${key}-${added ? "add" : "rem"}` }
-    );
-
-    // синхронизируем Set избранных id
-    setFavIds((prev) => {
-      const next = new Set(prev);
-      if (added) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-
-    // при снятии избранного — удаляем карточку из списка и корректируем пагинацию
-    if (!added) {
-      let newLen = 0;
-      setFavorites((prev) => {
-        const updated = prev.filter((row) => {
-          const sid =
-            row?.service?.id ??
-            row?.service_id ??
-            row?.serviceId ??
-            row?.id ??
-            null;
-          return String(sid) !== key;
+      // если сняли — сразу убираем карточку
+      if (!added) {
+        setFavorites((prev) =>
+          prev.filter((row) => {
+            const sid =
+              row?.service?.id ??
+              row?.service_id ??
+              row?.serviceId ??
+              row?.id ??
+              null;
+            return String(sid) !== key;
+          })
+        );
+        // подправим пагинацию, чтоб не оставалась пустая страница
+        setFavPage((p) => {
+          const total = Math.max(0, (favorites?.length || 0) - 1);
+          const max = Math.max(1, Math.ceil(total / 8));
+          return Math.min(p, max);
         });
-        newLen = updated.length;
-        return updated;
-      });
+      }
 
-      setFavPage((p) => {
-        const maxPage = Math.max(1, Math.ceil(newLen / FAV_PAGE_SIZE));
-        return Math.min(p, maxPage);
-      });
+      setMessage(
+        added
+          ? t("messages.favorite_added", { defaultValue: "Добавлено в избранное" })
+          : t("messages.favorite_removed", { defaultValue: "Удалено из избранного" })
+      );
+    } catch {
+      setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
     }
-
-    // для старого UI, где есть message/error-лента — оставим текст
-    setMessage(
-      added
-        ? t("messages.favorite_added", { defaultValue: "Добавлено в избранное" })
-        : t("messages.favorite_removed", { defaultValue: "Удалено из избранного" })
-    );
-  } catch (err) {
-    // аккуратно разбираем ошибку
-    const status =
-      err?.status ||
-      err?.response?.status ||
-      err?.data?.status ||
-      (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
-
-    if (status === 401 || status === 403) {
-      tInfo(t("auth.login_required") || "Войдите, чтобы использовать избранное", {
-        autoClose: 2200,
-        toastId: "login-required",
-      });
-    } else {
-      tError(t("toast.favoriteError") || "Не удалось изменить избранное", { autoClose: 2000 });
-    }
-
-    setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
-  }
-};
+  };
 
   // quick request из «Избранного» (+локальный черновик) — оставил как было
   const handleQuickRequest = async (serviceId, meta = {}) => {
@@ -778,7 +750,6 @@ export default function ClientDashboard() {
     try {
       await apiPost("/api/requests", { service_id: serviceId, note });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
-      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
 
       const title = meta.title ||
         favorites.find((f) => {
@@ -801,15 +772,9 @@ export default function ClientDashboard() {
         const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
         setRequests(mergeRequests(apiList, drafts));
       } catch {}
-     } catch (err) {
-   setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-   const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-   if (msg.includes("self_request_forbidden")) {
-     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
-   } else {
-     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-   }
- }
+    } catch {
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    }
   };
 
   const handleAcceptProposal = async (id) => {
@@ -821,10 +786,7 @@ export default function ClientDashboard() {
       if (r.status === "fulfilled") setRequests(mergeRequests(r.value, [...loadDrafts(myId), ...loadDrafts(null)]));
       if (b.status === "fulfilled") setBookings(b.value);
       setActiveTab("bookings");
-     } catch (e) {
-   setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-   tError(t("errors.action_failed") || "Не удалось выполнить действие", { autoClose: 2000 });
- }
+    } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
     finally { setActingReqId(null); }
   };
 
@@ -833,7 +795,6 @@ export default function ClientDashboard() {
       setActingReqId(id); setError(null);
       await apiPost(`/api/requests/${id}/reject`, {});
       setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
-      tInfo(t("client.dashboard.rejected") || "Предложение отклонено", { autoClose: 1800 });
       const data = await fetchClientRequestsSafe(myId);
       setRequests(mergeRequests(data, [...loadDrafts(myId), ...loadDrafts(null)]));
     } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
@@ -886,7 +847,6 @@ export default function ClientDashboard() {
     if (!qrServiceId) return;
     try {
       await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
-      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
       setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
       const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
@@ -904,15 +864,6 @@ export default function ClientDashboard() {
       } catch {}
     } catch {
       setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-         const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-   const status = err?.status || err?.response?.status;
-   if (msg.includes("self_request_forbidden") || status === 400) {
-     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
-   } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-     tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
-   } else {
-     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-   }
     } finally {
       closeQuickRequestModal();
     }
@@ -1041,7 +992,7 @@ export default function ClientDashboard() {
       <FavoritesList
         items={favorites}
         page={favPage}
-        perPage={FAV_PAGE_SIZE}
+        perPage={8}
         favIds={favIds}
         onToggleFavorite={toggleFavoriteClient}
         onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
@@ -1165,7 +1116,7 @@ export default function ClientDashboard() {
               <FavoritesList
                 items={favorites}
                 page={favPage}
-                perPage={FAV_PAGE_SIZE}
+                perPage={8}
                 favIds={favIds}
                 onToggleFavorite={toggleFavoriteClient}
                 onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
