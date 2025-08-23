@@ -358,9 +358,6 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
-/** DELETE /api/requests/:id
- *  Клиент (создатель) ИЛИ провайдер-владелец услуги может удалить заявку
- */
 /** DELETE /api/requests/:id (клиент — свою заявку; провайдер — заявку по своей услуге) */
 exports.deleteRequest = async (req, res) => {
   try {
@@ -400,6 +397,7 @@ exports.deleteRequest = async (req, res) => {
     return res.status(500).json({ error: "delete_failed" });
   }
 };
+
 
 
 /** GET /api/requests/provider/stats */
