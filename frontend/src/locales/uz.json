@@ -3,6 +3,7 @@
   "accommodation_category": "Joylashuv toifasi",
   "actions": {
     "cancel": "Bekor qilish",
+    "delete": "O'chirish",
     "quick_request": "Tez so‘rov",
     "send": "YUBORISH"
   },
@@ -73,6 +74,7 @@
       "changeBtn": "Almashtirish",
       "changePassword": "Parolni almashtirish",
       "changePhoto": "Rasmni almashtirish",
+      "confirmDeleteRequest": "Ushbu so'rovni o'chirmoqchimisiz?",
       "languagesCsv": "languages_csv",
       "logout": "Chiqish",
       "name": "Nom",
