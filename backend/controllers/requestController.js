@@ -251,16 +251,20 @@ exports.getProviderRequests = async (req, res) => {
         COALESCE(r.status, 'new') AS status,
         r.note,
         json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
-        json_build_object(
+                json_build_object(
           'id', COALESCE(c.id, p.id),
           'name', COALESCE(c.name, p.name, '—'),
           'phone', COALESCE(c.phone, p.phone),
-          'telegram', COALESCE(c.telegram, p.social)
+          'telegram', COALESCE(c.telegram, p.social),
+          'type', COALESCE(p2.type, 'client'),
+          'provider_id', p2.id
         ) AS client
       FROM requests r
       JOIN services s ON s.id = r.service_id
       LEFT JOIN clients   c ON c.id = r.client_id
       LEFT JOIN providers p ON p.id = r.client_id
+      LEFT JOIN providers p2 ON (p2.email IS NOT DISTINCT FROM c.email
+                             OR  p2.phone IS NOT DISTINCT FROM c.phone) -- если «клиент» на самом деле провайдер
       WHERE s.provider_id = ANY ($1::int[])
       ORDER BY r.created_at DESC
       `,
@@ -350,10 +354,19 @@ exports.getProviderRequestById = async (req, res) => {
         COALESCE(r.status, 'new') AS status,
         r.note,
         json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
-        json_build_object('id', c.id, 'name', COALESCE(c.name, '—'), 'phone', c.phone, 'telegram', c.telegram) AS client
+                json_build_object(
+          'id', c.id,
+          'name', COALESCE(c.name, '—'),
+          'phone', c.phone,
+          'telegram', c.telegram,
+          'type', COALESCE(p2.type, 'client'),
+          'provider_id', p2.id
+        ) AS client
       FROM requests r
       JOIN services s ON s.id = r.service_id
       JOIN clients  c ON c.id = r.client_id
+      LEFT JOIN providers p2 ON (p2.email IS NOT DISTINCT FROM c.email
+                             OR  p2.phone IS NOT DISTINCT FROM c.phone)
      WHERE r.id::text = $1 AND s.provider_id = ANY ($2::int[])
       `,
       [id, providerIds]
