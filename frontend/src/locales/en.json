@@ -172,6 +172,7 @@
     "password_short": "Password must be at least 6 characters",
     "profile_load": "Failed to load profile",
     "profile_save": "Failed to save profile",
+    "request_already_sent":"Request has already been sent before",
     "request_send": "Failed to send request",
     "self_request_forbidden": "You can’t send a quick request to yourself!",
     "service_unknown": "Service not found",
