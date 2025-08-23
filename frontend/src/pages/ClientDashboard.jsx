@@ -819,7 +819,14 @@ export default function ClientDashboard() {
         setRequests(mergeRequests(apiList, drafts));
       } catch {}
      } catch (err) {
-   setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+         const status = err?.status || err?.response?.status;
+         const code = err?.response?.data?.error || err?.data?.error || err?.message || "";
+         const msg = String(code).toLowerCase();
+         if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
+           tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", { toastId: "req-already", autoClose: 2000 });
+           return;
+         }
    const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
    if (msg.includes("self_request_forbidden")) {
      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
@@ -941,9 +948,14 @@ export default function ClientDashboard() {
         setRequests(mergeRequests(apiList, drafts));
       } catch {}
     } catch {
-      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-         const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-   const status = err?.status || err?.response?.status;
+          setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+    const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
+    const status = err?.status || err?.response?.status;
+    if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
+      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", { toastId: "req-already", autoClose: 2000 });
+      return;
+    }
+   
    if (msg.includes("self_request_forbidden") || status === 400) {
      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
    } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
