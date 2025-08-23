@@ -137,6 +137,7 @@ function extractServiceFields(item) {
 
   const providerId = _firstNonEmpty(svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id, svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id);
 
+  const flatType = _firstNonEmpty(pick(bag, ["provider_type","type","category"]));
   const flatName  = _firstNonEmpty(pick(bag, ["provider_name","supplier_name","vendor_name","agency_name","company_name","providerTitle","display_name"]));
   const flatPhone = _firstNonEmpty(pick(bag, ["provider_phone","supplier_phone","vendor_phone","agency_phone","company_phone","contact_phone","phone","whatsapp","whats_app"]));
   const flatTg = _firstNonEmpty(
@@ -1006,7 +1007,30 @@ export default function ClientDashboard() {
   return (
     <div key={r.id} className={`bg-white border rounded-xl p-4 ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
       <div className="font-semibold">{serviceTitle}</div>
-
+                  {providerId && (
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="flex items-center gap-2">
+                  <a href={`/providers/${providerId}`} className="underline hover:no-underline">
+                    {flatName || "—"}
+                  </a>
+                  {flatType && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
+                      {{
+                        agent: "Турагент",
+                        guide: "Гид",
+                        transport: "Транспорт",
+                        hotel: "Отель",
+                      }[flatType] || "Провайдер"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-4 mt-1">
+                  {flatPhone && <a className="hover:underline" href={`tel:${String(flatPhone).replace(/[^+\d]/g,"")}`}>{flatPhone}</a>}
+                  {flatTg && <a className="hover:underline" href={`https://t.me/${String(flatTg).replace(/^@/,"")}`} target="_blank" rel="noreferrer">@{String(flatTg).replace(/^@/,"")}</a>}
+                </div>
+              </div>
+            )}
+                        
       <div className="text-sm text-gray-500 mt-1">
         {t("common.status", { defaultValue: "Статус" })}: {statusLabel(status)}
       </div>
