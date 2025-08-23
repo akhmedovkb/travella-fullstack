@@ -859,25 +859,44 @@ export default function ClientDashboard() {
   // Удаление заявки (API или локальный черновик)
   function askDeleteRequest(id) {
     if (!id) return;
-    setDelUI({ open: true, id, isDraft: false, sending: false });
+    const isDraftFromState = requests?.some((x) => String(x.id) === String(id) && x.is_draft);
+    const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
+    setDelUI({ open: true, id, isDraft, sending: false });
   }
 
-  async function confirmDeleteRequest() {
+   async function confirmDeleteRequest() {
     if (!delUI.id) return;
     setDelUI((s) => ({ ...s, sending: true }));
     try {
-      if (delUI.isDraft) {
+      // Локальный черновик — удаляем без API
+      if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
         const keyId = myId || null;
         const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
         saveDrafts(keyId, updated);
         setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
       } else {
         await apiDelete(`/api/requests/${delUI.id}`);
-        setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
+        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
         setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
       }
-    } catch {
-      setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+    } catch (err) {
+      const status = err?.status || err?.response?.status;
+      const msgText = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
+      // Если на бэке уже нет записи — считаем успехом локально
+      if (status === 404 || msgText.includes("not found")) {
+        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tInfo(t("client.dashboard.requestDeleted") || "Заявка удалена (уже была удалена)", {
+          autoClose: 1600,
+          toastId: `req-del-${delUI.id}-404`
+        });
+      } else {
+        setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+        tError(t("client.dashboard.requestDeleteFailed") || "Не удалось удалить заявку", { autoClose: 1800 });
+      }
     } finally {
       setDelUI({ open: false, id: null, isDraft: false, sending: false });
     }
