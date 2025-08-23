@@ -173,12 +173,12 @@ async function ensureClientIdForUser(userId) {
   const email = prov.email || null;
   const phone = prov.phone || null;
 
-  // Попытаться сопоставить существующего клиента по email/phone (только если значения не null)
+    // Попытаться сопоставить существующего клиента по email/phone (приводим параметры к text)
   const q2 = await db.query(
     `SELECT id FROM clients
-      WHERE ($1 IS NOT NULL AND email IS NOT DISTINCT FROM $1)
-         OR ($2 IS NOT NULL AND phone IS NOT DISTINCT FROM $2)
-      ORDER BY id LIMIT 1`,
+       WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
+          OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
+       ORDER BY id LIMIT 1`,
     [email, phone]
   );
   if (q2.rowCount > 0) return q2.rows[0].id;
@@ -195,11 +195,11 @@ async function ensureClientIdForUser(userId) {
   } catch (e) {
     // 23505 = UNIQUE violation (например, по email/phone) — перечитать
     if (e && e.code === '23505') {
-      const q3 = await db.query(
+            const q3 = await db.query(
         `SELECT id FROM clients
-          WHERE ($1 IS NOT NULL AND email IS NOT DISTINCT FROM $1)
-             OR ($2 IS NOT NULL AND phone IS NOT DISTINCT FROM $2)
-          ORDER BY id LIMIT 1`,
+           WHERE ($1::text IS NOT NULL AND email IS NOT DISTINCT FROM $1::text)
+              OR ($2::text IS NOT NULL AND phone IS NOT DISTINCT FROM $2::text)
+           ORDER BY id LIMIT 1`,
         [email, phone]
       );
       if (q3.rowCount > 0) return q3.rows[0].id;
