@@ -628,6 +628,12 @@ direction: "",
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+      if (profile?.id) {
+        localStorage.setItem("provider_id", String(profile.id));
+      }
+    }, [profile?.id]);
+
   /** ===== Provider inbox loaders/actions ===== */
   const serverCleanupExpired = async () => {
     if (typeof window.__providerCleanupExpired === "function") {
@@ -1076,6 +1082,7 @@ const __grossNum = (() => {
               <button
                 onClick={() => {
                   localStorage.removeItem("token");
+                  localStorage.removeItem("provider_id");
                   window.location.href = "/login";
                 }}
                 className="mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold w-full"
