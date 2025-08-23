@@ -1060,7 +1060,10 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   {providerId && (
               <div className="mt-2 text-sm text-gray-700 min-w-0">
                 <div className="flex items-center gap-2">
-                  <Link to={`/profile/provider/${providerId}`} className="underline hover:no-underline truncate block max-w-full">
+                  <Link
+                    to={`/profile/provider/${providerId}`}
+                    className="underline hover:no-underline block max-w-full truncate"
+                  >
                     {providerName || "—"}
                   </Link>
                   {providerType && (
@@ -1075,8 +1078,25 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   )}
                 </div>
                 <div className="flex gap-4 mt-1">
-                  {providerPhone && <a className="hover:underline break-all" href={`tel:${...}`}>{providerPhone}</a>}
-                  {providerTg && <a className="hover:underline break-all" href={`https://t.me/${...}`} ...>@{...}</a>}
+                  {providerPhone && (
+                      <a
+                        className="hover:underline break-all"
+                        href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}
+                      >
+                        {providerPhone}
+                      </a>
+                   )}
+                  
+                  {providerTg && (
+                      <a
+                        className="hover:underline break-all"
+                        href={`https://t.me/${String(providerTg).replace(/^@/, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        @{String(providerTg).replace(/^@/, "")}
+                      </a>
+                    )}
                 </div>
               </div>
             )}
