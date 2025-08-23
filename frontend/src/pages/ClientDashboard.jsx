@@ -617,15 +617,13 @@ export default function ClientDashboard() {
 
   // слушаем событие мгновенного создания (в т.ч. из маркетплейса) + синхронизация между вкладками
   useEffect(() => {
-    const onCreated = (e) => {
-      const { service_id, title } = e.detail || {};
-      if (!service_id) return;
-      const draft = makeDraft({ serviceId: service_id, title });
-      const keyId = myId || null;
-      const current = loadDrafts(keyId);
-      saveDrafts(keyId, [draft, ...current]);
-      setRequests((prev) => [draft, ...prev]);
+    
+    const onCreated = async () => {
+      const apiList = await fetchClientRequestsSafe(myId);
+      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+      setRequests(mergeRequests(apiList, drafts));
     };
+
     const onStorage = (ev) => {
       if (!ev.key) return;
       if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
@@ -788,45 +786,38 @@ export default function ClientDashboard() {
 };
 
   // quick request из «Избранного» (+локальный черновик) — оставил как было
-  const handleQuickRequest = async (serviceId, meta = {}) => {
-    if (!serviceId) { setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" })); return; }
-    const note = window.prompt(t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })) || undefined;
+  // quick request из «Избранного» — без локальных черновиков и без dispatch события
+const handleQuickRequest = async (serviceId, meta = {}) => {
+  if (!serviceId) {
+    setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
+    return;
+  }
 
-    try {
-      await apiPost("/api/requests", { service_id: serviceId, note });
-      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
-      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+  const note = window.prompt(
+    t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
+  ) || undefined;
 
-      const title = meta.title ||
-        favorites.find((f) => {
-          const sid =
-            f?.service?.id ?? f?.service_id ?? f?.serviceId ??
-            f?.id ?? null;
-          return String(sid) === String(serviceId);
-        })?.service?.title || "Запрос";
+  try {
+    await apiPost("/api/requests", { service_id: serviceId, note });
+    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
-      const draft = makeDraft({ serviceId, title });
-      const keyId = myId || null;
-      saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
-      setRequests((prev) => [draft, ...prev]);
-      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: serviceId, title } }));
+    setActiveTab("requests");
 
-      setActiveTab("requests");
-
-      try {
-        const apiList = await fetchClientRequestsSafe(myId);
-        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-        setRequests(mergeRequests(apiList, drafts));
-      } catch {}
-       } catch (err) {
+    // Обновляем список из API (без создания локальных копий)
+    const apiList = await fetchClientRequestsSafe(myId);
+    const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+    setRequests(mergeRequests(apiList, drafts));
+  } catch (err) {
     setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+
     const status =
       err?.status || err?.response?.status || err?.data?.status;
     const code =
       err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
     const msg = String(code).toLowerCase();
 
-    // Повторный быстрый запрос на ту же услугу
+    // Повторный запрос на ту же услугу
     if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
       tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
         autoClose: 2000,
@@ -836,14 +827,20 @@ export default function ClientDashboard() {
     }
 
     if (msg.includes("self_request_forbidden")) {
-      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
+        toastId: "self-req",
+        autoClose: 2200
+      });
     } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
+      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+        toastId: "login-required",
+        autoClose: 2000
+      });
     } else {
       tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
     }
   }
-  };
+};
 
   const handleAcceptProposal = async (id) => {
     try {
@@ -937,45 +934,52 @@ export default function ClientDashboard() {
     setQrTitle("");
   }
   async function submitQuickRequest(note) {
-    if (!qrServiceId) return;
-    try {
-      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
-      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
-      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+  if (!qrServiceId) return;
 
-      const draft = makeDraft({ serviceId: qrServiceId, title: qrTitle || "Запрос" });
-      const keyId = myId || null;
-      saveDrafts(keyId, [draft, ...loadDrafts(keyId)]);
-      setRequests((prev) => [draft, ...prev]);
-      window.dispatchEvent(new CustomEvent("request:created", { detail: { service_id: qrServiceId, title: qrTitle } }));
+  try {
+    await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
-      setActiveTab("requests");
+    setActiveTab("requests");
 
-      try {
-        const apiList = await fetchClientRequestsSafe(myId);
-        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-        setRequests(mergeRequests(apiList, drafts));
-      } catch {}
-    } catch {
-          setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-    const msg = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-    const status = err?.status || err?.response?.status;
+    // Обновляем список из API (без локальных дублей)
+    const apiList = await fetchClientRequestsSafe(myId);
+    const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+    setRequests(mergeRequests(apiList, drafts));
+  } catch (err) {
+    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+
+    const status =
+      err?.status || err?.response?.status || err?.data?.status;
+    const code =
+      err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
+    const msg = String(code).toLowerCase();
+
     if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
-      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", { toastId: "req-already", autoClose: 2000 });
+      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
+        toastId: "req-already",
+        autoClose: 2000,
+      });
       return;
     }
-   
-   if (msg.includes("self_request_forbidden") || status === 400) {
-     tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", { toastId: "self-req", autoClose: 2200 });
-   } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-     tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", { toastId: "login-required", autoClose: 2000 });
-   } else {
-     tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-   }
-    } finally {
-      closeQuickRequestModal();
+    if (msg.includes("self_request_forbidden") || status === 400) {
+      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
+        toastId: "self-req",
+        autoClose: 2200,
+      });
+    } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+        toastId: "login-required",
+        autoClose: 2000,
+      });
+    } else {
+      tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
     }
+  } finally {
+    closeQuickRequestModal();
   }
+}
 
   function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
   function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
