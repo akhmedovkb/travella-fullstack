@@ -182,6 +182,7 @@
     "password_change": "Parolni o‘zgartirib bo‘lmadi",
     "password_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
     "profile_load": "Profilni yuklab bo‘lmadi",
+    "request_already_sent":"So`rovno oldin jo`natib bo`lgansiz",
     "profile_save": "Profilni saqlab bo‘lmadi",
     "request_send": "So‘rovni yuborib bo‘lmadi",
     "self_request_forbidden": "O‘zingizga tezkor so‘rov yubora olmaysiz!",
