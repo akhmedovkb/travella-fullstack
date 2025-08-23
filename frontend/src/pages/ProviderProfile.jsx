@@ -117,7 +117,16 @@ export default function ProviderProfile() {
       <div className="bg-white rounded-xl border shadow overflow-hidden mb-6">
         {details.cover && <div className="h-40 sm:h-56 w-full overflow-hidden"><img src={details.cover} alt="" className="w-full h-full object-cover" /></div>}
         <div className="p-4 md:p-6 flex items-start gap-4">
-          {details.logo && <img src={details.logo} alt="" className="w-16 h-16 rounded-xl object-cover ring-1 ring-black/5" />}
+             {/* BIG logo/photo (не маленькое) */}
+          <div className="shrink-0">
+            <div className="w-32 h-32 md:w-48 md:h-48 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center ring-1 ring-black/5">
+              {details.logo ? (
+                <img src={details.logo} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs text-gray-400 px-2">Нет фото</span>
+              )}
+            </div>
+          </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl md:text-2xl font-semibold">{tx("marketplace.supplier","Поставщик")}: {details.name}</h1>
@@ -135,9 +144,9 @@ export default function ProviderProfile() {
                 <span>
                   {tx("marketplace.telegram","Телеграм")}:{" "}
                   {String(details.telegram).startsWith("@")
-                    ? <a className="underline" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
+                    ? <a className="underline break-all" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
                     : /^https?:\/\//.test(String(details.telegram))
-                      ? <a className="underline" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
+                      ? <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
                       : <span>{details.telegram}</span>}
                 </span>
               )}
