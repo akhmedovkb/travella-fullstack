@@ -980,6 +980,10 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     closeQuickRequestModal();
   }
 }
+  
+  function openQuickEdit() {
+  tInfo(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }), { autoClose: 1500 });
+}
 
   function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
   function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
