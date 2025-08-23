@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 function StatusBadge({ status }) {
   const map =
@@ -50,10 +51,13 @@ function formatDate(ts) {
 function makeTgHref(v) {
   if (!v) return null;
   let s = String(v).trim();
-  if (s.startsWith("http://") || s.startsWith("https://")) return s;
-  if (s.startsWith("@")) s = s.slice(1);
+  // убираем ведущий @ и возможные префиксы t.me
+  s = s.replace(/^@/, "")
+       .replace(/^https?:\/\/t\.me\//i, "")
+       .replace(/^t\.me\//i, "");
   return `https://t.me/${s}`;
 }
+
 
 const ProviderInboxList = ({ showHeader = false }) => {
   const { t } = useTranslation();
@@ -183,10 +187,17 @@ const ProviderInboxList = ({ showHeader = false }) => {
 
       <div className="space-y-4">
         {items.map((r) => {
-          const phone = r?.client?.phone || null;
-          const tg = r?.client?.telegram || null;
-          const tgHref = makeTgHref(tg);
-          const isProcessed = String(r.status) === "processed";
+          const rawPhone = r?.client?.phone || null;
+          const phoneHref = rawPhone ? `tel:${String(rawPhone).replace(/[^+\d]/g, "")}` : null;
+          
+          const rawTg = r?.client?.telegram || null;
+          const tgHref = rawTg ? makeTgHref(rawTg) : null;
+          const tgLabel = rawTg
+            ? "@" + String(rawTg).trim()
+                .replace(/^@/, "")
+                .replace(/^https?:\/\/t\.me\//i, "")
+                .replace(/^t\.me\//i, "")
+            : null;
 
           return (
             <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
@@ -215,52 +226,71 @@ const ProviderInboxList = ({ showHeader = false }) => {
               <div className="mt-2 text-sm">
                 <div className="text-gray-600">
                   {t("provider.inbox.from", { defaultValue: "От" })}:
-                </div>
-                                <div className="font-medium flex items-center gap-2">
-                  {r?.client?.provider_id ? (
-                    <a
-                      href={`/providers/${r.client.provider_id}`}
-                      className="underline hover:no-underline"
-                    >
-                      {r.client?.name || "—"}
-                    </a>
-                  ) : (
-                    <span>{r.client?.name || "—"}</span>
-                  )}
-                  {!!r.client?.type && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
-                      {{
-                        client: t("labels.client", { defaultValue: "Клиент" }),
-                        agent: t("labels.agent", { defaultValue: "Турагент" }),
-                        guide: t("labels.guide", { defaultValue: "Гид" }),
-                        transport: t("labels.transport", { defaultValue: "Транспорт" }),
-                        hotel: t("labels.hotel", { defaultValue: "Отель" }),
-                      }[r.client.type] || r.client.type}
-                    </span>
-                  )}
+              </div>
+              <div className="font-medium flex items-center gap-2 min-w-0">
+                                        {(() => {
+                          const c = r?.client || {};
+                          // если прислан provider_id — это профиль провайдера; иначе пробуем профиль клиента
+                          const profileUrl = c.provider_id
+                            ? `/profile/provider/${c.provider_id}`
+                            : (c.id ? `/profile/client/${c.id}` : null);
+                      
+                          const typeLabel = {
+                            client: t("labels.client",   { defaultValue: "Клиент" }),
+                            agent:  t("labels.agent",    { defaultValue: "Турагент" }),
+                            guide:  t("labels.guide",    { defaultValue: "Гид" }),
+                            transport: t("labels.transport", { defaultValue: "Транспорт" }),
+                            hotel:  t("labels.hotel",    { defaultValue: "Отель" }),
+                          }[(c.type || "").toLowerCase()] || c.type;
+                      
+                          return (
+                            <div className="font-medium flex items-center gap-2 min-w-0">
+                              {profileUrl ? (
+                                <Link
+                                  to={profileUrl}
+                                  className="underline hover:no-underline truncate block max-w-full"
+                                  title={c.name || "—"}
+                                >
+                                  {c.name || "—"}
+                                </Link>
+                              ) : (
+                                <span className="truncate" title={c.name || "—"}>
+                                  {c.name || "—"}
+                                </span>
+                              )}
+                      
+                              {!!c.type && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
+                                  {typeLabel}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
-                  {phone ? (
-                    <a href={`tel:${phone}`} className="underline hover:no-underline">
-                      {phone}
-                    </a>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                  {tg ? (
-                    <a
-                      href={tgHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:no-underline"
-                      title="Telegram"
-                    >
-                      {tg.startsWith("@") ? tg : `@${tg.replace(/^https?:\/\/t\.me\//i, "")}`}
-                    </a>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
+                  {phoneHref ? (
+                        <a href={phoneHref} className="underline hover:no-underline">
+                          {rawPhone}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    
+                      {tgHref ? (
+                        <a
+                          href={tgHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:no-underline"
+                          title="Telegram"
+                        >
+                          {tgLabel}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                 </div>
               </div>
 
