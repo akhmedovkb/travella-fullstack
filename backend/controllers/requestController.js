@@ -192,7 +192,13 @@ async function ensureClientIdForUser(userId) {
 
 /* ===================== Controllers ===================== */
 
-/** POST /api/requests (алиас: /api/requests/quick) */
+/** POST /api/requests (алиас: /api/requests/quick)
+ *  Работает и для клиента, и для провайдера:
+ *  - запрещает самозаявку (провайдер → свой же сервис)
+ *  - НЕ создаёт «теневого клиента»
+ *  - client_id = текущий userId как есть
+ *  - при дубле возвращает существующую заявку (200), а не падает
+ */
 exports.createQuickRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -202,20 +208,22 @@ exports.createQuickRequest = async (req, res) => {
     if (!service_id) return res.status(400).json({ error: "service_id_required" });
 
     // 1) сервис существует?
-    const svcQ = await db.query(`SELECT id, provider_id FROM services WHERE id = $1`, [service_id]);
+    const svcQ = await db.query(
+      `SELECT id, provider_id FROM services WHERE id = $1`,
+      [service_id]
+    );
     const svc = svcQ.rows[0];
     if (!svc) return res.status(404).json({ error: "service_not_found" });
 
-    // 2) запрет самозаявок (важно именно для провайдера)
+    // 2) провайдер не может отправить запрос на свой же сервис
     if (Number(svc.provider_id) === Number(userId)) {
       return res.status(400).json({ error: "self_request_forbidden" });
     }
 
-    // 3) получить корректный client_id (провайдер → делаем/подбираем «клиента»)
-    const clientId = await ensureClientIdForUser(userId);
-    if (!clientId) return res.status(403).json({ error: "forbidden" });
+    // 3) client_id = текущий userId (для клиента — id клиента, для провайдера — id провайдера)
+    const clientId = Number(userId);
 
-    // 4) защита от дублей: вернуть существующую заявку клиента на эту услугу
+    // 4) защита от дублей: вернуть последнюю существующую заявку
     const dup = await db.query(
       `SELECT id, service_id, client_id, status, note, created_at
          FROM requests
@@ -224,19 +232,22 @@ exports.createQuickRequest = async (req, res) => {
         LIMIT 1`,
       [service_id, clientId]
     );
-    if (dup.rowCount > 0) return res.status(200).json(dup.rows[0]);
+    if (dup.rowCount > 0) {
+      return res.status(200).json(dup.rows[0]);
+    }
 
-    // 5) новая заявка
+    // 5) создать новую заявку
     const ins = await db.query(
       `INSERT INTO requests (service_id, client_id, status, note)
        VALUES ($1, $2, 'new', $3)
        RETURNING id, service_id, client_id, status, note, created_at`,
       [service_id, clientId, note || null]
     );
+
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("quick request error:", err);
-    // без 500: отдаём понятный код для UI
+    // отдаём понятный код, без 500
     return res.status(400).json({ error: "request_create_failed" });
   }
 };
