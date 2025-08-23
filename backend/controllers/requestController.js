@@ -361,6 +361,7 @@ exports.getProviderRequests = async (req, res) => {
 /** DELETE /api/requests/:id
  *  Клиент (создатель) ИЛИ провайдер-владелец услуги может удалить заявку
  */
+/** DELETE /api/requests/:id (клиент — свою заявку; провайдер — заявку по своей услуге) */
 exports.deleteRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -369,34 +370,33 @@ exports.deleteRequest = async (req, res) => {
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    // смотрим, кому принадлежит заявка и какой провайдер владелец сервиса
-    const { rows, rowCount } = await db.query(
-      `SELECT r.id, r.client_id, s.provider_id
-         FROM requests r
-         JOIN services s ON s.id = r.service_id
-        WHERE r.id::text = $1`,
-      [id]
+    // 1) Клиент удаляет свою заявку
+    let q = await db.query(
+      `DELETE FROM requests
+        WHERE id::text = $1 AND client_id = $2`,
+      [id, Number(userId)]
     );
-    if (!rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
 
-    const rec = rows[0];
+    // 2) Провайдер удаляет заявку, если услуга принадлежит ему
+    if (!q.rowCount) {
+      const providerId = Number(req.user?.provider_id ?? req.user?.id);
+      q = await db.query(
+        `DELETE FROM requests r
+           USING services s
+         WHERE r.id::text = $1
+           AND r.service_id = s.id
+           AND s.provider_id = $2`,
+        [id, providerId]
+      );
+    }
 
-    // клиент-владелец заявки
-    const isClientOwner = String(rec.client_id) === String(userId);
-
-    // провайдер-владелец сервиса (учитываем разные способы кодирования id в токене)
-    const providerIds = collectProviderIdsFromUser(req.user);
-    const isServiceOwner = providerIds.map(String).includes(String(rec.provider_id));
-
-    if (!isClientOwner && !isServiceOwner) {
-      // маскируем запрет под 404, как и прежде
+    if (!q.rowCount) {
       return res.status(404).json({ error: "not_found_or_forbidden" });
     }
 
-    await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
     return res.json({ success: true, deleted: id });
   } catch (e) {
-    console.error("deleteRequest (client|provider) error:", e);
+    console.error("deleteRequest error:", e);
     return res.status(500).json({ error: "delete_failed" });
   }
 };
