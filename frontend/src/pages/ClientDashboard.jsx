@@ -857,16 +857,19 @@ export default function ClientDashboard() {
   };
 
   // Удаление заявки (API или локальный черновик)
-  function askDeleteRequest(id) {
-    if (!id) return;
-    setDelUI({ open: true, id, isDraft: false, sending: false });
-  }
+   function askDeleteRequest(id) {
+     if (!id) return;
+     // Черновик = id начинается с "d_" или флаг в текущем списке
+     const isDraftFromState = requests?.some((x) => String(x.id) === String(id) && x.is_draft);
+     const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
+     setDelUI({ open: true, id, isDraft, sending: false });
+   }
 
   async function confirmDeleteRequest() {
     if (!delUI.id) return;
     setDelUI((s) => ({ ...s, sending: true }));
     try {
-      if (delUI.isDraft) {
+      if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
         const keyId = myId || null;
         const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
         saveDrafts(keyId, updated);
