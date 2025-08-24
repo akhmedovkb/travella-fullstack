@@ -225,6 +225,13 @@ export default function ProviderProfile() {
       avg: Number(data?.stats?.avg || data?.avg || 0)
     });
     setReviews(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+    if (e?.code === "review_already_exists") {
+      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+      } else {
+      console.error(e);
+      toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+      }
   };
 
   const roleLabel = (role) => tx(`roles.${role}`, role);
