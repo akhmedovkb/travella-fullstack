@@ -107,16 +107,21 @@ export default function ClientProfile() {
       setRating(5);
       await loadReviews();
     } catch (e) {
-      if (e?.code === "review_already_exists" ||
-          (e?.response?.status === 409 && e?.response?.data?.error === "review_already_exists")) {
-      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        const already =
+          e?.code === "review_already_exists" ||
+          e?.response?.status === 409 ||
+          e?.response?.data?.error === "review_already_exists" ||
+          String(e?.message || "").includes("review_already_exists");
+      
+        if (already) {
+          toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
         } else {
-        console.error("review submit failed:", e?.response?.data || e?.message);
-        toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+          console.error("review submit failed:", e);
+          toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
         }
-    } finally {
-      setSending(false);
-    }
+      } finally {
+        setSending(false);
+      }
   };
 
   useEffect(() => {
