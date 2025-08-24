@@ -105,7 +105,7 @@ export default function ClientProfile() {
 
       // На случай 2xx с {error}
       if (res?.error === "review_already_exists") {
-        toast(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
         return;
       }
 
@@ -120,7 +120,7 @@ export default function ClientProfile() {
         String(e?.message || "").includes("review_already_exists");
 
       if (already) {
-        toast(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
       } else {
         console.error("review submit failed:", e);
         toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
