@@ -1,7 +1,7 @@
 // frontend/src/components/ReviewForm.jsx
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { tSuccess, tError } from "../shared/toast";
+import { tSuccess } from "../shared/toast";
 
 export default function ReviewForm({ onSubmit, submitLabel }) {
   const { t } = useTranslation();
@@ -10,16 +10,23 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); // чтобы форма не перезагружала страницу
+    e.preventDefault(); // не перезагружаем страницу
     if (busy) return;
+
+    setBusy(true);
     try {
-      setBusy(true);
-      await onSubmit?.({ rating, text });
-      setText("");
-      setRating(5);
-      tSuccess(t("reviews.saved") || "Отзыв отправлен");
+      // Родитель должен вернуть true, если отзыв реально сохранён.
+      // На 409/ошибках родитель возвращает false (и сам показывает тост).
+      const saved = await onSubmit?.({ rating, text });
+
+      if (saved === true) {
+        setText("");
+        setRating(5);
+        tSuccess(t("reviews.saved", { defaultValue: "Отзыв сохранён" }));
+      }
+      // Если saved === false или промис упал — тосты уже показал родитель.
     } catch {
-      tError(t("reviews.save_error") || "Не удалось сохранить отзыв");
+      // Ошибки (включая review_already_exists) обрабатываются родителем.
     } finally {
       setBusy(false);
     }
@@ -27,7 +34,10 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="text-sm text-gray-600">{t("reviews.your_rating") || "Ваша оценка"}</div>
+      <div className="text-sm text-gray-600">
+        {t("reviews.your_rating", { defaultValue: "Ваша оценка" })}
+      </div>
+
       <div className="flex items-center gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -47,7 +57,7 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
         className="w-full border rounded p-2 min-h-[96px]"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={t("reviews.placeholder") || "Коротко опишите опыт"}
+        placeholder={t("reviews.placeholder", { defaultValue: "Коротко опишите опыт" })}
       />
 
       <div className="flex justify-end">
@@ -56,7 +66,7 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
           disabled={busy}
           className="px-4 py-2 rounded bg-gray-900 text-white disabled:opacity-60"
         >
-          {submitLabel || t("actions.save") || "Сохранить"}
+          {submitLabel || t("actions.save", { defaultValue: "Сохранить" })}
         </button>
       </div>
     </form>
