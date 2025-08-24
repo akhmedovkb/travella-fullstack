@@ -20,7 +20,7 @@ const {
   updateMyRequest,
   touchByProvider,
   // опционально, если у вас есть отдельный аутбокс
-  getProviderOutbox,
+  getProviderOutgoingRequests,
 } = ctrl;
 
 // Небольшой helper: взять первый существующий хэндлер
@@ -44,13 +44,12 @@ if (firstFn(getProviderRequests)) {
 }
 // Если есть отдельный аутбокс — используем его;
 // иначе прокидываем box=outgoing в общий хэндлер.
-if (firstFn(getProviderOutbox)) {
-  router.get("/provider/outgoing", authenticateToken, getProviderOutbox);
+if (firstFn(getProviderOutgoingRequests)) {
+  router.get("/provider/outgoing", authenticateToken, getProviderOutgoingRequests);
 } else if (firstFn(getProviderRequests)) {
-  router.get("/provider/outgoing", authenticateToken, (req, res, next) => {
-    req.query = { ...(req.query || {}), box: "outgoing" };
-    return getProviderRequests(req, res, next);
-  });
+  // (редкий фолбэк, если вдруг нет отдельного хэндлера)
+    router.get("/provider/outgoing", authenticateToken, getProviderRequests);
+      }
 }
 
 if (firstFn(getProviderStats)) {
