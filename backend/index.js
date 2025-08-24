@@ -88,6 +88,9 @@ app.use("/api/hotels", hotelRoutes);
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
 
+const clientRoutes = require("./routes/clientRoutes");
+app.use("/api/clients", clientRoutes);
+
 const profileRoutes = require("./routes/profileRoutes");
 app.use("/api/profile", profileRoutes); 
 
