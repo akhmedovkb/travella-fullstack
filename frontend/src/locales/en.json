@@ -327,6 +327,8 @@
       "confirm_delete": "Delete request?"
     },
     "outbox": {
+      "confirm_delete_title": "Delete request?",
+      "confirm_delete_msg": "Delete this quick request permanently?",
       "title": "Outcoming requests",
       "total": "Total",
       "new": "New",
