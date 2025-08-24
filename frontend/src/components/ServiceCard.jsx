@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet } from "../api";
 import WishHeart from "./WishHeart";
+const SHOW_REVIEWS = false; // выключаем блок «Отзывы об услуге»
+
 
 /* ============== small utils ============== */
 const firstNonEmpty = (...vals) => {
@@ -390,6 +392,7 @@ export default function ServiceCard({
               </span>
             )}
 
+            {SHOW_REVIEWS && (
             <button
               ref={revBtnRef}
               className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
@@ -401,6 +404,7 @@ export default function ServiceCard({
                 <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
               </svg>
             </button>
+            )}
           </div>
 
           {/* HEART */}
@@ -457,6 +461,7 @@ export default function ServiceCard({
       </div>
 
       {/* reviews tooltip portal */}
+      {SHOW_REVIEWS && (
       <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
         <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
           <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
@@ -479,7 +484,7 @@ export default function ServiceCard({
           </div>
         </div>
       </TooltipPortal>
-
+      )}
       {/* BODY */}
       <div className="p-3 flex-1 flex flex-col">
         <div className="font-semibold line-clamp-2">{title}</div>
