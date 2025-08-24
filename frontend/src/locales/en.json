@@ -315,6 +315,8 @@
       "title": "Bookings (Provider)"
     },
     "inbox": {
+      "confirm_delete_title": "Delete request?",
+      "confirm_delete_msg": "Delete this quick request permanently?",
       "title": "Incoming Requests",
       "total": "Total",
       "new": "New",
