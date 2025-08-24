@@ -4,6 +4,7 @@
   "actions": {
     "cancel": "Bekor qilish",
     "delete": "O'chirish",
+    "edit": "Tahrirlash",
     "quick_request": "Tez so‘rov",
     "send": "Yuborish"
   },
