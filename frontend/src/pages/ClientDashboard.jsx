@@ -709,44 +709,55 @@ export default function ClientDashboard() {
 
 
   useEffect(() => {
-  // соберём уникальные ID провайдеров из моих запросов
+  // уникальные providerId из заявок
   const ids = Array.from(
     new Set(
-      (requests || []).map((r) =>
-        r?.provider?.id ??
-        r?.service?.provider_id ?? r?.service?.providerId ??
-        r?.provider_id ?? r?.providerId ?? null
-      ).filter(Boolean).map(Number)
+      (requests || [])
+        .map((r) =>
+          r?.provider?.id ??
+          r?.service?.provider_id ?? r?.service?.providerId ??
+          r?.provider_id ?? r?.providerId ?? null
+        )
+        .filter(Boolean)
+        .map(Number)
     )
   );
-  if (!ids.length) return;
+
+  // тянем только тех, которых ещё нет в authorProvTypes
+  const need = ids.filter((id) => !authorProvTypes[id]);
+  if (!need.length) return;
 
   let cancelled = false;
   (async () => {
     const map = {};
-    for (const pid of ids) {
+    for (const pid of need) {
       try {
-        // В файле уже есть helper fetchProviderProfile(...)
         const p = await fetchProviderProfile(pid);
-
-        const d = (typeof p?.details === "string"
-          ? (() => { try { return JSON.parse(p.details); } catch { return {}; } })()
-          : (p?.details || {}));
-
+        const d =
+          typeof p?.details === "string"
+            ? (() => {
+                try { return JSON.parse(p.details); } catch { return {}; }
+              })()
+            : (p?.details || {});
         const rawType =
           p?.type ?? p?.provider_type ?? p?.category ??
           d?.type ?? d?.provider_type ?? d?.category;
 
-        map[pid] = providerTypeLabel(rawType, t) || t("roles.provider", { defaultValue: "Поставщик" });
+        map[pid] =
+          providerTypeLabel(rawType, t) ||
+          t("roles.provider", { defaultValue: "Поставщик" });
       } catch {
         // no-op
       }
     }
-    if (!cancelled) setAuthorProvTypes((prev) => ({ ...prev, ...map }));
+    if (!cancelled && Object.keys(map).length) {
+      setAuthorProvTypes((prev) => ({ ...prev, ...map }));
+    }
   })();
 
   return () => { cancelled = true; };
-}, [requests, t]);
+}, [requests, t, authorProvTypes]);
+
 
   // подгружаем ids избранного (для сердечка) при входе на таб
   useEffect(() => {
@@ -1214,11 +1225,14 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                     {providerName || "—"}
                   </Link>
                   {(providerType || authorProvTypes[providerId]) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
-                      {providerTypeLabel(providerType || authorProvTypes[providerId], t)
-                        || t("roles.provider", { defaultValue: "Поставщик" })}
-                    </span>
-                  )}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
+                        {providerType
+                          ? providerTypeLabel(providerType, t)
+                          : authorProvTypes[providerId] ||
+                            t("roles.provider", { defaultValue: "Поставщик" })}
+                      </span>
+                    )}
+
                 </div>
                 <div className="flex gap-4 mt-1">
                   {providerPhone && (
