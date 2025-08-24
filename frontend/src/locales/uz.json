@@ -489,6 +489,7 @@
   "return_date": "Qaytish sanasi",
 
   "reviews": {
+    "already_left" : "Bunga oldin sharh qoldirgansiz!",
     "count": "ta sharh",
     "count_one": "{{count}} sharh",
     "count_few": "{{count}} sharh",
