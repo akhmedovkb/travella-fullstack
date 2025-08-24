@@ -217,7 +217,7 @@ export default function ProviderProfile() {
     return (isClient || isProvider) && !(isProvider && myProvId === pid);
   }, [pid]);
 
-  cconst submitReview = async ({ rating, text }) => {
+  const submitReview = async ({ rating, text }) => {
   try {
     await addProviderReview(pid, { rating, text });
     const data = await getProviderReviews(pid);
