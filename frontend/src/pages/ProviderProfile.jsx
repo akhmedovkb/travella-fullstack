@@ -264,7 +264,9 @@ export default function ProviderProfile() {
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <RatingStars value={reviewsAgg.avg} size={16} />
                 <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">· {reviewsAgg.count || 0} {tx("reviews.count","отзыв(ов)")} </span>
+                <span className="opacity-70">
+                  · {t("reviews.count", { count: reviewsAgg.count ?? 0 })}
+                </span>
               </div>
             </div>
 
