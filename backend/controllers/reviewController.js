@@ -8,24 +8,17 @@ function pagin(req) {
   const offset = Math.max(0, toInt(req.query.offset) ?? 0);
   return { limit, offset };
 }
-
 function rowsToPublic(list) {
   return list.map(r => ({
     id: r.id,
     rating: r.rating,
     text: r.text,
     created_at: r.created_at,
-    author: {
-      id: r.author_id,
-      role: r.author_role,
-      name: r.author_name || null,
-      avatar_url: r.author_avatar || null, // ⬅️ картинка автора отзыва
-    },
+    author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
   }));
 }
 
 /* ───────── CREATE ───────── */
-
 // клиент → услуге
 exports.addServiceReview = async (req, res) => {
   try {
@@ -47,8 +40,7 @@ exports.addServiceReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") {
-      // уникальный индекс: (author_role, author_id, target_type, target_id)
+    if (e && e.code === '23505') {
       return res.status(409).json({ error: "review_already_exists" });
     }
     console.error("addServiceReview:", e);
@@ -77,7 +69,7 @@ exports.addClientReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") {
+    if (e && e.code === '23505') {
       return res.status(409).json({ error: "review_already_exists" });
     }
     console.error("addClientReview:", e);
@@ -115,7 +107,7 @@ exports.addProviderReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") {
+    if (e && e.code === '23505') {
       return res.status(409).json({ error: "review_already_exists" });
     }
     console.error("addProviderReview:", e);
@@ -135,27 +127,13 @@ async function listWithAgg(targetType, targetId, req, res) {
     [targetType, targetId]
   );
 
-  // Возвращаем имя и АВАТАР АВТОРА (в зависимости от роли)
   const list = await db.query(
     `SELECT r.*,
             CASE r.author_role
               WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
               WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
               ELSE NULL
-            END AS author_name,
-            CASE r.author_role
-              WHEN 'client' THEN (
-                SELECT COALESCE(avatar_url, photo, image, avatar)
-                  FROM clients
-                 WHERE id = r.author_id
-              )
-              WHEN 'provider' THEN (
-                SELECT COALESCE(logo, photo, image, avatar_url, avatar)
-                  FROM providers
-                 WHERE id = r.author_id
-              )
-              ELSE NULL
-            END AS author_avatar
+            END AS author_name
        FROM reviews r
       WHERE r.target_type = $1 AND r.target_id = $2
       ORDER BY r.created_at DESC
