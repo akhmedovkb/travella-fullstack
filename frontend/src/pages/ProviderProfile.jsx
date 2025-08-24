@@ -6,6 +6,7 @@ import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
+import { toast } from "react-hot-toast";
 
 /* helpers */
 const first = (...vals) => {
