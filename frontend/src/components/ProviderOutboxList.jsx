@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import ConfirmModal from "./ConfirmModal";
 
 /* helpers */
 function formatDate(ts) {
@@ -35,6 +36,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
   const [loading, setLoading] = useState(false);
   const [busyEdit, setBusyEdit] = useState({}); // { [id]: true }
   const [busyDel, setBusyDel] = useState({});  // { [id]: true }
+  const [delUI, setDelUI] = useState({ open: false, id: null, sending: false });
 
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -58,31 +60,11 @@ export default function ProviderOutboxList({ showHeader = false }) {
   }, [token]);
 
   /* actions */
-  const handleEdit = async (id, currentNote) => {
-    const next = window.prompt(
-      t("common.note_optional", { defaultValue: "Комментарий (необязательно):" }),
-      currentNote || ""
-    );
-    if (next === null) return; // cancel
-    setBusyEdit((m) => ({ ...m, [id]: true }));
-    try {
-      await axios.put(`${API_BASE}/api/requests/${id}`, { note: next || null }, config);
-      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, note: next || null } : r)));
-    } catch (e) {
-      console.error("edit request failed:", e?.response?.data || e?.message);
-      alert(t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-    } finally {
-      setBusyEdit((m) => {
-        const n = { ...m };
-        delete n[id];
-        return n;
-      });
-    }
+  const handleEdit = async () => {
+    alert(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }));
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm(t("provider.outbox.confirm_delete", { defaultValue: "Удалить заявку?" })))
-      return;
     setBusyDel((m) => ({ ...m, [id]: true }));
     try {
       await axios.delete(`${API_BASE}/api/requests/${id}`, config);
@@ -98,6 +80,18 @@ export default function ProviderOutboxList({ showHeader = false }) {
       });
     }
   };
+
+  const askDelete = (id) => setDelUI({ open: true, id, sending: false });
+  const confirmDelete = async () => {
+    if (!delUI.id) return;
+    setDelUI((s) => ({ ...s, sending: true }));
+    try {
+      await handleDelete(delUI.id);
+    } finally {
+      setDelUI({ open: false, id: null, sending: false });
+    }
+  };
+  const closeDelete = () => setDelUI({ open: false, id: null, sending: false });
 
   /* counters */
   const total = items.length;
@@ -131,7 +125,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
 
       {!loading && items.length === 0 && (
         <div className="text-sm text-gray-500">
-          {t("provider.outbox.empty", { defaultValue: "Нет исходящих заявок" })}
+          {t("provider.outbox.empty", { defaultValue: "Нет исходящих запросов" })}
         </div>
       )}
 
@@ -223,7 +217,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
               {/* действия */}
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => handleEdit(r.id, r.note)}
+                  onClick={() => handleEdit()}
                   disabled={!!busyEdit[r.id]}
                   className="px-3 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-60"
                 >
@@ -232,7 +226,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
                     : t("actions.edit", { defaultValue: "Править" })}
                 </button>
                 <button
-                  onClick={() => handleDelete(r.id)}
+                  onClick={() => askDelete(r.id)}
                   disabled={!!busyDel[r.id]}
                   className="px-3 py-1.5 rounded border text-red-600 hover:bg-red-50 disabled:opacity-60"
                 >
@@ -243,6 +237,19 @@ export default function ProviderOutboxList({ showHeader = false }) {
           );
         })}
       </div>
+            <ConfirmModal
+        open={delUI.open}
+        title={t("provider.outbox.confirm_delete_title", { defaultValue: "Удалить запрос?" })}
+        message={t("provider.outbox.confirm_delete_msg", {
+          defaultValue: "Удалить этот быстрый запрос без возможности восстановления?",
+        })}
+        confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        danger
+        busy={delUI.sending}
+        onConfirm={confirmDelete}
+        onClose={closeDelete}
+      />
     </div>
   );
 }
