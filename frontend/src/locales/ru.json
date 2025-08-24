@@ -489,6 +489,7 @@
   "return_date": "Дата возвращения",
 
   "reviews": {
+    "already_left" : "Вы уже оставляли на него отзыв", 
     "count": "отзыв(ов)",
     "count_one": "{{count}} отзыв",
     "count_few": "{{count}} отзыва",
