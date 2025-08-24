@@ -183,7 +183,7 @@ export default function ClientProfile() {
               )}
             </div>
             <div>
-              Telegram:{" "}
+              {t("common.telegram", { defaultValue: "Telegram" })}:{" "}
               {profile.telegram ? (
                 <a
                   className="hover:underline"
