@@ -1,4 +1,5 @@
-//  frontend/src/pages/ProviderProfile.jsximport React, { useEffect, useMemo, useState } from "react";
+//  frontend/src/pages/ProviderProfile.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet } from "../api";
