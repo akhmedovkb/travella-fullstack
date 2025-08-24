@@ -349,6 +349,8 @@
       "title": "Bronlar (Provayder)"
     },
     "inbox": {
+      "confirm_delete_title": "So'rovni o‘chirish?",
+      "confirm_delete_msg": "Ushbu tezkor so'rovni qayta tiklab bo‘lmaydi. O‘chirishni tasdiqlaysizmi?",
       "title": "Kelib tushgan so'rovlar",
       "total": "Jami",
       "new": "Yangi",
