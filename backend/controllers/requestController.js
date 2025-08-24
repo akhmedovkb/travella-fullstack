@@ -359,49 +359,86 @@ exports.getProviderRequests = async (req, res) => {
 };
 
 /** DELETE /api/requests/:id
- *  Разрешено удалять:
- *   1) Автору заявки — совпадение по user.id ИЛИ provider_id
- *      (учитываем, что в старых строках автор мог лежать в created_by/provider_id).
- *   2) Провайдеру-владельцу услуги.
- */
-/** DELETE /api/requests/:id
- *  Удалять можно:
- *   - автору заявки (client_id = текущий user.id)
- *   - владельцу услуги (services.provider_id = текущий provider_id)
+ * Разрешаем удалять:
+ *  - автору заявки (client_id = текущий user.id)
+ *  - владельцу услуги (JOIN services.provider_id = текущий provider_id)
+ *  - провайдеру-инициатору (requests.provider_id = provider_id)    [если колонка есть]
+ *  - провайдеру-инициатору (requests.author_provider_id = provider_id) [если колонка есть]
+ *  - провайдеру-инициатору (requests.created_by = provider_id)     [если колонка есть]
+ *  - провайдеру-инициатору (requests.owner_id = provider_id)       [если колонка есть]
  */
 exports.deleteRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const providerId = req.user?.provider_id || null;
+    const providerId = req.user?.provider_id ?? null;
     if (!userId) return res.status(401).json({ error: "unauthorized" });
 
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
     const userIdStr = String(userId);
+    const provIdStr = providerId != null ? String(providerId) : null;
 
-    // 1) Пытаемся удалить как автор (клиент)
-    let q = await db.query(
+    // помощник: попытаться выполнить DELETE и вернуть rowCount; если колонки нет — вернуть 0
+    const tryDelete = async (sql, params) => {
+      try {
+        const q = await db.query(sql, params);
+        return q.rowCount || 0;
+      } catch (e) {
+        // колонка может отсутствовать — игнорируем такие ошибки
+        if (
+          /column .* does not exist/i.test(String(e?.message)) ||
+          /missing FROM-clause entry/i.test(String(e?.message))
+        ) {
+          return 0;
+        }
+        // прочие ошибки пробрасываем наверх
+        throw e;
+      }
+    };
+
+    let affected = 0;
+
+    // 1) мы — автор заявки (клиент)
+    affected += await tryDelete(
       `DELETE FROM requests
         WHERE id::text = $1
           AND client_id::text = $2`,
       [id, userIdStr]
     );
 
-    // 2) Если не мы автор — пробуем удалить как владелец услуги
-    if (!q.rowCount && providerId != null) {
-      const providerIdStr = String(providerId);
-      q = await db.query(
+    // 2) мы — владелец услуги (входящие)
+    if (!affected && provIdStr) {
+      affected += await tryDelete(
         `DELETE FROM requests r
-          USING services s
+           USING services s
          WHERE r.id::text = $1
            AND s.id = r.service_id
            AND s.provider_id::text = $2`,
-        [id, providerIdStr]
+        [id, provIdStr]
       );
     }
 
-    if (!q.rowCount) {
+    // 3+) мы — провайдер-инициатор (исходящие). Пробуем несколько возможных колонок, если они существуют.
+    if (!affected && provIdStr) {
+      const candidateCols = [
+        "provider_id",
+        "author_provider_id",
+        "created_by",
+        "owner_id",
+      ];
+      for (const col of candidateCols) {
+        if (affected) break;
+        affected += await tryDelete(
+          `DELETE FROM requests
+            WHERE id::text = $1
+              AND ${col}::text = $2`,
+          [id, provIdStr]
+        );
+      }
+    }
+
+    if (!affected) {
       return res.status(404).json({ error: "not_found_or_forbidden" });
     }
     return res.json({ success: true, deleted: id });
