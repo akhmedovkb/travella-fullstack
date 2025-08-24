@@ -21,7 +21,6 @@ function formatDate(ts) {
     return ts;
   }
 }
-
 function makeTgHref(v) {
   if (!v) return null;
   let s = String(v).trim();
@@ -34,8 +33,8 @@ export default function ProviderOutboxList({ showHeader = false }) {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [busyEdit, setBusyEdit] = useState({}); // { [id]: true }
-  const [busyDel, setBusyDel] = useState({});  // { [id]: true }
+  const [busyDel, setBusyDel] = useState({});
+  const [editUI, setEditUI] = useState({ open: false }); // заглушка «Скоро будет»
   const [delUI, setDelUI] = useState({ open: false, id: null, sending: false });
 
   const token = localStorage.getItem("token");
@@ -59,41 +58,37 @@ export default function ProviderOutboxList({ showHeader = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  /* actions */
-  const handleEdit = async () => {
-    alert(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }));
-  };
-
-  const handleDelete = async (id) => {
-    setBusyDel((m) => ({ ...m, [id]: true }));
-    try {
-      await axios.delete(`${API_BASE}/api/requests/${id}`, config);
-      setItems((prev) => prev.filter((r) => r.id !== id));
-    } catch (e) {
-      console.error("delete request failed:", e?.response?.data || e?.message);
-      alert(t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-    } finally {
-      setBusyDel((m) => {
-        const n = { ...m };
-        delete n[id];
-        return n;
-      });
-    }
-  };
+  const askEdit = () => setEditUI({ open: true });
 
   const askDelete = (id) => setDelUI({ open: true, id, sending: false });
+
   const confirmDelete = async () => {
     if (!delUI.id) return;
     setDelUI((s) => ({ ...s, sending: true }));
     try {
-      await handleDelete(delUI.id);
+      await axios.delete(`${API_BASE}/api/requests/${delUI.id}`, config);
+      setItems((prev) => prev.filter((r) => r.id !== delUI.id));
+    } catch (e) {
+      console.error("delete request failed:", e?.response?.data || e?.message);
+      alert(t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
     } finally {
       setDelUI({ open: false, id: null, sending: false });
     }
   };
   const closeDelete = () => setDelUI({ open: false, id: null, sending: false });
 
-  /* counters */
+  const statusLabel = (v) => {
+    const k = String(v || "new").toLowerCase();
+    return (
+      {
+        new: t("status.new", { defaultValue: "new" }),
+        processed: t("status.processed", { defaultValue: "processed" }),
+        rejected: t("status.rejected", { defaultValue: "rejected" }),
+        active: t("status.active", { defaultValue: "active" }),
+      }[k] || v || "—"
+    );
+  };
+
   const total = items.length;
 
   return (
@@ -103,8 +98,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
           <h3 className="text-2xl font-semibold">
             {t("provider.outbox.title", { defaultValue: "Исходящие запросы" })}
           </h3>
-          <span className="ml-1 inline-flex items-center justify-center text-xs font-medium
-                           min-w-[20px] h-[20px] px-1 rounded-full bg-gray-100 text-gray-700">
+          <span className="ml-1 inline-flex items-center justify-center text-xs font-medium min-w-[20px] h-[20px] px-1 rounded-full bg-gray-100 text-gray-700">
             {total}
           </span>
         </div>
@@ -117,11 +111,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
         </button>
       </div>
 
-      {loading && (
-        <div className="text-sm text-gray-500">
-          {t("common.loading", { defaultValue: "Загрузка…" })}
-        </div>
-      )}
+      {loading && <div className="text-sm text-gray-500">{t("common.loading", { defaultValue: "Загрузка…" })}</div>}
 
       {!loading && items.length === 0 && (
         <div className="text-sm text-gray-500">
@@ -146,8 +136,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
           const tgRaw = dst?.telegram || dst?.social || r?.telegram || null;
           const tgHref = tgRaw ? makeTgHref(tgRaw) : null;
           const tgLabel = tgRaw
-            ? "@" +
-              String(tgRaw).trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//i, "").replace(/^t\.me\//i, "")
+            ? "@" + String(tgRaw).trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//i, "").replace(/^t\.me\//i, "")
             : null;
 
           const serviceTitle =
@@ -200,7 +189,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
               </div>
 
               <div className="text-sm text-gray-500 mt-1">
-                {t("common.status", { defaultValue: "Статус" })}: {r?.status || "new"}
+                {t("common.status", { defaultValue: "Статус" })}: {statusLabel(r?.status)}
               </div>
               {created && (
                 <div className="text-xs text-gray-400 mt-1">
@@ -217,13 +206,10 @@ export default function ProviderOutboxList({ showHeader = false }) {
               {/* действия */}
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => handleEdit()}
-                  disabled={!!busyEdit[r.id]}
-                  className="px-3 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-60"
+                  onClick={askEdit}
+                  className="px-3 py-1.5 rounded border hover:bg-gray-50"
                 >
-                  {busyEdit[r.id]
-                    ? t("common.saving", { defaultValue: "Сохранение..." })
-                    : t("actions.edit", { defaultValue: "Править" })}
+                  {t("actions.edit", { defaultValue: "Править" })}
                 </button>
                 <button
                   onClick={() => askDelete(r.id)}
@@ -237,7 +223,23 @@ export default function ProviderOutboxList({ showHeader = false }) {
           );
         })}
       </div>
-            <ConfirmModal
+
+      {/* Заглушка «Править» — одна кнопка ОК */}
+      <ConfirmModal
+        open={editUI.open}
+        title={t("provider.outbox.edit_soon_title", {
+          defaultValue: "Подтвердите действие на travella.uz",
+        })}
+        message={t("provider.outbox.edit_soon_msg", {
+          defaultValue: "Редактирование скоро будет",
+        })}
+        confirmLabel={t("actions.ok", { defaultValue: "ОК" })}
+        hideCancel
+        onClose={() => setEditUI({ open: false })}
+      />
+
+      {/* Удаление */}
+      <ConfirmModal
         open={delUI.open}
         title={t("provider.outbox.confirm_delete_title", { defaultValue: "Удалить запрос?" })}
         message={t("provider.outbox.confirm_delete_msg", {
