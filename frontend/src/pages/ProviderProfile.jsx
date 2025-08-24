@@ -228,10 +228,13 @@ export default function ProviderProfile() {
     });
     setReviews(Array.isArray(data?.items) ? data.items : []);
   } catch (e) {
-    if (
+    const already =
       e?.code === "review_already_exists" ||
-      (e?.response?.status === 409 && e?.response?.data?.error === "review_already_exists")
-    ) {
+      e?.response?.status === 409 ||
+      e?.response?.data?.error === "review_already_exists" ||
+      String(e?.message || "").includes("review_already_exists");
+  
+    if (already) {
       toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
     } else {
       console.error(e);
