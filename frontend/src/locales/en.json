@@ -322,6 +322,16 @@
       "empty": "No requests",
       "mark_processed": "Processed",
       "confirm_delete": "Delete request?"
+    },
+    "outbox": {
+      "title": "Outcoming requests",
+      "total": "Total",
+      "new": "New",
+      "processed": "Processed",
+      "from": "From",
+      "empty": "No requests",
+      "mark_processed": "Processed",
+      "confirm_delete": "Delete request?"
     }
   },
     
