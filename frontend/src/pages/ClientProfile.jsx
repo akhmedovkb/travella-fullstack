@@ -26,24 +26,35 @@ export default function ClientProfile() {
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState(null);
 
-  // пробуем несколько эндпоинтов: /api/profile/client/:id затем /api/clients/:id
+  // Пытаемся несколько эндпоинтов и разных форм ответа
   const fetchProfile = async () => {
     if (!id) return;
     setLoading(true);
     try {
       const tryUrls = [
-        `${API_BASE}/api/profile/client/${id}`,
-        `${API_BASE}/api/clients/${id}`,
+        `${API_BASE}/api/profile/client/${id}`, // наш публичный эндпоинт (см. ниже)
+        `${API_BASE}/api/clients/${id}`,        // если уже что-то было на бекенде
       ];
+
       let data = null;
       for (const url of tryUrls) {
         try {
           const r = await axios.get(url, config);
           if (r?.data) {
-            data = r.data;
-            break;
+            const d =
+              r.data.item ||
+              r.data.client ||
+              r.data.profile ||
+              r.data.data ||
+              r.data; // плоский ответ
+            if (d && typeof d === "object") {
+              data = d;
+              break;
+            }
           }
-        } catch {}
+        } catch {
+          /* пробуем следующую url */
+        }
       }
       setProfile(data || {});
     } catch (e) {
@@ -59,7 +70,7 @@ export default function ClientProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token]);
 
-  // Поддержка разных ключей из БД/АПИ
+  // Поддерживаем разные названия полей
   const avatar =
     profile?.avatar ||
     profile?.avatar_url ||
@@ -77,12 +88,15 @@ export default function ClientProfile() {
 
   const phone =
     profile?.phone ||
-    profile?.contacts?.phone ||
+    profile?.phone_number ||
+    profile?.mobile ||
     profile?.contact_phone ||
+    profile?.contacts?.phone ||
     null;
 
   const telegram =
     profile?.telegram ||
+    profile?.tg ||
     profile?.social ||
     profile?.contacts?.telegram ||
     profile?.contact_telegram ||
@@ -143,13 +157,13 @@ export default function ClientProfile() {
         </div>
       </div>
 
-      {/* Отзывы — заглушка (как у провайдера, без ломания логики) */}
+      {/* Отзывы — заглушка */}
       <div className="mt-6 bg-white rounded-xl border p-4 md:p-6">
         <div className="text-lg font-semibold mb-2">Отзывы</div>
         <div className="text-sm text-gray-500">Пока нет отзывов.</div>
       </div>
 
-      {/* Форма оставить отзыв — заглушка (чтобы не ломать существующую разметку) */}
+      {/* Форма оставить отзыв — заглушка */}
       <div className="mt-6 bg-white rounded-xl border p-4 md:p-6">
         <div className="text-lg font-semibold mb-3">Оставить отзыв</div>
         <div className="text-sm text-gray-500">
@@ -167,3 +181,4 @@ export default function ClientProfile() {
     </div>
   );
 }
+
