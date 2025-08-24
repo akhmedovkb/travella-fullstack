@@ -5,6 +5,7 @@
     "quick_request": "Quick request",
     "cancel": "Cancel",
     "delete": "Delete",
+    "edit": "Edit",
     "send": "Send"
   },
   "add_error": "Failed to add service",
