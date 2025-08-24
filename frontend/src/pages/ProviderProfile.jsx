@@ -217,22 +217,26 @@ export default function ProviderProfile() {
     return (isClient || isProvider) && !(isProvider && myProvId === pid);
   }, [pid]);
 
-  const submitReview = async ({ rating, text }) => {
+  cconst submitReview = async ({ rating, text }) => {
+  try {
     await addProviderReview(pid, { rating, text });
     const data = await getProviderReviews(pid);
+
     setReviewsAgg({
-      count: Number(data?.stats?.count || data?.count || 0),
-      avg: Number(data?.stats?.avg || data?.avg || 0)
+      count: Number(data?.stats?.count ?? data?.count ?? 0),
+      avg: Number(data?.stats?.avg ?? data?.avg ?? 0),
     });
     setReviews(Array.isArray(data?.items) ? data.items : []);
-    } catch (e) {
+  } catch (e) {
     if (e?.code === "review_already_exists") {
       toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
-      } else {
+    } else {
       console.error(e);
       toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
-      }
-  };
+    }
+  }
+};
+
 
   const roleLabel = (role) => tx(`roles.${role}`, role);
 
