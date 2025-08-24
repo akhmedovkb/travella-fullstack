@@ -126,7 +126,9 @@ export default function ProviderProfile() {
   const [loading, setLoading] = useState(true);
   const [reviewsAgg, setReviewsAgg] = useState({ count: 0, avg: 0 });
   const [reviews, setReviews] = useState([]);
+  const [authorProvTypes, setAuthorProvTypes] = useState({});
 
+  
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -161,6 +163,46 @@ export default function ProviderProfile() {
     return () => { alive = false; };
   }, [pid]);
 
+useEffect(() => {
+  let cancelled = false;
+
+  // собираем уникальные id провайдеров-авторов
+  const ids = Array.from(
+    new Set(
+      (reviews || [])
+        .filter(r => r?.author?.role === "provider" && Number(r?.author?.id))
+        .map(r => Number(r.author.id))
+    )
+  );
+
+  if (!ids.length) return;
+
+  (async () => {
+    const map = {};
+    for (const aid of ids) {
+      try {
+        const p = await fetchProviderProfile(aid);
+        const d = maybeParse(p?.details) || p?.details || {};
+        const rawType =
+          p?.type ??
+          p?.provider_type ??
+          p?.category ??
+          d?.type ?? d?.provider_type ?? d?.category;
+
+        map[aid] = providerTypeLabel(rawType, t) || t("roles.provider", { defaultValue: "Поставщик" });
+      } catch {
+        // молча, просто ничего не пишем — отрисуется "Поставщик"
+      }
+    }
+    if (!cancelled) {
+      setAuthorProvTypes(prev => ({ ...prev, ...map }));
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, [reviews, t]);
+
+  
   const details = useMemo(() => {
     const d = maybeParse(prov?.details) || prov?.details || {};
     const contacts = prov?.contacts || {};
@@ -320,11 +362,14 @@ export default function ProviderProfile() {
                       <div className="min-w-0">
                         <div className="text-sm text-gray-700 truncate">
                           {r.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}{" "}
-                          {r.author?.role && (
-                            <span className="text-gray-400">
-                              ({t(`roles.${r.author.role}`, { defaultValue: r.author.role })})
-                            </span>
-                          )}
+                          <span className="text-gray-400">
+                            (
+                            {r.author?.role === "provider"
+                              ? (authorProvTypes[r.author.id] || t("roles.provider", { defaultValue: "Поставщик" }))
+                              : t("roles.client",   { defaultValue: "Клиент" })
+                            }
+                            )
+                          </span>
                         </div>
                         <div className="text-xs text-gray-400">
                           {new Date(r.created_at || Date.now()).toLocaleString()}
