@@ -58,7 +58,6 @@ export default function ClientProfile() {
       setLoading(true);
       const { data } = await axios.get(`${API_BASE}/api/profile/client/${id}`, auth);
       setProfile(data || null);
-      // если API уже присылает сводку рейтинга — используем
       if (data?.rating) {
         setAvg(Number(data.rating.avg || 0));
         setCount(Number(data.rating.count || 0));
@@ -74,14 +73,10 @@ export default function ClientProfile() {
   const loadReviews = async () => {
     try {
       setRevLoading(true);
-      // тот же контракт, что и на странице поставщика:
-      // GET /api/reviews?type=client&id=:id
       const { data } = await axios.get(
         `${API_BASE}/api/reviews`,
         { params: { type: "client", id }, ...(auth || {}) }
       );
-
-      // ожидаем структуру { items: [...], avg, count }
       if (Array.isArray(data?.items)) setReviews(data.items);
       if (data?.avg != null) setAvg(Number(data.avg));
       if (data?.count != null) setCount(Number(data.count));
@@ -162,12 +157,10 @@ export default function ClientProfile() {
             </h1>
             <div className="flex items-center gap-2 text-gray-500 text-sm">
               <Stars value={avg} readonly size="text-base" />
-              <span>{avg.toFixed(1)} / 5</span>
+              <span>{(avg || 0).toFixed(1)} / 5</span>
               <span>•</span>
-              <span>
-                {count}{" "}
-                {t("reviews.count_suffix", { defaultValue: "отзыв(ов)" })}
-              </span>
+              {/* ✅ Плюрализация по языку */}
+              <span>{t("reviews.count", { count: count ?? 0 })}</span>
             </div>
           </div>
 
