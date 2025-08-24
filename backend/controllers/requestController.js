@@ -358,39 +358,65 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
-/** DELETE /api/requests/:id (клиент — свою заявку; провайдер — заявку по своей услуге) */
+/** DELETE /api/requests/:id
+ *  Разрешено удалять:
+ *   1) Автору заявки — совпадение по user.id ИЛИ provider_id
+ *      (учитываем, что в старых строках автор мог лежать в created_by/provider_id).
+ *   2) Провайдеру-владельцу услуги.
+ */
 exports.deleteRequest = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "unauthorized" });
+    const uid = req.user?.id;                    // id пользователя
+    const pid = req.user?.provider_id ?? uid;    // id провайдера (или uid, если нет)
+    if (!uid) return res.status(401).json({ error: "unauthorized" });
 
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    // 1) Клиент удаляет свою заявку
+    // Нормализуем к строке, чтобы не споткнуться о типы (int/uuid)
+    const uidStr = String(uid);
+    const pidStr = String(pid);
+
+    // 1) Удаляет автор (совпадение по user.id ИЛИ provider_id)
     let q = await db.query(
-      `DELETE FROM requests
-        WHERE id::text = $1 AND client_id = $2`,
-      [id, Number(userId)]
+      `
+      DELETE FROM requests
+       WHERE id::text = $1
+         AND (
+              client_id::text  = $2
+           OR user_id::text    = $2
+           OR owner_id::text   = $2
+           OR created_by::text = $2
+           OR client_id::text  = $3
+           OR user_id::text    = $3
+           OR owner_id::text   = $3
+           OR created_by::text = $3
+         )
+      `,
+      [id, uidStr, pidStr]
     );
 
-    // 2) Провайдер удаляет заявку, если услуга принадлежит ему
+    // 2) Удаляет владелец услуги
     if (!q.rowCount) {
-      const providerId = Number(req.user?.provider_id ?? req.user?.id);
       q = await db.query(
-        `DELETE FROM requests r
-           USING services s
-         WHERE r.id::text = $1
-           AND r.service_id = s.id
-           AND s.provider_id = $2`,
-        [id, providerId]
+        `
+        DELETE FROM requests r
+         USING services s
+        WHERE r.id::text  = $1
+          AND r.service_id = s.id
+          AND (
+                s.provider_id::text = $2
+             OR s.owner_id::text    = $2
+             OR s.agency_id::text   = $2
+          )
+        `,
+        [id, pidStr]
       );
     }
 
     if (!q.rowCount) {
       return res.status(404).json({ error: "not_found_or_forbidden" });
     }
-
     return res.json({ success: true, deleted: id });
   } catch (e) {
     console.error("deleteRequest error:", e);
