@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-// ✅ используем готовые API-функции, соответствующие твоим роутам
 import { getClientReviews, addClientReview } from "../api/reviews";
+import { toast } from "react-hot-toast";
 
 const Stars = ({ value = 0, onChange, size = "text-xl", readonly = false }) => {
   const [hover, setHover] = useState(0);
@@ -92,11 +92,11 @@ export default function ClientProfile() {
   // ✅ отправляем в: POST /api/reviews/client/:id
   const submitReview = async () => {
     if (!isProvider) {
-      alert(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
+      toast.error(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
       return;
     }
     if (!rating) {
-      alert(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
+      toast.error(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
       return;
     }
     try {
