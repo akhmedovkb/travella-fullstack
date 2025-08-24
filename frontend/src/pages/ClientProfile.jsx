@@ -1,103 +1,182 @@
 // frontend/src/pages/ClientProfile.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 
-function Stars({ value = 0, size = 14 }) {
-  const full = Math.round(value * 2) / 2; // до половинки, если нужно
-  const stars = [1, 2, 3, 4, 5].map((i) => (
-    <span key={i} style={{ fontSize: size, lineHeight: 1, color: i <= full ? "#f59e0b" : "#d1d5db" }}>
-      ★
-    </span>
-  ));
-  return <span className="inline-flex items-center gap-0.5">{stars}</span>;
-}
+const Stars = ({ value = 0, onChange, size = "text-xl", readonly = false }) => {
+  const [hover, setHover] = useState(0);
+  const curr = hover || value;
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={readonly}
+          onMouseEnter={() => !readonly && setHover(n)}
+          onMouseLeave={() => !readonly && setHover(0)}
+          onClick={() => !readonly && onChange?.(n)}
+          className={`leading-none ${size} ${readonly ? "cursor-default" : "cursor-pointer"}`}
+          aria-label={`${n} star`}
+        >
+          <span className={n <= curr ? "text-yellow-500" : "text-gray-300"}>★</span>
+        </button>
+      ))}
+    </div>
+  );
+};
 
 export default function ClientProfile() {
   const { t } = useTranslation();
   const { id } = useParams();
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const token = localStorage.getItem("token");
-  const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  const auth = useMemo(
+    () => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+    [token]
+  );
+
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [error, setError] = useState("");
+
+  // reviews
+  const [revLoading, setRevLoading] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [avg, setAvg] = useState(0);
+  const [count, setCount] = useState(0);
+
+  // my review form
+  const [rating, setRating] = useState(5);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE}/api/profile/client/${id}`, auth);
+      setProfile(data || null);
+      // если API уже присылает сводку рейтинга — используем
+      if (data?.rating) {
+        setAvg(Number(data.rating.avg || 0));
+        setCount(Number(data.rating.count || 0));
+      }
+    } catch (e) {
+      console.error("client profile load failed:", e?.response?.data || e?.message);
+      setError(t("errors.profile_load_failed", { defaultValue: "Не удалось загрузить профиль" }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadReviews = async () => {
+    try {
+      setRevLoading(true);
+      // тот же контракт, что и на странице поставщика:
+      // GET /api/reviews?type=client&id=:id
+      const { data } = await axios.get(
+        `${API_BASE}/api/reviews`,
+        { params: { type: "client", id }, ...(auth || {}) }
+      );
+
+      // ожидаем структуру { items: [...], avg, count }
+      if (Array.isArray(data?.items)) setReviews(data.items);
+      if (data?.avg != null) setAvg(Number(data.avg));
+      if (data?.count != null) setCount(Number(data.count));
+    } catch (e) {
+      console.error("reviews load failed:", e?.response?.data || e?.message);
+    } finally {
+      setRevLoading(false);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!token) {
+      alert(t("errors.auth_required", { defaultValue: "Нужно войти, чтобы оставить отзыв" }));
+      return;
+    }
+    if (!rating) {
+      alert(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
+      return;
+    }
+    try {
+      setSending(true);
+      await axios.post(
+        `${API_BASE}/api/reviews`,
+        {
+          type: "client",
+          id: Number(id),
+          rating: Number(rating),
+          text: text?.trim() || null,
+        },
+        auth
+      );
+      setText("");
+      setRating(5);
+      await loadReviews();
+    } catch (e) {
+      console.error("review submit failed:", e?.response?.data || e?.message);
+      alert(t("errors.action_failed", { defaultValue: "Не удалось отправить отзыв" }));
+    } finally {
+      setSending(false);
+    }
+  };
 
   useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get(`${API_BASE}/api/profile/client/${id}`, config);
-        if (!isMounted) return;
-        const row = res.data || {};
-        // нормализуем аватар на фронте тоже, на всякий
-        row.avatar_url = row.avatar_url || row.avatarUrl || row.avatar || null;
-        setData(row);
-      } catch (e) {
-        console.error("client profile load failed:", e?.response?.data || e?.message);
-        setData(null);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    })();
-    return () => (isMounted = false);
-  }, [id]);
+    loadProfile();
+    loadReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, token]);
 
   if (loading) {
-    return <div className="text-sm text-gray-500 p-4">{t("common.loading", { defaultValue: "Загрузка…" })}</div>;
+    return <div className="p-4 text-sm text-gray-500">{t("common.loading", { defaultValue: "Загрузка…" })}</div>;
   }
-  if (!data) {
-    return <div className="text-sm text-red-600 p-4">{t("errors.load_failed", { defaultValue: "Не удалось загрузить профиль" })}</div>;
+  if (error) {
+    return <div className="p-4 text-sm text-red-600">{error}</div>;
   }
+  if (!profile) return null;
 
-  const avatar = data.avatar_url || null;
-  const name = data.name || t("client.title", { defaultValue: "Клиент" });
-  const phone = data.phone || "—";
-  const telegram = data.telegram || "—";
-  const rating = data.rating || { avg: 0, count: 0 };
+  const avatar =
+    profile.avatar_url ||
+    "data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>\
+<rect width='100%' height='100%' fill='#f3f4f6'/>\
+<text x='50%' y='54%' text-anchor='middle' fill='#9ca3af' font-family='Arial' font-size='16'>Нет фото</text>\
+</svg>";
 
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6">
+    <div className="max-w-5xl mx-auto px-4 py-6">
       {/* Header card */}
-      <div className="bg-white rounded-2xl border p-4 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
-        <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-          {avatar ? (
-            <img
-              src={avatar}
-              alt={name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          ) : (
-            <span className="text-xs text-gray-500">{t("profile.no_photo", { defaultValue: "Нет фото" })}</span>
-          )}
-        </div>
-
-        <div className="flex-1">
-          <div className="text-xl md:text-2xl font-semibold">
-            {t("client.profile_title", { defaultValue: "Клиент" })}: {name}
-          </div>
-
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-gray-700">
-            <div className="flex items-center gap-2">
-              <Stars value={Number(rating.avg) || 0} />
-              <span className="text-sm text-gray-500">
-                {(Number(rating.avg) || 0).toFixed(1)} / 5 • {rating.count || 0}{" "}
+      <div className="bg-white border rounded-2xl p-5 flex items-start gap-4">
+        <img
+          src={avatar}
+          alt="avatar"
+          className="w-20 h-20 rounded-full object-cover border"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold truncate">
+              {t("client.profile.title", { defaultValue: "Клиент" })}: {profile.name || "—"}
+            </h1>
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
+              <Stars value={avg} readonly size="text-base" />
+              <span>{avg.toFixed(1)} / 5</span>
+              <span>•</span>
+              <span>
+                {count}{" "}
                 {t("reviews.count_suffix", { defaultValue: "отзыв(ов)" })}
               </span>
             </div>
           </div>
 
-          <div className="mt-2 text-sm text-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1">
+          <div className="mt-2 text-sm text-gray-700 flex flex-wrap gap-x-6 gap-y-1">
             <div>
               {t("common.phone", { defaultValue: "Телефон" })}:{" "}
-              {phone && phone !== "—" ? (
-                <a className="underline hover:no-underline" href={`tel:${String(phone).replace(/[^+\d]/g, "")}`}>
-                  {phone}
+              {profile.phone ? (
+                <a className="hover:underline" href={`tel:${String(profile.phone).replace(/[^+\d]/g, "")}`}>
+                  {profile.phone}
                 </a>
               ) : (
                 "—"
@@ -105,20 +184,18 @@ export default function ClientProfile() {
             </div>
             <div>
               Telegram:{" "}
-              {telegram && telegram !== "—" ? (
+              {profile.telegram ? (
                 <a
-                  className="underline hover:no-underline"
+                  className="hover:underline"
                   href={
-                    /^@/.test(telegram)
-                      ? `https://t.me/${telegram.replace(/^@/, "")}`
-                      : /^https?:\/\//i.test(telegram)
-                      ? telegram
-                      : `https://t.me/${telegram}`
+                    /^https?:\/\//i.test(profile.telegram)
+                      ? profile.telegram
+                      : `https://t.me/${String(profile.telegram).replace(/^@/, "")}`
                   }
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {/^@/.test(telegram) ? telegram : `@${telegram.replace(/^https?:\/\/t\.me\//i, "")}`}
+                  {profile.telegram.startsWith("@") ? profile.telegram : `@${String(profile.telegram).replace(/^@/, "")}`}
                 </a>
               ) : (
                 "—"
@@ -129,42 +206,85 @@ export default function ClientProfile() {
       </div>
 
       {/* Reviews list */}
-      <div className="bg-white rounded-2xl border mt-4 md:mt-6 p-4 md:p-6">
-        <div className="text-lg font-semibold">{t("reviews.title", { defaultValue: "Отзывы" })}</div>
-        {Array.isArray(data.reviews) && data.reviews.length > 0 ? (
-          <div className="mt-3 space-y-3">
-            {data.reviews.map((rv) => (
-              <div key={rv.id} className="border rounded-xl p-3">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">{rv.author_name || t("reviews.anonymous", { defaultValue: "Анонимно" })}</div>
-                  <Stars value={Number(rv.rating) || 0} />
-                </div>
-                {!!rv.text && <div className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{rv.text}</div>}
-                {!!rv.created_at && (
-                  <div className="text-xs text-gray-400 mt-1">
-                    {new Date(rv.created_at).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            ))}
+      <div className="bg-white border rounded-2xl p-5 mt-5">
+        <div className="text-lg font-semibold mb-2">
+          {t("reviews.title", { defaultValue: "Отзывы" })}
+        </div>
+
+        {revLoading ? (
+          <div className="text-sm text-gray-500">{t("common.loading", { defaultValue: "Загрузка…" })}</div>
+        ) : reviews.length === 0 ? (
+          <div className="text-sm text-gray-500">
+            {t("reviews.empty", { defaultValue: "Пока нет отзывов." })}
           </div>
         ) : (
-          <div className="text-sm text-gray-500 mt-2">
-            {t("reviews.empty", { defaultValue: "Пока нет отзывов." })}
+          <div className="space-y-4">
+            {reviews.map((rv) => (
+              <div key={rv.id} className="border rounded-xl p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={rv.author?.avatar_url || avatar}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover border"
+                    />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{rv.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}</div>
+                      <div className="text-xs text-gray-400">
+                        {rv.created_at
+                          ? new Date(rv.created_at).toLocaleString()
+                          : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <Stars value={rv.rating || 0} readonly size="text-base" />
+                </div>
+                {rv.text ? (
+                  <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{rv.text}</div>
+                ) : null}
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Review form — оставил заглушку, как договаривались */}
-      <div className="bg-white rounded-2xl border mt-4 md:mt-6 p-4 md:p-6">
-        <div className="text-lg font-semibold">
-          {t("reviews.leave_review", { defaultValue: "Оставить отзыв" })}
+      {/* Leave a review */}
+      <div className="bg-white border rounded-2xl p-5 mt-5">
+        <div className="text-lg font-semibold mb-3">
+          {t("reviews.leave", { defaultValue: "Оставить отзыв" })}
         </div>
-        <div className="text-sm text-gray-500 mt-2">
-          {t("reviews.form_soon", {
-            defaultValue: "Форма будет доступна после подключения API отзывов.",
-          })}
-        </div>
+
+        {!token ? (
+          <div className="text-sm text-gray-500">
+            {t("reviews.login_to_review", { defaultValue: "Войдите, чтобы оставить отзыв." })}
+          </div>
+        ) : (
+          <>
+            <div className="text-sm text-gray-700 mb-2">
+              {t("reviews.your_rating", { defaultValue: "Ваша оценка" })}
+            </div>
+            <Stars value={rating} onChange={setRating} size="text-2xl" />
+            <textarea
+              className="mt-3 w-full border rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              rows={4}
+              placeholder={t("reviews.placeholder", { defaultValue: "Коротко опишите опыт" })}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={submitReview}
+                disabled={sending}
+                className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+              >
+                {sending
+                  ? t("common.sending", { defaultValue: "Отправка…" })
+                  : t("actions.send", { defaultValue: "Отправить" })}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
