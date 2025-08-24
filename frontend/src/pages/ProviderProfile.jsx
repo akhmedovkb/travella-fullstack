@@ -158,6 +158,7 @@ export default function ProviderProfile() {
           avg: Number(data?.stats?.avg || data?.avg || 0)
         });
         setReviews(Array.isArray(data?.items) ? data.items : []);
+        return true; // реальное сохранение
       } catch {
         if (!alive) return;
         setReviewsAgg({ count: 0, avg: 0 });
@@ -216,6 +217,7 @@ export default function ProviderProfile() {
         e?.response?.data?.error === "review_already_exists";
       if (already) {
         toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        return false; // не сохраняли — ReviewForm НЕ покажет "Отзыв сохранён"
       } else {
         console.error(e);
         toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
