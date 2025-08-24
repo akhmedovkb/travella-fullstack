@@ -74,63 +74,61 @@ export default function ClientProfile() {
     }
   };
 
-  
-  // ✅ отправляем в: POST /api/reviews/client/:id
-  // загрузка отзывов — важно НЕ деструктурировать { data }:
-const loadReviews = async () => {
-  try {
-    setRevLoading(true);
-    const data = await getClientReviews(id);
-    setReviews(Array.isArray(data?.items) ? data.items : []);
-    setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
-    setCount(Number(data?.stats?.count ?? data?.count ?? 0));
-  } finally {
-    setRevLoading(false);
-  }
-};
+  // Загрузка отзывов
+  const loadReviews = async () => {
+    try {
+      setRevLoading(true);
+      const data = await getClientReviews(id); // getClientReviews уже возвращает payload
+      setReviews(Array.isArray(data?.items) ? data.items : []);
+      setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
+      setCount(Number(data?.stats?.count ?? data?.count ?? 0));
+    } catch (e) {
+      console.error("reviews load failed:", e?.response?.data || e?.message);
+    } finally {
+      setRevLoading(false);
+    }
+  };
 
-// отправка
-const submitReview = async () => {
-  if (!isProvider) {
-    toast.error(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
-    return;
-  }
-  if (!rating) {
-    toast.error(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
-    return;
-  }
-
-  try {
-    setSending(true);
-    const res = await addClientReview(id, { rating: Number(rating), text: text?.trim() || null });
-
-    // 200 с {error:"review_already_exists"}
-    if (res?.error === "review_already_exists") {
-      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+  // Отправка отзыва (только провайдер)
+  const submitReview = async () => {
+    if (!isProvider) {
+      toast.error(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
       return;
     }
-
-    setText("");
-    setRating(5);
-    await loadReviews();
-  } catch (e) {
-    const already =
-      e?.code === "review_already_exists" ||
-      e?.response?.status === 409 ||
-      e?.response?.data?.error === "review_already_exists" ||
-      String(e?.message || "").includes("review_already_exists");
-
-    if (already) {
-      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
-    } else {
-      console.error("review submit failed:", e);
-      toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+    if (!rating) {
+      toast.error(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
+      return;
     }
-  } finally {
-    setSending(false);
-  }
-};
+    try {
+      setSending(true);
+      const res = await addClientReview(id, { rating: Number(rating), text: text?.trim() || null });
 
+      // На случай 2xx с {error}
+      if (res?.error === "review_already_exists") {
+        toast(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        return;
+      }
+
+      setText("");
+      setRating(5);
+      await loadReviews();
+    } catch (e) {
+      const already =
+        e?.code === "review_already_exists" ||
+        e?.response?.status === 409 ||
+        e?.response?.data?.error === "review_already_exists" ||
+        String(e?.message || "").includes("review_already_exists");
+
+      if (already) {
+        toast(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+      } else {
+        console.error("review submit failed:", e);
+        toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+      }
+    } finally {
+      setSending(false);
+    }
+  };
 
   useEffect(() => {
     loadProfile();
@@ -168,7 +166,6 @@ const submitReview = async () => {
               <Stars value={avg} readonly size="text-base" />
               <span>{(avg || 0).toFixed(1)} / 5</span>
               <span>•</span>
-              {/* плюрализация i18n */}
               <span>{t("reviews.count", { count: count ?? 0 })}</span>
             </div>
           </div>
