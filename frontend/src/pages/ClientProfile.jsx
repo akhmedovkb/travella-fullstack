@@ -106,8 +106,12 @@ export default function ClientProfile() {
       setRating(5);
       await loadReviews();
     } catch (e) {
-      console.error("review submit failed:", e?.response?.data || e?.message);
-      alert(t("errors.action_failed", { defaultValue: "Не удалось отправить отзыв" }));
+      if (e?.code === "review_already_exists") {
+      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        } else {
+        console.error("review submit failed:", e?.response?.data || e?.message);
+        toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+        }
     } finally {
       setSending(false);
     }
