@@ -139,7 +139,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-2xl font-semibold">
-            {t("provider.inbox.title", { defaultValue: "Входящие заявки" })}
+            {t("provider.inbox.title", { defaultValue: "Входящие запросы" })}
           </h3>
           <span className="ml-1 inline-flex items-center justify-center text-xs font-medium
                            min-w-[20px] h-[20px] px-1 rounded-full bg-gray-100 text-gray-700">
