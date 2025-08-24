@@ -125,6 +125,7 @@
     "created": "Created",
     "date": "Date",
     "loading_error": "Failed to load data",
+    "refresh" : "Refresh",
     "request": "Request",
     "saving": "Saving…",
     "sending": "Sending…",
