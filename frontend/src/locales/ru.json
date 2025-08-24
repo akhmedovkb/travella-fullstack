@@ -66,6 +66,7 @@
   "city_tour": "Тур по городу",
   "clear_all": "Очистить всё",
   "clear_all_images_confirm": "Удалить все изображения?",
+  
   "client": {
     "dashboard": {
       "avatarUrl": "Ссылка на аву",
@@ -109,6 +110,8 @@
       "success": "Вход выполнен",
       "error": "Ошибка входа"
     },
+    { "profile": { "title": "Клиент" } },
+  
     "register": {
       "haveAccount": "Уже есть аккаунт?",
       "loginLink": "Войти",
