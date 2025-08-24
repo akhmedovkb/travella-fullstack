@@ -125,7 +125,7 @@ async function listWithAgg(targetType, targetId, req, res) {
       [targetType, targetId]
     );
 
-    // JOIN вместо подзапросов + аватар автора
+    // ВАЖНО: не ссылаемся на несуществующие поля в clients
     const list = await db.query(
       `SELECT r.id, r.rating, r.text, r.created_at, r.author_role, r.author_id,
               COALESCE(
@@ -133,13 +133,11 @@ async function listWithAgg(targetType, targetId, req, res) {
                      WHEN r.author_role = 'provider' THEN p.name
                 END, NULL
               ) AS author_name,
-              COALESCE(
-                CASE WHEN r.author_role = 'client' THEN
-                       COALESCE(c.avatar_url, c.photo, c.image, c.avatar)
-                     WHEN r.author_role = 'provider' THEN
-                       COALESCE(p.logo, p.photo, p.image, p.avatar_url, p.avatar)
-                END, NULL
-              ) AS author_avatar
+              CASE
+                WHEN r.author_role = 'client' THEN c.avatar_url
+                WHEN r.author_role = 'provider' THEN COALESCE(p.logo, p.photo, p.image, p.avatar_url, p.avatar)
+                ELSE NULL
+              END AS author_avatar
          FROM reviews r
          LEFT JOIN clients   c ON c.id = r.author_id AND r.author_role = 'client'
          LEFT JOIN providers p ON p.id = r.author_id AND r.author_role = 'provider'
