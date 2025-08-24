@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import ConfirmModal from "./ConfirmModal";
 
 function StatusBadge({ status }) {
   const map =
@@ -65,7 +66,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState({}); // { [id]: true }
   const [busyDel, setBusyDel] = useState({}); // { [id]: true }
-
+  const [delUI, setDelUI] = useState({ open: false, id: null, sending: false });
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -110,9 +111,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
 
   const handleDelete = async (id) => {
     if (!id) return;
-    if (!window.confirm(t("provider.inbox.confirm_delete", { defaultValue: "Delete request?" }))) {
-      return;
-    }
     setBusyDel((b) => ({ ...b, [id]: true }));
     try {
       await axios.delete(`${API_BASE}/api/requests/${id}`, config);
@@ -128,6 +126,20 @@ const ProviderInboxList = ({ showHeader = false }) => {
       });
     }
   };
+
+  const askDelete = (id) => setDelUI({ open: true, id, sending: false });
+
+  const confirmDelete = async () => {
+    if (!delUI.id) return;
+    setDelUI((s) => ({ ...s, sending: true }));
+    try {
+      await handleDelete(delUI.id);
+    } finally {
+      setDelUI({ open: false, id: null, sending: false });
+    }
+  };
+
+  const closeDelete = () => setDelUI({ open: false, id: null, sending: false });
 
   // ======= Шапка со счётчиками в «красивом» стиле =======
   const total = items.length;
@@ -181,7 +193,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
 
       {!loading && items.length === 0 && (
         <div className="text-sm text-gray-500">
-          {t("provider.inbox.empty", { defaultValue: "Нет заявок" })}
+          {t("provider.inbox.empty", { defaultValue: "Нет запросов" })}
         </div>
       )}
 
@@ -320,7 +332,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
                   </button>
                 )}
                 <button
-                  onClick={() => handleDelete(r.id)}
+                  onClick={() => askDelete(r.id)}
                   disabled={!!busyDel[r.id]}
                   className={`px-3 py-1 rounded text-sm text-white ${
                     busyDel[r.id] ? "bg-red-300 cursor-wait" : "bg-red-600 hover:bg-red-700"
@@ -333,6 +345,20 @@ const ProviderInboxList = ({ showHeader = false }) => {
           );
         })}
       </div>
+          <ConfirmModal
+        open={delUI.open}
+        title={t("provider.inbox.confirm_delete_title", { defaultValue: "Удалить запрос?" })}
+        message={t("provider.inbox.confirm_delete_msg", {
+          defaultValue: "Удалить этот быстрый запрос без возможности восстановления?",
+        })}
+        confirmLabel={t("delete", { defaultValue: "Удалить" })}
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        danger
+        busy={delUI.sending}
+        onConfirm={confirmDelete}
+        onClose={closeDelete}
+      />
+
     </div>
   );
 };
