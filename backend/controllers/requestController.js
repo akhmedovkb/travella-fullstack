@@ -364,53 +364,40 @@ exports.getProviderRequests = async (req, res) => {
  *      (учитываем, что в старых строках автор мог лежать в created_by/provider_id).
  *   2) Провайдеру-владельцу услуги.
  */
+/** DELETE /api/requests/:id
+ *  Удалять можно:
+ *   - автору заявки (client_id = текущий user.id)
+ *   - владельцу услуги (services.provider_id = текущий provider_id)
+ */
 exports.deleteRequest = async (req, res) => {
   try {
-    const uid = req.user?.id;                    // id пользователя
-    const pid = req.user?.provider_id ?? uid;    // id провайдера (или uid, если нет)
-    if (!uid) return res.status(401).json({ error: "unauthorized" });
+    const userId = req.user?.id;
+    const providerId = req.user?.provider_id || null;
+    if (!userId) return res.status(401).json({ error: "unauthorized" });
 
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    // Нормализуем к строке, чтобы не споткнуться о типы (int/uuid)
-    const uidStr = String(uid);
-    const pidStr = String(pid);
+    const userIdStr = String(userId);
 
-    // 1) Удаляет автор (совпадение по user.id ИЛИ provider_id)
+    // 1) Пытаемся удалить как автор (клиент)
     let q = await db.query(
-      `
-      DELETE FROM requests
-       WHERE id::text = $1
-         AND (
-              client_id::text  = $2
-           OR user_id::text    = $2
-           OR owner_id::text   = $2
-           OR created_by::text = $2
-           OR client_id::text  = $3
-           OR user_id::text    = $3
-           OR owner_id::text   = $3
-           OR created_by::text = $3
-         )
-      `,
-      [id, uidStr, pidStr]
+      `DELETE FROM requests
+        WHERE id::text = $1
+          AND client_id::text = $2`,
+      [id, userIdStr]
     );
 
-    // 2) Удаляет владелец услуги
-    if (!q.rowCount) {
+    // 2) Если не мы автор — пробуем удалить как владелец услуги
+    if (!q.rowCount && providerId != null) {
+      const providerIdStr = String(providerId);
       q = await db.query(
-        `
-        DELETE FROM requests r
-         USING services s
-        WHERE r.id::text  = $1
-          AND r.service_id = s.id
-          AND (
-                s.provider_id::text = $2
-             OR s.owner_id::text    = $2
-             OR s.agency_id::text   = $2
-          )
-        `,
-        [id, pidStr]
+        `DELETE FROM requests r
+          USING services s
+         WHERE r.id::text = $1
+           AND s.id = r.service_id
+           AND s.provider_id::text = $2`,
+        [id, providerIdStr]
       );
     }
 
