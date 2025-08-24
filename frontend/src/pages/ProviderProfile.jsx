@@ -1,4 +1,4 @@
-//  frontend/src/pages/ProviderProfile.jsx// frontend/src/pages/ProviderProfile.jsx
+// frontend/src/pages/ProviderProfile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -6,8 +6,9 @@ import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
+import { tSuccess, tError } from "../shared/toast";
 
-/* small helpers */
+/* helpers */
 const first = (...vals) => {
   for (const v of vals) {
     if (v === 0) return 0;
@@ -67,6 +68,7 @@ const firstImageFrom = (val) => {
   return null;
 };
 
+// загрузка профиля провайдера (перебор возможных эндпоинтов)
 async function fetchProviderProfile(providerId) {
   const endpoints = [
     `/api/providers/${providerId}`, `/api/provider/${providerId}`,
@@ -84,11 +86,14 @@ async function fetchProviderProfile(providerId) {
   return null;
 }
 
-/* Тип поставщика → ключ i18n */
+// i18n helper
+const tr = (t) => (key, fallback) => t(key, { defaultValue: fallback });
+
+// Маппинг типа поставщика (строки/коды)
 function providerTypeKey(raw) {
   if (raw === null || raw === undefined) return null;
   const s = String(raw).trim().toLowerCase();
-  const byCode = { "1": "agent", "2": "guide", "3": "transport", "4": "hotel" };
+  const byCode = { "1":"agent","2":"guide","3":"transport","4":"hotel" };
   if (byCode[s]) return byCode[s];
   const direct = {
     agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
@@ -103,18 +108,19 @@ function providerTypeKey(raw) {
   if (/agent|agency|travel|тур|агент/.test(s)) return "agent";
   return null;
 }
-const providerTypeLabel = (raw, t) => {
+function providerTypeLabel(raw, t) {
   const key = providerTypeKey(raw);
   if (!key) return raw || "";
+  const _ = tr(t);
   const fallback = { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
-  return t(`provider.types.${key}`, { defaultValue: fallback });
-};
+  return _(`provider.types.${key}`, fallback);
+}
 
-/* Page */
 export default function ProviderProfile() {
   const { id } = useParams();
   const pid = Number(id);
   const { t } = useTranslation();
+  const tx = (key, fallback) => t(key, { defaultValue: fallback });
 
   const [prov, setProv] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -162,15 +168,28 @@ export default function ProviderProfile() {
 
     const name     = first(prov?.display_name, prov?.name, prov?.title, prov?.brand, prov?.company_name);
     const about    = first(d?.about, d?.description, prov?.about, prov?.description);
+    const city     = first(d?.city, prov?.city, contacts?.city, prov?.location?.city);
+    const country  = first(d?.country, prov?.country, contacts?.country, prov?.location?.country);
     const phone    = first(prov?.phone, prov?.phone_number, prov?.phoneNumber, contacts?.phone, d?.phone, prov?.whatsapp, prov?.whatsApp);
+    const email    = first(prov?.email, contacts?.email, d?.email);
     const telegram = first(prov?.telegram, prov?.tg, contacts?.telegram, socials?.telegram, d?.telegram, prov?.social);
-    const logo     = firstImageFrom(first(prov?.logo, d?.logo, prov?.photo, d?.photo, prov?.image, d?.image, prov?.avatar, d?.avatar, prov?.images, d?.images));
+    const website  = first(prov?.website, contacts?.website, d?.website, prov?.site, socials?.site);
+
+    const logo     = firstImageFrom(first(
+      prov?.logo, d?.logo, prov?.photo, d?.photo, prov?.image, d?.image, prov?.avatar, d?.avatar, prov?.images, d?.images
+    ));
     const cover    = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images, d?.images));
-    const type     = first(prov?.type, d?.type, prov?.provider_type, d?.provider_type, prov?.type_name, d?.type_name, prov?.category, d?.category, prov?.role, d?.role, prov?.kind, d?.kind, prov?.providerType);
+
+    const type     = first(
+      prov?.type, d?.type, prov?.provider_type, d?.provider_type,
+      prov?.type_name, d?.type_name, prov?.category, d?.category,
+      prov?.role, d?.role, prov?.kind, d?.kind, prov?.providerType
+    );
+
     const region   = first(prov?.region, d?.region, prov?.location, d?.location);
     const address  = first(d?.address, prov?.address, contacts?.address);
 
-    return { name, about, phone, telegram, logo, cover, type, region, address };
+    return { name, about, city, country, phone, email, telegram, website, logo, cover, type, region, address };
   }, [prov]);
 
   const canReview = useMemo(() => {
@@ -180,16 +199,35 @@ export default function ProviderProfile() {
     return (isClient || isProvider) && !(isProvider && myProvId === pid);
   }, [pid]);
 
-  // страница только вызывает API и обновляет список; тосты — внутри ReviewForm
+  // Возвращаем:
+  //  - true  -> успешно создан, форма покажет зелёный "Отзыв сохранён"
+  //  - false -> дубль, страница покажет зелёный "Вы уже оставляли..." и форма МОЛЧИТ
+  //  - throw -> реальная ошибка, форма покажет красный
   const submitReview = async ({ rating, text }) => {
-    await addProviderReview(pid, { rating, text });           // бросит 409 → перехватит ReviewForm
-    const data = await getProviderReviews(pid);
-    setReviewsAgg({
-      count: Number(data?.stats?.count ?? data?.count ?? 0),
-      avg: Number(data?.stats?.avg ?? data?.avg ?? 0),
-    });
-    setReviews(Array.isArray(data?.items) ? data.items : []);
+    try {
+      await addProviderReview(pid, { rating, text });
+      const data = await getProviderReviews(pid);
+      setReviewsAgg({
+        count: Number(data?.stats?.count ?? data?.count ?? 0),
+        avg: Number(data?.stats?.avg ?? data?.avg ?? 0),
+      });
+      setReviews(Array.isArray(data?.items) ? data.items : []);
+      return true;
+    } catch (e) {
+      const already =
+        e?.code === "review_already_exists" ||
+        e?.response?.status === 409 ||
+        e?.response?.data?.error === "review_already_exists";
+      if (already) {
+        tSuccess(t("reviews.already_left", { defaultValue: "Вы уже оставляли на него отзыв" }));
+        return false;
+      }
+      console.error(e);
+      throw e;
+    }
   };
+
+  const roleLabel = (role) => tx(`roles.${role}`, role);
 
   if (loading) {
     return (
@@ -198,9 +236,6 @@ export default function ProviderProfile() {
       </div>
     );
   }
-
-  const defaultAvatar =
-    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='58%' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='10'>Нет фото</text></svg>";
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
@@ -211,9 +246,14 @@ export default function ProviderProfile() {
           </div>
         )}
         <div className="p-4 md:p-6 flex items-start gap-4">
+          {/* BIG logo/photo */}
           <div className="shrink-0">
             <div className="w-32 h-32 md:w-48 md:h-48 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center ring-1 ring-black/5">
-              {details.logo ? <img src={details.logo} alt="" className="w-full h-full object-cover" /> : <span className="text-xs text-gray-400 px-2">Нет фото</span>}
+              {details.logo ? (
+                <img src={details.logo} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs text-gray-400 px-2">Нет фото</span>
+              )}
             </div>
           </div>
 
@@ -261,6 +301,7 @@ export default function ProviderProfile() {
         </div>
       </div>
 
+      {/* Отзывы */}
       <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
         <div className="text-lg font-semibold mb-3">{t("reviews.list", { defaultValue: "Отзывы" })}</div>
         {!reviews.length ? (
@@ -268,7 +309,9 @@ export default function ProviderProfile() {
         ) : (
           <ul className="space-y-4">
             {reviews.map((r) => {
-              const avatar = firstImageFrom(r.author?.avatar_url) || defaultAvatar;
+              const avatar =
+                firstImageFrom(r.author?.avatar_url) ||
+                "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='58%' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='10'>Нет фото</text></svg>";
               return (
                 <li key={r.id} className="border rounded-lg p-3">
                   <div className="flex items-center justify-between gap-3">
