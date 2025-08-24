@@ -376,7 +376,9 @@ exports.deleteRequest = async (req, res) => {
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    const userIdStr = String(userId);
+    // важно: для провайдера его «клиентский» id — это id зеркального клиента
+    const clientId = await ensureClientIdForUser(userId);
+    const clientIdStr = String(clientId);
     const provIdStr = providerId != null ? String(providerId) : null;
 
     // помощник: попытаться выполнить DELETE и вернуть rowCount; если колонки нет — вернуть 0
@@ -399,12 +401,12 @@ exports.deleteRequest = async (req, res) => {
 
     let affected = 0;
 
-    // 1) мы — автор заявки (клиент)
+    // 1) мы — автор заявки (клиент). Для провайдера это зеркальный клиент.
     affected += await tryDelete(
       `DELETE FROM requests
         WHERE id::text = $1
           AND client_id::text = $2`,
-      [id, userIdStr]
+      [id, clientIdStr]
     );
 
     // 2) мы — владелец услуги (входящие)
