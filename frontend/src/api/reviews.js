@@ -71,4 +71,6 @@ export async function getServiceReviews(serviceId, { limit = 20, offset = 0 } = 
   });
   return data;
 }
-export func
+export function addServiceReview(serviceId, { rating, text, booking_id }) {
+  return postReview(`${API}/api/reviews/service/${serviceId}`, { rating, text, booking_id });
+}
