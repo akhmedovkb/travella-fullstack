@@ -25,18 +25,56 @@ export async function getProviderReviews(providerId) {
   const { data } = await axios.get(`${API}/api/reviews/provider/${providerId}`);
   return data; // { items, stats:{count,avg} }
 }
-export async function addProviderReview(providerId, { rating, text, booking_id }) {
+
+export const addProviderReview = async (providerId, body) => {
   try {
-    const { data } = await axios.post(
-      `${API}/api/reviews/provider/${providerId}`,
-      { rating, text, booking_id },
-      { headers: authHeaders() }
-    );
-    return data;
+    return await apiPost(`/api/reviews/provider/${providerId}`, body);
   } catch (err) {
-    rethrowConflict(err);
+    if (
+      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
+      err?.status === 409 || err?.code === "review_already_exists"
+    ) {
+      const e = new Error("review_already_exists");
+      e.code = "review_already_exists";
+      throw e;
+    }
+    throw err;
   }
-}
+};
+
+export const addClientReview = async (clientId, body) => {
+  try {
+    return await apiPost(`/api/reviews/client/${clientId}`, body);
+  } catch (err) {
+    if (
+      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
+      err?.status === 409 || err?.code === "review_already_exists"
+    ) {
+      const e = new Error("review_already_exists");
+      e.code = "review_already_exists";
+      throw e;
+    }
+    throw err;
+  }
+};
+
+// (опционально)
+export const addServiceReview = async (serviceId, body) => {
+  try {
+    return await apiPost(`/api/reviews/service/${serviceId}`, body);
+  } catch (err) {
+    if (
+      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
+      err?.status === 409 || err?.code === "review_already_exists"
+    ) {
+      const e = new Error("review_already_exists");
+      e.code = "review_already_exists";
+      throw e;
+    }
+    throw err;
+  }
+};
+
 
 /* ---------- CLIENT ---------- */
 export async function getClientReviews(clientId) {
