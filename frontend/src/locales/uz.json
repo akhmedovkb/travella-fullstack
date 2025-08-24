@@ -136,6 +136,7 @@
     "created": "Yaratilgan",
     "date": "Sana",
     "loading_error": "Ma’lumotlarni yuklab bo‘lmadi",
+    "refresh" : "Yangilash",
     "request": "So‘rov",
     "saving": "Saqlanmoqda…",
     "sending": "Yuborilmoqda…",
