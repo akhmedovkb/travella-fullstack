@@ -162,6 +162,7 @@ export default function ProviderProfile() {
           avg: Number(data?.stats?.avg || data?.avg || 0)
         });
         setReviews(Array.isArray(data?.items) ? data.items : []);
+        return true;
       } catch {
         if (!alive) return;
         setReviewsAgg({ count: 0, avg: 0 });
@@ -227,11 +228,11 @@ export default function ProviderProfile() {
         e?.response?.data?.error === "review_already_exists";
       if (already) {
         // один зелёный тост на “уже оставляли”
-        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставляли на него отзыв" }));
+        tInfo(t("reviews.already_left", { defaultValue: "Вы уже оставляли на него отзыв" }));
         return false; // запретить ReviewForm показывать "успешно"
       } else {
         console.error(e);
-        toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+        tError(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
         throw e; // чтобы ReviewForm показал красный тост
       }
     }
