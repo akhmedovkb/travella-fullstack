@@ -1,7 +1,7 @@
 // frontend/src/components/ReviewForm.jsx
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { tSuccess } from "../shared/toast";
+import { tSuccess, tError } from "../shared/toast";
 
 export default function ReviewForm({ onSubmit, submitLabel }) {
   const { t } = useTranslation();
@@ -10,23 +10,20 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); // не перезагружаем страницу
+    e.preventDefault();
     if (busy) return;
 
-    setBusy(true);
     try {
-      // Родитель должен вернуть true, если отзыв реально сохранён.
-      // На 409/ошибках родитель возвращает false (и сам показывает тост).
-      const saved = await onSubmit?.({ rating, text });
-
-      if (saved === true) {
+      setBusy(true);
+      const res = await onSubmit?.({ rating, text });
+      // Показываем "успешно" только если onSubmit не вернул false
+      if (res !== false) {
         setText("");
         setRating(5);
         tSuccess(t("reviews.saved", { defaultValue: "Отзыв сохранён" }));
       }
-      // Если saved === false или промис упал — тосты уже показал родитель.
     } catch {
-      // Ошибки (включая review_already_exists) обрабатываются родителем.
+      tError(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
     } finally {
       setBusy(false);
     }
@@ -44,9 +41,7 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
             key={n}
             type="button"
             onClick={() => setRating(n)}
-            className={`px-3 py-1 rounded border ${
-              rating === n ? "bg-yellow-100 border-yellow-300" : "bg-white"
-            }`}
+            className={`px-3 py-1 rounded border ${rating === n ? "bg-yellow-100 border-yellow-300" : "bg-white"}`}
           >
             {n}★
           </button>
