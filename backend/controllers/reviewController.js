@@ -14,12 +14,7 @@ function rowsToPublic(list) {
     rating: r.rating,
     text: r.text,
     created_at: r.created_at,
-    author: {
-      id: r.author_id,
-      role: r.author_role,
-      name: r.author_name || null,
-      avatar_url: r.author_avatar || null, // ← добавили
-    },
+    author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
   }));
 }
 
@@ -138,20 +133,7 @@ async function listWithAgg(targetType, targetId, req, res) {
               WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
               WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
               ELSE NULL
-            END AS author_name,
-            CASE r.author_role
-              WHEN 'client' THEN (
-                SELECT COALESCE(avatar_url, photo, image, avatar)
-                  FROM clients
-                 WHERE id = r.author_id
-              )
-              WHEN 'provider' THEN (
-                SELECT COALESCE(logo, photo, image, avatar_url, avatar)
-                  FROM providers
-                 WHERE id = r.author_id
-              )
-              ELSE NULL
-            END AS author_avatar
+            END AS author_name
        FROM reviews r
       WHERE r.target_type = $1 AND r.target_id = $2
       ORDER BY r.created_at DESC
