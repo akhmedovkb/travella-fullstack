@@ -1,4 +1,3 @@
-//src/components/ProviderInboxList.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -52,21 +51,18 @@ function formatDate(ts) {
 function makeTgHref(v) {
   if (!v) return null;
   let s = String(v).trim();
-  // убираем ведущий @ и возможные префиксы t.me
-  s = s.replace(/^@/, "")
-       .replace(/^https?:\/\/t\.me\//i, "")
-       .replace(/^t\.me\//i, "");
+  s = s.replace(/^@/, "").replace(/^https?:\/\/t\.me\//i, "").replace(/^t\.me\//i, "");
   return `https://t.me/${s}`;
 }
-
 
 const ProviderInboxList = ({ showHeader = false }) => {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState({}); // { [id]: true }
-  const [busyDel, setBusyDel] = useState({}); // { [id]: true }
+  const [busy, setBusy] = useState({});
+  const [busyDel, setBusyDel] = useState({});
   const [delUI, setDelUI] = useState({ open: false, id: null, sending: false });
+
   const token = localStorage.getItem("token");
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -74,7 +70,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
   const load = async () => {
     try {
       setLoading(true);
-      // авто-очистка можно попытаться, но логики не трогаем — так и оставим
       try { await axios.post(`${API_BASE}/api/requests/cleanup-expired`, {}, config); } catch {}
       const res = await axios.get(`${API_BASE}/api/requests/provider`, config);
       setItems(Array.isArray(res.data?.items) ? res.data.items : []);
@@ -94,7 +89,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
     if (!id) return;
     setBusy((b) => ({ ...b, [id]: true }));
     try {
-      // ЛОГИКУ НЕ МЕНЯЕМ: тот же эндпоинт, что у тебя уже работает
       await axios.put(`${API_BASE}/api/requests/${id}/processed`, {}, config);
       setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "processed" } : r)));
     } catch (e) {
@@ -138,10 +132,8 @@ const ProviderInboxList = ({ showHeader = false }) => {
       setDelUI({ open: false, id: null, sending: false });
     }
   };
-
   const closeDelete = () => setDelUI({ open: false, id: null, sending: false });
 
-  // ======= Шапка со счётчиками в «красивом» стиле =======
   const total = items.length;
   const newCnt = items.filter((x) => String(x.status) === "new" || !x.status).length;
   const processedCnt = items.filter((x) => String(x.status) === "processed").length;
@@ -153,8 +145,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
           <h3 className="text-2xl font-semibold">
             {t("provider.inbox.title", { defaultValue: "Входящие запросы" })}
           </h3>
-          <span className="ml-1 inline-flex items-center justify-center text-xs font-medium
-                           min-w-[20px] h-[20px] px-1 rounded-full bg-gray-100 text-gray-700">
+          <span className="ml-1 inline-flex items-center justify-center text-xs font-medium min-w-[20px] h-[20px] px-1 rounded-full bg-gray-100 text-gray-700">
             {total}
           </span>
         </div>
@@ -185,33 +176,25 @@ const ProviderInboxList = ({ showHeader = false }) => {
         </div>
       </div>
 
-      {loading && (
-        <div className="text-sm text-gray-500">
-          {t("common.loading", { defaultValue: "Loading…" })}
-        </div>
-      )}
+      {loading && <div className="text-sm text-gray-500">{t("common.loading", { defaultValue: "Loading…" })}</div>}
 
       {!loading && items.length === 0 && (
-        <div className="text-sm text-gray-500">
-          {t("provider.inbox.empty", { defaultValue: "Нет запросов" })}
-        </div>
+        <div className="text-sm text-gray-500">{t("provider.inbox.empty", { defaultValue: "Нет запросов" })}</div>
       )}
 
       <div className="space-y-4">
         {items.map((r) => {
           const rawPhone = r?.client?.phone || null;
           const phoneHref = rawPhone ? `tel:${String(rawPhone).replace(/[^+\d]/g, "")}` : null;
-          
+
           const rawTg = r?.client?.telegram || null;
           const tgHref = rawTg ? makeTgHref(rawTg) : null;
           const tgLabel = rawTg
-            ? "@" + String(rawTg).trim()
-                .replace(/^@/, "")
-                .replace(/^https?:\/\/t\.me\//i, "")
-                .replace(/^t\.me\//i, "")
+            ? "@" +
+              String(rawTg).trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//i, "").replace(/^t\.me\//i, "")
             : null;
-      
-        const isProcessed = String(r?.status || "").toLowerCase() === "processed";
+
+          const isProcessed = String(r?.status || "").toLowerCase() === "processed";
 
           return (
             <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
@@ -236,84 +219,80 @@ const ProviderInboxList = ({ showHeader = false }) => {
               </div>
 
               {/* От кого */}
-              
               <div className="mt-2 text-sm">
-                <div className="text-gray-600">
-                  {t("provider.inbox.from", { defaultValue: "От" })}:
-              </div>
-              <div className="font-medium flex items-center gap-2 min-w-0">
-                                        {(() => {
-                          const c = r?.client || {};
-                          // если прислан provider_id — это профиль провайдера; иначе пробуем профиль клиента
-                          const profileUrl = c.provider_id
-                            ? `/profile/provider/${c.provider_id}`
-                            : (c.id ? `/profile/client/${c.id}` : null);
-                      
-                          const typeLabel = {
-                            client: t("labels.client",   { defaultValue: "Клиент" }),
-                            agent:  t("labels.agent",    { defaultValue: "Турагент" }),
-                            guide:  t("labels.guide",    { defaultValue: "Гид" }),
-                            transport: t("labels.transport", { defaultValue: "Транспорт" }),
-                            hotel:  t("labels.hotel",    { defaultValue: "Отель" }),
-                          }[(c.type || "").toLowerCase()] || c.type;
-                      
-                          return (
-                            <div className="font-medium flex items-center gap-2 min-w-0">
-                              {profileUrl ? (
-                                <Link
-                                  to={profileUrl}
-                                  className="underline hover:no-underline truncate block max-w-full"
-                                  title={c.name || "—"}
-                                >
-                                  {c.name || "—"}
-                                </Link>
-                              ) : (
-                                <span className="truncate" title={c.name || "—"}>
-                                  {c.name || "—"}
-                                </span>
-                              )}
-                      
-                              {!!c.type && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
-                                  {typeLabel}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
+                <div className="text-gray-600">{t("provider.inbox.from", { defaultValue: "От" })}:</div>
+
+                <div className="font-medium flex items-center gap-2 min-w-0">
+                  {(() => {
+                    const c = r?.client || {};
+                    const profileUrl = c.provider_id
+                      ? `/profile/provider/${c.provider_id}`
+                      : c.id
+                      ? `/profile/client/${c.id}`
+                      : null;
+
+                    const typeLabel = {
+                      client: t("labels.client", { defaultValue: "Клиент" }),
+                      agent: t("labels.agent", { defaultValue: "Турагент" }),
+                      guide: t("labels.guide", { defaultValue: "Гид" }),
+                      transport: t("labels.transport", { defaultValue: "Транспорт" }),
+                      hotel: t("labels.hotel", { defaultValue: "Отель" }),
+                    }[(c.type || "").toLowerCase()] || c.type;
+
+                    return (
+                      <div className="font-medium flex items-center gap-2 min-w-0">
+                        {profileUrl ? (
+                          <Link
+                            to={profileUrl}
+                            className="underline hover:no-underline truncate block max-w-full"
+                            title={c.name || "—"}
+                          >
+                            {c.name || "—"}
+                          </Link>
+                        ) : (
+                          <span className="truncate" title={c.name || "—"}>
+                            {c.name || "—"}
+                          </span>
+                        )}
+
+                        {!!c.type && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
+                            {typeLabel}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
                   {phoneHref ? (
-                        <a href={phoneHref} className="underline hover:no-underline">
-                          {rawPhone}
-                        </a>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    
-                      {tgHref ? (
-                        <a
-                          href={tgHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:no-underline"
-                          title="Telegram"
-                        >
-                          {tgLabel}
-                        </a>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                    <a href={phoneHref} className="underline hover:no-underline">
+                      {rawPhone}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+
+                  {tgHref ? (
+                    <a
+                      href={tgHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:no-underline"
+                      title="Telegram"
+                    >
+                      {tgLabel}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </div>
               </div>
 
-              {/* Комментарий, если есть */}
               {!!r.note && (
                 <div className="mt-3">
-                  <div className="text-sm text-gray-600">
-                    {t("comment", { defaultValue: "Комментарий" })}:
-                  </div>
+                  <div className="text-sm text-gray-600">{t("comment", { defaultValue: "Комментарий" })}:</div>
                   <div className="text-sm bg-gray-50 border rounded px-3 py-2">{r.note}</div>
                 </div>
               )}
@@ -345,7 +324,8 @@ const ProviderInboxList = ({ showHeader = false }) => {
           );
         })}
       </div>
-          <ConfirmModal
+
+      <ConfirmModal
         open={delUI.open}
         title={t("provider.inbox.confirm_delete_title", { defaultValue: "Удалить запрос?" })}
         message={t("provider.inbox.confirm_delete_msg", {
@@ -358,7 +338,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
         onConfirm={confirmDelete}
         onClose={closeDelete}
       />
-
     </div>
   );
 };
