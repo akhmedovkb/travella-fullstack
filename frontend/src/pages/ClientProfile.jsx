@@ -76,18 +76,19 @@ export default function ClientProfile() {
 
   // ✅ берём существующий эндпоинт: GET /api/reviews/client/:id
   const loadReviews = async () => {
-    try {
-      setRevLoading(true);
-     const data = await getClientReviews(id);     // ✅ getClientReviews уже возвращает payload
-      ssetReviews(Array.isArray(data?.items) ? data.items : []);
-      setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
-      setCount(Number(data?.stats?.count ?? data?.count ?? 0));
-    } catch (e) {
-      console.error("reviews load failed:", e?.response?.data || e?.message);
-    } finally {
-      setRevLoading(false);
-    }
-  };
+  try {
+    setRevLoading(true);
+    const data = await getClientReviews(id); // getClientReviews уже возвращает payload
+    setReviews(Array.isArray(data?.items) ? data.items : []); // <-- было ssetReviews
+    setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
+    setCount(Number(data?.stats?.count ?? data?.count ?? 0));
+  } catch (e) {
+    console.error("reviews load failed:", e?.response?.data || e?.message);
+  } finally {
+    setRevLoading(false);
+  }
+};
+
 
   // ✅ отправляем в: POST /api/reviews/client/:id
   const submitReview = async () => {
