@@ -92,7 +92,19 @@ const tr = (t) => (key, fallback) => t(key, { defaultValue: fallback });
 
 // Маппинг типа поставщика
 function providerTypeKey(raw) {
-  if (raw === null || raw === undefined) return null;
+    if (raw === null || raw === undefined) return null;
+
+  // если пришёл объект — пробуем распространённые поля
+  if (typeof raw === "object") {
+    const cand =
+      raw.key ?? raw.type ?? raw.name ?? raw.title ?? raw.slug ?? raw.code ?? raw.id ?? null;
+    if (cand != null) return providerTypeKey(cand); // рекурсивно распарсим строку/число
+    return null;
+  }
+
+  // число (например 1..4)
+  if (typeof raw === "number") return providerTypeKey(String(raw));
+
   const s = String(raw).trim().toLowerCase();
 
   // числовые/кодовые варианты
