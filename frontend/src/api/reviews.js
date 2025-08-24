@@ -12,6 +12,7 @@ function authHeaders() {
 }
 
 function rethrowConflict(err) {
+  // Нормализуем 409 в e.code="review_already_exists"
   if (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") {
     const e = new Error("review_already_exists");
     e.code = "review_already_exists";
@@ -21,66 +22,34 @@ function rethrowConflict(err) {
 }
 
 /* ---------- PROVIDER ---------- */
-export async function getProviderReviews(providerId) {
-  const { data } = await axios.get(`${API}/api/reviews/provider/${providerId}`);
+export async function getProviderReviews(providerId, { limit = 20, offset = 0 } = {}) {
+  const { data } = await axios.get(`${API}/api/reviews/provider/${providerId}`, {
+    params: { limit, offset },
+  });
   return data; // { items, stats:{count,avg} }
 }
 
-export const addProviderReview = async (providerId, body) => {
+export async function addProviderReview(providerId, { rating, text, booking_id }) {
   try {
-    return await apiPost(`/api/reviews/provider/${providerId}`, body);
+    const { data } = await axios.post(
+      `${API}/api/reviews/provider/${providerId}`,
+      { rating, text, booking_id },
+      { headers: authHeaders() }
+    );
+    return data;
   } catch (err) {
-    if (
-      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
-      err?.status === 409 || err?.code === "review_already_exists"
-    ) {
-      const e = new Error("review_already_exists");
-      e.code = "review_already_exists";
-      throw e;
-    }
-    throw err;
+    rethrowConflict(err);
   }
-};
-
-export const addClientReview = async (clientId, body) => {
-  try {
-    return await apiPost(`/api/reviews/client/${clientId}`, body);
-  } catch (err) {
-    if (
-      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
-      err?.status === 409 || err?.code === "review_already_exists"
-    ) {
-      const e = new Error("review_already_exists");
-      e.code = "review_already_exists";
-      throw e;
-    }
-    throw err;
-  }
-};
-
-// (опционально)
-export const addServiceReview = async (serviceId, body) => {
-  try {
-    return await apiPost(`/api/reviews/service/${serviceId}`, body);
-  } catch (err) {
-    if (
-      (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") ||
-      err?.status === 409 || err?.code === "review_already_exists"
-    ) {
-      const e = new Error("review_already_exists");
-      e.code = "review_already_exists";
-      throw e;
-    }
-    throw err;
-  }
-};
-
+}
 
 /* ---------- CLIENT ---------- */
-export async function getClientReviews(clientId) {
-  const { data } = await axios.get(`${API}/api/reviews/client/${clientId}`);
+export async function getClientReviews(clientId, { limit = 20, offset = 0 } = {}) {
+  const { data } = await axios.get(`${API}/api/reviews/client/${clientId}`, {
+    params: { limit, offset },
+  });
   return data;
 }
+
 export async function addClientReview(clientId, { rating, text, booking_id }) {
   try {
     const { data } = await axios.post(
@@ -95,10 +64,13 @@ export async function addClientReview(clientId, { rating, text, booking_id }) {
 }
 
 /* ---------- SERVICE (если используете) ---------- */
-export async function getServiceReviews(serviceId) {
-  const { data } = await axios.get(`${API}/api/reviews/service/${serviceId}`);
+export async function getServiceReviews(serviceId, { limit = 20, offset = 0 } = {}) {
+  const { data } = await axios.get(`${API}/api/reviews/service/${serviceId}`, {
+    params: { limit, offset },
+  });
   return data;
 }
+
 export async function addServiceReview(serviceId, { rating, text, booking_id }) {
   try {
     const { data } = await axios.post(
