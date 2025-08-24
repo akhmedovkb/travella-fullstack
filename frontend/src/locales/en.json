@@ -405,9 +405,9 @@
   },
 
   "roles": {
-    "client": "client",
-    "provider": "provider",
-    "admin": "admin"
+    "client": "Client",
+    "provider": "Provider",
+    "admin": "Admin"
   },
     
   "room_rent": "Room rental",
