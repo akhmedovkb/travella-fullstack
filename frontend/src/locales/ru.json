@@ -348,8 +348,10 @@
   },
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
+  
   "provider": {
     "type": "Тип поставщика",
+    
     "types": {
       "agent": "Турагент",
       "guide": "Гид",
@@ -376,6 +378,16 @@
       "mark_processed": "Обработано",
       "confirm_delete": "Удалить заявку?"
     }
+    "outbox": {
+      "title": "Исходящие запросы",
+      "total": "Всего",
+      "new": "Новые",
+      "processed": "Обработанные",
+      "from": "От",
+      "empty": "Нет заявок",
+      "mark_processed": "Обработано",
+      "confirm_delete": "Удалить заявку?"
+    },
   },
   "requests": {
     "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.",
