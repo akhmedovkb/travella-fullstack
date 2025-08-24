@@ -40,6 +40,9 @@ exports.addServiceReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ error: "review_already_exists" });
+    }
     console.error("addServiceReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -66,6 +69,9 @@ exports.addClientReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ error: "review_already_exists" });
+    }
     console.error("addClientReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -101,6 +107,9 @@ exports.addProviderReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ error: "review_already_exists" });
+    }
     console.error("addProviderReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
