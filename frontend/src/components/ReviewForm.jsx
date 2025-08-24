@@ -1,7 +1,7 @@
 // frontend/src/components/ReviewForm.jsx
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { tSuccess, tError, tInfo } from "../shared/toast";
+import { tSuccess, tError } from "../shared/toast";
 
 export default function ReviewForm({ onSubmit, submitLabel }) {
   const { t } = useTranslation();
@@ -12,24 +12,19 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (busy) return;
-
     try {
       setBusy(true);
-      await onSubmit?.({ rating, text });      // страница бросает ошибку при конфликте
-      setText("");
-      setRating(5);
-      tSuccess(t("reviews.saved", { defaultValue: "Отзыв сохранён" }));
-    } catch (err) {
-      const already =
-        err?.code === "review_already_exists" ||
-        err?.response?.status === 409 ||
-        err?.response?.data?.error === "review_already_exists";
-      if (already) {
-        // только зелёный информ-тост
-        tInfo(t("reviews.already_left", { defaultValue: "Вы уже оставляли на него отзыв" }));
-      } else {
-        tError(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+      const res = await onSubmit?.({ rating, text });
+      // Показываем success ТОЛЬКО если onSubmit вернул true
+      if (res === true) {
+        tSuccess(t("reviews.saved", { defaultValue: "Отзыв сохранён" }));
+        setText("");
+        setRating(5);
       }
+      // если res === false — «уже оставляли», тост покажет страница
+    } catch (err) {
+      console.error(err);
+      tError(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
     } finally {
       setBusy(false);
     }
@@ -59,11 +54,7 @@ export default function ReviewForm({ onSubmit, submitLabel }) {
       />
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={busy}
-          className="px-4 py-2 rounded bg-gray-900 text-white disabled:opacity-60"
-        >
+        <button type="submit" disabled={busy} className="px-4 py-2 rounded bg-gray-900 text-white disabled:opacity-60">
           {submitLabel || t("actions.send", { defaultValue: "Отправить" })}
         </button>
       </div>
