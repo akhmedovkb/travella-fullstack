@@ -12,6 +12,7 @@ export default function ConfirmModal({
   busy = false,
   onConfirm,
   onClose,
+  hideCancel = false
 }) {
   const { t } = useTranslation();
   const confirmRef = useRef(null);
