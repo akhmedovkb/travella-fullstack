@@ -357,6 +357,16 @@
       "mark_processed": "Qayta ishlangan",
       "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
     },
+    "outbox": {
+      "title": "Chiqib ketgan so'rovlar",
+      "total": "Jami",
+      "new": "Yangi",
+      "processed": "Qayta ishlangan",
+      "from": "Kimdan",
+      "empty": "So'rovlar yo'q",
+      "mark_processed": "Qayta ishlangan",
+      "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
+    },
     "types": {
       "agent": "Turagent",
       "guide": "Gid",
