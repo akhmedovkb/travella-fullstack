@@ -78,8 +78,8 @@ export default function ClientProfile() {
   const loadReviews = async () => {
   try {
     setRevLoading(true);
-    const data = await getClientReviews(id); // getClientReviews уже возвращает payload
-    setReviews(Array.isArray(data?.items) ? data.items : []); // <-- было ssetReviews
+    const data = await getClientReviews(id); 
+    setReviews(Array.isArray(data?.items) ? data.items : []); 
     setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
     setCount(Number(data?.stats?.count ?? data?.count ?? 0));
   } catch (e) {
