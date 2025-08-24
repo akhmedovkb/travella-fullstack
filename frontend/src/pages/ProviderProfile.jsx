@@ -219,9 +219,15 @@ export default function ProviderProfile() {
 
   const submitReview = async ({ rating, text }) => {
   try {
-    await addProviderReview(pid, { rating, text });
-    const data = await getProviderReviews(pid);
+    const res = await addProviderReview(pid, { rating, text });
 
+    // на случай, если API вернул 200 с {error:"review_already_exists"}
+    if (res?.error === "review_already_exists") {
+      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+      return;
+    }
+
+    const data = await getProviderReviews(pid);
     setReviewsAgg({
       count: Number(data?.stats?.count ?? data?.count ?? 0),
       avg: Number(data?.stats?.avg ?? data?.avg ?? 0),
@@ -233,7 +239,7 @@ export default function ProviderProfile() {
       e?.response?.status === 409 ||
       e?.response?.data?.error === "review_already_exists" ||
       String(e?.message || "").includes("review_already_exists");
-  
+
     if (already) {
       toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
     } else {
@@ -242,6 +248,7 @@ export default function ProviderProfile() {
     }
   }
 };
+
 
 
 
