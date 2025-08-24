@@ -1,60 +1,93 @@
+// backend/routes/requestRoutes.js
 const express = require("express");
 const router = express.Router();
 
 const authenticateToken = require("../middleware/authenticateToken");
-const ctrl = require("../controllers/requestController");
+const ctrl = require("../controllers/requestController") || {};
 
 const {
   createQuickRequest,
   getProviderRequests,
-  getProviderOutgoingRequests,   // ← НОВОЕ
+  getProviderOutgoingRequests,
   getProviderStats,
   updateRequestStatus,
-  updateStatusByProvider,        // ← есть в контроллере
+  updateStatusByProvider,
   deleteRequest,
-  deleteByProvider,              // ← НОВОЕ
+  deleteByProvider,
   manualCleanupExpired,
   getMyRequests,
   updateMyRequest,
   touchByProvider,
 } = ctrl;
 
-// создать быстрый запрос
+const has = (fn) => typeof fn === "function";
+
+// ---------- Создать быстрый запрос ----------
+if (!has(createQuickRequest)) {
+  throw new Error("requestController.createQuickRequest is not exported");
+}
 router.post("/", authenticateToken, createQuickRequest);
 router.post("/quick", authenticateToken, createQuickRequest);
 
-// входящие провайдера
-router.get("/provider", authenticateToken, getProviderRequests);
-router.get("/provider/inbox", authenticateToken, getProviderRequests);
+// ---------- Входящие провайдера ----------
+if (has(getProviderRequests)) {
+  router.get("/provider", authenticateToken, getProviderRequests);
+  router.get("/provider/inbox", authenticateToken, getProviderRequests);
+}
 
-// исходящие провайдера (правильный хэндлер)
-router.get("/provider/outgoing", authenticateToken, getProviderOutgoingRequests);
+// ---------- Исходящие провайдера ----------
+if (has(getProviderOutgoingRequests)) {
+  router.get("/provider/outgoing", authenticateToken, getProviderOutgoingRequests);
+} else if (has(getProviderRequests)) {
+  // фолбэк, если outbox отдается тем же хэндлером
+  router.get("/provider/outgoing", authenticateToken, getProviderRequests);
+}
 
-// счётчики
-router.get("/provider/stats", authenticateToken, getProviderStats);
+// ---------- Счётчики ----------
+if (has(getProviderStats)) {
+  router.get("/provider/stats", authenticateToken, getProviderStats);
+}
 
-// отметить/сменить статус (универсальный и провайдерский)
-router.put("/:id/status", authenticateToken, updateRequestStatus);
-router.put("/:id/processed", authenticateToken, (req, res, next) => {
-  req.body = { ...(req.body || {}), status: "processed" };
-  return updateRequestStatus(req, res, next);
-});
-router.patch("/provider/:id", authenticateToken, updateStatusByProvider);
+// ---------- Обновить статус ----------
+if (has(updateRequestStatus)) {
+  router.put("/:id/status", authenticateToken, updateRequestStatus);
+  // алиас "processed"
+  router.put("/:id/processed", authenticateToken, (req, res, next) => {
+    req.body = { ...(req.body || {}), status: "processed" };
+    return updateRequestStatus(req, res, next);
+  });
+}
+// провайдерская форма (optional)
+if (has(updateStatusByProvider)) {
+  router.patch("/provider/:id", authenticateToken, updateStatusByProvider);
+}
 
-// удалить заявку
-// - для автора (клиент/зеркальный клиент провайдера) ИЛИ для «инициатора» — используем общий DELETE
-router.delete("/:id", authenticateToken, deleteRequest);
-// - для владельца услуги (входящие) — безопаснее отдельный провайдерский DELETE
-router.delete("/provider/:id", authenticateToken, deleteByProvider);
+// ---------- Удалить заявку ----------
+/** Автор/инициатор (клиент/зеркальный клиент провайдера, а также колонки-provider* если есть) */
+if (has(deleteRequest)) {
+  router.delete("/:id", authenticateToken, deleteRequest);
+}
+/** Владелец услуги (входящие у провайдера) */
+if (has(deleteByProvider)) {
+  router.delete("/provider/:id", authenticateToken, deleteByProvider);
+}
 
-// ручная очистка просроченных
-router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
+// ---------- Мои заявки клиента ----------
+if (has(getMyRequests)) {
+  router.get("/my", authenticateToken, getMyRequests);
+}
+if (has(updateMyRequest)) {
+  router.put("/:id", authenticateToken, updateMyRequest);
+}
 
-// мои заявки клиента
-router.get("/my", authenticateToken, getMyRequests);
-router.put("/:id", authenticateToken, updateMyRequest);
+// ---------- Пометить как прочитано провайдером ----------
+if (has(touchByProvider)) {
+  router.post("/:id/touch", authenticateToken, touchByProvider);
+}
 
-// пометить как прочитано провайдером
-router.post("/:id/touch", authenticateToken, touchByProvider);
+// ---------- Ручная очистка просроченных ----------
+if (has(manualCleanupExpired)) {
+  router.post("/cleanup-expired", authenticateToken, manualCleanupExpired);
+}
 
 module.exports = router;
