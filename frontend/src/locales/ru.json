@@ -13,6 +13,7 @@
   "airline": "Авиакомпания",
   "authored_tour": "Авторский тур",
   "back": "← Назад",
+
   "booking": {
     "date": "Дата",
     "pax": "Пассажиры",
@@ -24,7 +25,9 @@
     "empty": "Пока нет бронирований.",
     "item": "Бронирование"
   },
+
   "border_transfer": "Пограничный трансфер",
+
   "calendar": {
     "blocking_title": "Календарь занятости",
     "booked": "Занято",
@@ -38,6 +41,7 @@
     "save_error": "Ошибка сохранения дат",
     "saved_successfully": "Даты сохранены"
   },
+
   "cancel": "Отмена",
   "category": {
     "author_tour": "Авторский тур",
@@ -57,6 +61,7 @@
     "refused_tour": "Отказной тур",
     "visa_support": "Визовая поддержка"
   },
+
   "certificate": "Сертификат",
   "change": "Сменить",
   "change_password": "Сменить пароль",
@@ -66,10 +71,13 @@
   "city_tour": "Тур по городу",
   "clear_all": "Очистить всё",
   "clear_all_images_confirm": "Удалить все изображения?",
-  
+
   "client": {
+    "profile": {
+      "title": "Клиент"
+    },
     "dashboard": {
-      "avatarUrl": "Ссылка на аву",
+      "avatarUrl": "Ссылка на аватар",
       "changeBtn": "Сменить",
       "changePassword": "Сменить пароль",
       "changePhoto": "Сменить фото",
@@ -84,12 +92,12 @@
       "passwordChanged": "Пароль обновлён",
       "passwordTooShort": "Минимум 6 символов",
       "phone": "Телефон",
-      "photoHint": "JPEG/PNG, квадрат 512×512. Подрезка и сжатие выполняются автоматически.",
+      "photoHint": "JPEG/PNG, квадрат 512×512. Обрезка и сжатие выполняются автоматически.",
       "profileTitle": "Профиль",
       "refresh": "Обновить",
       "refusedTours": "Отказные туры",
       "removePhoto": "Удалить фото",
-      "requestDeleted": "Запрос удален",
+      "requestDeleted": "Запрос удалён",
       "saveBtn": "Сохранить",
       "tabs": {
         "myBookings": "Мои бронирования",
@@ -104,19 +112,17 @@
     "login": {
       "loginBtn": "Войти",
       "noAccount": "Нет аккаунта?",
-      "password": "пароль",
+      "password": "Пароль",
       "registerLink": "Регистрация",
       "title": "Вход клиента",
       "success": "Вход выполнен",
       "error": "Ошибка входа"
     },
-    { "profile": { "title": "Клиент" } },
-  
     "register": {
       "haveAccount": "Уже есть аккаунт?",
       "loginLink": "Войти",
       "name": "Наименование",
-      "password": "пароль",
+      "password": "Пароль",
       "phone": "Телефон",
       "registerBtn": "Зарегистрироваться",
       "title": "Регистрация клиента",
@@ -124,10 +130,12 @@
       "error": "Ошибка регистрации"
     }
   },
+
   "comment": "Комментарий",
+
   "common": {
     "add_hotel": "Добавить свой отель",
-    "anonymous": "Аноним"
+    "anonymous": "Аноним",
     "comment": "Комментарий",
     "direction": "Направление",
     "find": "Найти",
@@ -139,7 +147,7 @@
     "created": "Создано",
     "date": "Дата",
     "loading_error": "Не удалось загрузить данные",
-    "refresh" : "Обновить",
+    "refresh": "Обновить",
     "request": "Запрос",
     "saving": "Сохранение…",
     "sending": "Отправка…",
@@ -154,16 +162,16 @@
     "save": "Сохранить",
     "cancel": "Отмена"
   },
-    
+
   "confirm_delete": "Удалить элемент?",
   "countdown": {
     "until_end": "До окончания",
     "expired": "Время истекло"
   },
+
   "country_not_chosen": "Страны не найдены",
   "cover": "Обложка",
-  "created": "Создан",
-  "date": "Дата",
+
   "delete": "Удалить",
   "delete_error": "Ошибка удаления",
   "departure_date": "Дата вылета",
@@ -176,33 +184,40 @@
   "direction_to": "Город прибытия",
   "direction_to_not_chosen": "Город прибытия не выбран",
   "drag_to_reorder": "Перетащите для сортировки",
+
   "edit": "Редактировать",
   "edit_service": "Отредактируйте услугу:",
+
   "empty": {
     "no_bookings": "Пока нет бронирований.",
     "no_favorites": "Избранное пусто",
     "no_requests": "Пока нет запросов."
   },
+
   "end_flight_date": "Дата рейса обратно",
-  "enter_accommodation": "Внесите размещение",
+  "enter_accommodation": "Укажите размещение",
   "enter_airline": "Введите авиакомпанию",
-  "enter_category": "Внесите категорию размещения",
+  "enter_category": "Укажите категорию размещения",
   "enter_flight_details": "Введите детали рейса",
+
   "errors": {
     "action_failed": "Действие не удалось",
+    "auth_required": "Нужно войти, чтобы оставить отзыв",
     "booking_create": "Не удалось создать бронирование",
     "data_load": "Ошибка загрузки данных",
     "image_process": "Ошибка обработки изображения",
     "password_change": "Не удалось сменить пароль",
     "password_short": "Пароль должен быть не короче 6 символов",
     "profile_load": "Не удалось загрузить профиль",
+    "profile_load_failed": "Не удалось загрузить профиль",
     "profile_save": "Не удалось сохранить профиль",
     "request_send": "Не удалось отправить запрос",
-    "request_already_sent":"Вы уже отправляли запрос",
+    "request_already_sent": "Вы уже отправляли запрос",
     "self_request_forbidden": "Вы не можете отправить себе быстрый запрос!",
     "service_unknown": "Сервис не найден",
     "tab_load": "Не удалось загрузить вкладку"
   },
+
   "event_category_concert": "Концерт",
   "event_category_exhibition": "Выставка",
   "event_category_fight": "Бой",
@@ -211,22 +226,26 @@
   "event_category_show": "Шоу",
   "event_date": "Дата мероприятия",
   "event_name": "Название мероприятия",
+
   "expiration_timer": "Таймер актуальности",
+
   "favorites": {
-    "add": "Добавить в избранные",
+    "add": "Добавить в избранное",
     "expired_badge": "Истекло",
     "expired_title": "Эта услуга больше недоступна",
-    "remove_from": "Удалить из Избранного",
+    "remove_from": "Удалить из избранного",
     "no_image": "Нет изображения",
     "added_toast": "Добавлено в избранное",
     "removed_toast": "Удалено из избранного",
     "add_error": "Не удалось добавить в избранное",
     "remove_error": "Не удалось удалить из избранного"
   },
+
   "file_chosen": "Файлы выбраны",
   "fill_all_fields": "Заполните все поля и выберите даты",
   "flight_details": "Детали рейса",
   "flight_type": "Тип перелёта",
+
   "food": "Питание",
   "food_options": {
     "ai": "Всё включено",
@@ -237,23 +256,25 @@
     "select": "Выберите вариант",
     "uai": "Ультра всё включено"
   },
+
   "guide": "Гид",
   "hall_rent": "Аренда зала",
-  
+
   "hotel": "Отель",
   "hotel_check_in": "Дата заезда",
   "hotel_check_out": "Дата выезда",
   "hotel_not_found": "Отель не найден",
-  "hotel_transfer": "Трансфер от отеля",
+  "hotel_transfer": "Трансфер от/до отеля",
   "hotel.no_options": "Нет вариантов",
   "hotel.search_placeholder": "Введите название отеля",
- 
+
   "images_hint": "До 10 изображений, ≤ 3 МБ каждое",
   "inf": "Младенцы (INF)",
   "is_active": "Актуально",
   "loading": "Загрузка…",
   "loading_stats": "Загрузка статистики...",
   "location": "Регион или место проведения",
+
   "login": {
     "button": "Войти",
     "email": "Email",
@@ -263,8 +284,10 @@
     "title": "Вход для поставщика",
     "success": "Вход выполнен"
   },
+
   "logout": "Выйти",
   "make_cover": "Сделать обложкой",
+
   "marketplace": {
     "telegram": "Телеграм",
     "website": "Сайт",
@@ -288,83 +311,94 @@
     "search_filters": "Фильтр поиска",
     "search_in": "Поиск по {{category}}:",
     "search_placeholder": "Поиск по услугам, странам, городам…",
-    "searching": "Идет поиск...",
+    "searching": "Идёт поиск...",
     "select_category": "Выберите категорию",
     "start_date": "Дата начала",
     "title": "Доска объявлений",
     "transport": "Транспорт",
     "supplier": "Поставщик",
     "phone": "Телефон",
-    "telegram": "Телеграм",
     "no_image": "Нет изображения",
     "no_results": "Нет результатов",
     "time_left": "До окончания",
     "time_expired": "Время истекло"
   },
+
   "messages": {
     "booking_created": "Бронирование создано",
     "favorite_removed": "Удалено из избранного",
     "profile_saved": "Профиль сохранён",
     "request_sent": "Запрос отправлен"
   },
-  "mountain_tour": "Тур по горам",
+
+  "mountain_tour": "Тур в горы",
   "my_bookings": "Мои бронирования",
   "my_requests": "Мои запросы",
+
   "name": "Наименование",
   "name_placeholder": "Ваше имя",
+
   "nav": {
     "bookings": "Бронирования",
     "dashboard": "Управление",
     "requests": "Запросы",
     "favorites": "Избранное"
   },
+
   "net_price": "Цена нетто",
   "current_password": "Старый пароль",
   "new_password": "Новый пароль",
+
   "new_refused_airtkt": "Добавление нового отказного авиабилета:",
   "new_refused_event_ticket": "Отказной билет на мероприятие",
   "new_refused_hotel": "Добавление нового отказного отеля:",
   "new_refused_tkt": "Добавление нового отказного билета на мероприятие:",
   "new_refused_tour": "Добавление нового отказного тура:",
+
   "new_service_tip": "Чтобы создать новую услугу, заполните все поля ниже и нажмите «Сохранить услугу».",
   "new_visa_service": "Добавление услуги визовой поддержки:",
   "new_visa_support": "Визовая поддержка",
+
   "no_changes": "Нет изменений для сохранения",
   "no_file_chosen": "Файл не выбран",
   "no_files_selected": "Файлы не выбраны",
   "no_images_yet": "Изображений пока нет",
   "not_specified": "Не указано",
+
   "ok": "Ок",
   "one_way": "В одну сторону",
   "one_way_transfer": "Трансфер в одну сторону",
+
   "pagination": {
     "next": "Вперёд",
     "prev": "Назад"
   },
+
   "password_change": "Сменить пароль",
   "password_changed": "Пароль обновлён",
   "password_error": "Ошибка смены пароля",
   "password_too_short": "Пароль должен быть не короче 6 символов",
+
   "phone": "Телефон",
   "photo": "Фото",
   "price": "Цена",
+
   "profile": {
     "password_changed": "Пароль изменён",
     "saved": "Профиль сохранён"
   },
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
-  
+
   "provider": {
     "type": "Тип поставщика",
-    
+    "region": "Регион поставщика",
     "types": {
       "agent": "Турагент",
       "guide": "Гид",
       "transport": "Транспорт",
       "hotel": "Отель"
     },
-    "region": "Регион поставщика",
     "bookings": {
       "cancel": "Отменить",
       "confirm": "Подтвердить",
@@ -399,6 +433,7 @@
       "confirm_delete": "Удалить заявку?"
     }
   },
+
   "requests": {
     "afterAcceptNote": "После того как клиент примет предложение (status = accepted), он сможет оформить бронирование.",
     "messagePlaceholder": "Сообщение клиенту…",
@@ -408,14 +443,14 @@
     "sendProposal": "Отправить предложение",
     "title": "Запросы (Поставщик)"
   },
-  
+
   "provider_profile": "Профиль поставщика",
   "providerProfile": {
     "type": "Тип поставщика",
     "region": "Регион поставщика",
     "address": "Адрес"
   },
-  
+
   "refused_hotel": "Отказной отель",
   "refused_hotel_city": "Город",
   "refused_hotel_name": "Название отказного отеля",
@@ -423,6 +458,7 @@
   "refused_hotel_select_city": "Введите город",
   "refused_ticket": "Отказной авиабилет",
   "refused_tour": "Отказной тур",
+
   "register": {
     "button": "Зарегистрироваться",
     "email": "Email",
@@ -441,6 +477,7 @@
     "title": "Регистрация поставщика",
     "type": "Тип поставщика"
   },
+
   "requests_list": {
     "empty": "Пока нет запросов.",
     "error": "Не удалось отправить запрос",
@@ -448,7 +485,9 @@
     "note_prompt": "Комментарий к запросу (необязательно):",
     "sent": "Запрос отправлен"
   },
+
   "return_date": "Дата возвращения",
+
   "reviews": {
     "count": "отзыв(ов)",
     "count_one": "{{count}} отзыв",
@@ -456,7 +495,7 @@
     "count_many": "{{count}} отзывов",
     "count_other": "{{count}} отзывов",
     "empty": "Пока нет отзывов.",
-    "leave": "Оставить отзыв"     
+    "leave": "Оставить отзыв",
     "leave_client": "Оставить отзыв о клиенте",
     "leave_service": "Оставить отзыв об услуге",
     "list": "Отзывы",
@@ -465,8 +504,8 @@
     "save_error": "Не удалось сохранить отзыв",
     "saved": "Отзыв сохранён",
     "send": "Отправить",
+    "title": "Отзывы",
     "title_provider": "Отзывы клиентов",
-    "title": "Отзывы",            
     "title_service": "Отзывы об услуге",
     "your_rating": "Ваша оценка"
   },
@@ -476,7 +515,7 @@
     "provider": "Поставщик",
     "admin": "Админ"
   },
-  
+
   "room_rent": "Аренда номера",
   "round_trip": "Туда-обратно",
   "save": "Сохранить",
@@ -488,14 +527,17 @@
   "select_event_category": "Выберите категорию события",
   "select_files": "Выбрать файлы",
   "select_hotel": "Выберите отель",
+
   "service_added": "Услуга добавлена",
   "service_deleted": "Услуга удалена",
   "service_images": "Фото услуги",
   "service_updated": "Услуга обновлена",
   "services": "Услуги",
   "services_load_error": "Не удалось загрузить услуги",
+
   "social": "Ссылка на соцсети",
   "start_flight_date": "Дата рейса вылета",
+
   "stats": {
     "bonus_progress": "Бонусный прогресс",
     "bookings_total": "Бронирований (всего)",
@@ -508,6 +550,7 @@
     "tier": "Уровень",
     "tier_label": "Уровень"
   },
+
   "status": {
     "new": "новый",
     "processed": "обработано",
@@ -515,19 +558,24 @@
     "active": "активна",
     "accepted": "принято"
   },
+
   "sum": "Сумма",
+
   "tabs": {
     "favorites": "Избранное",
     "my_bookings": "Мои бронирования",
     "my_requests": "Мои запросы"
   },
+
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "title": "Название",
+
   "toast": {
     "addedToFav": "Добавлено в избранное",
     "favoriteError": "Не удалось изменить избранное",
     "removedFromFav": "Удалено из избранного"
   },
+
   "transfer": "Трансфер",
   "transfer_options": {
     "group": "Групповой",
@@ -535,6 +583,7 @@
     "none": "Отсутствует",
     "select": "Выберите трансфер"
   },
+
   "transport": "Транспорт",
   "type": "Тип поставщика",
   "update_error": "Ошибка обновления",
@@ -542,57 +591,21 @@
   "view_certificate": "Посмотреть сертификат",
   "visa_included": "Виза включена",
   "visa_support": "Визовая поддержка",
+
   "tooltips": {
     "favorite_add": "В избранное",
     "favorite_remove": "Убрать из избранного"
   },
+
   "gross_price": "Цена для клиента (брутто)",
   "expired": "Истекло",
 
-  "register": {
-    "title": "Регистрация поставщика",
-    "name": "Название",
-    "type": "Тип поставщика",
-    "phone": "Телефон",
-    "email": "Email",
-    "social": "Ссылка на соцсети",
-    "password": "Пароль",
-
-    "location_placeholder": "Регион или город (например, Tashkent)",
-    "photo": "Фото профиля",
-    "select_file": "Выбрать файл",
-    "file_chosen": "Файл выбран",
-    "no_file": "Файл не выбран",
-
-    "phone_hint": "Введите номер в международном формате, например +998 90 123 45 67",
-    "button": "Зарегистрироваться",
-    "loading": "Отправляем…",
-    "success": "Регистрация прошла успешно!",
-
-    "errors": {
-      "auth_required": "Нужно войти, чтобы оставить отзыв"
-      "generic": "Что-то пошло не так. Попробуйте ещё раз.",
-      "profile_load_failed": "Не удалось загрузить профиль",
-      "required": "Заполните это поле",
-      "required_name": "Введите название.",
-      "required_location": "Укажите регион или город.",
-      "required_phone": "Введите номер телефона.",
-      "required_email": "Введите email.",
-      "required_password": "Введите пароль.",
-      "email_invalid": "Некорректный email.",
-      "phone_invalid": "Некорректный номер телефона. Пример: +998 90 123 45 67",
-      "password_weak": "Пароль слишком короткий (минимум 6 символов).",
-      "email_taken": "Email уже используется.",
-      "phone_taken": "Этот номер уже используется.",
-      "duplicate": "Запись с такими данными уже существует."
-    },
-  
   "form": {
     "required": "Заполните это поле.",
     "email_invalid": "Введите корректный e-mail.",
     "password_short": "Минимальная длина пароля — 6 символов."
-  }
-},
+  },
+
   "enter_current_password": "Введите текущий пароль",
   "hotels_load_error": "Не удалось загрузить отели",
   "country_not_found": "Страна не найдена",
