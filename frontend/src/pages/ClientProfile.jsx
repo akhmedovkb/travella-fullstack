@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
+// ✅ используем готовые API-функции, соответствующие твоим роутам
+import { getClientReviews, addClientReview } from "../api/reviews";
 
 const Stars = ({ value = 0, onChange, size = "text-xl", readonly = false }) => {
   const [hover, setHover] = useState(0);
@@ -32,11 +34,8 @@ export default function ClientProfile() {
   const { id } = useParams();
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const token = localStorage.getItem("token");
-  const auth = useMemo(
-    () => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
-    [token]
-  );
+  const token = localStorage.getItem("token") || localStorage.getItem("providerToken"); // провайдер
+  const isProvider = !!token;
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -52,6 +51,11 @@ export default function ClientProfile() {
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+
+  const auth = useMemo(
+    () => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+    [token]
+  );
 
   const loadProfile = async () => {
     try {
@@ -70,16 +74,14 @@ export default function ClientProfile() {
     }
   };
 
+  // ✅ берём существующий эндпоинт: GET /api/reviews/client/:id
   const loadReviews = async () => {
     try {
       setRevLoading(true);
-      const { data } = await axios.get(
-        `${API_BASE}/api/reviews`,
-        { params: { type: "client", id }, ...(auth || {}) }
-      );
-      if (Array.isArray(data?.items)) setReviews(data.items);
-      if (data?.avg != null) setAvg(Number(data.avg));
-      if (data?.count != null) setCount(Number(data.count));
+      const { data } = await getClientReviews(id); // { items, stats:{count,avg} }
+      setReviews(Array.isArray(data?.items) ? data.items : []);
+      setAvg(Number(data?.stats?.avg || 0));
+      setCount(Number(data?.stats?.count || 0));
     } catch (e) {
       console.error("reviews load failed:", e?.response?.data || e?.message);
     } finally {
@@ -87,9 +89,10 @@ export default function ClientProfile() {
     }
   };
 
+  // ✅ отправляем в: POST /api/reviews/client/:id
   const submitReview = async () => {
-    if (!token) {
-      alert(t("errors.auth_required", { defaultValue: "Нужно войти, чтобы оставить отзыв" }));
+    if (!isProvider) {
+      alert(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
       return;
     }
     if (!rating) {
@@ -98,16 +101,7 @@ export default function ClientProfile() {
     }
     try {
       setSending(true);
-      await axios.post(
-        `${API_BASE}/api/reviews`,
-        {
-          type: "client",
-          id: Number(id),
-          rating: Number(rating),
-          text: text?.trim() || null,
-        },
-        auth
-      );
+      await addClientReview(id, { rating: Number(rating), text: text?.trim() || null });
       setText("");
       setRating(5);
       await loadReviews();
@@ -145,11 +139,7 @@ export default function ClientProfile() {
     <div className="max-w-5xl mx-auto px-4 py-6">
       {/* Header card */}
       <div className="bg-white border rounded-2xl p-5 flex items-start gap-4">
-        <img
-          src={avatar}
-          alt="avatar"
-          className="w-20 h-20 rounded-full object-cover border"
-        />
+        <img src={avatar} alt="avatar" className="w-20 h-20 rounded-full object-cover border" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold truncate">
@@ -159,7 +149,7 @@ export default function ClientProfile() {
               <Stars value={avg} readonly size="text-base" />
               <span>{(avg || 0).toFixed(1)} / 5</span>
               <span>•</span>
-              {/* ✅ Плюрализация по языку */}
+              {/* плюрализация i18n */}
               <span>{t("reviews.count", { count: count ?? 0 })}</span>
             </div>
           </div>
@@ -171,9 +161,7 @@ export default function ClientProfile() {
                 <a className="hover:underline" href={`tel:${String(profile.phone).replace(/[^+\d]/g, "")}`}>
                   {profile.phone}
                 </a>
-              ) : (
-                "—"
-              )}
+              ) : "—"}
             </div>
             <div>
               {t("common.telegram", { defaultValue: "Telegram" })}:{" "}
@@ -185,14 +173,11 @@ export default function ClientProfile() {
                       ? profile.telegram
                       : `https://t.me/${String(profile.telegram).replace(/^@/, "")}`
                   }
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="_blank" rel="noopener noreferrer"
                 >
                   {profile.telegram.startsWith("@") ? profile.telegram : `@${String(profile.telegram).replace(/^@/, "")}`}
                 </a>
-              ) : (
-                "—"
-              )}
+              ) : "—"}
             </div>
           </div>
         </div>
@@ -222,11 +207,11 @@ export default function ClientProfile() {
                       className="w-9 h-9 rounded-full object-cover border"
                     />
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{rv.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}</div>
+                      <div className="font-medium truncate">
+                        {rv.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}
+                      </div>
                       <div className="text-xs text-gray-400">
-                        {rv.created_at
-                          ? new Date(rv.created_at).toLocaleString()
-                          : ""}
+                        {rv.created_at ? new Date(rv.created_at).toLocaleString() : ""}
                       </div>
                     </div>
                   </div>
@@ -241,15 +226,15 @@ export default function ClientProfile() {
         )}
       </div>
 
-      {/* Leave a review */}
+      {/* Leave a review (только провайдер может оставить отзыв о клиенте) */}
       <div className="bg-white border rounded-2xl p-5 mt-5">
         <div className="text-lg font-semibold mb-3">
           {t("reviews.leave", { defaultValue: "Оставить отзыв" })}
         </div>
 
-        {!token ? (
+        {!isProvider ? (
           <div className="text-sm text-gray-500">
-            {t("reviews.login_to_review", { defaultValue: "Войдите, чтобы оставить отзыв." })}
+            {t("auth.provider_login_required", { defaultValue: "Войдите как поставщик, чтобы оставить отзыв." })}
           </div>
         ) : (
           <>
