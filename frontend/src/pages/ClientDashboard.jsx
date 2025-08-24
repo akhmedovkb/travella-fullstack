@@ -11,6 +11,63 @@ import { tSuccess, tError, tInfo } from "../shared/toast";
 const FAV_PAGE_SIZE = 6;
 
 /* ===================== Helpers ===================== */
+
+// --- helpers для типа поставщика ---
+const maybeParse = (x) => {
+  if (!x) return null;
+  if (typeof x === "object") return x;
+  if (typeof x === "string") {
+    const s = x.trim();
+    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+      try { return JSON.parse(s); } catch {}
+    }
+  }
+  return null;
+};
+
+const providerTypeKey = (raw) => {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase();
+  const byCode = { "1": "agent", "2": "guide", "3": "transport", "4": "hotel" };
+  if (byCode[s]) return byCode[s];
+  const direct = {
+    agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
+    guide:"guide","tour_guide":"guide","tourguide":"guide","гид":"guide","экскурсовод":"guide",
+    transport:"transport","transfer":"transport","car":"transport","driver":"transport","taxi":"transport","авто":"transport","транспорт":"transport","трансфер":"transport",
+    hotel:"hotel","guesthouse":"hotel","accommodation":"hotel","otel":"hotel","отель":"hotel",
+  };
+  if (direct[s]) return direct[s];
+  if (/guide|гид|экскур/.test(s)) return "guide";
+  if (/hotel|guest|accom|otel|отел/.test(s)) return "hotel";
+  if (/trans|taxi|driver|car|bus|авто|трансфер|транспорт/.test(s)) return "transport";
+  if (/agent|agency|travel|тур|агент/.test(s)) return "agent";
+  return null;
+};
+
+const providerTypeLabel = (raw, t) => {
+  const key = providerTypeKey(raw);
+  if (!key) return raw || "";
+  const fallback = { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
+  return t(`provider.types.${key}`, { defaultValue: fallback });
+};
+
+// аккуратно пробуем несколько эндпоинтов, чтобы вытащить провайдера
+async function fetchProviderProfileForType(axios, API_BASE, id) {
+  const urls = [
+    `${API_BASE}/api/providers/${id}`,
+    `${API_BASE}/api/provider/${id}`,
+    `${API_BASE}/api/companies/${id}`,
+    `${API_BASE}/api/company/${id}`,
+  ];
+  for (const u of urls) {
+    try {
+      const { data } = await axios.get(u);
+      if (data) return data;
+    } catch {}
+  }
+  return null;
+}
+
 function initials(name = "") {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] || "";
@@ -487,7 +544,7 @@ export default function ClientDashboard() {
   const [avatarBase64, setAvatarBase64] = useState(null);
   const [avatarServerUrl, setAvatarServerUrl] = useState(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
-
+  
   // Password
   const [newPassword, setNewPassword] = useState("");
   const [changingPass, setChangingPass] = useState(false);
@@ -542,6 +599,9 @@ export default function ClientDashboard() {
 
   // 🔴 Set of избранных serviceId (для сердечек и мгновенного hidden)
   const [favIds, setFavIds] = useState(new Set());
+
+  // вытаскиваем типы поставщика в review
+  const [authorProvTypes, setAuthorProvTypes] = useState({});
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -646,6 +706,47 @@ export default function ClientDashboard() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, t, myId]);
+
+
+  useEffect(() => {
+  // соберём уникальные ID провайдеров из моих запросов
+  const ids = Array.from(
+    new Set(
+      (requests || []).map((r) =>
+        r?.provider?.id ??
+        r?.service?.provider_id ?? r?.service?.providerId ??
+        r?.provider_id ?? r?.providerId ?? null
+      ).filter(Boolean).map(Number)
+    )
+  );
+  if (!ids.length) return;
+
+  let cancelled = false;
+  (async () => {
+    const map = {};
+    for (const pid of ids) {
+      try {
+        // В файле уже есть helper fetchProviderProfile(...)
+        const p = await fetchProviderProfile(pid);
+
+        const d = (typeof p?.details === "string"
+          ? (() => { try { return JSON.parse(p.details); } catch { return {}; } })()
+          : (p?.details || {}));
+
+        const rawType =
+          p?.type ?? p?.provider_type ?? p?.category ??
+          d?.type ?? d?.provider_type ?? d?.category;
+
+        map[pid] = providerTypeLabel(rawType, t) || t("roles.provider", { defaultValue: "Поставщик" });
+      } catch {
+        // no-op
+      }
+    }
+    if (!cancelled) setAuthorProvTypes((prev) => ({ ...prev, ...map }));
+  })();
+
+  return () => { cancelled = true; };
+}, [requests, t]);
 
   // подгружаем ids избранного (для сердечка) при входе на таб
   useEffect(() => {
@@ -1112,14 +1213,10 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                   >
                     {providerName || "—"}
                   </Link>
-                  {providerType && (
+                  {(providerType || authorProvTypes[providerId]) && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
-                      {{
-                        agent: "Турагент",
-                        guide: "Гид",
-                        transport: "Транспорт",
-                        hotel: "Отель",
-                      }[String(providerType).toLowerCase()] || "Провайдер"}
+                      {providerTypeLabel(providerType || authorProvTypes[providerId], t)
+                        || t("roles.provider", { defaultValue: "Поставщик" })}
                     </span>
                   )}
                 </div>
