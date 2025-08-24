@@ -215,7 +215,7 @@ export default function ProviderProfile() {
         e?.response?.status === 409 ||
         e?.response?.data?.error === "review_already_exists";
       if (already) {
-        toast(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
       } else {
         console.error(e);
         toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
