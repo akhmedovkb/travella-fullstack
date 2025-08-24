@@ -359,6 +359,8 @@
       "confirm_delete": "So'rovni o‘chirishni xohlaysizmi?"
     },
     "outbox": {
+      "confirm_delete_title": "Удалить запрос?",
+      "confirm_delete_msg": "Удалить этот быстрый запрос без возможности восстановления?",
       "title": "Chiqib ketgan so'rovlar",
       "total": "Jami",
       "new": "Yangi",
