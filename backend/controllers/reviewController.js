@@ -127,32 +127,33 @@ async function listWithAgg(targetType, targetId, req, res) {
 
     // ВАЖНО: только существующие поля — clients.avatar_url и providers.logo
     const list = await db.query(
-      `SELECT r.*,
-              CASE r.author_role
-                WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
-                WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
-                ELSE NULL
-              END AS author_name,
-              CASE r.author_role
-                WHEN 'client'   THEN (SELECT avatar_url FROM clients   WHERE id = r.author_id)
-                WHEN 'provider' THEN (SELECT logo        FROM providers WHERE id = r.author_id)
-                ELSE NULL
-              END AS author_avatar
-         FROM reviews r
-        WHERE r.target_type = $1 AND r.target_id = $2
-        ORDER BY r.created_at DESC
-        LIMIT $3 OFFSET $4`,
-      [targetType, targetId, limit, offset]
-    );
-
-    res.json({
-      stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
-      items: rowsToPublic(list.rows),
-    });
-  } catch (e) {
-    console.error("listWithAgg:", e);
-    res.status(500).json({ error: "reviews_list_failed" });
-  }
+        `SELECT r.*,
+                CASE r.author_role
+                  WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
+                  WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
+                  ELSE NULL
+                END AS author_name,
+                CASE r.author_role
+                  WHEN 'client'   THEN (SELECT avatar_url FROM clients   WHERE id = r.author_id)
+                  WHEN 'provider' THEN (SELECT logo        FROM providers WHERE id = r.author_id)
+                  ELSE NULL
+                END AS author_avatar
+           FROM reviews r
+          WHERE r.target_type = $1 AND r.target_id = $2
+          ORDER BY r.created_at DESC
+          LIMIT $3 OFFSET $4`,
+        [targetType, targetId, limit, offset]
+      );
+      
+      res.json({
+        stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
+        items: rowsToPublic(list.rows), // rowsToPublic добавляет author.avatar_url
+      });
+    
+      } catch (e) {
+        console.error("listWithAgg:", e);
+        res.status(500).json({ error: "reviews_list_failed" });
+      }
 }
 
 exports.getServiceReviews  = (req, res) => listWithAgg("service",  toInt(req.params.serviceId),  req, res);
