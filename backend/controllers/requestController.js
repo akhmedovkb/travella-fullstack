@@ -360,48 +360,44 @@ exports.getProviderRequests = async (req, res) => {
 
 /** DELETE /api/requests/:id
  * Разрешаем удалять:
- *  - автору заявки (client_id = текущий user.id)
- *  - владельцу услуги (JOIN services.provider_id = текущий provider_id)
- *  - провайдеру-инициатору (requests.provider_id = provider_id)    [если колонка есть]
- *  - провайдеру-инициатору (requests.author_provider_id = provider_id) [если колонка есть]
- *  - провайдеру-инициатору (requests.created_by = provider_id)     [если колонка есть]
- *  - провайдеру-инициатору (requests.owner_id = provider_id)       [если колонка есть]
+ *  - автору заявки (client_id = текущий user.id либо зеркальный client_id для провайдера)
+ *  - владельцу услуги (JOIN services.provider_id ∈ providerIds)
+ *  - провайдеру-инициатору (requests.provider_id / author_provider_id / created_by / owner_id ∈ providerIds), если такие колонки есть
  */
 exports.deleteRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const providerId = req.user?.provider_id ?? null;
     if (!userId) return res.status(401).json({ error: "unauthorized" });
 
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(400).json({ error: "id_required" });
 
-    // важно: для провайдера его «клиентский» id — это id зеркального клиента
+    // 1) автор заявки — для провайдера это «зеркальный клиент»
     const clientId = await ensureClientIdForUser(userId);
     const clientIdStr = String(clientId);
-    const provIdStr = providerId != null ? String(providerId) : null;
 
-    // помощник: попытаться выполнить DELETE и вернуть rowCount; если колонки нет — вернуть 0
+    // 2) набор возможных provider-id (id, provider_id, company_id, …)
+    const providerIds = collectProviderIdsFromUser(req.user);
+
+    // helper: пробуем DELETE; если нет колонки — не считаем за ошибку
     const tryDelete = async (sql, params) => {
       try {
         const q = await db.query(sql, params);
         return q.rowCount || 0;
       } catch (e) {
-        // колонка может отсутствовать — игнорируем такие ошибки
         if (
           /column .* does not exist/i.test(String(e?.message)) ||
           /missing FROM-clause entry/i.test(String(e?.message))
         ) {
           return 0;
         }
-        // прочие ошибки пробрасываем наверх
         throw e;
       }
     };
 
     let affected = 0;
 
-    // 1) мы — автор заявки (клиент). Для провайдера это зеркальный клиент.
+    // A) мы — автор (client)
     affected += await tryDelete(
       `DELETE FROM requests
         WHERE id::text = $1
@@ -409,40 +405,33 @@ exports.deleteRequest = async (req, res) => {
       [id, clientIdStr]
     );
 
-    // 2) мы — владелец услуги (входящие)
-    if (!affected && provIdStr) {
+    // B) мы — владелец услуги (входящие)
+    if (!affected && providerIds.length) {
       affected += await tryDelete(
         `DELETE FROM requests r
            USING services s
          WHERE r.id::text = $1
            AND s.id = r.service_id
-           AND s.provider_id::text = $2`,
-        [id, provIdStr]
+           AND s.provider_id = ANY($2::int[])`,
+        [id, providerIds]
       );
     }
 
-    // 3+) мы — провайдер-инициатор (исходящие). Пробуем несколько возможных колонок, если они существуют.
-    if (!affected && provIdStr) {
-      const candidateCols = [
-        "provider_id",
-        "author_provider_id",
-        "created_by",
-        "owner_id",
-      ];
-      for (const col of candidateCols) {
+    // C) мы — инициатор-провайдер (исходящие), если колонка есть
+    if (!affected && providerIds.length) {
+      const cols = ["provider_id", "author_provider_id", "created_by", "owner_id"];
+      for (const col of cols) {
         if (affected) break;
         affected += await tryDelete(
           `DELETE FROM requests
             WHERE id::text = $1
-              AND ${col}::text = $2`,
-          [id, provIdStr]
+              AND ${col} = ANY($2::int[])`,
+          [id, providerIds]
         );
       }
     }
 
-    if (!affected) {
-      return res.status(404).json({ error: "not_found_or_forbidden" });
-    }
+    if (!affected) return res.status(404).json({ error: "not_found_or_forbidden" });
     return res.json({ success: true, deleted: id });
   } catch (e) {
     console.error("deleteRequest error:", e);
