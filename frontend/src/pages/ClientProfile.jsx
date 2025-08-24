@@ -91,38 +91,61 @@ export default function ClientProfile() {
 
 
   // ✅ отправляем в: POST /api/reviews/client/:id
-  const submitReview = async () => {
-    if (!isProvider) {
-      toast.error(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
+  // загрузка отзывов — важно НЕ деструктурировать { data }:
+const loadReviews = async () => {
+  try {
+    setRevLoading(true);
+    const data = await getClientReviews(id);
+    setReviews(Array.isArray(data?.items) ? data.items : []);
+    setAvg(Number(data?.stats?.avg ?? data?.avg ?? 0));
+    setCount(Number(data?.stats?.count ?? data?.count ?? 0));
+  } finally {
+    setRevLoading(false);
+  }
+};
+
+// отправка
+const submitReview = async () => {
+  if (!isProvider) {
+    toast.error(t("auth.provider_login_required", { defaultValue: "Войдите как поставщик" }));
+    return;
+  }
+  if (!rating) {
+    toast.error(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
+    return;
+  }
+
+  try {
+    setSending(true);
+    const res = await addClientReview(id, { rating: Number(rating), text: text?.trim() || null });
+
+    // 200 с {error:"review_already_exists"}
+    if (res?.error === "review_already_exists") {
+      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
       return;
     }
-    if (!rating) {
-      toast.error(t("errors.rating_required", { defaultValue: "Укажите оценку" }));
-      return;
+
+    setText("");
+    setRating(5);
+    await loadReviews();
+  } catch (e) {
+    const already =
+      e?.code === "review_already_exists" ||
+      e?.response?.status === 409 ||
+      e?.response?.data?.error === "review_already_exists" ||
+      String(e?.message || "").includes("review_already_exists");
+
+    if (already) {
+      toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
+    } else {
+      console.error("review submit failed:", e);
+      toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
     }
-    try {
-      setSending(true);
-      await addClientReview(id, { rating: Number(rating), text: text?.trim() || null });
-      setText("");
-      setRating(5);
-      await loadReviews();
-    } catch (e) {
-        const already =
-          e?.code === "review_already_exists" ||
-          e?.response?.status === 409 ||
-          e?.response?.data?.error === "review_already_exists" ||
-          String(e?.message || "").includes("review_already_exists");
-      
-        if (already) {
-          toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
-        } else {
-          console.error("review submit failed:", e);
-          toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
-        }
-      } finally {
-        setSending(false);
-      }
-  };
+  } finally {
+    setSending(false);
+  }
+};
+
 
   useEffect(() => {
     loadProfile();
