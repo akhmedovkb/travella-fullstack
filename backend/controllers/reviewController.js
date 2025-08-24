@@ -1,7 +1,7 @@
 // backend/controllers/reviewController.js
 const db = require("../db");
 
-/* helpers */
+/* ───────── helpers ───────── */
 function toInt(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 function pagin(req) {
   const limit  = Math.min(100, Math.max(1, toInt(req.query.limit)  ?? 20));
@@ -23,8 +23,8 @@ function rowsToPublic(list) {
   }));
 }
 
-/* CREATE */
-// client → service
+/* ───────── CREATE ───────── */
+// клиент → услуге
 exports.addServiceReview = async (req, res) => {
   try {
     const serviceId = toInt(req.params.serviceId);
@@ -45,13 +45,13 @@ exports.addServiceReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e?.code === '23505') return res.status(409).json({ error: "review_already_exists" });
+    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addServiceReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
 };
 
-// provider → client
+// провайдер → клиенту
 exports.addClientReview = async (req, res) => {
   try {
     const clientId = toInt(req.params.clientId);
@@ -72,17 +72,17 @@ exports.addClientReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e?.code === '23505') return res.status(409).json({ error: "review_already_exists" });
+    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addClientReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
 };
 
-// client OR provider → about provider
+// клиент ИЛИ провайдер → о ПРОВАЙДЕРЕ
 exports.addProviderReview = async (req, res) => {
   try {
-    const providerId = Number(req.params.providerId);
-    if (!Number.isFinite(providerId)) return res.status(400).json({ error: "bad_provider_id" });
+    const providerId = toInt(req.params.providerId);
+    if (!providerId) return res.status(400).json({ error: "bad_provider_id" });
 
     const { rating, text, booking_id } = req.body || {};
     const r = Math.max(1, Math.min(5, Number(rating || 0)));
@@ -106,53 +106,57 @@ exports.addProviderReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e?.code === '23505') return res.status(409).json({ error: "review_already_exists" });
+    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addProviderReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
 };
 
-/* READ (list + agg) */
+/* ───────── READ (list + agg) ───────── */
 async function listWithAgg(targetType, targetId, req, res) {
-  if (!targetId) return res.status(400).json({ error: "bad_target_id" });
-  const { limit, offset } = pagin(req);
+  try {
+    if (!targetId) return res.status(400).json({ error: "bad_target_id" });
+    const { limit, offset } = pagin(req);
 
-  const agg = await db.query(
-    `SELECT COUNT(*)::int AS count, COALESCE(AVG(rating),0)::float AS avg
-       FROM reviews
-      WHERE target_type = $1 AND target_id = $2`,
-    [targetType, targetId]
-  );
+    const agg = await db.query(
+      `SELECT COUNT(*)::int AS count, COALESCE(AVG(rating),0)::float AS avg
+         FROM reviews
+        WHERE target_type = $1 AND target_id = $2`,
+      [targetType, targetId]
+    );
 
-  const list = await db.query(
-    `SELECT r.*,
-            CASE r.author_role
-              WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
-              WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
-              ELSE NULL
-            END AS author_name,
-            CASE r.author_role
-              WHEN 'client' THEN (
-                SELECT COALESCE(avatar_url, photo, image, avatar)
-                  FROM clients WHERE id = r.author_id
-              )
-              WHEN 'provider' THEN (
-                SELECT COALESCE(logo, photo, image, avatar_url, avatar)
-                  FROM providers WHERE id = r.author_id
-              )
-              ELSE NULL
-            END AS author_avatar
-       FROM reviews r
-      WHERE r.target_type = $1 AND r.target_id = $2
-      ORDER BY r.created_at DESC
-      LIMIT $3 OFFSET $4`,
-    [targetType, targetId, limit, offset]
-  );
+    // JOIN вместо подзапросов + аватар автора
+    const list = await db.query(
+      `SELECT r.id, r.rating, r.text, r.created_at, r.author_role, r.author_id,
+              COALESCE(
+                CASE WHEN r.author_role = 'client'   THEN c.name
+                     WHEN r.author_role = 'provider' THEN p.name
+                END, NULL
+              ) AS author_name,
+              COALESCE(
+                CASE WHEN r.author_role = 'client' THEN
+                       COALESCE(c.avatar_url, c.photo, c.image, c.avatar)
+                     WHEN r.author_role = 'provider' THEN
+                       COALESCE(p.logo, p.photo, p.image, p.avatar_url, p.avatar)
+                END, NULL
+              ) AS author_avatar
+         FROM reviews r
+         LEFT JOIN clients   c ON c.id = r.author_id AND r.author_role = 'client'
+         LEFT JOIN providers p ON p.id = r.author_id AND r.author_role = 'provider'
+        WHERE r.target_type = $1 AND r.target_id = $2
+        ORDER BY r.created_at DESC
+        LIMIT $3 OFFSET $4`,
+      [targetType, targetId, limit, offset]
+    );
 
-  res.json({
-    stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
-    items: rowsToPublic(list.rows),
-  });
+    return res.json({
+      stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
+      items: rowsToPublic(list.rows),
+    });
+  } catch (e) {
+    console.error(`listWithAgg(${targetType}, ${targetId}) failed:`, e);
+    return res.status(500).json({ error: "reviews_read_failed" });
+  }
 }
 
 exports.getServiceReviews  = (req, res) => listWithAgg("service",  toInt(req.params.serviceId),  req, res);
