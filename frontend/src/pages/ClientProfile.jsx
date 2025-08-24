@@ -106,7 +106,8 @@ export default function ClientProfile() {
       setRating(5);
       await loadReviews();
     } catch (e) {
-      if (e?.code === "review_already_exists") {
+      if (e?.code === "review_already_exists" ||
+          (e?.response?.status === 409 && e?.response?.data?.error === "review_already_exists")) {
       toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
         } else {
         console.error("review submit failed:", e?.response?.data || e?.message);
