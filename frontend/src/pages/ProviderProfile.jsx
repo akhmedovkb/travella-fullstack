@@ -28,7 +28,6 @@ const maybeParse = (x) => {
   return null;
 };
 
-// делаем абсолютный URL из относительного
 const makeAbsolute = (u) => {
   if (!u) return null;
   const s = String(u).trim();
@@ -38,10 +37,8 @@ const makeAbsolute = (u) => {
   return `${base}/${s.replace(/^\/+/, "")}`;
 };
 
-// извлекаем первую картинку из разных форматов (строка, объект, массив)
 const firstImageFrom = (val) => {
   if (!val) return null;
-
   if (typeof val === "string") {
     const s = val.trim();
     const parsed = maybeParse(s);
@@ -54,7 +51,6 @@ const firstImageFrom = (val) => {
     }
     return makeAbsolute(s);
   }
-
   if (Array.isArray(val)) {
     for (const item of val) {
       const found = firstImageFrom(item);
@@ -62,7 +58,6 @@ const firstImageFrom = (val) => {
     }
     return null;
   }
-
   if (typeof val === "object") {
     const hit = first(
       val.url, val.src, val.image, val.photo, val.logo,
@@ -92,12 +87,23 @@ async function fetchProviderProfile(providerId) {
   return null;
 }
 
-// курри-хелпер (используется в providerTypeLabel)
+// i18n helper
 const tr = (t) => (key, fallback) => t(key, { defaultValue: fallback });
 
-// нормализация типа → ключ i18n
+// Маппинг типа поставщика
 function providerTypeKey(raw) {
-  const s = String(raw || "").trim().toLowerCase();
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase();
+
+  // числовые/кодовые варианты
+  const byCode = {
+    "1": "agent",
+    "2": "guide",
+    "3": "transport",
+    "4": "hotel"
+  };
+  if (byCode[s]) return byCode[s];
+
   const direct = {
     agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
     guide:"guide","tour_guide":"guide","tourguide":"guide","гид":"guide","экскурсовод":"guide",
@@ -120,12 +126,10 @@ function providerTypeLabel(raw, t) {
   return _(`provider.types.${key}`, fallback);
 }
 
-/* page */
 export default function ProviderProfile() {
   const { id } = useParams();
   const pid = Number(id);
   const { t } = useTranslation();
-
   const tx = (key, fallback) => t(key, { defaultValue: fallback });
 
   const [prov, setProv] = useState(null);
@@ -158,7 +162,6 @@ export default function ProviderProfile() {
           avg: Number(data?.stats?.avg || data?.avg || 0)
         });
         setReviews(Array.isArray(data?.items) ? data.items : []);
-        return true; // реальное сохранение
       } catch {
         if (!alive) return;
         setReviewsAgg({ count: 0, avg: 0 });
@@ -187,7 +190,13 @@ export default function ProviderProfile() {
     ));
     const cover    = firstImageFrom(first(prov?.cover, d?.cover, prov?.banner, d?.banner, prov?.images, d?.images));
 
-    const type     = first(prov?.type, d?.type, prov?.provider_type, d?.provider_type);
+    // расширили набор возможных названий поля + числовые коды
+    const type = first(
+      prov?.type, d?.type, prov?.provider_type, d?.provider_type,
+      prov?.type_name, d?.type_name, prov?.category, d?.category,
+      prov?.role, d?.role, prov?.kind, d?.kind, prov?.providerType
+    );
+
     const region   = first(prov?.region, d?.region, prov?.location, d?.location);
     const address  = first(d?.address, prov?.address, contacts?.address);
 
@@ -210,17 +219,20 @@ export default function ProviderProfile() {
         avg: Number(data?.stats?.avg ?? data?.avg ?? 0),
       });
       setReviews(Array.isArray(data?.items) ? data.items : []);
+      return true; // скажем ReviewForm'у показать "успешно"
     } catch (e) {
       const already =
         e?.code === "review_already_exists" ||
         e?.response?.status === 409 ||
         e?.response?.data?.error === "review_already_exists";
       if (already) {
-        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
-        return false; // не сохраняли — ReviewForm НЕ покажет "Отзыв сохранён"
+        // один зелёный тост на “уже оставляли”
+        toast.success(t("reviews.already_left", { defaultValue: "Вы уже оставляли на него отзыв" }));
+        return false; // запретить ReviewForm показывать "успешно"
       } else {
         console.error(e);
         toast.error(t("reviews.save_error", { defaultValue: "Не удалось сохранить отзыв" }));
+        throw e; // чтобы ReviewForm показал красный тост
       }
     }
   };
@@ -258,29 +270,27 @@ export default function ProviderProfile() {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl md:text-2xl font-semibold">
-                {tx("marketplace.supplier","Поставщик")}: {details.name || "-"}
+                {t("marketplace.supplier", { defaultValue: "Поставщик" })}: {details.name || "-"}
               </h1>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <RatingStars value={reviewsAgg.avg} size={16} />
                 <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">
-                  · {t("reviews.count", { count: reviewsAgg.count ?? 0 })}
-                </span>
+                <span className="opacity-70">· {t("reviews.count", { count: reviewsAgg.count ?? 0 })}</span>
               </div>
             </div>
 
             <div className="mt-1 text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-              {details.type   && <span>{tx("provider.type","Тип поставщика")}: <b>{providerTypeLabel(details.type, t)}</b></span>}
-              {details.region && <span>{tx("provider.region","Регион поставщика")}: <b>{details.region}</b></span>}
+              {details.type   && <span>{t("provider.type", { defaultValue: "Тип поставщика" })}: <b>{providerTypeLabel(details.type, t)}</b></span>}
+              {details.region && <span>{t("provider.region", { defaultValue: "Регион поставщика" })}: <b>{details.region}</b></span>}
               {details.phone  && (
                 <span>
-                  {tx("marketplace.phone","Телефон")}:{" "}
+                  {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
                   <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g, "")}`}>{details.phone}</a>
                 </span>
               )}
               {details.telegram && (
                 <span>
-                  {tx("marketplace.telegram","Телеграм")}:{" "}
+                  {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
                   {String(details.telegram).startsWith("@")
                     ? <a className="underline break-all" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
                     : /^https?:\/\//.test(String(details.telegram))
@@ -288,12 +298,12 @@ export default function ProviderProfile() {
                       : <span>{details.telegram}</span>}
                 </span>
               )}
-              {details.address && <span>{tx("marketplace.address","Адрес")}: <b>{details.address}</b></span>}
+              {details.address && <span>{t("marketplace.address", { defaultValue: "Адрес" })}: <b>{details.address}</b></span>}
             </div>
 
             {details.about && (
               <div className="mt-3">
-                <div className="text-gray-500 text-sm mb-1">{tx("common.about","О компании")}</div>
+                <div className="text-gray-500 text-sm mb-1">{t("common.about", { defaultValue: "О компании" })}</div>
                 <div className="whitespace-pre-line">{details.about}</div>
               </div>
             )}
@@ -301,38 +311,48 @@ export default function ProviderProfile() {
         </div>
       </div>
 
+      {/* Отзывы */}
       <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
-        <div className="text-lg font-semibold mb-3">{tx("reviews.list","Отзывы")}</div>
+        <div className="text-lg font-semibold mb-3">{t("reviews.list", { defaultValue: "Отзывы" })}</div>
         {!reviews.length ? (
-          <div className="text-gray-500">{tx("reviews.empty","Пока нет отзывов.")}</div>
+          <div className="text-gray-500">{t("reviews.empty", { defaultValue: "Пока нет отзывов." })}</div>
         ) : (
           <ul className="space-y-4">
-            {reviews.map((r) => (
-              <li key={r.id} className="border rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+            {reviews.map((r) => {
+              const avatar =
+                firstImageFrom(r.author?.avatar_url) ||
+                "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='58%' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='10'>Нет фото</text></svg>";
+              return (
+                <li key={r.id} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img src={avatar} alt="" className="w-9 h-9 rounded-full object-cover border" />
+                      <div className="min-w-0">
+                        <div className="text-sm text-gray-700 truncate">
+                          {r.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}{" "}
+                          {r.author?.role && (
+                            <span className="text-gray-400">({t(`roles.${r.author.role}`, { defaultValue: r.author.role })})</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(r.created_at || Date.now()).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
                     <RatingStars value={r.rating || 0} size={16} />
-                    {r.author?.name && (
-                      <span className="text-sm text-gray-600">
-                        {r.author.name} ({tx(`roles.${r.author.role}`, r.author.role)})
-                      </span>
-                    )}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(r.created_at || r.date || Date.now()).toLocaleString()}
-                  </div>
-                </div>
-                {r.text && <div className="mt-2 whitespace-pre-line">{r.text}</div>}
-              </li>
-            ))}
+                  {r.text && <div className="mt-2 whitespace-pre-line">{r.text}</div>}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
       {canReview && (
         <div className="bg-white rounded-xl border shadow p-4 md:p-6">
-          <div className="text-lg font-semibold mb-3">{tx("reviews.leave","Оставить отзыв")}</div>
-          <ReviewForm onSubmit={submitReview} submitLabel={tx("reviews.send","Отправить")} />
+          <div className="text-lg font-semibold mb-3">{t("reviews.leave", { defaultValue: "Оставить отзыв" })}</div>
+          <ReviewForm onSubmit={submitReview} submitLabel={t("reviews.send", { defaultValue: "Отправить" })} />
         </div>
       )}
     </div>
