@@ -1,5 +1,4 @@
 // backend/controllers/reviewController.js
-
 const db = require("../db");
 
 /* ───────── helpers ───────── */
@@ -15,7 +14,12 @@ function rowsToPublic(list) {
     rating: r.rating,
     text: r.text,
     created_at: r.created_at,
-    author: { id: r.author_id, role: r.author_role, name: r.author_name || null },
+    author: {
+      id: r.author_id,
+      role: r.author_role,
+      name: r.author_name || null,
+      avatar_url: r.author_avatar || null,   // ← добавили
+    },
   }));
 }
 
@@ -41,9 +45,7 @@ exports.addServiceReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === '23505') {
-      return res.status(409).json({ error: "review_already_exists" });
-    }
+    if (e && e.code === '23505') return res.status(409).json({ error: "review_already_exists" });
     console.error("addServiceReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -70,9 +72,7 @@ exports.addClientReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === '23505') {
-      return res.status(409).json({ error: "review_already_exists" });
-    }
+    if (e && e.code === '23505') return res.status(409).json({ error: "review_already_exists" });
     console.error("addClientReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -91,11 +91,9 @@ exports.addProviderReview = async (req, res) => {
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
 
-    // роль автора: провайдер или клиент
     const authorRole =
       (req.user?.role === "provider" || req.user?.providerId) ? "provider" : "client";
 
-    // запрет «сам себе отзыв» для провайдера
     if (authorRole === "provider" && Number(authorId) === providerId) {
       return res.status(400).json({ error: "self_review_forbidden" });
     }
@@ -108,9 +106,7 @@ exports.addProviderReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === '23505') {
-      return res.status(409).json({ error: "review_already_exists" });
-    }
+    if (e && e.code === '23505') return res.status(409).json({ error: "review_already_exists" });
     console.error("addProviderReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -121,31 +117,42 @@ async function listWithAgg(targetType, targetId, req, res) {
   if (!targetId) return res.status(400).json({ error: "bad_target_id" });
   const { limit, offset } = pagin(req);
 
-  const agg = await db.query(
-    `SELECT COUNT(*)::int AS count, COALESCE(AVG(rating),0)::float AS avg
-       FROM reviews
-      WHERE target_type = $1 AND target_id = $2`,
-    [targetType, targetId]
-  );
+  try {
+    const agg = await db.query(
+      `SELECT COUNT(*)::int AS count, COALESCE(AVG(rating),0)::float AS avg
+         FROM reviews
+        WHERE target_type = $1 AND target_id = $2`,
+      [targetType, targetId]
+    );
 
-  const list = await db.query(
-    `SELECT r.*,
-            CASE r.author_role
-              WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
-              WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
-              ELSE NULL
-            END AS author_name
-       FROM reviews r
-      WHERE r.target_type = $1 AND r.target_id = $2
-      ORDER BY r.created_at DESC
-      LIMIT $3 OFFSET $4`,
-    [targetType, targetId, limit, offset]
-  );
+    // ВАЖНО: только существующие поля — clients.avatar_url и providers.logo
+    const list = await db.query(
+      `SELECT r.*,
+              CASE r.author_role
+                WHEN 'client'   THEN (SELECT name FROM clients   WHERE id = r.author_id)
+                WHEN 'provider' THEN (SELECT name FROM providers WHERE id = r.author_id)
+                ELSE NULL
+              END AS author_name,
+              CASE r.author_role
+                WHEN 'client'   THEN (SELECT avatar_url FROM clients   WHERE id = r.author_id)
+                WHEN 'provider' THEN (SELECT logo        FROM providers WHERE id = r.author_id)
+                ELSE NULL
+              END AS author_avatar
+         FROM reviews r
+        WHERE r.target_type = $1 AND r.target_id = $2
+        ORDER BY r.created_at DESC
+        LIMIT $3 OFFSET $4`,
+      [targetType, targetId, limit, offset]
+    );
 
-  res.json({
-    stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
-    items: rowsToPublic(list.rows),
-  });
+    res.json({
+      stats: { count: agg.rows[0].count, avg: Number(agg.rows[0].avg) },
+      items: rowsToPublic(list.rows),
+    });
+  } catch (e) {
+    console.error("listWithAgg:", e);
+    res.status(500).json({ error: "reviews_list_failed" });
+  }
 }
 
 exports.getServiceReviews  = (req, res) => listWithAgg("service",  toInt(req.params.serviceId),  req, res);
