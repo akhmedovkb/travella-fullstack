@@ -35,31 +35,48 @@ function HotelSelect({ value, onChange, loadOptions, t }) {
   );
 }
 
-async function resizeImageFile(file, maxSide = 1600, quality = 0.85, mime = "image/jpeg") {
-  const dataUrl = await new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
-    fr.readAsDataURL(file);
+// Жёстко приводим к нужным W×H (по умолчанию 1600×1000 ≈ 16:10)
+function resizeImageFile(file, targetW = 1600, targetH = 1000, quality = 0.86, mime = "image/jpeg") {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const srcW = img.width, srcH = img.height;
+        const targetAR = targetW / targetH;
+        const srcAR = srcW / srcH;
+
+        // cover-кроп по центру под целевой аспект
+        let sx, sy, sw, sh;
+        if (srcAR > targetAR) {
+          // источник шире — режем по ширине
+          sh = srcH;
+          sw = sh * targetAR;
+          sx = Math.max(0, (srcW - sw) / 2);
+          sy = 0;
+        } else {
+          // источник уже — режем по высоте
+          sw = srcW;
+          sh = sw / targetAR;
+          sx = 0;
+          sy = Math.max(0, (srcH - sh) / 2);
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+        resolve(canvas.toDataURL(mime, quality));
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
   });
-
-  const img = await new Promise((resolve, reject) => {
-    const im = new Image();
-    im.onload = () => resolve(im);
-    im.onerror = reject;
-    im.src = dataUrl;
-  });
-
-  const iw = img.width, ih = img.height;
-  const scale = Math.min(1, maxSide / Math.max(iw, ih));
-  const w = Math.round(iw * scale);
-  const h = Math.round(ih * scale);
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  canvas.width = w; canvas.height = h;
-  ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL(mime, quality);
 }
 
 /* ===== Доп. полезные хелперы для очистки и «От кого» ===== */
