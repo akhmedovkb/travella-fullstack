@@ -228,8 +228,10 @@ export default function ProviderProfile() {
     });
     setReviews(Array.isArray(data?.items) ? data.items : []);
   } catch (e) {
-    if (e?.code === "review_already_exists") {
-      (e?.response?.status === 409 && e?.response?.data?.error === "review_already_exists")) {
+    if (
+      e?.code === "review_already_exists" ||
+      (e?.response?.status === 409 && e?.response?.data?.error === "review_already_exists")
+    ) {
       toast.info(t("reviews.already_left", { defaultValue: "Вы уже оставили отзыв" }));
     } else {
       console.error(e);
@@ -237,6 +239,7 @@ export default function ProviderProfile() {
     }
   }
 };
+
 
 
   const roleLabel = (role) => tx(`roles.${role}`, role);
