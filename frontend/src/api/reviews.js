@@ -1,22 +1,75 @@
 // frontend/src/api/reviews.js
-import { apiGet, apiPost } from "../api";
+import axios from "axios";
 
-/* ----- Provider target ----- */
-export const getProviderReviews = (providerId, { limit = 20, offset = 0 } = {}) =>
-  apiGet(`/api/reviews/provider/${providerId}?limit=${limit}&offset=${offset}`);
+const API = import.meta.env.VITE_API_BASE_URL;
 
-export const addProviderReview = (providerId, body) =>
-  apiPost(`/api/reviews/provider/${providerId}`, body);
+function authHeaders() {
+  const token =
+    localStorage.getItem("token") ||           // провайдер
+    localStorage.getItem("providerToken") ||   // провайдер (альт)
+    localStorage.getItem("clientToken");       // клиент
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-/* ----- (на будущее) Service & Client ----- */
-export const getServiceReviews = (serviceId, { limit = 20, offset = 0 } = {}) =>
-  apiGet(`/api/reviews/service/${serviceId}?limit=${limit}&offset=${offset}`);
+function rethrowConflict(err) {
+  if (err?.response?.status === 409 && err?.response?.data?.error === "review_already_exists") {
+    const e = new Error("review_already_exists");
+    e.code = "review_already_exists";
+    throw e;
+  }
+  throw err;
+}
 
-export const addServiceReview = (serviceId, body) =>
-  apiPost(`/api/reviews/service/${serviceId}`, body);
+/* ---------- PROVIDER ---------- */
+export async function getProviderReviews(providerId) {
+  const { data } = await axios.get(`${API}/api/reviews/provider/${providerId}`);
+  return data; // { items, stats:{count,avg} }
+}
+export async function addProviderReview(providerId, { rating, text, booking_id }) {
+  try {
+    const { data } = await axios.post(
+      `${API}/api/reviews/provider/${providerId}`,
+      { rating, text, booking_id },
+      { headers: authHeaders() }
+    );
+    return data;
+  } catch (err) {
+    rethrowConflict(err);
+  }
+}
 
-export const getClientReviews = (clientId, { limit = 20, offset = 0 } = {}) =>
-  apiGet(`/api/reviews/client/${clientId}?limit=${limit}&offset=${offset}`);
+/* ---------- CLIENT ---------- */
+export async function getClientReviews(clientId) {
+  const { data } = await axios.get(`${API}/api/reviews/client/${clientId}`);
+  return data;
+}
+export async function addClientReview(clientId, { rating, text, booking_id }) {
+  try {
+    const { data } = await axios.post(
+      `${API}/api/reviews/client/${clientId}`,
+      { rating, text, booking_id },
+      { headers: authHeaders() }
+    );
+    return data;
+  } catch (err) {
+    rethrowConflict(err);
+  }
+}
 
-export const addClientReview = (clientId, body) =>
-  apiPost(`/api/reviews/client/${clientId}`, body);
+/* ---------- SERVICE (если используете) ---------- */
+export async function getServiceReviews(serviceId) {
+  const { data } = await axios.get(`${API}/api/reviews/service/${serviceId}`);
+  return data;
+}
+export async function addServiceReview(serviceId, { rating, text, booking_id }) {
+  try {
+    const { data } = await axios.post(
+      `${API}/api/reviews/service/${serviceId}`,
+      { rating, text, booking_id },
+      { headers: authHeaders() }
+    );
+    return data;
+  } catch (err) {
+    rethrowConflict(err);
+  }
+}
