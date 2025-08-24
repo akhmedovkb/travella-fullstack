@@ -45,7 +45,7 @@ exports.addServiceReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
+    if (e?.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addServiceReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -72,7 +72,7 @@ exports.addClientReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
+    if (e?.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addClientReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -106,7 +106,7 @@ exports.addProviderReview = async (req, res) => {
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
-    if (e && e.code === "23505") return res.status(409).json({ error: "review_already_exists" });
+    if (e?.code === "23505") return res.status(409).json({ error: "review_already_exists" });
     console.error("addProviderReview:", e);
     res.status(500).json({ error: "review_create_failed" });
   }
@@ -125,17 +125,19 @@ async function listWithAgg(targetType, targetId, req, res) {
       [targetType, targetId]
     );
 
-    // ВАЖНО: не ссылаемся на несуществующие поля в clients
+    // Критично: используем только гарантированно существующие поля
+    // clients:   avatar_url
+    // providers: photo
     const list = await db.query(
       `SELECT r.id, r.rating, r.text, r.created_at, r.author_role, r.author_id,
-              COALESCE(
-                CASE WHEN r.author_role = 'client'   THEN c.name
-                     WHEN r.author_role = 'provider' THEN p.name
-                END, NULL
-              ) AS author_name,
-              CASE
-                WHEN r.author_role = 'client' THEN c.avatar_url
-                WHEN r.author_role = 'provider' THEN COALESCE(p.logo, p.photo, p.image, p.avatar_url, p.avatar)
+              CASE r.author_role
+                WHEN 'client'   THEN c.name
+                WHEN 'provider' THEN p.name
+                ELSE NULL
+              END AS author_name,
+              CASE r.author_role
+                WHEN 'client'   THEN c.avatar_url
+                WHEN 'provider' THEN p.photo
                 ELSE NULL
               END AS author_avatar
          FROM reviews r
