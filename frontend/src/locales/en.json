@@ -489,6 +489,7 @@
   "return_date": "Return date",
 
   "reviews": {
+    "already_left" : "You have already left comment for him",
     "count": "review(s)",
     "count_one": "{{count}} review",
     "count_few": "{{count}} reviews",
