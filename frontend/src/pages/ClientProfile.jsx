@@ -69,6 +69,32 @@ const firstImageFrom = (val) => {
   return null;
 };
 
+/* -------- helpers для типа поставщика (как в ProviderProfile/ClientDashboard) -------- */
+const providerTypeKey = (raw) => {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase();
+  const byCode = { "1": "agent", "2": "guide", "3": "transport", "4": "hotel" };
+  if (byCode[s]) return byCode[s];
+  const direct = {
+    agent:"agent","travel_agent":"agent","travelagent":"agent","тур агент":"agent","турагент":"agent","tour_agent":"agent",
+    guide:"guide","tour_guide":"guide","tourguide":"guide","гид":"guide","экскурсовод":"guide",
+    transport:"transport","transfer":"transport","car":"transport","driver":"transport","taxi":"transport","авто":"transport","транспорт":"transport","трансфер":"transport",
+    hotel:"hotel","guesthouse":"hotel","accommodation":"hotel","otel":"hotel","отель":"hotel",
+  };
+  if (direct[s]) return direct[s];
+  if (/guide|гид|экскур/.test(s)) return "guide";
+  if (/hotel|guest|accom|otel|отел/.test(s)) return "hotel";
+  if (/trans|taxi|driver|car|bus|авто|трансфер|транспорт/.test(s)) return "transport";
+  if (/agent|agency|travel|тур|агент/.test(s)) return "agent";
+  return null;
+};
+const providerTypeLabel = (raw, t) => {
+  const key = providerTypeKey(raw);
+  if (!key) return raw || "";
+  const fallback = { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
+  return t(`provider.types.${key}`, { defaultValue: fallback });
+};
+
 export default function ClientProfile() {
   const { id } = useParams();
   const { t } = useTranslation();
@@ -85,6 +111,9 @@ export default function ClientProfile() {
   const [avg, setAvg] = useState(0);
   const [count, setCount] = useState(0);
   const [revLoading, setRevLoading] = useState(false);
+
+  // 🔸 кэш типов поставщиков-авторов отзывов
+  const [authorProvTypes, setAuthorProvTypes] = useState({});
 
   const auth = useMemo(
     () => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
@@ -154,6 +183,54 @@ export default function ClientProfile() {
     loadReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token]);
+
+  // 🔸 после загрузки отзывов: подтянуть типы поставщиков-авторов
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        (reviews || [])
+          .map((r) => (r?.author?.role === "provider" ? Number(r?.author?.id || r?.author_id) : null))
+          .filter(Boolean)
+      )
+    );
+    if (!ids.length) return;
+
+    let cancelled = false;
+    (async () => {
+      const map = {};
+      for (const pid of ids) {
+        try {
+          const urls = [
+            `/api/providers/${pid}`, `/api/provider/${pid}`,
+            `/api/companies/${pid}`, `/api/company/${pid}`,
+            `/api/agencies/${pid}`, `/api/agency/${pid}`,
+            `/api/users/${pid}`, `/api/user/${pid}`,
+          ];
+          let prof = null;
+          for (const u of urls) {
+            try {
+              const { data } = await axios.get(`${API_BASE}${u}`, auth);
+              if (data) { prof = data; break; }
+            } catch {}
+          }
+          if (!prof) continue;
+
+          const d = typeof prof?.details === "string"
+            ? (() => { try { return JSON.parse(prof.details); } catch { return {}; } })()
+            : (prof?.details || {});
+          const rawType =
+            prof?.type ?? prof?.provider_type ?? prof?.category ??
+            d?.type ?? d?.provider_type ?? d?.category ?? prof?.role ?? d?.role;
+
+          map[pid] = providerTypeLabel(rawType, t) || t("roles.provider", { defaultValue: "Поставщик" });
+        } catch {}
+      }
+      if (!cancelled) setAuthorProvTypes((prev) => ({ ...prev, ...map }));
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviews, t]);
 
   if (loading) {
     return <div className="max-w-5xl mx-auto p-4 md:p-6"><div className="animate-pulse h-32 bg-gray-100 rounded-xl" /></div>;
@@ -232,6 +309,12 @@ export default function ClientProfile() {
               const avatar =
                 firstImageFrom(rv.author?.avatar_url) ||
                 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='58%' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='10'>Нет фото</text></svg>";
+              const authorIdNum = Number(rv?.author?.id || rv?.author_id);
+              const typeBadge =
+                rv?.author?.role === "provider"
+                  ? (authorProvTypes[authorIdNum] || t("roles.provider", { defaultValue: "Поставщик" }))
+                  : t("roles.client", { defaultValue: "Клиент" });
+
               return (
                 <div key={rv.id} className="border rounded-xl p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -240,9 +323,9 @@ export default function ClientProfile() {
                       <div className="min-w-0">
                         <div className="font-medium truncate">
                           {rv.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}{" "}
-                          {rv.author?.role && (
-                            <span className="text-xs text-gray-400">({t(`roles.${rv.author.role}`, { defaultValue: rv.author.role })})</span>
-                          )}
+                          <span className="text-xs text-gray-400">
+                            ({typeBadge})
+                          </span>
                         </div>
                         <div className="text-xs text-gray-400">
                           {rv.created_at ? new Date(rv.created_at).toLocaleString() : ""}
