@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
@@ -12,6 +12,17 @@ import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
+
+// --- money helpers (нетто/брутто) ---
+const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
+const parseMoney = (v) => {
+  if (!hasVal(v)) return NaN;
+  const s = String(v).replace(/\s+/g, "").replace(",", "."); // "1 200,50" -> "1200.50"
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+
 function HotelSelect({ value, onChange, loadOptions, t }) {
   return (
     <AsyncCreatableSelect
@@ -115,6 +126,23 @@ tError(msg);
 function toastSuccessT(t, keys, fallback) { tSuccess(makeTr(t)(keys, fallback)); }
 function toastInfoT(t, keys, fallback)    { tInfo(makeTr(t)(keys, fallback)); }
 function toastWarnT(t, keys, fallback)    { tWarn(makeTr(t)(keys, fallback)); }
+// NEW: дебаунсер для загрузчиков AsyncSelect/AsyncCreatable
+function makeDebouncedLoader(loader, delay = 350) {
+  let timer = null;
+  let lastReject = null;
+  return (inputValue) =>
+    new Promise((resolve, reject) => {
+      if (lastReject) {
+        // аккуратно отклоняем предыдущий промис, чтобы не было утечек
+        lastReject({ canceled: true });
+      }
+      lastReject = reject;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try { resolve(await loader(inputValue)); } catch (e) { reject(e); }
+      }, delay);
+    });
+}
 
 function resolveExpireAtFromService(service) {
   const s = service || {};
@@ -373,7 +401,12 @@ direction: "",
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   /** ===== Utils ===== */
-  const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
+    const isServiceActive = (s) => {
+    const exp = s?.details?.expiration;
+    if (!exp) return true;
+    const ts = Date.parse(exp);
+    return Number.isFinite(ts) ? ts > Date.now() : true;
+  };
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
   /** ===== API helpers ===== */
@@ -391,8 +424,8 @@ direction: "",
       return [];
     }
   };
-
-  const loadDepartureCities = async (inputValue) => {
+  
+   const loadDepartureCities = async (inputValue) => {
     if (!inputValue) return [];
     try {
       const response = await axios.get("https://secure.geonames.org/searchJSON", {
@@ -434,6 +467,19 @@ direction: "",
     }
   };
 
+    const debouncedLoadDepartureCities = useMemo(
+      () => makeDebouncedLoader(loadDepartureCities, 350),
+      [loadDepartureCities]
+    );
+    const debouncedLoadCitiesFromInput = useMemo(
+      () => makeDebouncedLoader(loadCitiesFromInput, 350),
+      [loadCitiesFromInput]
+    );
+    const debouncedLoadHotelOptions = useMemo(
+      () => makeDebouncedLoader(loadHotelOptions, 350),
+      [loadHotelOptions]
+    );
+
   /** ===== Images handlers ===== */
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -444,9 +490,9 @@ direction: "",
 
     const processed = [];
     for (const f of toProcess) {
-      if (f.size > 6 * 1024 * 1024) continue; // пропускаем >6MB
+      if (f.size > 3 * 1024 * 1024) continue; // пропускаем >3MB (соответствует подсказке)
       try {
-        const dataUrl = await resizeImageFile(f, 1600, 0.85, "image/jpeg");
+        const dataUrl = await resizeImageFile(f, 1600, 1000, 0.85, "image/jpeg");
         processed.push(dataUrl);
       } catch {
         // ignore
@@ -534,8 +580,10 @@ direction: "",
   /** ===== Load dictionaries ===== */
   useEffect(() => {
     const fetchCountries = async () => {
+      let alive = true;
       try {
         const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+        if (!alive) return;
         const countries = response.data.map((country) => ({
           value: country.name.common,
           label: country.name.common,
@@ -545,6 +593,7 @@ direction: "",
       } catch (error) {
         console.error("Ошибка загрузки стран:", error);
       }
+      return () => { alive = false; };
     };
     fetchCountries();
   }, []);
@@ -552,6 +601,7 @@ direction: "",
   // Departure cities (top by population)
   useEffect(() => {
     const fetchCities = async () => {
+      let alive = true;
       try {
         const response = await axios.get("https://secure.geonames.org/searchJSON", {
           params: {
@@ -561,6 +611,7 @@ direction: "",
             username: import.meta.env.VITE_GEONAMES_USERNAME,
           },
         });
+        if (!alive) return;
         const cities = response.data.geonames.map((city) => ({
           value: city.name,
           label: city.name,
@@ -569,6 +620,7 @@ direction: "",
       } catch (error) {
         console.error("Ошибка загрузки городов отправления:", error);
       }
+      return () => { alive = false; };
     };
     fetchCities();
   }, []);
@@ -577,6 +629,7 @@ direction: "",
   useEffect(() => {
     if (!selectedCountry?.code) return;
     const fetchCities = async () => {
+      let alive = true;
       try {
         const response = await axios.get("https://secure.geonames.org/searchJSON", {
           params: {
@@ -586,6 +639,7 @@ direction: "",
             username: import.meta.env.VITE_GEONAMES_USERNAME,
           },
         });
+        if (!alive) return;
         const cities = response.data.geonames.map((city) => ({
           value: city.name,
           label: city.name,
@@ -594,6 +648,7 @@ direction: "",
       } catch (error) {
         console.error("Ошибка загрузки городов прибытия:", error);
       }
+      return () => { alive = false; };
     };
     fetchCities();
   }, [selectedCountry]);
@@ -601,9 +656,11 @@ direction: "",
   /** ===== Load profile + services + stats ===== */
   useEffect(() => {
     // Profile
+    let alive = true;
     axios
       .get(`${API_BASE}/api/providers/profile`, config)
       .then((res) => {
+        if (!alive) return;
         setProfile(res.data || {});
         setNewLocation(res.data?.location || "");
         setNewSocial(res.data?.social || "");
@@ -614,6 +671,7 @@ direction: "",
           axios
             .get(`${API_BASE}/api/providers/booked-dates`, config)
             .then((response) => {
+              if (!alive) return;
               const formatted = (response.data || []).map((item) => new Date(item.date));
               setBookedDates(formatted);
             })
@@ -631,7 +689,7 @@ direction: "",
     // Services
     axios
       .get(`${API_BASE}/api/providers/services`, config)
-      .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
+      .then((res) => { if (!alive) return; setServices(Array.isArray(res.data) ? res.data : []); })
       .catch((err) => {
         console.error("Ошибка загрузки услуг", err);
         tError(t("services_load_error") || "Не удалось загрузить услуги");
@@ -640,9 +698,10 @@ direction: "",
     // Stats
     axios
       .get(`${API_BASE}/api/providers/stats`, config)
-      .then((res) => setStats(res.data || {}))
-      .catch(() => setStats({}));
+      .then((res) => { if (!alive) return; setStats(res.data || {}); })
+      .catch(() => { if (!alive) return; setStats({}); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -953,6 +1012,12 @@ direction: "",
       return value === "" || value === undefined;
     });
 
+    if (hasEmpty) {
+      tError(t("validation.fill_required") || "Заполните обязательные поля");
+      return;
+    }
+
+
     const needsReturnDate =
       category === "refused_flight" &&
       details.flightType === "round_trip" &&
@@ -963,6 +1028,54 @@ direction: "",
       return;
     }
 
+              // === ВАЛИДАЦИЯ ЦЕНЫ НЕТТО/БРУТТО ===
+          // поддерживаем "1 200,50" и т.п.
+          const netRaw =
+            details?.netPrice ?? details?.priceNet ?? details?.net_price ?? null;
+          const grossRaw =
+            details?.grossPrice ?? details?.priceGross ?? details?.gross_price ?? null;
+          
+          const netNum = hasVal(netRaw) ? parseMoney(netRaw) : NaN;
+          const grossNum = hasVal(grossRaw) ? parseMoney(grossRaw) : null;
+          
+          // нетто — обязательно и > 0
+          if (!Number.isFinite(netNum) || netNum <= 0) {
+            tError(t("validation.net_price_invalid") || "Введите корректную цену нетто (> 0)");
+            return;
+          }
+          
+          // брутто — если введено: число ≥ 0 и не меньше нетто
+          if (grossNum != null) {
+            if (!Number.isFinite(grossNum) || grossNum < 0) {
+              tError(t("validation.gross_price_invalid") || "Цена брутто должна быть числом ≥ 0");
+              return;
+            }
+            if (grossNum < netNum) {
+              tError(t("validation.gross_lt_net") || "Цена брутто не может быть меньше нетто");
+              return;
+            }
+          }
+          
+          // подготовим нормализованное брутто для payload
+          const __grossNum = grossNum != null ? Number(grossNum.toFixed(2)) : undefined;
+              // и нормализованное нетто
+          const __netNum = Number(netNum.toFixed(2));
+
+          // === ДОП. ПРОВЕРКА ДАТ (возврат не раньше вылета) ===
+          if (category === "refused_flight" && details.flightType === "round_trip") {
+            if (!details.returnDate) {
+              tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
+              return;
+            }
+            if (new Date(details.returnDate) < new Date(details.startDate)) {
+              tError(t("return_before_departure") || "Обратная дата раньше вылета");
+              return;
+            }
+          }
+          // (если нужно, можно также нормализовать нетто и подставлять в details.netPrice,
+          // но по задаче — только валидация, без изменения структуры отправки)
+          
+              
     const compact = (obj) =>
       Object.fromEntries(
         Object.entries(obj).filter(([_, v]) => {
@@ -973,12 +1086,12 @@ direction: "",
         })
       );
 
-const __grossNum = (() => {
-  const g = details?.grossPrice;
-  if (g === "" || g === null || g === undefined) return undefined;
-  const n = Number(g);
-  return Number.isFinite(n) ? n : undefined;
-})();
+    {/* const __grossNum = (() => {
+        const g = details?.grossPrice;
+        if (g === "" || g === null || g === undefined) return undefined;
+        const n = Number(g);
+        return Number.isFinite(n) ? n : undefined;
+      })(); */}
 
 
     const raw = {
@@ -988,7 +1101,17 @@ const __grossNum = (() => {
       price: isExtendedCategory ? undefined : price,
       description: isExtendedCategory ? undefined : description,
       availability: isExtendedCategory ? undefined : availability,
-      details: isExtendedCategory ? { ...details, ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}) } : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
+            details: (() => {
+        if (isExtendedCategory) {
+          return {
+            ...details,
+            ...( __netNum !== undefined ? { netPrice: __netNum } : {} ),
+            ...( __grossNum !== undefined ? { grossPrice: __grossNum } : {} ),
+          };
+        }
+        // для простых категорий передаём только grossPrice (если введено)
+        return (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined);
+      })(),
     };
 
     const data = compact(raw);
@@ -1312,7 +1435,7 @@ const __grossNum = (() => {
                     <AsyncSelect
                       cacheOptions
                       defaultOptions
-                      loadOptions={loadDepartureCities}
+                      loadOptions={debouncedLoadDepartureCities}
                       onChange={(selected) => {
                         setDepartureCity(selected);
                         setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
@@ -1369,7 +1492,7 @@ const __grossNum = (() => {
                    
                   <HotelSelect
                      t={t}
-                     loadOptions={loadHotelOptions}
+                     loadOptions={debouncedLoadHotelOptions}
                      value={details.hotel}
                      onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
                    />
@@ -1470,7 +1593,7 @@ const __grossNum = (() => {
                   <input
                     type="datetime-local"
                     value={details.expiration || ""}
-                    onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                    onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
                   <label className="inline-flex items-center mb-4">
@@ -1503,7 +1626,7 @@ const __grossNum = (() => {
                     <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                     <AsyncSelect
                       cacheOptions
-                      loadOptions={loadCitiesFromInput}
+                      loadOptions={debouncedLoadCitiesFromInput}
                       defaultOptions
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
                       onChange={(selected) =>
@@ -1517,7 +1640,7 @@ const __grossNum = (() => {
                     <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
                       <HotelSelect
                        t={t}
-                       loadOptions={loadHotelOptions}
+                       loadOptions={debouncedLoadHotelOptions}
                        value={details.hotel}
                        onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
                      />
@@ -1630,7 +1753,7 @@ const __grossNum = (() => {
                     <input
                       type="datetime-local"
                       value={details.expiration || ""}
-                      onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                      onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                       className="w-full border px-3 py-2 rounded"
                     />
                   </div>
@@ -1668,7 +1791,7 @@ const __grossNum = (() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          loadOptions={debouncedLoadDepartureCities}
                           onChange={(selected) => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({
@@ -1789,7 +1912,7 @@ const __grossNum = (() => {
                         <input
                           type="datetime-local"
                           value={details.expiration || ""}
-                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                           className="w-full border px-3 py-2 rounded"
                         />
                       </div>
@@ -1886,7 +2009,7 @@ const __grossNum = (() => {
                   <input
                     type="datetime-local"
                     value={details.expiration || ""}
-                    onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                    onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                     placeholder={t("expiration_timer")}
                     className="w-full border px-3 py-2 rounded mb-4"
                   />
@@ -2119,7 +2242,7 @@ const __grossNum = (() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          loadOptions={debouncedLoadDepartureCities}
                           onChange={(selected) => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
@@ -2174,7 +2297,7 @@ const __grossNum = (() => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("hotel")}</label>
                         <HotelSelect
                            t={t}
-                           loadOptions={loadHotelOptions}
+                           loadOptions={debouncedLoadHotelOptions}
                            value={details.hotel}
                            onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
                          />
@@ -2275,7 +2398,7 @@ const __grossNum = (() => {
                       <input
                         type="datetime-local"
                         value={details.expiration || ""}
-                        onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                        onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
                       <label className="inline-flex items-center mb-4">
@@ -2312,7 +2435,7 @@ const __grossNum = (() => {
                         <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                         <AsyncSelect
                           cacheOptions
-                          loadOptions={loadCitiesFromInput}
+                          loadOptions={debouncedLoadCitiesFromInput}
                           defaultOptions
                           onChange={(selected) => setDetails({ ...details, directionTo: selected?.value || "" })}
                           placeholder={t("refused_hotel_select_city")}
@@ -2323,7 +2446,7 @@ const __grossNum = (() => {
                        <label className="block font-medium mb-1">{t("refused_hotel_name")}</label>
                           <HotelSelect
                              t={t}
-                             loadOptions={loadHotelOptions}
+                             loadOptions={debouncedLoadHotelOptions}
                              value={details.hotel}
                              onChange={(hotel) => setDetails((d) => ({ ...d, hotel }))}
                            />
@@ -2436,7 +2559,7 @@ const __grossNum = (() => {
                         <input
                           type="datetime-local"
                           value={details.expiration || ""}
-                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                           className="w-full border px-3 py-2 rounded"
                         />
                       </div>
@@ -2481,7 +2604,7 @@ const __grossNum = (() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          loadOptions={debouncedLoadDepartureCities}
                           onChange={(selected) => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({
@@ -2602,7 +2725,7 @@ const __grossNum = (() => {
                         <input
                           type="datetime-local"
                           value={details.expiration || ""}
-                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                          onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                           className="w-full border px-3 py-2 rounded"
                         />
                       </div>
@@ -2705,7 +2828,7 @@ const __grossNum = (() => {
                       <input
                         type="datetime-local"
                         value={details.expiration || ""}
-                        onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
+                        onChange={(e) => setDetails({ ...details, expiration: e.target.value })} min={nowLocalDateTime()}
                         placeholder={t("expiration_timer")}
                         className="w-full border px-3 py-2 rounded mb-4"
                       />
