@@ -412,60 +412,42 @@ direction: "",
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-  const loadHotelOptions = async (inputValue) => {
-    try {
-      const res = await axios.get(
-        `${API_BASE}/api/hotels/search?query=${encodeURIComponent(inputValue || "")}`
-      );
-      return (res.data || []).map((x) => ({ value: x.label || x.name || x, label: x.label || x.name || x }));
-    } catch (err) {
-      console.error("Ошибка загрузки отелей:", err);
-      tError(t("hotels_load_error") || "Не удалось загрузить отели");
-      return [];
-    }
-  };
+   const loadHotelOptions = useCallback(async (inputValue) => {
+       try {
+         const res = await axios.get(`${API_BASE}/api/hotels/search?query=${encodeURIComponent(inputValue || "")}`);
+         return (res.data || []).map((x) => ({ value: x.label || x.name || x, label: x.label || x.name || x }));
+       } catch (err) {
+         console.error("Ошибка загрузки отелей:", err);
+         tError(t("hotels_load_error") || "Не удалось загрузить отели");
+         return [];
+       }
+     }, [API_BASE, t]);
   
-   const loadDepartureCities = async (inputValue) => {
-    if (!inputValue) return [];
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          name_startsWith: inputValue,
-          featureClass: "P",
-          maxRows: 10,
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      return response.data.geonames.map((city) => ({
-        value: city.name,
-        label: `${city.name}, ${city.countryName}`,
-      }));
-    } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
-    }
-  };
+    const loadDepartureCities = useCallback(async (inputValue) => {
+       if (!inputValue) return [];
+       try {
+         const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+           params: { name_startsWith: inputValue, featureClass: "P", maxRows: 10, username: import.meta.env.VITE_GEONAMES_USERNAME },
+         });
+         return data.geonames.map((city) => ({ value: city.name, label: `${city.name}, ${city.countryName}` }));
+       } catch (e) {
+         console.error("Ошибка загрузки городов:", e);
+         return [];
+       }
+     }, []);
 
-  const loadCitiesFromInput = async (inputValue) => {
-    if (!inputValue) return [];
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          name_startsWith: inputValue,
-          featureClass: "P",
-          maxRows: 10,
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      return response.data.geonames.map((city) => ({
-        value: city.name,
-        label: `${city.name}, ${city.countryName}`,
-      }));
-    } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
-    }
-  };
+   const loadCitiesFromInput = useCallback(async (inputValue) => {
+       if (!inputValue) return [];
+       try {
+         const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+           params: { name_startsWith: inputValue, featureClass: "P", maxRows: 10, username: import.meta.env.VITE_GEONAMES_USERNAME },
+         });
+         return data.geonames.map((city) => ({ value: city.name, label: `${city.name}, ${city.countryName}` }));
+       } catch (e) {
+         console.error("Ошибка загрузки городов:", e);
+         return [];
+       }
+     }, []);
 
     const debouncedLoadDepartureCities = useMemo(
       () => makeDebouncedLoader(loadDepartureCities, 350),
@@ -578,25 +560,42 @@ direction: "",
   };
 
   /** ===== Load dictionaries ===== */
+
   useEffect(() => {
-    const fetchCountries = async () => {
-      let alive = true;
+  const id = axios.interceptors.response.use(
+    (r) => r,
+    (error) => {
+      if (error?.response?.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("provider_id");
+        tWarn(t("session_expired") || "Сессия истекла, войдите снова");
+        window.location.href = "/login";
+      }
+      return Promise.reject(error);
+    }
+  );
+  return () => axios.interceptors.response.eject(id);
+}, [t]);
+
+  
+  useEffect(() => {
+       let alive = true;
+    (async () => {
       try {
         const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
         if (!alive) return;
-        const countries = response.data.map((country) => ({
-          value: country.name.common,
-          label: country.name.common,
-          code: country.cca2,
+        const countries = response.data.map((c) => ({
+          value: c.name.common,
+          label: c.name.common,
+          code: c.cca2,
         }));
         setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
-      } catch (error) {
-        console.error("Ошибка загрузки стран:", error);
+      } catch (e) {
+        console.error("Ошибка загрузки стран:", e);
       }
-      return () => { alive = false; };
-    };
-    fetchCountries();
-  }, []);
+    })();
+    return () => { alive = false; };
+    }, []);
 
   // Departure cities (top by population)
   useEffect(() => {
@@ -1086,14 +1085,7 @@ direction: "",
         })
       );
 
-    {/* const __grossNum = (() => {
-        const g = details?.grossPrice;
-        if (g === "" || g === null || g === undefined) return undefined;
-        const n = Number(g);
-        return Number.isFinite(n) ? n : undefined;
-      })(); */}
-
-
+    
     const raw = {
       title,
       category,
