@@ -446,7 +446,7 @@ direction: "",
     for (const f of toProcess) {
       if (f.size > 6 * 1024 * 1024) continue; // пропускаем >6MB
       try {
-        const dataUrl = await resizeImageFile(f, 1600, 0.85, "image/jpeg");
+        const dataUrl = await resizeImageFile(f, 1600, 1000, 0.85, "image/jpeg");
         processed.push(dataUrl);
       } catch {
         // ignore
