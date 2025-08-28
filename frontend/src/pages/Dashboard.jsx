@@ -11,6 +11,7 @@ import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
+import BookingRow from "../components/BookingRow";
 
 
 /** ================= Helpers ================= */
@@ -463,6 +464,10 @@ const Dashboard = () => {
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
+  //Мои брони
+  const [providerBookings, setProviderBookings] = useState([]);
+
+
   // Details for agent categories
   const [details, setDetails] = useState({
         grossPrice: "",
@@ -833,6 +838,27 @@ useEffect(() => {
       }
     }, [profile?.id]);
 
+  useEffect(() => {
+      if (!profile?.type || !["guide", "transport"].includes(String(profile.type))) return;
+      axios
+        .get(`${API_BASE}/api/bookings/provider`, config)
+        .then(res => setProviderBookings(Array.isArray(res.data) ? res.data : []))
+        .catch(() => setProviderBookings([]));
+    }, [profile?.type]);
+
+  const acceptBooking = async (id) => {
+      await axios.post(`${API_BASE}/api/bookings/${id}/accept`, {}, config);
+      const res = await axios.get(`${API_BASE}/api/bookings/provider`, config);
+      setProviderBookings(Array.isArray(res.data) ? res.data : []);
+    };
+  const rejectBooking = async (id) => {
+      await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, config);
+      const res = await axios.get(`${API_BASE}/api/bookings/provider`, config);
+      setProviderBookings(Array.isArray(res.data) ? res.data : []);
+    };
+
+
+
   /** ===== Provider inbox loaders/actions ===== */
   const serverCleanupExpired = async () => {
     if (typeof window.__providerCleanupExpired === "function") {
@@ -892,7 +918,7 @@ useEffect(() => {
     }
   };
 
-  const confirmBooking = async (id) => {
+  const confirmBookingInbox = async (id) => {
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/confirm`, {}, config);
@@ -906,7 +932,7 @@ useEffect(() => {
     }
   };
 
-  const rejectBooking = async (id) => {
+  const rejectBookingInbox = async (id) => {
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, config);
@@ -920,7 +946,7 @@ useEffect(() => {
     }
   };
 
-  const cancelBooking = async (id) => {
+  const cancelBookingInbox = async (id) => {
     try {
       setLoadingInbox(true);
       await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, config);
@@ -3057,57 +3083,27 @@ useEffect(() => {
           </section> */}
 
           {/* ===== МОИ БРОНИ (E2E) ===== */}
-          <div className="mt-8">
-            <h3 className="text-xl font-semibold mb-3">Мои брони</h3>
-            <div className="space-y-3">
-              {bookingsInbox.length === 0 && (
-                <div className="text-sm text-gray-500">Брони отсутствуют.</div>
-              )}
-              {bookingsInbox.map((b) => (
-                <div
-                  key={b.id}
-                  className="border rounded-lg p-3 flex items-start justify-between gap-3"
-                >
-                  <div className="text-sm">
-                    <div className="font-medium">
-                      #{b.id} • {b.service_title || "услуга"} • {b.status}
-                    </div>
-                    <div>{b.price ? `${b.price} ${b.currency || ""}` : "—"}</div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {b.status === "pending" && (
-                      <>
-                        <button
-                          onClick={() => confirmBooking(b.id)}
-                          className="text-sm bg-green-600 text-white px-3 py-1 rounded"
-                          disabled={loadingInbox}
-                        >
-                          Подтвердить
-                        </button>
-                        <button
-                          onClick={() => rejectBooking(b.id)}
-                          className="text-sm bg-red-600 text-white px-3 py-1 rounded"
-                          disabled={loadingInbox}
-                        >
-                          Отклонить
-                        </button>
-                      </>
-                    )}
-                    {(b.status === "pending" || b.status === "active") && (
-                      <button
-                        onClick={() => cancelBooking(b.id)}
-                        className="text-sm bg-gray-100 px-3 py-1 rounded hover:bg-gray-200"
-                        disabled={loadingInbox}
-                      >
-                        Отменить
-                      </button>
-                    )}
-                  </div>
+          <div className="mt-6">
+              <div className="text-lg font-semibold mb-2">{t("dashboard.my_bookings") || "Мои брони"}</div>
+              {!["guide","transport"].includes(String(profile?.type || "")) ? (
+                <div className="text-gray-500">—</div>
+              ) : !providerBookings.length ? (
+                <div className="text-gray-500">{t("bookings.empty") || "Пока нет заявок"}</div>
+              ) : (
+                <div className="space-y-3">
+                  {providerBookings.map(b => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      viewerRole="provider"
+                      onAccept={(bk) => acceptBooking(bk.id)}
+                      onReject={(bk) => rejectBooking(bk.id)}
+                    />
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
+
         </div>
       </div>
 
