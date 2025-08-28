@@ -1764,6 +1764,14 @@ direction: "",
                       onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
                       className="w-full border px-3 py-2 rounded"
                     />
+
+                    <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                    />
                   </div>
 
                   <div className="mb-2">
@@ -1925,7 +1933,7 @@ direction: "",
                         placeholder={t("gross_price")}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
-    <div className="mb-3">
+                  <div className="mb-3">
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
