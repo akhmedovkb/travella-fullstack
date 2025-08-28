@@ -10,6 +10,8 @@ import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
+import ProviderCalendar from "../components/ProviderCalendar";
+
 
 /** ================= Helpers ================= */
 //для календаря гида и трансп.
@@ -3138,41 +3140,7 @@ useEffect(() => {
       {(profile.type === "guide" || profile.type === "transport") && (
         <div className="px-6 pb-10">
           <div className="mt-10 bg-white p-6 rounded shadow border max-w-3xl mx-auto">
-            <h3 className="text-lg font-semibold mb-4 text-orange-600">
-              {t("calendar.blocking_title")}
-            </h3>
-
-            <DayPicker
-              mode="multiple"
-              selected={blockedDates}
-              onSelect={(dates) => setBlockedDates(dates || [])}
-              disabled={[{ before: new Date() }, ...bookedDates]}
-              modifiers={{ booked: bookedDates }}
-              modifiersClassNames={{
-                selected: "bg-red-400 text-white",
-                booked: "bg-blue-500 text-white",
-              }}
-              className="border rounded p-4"
-            />
-
-            <div className="mt-2 text-sm text-gray-600 flex gap-4">
-              <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-red-400 inline-block" />
-                <span>{t("calendar.label_blocked_manual")}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-blue-500 inline-block" />
-                <span>{t("calendar.label_booked_by_clients")}</span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveBlockedDates}
-              disabled={saving}
-              className="mt-4 px-4 py-2 rounded bg-orange-500 text-white font-semibold disabled:opacity-60"
-            >
-              {saving ? t("saving") || "Сохраняю..." : t("calendar.save_blocked_dates")}
-            </button>
+            <ProviderCalendar token={token} />
           </div>
         </div>
       )}
