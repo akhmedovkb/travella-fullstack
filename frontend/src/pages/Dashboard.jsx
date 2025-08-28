@@ -12,6 +12,16 @@ import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
+//для календаря гида и трансп.
+onst toLocalDate = (val) => {
+  const s =
+    typeof val === "string"
+      ? val
+      : val?.date || val?.day || ""; // поддержим и {date}, и {day}
+  const [y, m, d] = String(s).split("-").map((n) => Number(n));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d); // локальная дата без TZ-сдвига
+};
 
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
@@ -734,7 +744,7 @@ direction: "",
           axios
             .get(`${API_BASE}/api/providers/booked-dates`, config)
             .then((response) => {
-              const formatted = (response.data || []).map((item) => new Date(item.date));
+              const formatted = (response.data || []).map(toLocalDate).filter(Boolean);
               setBookedDates(formatted);
             })
             .catch((err) => {
