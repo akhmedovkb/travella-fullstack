@@ -633,14 +633,13 @@ direction: "",
     });
   };
 
-  /** ===== Calendar save ===== */
+  // === Calendar save  ===
 const handleSaveBlockedDates = async () => {
   if (!Array.isArray(blockedDates)) return;
   setSaving(true);
 
-  // локальное YYYY-MM-DD без UTC-сдвига
   const toYMD = (d) => {
-    const dt = d instanceof Date ? d : new Date(d);
+    const dt = new Date(d);
     const y = dt.getFullYear();
     const m = String(dt.getMonth() + 1).padStart(2, "0");
     const day = String(dt.getDate()).padStart(2, "0");
@@ -648,13 +647,29 @@ const handleSaveBlockedDates = async () => {
   };
 
   try {
-    const payload = Array.from(new Set(blockedDates.map(toYMD)));
+    const payload = blockedDates.map((d) =>
+      typeof d === "string" ? d : toYMD(d)
+    );
+
     await axios.post(
       `${API_BASE}/api/providers/blocked-dates`,
-      { dates: payload },            // сервер у тебя это принимает
+      { dates: payload },
       config
     );
+
     tSuccess(t("calendar.saved_successfully") || "Даты сохранены");
+
+    // опционально: сразу перезагрузить актуальные блокировки с сервера
+    const { data } = await axios.get(
+      `${API_BASE}/api/providers/blocked-dates`,
+      config
+    );
+    const toLocalDate = (v) => {
+      const s = typeof v === "string" ? v : v?.date || v?.day || "";
+      const [Y, M, D] = s.split("-").map(Number);
+      return Y && M && D ? new Date(Y, M - 1, D) : null;
+    };
+    setBlockedDates((Array.isArray(data) ? data : []).map(toLocalDate).filter(Boolean));
   } catch (err) {
     console.error("Ошибка сохранения дат", err);
     const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
@@ -663,6 +678,7 @@ const handleSaveBlockedDates = async () => {
     setSaving(false);
   }
 };
+
 
 
   /** ===== Delete service modal ===== */
@@ -758,63 +774,55 @@ const handleSaveBlockedDates = async () => {
   }, [selectedCountry]);
 
       /** ===== Load profile + services + stats ===== */
-        useEffect(() => {
-          // вспомогалка: безопасно превратить "YYYY-MM-DD" / {date|day} в локальный Date (без TZ-сдвига)
-          const toLocalDate = (val) => {
-            const s = typeof val === "string" ? val : val?.date || val?.day || "";
-            const [y, m, d] = String(s).split("-").map(Number);
-            if (!y || !m || !d) return null;
-            return new Date(y, m - 1, d);
-          };
-        
-          // Profile
-          axios
-            .get(`${API_BASE}/api/providers/profile`, config)
-            .then((res) => {
-              setProfile(res.data || {});
-              setNewLocation(res.data?.location || "");
-              setNewSocial(res.data?.social || "");
-              setNewPhone(res.data?.phone || "");
-              setNewAddress(res.data?.address || "");
-        
-              if (["guide", "transport"].includes(res.data?.type)) {
-                // ВАЖНО: сюда бэкенд отдаёт именно ручные блокировки провайдера,
-                // поэтому кладём их в blockedDates (это selected в календаре).
-                axios
-                  .get(`${API_BASE}/api/providers/booked-dates`, config)
-                  .then((response) => {
-                    const formatted = (response.data || [])
-                      .map(toLocalDate)
-                      .filter(Boolean);
-                    setBlockedDates(formatted); // <-- было setBookedDates
-                  })
-                  .catch((err) => {
-                    console.error("Ошибка загрузки занятых дат", err);
-                    tError(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-                  });
-              }
-            })
-            .catch((err) => {
-              console.error("Ошибка загрузки профиля", err);
-              tError(t("profile_load_error") || "Не удалось загрузить профиль");
-            });
-        
-          // Services
-          axios
-            .get(`${API_BASE}/api/providers/services`, config)
-            .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
-            .catch((err) => {
-              console.error("Ошибка загрузки услуг", err);
-              tError(t("services_load_error") || "Не удалось загрузить услуги");
-            });
-        
-          // Stats
-          axios
-            .get(`${API_BASE}/api/providers/stats`, config)
-            .then((res) => setStats(res.data || {}))
-            .catch(() => setStats({}));
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, []);
+useEffect(() => {
+  // Profile
+  axios
+    .get(`${API_BASE}/api/providers/profile`, config)
+    .then(async (res) => {
+      setProfile(res.data || {});
+      setNewLocation(res.data?.location || "");
+      setNewSocial(res.data?.social || "");
+      setNewPhone(res.data?.phone || "");
+      setNewAddress(res.data?.address || "");
+
+      if (["guide", "transport"].includes(res.data?.type)) {
+        const [blockedRes, bookedRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/providers/blocked-dates`, config), // РУЧНЫЕ
+          axios.get(`${API_BASE}/api/providers/booked-dates`,  config), // БРОНИ
+        ]);
+
+        const toLocalDate = (v) => {
+          const s = typeof v === "string" ? v : v?.date || v?.day || "";
+          const [Y, M, D] = s.split("-").map(Number);
+          return Y && M && D ? new Date(Y, M - 1, D) : null;
+        };
+
+        setBlockedDates((blockedRes.data || []).map(toLocalDate).filter(Boolean)); // 🔴 вручную
+        setBookedDates ((bookedRes.data  || []).map(toLocalDate).filter(Boolean)); // 🔵 брони
+      }
+    })
+    .catch((err) => {
+      console.error("Ошибка загрузки профиля", err);
+      tError(t("profile_load_error") || "Не удалось загрузить профиль");
+    });
+
+  // Services
+  axios
+    .get(`${API_BASE}/api/providers/services`, config)
+    .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
+    .catch((err) => {
+      console.error("Ошибка загрузки услуг", err);
+      tError(t("services_load_error") || "Не удалось загрузить услуги");
+    });
+
+  // Stats
+  axios
+    .get(`${API_BASE}/api/providers/stats`, config)
+    .then((res) => setStats(res.data || {}))
+    .catch(() => setStats({}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
 
 
   useEffect(() => {
