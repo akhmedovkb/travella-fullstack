@@ -109,7 +109,7 @@ const createBooking = async (req, res) => {
   }
 };
 
-// Брони провайдера
+// Брони провайдера (обогащены полями клиента и услуги)
 const getProviderBookings = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -118,14 +118,21 @@ const getProviderBookings = async (req, res) => {
          b.id, b.service_id, b.provider_id, b.client_id, b.status,
          b.client_message, b.attachments, b.provider_price, b.provider_note,
          b.date, b.created_at, b.updated_at,
-         array_agg(bd.date::date ORDER BY bd.date) AS dates
+         array_agg(bd.date::date ORDER BY bd.date) AS dates,
+         -- клиент
+         c.name  AS client_name,
+         c.phone AS client_phone,
+         c.social AS client_social,
+         c.address AS client_address,
+         -- услуга
+         s.title AS service_title
        FROM bookings b
        LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+       LEFT JOIN clients c         ON c.id = b.client_id
+       LEFT JOIN services s        ON s.id = b.service_id
        WHERE b.provider_id = $1
-       GROUP BY b.id
-       ORDER BY
-         b.updated_at DESC NULLS LAST,
-         b.created_at DESC`,
+       GROUP BY b.id, c.name, c.phone, c.social, c.address, s.title
+       ORDER BY b.updated_at DESC NULLS LAST, b.created_at DESC`,
       [providerId]
     );
     res.json(q.rows);
@@ -135,7 +142,7 @@ const getProviderBookings = async (req, res) => {
   }
 };
 
-// Брони клиента
+// Брони клиента (обогащены полями провайдера и услуги)
 const getMyBookings = async (req, res) => {
   try {
     const clientId = req.user?.id;
@@ -145,17 +152,21 @@ const getMyBookings = async (req, res) => {
          b.client_message, b.attachments, b.provider_price, b.provider_note,
          b.date, b.created_at, b.updated_at,
          array_agg(bd.date::date ORDER BY bd.date) AS dates,
-         p.name AS provider_name,
+         -- провайдер
+         p.name  AS provider_name,
+         p.type  AS provider_type,
+         p.phone AS provider_phone,
+         p.social AS provider_social,
+         p.address AS provider_address,
+         -- услуга
          s.title AS service_title
        FROM bookings b
        LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-       LEFT JOIN providers p ON p.id = b.provider_id
-       LEFT JOIN services  s ON s.id = b.service_id
+       LEFT JOIN providers p      ON p.id = b.provider_id
+       LEFT JOIN services  s      ON s.id = b.service_id
        WHERE b.client_id = $1
-       GROUP BY b.id, p.name, s.title
-       ORDER BY
-         b.updated_at DESC NULLS LAST,
-         b.created_at DESC`,
+       GROUP BY b.id, p.name, p.type, p.phone, p.social, p.address, s.title
+       ORDER BY b.updated_at DESC NULLS LAST, b.created_at DESC`,
       [clientId]
     );
     res.json(q.rows);
@@ -184,7 +195,7 @@ const acceptBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    // финальная проверка доступности (игнорируя текущую заявку)
+    // финальная проверка (игнорируем текущую заявку)
     const dQ = await pool.query(`SELECT date::date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
     const days = dQ.rows.map((r) => normYMD(r.d));
     const ok = await isDatesFree(providerId, days, id);
