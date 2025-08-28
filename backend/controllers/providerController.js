@@ -340,29 +340,28 @@ const getProviderPublicById = async (req, res) => {
 // ---------- Calendar (booked / blocked dates) ----------
 
 // Даты, занятые бронированиями (для провайдера). Возвращаем [{date:"YYYY-MM-DD"}, ...] — как ждёт фронт.
+
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-
+    // отдаем ТОЛЬКО YYYY-MM-DD без часовых поясов
     const r = await pool
       .query(
-        `SELECT bd.date::date AS date
-           FROM booking_dates bd
-           JOIN bookings b ON b.id = bd.booking_id
-          WHERE b.provider_id = $1
-            AND b.status IN ('pending','active')
-          GROUP BY bd.date
-          ORDER BY bd.date`,
+        `SELECT to_char(day, 'YYYY-MM-DD') AS date
+           FROM provider_blocked_dates
+          WHERE provider_id = $1
+          ORDER BY day`,
         [providerId]
       )
       .catch(() => ({ rows: [] }));
 
-    res.json(r.rows); // [{ date: '2025-09-01' }, ...]
+    res.json(r.rows.map(x => x.date));
   } catch (err) {
-    console.error("❌ Ошибка получения занятых дат (booked):", err);
+    console.error("❌ Ошибка получения занятых дат:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Ручные блокировки провайдера (сам провайдер). Возвращаем массив "YYYY-MM-DD".
 const getBlockedDates = async (req, res) => {
