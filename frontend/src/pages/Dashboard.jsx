@@ -23,6 +23,8 @@ const parseMoneySafe = (v) => {
   return Number.isFinite(n) ? n : NaN;
 };
 
+// Только цифры, пробел, точка, запятая, минус. Любая буква/символ — ошибка ввода.
+const hasInvalidMoneyChars = (v) => hasVal(v) && /[^\d.,\s-]/.test(String(v));
 const pick = (...vals) => vals.find((v) => hasVal(v));
 
 const extractPrices = (details) => {
@@ -49,6 +51,16 @@ const extractPrices = (details) => {
 
 const validateNetGross = (details, t) => {
   const { netRaw, grossRaw, net, gross } = extractPrices(details || {});
+    // недопустимые символы — ловим и показываем точную причину
+  if (hasInvalidMoneyChars(netRaw)) {
+    tError(t("validation.net_invalid_chars", "Цена нетто: допустимы только цифры, точка или запятая"));
+    return false;
+  }
+  if (hasInvalidMoneyChars(grossRaw)) {
+    tError(t("validation.gross_invalid_chars", "Цена брутто: допустимы только цифры, точка или запятая"));
+    return false;
+  }
+
   if (!hasVal(netRaw) || Number.isNaN(net)) {
     tError(t("validation.net_required", "Укажите корректную цену нетто"));
     return false;
@@ -180,6 +192,39 @@ tError(msg);
 function toastSuccessT(t, keys, fallback) { tSuccess(makeTr(t)(keys, fallback)); }
 function toastInfoT(t, keys, fallback)    { tInfo(makeTr(t)(keys, fallback)); }
 function toastWarnT(t, keys, fallback)    { tWarn(makeTr(t)(keys, fallback)); }
+
+// Универсально достаём текст ошибки из разных форматов
+const extractApiErrorText = (err) => {
+  const d = err?.response?.data;
+  if (!d) return "";
+  if (typeof d === "string") return d;
+
+  const msgs = [];
+  if (d.message) msgs.push(String(d.message));
+  if (typeof d.error === "string") msgs.push(d.error);
+
+  // express-validator / кастомные массивы
+  if (Array.isArray(d.errors)) {
+    msgs.push(
+      ...d.errors
+        .map(e =>
+          e?.message || e?.msg || e?.error ||
+          (e?.field ? `${e.field}: ${e?.reason || e?.error || "invalid"}` : "")
+        )
+        .filter(Boolean)
+    );
+  }
+
+  // Joi/Zod style
+  if (Array.isArray(d?.error?.details)) {
+    msgs.push(...d.error.details.map(x => x?.message || `${x?.path?.join?.(".")}: ${x?.message || ""}`));
+  }
+  if (Array.isArray(d.details)) {
+    msgs.push(...d.details.map(x => x?.message || String(x)));
+  }
+  return msgs.filter(Boolean).join("\n");
+};
+
 
 function resolveExpireAtFromService(service) {
   const s = service || {};
@@ -1045,12 +1090,17 @@ direction: "",
         })
       );
 
-const __grossNum = (() => {
-  const g = details?.grossPrice;
-  if (!hasVal(g)) return undefined;
-  const n = parseMoneySafe(g); // поддерживает "1 200,50"
-  return Number.isFinite(n) ? n : undefined;
-})();
+    const __grossNum = (() => {
+      const g = details?.grossPrice;
+      if (!hasVal(g)) return undefined;
+      const n = parseMoneySafe(g); // поддерживает "1 200,50"
+      return Number.isFinite(n) ? n : undefined;
+    })();
+
+    const __netNum = (() => {
+      const n = parseMoneySafe(details?.netPrice);
+      return Number.isFinite(n) ? n : undefined;
+    })();
 
 
     const raw = {
@@ -1060,8 +1110,15 @@ const __grossNum = (() => {
       price: isExtendedCategory ? undefined : price,
       description: isExtendedCategory ? undefined : description,
       availability: isExtendedCategory ? undefined : availability,
-      details: isExtendedCategory ? { ...details, ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}) } : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
-    };
+      details: isExtendedCategory
+      ? {
+          ...details,
+          ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
+          ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
+        }
+      : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
+    
+        };
 
     const data = compact(raw);
 
@@ -1086,7 +1143,9 @@ const __grossNum = (() => {
       })
       .catch((err) => {
         console.error(selectedService ? "Ошибка обновления услуги" : "Ошибка добавления услуги", err);
-        tError(t(selectedService ? "update_error" : "add_error") || "Ошибка");
+        const text = extractApiErrorText(err);
+        const fallback = t(selectedService ? "update_error" : "add_error") || "Ошибка";
+        tError(text || fallback);
       });
   };
 
