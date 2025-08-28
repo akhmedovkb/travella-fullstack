@@ -2578,6 +2578,14 @@ direction: "",
                           onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
                         />
+                        
+                        <input
+                        type="number"
+                        value={details.grossPrice || ""}
+                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        placeholder={t("gross_price")}
+                        className="w-full border px-3 py-2 rounded mb-2"
+                        />
                       </div>
 
                       <div className="mb-2">
