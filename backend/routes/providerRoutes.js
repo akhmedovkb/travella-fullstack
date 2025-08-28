@@ -1,4 +1,3 @@
-// backend/routes/providerRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -15,8 +14,12 @@ const {
   updateService,
   deleteService,
   updateServiceImagesOnly,
-  getBookedDates,
+  // календарь
+  getBookedDates,      // занято бронями
+  getBlockedDates,     // ручные блокировки провайдера
   saveBlockedDates,
+  getCalendarPublic,   // публичный для клиента
+  // прочее
   getProviderPublicById,
   getProviderStats,
   listProviderFavorites,
@@ -24,7 +27,7 @@ const {
   removeProviderFavorite,
 } = require("../controllers/providerController");
 
-// Simple role guard: token already decoded by authenticateToken
+// Simple role guard
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
@@ -41,7 +44,7 @@ router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/password", authenticateToken, requireProvider, changeProviderPassword);
 
-// Stats (place before :id route)
+// Stats
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 
 // Services
@@ -51,26 +54,19 @@ router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
-// Calendar
-router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
+// Calendar (важно располагать до публичного /:id)
+router.get("/booked-dates",  authenticateToken, requireProvider, getBookedDates);
+router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
-// получить ручные блокировки провайдера (сам провайдер)
-router.get('/blocked-dates', authenticate, providerController.getBlockedDates);
-
-// заменить/обновить блокировки
-router.post('/blocked-dates', authenticate, providerController.saveBlockedDates);
-
-// публичная выдача для клиента: и забронированные, и заблокированные
-router.get('/:providerId/calendar', providerController.getCalendarPublic);
-
+// публичный эндпоинт для клиента
+router.get("/:providerId/calendar", getCalendarPublic);
 
 // Favorites (provider)
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
 
-// Public provider page (keep last)
+// Public provider page (держим самым последним)
 router.get("/:id(\\d+)", getProviderPublicById);
-
 
 module.exports = router;
