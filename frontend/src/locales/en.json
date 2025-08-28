@@ -472,7 +472,7 @@
     "photo": "Profile photo",
     "required": "Please fill out this field",
     "select_file": "Choose file",
-    "social": "Social link",
+    "social": "Telegram username",
     "success": "Registration successful!",
     "title": "Provider registration",
     "type": "Provider type"
