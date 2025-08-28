@@ -749,70 +749,64 @@ direction: "",
   }, [selectedCountry]);
 
       /** ===== Load profile + services + stats ===== */
-    useEffect(() => {
-      // Profile
-      axios
-        .get(`${API_BASE}/api/providers/profile`, config)
-        .then((res) => {
-          setProfile(res.data || {});
-          setNewLocation(res.data?.location || "");
-          setNewSocial(res.data?.social || "");
-          setNewPhone(res.data?.phone || "");
-          setNewAddress(res.data?.address || "");
-    
-          // Для guide/transport — подтягиваем РУЧНЫЕ блокировки из provider_blocked_dates
-          if (["guide", "transport"].includes(res.data?.type)) {
-            axios
-              .get(`${API_BASE}/api/providers/booked-dates`, config)
-              .then(({ data }) => {
-                // сервер может вернуть ["2025-08-29","2025-08-30"] или [{date:"..."},{day:"..."}]
-                const ymds = Array.isArray(data)
-                  ? data.map((v) => (typeof v === "string" ? v : v?.date || v?.day)).filter(Boolean)
-                  : [];
-    
-                // Преобразуем Y-M-D в локальные Date без TZ-сдвига
-                const asDates = ymds
-                  .map((s) => {
-                    const [y, m, d] = String(s).split("-").map(Number);
-                    return Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)
-                      ? new Date(y, m - 1, d)
-                      : null;
+        useEffect(() => {
+          // вспомогалка: безопасно превратить "YYYY-MM-DD" / {date|day} в локальный Date (без TZ-сдвига)
+          const toLocalDate = (val) => {
+            const s = typeof val === "string" ? val : val?.date || val?.day || "";
+            const [y, m, d] = String(s).split("-").map(Number);
+            if (!y || !m || !d) return null;
+            return new Date(y, m - 1, d);
+          };
+        
+          // Profile
+          axios
+            .get(`${API_BASE}/api/providers/profile`, config)
+            .then((res) => {
+              setProfile(res.data || {});
+              setNewLocation(res.data?.location || "");
+              setNewSocial(res.data?.social || "");
+              setNewPhone(res.data?.phone || "");
+              setNewAddress(res.data?.address || "");
+        
+              if (["guide", "transport"].includes(res.data?.type)) {
+                // ВАЖНО: сюда бэкенд отдаёт именно ручные блокировки провайдера,
+                // поэтому кладём их в blockedDates (это selected в календаре).
+                axios
+                  .get(`${API_BASE}/api/providers/booked-dates`, config)
+                  .then((response) => {
+                    const formatted = (response.data || [])
+                      .map(toLocalDate)
+                      .filter(Boolean);
+                    setBlockedDates(formatted); // <-- было setBookedDates
                   })
-                  .filter(Boolean);
-    
-                // Ручные блокировки показываем как selected (красные)
-                setBlockedDates(asDates);
-    
-                // Если у вас есть отдельный эндпоинт реальных броней клиентов — туда сетайте setBookedDates(...)
-                // Здесь НЕ трогаем bookedDates, чтобы не мешать ручному редактированию.
-              })
-              .catch((err) => {
-                console.error("Ошибка загрузки занятых дат", err);
-                tError(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-              });
-          }
-        })
-        .catch((err) => {
-          console.error("Ошибка загрузки профиля", err);
-          tError(t("profile_load_error") || "Не удалось загрузить профиль");
-        });
+                  .catch((err) => {
+                    console.error("Ошибка загрузки занятых дат", err);
+                    tError(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+                  });
+              }
+            })
+            .catch((err) => {
+              console.error("Ошибка загрузки профиля", err);
+              tError(t("profile_load_error") || "Не удалось загрузить профиль");
+            });
+        
+          // Services
+          axios
+            .get(`${API_BASE}/api/providers/services`, config)
+            .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
+            .catch((err) => {
+              console.error("Ошибка загрузки услуг", err);
+              tError(t("services_load_error") || "Не удалось загрузить услуги");
+            });
+        
+          // Stats
+          axios
+            .get(`${API_BASE}/api/providers/stats`, config)
+            .then((res) => setStats(res.data || {}))
+            .catch(() => setStats({}));
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
 
-  // Services
-  axios
-    .get(`${API_BASE}/api/providers/services`, config)
-    .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
-    .catch((err) => {
-      console.error("Ошибка загрузки услуг", err);
-      tError(t("services_load_error") || "Не удалось загрузить услуги");
-    });
-
-  // Stats
-  axios
-    .get(`${API_BASE}/api/providers/stats`, config)
-    .then((res) => setStats(res.data || {}))
-    .catch(() => setStats({}));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
 
   useEffect(() => {
       if (profile?.id) {
