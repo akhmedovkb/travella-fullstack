@@ -1757,16 +1757,13 @@ direction: "",
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("net_price")}</label>
                     <input
                       type="number"
                       value={details.netPrice || ""}
                       placeholder={t("net_price")}
                       onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
                       className="w-full border px-3 py-2 rounded"
-                    />
-
-                    <label className="block font-medium mb-1">{t("gross_price")}</label>
+                    />                    
                     <input
                         type="number"
                         value={details.grossPrice || ""}
@@ -2573,15 +2570,16 @@ direction: "",
                       </div>
 
                     <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("net_price")}</label>
+                        
                         <input
                           type="number"
                           value={details.netPrice || ""}
                           onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+                          placeholder={t("net_price")}
                           className="w-full border px-3 py-2 rounded"
                         />
                         
-                         <label className="block font-medium mb-1">{t("gross_price")}</label>
+                         
                           <input
                               type="number"
                               value={details.grossPrice || ""}
