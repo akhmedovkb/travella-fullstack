@@ -1,12 +1,14 @@
 {
   "accommodation": "Размещение",
   "accommodation_category": "Категория размещения",
+  
   "actions": {
     "book": "Бронировать",
     "cancel": "Отмена",
-    "send": "Отправить"
+    "send": "Отправить",
     "quick_request": "Быстрый запрос"
   },
+  
   "address": "Адрес",
   "add_error": "Ошибка добавления",
   "adt": "Взрослые (ADT)",
