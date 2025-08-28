@@ -85,6 +85,7 @@
       "confirmDeleteRequest": "Ushbu so‘rovni o‘chirmoqchimisiz?",
       "languagesCsv": "languages_csv",
       "logout": "Chiqish",
+      "my_bookings": "Bronlarim",
       "name": "Ism / nom",
       "newPassword": "Yangi parol",
       "noBookings": "Bronlar yo‘q",
@@ -333,7 +334,6 @@
   },
 
   "mountain_tour": "Tog‘ sayohati",
-  "my_bookings": "Bronlarim",
   "my_requests": "So‘rovlarim",
 
   "name": "Nom",
