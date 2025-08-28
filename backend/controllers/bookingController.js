@@ -109,32 +109,63 @@ const createBooking = async (req, res) => {
   }
 };
 
-// Брони провайдера (обогащены полями клиента и услуги)
+// Брони провайдера: показываем, кто сделал запрос (клиент или поставщик)
 const getProviderBookings = async (req, res) => {
   try {
     const providerId = req.user?.id;
+
     const q = await pool.query(
-      `SELECT
-         b.id, b.service_id, b.provider_id, b.client_id, b.status,
-         b.client_message, b.attachments, b.provider_price, b.provider_note,
-         b.date, b.created_at, b.updated_at,
-         array_agg(bd.date::date ORDER BY bd.date) AS dates,
-         -- клиент
-         c.name  AS client_name,
-         c.phone AS client_phone,
-         c.social AS client_social,
-         c.address AS client_address,
-         -- услуга
-         s.title AS service_title
-       FROM bookings b
-       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-       LEFT JOIN clients c         ON c.id = b.client_id
-       LEFT JOIN services s        ON s.id = b.service_id
-       WHERE b.provider_id = $1
-       GROUP BY b.id, c.name, c.phone, c.social, c.address, s.title
-       ORDER BY b.updated_at DESC NULLS LAST, b.created_at DESC`,
+      `
+      SELECT
+        b.id, b.service_id, b.provider_id, b.client_id, b.status,
+        b.client_message, b.attachments, b.provider_price, b.provider_note,
+        b.created_at, b.updated_at,
+
+        -- все даты в брони
+        (
+          SELECT array_agg(d.date::date ORDER BY d.date)
+          FROM booking_dates d
+          WHERE d.booking_id = b.id
+        ) AS dates,
+
+        s.title AS service_title,
+
+        -- данные клиента (если автор — клиент)
+        c.id      AS client_id,
+        c.name    AS client_name,
+        c.phone   AS client_phone,
+        c.address AS client_address,
+        c.telegram AS client_telegram,
+
+        -- данные поставщика (если автор — поставщик)
+        p.id      AS author_provider_id,
+        p.name    AS author_provider_name,
+        p.phone   AS author_provider_phone,
+        p.address AS author_provider_address,
+        p.social  AS author_provider_social,
+        p.type    AS author_provider_type,
+
+        -- сводные поля «кто запросил»
+        CASE WHEN c.id IS NOT NULL THEN 'client' ELSE 'provider' END AS requester_role,
+        COALESCE(c.id,      p.id)      AS requester_id,
+        COALESCE(c.name,    p.name)    AS requester_name,
+        COALESCE(c.phone,   p.phone)   AS requester_phone,
+        COALESCE(c.address, p.address) AS requester_address,
+        COALESCE(c.telegram, p.social) AS requester_telegram,
+        CASE WHEN c.id IS NOT NULL THEN NULL ELSE p.type END AS requester_provider_type
+
+      FROM bookings b
+      LEFT JOIN services  s ON s.id = b.service_id
+      LEFT JOIN clients   c ON c.id = b.client_id
+      -- если client найден, до поставщика не джойним, чтобы не плодить дублей
+      LEFT JOIN providers p ON p.id = b.client_id AND c.id IS NULL
+
+      WHERE b.provider_id = $1
+      ORDER BY b.created_at DESC NULLS LAST
+      `,
       [providerId]
     );
+
     res.json(q.rows);
   } catch (err) {
     console.error("getProviderBookings error:", err);
@@ -142,39 +173,48 @@ const getProviderBookings = async (req, res) => {
   }
 };
 
-// Брони клиента (обогащены полями провайдера и услуги)
+// Брони клиента (мой кабинет)
 const getMyBookings = async (req, res) => {
   try {
     const clientId = req.user?.id;
+
     const q = await pool.query(
-      `SELECT
-         b.id, b.service_id, b.provider_id, b.client_id, b.status,
-         b.client_message, b.attachments, b.provider_price, b.provider_note,
-         b.date, b.created_at, b.updated_at,
-         array_agg(bd.date::date ORDER BY bd.date) AS dates,
-         -- провайдер
-         p.name  AS provider_name,
-         p.type  AS provider_type,
-         p.phone AS provider_phone,
-         p.social AS provider_social,
-         p.address AS provider_address,
-         -- услуга
-         s.title AS service_title
-       FROM bookings b
-       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-       LEFT JOIN providers p      ON p.id = b.provider_id
-       LEFT JOIN services  s      ON s.id = b.service_id
-       WHERE b.client_id = $1
-       GROUP BY b.id, p.name, p.type, p.phone, p.social, p.address, s.title
-       ORDER BY b.updated_at DESC NULLS LAST, b.created_at DESC`,
+      `
+      SELECT
+        b.id, b.service_id, b.provider_id, b.client_id, b.status,
+        b.client_message, b.attachments, b.provider_price, b.provider_note,
+        b.created_at, b.updated_at,
+
+        (
+          SELECT array_agg(d.date::date ORDER BY d.date)
+          FROM booking_dates d
+          WHERE d.booking_id = b.id
+        ) AS dates,
+
+        s.title AS service_title,
+
+        p.name    AS provider_name,
+        p.type    AS provider_type,
+        p.phone   AS provider_phone,
+        p.address AS provider_address,
+        p.social  AS provider_telegram   -- соц./телеграм поставщика
+
+      FROM bookings b
+      LEFT JOIN services  s ON s.id = b.service_id
+      LEFT JOIN providers p ON p.id = b.provider_id
+      WHERE b.client_id = $1
+      ORDER BY b.created_at DESC NULLS LAST
+      `,
       [clientId]
     );
+
     res.json(q.rows);
   } catch (err) {
     console.error("getMyBookings error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Принять бронь: POST /api/bookings/:id/accept { price?: number, note?: string }
 const acceptBooking = async (req, res) => {
