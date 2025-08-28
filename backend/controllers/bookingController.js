@@ -16,28 +16,35 @@ async function getProviderType(providerId) {
 }
 
 // Проверка доступности набора дат для провайдера
-async function isDatesFree(providerId, ymdList) {
+// excludeBookingId — опционально игнорируем конкретную бронь (нужно на accept)
+async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
   if (!ymdList.length) return false;
 
   // 1) нет в ручных блокировках
   const q1 = await pool.query(
-    `SELECT day::date AS d
+    `SELECT 1
        FROM provider_blocked_dates
-      WHERE provider_id=$1 AND day = ANY($2::date[])`,
+      WHERE provider_id=$1 AND day = ANY($2::date[]) LIMIT 1`,
     [providerId, ymdList]
   );
   if (q1.rowCount) return false;
 
   // 2) нет пересечений с активными/ожидающими бронями
-  const q2 = await pool.query(
-    `SELECT bd.date::date AS d
+  let sql =
+    `SELECT 1
        FROM booking_dates bd
        JOIN bookings b ON b.id = bd.booking_id
       WHERE b.provider_id=$1
         AND b.status IN ('pending','active')
-        AND bd.date = ANY($2::date[])`,
-    [providerId, ymdList]
-  );
+        AND bd.date = ANY($2::date[])`;
+  const params = [providerId, ymdList];
+  if (excludeBookingId) {
+    sql += ` AND b.id <> $3`;
+    params.push(excludeBookingId);
+  }
+  sql += ` LIMIT 1`;
+
+  const q2 = await pool.query(sql, params);
   if (q2.rowCount) return false;
 
   return true;
@@ -71,16 +78,19 @@ const createBooking = async (req, res) => {
     const days = toArray(dates).map(normYMD).filter(Boolean);
     if (!days.length) return res.status(400).json({ message: "Не указаны даты" });
 
+    // опорная дата для совместимости с колонкой bookings.date NOT NULL
+    const primaryDate = [...days].sort()[0];
+
     // проверка доступности
     const ok = await isDatesFree(providerId, days);
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
-    // создаём бронь
+    // создаём бронь (ВКЛЮЧАЯ колонку date)
     const ins = await pool.query(
-      `INSERT INTO bookings (service_id, provider_id, client_id, status, client_message, attachments)
-       VALUES ($1,$2,$3,'pending',$4,$5::jsonb)
+      `INSERT INTO bookings (service_id, provider_id, client_id, date, status, client_message, attachments)
+       VALUES ($1,$2,$3,$4::date,'pending',$5,$6::jsonb)
        RETURNING id, status`,
-      [service_id ?? null, providerId, clientId, message ?? null, JSON.stringify(attachments ?? [])]
+      [service_id ?? null, providerId, clientId, primaryDate, message ?? null, JSON.stringify(attachments ?? [])]
     );
     const bookingId = ins.rows[0].id;
 
@@ -107,7 +117,7 @@ const getProviderBookings = async (req, res) => {
       `SELECT
          b.id, b.service_id, b.provider_id, b.client_id, b.status,
          b.client_message, b.attachments, b.provider_price, b.provider_note,
-         b.created_at, b.updated_at,
+         b.date, b.created_at, b.updated_at,
          array_agg(bd.date::date ORDER BY bd.date) AS dates
        FROM bookings b
        LEFT JOIN booking_dates bd ON bd.booking_id = b.id
@@ -133,7 +143,7 @@ const getMyBookings = async (req, res) => {
       `SELECT
          b.id, b.service_id, b.provider_id, b.client_id, b.status,
          b.client_message, b.attachments, b.provider_price, b.provider_note,
-         b.created_at, b.updated_at,
+         b.date, b.created_at, b.updated_at,
          array_agg(bd.date::date ORDER BY bd.date) AS dates,
          p.name AS provider_name,
          s.title AS service_title
@@ -174,10 +184,10 @@ const acceptBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    // финальная проверка доступности
+    // финальная проверка доступности (игнорируя текущую заявку)
     const dQ = await pool.query(`SELECT date::date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
     const days = dQ.rows.map((r) => normYMD(r.d));
-    const ok = await isDatesFree(providerId, days);
+    const ok = await isDatesFree(providerId, days, id);
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
     await pool.query(
