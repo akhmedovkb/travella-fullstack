@@ -85,6 +85,7 @@
       "confirmDeleteRequest": "Delete this request?",
       "languagesCsv": "languages_csv",
       "logout": "Logout",
+      "my_bookings": "My bookings",
       "name": "Name",
       "newPassword": "New password",
       "noBookings": "No bookings",
@@ -333,8 +334,7 @@
   },
 
   "mountain_tour": "Mountain tour",
-  "my_bookings": "My bookings",
-  "my_requests": "My requests",
+    "my_requests": "My requests",
 
   "name": "Name",
   "name_placeholder": "Your name",
