@@ -87,6 +87,7 @@
       "confirmDeleteRequest": "Удалить эту заявку?",
       "languagesCsv": "languages_csv",
       "logout": "Выйти",
+      "my_bookings": "Мои бронирования",
       "name": "Наименование",
       "newPassword": "Новый пароль",
       "noBookings": "Бронирований нет",
@@ -335,7 +336,6 @@
   },
 
   "mountain_tour": "Тур в горы",
-  "my_bookings": "Мои бронирования",
   "my_requests": "Мои запросы",
 
   "name": "Наименование",
