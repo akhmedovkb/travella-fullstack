@@ -1,21 +1,29 @@
 // backend/routes/bookingRoutes.js
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/authenticateToken");
-const ctrl = require("../controllers/bookingController");
 
-// Клиент создаёт и смотрит свои брони
-router.post("/", auth, ctrl.createBooking);
-router.get("/my", auth, ctrl.listMyBookings);
+const authenticateToken = require("../middleware/authenticateToken");
+const {
+  createBooking,
+  getProviderBookings,
+  getMyBookings,
+  acceptBooking,
+  rejectBooking,
+  cancelBooking,
+} = require("../controllers/bookingController");
 
-// Провайдер смотрит брони по своим услугам
-router.get("/provider", auth, ctrl.listProviderBookings);
+// Создать заявку (клиент/провайдер с токеном)
+router.post("/", authenticateToken, createBooking);
 
-// Провайдер подтверждает/отклоняет
-router.post("/:id/confirm", auth, ctrl.confirm);
-router.post("/:id/reject", auth, ctrl.reject);
+// Списки
+router.get("/provider", authenticateToken, getProviderBookings); // мои как провайдера
+router.get("/my",       authenticateToken, getMyBookings);       // мои как клиента
 
-// Клиент или провайдер отменяет
-router.post("/:id/cancel", auth, ctrl.cancel);
+// Действия провайдера
+router.post("/:id/accept", authenticateToken, acceptBooking);
+router.post("/:id/reject", authenticateToken, rejectBooking);
+
+// Действие клиента
+router.post("/:id/cancel", authenticateToken, cancelBooking);
 
 module.exports = router;
