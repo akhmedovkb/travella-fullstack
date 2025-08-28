@@ -54,6 +54,15 @@ router.patch("/services/:id/images", authenticateToken, requireProvider, updateS
 // Calendar
 router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
+// получить ручные блокировки провайдера (сам провайдер)
+router.get('/blocked-dates', authenticate, providerController.getBlockedDates);
+
+// заменить/обновить блокировки
+router.post('/blocked-dates', authenticate, providerController.saveBlockedDates);
+
+// публичная выдача для клиента: и забронированные, и заблокированные
+router.get('/:providerId/calendar', providerController.getCalendarPublic);
+
 
 // Favorites (provider)
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
@@ -62,5 +71,6 @@ router.delete("/favorites/:serviceId", authenticateToken, requireProvider, remov
 
 // Public provider page (keep last)
 router.get("/:id(\\d+)", getProviderPublicById);
+
 
 module.exports = router;
