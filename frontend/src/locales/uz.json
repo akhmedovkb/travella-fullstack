@@ -2,8 +2,9 @@
   "accommodation": "Joylashuv",
   "accommodation_category": "Joylashuv toifasi",
   "actions": {
-    "quick_request": "Tez so‘rov",
+    "book": "Bron qilish",
     "cancel": "Bekor qilish",
+    "quick_request": "Tez so‘rov",
     "send": "Yuborish"
   },
   "address": "Manzil",
