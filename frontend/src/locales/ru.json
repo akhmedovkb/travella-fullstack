@@ -2,9 +2,10 @@
   "accommodation": "Размещение",
   "accommodation_category": "Категория размещения",
   "actions": {
-    "quick_request": "Быстрый запрос",
+    "book": "Бронировать",
     "cancel": "Отмена",
     "send": "Отправить"
+    "quick_request": "Быстрый запрос",
   },
   "address": "Адрес",
   "add_error": "Ошибка добавления",
