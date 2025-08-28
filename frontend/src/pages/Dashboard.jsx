@@ -1761,10 +1761,12 @@ direction: "",
                     <input
                       type="number"
                       value={details.netPrice || ""}
+                      placeholder={t("net_price")}
                       onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
                       className="w-full border px-3 py-2 rounded"
                     />
 
+                    <label className="block font-medium mb-1">{t("gross_price")}</label>
                     <input
                         type="number"
                         value={details.grossPrice || ""}
@@ -2570,7 +2572,7 @@ direction: "",
                         <label>{t("changeable")}</label>
                       </div>
 
-                      <div className="mb-2">
+                    <div className="mb-2">
                         <label className="block font-medium mb-1">{t("net_price")}</label>
                         <input
                           type="number"
@@ -2579,13 +2581,14 @@ direction: "",
                           className="w-full border px-3 py-2 rounded"
                         />
                         
-                        <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                        />
+                         <label className="block font-medium mb-1">{t("gross_price")}</label>
+                          <input
+                              type="number"
+                              value={details.grossPrice || ""}
+                              onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                              placeholder={t("gross_price")}
+                              className="w-full border px-3 py-2 rounded mb-2"
+                          />
                       </div>
 
                       <div className="mb-2">
