@@ -12,6 +12,71 @@ import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
+
+// --- money helpers ---
+const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
+
+const parseMoneySafe = (v) => {
+  if (!hasVal(v)) return NaN;
+  const s = String(v).replace(/\s+/g, "").replace(",", ".");
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+const pick = (...vals) => vals.find((v) => hasVal(v));
+
+const extractPrices = (details) => {
+  // Поддерживаем возможные варианты имен полей
+  const netRaw = pick(
+    details?.netPrice,
+    details?.netto,
+    details?.net,
+    details?.priceNet,
+    details?.price_net
+  );
+  const grossRaw = pick(
+    details?.bruttoPrice,
+    details?.grossPrice,
+    details?.clientPrice,
+    details?.priceBrut,
+    details?.price_brutto,
+    details?.brutto
+  );
+  const net = parseMoneySafe(netRaw);
+  const gross = parseMoneySafe(grossRaw);
+  return { netRaw, grossRaw, net, gross };
+};
+
+const validateNetGross = (details, t) => {
+  const { netRaw, grossRaw, net, gross } = extractPrices(details || {});
+  if (!hasVal(netRaw) || Number.isNaN(net)) {
+    tError(t("validation.net_required", "Укажите корректную цену нетто"));
+    return false;
+  }
+  if (net <= 0) {
+    tError(t("validation.net_positive", "Цена нетто должна быть больше 0"));
+    return false;
+  }
+  if (!hasVal(grossRaw) || Number.isNaN(gross)) {
+    tError(t("validation.gross_required", "Укажите корректную цену для клиента (брутто)"));
+    return false;
+  }
+  if (gross <= 0) {
+    tError(t("validation.gross_positive", "Цена для клиента (брутто) должна быть больше 0"));
+    return false;
+  }
+  if (gross < net) {
+    tError(t("validation.gross_ge_net", "Брутто не может быть меньше нетто"));
+    return false;
+  }
+  // Мягкое предупреждение на слишком большие числа
+  if (net > 100000000 || gross > 100000000) {
+    tWarn(t("validation.too_large", "Слишком большое значение цены — проверьте валюту/единицы"));
+  }
+  return true;
+};
+
+
 function HotelSelect({ value, onChange, loadOptions, t }) {
   return (
     <AsyncCreatableSelect
@@ -950,7 +1015,7 @@ direction: "",
 
     const hasEmpty = requiredFields.some((field) => {
       const value = getFieldValue(field);
-      return value === "" || value === undefined;
+      return value === "" || value === undefined || value === null;
     });
 
     const needsReturnDate =
@@ -961,6 +1026,13 @@ direction: "",
     if (hasEmpty || needsReturnDate) {
       tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
       return;
+          }
+
+    // Validate net/gross prices for extended categories
+    if (isExtendedCategory) {
+      // предпочитаем актуальное состояние формы; если его нет — берем из selectedService
+      const detailsToCheck = (details && Object.keys(details).length) ? details : (selectedService?.details || {});
+      if (!validateNetGross(detailsToCheck, t)) return;
     }
 
     const compact = (obj) =>
@@ -975,8 +1047,8 @@ direction: "",
 
 const __grossNum = (() => {
   const g = details?.grossPrice;
-  if (g === "" || g === null || g === undefined) return undefined;
-  const n = Number(g);
+  if (!hasVal(g)) return undefined;
+  const n = parseMoneySafe(g); // поддерживает "1 200,50"
   return Number.isFinite(n) ? n : undefined;
 })();
 
