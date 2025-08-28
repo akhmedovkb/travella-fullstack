@@ -6,92 +6,108 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
+/** ===== helpers ===== */
 const toYMD = (d) => {
   const dt = new Date(d);
   const y = dt.getFullYear();
   const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const da = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
+// нормализация того, что вернул сервер: "YYYY-MM-DD" ИЛИ { date|day: "YYYY-MM-DD" }
+const normalizeServerDatesToStrings = (arr) => {
+  const out = new Set();
+  (Array.isArray(arr) ? arr : []).forEach((v) => {
+    const s =
+      typeof v === "string"
+        ? v
+        : v?.date || v?.day || (typeof v === "object" ? String(v) : "");
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) out.add(`${m[1]}-${m[2]}-${m[3]}`);
+  });
+  return Array.from(out).sort();
+};
+
+// превращаем "YYYY-MM-DD" в локальный Date без сдвига часового пояса
+const ymdListToLocalDates = (list) =>
+  (list || []).map((s) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  });
+
+/** ===== component ===== */
 const ProviderCalendar = ({ token }) => {
   const { t } = useTranslation();
 
-  // что пришло с сервера (строки YYYY-MM-DD)
-  const [initial, setInitial] = useState([]);
-  // что сейчас выделено в UI (строки YYYY-MM-DD)
-  const [selected, setSelected] = useState([]);
+  // то, что уже лежит в БД (строки YYYY-MM-DD)
+  const [serverDates, setServerDates] = useState([]);
+  // текущее выделение в UI (строки YYYY-MM-DD)
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const config = useMemo(
     () => ({ headers: { Authorization: `Bearer ${token}` } }),
     [token]
   );
 
-  // Загрузка: бекенд отдаёт массив строк, НЕ объекты {date}
+  // загрузка текущих блокировок (используем /booked-dates — как у тебя в проде)
   useEffect(() => {
     if (!token) return;
+    setLoading(true);
     axios
-      .get(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
-        config
-      )
+      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`, config)
       .then(({ data }) => {
-        const arr = Array.isArray(data) ? data.filter(Boolean) : [];
-        setInitial(arr);
-        setSelected(arr);
+        const normalized = normalizeServerDatesToStrings(data);
+        setServerDates(normalized);
+        // по умолчанию выделяем то, что уже есть на сервере
+        setSelectedDates(normalized);
       })
       .catch((err) => {
         console.error("Ошибка загрузки занятых дат", err);
         toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-      });
+      })
+      .finally(() => setLoading(false));
   }, [token]);
 
+  // преобразуем выбранные строки в Date для DayPicker
   const selectedAsDates = useMemo(
-    () => selected.map((s) => new Date(`${s}T00:00:00`)),
-    [selected]
+    () => ymdListToLocalDates(selectedDates),
+    [selectedDates]
   );
 
+  // переключение даты по клику
   const toggleDate = (day) => {
     const ymd = toYMD(day);
-    setSelected((prev) =>
+    setSelectedDates((prev) =>
       prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
     );
   };
 
+  // сохранить: отправляем дифф { add, remove }
   const handleSave = async () => {
-    const finalSet = Array.from(new Set(selected)).sort();
-
-    // 1) пробуем Legacy-формат: полная замена
+    setSaving(true);
     try {
-      const { data } = await axios.post(
+      const before = new Set(serverDates);
+      const after = Array.from(new Set(selectedDates)).sort();
+
+      const add = after.filter((d) => !before.has(d));
+      const remove = serverDates.filter((d) => !after.includes(d));
+
+      await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-        { dates: finalSet },
+        { add, remove },
         config
       );
-      setInitial(finalSet);
-      toast.success(
-        data?.message || t("calendar.saved_successfully") || "Даты сохранены"
-      );
-      return;
-    } catch (e1) {
-      // 2) если сервер ждёт дифф, отправим { add, remove }
-      const initialSet = new Set(initial);
-      const final = new Set(finalSet);
-      const add = finalSet.filter((d) => !initialSet.has(d));
-      const remove = initial.filter((d) => !final.has(d));
 
-      try {
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-          { add, remove },
-          config
-        );
-        setInitial(finalSet);
-        toast.success(t("calendar.saved_successfully") || "Даты сохранены");
-      } catch (e2) {
-        console.error("Ошибка сохранения занятых дат", e2);
-        toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
-      }
+      setServerDates(after);
+      toast.success(t("calendar.saved_successfully") || "Даты сохранены");
+    } catch (e) {
+      console.error("Ошибка сохранения занятых дат", e);
+      toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -104,12 +120,20 @@ const ProviderCalendar = ({ token }) => {
         disabled={[{ before: new Date() }]}
         modifiersClassNames={{ selected: "bg-red-500 text-white" }}
       />
+
       <button
         onClick={handleSave}
-        className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+        disabled={saving || loading}
+        className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-60"
       >
-        {t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
+        {saving
+          ? t("saving") || "Сохраняю…"
+          : t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
       </button>
+
+      <p className="text-sm mt-2 text-gray-600">
+        🔴 {t("calendar.manual_blocked", "Ручные блокировки")}
+      </p>
     </div>
   );
 };
