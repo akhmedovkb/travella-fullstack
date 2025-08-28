@@ -6,7 +6,6 @@ import { apiGet } from "../api";
 import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false; // выключаем блок «Отзывы об услуге»
 
-
 /* ============== small utils ============== */
 const firstNonEmpty = (...vals) => {
   for (const v of vals) {
@@ -202,8 +201,8 @@ function extractServiceFields(item, viewerRole) {
     bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
-  
-    // ---------- direction (for refused_flight, etc.) ----------
+
+  // ---------- direction (for refused_flight, etc.) ----------
   const dirFrom = firstNonEmpty(
     details?.directionFrom, details?.from, details?.cityFrom, details?.origin, details?.departureCity,
     svc.directionFrom, svc.from, svc.cityFrom, svc.origin, svc.departureCity,
@@ -215,7 +214,7 @@ function extractServiceFields(item, viewerRole) {
     item.directionTo, item.to, item.cityTo, item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
-  
+
   const inlineProvider = firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
     item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
@@ -349,12 +348,37 @@ export default function ServiceCard({
   };
   const closeReviews = () => setRevOpen(false);
 
-   const activeFav =
-   typeof isFav === "boolean"
-     ? isFav
-     : typeof favActive === "boolean"
-       ? favActive
-       : (favoriteIds ? favoriteIds.has(String(id)) : false);
+  const activeFav =
+    typeof isFav === "boolean"
+      ? isFav
+      : typeof favActive === "boolean"
+        ? favActive
+        : (favoriteIds ? favoriteIds.has(String(id)) : false);
+
+  // ---------- Кнопка «Бронировать» только для гида/транспорта ----------
+  const bookableCategories = new Set([
+    "city_tour_guide",
+    "mountain_tour_guide",
+    "city_tour_transport",
+    "mountain_tour_transport",
+    "one_way_transfer",
+    "dinner_transfer",
+    "border_transfer",
+  ]);
+  const svcCat = String(svc?.category || "").toLowerCase();
+  const bookableByCategory = bookableCategories.has(svcCat);
+
+  const providerTypeGuess = String(
+    prov?.type ||
+    details?.provider_type ||
+    svc?.provider_type ||
+    item?.provider_type ||
+    ""
+  ).toLowerCase();
+
+  const bookableByType = ["guide", "transport"].includes(providerTypeGuess);
+
+  const isBookable = (bookableByType || bookableByCategory) && !!providerId;
 
   return (
     <div className={["group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col", className].join(" ")}>
@@ -393,17 +417,17 @@ export default function ServiceCard({
             )}
 
             {SHOW_REVIEWS && (
-            <button
-              ref={revBtnRef}
-              className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
-              onMouseEnter={openReviews}
-              onMouseLeave={closeReviews}
-              title={t("marketplace.reviews") || "Отзывы об услуге"}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
-              </svg>
-            </button>
+              <button
+                ref={revBtnRef}
+                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
+                onMouseEnter={openReviews}
+                onMouseLeave={closeReviews}
+                title={t("marketplace.reviews") || "Отзывы об услуге"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
+                </svg>
+              </button>
             )}
           </div>
 
@@ -424,7 +448,7 @@ export default function ServiceCard({
           <div className="absolute inset-x-0 bottom-0 p-3">
             <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
               <div className="font-semibold line-clamp-2">{title}</div>
-                            {/* Направление только для отказных авиабилетов */}
+              {/* Направление только для отказных авиабилетов */}
               {svc?.category === "refused_flight" && direction && (
                 <div>
                   <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
@@ -462,29 +486,30 @@ export default function ServiceCard({
 
       {/* reviews tooltip portal */}
       {SHOW_REVIEWS && (
-      <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
-        <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-          <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
-          <div className="flex items-center gap-2">
-            <Stars value={revData.avg} />
-            <span className="opacity-80">({revData.count || 0})</span>
+        <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
+          <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
+            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
+            <div className="flex items-center gap-2">
+              <Stars value={revData.avg} />
+              <span className="opacity-80">({revData.count || 0})</span>
+            </div>
+            <div className="mt-1">
+              {!revData.items?.length ? (
+                <span className="opacity-80">—</span>
+              ) : (
+                <ul className="list-disc ml-4 space-y-1">
+                  {revData.items.slice(0, 2).map((r) => (
+                    <li key={r.id} className="line-clamp-2 opacity-90">
+                      {r.text || ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-          <div className="mt-1">
-            {!revData.items?.length ? (
-              <span className="opacity-80">—</span>
-            ) : (
-              <ul className="list-disc ml-4 space-y-1">
-                {revData.items.slice(0, 2).map((r) => (
-                  <li key={r.id} className="line-clamp-2 opacity-90">
-                    {r.text || ""}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </TooltipPortal>
+        </TooltipPortal>
       )}
+
       {/* BODY */}
       <div className="p-3 flex-1 flex flex-col">
         <div className="font-semibold line-clamp-2">{title}</div>
@@ -501,12 +526,12 @@ export default function ServiceCard({
                 <span className="text-gray-500">
                   {t("marketplace.supplier") || "Поставщик"}:{" "}
                 </span>
-            
+
                 {providerId ? (
                   <a
                     href={`/profile/provider/${providerId}`}
                     className="underline hover:text-gray-900"
-                    onClick={(e) => e.stopPropagation()} // чтобы клик по ссылке не триггерил клики карточки
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {supplierName}
                   </a>
@@ -540,12 +565,22 @@ export default function ServiceCard({
         )}
 
         <div className="mt-auto pt-3">
-          <button
-            onClick={() => onQuickRequest?.(id, providerId, title)}
-            className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-          >
-            {t("actions.quick_request") || "Быстрый запрос"}
-          </button>
+          {isBookable ? (
+            <a
+              href={`/profile/provider/${providerId}?service=${id}#book`}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full inline-flex items-center justify-center bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.book") || "Бронировать"}
+            </a>
+          ) : (
+            <button
+              onClick={() => onQuickRequest?.(id, providerId, title)}
+              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+            >
+              {t("actions.quick_request") || "Быстрый запрос"}
+            </button>
+          )}
         </div>
       </div>
     </div>
