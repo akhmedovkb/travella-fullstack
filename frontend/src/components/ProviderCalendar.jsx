@@ -126,7 +126,7 @@ const ProviderCalendar = ({ token }) => {
         onClick={handleSave}
         className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
       >
-        {t("calendar.save_blocked") || "Сохранить занятые даты"}
+        {t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
       </button>
       <p className="text-sm mt-2 text-gray-600">
         🔴 {t("calendar.manual_blocked") || "Заблокировано вручную"}
