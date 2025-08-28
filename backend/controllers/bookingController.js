@@ -130,6 +130,14 @@ const getProviderBookings = async (req, res) => {
         c.location    AS requester_client_location,
         c.avatar_url  AS requester_client_avatar_url,
 
+        -- 🔽 универсальные алиасы под фронт
+        c.name     AS requester_name,
+        c.phone    AS requester_phone,
+        c.telegram AS requester_telegram,
+        c.location AS requester_location,
+        'client'   AS requester_role,
+        ('/profile/client/' || c.id)::text AS requester_url,
+
         -- сам провайдер, к которому пришла бронь (для отображения/контекста)
         p.id          AS provider_profile_id,
         p.name        AS provider_name,
