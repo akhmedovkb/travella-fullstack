@@ -6,78 +6,83 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
-// YYYY-MM-DD -> Date (локаль, без сдвигов)
-function ymdToDate(ymd) {
-  const [y, m, d] = String(ymd).split("-").map(Number);
+/** helpers */
+const dateToYmd = (d) => {
+  const x = new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const dd = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+const ymdToLocalDate = (s) => {
+  const [y, m, d] = String(s).split("-").map(Number);
   if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
-}
-
-// Date -> YYYY-MM-DD (локально)
-function dateToYmd(date) {
-  const dt = new Date(date);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const d = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-// Сервер может отдать: "2025-08-29" ИЛИ {date:"2025-08-29"} ИЛИ {day:"2025-08-29"} ИЛИ ISO "2025-08-29T00:00:00.000Z"
-function normalizeServerItem(item) {
-  const raw = typeof item === "string" ? item : item?.date || item?.day || "";
-  if (!raw) return null;
-  const str = String(raw);
-  // если пришло ISO — забираем только YYYY-MM-DD
-  return str.includes("T") ? str.split("T")[0] : str;
-}
+  return new Date(y, m - 1, d); // без UTC-сдвига
+};
+const normalizeFromServer = (arr) => {
+  const out = new Set();
+  (Array.isArray(arr) ? arr : []).forEach((v) => {
+    const s = typeof v === "string" ? v : v?.day || v?.date || "";
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) out.add(`${m[1]}-${m[2]}-${m[3]}`);
+  });
+  return Array.from(out).sort();
+};
 
 const ProviderCalendar = ({ token }) => {
   const { t } = useTranslation();
+  const API = import.meta.env.VITE_API_BASE_URL;
 
-  // что пришло с сервера (массив строк YYYY-MM-DD)
+  // что лежит в БД (YYYY-MM-DD)
   const [initial, setInitial] = useState([]);
-  // что выделено сейчас (тоже массив строк YYYY-MM-DD)
+  // текущее выделение (YYYY-MM-DD)
   const [selected, setSelected] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  const API = import.meta.env.VITE_API_BASE_URL;
-  const config = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const config = useMemo(
+    () => ({ headers: { Authorization: `Bearer ${token}` } }),
+    [token]
+  );
 
-  // Загрузка
+  // ===== загрузка ручных блокировок =====
   useEffect(() => {
     if (!token) return;
     axios
-      .get(`${API}/api/providers/booked-dates`, config)
+      .get(`${API}/api/providers/blocked-dates`, config)
       .then(({ data }) => {
-        const arr = Array.isArray(data) ? data.map(normalizeServerItem).filter(Boolean) : [];
+        const arr = normalizeFromServer(data); // ожидаем ["YYYY-MM-DD"]
         setInitial(arr);
         setSelected(arr);
       })
       .catch((err) => {
-        console.error("Ошибка загрузки занятых дат", err);
+        console.error("Ошибка загрузки blocked-dates", err);
         toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
       });
   }, [token]);
 
   // Для DayPicker нужны Date-объекты
-  const selectedAsDates = useMemo(() => selected.map(ymdToDate).filter(Boolean), [selected]);
+  const selectedAsDates = useMemo(
+    () => selected.map(ymdToLocalDate).filter(Boolean),
+    [selected]
+  );
 
-  // Тоггл даты
+  // Тоггл дня
   const onDayClick = (day) => {
     const ymd = dateToYmd(day);
     setSelected((prev) => (prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]));
   };
 
-  // Сохранение: сначала пробуем контракт {dates:[...]} (полная замена),
-  // если бэкенд ждёт дифф — шлём {add, remove}
+  // Сохранение
   const handleSave = async () => {
     const final = Array.from(new Set(selected)).sort();
     setSaving(true);
     try {
+      // 1) пробуем полную замену
       await axios.post(`${API}/api/providers/blocked-dates`, { dates: final }, config);
       setInitial(final);
       toast.success(t("calendar.saved_successfully") || "Даты сохранены");
-    } catch (e1) {
+    } catch {
+      // 2) сервер ждёт дифф
       try {
         const initSet = new Set(initial);
         const finSet = new Set(final);
@@ -87,11 +92,18 @@ const ProviderCalendar = ({ token }) => {
         setInitial(final);
         toast.success(t("calendar.saved_successfully") || "Даты сохранены");
       } catch (e2) {
-        console.error("Ошибка сохранения занятых дат", e2);
+        console.error("Ошибка сохранения blocked-dates", e2);
         toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
       }
     } finally {
       setSaving(false);
+      // подтянуть актуальные значения из БД (на всякий)
+      try {
+        const { data } = await axios.get(`${API}/api/providers/blocked-dates`, config);
+        const arr = normalizeFromServer(data);
+        setInitial(arr);
+        setSelected(arr);
+      } catch {}
     }
   };
 
@@ -109,24 +121,14 @@ const ProviderCalendar = ({ token }) => {
         modifiersClassNames={{ selected: "bg-red-500 text-white" }}
       />
 
-      <div className="mt-2 text-sm text-gray-600 flex gap-4">
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded bg-red-500 inline-block" />
-          <span>{t("calendar.label_blocked_manual") || "Заблокировано вручную"}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded bg-blue-500 inline-block" />
-          <span>{t("calendar.label_booked_by_clients") || "Занято по бронированиям"}</span>
-        </div>
-      </div>
-
       <button
         onClick={handleSave}
         disabled={saving}
-        className="mt-4 px-4 py-2 rounded bg-orange-500 text-white font-semibold disabled:opacity-60"
+        className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-60"
       >
-        {saving ? (t("saving") || "Сохраняю…") : (t("calendar.save_blocked_dates") || "Сохранить занятые даты")}
+        {saving ? (t("saving") || "Сохранение…") : (t("calendar.save_blocked") || "Сохранить занятые даты")}
       </button>
+      <p className="text-sm mt-2 text-gray-600">🔴 {t("calendar.manual_blocked")} | 🔵 {t("calendar.booked")}</p>
     </div>
   );
 };
