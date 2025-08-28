@@ -1,3 +1,4 @@
+// frontend/src/components/ProviderCalendar.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -5,89 +6,92 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
+const toYMD = (d) => {
+  const dt = new Date(d);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const da = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+};
+
 const ProviderCalendar = ({ token }) => {
   const { t } = useTranslation();
-  const [blockedDatesFromServer, setBlockedDatesFromServer] = useState([]);
-  const [blockedDatesLocal, setBlockedDatesLocal] = useState([]);
 
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+  // что пришло с сервера (строки YYYY-MM-DD)
+  const [initial, setInitial] = useState([]);
+  // что сейчас выделено в UI (строки YYYY-MM-DD)
+  const [selected, setSelected] = useState([]);
 
-  // 📦 Загружаем даты при входе
+  const config = useMemo(
+    () => ({ headers: { Authorization: `Bearer ${token}` } }),
+    [token]
+  );
+
+  // Загрузка: бекенд отдаёт массив строк, НЕ объекты {date}
   useEffect(() => {
+    if (!token) return;
     axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
-      .then((response) => {
-        const formatted = response.data.map((item) => new Date(item.date));
-        setBlockedDatesFromServer(formatted);
+      .get(
+        `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
+        config
+      )
+      .then(({ data }) => {
+        const arr = Array.isArray(data) ? data.filter(Boolean) : [];
+        setInitial(arr);
+        setSelected(arr);
       })
-      .catch((err) => console.error("Ошибка загрузки занятых дат", err));
-  }, []);
+      .catch((err) => {
+        console.error("Ошибка загрузки занятых дат", err);
+        toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
+      });
+  }, [token]);
 
-  // 🧠 Объединяем даты
-  const allBlockedDates = useMemo(() => {
-    const all = new Set();
+  const selectedAsDates = useMemo(
+    () => selected.map((s) => new Date(`${s}T00:00:00`)),
+    [selected]
+  );
 
-    blockedDatesFromServer.forEach((d) => {
-      const dateStr = new Date(d).toISOString().split("T")[0];
-      all.add(dateStr);
-    });
-
-    blockedDatesLocal.forEach((d) => {
-      all.add(d);
-    });
-
-    return Array.from(all).map((str) => new Date(str));
-  }, [blockedDatesFromServer, blockedDatesLocal]);
-
-  // 🎯 Клик по дате
-  const handleDateClick = (date) => {
-    const dateStr = date.toISOString().split("T")[0];
-
-    const isFromServer = blockedDatesFromServer.some((d) => {
-      const dStr = new Date(d).toISOString().split("T")[0];
-      return dStr === dateStr;
-    });
-
-    const isLocal = blockedDatesLocal.includes(dateStr);
-
-    if (isLocal) {
-      // снятие локальной блокировки
-      setBlockedDatesLocal((prev) => prev.filter((d) => d !== dateStr));
-    } else if (!isFromServer) {
-      // добавление локальной блокировки
-      setBlockedDatesLocal((prev) => [...prev, dateStr]);
-    } else {
-      // снятие серверной блокировки
-      setBlockedDatesFromServer((prev) =>
-        prev.filter((d) => {
-          const dStr = new Date(d).toISOString().split("T")[0];
-          return dStr !== dateStr;
-        })
-      );
-    }
+  const toggleDate = (day) => {
+    const ymd = toYMD(day);
+    setSelected((prev) =>
+      prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
+    );
   };
 
-  const handleSaveBlockedDates = async () => {
+  const handleSave = async () => {
+    const finalSet = Array.from(new Set(selected)).sort();
+
+    // 1) пробуем Legacy-формат: полная замена
     try {
-      const res = await axios.post(
+      const { data } = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-        { dates: [...blockedDatesFromServer.map((d) => d.toISOString().split("T")[0]), ...blockedDatesLocal] },
+        { dates: finalSet },
         config
       );
-      toast.success(t(res.data.message));
-      setBlockedDatesLocal([]);
-      const refreshed = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-        config
+      setInitial(finalSet);
+      toast.success(
+        data?.message || t("calendar.saved_successfully") || "Даты сохранены"
       );
-      setBlockedDatesFromServer(refreshed.data.map((item) => new Date(item.date)));
-    } catch (error) {
-      console.error(error);
-      toast.error(t("calendar.save_error"));
+      return;
+    } catch (e1) {
+      // 2) если сервер ждёт дифф, отправим { add, remove }
+      const initialSet = new Set(initial);
+      const final = new Set(finalSet);
+      const add = finalSet.filter((d) => !initialSet.has(d));
+      const remove = initial.filter((d) => !final.has(d));
+
+      try {
+        await axios.post(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+          { add, remove },
+          config
+        );
+        setInitial(finalSet);
+        toast.success(t("calendar.saved_successfully") || "Даты сохранены");
+      } catch (e2) {
+        console.error("Ошибка сохранения занятых дат", e2);
+        toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
+      }
     }
   };
 
@@ -95,21 +99,17 @@ const ProviderCalendar = ({ token }) => {
     <div className="bg-white p-4 rounded-lg shadow-md mt-6">
       <DayPicker
         mode="multiple"
-        selected={allBlockedDates}
-        onDayClick={handleDateClick}
-        modifiersClassNames={{
-          selected: "bg-red-500 text-white",
-        }}
+        selected={selectedAsDates}
+        onDayClick={toggleDate}
+        disabled={[{ before: new Date() }]}
+        modifiersClassNames={{ selected: "bg-red-500 text-white" }}
       />
       <button
-        onClick={handleSaveBlockedDates}
+        onClick={handleSave}
         className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
       >
-        {t("calendar.save_button")}
+        {t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
       </button>
-      <p className="text-sm mt-2 text-gray-600">
-        🔴 {t("calendar.manual_blocked")} | 🔵 {t("calendar.booked")}
-      </p>
     </div>
   );
 };
