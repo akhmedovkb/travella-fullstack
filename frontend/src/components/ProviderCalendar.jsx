@@ -1,4 +1,5 @@
-// frontend/src/components/ProviderCalendar.jsximport React, { useEffect, useMemo, useState } from "react";
+// frontend/src/components/ProviderCalendar.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import axios from "axios";
