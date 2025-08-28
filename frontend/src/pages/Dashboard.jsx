@@ -634,27 +634,36 @@ direction: "",
   };
 
   /** ===== Calendar save ===== */
-  const handleSaveBlockedDates = async () => {
-    if (!Array.isArray(blockedDates)) return;
-    setSaving(true);
-    try {
-      const payload = blockedDates.map((d) =>
-        typeof d === "string" ? d : new Date(d).toISOString().split("T")[0]
-      );
-      await axios.post(
-        `${API_BASE}/api/providers/blocked-dates`,
-        { dates: payload },
-        config
-      );
-      tSuccess(t("calendar.saved_successfully") || "Даты сохранены");
-    } catch (err) {
-      console.error("Ошибка сохранения дат", err);
-      const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
-      tError(msg);
-    } finally {
-      setSaving(false);
-    }
+const handleSaveBlockedDates = async () => {
+  if (!Array.isArray(blockedDates)) return;
+  setSaving(true);
+
+  // локальное YYYY-MM-DD без UTC-сдвига
+  const toYMD = (d) => {
+    const dt = d instanceof Date ? d : new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   };
+
+  try {
+    const payload = Array.from(new Set(blockedDates.map(toYMD)));
+    await axios.post(
+      `${API_BASE}/api/providers/blocked-dates`,
+      { dates: payload },            // сервер у тебя это принимает
+      config
+    );
+    tSuccess(t("calendar.saved_successfully") || "Даты сохранены");
+  } catch (err) {
+    console.error("Ошибка сохранения дат", err);
+    const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
+    tError(msg);
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   /** ===== Delete service modal ===== */
   const confirmDeleteService = (id) => {
