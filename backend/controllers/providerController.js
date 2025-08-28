@@ -155,3 +155,442 @@ const updateProviderProfile = async (req, res) => {
       `SELECT name, location, phone, social, photo, certificate, address
        FROM providers WHERE id = $1`,
       [id]
+    );
+    if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
+    const old = oldQ.rows[0];
+
+    // location как массив (text[])
+    const toTextArray = (v, fallback) => {
+      if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+      if (typeof v === "string") return [v.trim()].filter(Boolean);
+      return Array.isArray(fallback) ? fallback : typeof fallback === "string" ? [fallback] : [];
+    };
+
+    const updated = {
+      name: req.body.name ?? old.name,
+      location: toTextArray(req.body.location, old.location),
+      phone: req.body.phone ?? old.phone,
+      social: req.body.social ?? old.social,
+      photo: req.body.photo ?? old.photo,
+      certificate: req.body.certificate ?? old.certificate,
+      address: req.body.address ?? old.address,
+    };
+
+    await pool.query(
+      `UPDATE providers
+         SET name=$1, location=$2, phone=$3, social=$4, photo=$5, certificate=$6, address=$7
+       WHERE id=$8`,
+      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, updated.address, id]
+    );
+    res.json({ message: "Профиль обновлён успешно" });
+  } catch (err) {
+    console.error("❌ Ошибка обновления профиля:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const changeProviderPassword = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const { oldPassword, newPassword } = req.body || {};
+    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
+    if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
+    const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
+    if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
+    const hashed = await bcrypt.hash(String(newPassword || ""), 10);
+    await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
+    res.json({ message: "Пароль обновлён" });
+  } catch (err) {
+    console.error("❌ Ошибка смены пароля:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ---------- Services CRUD ----------
+const addService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const { title, category, imagesArr, availabilityArr, priceNum, descriptionStr, detailsObj } =
+      normalizeServicePayload(req.body);
+
+    const extended = isExtendedCategory(category);
+
+    const ins = await pool.query(
+      `INSERT INTO services (provider_id, title, description, price, category, images, availability, details)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb)
+       RETURNING *`,
+      [
+        providerId,
+        title,
+        extended ? null : descriptionStr,
+        extended ? null : priceNum,
+        category,
+        JSON.stringify(imagesArr),
+        JSON.stringify(extended ? [] : availabilityArr),
+        JSON.stringify(detailsObj ?? {}),
+      ]
+    );
+
+    res.status(201).json(ins.rows[0]);
+  } catch (err) {
+    console.error("❌ Ошибка добавления услуги:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const getServices = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const r = await pool.query("SELECT * FROM services WHERE provider_id=$1 ORDER BY id DESC", [providerId]);
+    res.json(r.rows);
+  } catch (err) {
+    console.error("❌ Ошибка получения услуг:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const updateService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+
+    const { title, category, imagesArr, availabilityArr, priceNum, descriptionStr, detailsObj } =
+      normalizeServicePayload(req.body);
+
+    const extended = isExtendedCategory(category);
+
+    const upd = await pool.query(
+      `UPDATE services
+          SET title=$1,
+              description=$2,
+              price=$3,
+              category=$4,
+              images=$5::jsonb,
+              availability=$6::jsonb,
+              details=$7::jsonb
+        WHERE id=$8 AND provider_id=$9
+        RETURNING *`,
+      [
+        title,
+        extended ? null : descriptionStr,
+        extended ? null : priceNum,
+        category,
+        JSON.stringify(imagesArr),
+        JSON.stringify(extended ? [] : availabilityArr),
+        JSON.stringify(detailsObj ?? {}),
+        serviceId,
+        providerId,
+      ]
+    );
+
+    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json(upd.rows[0]);
+  } catch (err) {
+    console.error("❌ Ошибка обновления услуги:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const deleteService = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [serviceId, providerId]);
+    if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json({ message: "Удалено" });
+  } catch (err) {
+    console.error("❌ Ошибка удаления услуги:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Только обновление картинок
+const updateServiceImagesOnly = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = req.params.id;
+    const imagesArr = sanitizeImages(req.body.images);
+    const upd = await pool.query(
+      `UPDATE services SET images=$1::jsonb WHERE id=$2 AND provider_id=$3 RETURNING *`,
+      [JSON.stringify(imagesArr), serviceId, providerId]
+    );
+    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json(upd.rows[0]);
+  } catch (err) {
+    console.error("❌ Ошибка обновления картинок:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ---------- Public provider card ----------
+const getProviderPublicById = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await pool.query(
+      `SELECT id, name, type, location, phone, social, photo, address FROM providers WHERE id=$1`,
+      [id]
+    );
+    res.json(r.rows[0] || null);
+  } catch (err) {
+    console.error("❌ Ошибка getProviderPublicById:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ---------- Calendar (booked / blocked dates) ----------
+
+// Даты, занятые бронированиями (для провайдера). Возвращаем [{date:"YYYY-MM-DD"}, ...] — как ждёт фронт.
+const getBookedDates = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+
+    const r = await pool
+      .query(
+        `SELECT bd.date::date AS date
+           FROM booking_dates bd
+           JOIN bookings b ON b.id = bd.booking_id
+          WHERE b.provider_id = $1
+            AND b.status IN ('pending','active')
+          GROUP BY bd.date
+          ORDER BY bd.date`,
+        [providerId]
+      )
+      .catch(() => ({ rows: [] }));
+
+    res.json(r.rows); // [{ date: '2025-09-01' }, ...]
+  } catch (err) {
+    console.error("❌ Ошибка получения занятых дат (booked):", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Ручные блокировки провайдера (сам провайдер). Возвращаем массив "YYYY-MM-DD".
+const getBlockedDates = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const r = await pool
+      .query(
+        `SELECT day::date AS day
+           FROM provider_blocked_dates
+          WHERE provider_id=$1
+          ORDER BY day`,
+        [providerId]
+      )
+      .catch(() => ({ rows: [] }));
+    res.json(r.rows.map((x) => x.day));
+  } catch (err) {
+    console.error("❌ Ошибка получения blocked-dates:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Принимает либо { add:[...], remove:[...] }, либо { dates:[...] } — полная замена.
+const saveBlockedDates = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS provider_blocked_dates (
+         provider_id integer not null,
+         day date not null,
+         PRIMARY KEY(provider_id, day)
+       )`
+    );
+
+    let add = normalizeDateArray(req.body?.add);
+    let remove = normalizeDateArray(req.body?.remove);
+
+    // Полная замена { dates: [...] }
+    if (Array.isArray(req.body?.dates)) {
+      const incoming = new Set(normalizeDateArray(req.body.dates));
+
+      const curr = await pool
+        .query(`SELECT day::date AS day FROM provider_blocked_dates WHERE provider_id = $1`, [providerId])
+        .catch(() => ({ rows: [] }));
+
+      const current = new Set(curr.rows.map((r) => (r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day))));
+
+      add = [...incoming].filter((d) => !current.has(d));
+      remove = [...current].filter((d) => !incoming.has(d));
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const d of add) {
+        await client.query(
+          `INSERT INTO provider_blocked_dates(provider_id, day)
+           VALUES ($1, $2::date)
+           ON CONFLICT (provider_id, day) DO NOTHING`,
+          [providerId, d]
+        );
+      }
+
+      if (remove.length) {
+        await client.query(
+          `DELETE FROM provider_blocked_dates
+            WHERE provider_id=$1 AND day = ANY ($2::date[])`,
+          [providerId, remove]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const after = await pool
+      .query(
+        `SELECT day::date AS day
+           FROM provider_blocked_dates
+          WHERE provider_id=$1
+          ORDER BY day`,
+        [providerId]
+      )
+      .catch(() => ({ rows: [] }));
+
+    res.json({
+      added: add.length,
+      removed: remove.length,
+      dates: after.rows.map((r) => r.day),
+    });
+  } catch (err) {
+    console.error("❌ Ошибка сохранения blocked-dates:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Публичный календарь для клиентов: объединяем ручные блоки и занятые бронированиями
+const getCalendarPublic = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId)) {
+      return res.status(400).json({ message: "Bad providerId" });
+    }
+
+    const blockedPromise = pool
+      .query(`SELECT day::date AS day FROM provider_blocked_dates WHERE provider_id=$1 ORDER BY day`, [providerId])
+      .catch(() => ({ rows: [] }));
+
+    const bookedPromise = pool
+      .query(
+        `SELECT bd.date::date AS day
+           FROM booking_dates bd
+           JOIN bookings b ON b.id = bd.booking_id
+          WHERE b.provider_id = $1
+            AND b.status IN ('pending','active')
+          GROUP BY bd.date
+          ORDER BY bd.date`,
+        [providerId]
+      )
+      .catch(() => ({ rows: [] }));
+
+    const [blocked, booked] = await Promise.all([blockedPromise, bookedPromise]);
+
+    res.json({
+      blocked: blocked.rows.map((r) => r.day),
+      booked: booked.rows.map((r) => r.day),
+    });
+  } catch (err) {
+    console.error("❌ Ошибка getCalendarPublic:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// ---------- Stats (safe placeholder) ----------
+const getProviderStats = async (req, res) => {
+  try {
+    res.json({ new: 0, booked: 0 });
+  } catch {
+    res.json({ new: 0, booked: 0 });
+  }
+};
+
+// ===== Provider Favorites =====
+const listProviderFavorites = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const q = await pool.query(
+      `SELECT s.*,
+              COALESCE( (s.details->>'netPrice')::numeric, s.price ) AS net_price
+         FROM provider_favorites f
+         JOIN services s ON s.id = f.service_id
+        WHERE f.provider_id = $1
+        ORDER BY f.created_at DESC`,
+      [providerId]
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error("❌ listProviderFavorites:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const toggleProviderFavorite = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const { service_id } = req.body || {};
+    if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
+
+    // попытка добавить
+    const ins = await pool.query(
+      `INSERT INTO provider_favorites(provider_id, service_id)
+       VALUES ($1,$2)
+       ON CONFLICT (provider_id, service_id) DO NOTHING
+       RETURNING id`,
+      [providerId, service_id]
+    );
+
+    if (ins.rowCount) {
+      return res.json({ added: true });
+    }
+
+    // если уже было — удалить
+    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [providerId, service_id]);
+    res.json({ added: false });
+  } catch (err) {
+    console.error("❌ toggleProviderFavorite:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+const removeProviderFavorite = async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const serviceId = Number(req.params.serviceId);
+    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [providerId, serviceId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ removeProviderFavorite:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+module.exports = {
+  isExtendedCategory,
+  registerProvider,
+  loginProvider,
+  getProviderProfile,
+  updateProviderProfile,
+  changeProviderPassword,
+  addService,
+  getServices,
+  updateService,
+  deleteService,
+  updateServiceImagesOnly,
+  getProviderPublicById,
+  // календарь
+  getBookedDates,
+  getBlockedDates,
+  saveBlockedDates,
+  getCalendarPublic,
+  // остальное
+  getProviderStats,
+  listProviderFavorites,
+  toggleProviderFavorite,
+  removeProviderFavorite,
+};
