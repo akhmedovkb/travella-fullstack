@@ -551,16 +551,21 @@ direction: "",
   };
 
   /** ===== Images handlers ===== */
+  const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
+
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-
+  
     const freeSlots = Math.max(0, 10 - images.length);
     const toProcess = files.slice(0, freeSlots);
-
+  
     const processed = [];
     for (const f of toProcess) {
-      if (f.size > 6 * 1024 * 1024) continue; // пропускаем >6MB
+      if (f.size > MAX_FILE_SIZE) {
+        tWarn(t("image_too_big", { defaultValue: `Файл "${f.name}" больше 3 МБ — пропущен` }));
+        continue;
+      }
       try {
         const dataUrl = await resizeImageFile(f, 1600, 1000, 0.85, "image/jpeg");
         processed.push(dataUrl);
@@ -568,12 +573,11 @@ direction: "",
         // ignore
       }
     }
-
-    if (processed.length) {
-      setImages((prev) => [...prev, ...processed]);
-    }
+  
+    if (processed.length) setImages((prev) => [...prev, ...processed]);
     e.target.value = "";
   };
+
 
   const handleRemoveImage = (index) => setImages((prev) => prev.filter((_, i) => i !== index));
 
