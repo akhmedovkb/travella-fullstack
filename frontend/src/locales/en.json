@@ -2,8 +2,9 @@
   "accommodation": "Accommodation",
   "accommodation_category": "Accommodation category",
   "actions": {
-    "quick_request": "Quick request",
+    "book": "Book",
     "cancel": "Cancel",
+    "quick_request": "Quick request",
     "send": "Send"
   },
   "address": "Address",
