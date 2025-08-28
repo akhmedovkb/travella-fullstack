@@ -483,7 +483,13 @@ direction: "",
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   /** ===== Utils ===== */
-  const isServiceActive = (s) => !s.details?.expiration || new Date(s.details.expiration) > new Date();
+  const isServiceActive = (s) => {
+    const exp = s?.details?.expiration;
+    if (!exp) return true;
+    const ts = Date.parse(exp);
+    return Number.isFinite(ts) ? Date.now() < ts : true;
+  };
+
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
   /** ===== API helpers ===== */
