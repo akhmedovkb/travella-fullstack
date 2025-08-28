@@ -1,10 +1,10 @@
-//frontend/src/components/ServiceCard.jsx
+// frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet } from "../api";
 import WishHeart from "./WishHeart";
-const SHOW_REVIEWS = false; // выключаем блок «Отзывы об услуге»
+const SHOW_REVIEWS = false;
 
 /* ============== small utils ============== */
 const firstNonEmpty = (...vals) => {
@@ -57,52 +57,13 @@ const firstImageFrom = (val) => {
   }
   return null;
 };
-const resolveExpireAt = (service) => {
-  const s = service || {};
-  const d = s.details || {};
-  const cand = [
-    s.expires_at, s.expire_at, s.expireAt,
-    d.expires_at, d.expire_at, d.expiresAt,
-    d.expiration, d.expiration_at, d.expirationAt,
-    d.expiration_ts, d.expirationTs,
-  ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
-  let ts = null;
-  if (cand !== undefined && cand !== null) {
-    if (typeof cand === "number") ts = cand > 1e12 ? cand : cand * 1000;
-    else {
-      const parsed = Date.parse(String(cand));
-      if (!Number.isNaN(parsed)) ts = parsed;
-    }
-  }
-  if (!ts) {
-    const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
-    if (ttl && Number(ttl) > 0 && s.created_at) {
-      const created = Date.parse(s.created_at);
-      if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
-    }
-  }
-  return ts;
-};
-const formatLeft = (ms) => {
-  if (ms <= 0) return "00:00:00";
-  const total = Math.floor(ms / 1000);
-  const dd = Math.floor(total / 86400);
-  const hh = Math.floor((total % 86400) / 3600);
-  const mm = Math.floor((total % 3600) / 60);
-  const ss = total % 60;
-  const pad = (n) => String(n).padStart(2, "0");
-  if (dd > 0) return `${dd}д ${pad(hh)}:${pad(mm)}`;
-  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
-};
-const renderTelegram = (value) => {
-  if (!value) return null;
-  const s = String(value).trim();
-  let href = null;
-  let label = s;
-  if (/^https?:\/\//i.test(s)) href = s;
-  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
-  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
-  return { href, label };
+
+/* Тип провайдера/категории: гид/транспорт? */
+const isGuideOrTransport = (raw) => {
+  if (raw == null) return false;
+  const s = String(raw).trim().toLowerCase();
+  if (s === "guide" || s === "transport") return true;
+  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
 };
 
 /* ============== provider profile cache ============== */
@@ -202,7 +163,6 @@ function extractServiceFields(item, viewerRole) {
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
-  // ---------- direction (for refused_flight, etc.) ----------
   const dirFrom = firstNonEmpty(
     details?.directionFrom, details?.from, details?.cityFrom, details?.origin, details?.departureCity,
     svc.directionFrom, svc.from, svc.cityFrom, svc.origin, svc.departureCity,
@@ -251,12 +211,12 @@ function extractServiceFields(item, viewerRole) {
 /* ============== the card ============== */
 export default function ServiceCard({
   item,
-  viewerRole = null,        // 'client' | 'provider' | null
-  favoriteIds,              // Set<string> (optional)
-  isFav,                    // boolean (optional; overrides favoriteIds)
+  viewerRole = null,
+  favoriteIds,
+  isFav,
   favActive,
-  onToggleFavorite,         // (serviceId) => void|Promise<void>
-  onQuickRequest,           // (serviceId, providerId, title) => void
+  onToggleFavorite,
+  onQuickRequest,
   now = Date.now(),
   className = "",
 }) {
@@ -288,7 +248,7 @@ export default function ServiceCard({
     svc.image_url, item?.image_url,
   ]);
 
-  // provider profile enrichment
+  // provider profile enrichment (чтобы достать тип провайдера)
   const [provider, setProvider] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -308,20 +268,28 @@ export default function ServiceCard({
     prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
     prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone, flatPhone
   );
-  const supplierTg = renderTelegram(firstNonEmpty(
-    prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
-    prov?.contacts?.telegram, prov?.socials?.telegram,
-    prov?.social, prov?.social_link, flatTg
-  ));
+  const supplierTg = (() => {
+    const value = firstNonEmpty(
+      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
+      prov?.contacts?.telegram, prov?.socials?.telegram,
+      prov?.social, prov?.social_link, flatTg
+    );
+    if (!value) return null;
+    const s = String(value).trim();
+    if (/^https?:\/\//i.test(s)) return { href: s, label: s };
+    if (s.startsWith("@")) return { href: `https://t.me/${s.slice(1)}`, label: s };
+    if (/^[A-Za-z0-9_]+$/.test(s)) return { href: `https://t.me/${s}`, label: `@${s}` };
+    return { href: null, label: s };
+  })();
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
   const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
-  const expireAt = resolveExpireAt(svc);
-  const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
-  const hasTimer = !!expireAt;
-  const timerText = hasTimer ? formatLeft(leftMs) : null;
+  // ====== ВАЖНО: логика «кнопка Бронировать» только для гида/транспорта ======
+  const serviceLooksBookable = isGuideOrTransport(svc.category || details?.category || item?.category);
+  const providerLooksBookable = isGuideOrTransport(prov?.type || prov?.provider_type || prov?.category);
+  const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
 
   // reviews tooltip
   const [revOpen, setRevOpen] = useState(false);
@@ -355,31 +323,6 @@ export default function ServiceCard({
         ? favActive
         : (favoriteIds ? favoriteIds.has(String(id)) : false);
 
-  // ---------- Кнопка «Бронировать» только для гида/транспорта ----------
-  const bookableCategories = new Set([
-    "city_tour_guide",
-    "mountain_tour_guide",
-    "city_tour_transport",
-    "mountain_tour_transport",
-    "one_way_transfer",
-    "dinner_transfer",
-    "border_transfer",
-  ]);
-  const svcCat = String(svc?.category || "").toLowerCase();
-  const bookableByCategory = bookableCategories.has(svcCat);
-
-  const providerTypeGuess = String(
-    prov?.type ||
-    details?.provider_type ||
-    svc?.provider_type ||
-    item?.provider_type ||
-    ""
-  ).toLowerCase();
-
-  const bookableByType = ["guide", "transport"].includes(providerTypeGuess);
-
-  const isBookable = (bookableByType || bookableByCategory) && !!providerId;
-
   return (
     <div className={["group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col", className].join(" ")}>
       <div className="aspect-[16/10] bg-gray-100 relative">
@@ -399,18 +342,7 @@ export default function ServiceCard({
         {/* top overlay */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2">
-            {hasTimer && (
-              <span
-                className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${
-                  leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"
-                }`}
-                title={leftMs > 0 ? (t("countdown.until_end") || "До окончания") : (t("countdown.expired") || "Время истекло")}
-              >
-                {timerText}
-              </span>
-            )}
-
-            {!hasTimer && badge && (
+            {badge && (
               <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                 {badge}
               </span>
@@ -440,46 +372,6 @@ export default function ServiceCard({
               titleAdd={t("favorites.add") || "Добавить в избранное"}
               titleRemove={t("favorites.remove_from") || "Удалить из избранного"}
             />
-          </div>
-        </div>
-
-        {/* hover info overlay */}
-        <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute inset-x-0 bottom-0 p-3">
-            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-              <div className="font-semibold line-clamp-2">{title}</div>
-              {/* Направление только для отказных авиабилетов */}
-              {svc?.category === "refused_flight" && direction && (
-                <div>
-                  <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
-                  <span className="font-medium">{direction}</span>
-                </div>
-              )}
-              {hotel && (
-                <div>
-                  <span className="opacity-80">Отель: </span>
-                  <span className="font-medium">{hotel}</span>
-                </div>
-              )}
-              {accommodation && (
-                <div>
-                  <span className="opacity-80">Размещение: </span>
-                  <span className="font-medium">{accommodation}</span>
-                </div>
-              )}
-              {dates && (
-                <div>
-                  <span className="opacity-80">{t("common.date") || "Дата"}: </span>
-                  <span className="font-medium">{dates}</span>
-                </div>
-              )}
-              {prettyPrice && (
-                <div>
-                  <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
-                  <span className="font-semibold">{prettyPrice}</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -526,7 +418,6 @@ export default function ServiceCard({
                 <span className="text-gray-500">
                   {t("marketplace.supplier") || "Поставщик"}:{" "}
                 </span>
-
                 {providerId ? (
                   <a
                     href={`/profile/provider/${providerId}`}
@@ -565,11 +456,11 @@ export default function ServiceCard({
         )}
 
         <div className="mt-auto pt-3">
-          {isBookable ? (
+          {showBookButton ? (
             <a
               href={`/profile/provider/${providerId}?service=${id}#book`}
-              onClick={(e) => e.stopPropagation()}
               className="w-full inline-flex items-center justify-center bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+              onClick={(e) => e.stopPropagation()}
             >
               {t("actions.book") || "Бронировать"}
             </a>
