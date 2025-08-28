@@ -13,7 +13,7 @@ import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 
 /** ================= Helpers ================= */
 //для календаря гида и трансп.
-onst toLocalDate = (val) => {
+const toLocalDate = (val) => {
   const s =
     typeof val === "string"
       ? val
