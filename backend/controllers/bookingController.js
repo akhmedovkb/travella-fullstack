@@ -109,7 +109,7 @@ const createBooking = async (req, res) => {
   }
 };
 
-// Брони провайдера: показываем, кто сделал запрос (клиент или поставщик)
+// Брони провайдера (гид/транспорт) — только реальные поля БД
 const getProviderBookings = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -117,50 +117,36 @@ const getProviderBookings = async (req, res) => {
     const q = await pool.query(
       `
       SELECT
-        b.id, b.service_id, b.provider_id, b.client_id, b.status,
-        b.client_message, b.attachments, b.provider_price, b.provider_note,
-        b.created_at, b.updated_at,
+        b.*,
+        -- даты брони
+        ARRAY_AGG(bd.date::date ORDER BY bd.date) AS dates,
 
-        -- все даты в брони
-        (
-          SELECT array_agg(d.date::date ORDER BY d.date)
-          FROM booking_dates d
-          WHERE d.booking_id = b.id
-        ) AS dates,
+        -- инициатор-бронировщик (клиент)
+        c.id          AS requester_client_id,
+        c.name        AS requester_client_name,
+        c.phone       AS requester_client_phone,
+        c.email       AS requester_client_email,
+        c.telegram    AS requester_client_telegram,
+        c.location    AS requester_client_location,
+        c.avatar_url  AS requester_client_avatar_url,
 
-        s.title AS service_title,
-
-        -- данные клиента (если автор — клиент)
-        c.id      AS client_id,
-        c.name    AS client_name,
-        c.phone   AS client_phone,
-        c.address AS client_address,
-        c.telegram AS client_telegram,
-
-        -- данные поставщика (если автор — поставщик)
-        p.id      AS author_provider_id,
-        p.name    AS author_provider_name,
-        p.phone   AS author_provider_phone,
-        p.address AS author_provider_address,
-        p.social  AS author_provider_social,
-        p.type    AS author_provider_type,
-
-        -- сводные поля «кто запросил»
-        CASE WHEN c.id IS NOT NULL THEN 'client' ELSE 'provider' END AS requester_role,
-        COALESCE(c.id,      p.id)      AS requester_id,
-        COALESCE(c.name,    p.name)    AS requester_name,
-        COALESCE(c.phone,   p.phone)   AS requester_phone,
-        COALESCE(c.address, p.address) AS requester_address,
-        COALESCE(c.telegram, p.social) AS requester_telegram,
-        CASE WHEN c.id IS NOT NULL THEN NULL ELSE p.type END AS requester_provider_type
+        -- сам провайдер, к которому пришла бронь (для отображения/контекста)
+        p.id          AS provider_profile_id,
+        p.name        AS provider_name,
+        p.type        AS provider_type,
+        p.phone       AS provider_phone,
+        p.email       AS provider_email,
+        p.social      AS provider_social,     -- у providers телеграм лежит в social
+        p.address     AS provider_address,
+        p.location    AS provider_location,
+        p.photo       AS provider_photo
 
       FROM bookings b
-      LEFT JOIN services  s ON s.id = b.service_id
-      LEFT JOIN clients   c ON c.id = b.client_id
-      -- если client найден, до поставщика не джойним, чтобы не плодить дублей
-      LEFT JOIN providers p ON p.id = b.client_id AND c.id IS NULL
-
+      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+      LEFT JOIN clients  c       ON c.id = b.client_id
+      LEFT JOIN providers p      ON p.id = b.provider_id
       WHERE b.provider_id = $1
+      GROUP BY b.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
       `,
       [providerId]
@@ -172,6 +158,7 @@ const getProviderBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Брони клиента (мой кабинет)
 const getMyBookings = async (req, res) => {
