@@ -1,344 +1,226 @@
 // backend/controllers/bookingController.js
 const pool = require("../db");
 
-/** ================== УТИЛИТЫ ДАТ ================== */
-/** Нормализуем массив дат в ['YYYY-MM-DD'] с дедупликацией */
-function normalizeDates(arr) {
-  const seen = new Set();
-  return (Array.isArray(arr) ? arr : [])
-    .map((x) => String(x).slice(0, 10))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .filter((d) => {
-      const k = d;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+// локальные хелперы
+const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+const normYMD = (s) => String(s).slice(0, 10); // "YYYY-MM-DD"
+
+async function getProviderIdByService(serviceId) {
+  const q = await pool.query("SELECT provider_id FROM services WHERE id=$1", [serviceId]);
+  return q.rows[0]?.provider_id || null;
 }
+
+// Проверка доступности набора дат для провайдера
+async function isDatesFree(providerId, ymdList) {
+  if (!ymdList.length) return false;
+
+  // 1) НЕ входят в ручные блокировки
+  const q1 = await pool.query(
+    `SELECT day::date AS d
+       FROM provider_blocked_dates
+      WHERE provider_id=$1 AND day = ANY($2::date[])`,
+    [providerId, ymdList]
+  );
+  if (q1.rowCount) return false;
+
+  // 2) НЕ пересекаются с активными/ожидающими бронями
+  const q2 = await pool.query(
+    `SELECT bd.date::date AS d
+       FROM booking_dates bd
+       JOIN bookings b ON b.id = bd.booking_id
+      WHERE b.provider_id=$1
+        AND b.status IN ('pending','active')
+        AND bd.date = ANY($2::date[])`,
+    [providerId, ymdList]
+  );
+  if (q2.rowCount) return false;
+
+  return true;
+}
+
+// ====== API ======
 
 /**
- * Проверяем, что все даты свободны у провайдера:
- * — нет пересечений с активными/ожидающими бронями
- * — нет пересечений с заблокированными провайдером датами
- * Бросает ошибку { status:409, conflicts:[...]} при конфликте.
+ * POST /api/bookings
+ * body: { service_id?, provider_id?, dates: [YYYY-MM-DD], message?, attachments?: [{name,type,dataUrl}] }
+ * Требуется токен (клиент/провайдер). client_id берём из токена.
  */
-async function assertDatesFree(providerId, dates, client) {
-  const norm = normalizeDates(dates);
-  if (!norm.length) return norm;
+const createBooking = async (req, res) => {
+  try {
+    const clientId = req.user?.id; // в проекте токен содержит { id }
+    if (!clientId) return res.status(401).json({ message: "Требуется авторизация" });
 
-  const clash = await client.query(
-    `
-      WITH wanted AS (SELECT UNNEST($2::date[]) AS d)
-      SELECT w.d::text
-      FROM wanted w
-      WHERE EXISTS (
-        SELECT 1
-        FROM booking_dates bd
-        JOIN bookings b ON b.id = bd.booking_id
+    const { service_id, provider_id: pFromBody, dates, message, attachments } = req.body || {};
+    let providerId = pFromBody || null;
+
+    if (!providerId && service_id) {
+      providerId = await getProviderIdByService(service_id);
+    }
+    if (!providerId) return res.status(400).json({ message: "Не указан provider_id / service_id" });
+
+    const days = toArray(dates).map(normYMD).filter(Boolean);
+    if (!days.length) return res.status(400).json({ message: "Не указаны даты" });
+
+    // валидация доступности
+    const ok = await isDatesFree(providerId, days);
+    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+
+    // создаём бронь
+    const ins = await pool.query(
+      `INSERT INTO bookings (service_id, provider_id, client_id, status, client_message, attachments)
+       VALUES ($1,$2,$3,'pending',$4,$5::jsonb) RETURNING id, status`,
+      [service_id ?? null, providerId, clientId, message ?? null, JSON.stringify(attachments ?? [])]
+    );
+    const bookingId = ins.rows[0].id;
+
+    // добавляем даты
+    for (const d of days) {
+      await pool.query(
+        `INSERT INTO booking_dates (booking_id, date) VALUES ($1,$2::date)`,
+        [bookingId, d]
+      );
+    }
+
+    res.status(201).json({ id: bookingId, status: "pending", dates: days });
+  } catch (err) {
+    console.error("createBooking error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Брони провайдера
+const getProviderBookings = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    const q = await pool.query(
+      `SELECT b.*, array_agg(bd.date::date ORDER BY bd.date) AS dates
+         FROM bookings b
+         LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = $1
-          AND b.status IN ('pending','active')
-          AND bd.date::date = w.d
-      )
-      OR EXISTS (
-        SELECT 1
-        FROM provider_blocked_dates pbd
-        WHERE pbd.provider_id = $1
-          AND pbd.date::date = w.d
-      )
-    `,
-    [providerId, norm]
-  );
-
-  if (clash.rows.length) {
-    const bad = clash.rows.map((r) => r.d);
-    const err = new Error(`Даты недоступны: ${bad.join(", ")}`);
-    err.status = 409;
-    err.conflicts = bad;
-    throw err;
-  }
-  return norm;
-}
-
-/** ================== КОНТРОЛЛЕРЫ ================== */
-
-// Клиент создаёт бронь (обычно после оффера/принятия)
-// Точка входа: POST /api/bookings
-// Body: { service_id, request_id?, price?, currency?, details? }
-exports.createBooking = async (req, res) => {
-  const clientId = req.user?.id;
-  const role = req.user?.role;
-  if (!clientId || role !== "client") {
-    return res.status(403).json({ message: "Only client can create bookings" });
-  }
-
-  const { service_id, request_id, price, currency, details } = req.body || {};
-  if (!service_id) {
-    return res.status(400).json({ message: "service_id is required" });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // Проверяем услугу и провайдера
-    const svc = await client.query(
-      "SELECT id, provider_id, title, category FROM services WHERE id=$1",
-      [service_id]
-    );
-    if (!svc.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Service not found" });
-    }
-    const providerId = svc.rows[0].provider_id;
-
-    let proposal = null;
-    if (request_id) {
-      // Проверяем запрос и, если есть proposal, используем его как details/цену по умолчанию
-      const rq = await client.query(
-        `SELECT r.*, s.provider_id
-         FROM requests r
-         JOIN services s ON s.id = r.service_id
-         WHERE r.id=$1 AND r.client_id=$2`,
-        [request_id, clientId]
-      );
-      if (!rq.rowCount) {
-        await client.query("ROLLBACK");
-        return res.status(404).json({ message: "Request not found" });
-      }
-      if (rq.rows[0].service_id !== service_id) {
-        await client.query("ROLLBACK");
-        return res
-          .status(400)
-          .json({ message: "request.service_id mismatch with service_id" });
-      }
-      proposal = rq.rows[0].proposal || null;
-    }
-
-    // Берём поля: приоритет body > proposal > null
-    const finalPrice =
-      price != null
-        ? price
-        : proposal?.price != null
-        ? proposal.price
-        : null;
-
-    const finalCurrency = currency ?? (proposal?.currency ?? null);
-
-    const finalDetails = (() => {
-      // Складываем детали из body.details и proposal, proposal — как baseline
-      const base = (proposal && typeof proposal === "object") ? proposal : {};
-      if (details && typeof details === "object") {
-        return { ...base, ...details };
-      }
-      return Object.keys(base).length ? base : null;
-    })();
-
-    // Выцепляем даты из body.details / proposal / (их слияния)
-    const candidateDates =
-      (details && details.dates) ||
-      (proposal && proposal.dates) ||
-      (finalDetails && finalDetails.dates) ||
-      [];
-
-    // Проверяем конфликты, если даты передали
-    const safeDates = await assertDatesFree(providerId, candidateDates, client);
-
-    // Создаём бронь
-    const ins = await client.query(
-      `INSERT INTO bookings
-        (request_id, service_id, client_id, provider_id, status, price, currency, details)
-       VALUES ($1,$2,$3,$4,'pending', $5, $6, $7)
-       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
-      [
-        request_id || null,
-        service_id,
-        clientId,
-        providerId,
-        finalPrice,
-        finalCurrency,
-        finalDetails,
-      ]
-    );
-
-    const booking = ins.rows[0];
-
-    // Если даты есть — фиксируем их как занятые для этой брони
-    if (safeDates.length) {
-      await client.query(
-        `
-          INSERT INTO booking_dates (booking_id, date)
-          SELECT $1, d::date
-          FROM UNNEST($2::date[]) t(d)
-        `,
-        [booking.id, safeDates]
-      );
-    }
-
-    await client.query("COMMIT");
-    return res.status(201).json(booking);
-  } catch (e) {
-    await client.query("ROLLBACK");
-    if (e.status === 409) {
-      return res.status(409).json({ message: e.message, conflicts: e.conflicts });
-    }
-    console.error(e);
-    return res.status(500).json({ message: "createBooking error" });
-  } finally {
-    client.release();
-  }
-};
-
-// Клиент: список своих броней
-exports.listMyBookings = async (req, res) => {
-  const userId = req.user?.id;
-  const role = req.user?.role;
-  if (!userId || role !== "client") {
-    return res.status(403).json({ message: "Only client can view own bookings" });
-  }
-
-  try {
-    const q = await pool.query(
-      `SELECT b.*, s.title AS service_title, s.category
-       FROM bookings b
-       JOIN services s ON s.id = b.service_id
-       WHERE b.client_id=$1
-       ORDER BY b.created_at DESC`,
-      [userId]
-    );
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "listMyBookings error" });
-  }
-};
-
-// Провайдер: список броней по его услугам
-exports.listProviderBookings = async (req, res) => {
-  const providerId = req.user?.id;
-  const role = req.user?.role;
-  if (!providerId || role !== "provider") {
-    return res.status(403).json({ message: "Only provider can view provider bookings" });
-  }
-
-  try {
-    const q = await pool.query(
-      `SELECT b.*, s.title AS service_title, s.category
-       FROM bookings b
-       JOIN services s ON s.id = b.service_id
-       WHERE b.provider_id=$1
-       ORDER BY b.created_at DESC`,
+        GROUP BY b.id
+        ORDER BY b.created_at DESC NULLS LAST`,
       [providerId]
     );
     res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "listProviderBookings error" });
+  } catch (err) {
+    console.error("getProviderBookings error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// Провайдер подтверждает бронь -> status: active
-exports.confirm = async (req, res) => {
-  const providerId = req.user?.id;
-  const role = req.user?.role;
-  if (!providerId || role !== "provider") {
-    return res.status(403).json({ message: "Only provider can confirm bookings" });
-  }
-
-  const { id } = req.params;
+// Брони клиента
+const getMyBookings = async (req, res) => {
   try {
-    const upd = await pool.query(
-      `UPDATE bookings
-         SET status='active'
-       WHERE id=$1 AND provider_id=$2 AND status='pending'
-       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
-      [id, providerId]
-    );
-    if (!upd.rowCount) {
-      return res.status(404).json({ message: "Booking not found or already processed" });
-    }
-    res.json(upd.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "confirm error" });
-  }
-};
-
-// Провайдер отклоняет бронь -> status: rejected
-exports.reject = async (req, res) => {
-  const providerId = req.user?.id;
-  const role = req.user?.role;
-  if (!providerId || role !== "provider") {
-    return res.status(403).json({ message: "Only provider can reject bookings" });
-  }
-
-  const { id } = req.params;
-  const { reason } = req.body || {};
-  try {
-    const upd = await pool.query(
-      `UPDATE bookings
-         SET status='rejected',
-             details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
-               'rejected', jsonb_build_object('by','provider','reason',COALESCE($3,''),'ts',now())
-             )
-       WHERE id=$1 AND provider_id=$2 AND status IN ('pending')
-       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
-      [id, providerId, reason || ""]
-    );
-    if (!upd.rowCount) {
-      return res.status(404).json({ message: "Booking not found or already processed" });
-    }
-    res.json(upd.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "reject error" });
-  }
-};
-
-// Клиент или провайдер отменяет -> status: cancelled
-exports.cancel = async (req, res) => {
-  const userId = req.user?.id;
-  const role = req.user?.role; // 'client' | 'provider'
-  if (!userId || !['client','provider'].includes(role)) {
-    return res.status(403).json({ message: "Unauthorized" });
-  }
-  const { id } = req.params;
-  const { reason } = req.body || {};
-
-  try {
-    // Проверим владение бронью
+    const clientId = req.user?.id;
     const q = await pool.query(
-      `SELECT id, client_id, provider_id, status FROM bookings WHERE id=$1`,
+      `SELECT b.*, array_agg(bd.date::date ORDER BY bd.date) AS dates,
+              p.name AS provider_name, s.title AS service_title
+         FROM bookings b
+         LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+         LEFT JOIN providers p ON p.id = b.provider_id
+         LEFT JOIN services  s ON s.id = b.service_id
+        WHERE b.client_id = $1
+        GROUP BY b.id, p.name, s.title
+        ORDER BY b.created_at DESC NULLS LAST`,
+      [clientId]
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error("getMyBookings error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Принять: POST /api/bookings/:id/accept  { price?: number, note?: string }
+const acceptBooking = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    const id = Number(req.params.id);
+    const { price, note } = req.body || {};
+
+    // проверим владельца
+    const own = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].provider_id !== providerId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    // финальная проверка на доступность
+    const dQ = await pool.query(`SELECT date::date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+    const days = dQ.rows.map(r => normYMD(r.d));
+    const ok = await isDatesFree(providerId, days);
+    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+
+    await pool.query(
+      `UPDATE bookings
+          SET status='active',
+              provider_price = COALESCE($1, provider_price),
+              provider_note  = COALESCE($2, provider_note),
+              updated_at = NOW()
+        WHERE id=$3`,
+      [price ?? null, note ?? null, id]
+    );
+    res.json({ ok: true, status: "active" });
+  } catch (err) {
+    console.error("acceptBooking error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Отклонить: POST /api/bookings/:id/reject { reason?: string }
+const rejectBooking = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    const id = Number(req.params.id);
+    const { reason } = req.body || {};
+
+    const own = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].provider_id !== providerId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    await pool.query(
+      `UPDATE bookings
+          SET status='rejected', provider_note=COALESCE($1, provider_note), updated_at=NOW()
+        WHERE id=$2`,
+      [reason ?? null, id]
+    );
+    res.json({ ok: true, status: "rejected" });
+  } catch (err) {
+    console.error("rejectBooking error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// Отмена клиентом: POST /api/bookings/:id/cancel
+const cancelBooking = async (req, res) => {
+  try {
+    const clientId = req.user?.id;
+    const id = Number(req.params.id);
+
+    const own = await pool.query(`SELECT client_id FROM bookings WHERE id=$1`, [id]);
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].client_id !== clientId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    await pool.query(
+      `UPDATE bookings SET status='cancelled', updated_at=NOW() WHERE id=$1`,
       [id]
     );
-    if (!q.rowCount) return res.status(404).json({ message: "Booking not found" });
-
-    const b = q.rows[0];
-    const isOwner =
-      (role === "client" && b.client_id === userId) ||
-      (role === "provider" && b.provider_id === userId);
-    if (!isOwner) return res.status(403).json({ message: "Forbidden" });
-
-    // Разрешим отменять из любых "живых" статусов
-    const upd = await pool.query(
-      `UPDATE bookings
-         SET status='cancelled',
-             details = COALESCE(details, '{}'::jsonb) || jsonb_build_object(
-               'cancel', jsonb_build_object('by',$2,'reason',COALESCE($3,''),'ts',now())
-             )
-       WHERE id=$1 AND status IN ('pending','active')
-       RETURNING id, request_id, service_id, client_id, provider_id, status, price, currency, details, created_at`,
-      [id, role, reason || ""]
-    );
-    if (!upd.rowCount) {
-      return res.status(409).json({ message: "Booking already finished" });
-    }
-    res.json(upd.rows[0]);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "cancel error" });
+    res.json({ ok: true, status: "cancelled" });
+  } catch (err) {
+    console.error("cancelBooking error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// Алиасы на случай, если где-то уже используются старые имена
-exports.getMyBookings = exports.listMyBookings;
-exports.getProviderBookings = exports.listProviderBookings;
+module.exports = {
+  createBooking,
+  getProviderBookings,
+  getMyBookings,
+  acceptBooking,
+  rejectBooking,
+  cancelBooking,
+};
