@@ -82,17 +82,14 @@ function normalizeTelegram(v) {
   let s = String(v).trim();
   if (!s) return null;
 
-  // убираем пробелы внутри (на случай переносов строк/копипаста)
   s = s.replace(/\s+/g, "");
 
-  // tg://resolve?domain=username
   const mResolve = s.match(/tg:\/\/resolve\?domain=([\w\d_]+)/i);
   if (mResolve) {
     const u = mResolve[1];
     return { href: `https://t.me/${u}`, label: `@${u}` };
   }
 
-  // инвайты/группы (+XXXX или joinchat/XXXX) — просто кликабельная t.me-ссылка
   const mInvite = s.match(
     /(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/(joinchat\/[A-Za-z0-9_-]+|\+[A-Za-z0-9_-]+)/i
   );
@@ -101,7 +98,6 @@ function normalizeTelegram(v) {
     return { href: `https://t.me/${p}`, label: `t.me/${p}` };
   }
 
-  // обычные ссылки на пользователя
   const mUrl = s.match(
     /(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/(@?[\w\d_]+)/i
   );
@@ -110,17 +106,14 @@ function normalizeTelegram(v) {
     return { href: `https://t.me/${u}`, label: `@${u}` };
   }
 
-  // просто никнейм или с @
   const mUser = s.match(/^@?([\w\d_]{3,})$/);
   if (mUser) {
     const u = mUser[1];
     return { href: `https://t.me/${u}`, label: `@${u}` };
   }
 
-  // запасной вариант — пытаемся открыть как есть
   return { href: `https://t.me/${s.replace(/^@/, "")}`, label: s };
 }
-
 
 function toDataUrl(b64OrDataUrl, mime = "image/jpeg") {
   if (!b64OrDataUrl) return null;
@@ -184,9 +177,6 @@ function buildDates(d = {}) {
   if (hotelOut) return String(hotelOut);
   return null;
 }
-
-/* ============ Портал (подсказка) ============ */
-
 
 /* ======== provider fetch (cache + fallbacks) ======== */
 const providerCache = new Map();
@@ -290,8 +280,6 @@ async function fetchClientRequestsSafe(myId) {
   }
   return [];
 }
-
-
 
 /* ===================== Локальные черновики (без бэка) ===================== */
 const draftsKey = (id) => (id ? `client:req:drafts:${id}` : `client:req:drafts:anon`);
@@ -429,7 +417,6 @@ function FavoritesList({
   const start = (current - 1) * perPage;
   const pageItems = items.slice(start, start + perPage);
 
-  // helper для id услуги внутри элемента избранного
   const getServiceId = (row) => {
     const svc = row?.service || row || {};
     return (
@@ -467,7 +454,6 @@ function FavoritesList({
             })}
           </div>
 
-          {/* Пагинация */}
           {total > perPage && (
             <div className="flex items-center justify-center gap-2 mt-6">
               <button
@@ -514,7 +500,7 @@ export default function ClientDashboard() {
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // минутный таймер для «ровного» отсчёта без мерцаний
+  // минутный таймер — для «ровного» отсчёта без мерцаний
   const [nowMin, setNowMin] = useState(() => Math.floor(Date.now() / 60000));
   useEffect(() => {
     const id = setInterval(() => setNowMin(Math.floor(Date.now() / 60000)), 60000);
@@ -563,31 +549,20 @@ export default function ClientDashboard() {
 
   const [actingReqId, setActingReqId] = useState(null);
 
-  const [bookingUI, setBookingUI] = useState({ open: false, serviceId: null });
-  
-  // Quick Request (единый модал)
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrServiceId, setQrServiceId] = useState(null);
-  const [qrTitle, setQrTitle] = useState(""); // только для локального «черновика»
-  const [qrSending, setQrSending] = useState(false);
-
-  const [bkDate, setBkDate] = useState("");
-  const [bkTime, setBkTime] = useState("");
-  const [bkPax, setBkPax] = useState(1);
-  const [bkNote, setBkNote] = useState("");
-  const [bkSending, setBkSending] = useState(false);
-
   // мой id из профиля (для фильтрации/ключа черновиков)
   const [myId, setMyId] = useState(null);
 
   // удаление моих запросов
   const [delUI, setDelUI] = useState({ open: false, id: null, isDraft: false, sending: false });
 
-  // 🔴 Set of избранных serviceId (для сердечек и мгновенного hidden)
+  // избранные id для сердечка
   const [favIds, setFavIds] = useState(new Set());
 
-  // вытаскиваем типы поставщика в review
+  // подписка на типы поставщиков (для бейджей)
   const [authorProvTypes, setAuthorProvTypes] = useState({});
+
+  // рефреш для вкладки «Мои бронирования»
+  const [bookingsRefreshKey, setBookingsRefreshKey] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -597,7 +572,7 @@ export default function ClientDashboard() {
     setSearchParams(params, { replace: true });
   }, [activeTab, favPage]); // eslint-disable-line
 
-  // 🔁 NEW: keep React state in sync with URL query (so header links like ?tab=favorites work)
+  // synch state with URL params
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     const pageParamRaw = searchParams.get("page");
@@ -633,7 +608,7 @@ export default function ClientDashboard() {
     })();
   }, [t]);
 
-  // миграция «anon» черновиков в «мой» ключ, как только узнали myId
+  // миграция «anon» черновиков
   useEffect(() => {
     if (!myId) return;
     const anon = loadDrafts(null);
@@ -641,12 +616,11 @@ export default function ClientDashboard() {
       const mine = loadDrafts(myId);
       saveDrafts(myId, mergeRequests(mine, anon));
       saveDrafts(null, []);
-      // если открыт таб запросов — сразу подмерджим в стейт
       setRequests(prev => mergeRequests(prev, anon));
     }
   }, [myId]);
 
-  // загружаем статистику
+  // статистика
   useEffect(() => {
     (async () => {
       try {
@@ -661,97 +635,92 @@ export default function ClientDashboard() {
     })();
   }, []);
 
-  // загрузка данных табов + подмешивание черновиков
-useEffect(() => {
-  let cancelled = false;
+  // загрузка данных табов (+черновики), без «bookings»
+  useEffect(() => {
+    let cancelled = false;
 
-  (async () => {
-    try {
-      // ⚠️ Не включаем табовый спиннер для "bookings": этим табом управляет ClientBookings
-      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
-      if (isExternalTab) setLoadingTab(true);
+    (async () => {
+      try {
+        const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+        if (isExternalTab) setLoadingTab(true);
 
-      if (activeTab === "requests") {
-        const apiList = await fetchClientRequestsSafe(myId);
-        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-        if (!cancelled) setRequests(mergeRequests(apiList, drafts));
-      } else if (activeTab === "favorites") {
-        const data = await apiGet("/api/wishlist?expand=service");
-        const arr = Array.isArray(data) ? data : data?.items || [];
-        if (!cancelled) {
-          setFavorites(arr);
-          const maxPage = Math.max(1, Math.ceil(arr.length / 8));
-          setFavPage((p) => Math.min(Math.max(1, p), maxPage));
+        if (activeTab === "requests") {
+          const apiList = await fetchClientRequestsSafe(myId);
+          const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+          if (!cancelled) setRequests(mergeRequests(apiList, drafts));
+        } else if (activeTab === "favorites") {
+          const data = await apiGet("/api/wishlist?expand=service");
+          const arr = Array.isArray(data) ? data : data?.items || [];
+          if (!cancelled) {
+            setFavorites(arr);
+            const maxPage = Math.max(1, Math.ceil(arr.length / 8));
+            setFavPage((p) => Math.min(Math.max(1, p), maxPage));
+          }
+        }
+        // bookings — управляет сам <ClientBookings />
+      } catch {
+        if (activeTab === "favorites") setFavorites([]);
+        else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
+      } finally {
+        const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+        if (!cancelled && isExternalTab) setLoadingTab(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [activeTab, t, myId]);
+
+  // подгрузка типов провайдеров для заявок
+  useEffect(() => {
+    // уникальные providerId из заявок
+    const ids = Array.from(
+      new Set(
+        (requests || [])
+          .map((r) =>
+            r?.provider?.id ??
+            r?.service?.provider_id ?? r?.service?.providerId ??
+            r?.provider_id ?? r?.providerId ?? null
+          )
+          .filter(Boolean)
+          .map(Number)
+      )
+    );
+
+    const need = ids.filter((id) => !authorProvTypes[id]);
+    if (!need.length) return;
+
+    let cancelled = false;
+    (async () => {
+      const map = {};
+      for (const pid of need) {
+        try {
+          const p = await fetchProviderProfile(pid);
+          const d =
+            typeof p?.details === "string"
+              ? (() => {
+                  try { return JSON.parse(p.details); } catch { return {}; }
+                })()
+              : (p?.details || {});
+          const rawType =
+            p?.type ?? p?.provider_type ?? p?.category ??
+            d?.type ?? d?.provider_type ?? d?.category;
+
+          map[pid] =
+            providerTypeLabel(rawType, t) ||
+            t("roles.provider", { defaultValue: "Поставщик" });
+        } catch {
+          // ignore
         }
       }
-
-      // 👉 activeTab === "bookings" — ничего не делаем.
-      // Этим полностью занимается <ClientBookings /> внутри своего файла.
-    } catch {
-      if (activeTab === "favorites") setFavorites([]);
-      else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
-    } finally {
-      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
-      if (!cancelled && isExternalTab) setLoadingTab(false);
-    }
-  })();
-
-  return () => { cancelled = true; };
-}, [activeTab, t, myId]);
-
-
-  useEffect(() => {
-  // уникальные providerId из заявок
-  const ids = Array.from(
-    new Set(
-      (requests || [])
-        .map((r) =>
-          r?.provider?.id ??
-          r?.service?.provider_id ?? r?.service?.providerId ??
-          r?.provider_id ?? r?.providerId ?? null
-        )
-        .filter(Boolean)
-        .map(Number)
-    )
-  );
-
-  // тянем только тех, которых ещё нет в authorProvTypes
-  const need = ids.filter((id) => !authorProvTypes[id]);
-  if (!need.length) return;
-
-  let cancelled = false;
-  (async () => {
-    const map = {};
-    for (const pid of need) {
-      try {
-        const p = await fetchProviderProfile(pid);
-        const d =
-          typeof p?.details === "string"
-            ? (() => {
-                try { return JSON.parse(p.details); } catch { return {}; }
-              })()
-            : (p?.details || {});
-        const rawType =
-          p?.type ?? p?.provider_type ?? p?.category ??
-          d?.type ?? d?.provider_type ?? d?.category;
-
-        map[pid] =
-          providerTypeLabel(rawType, t) ||
-          t("roles.provider", { defaultValue: "Поставщик" });
-      } catch {
-        // no-op
+      if (!cancelled && Object.keys(map).length) {
+        setAuthorProvTypes((prev) => ({ ...prev, ...map }));
       }
-    }
-    if (!cancelled && Object.keys(map).length) {
-      setAuthorProvTypes((prev) => ({ ...prev, ...map }));
-    }
-  })();
+    })();
 
-  return () => { cancelled = true; };
-}, [requests, t, authorProvTypes]);
+    return () => { cancelled = true; };
+  }, [requests, t, authorProvTypes]);
 
-
-  // подгружаем ids избранного (для сердечка) при входе на таб
+  // ids избранного для сердечек
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -765,35 +734,34 @@ useEffect(() => {
     return () => { cancelled = true; };
   }, [activeTab]);
 
-  // слушаем событие мгновенного создания (в т.ч. из маркетплейса) + синхронизация между вкладками
+  // синхронизация заявок между вкладками/окнами
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  const onCreated = async () => {
-    try {
-      const apiList = await fetchClientRequestsSafe(myId);
-      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-      if (mounted) setRequests(mergeRequests(apiList, drafts));
-    } catch {}
-  };
+    const onCreated = async () => {
+      try {
+        const apiList = await fetchClientRequestsSafe(myId);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        if (mounted) setRequests(mergeRequests(apiList, drafts));
+      } catch {}
+    };
 
-  const onStorage = (ev) => {
-    if (!ev.key) return;
-    if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
-      const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
-      if (mounted) setRequests(prev => mergeRequests(prev.filter(x => !x.is_draft), drafts));
-    }
-  };
+    const onStorage = (ev) => {
+      if (!ev.key) return;
+      if (ev.key === draftsKey(myId) || ev.key === draftsKey(null)) {
+        const drafts = [...loadDrafts(myId), ...loadDrafts(null)];
+        if (mounted) setRequests(prev => mergeRequests(prev.filter(x => !x.is_draft), drafts));
+      }
+    };
 
-  window.addEventListener("request:created", onCreated);
-  window.addEventListener("storage", onStorage);
-  return () => {
-    mounted = false;
-    window.removeEventListener("request:created", onCreated);
-    window.removeEventListener("storage", onStorage);
-  };
-}, [myId]);
-
+    window.addEventListener("request:created", onCreated);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener("request:created", onCreated);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [myId]);
 
   const handleUploadClick = () => fileRef.current?.click();
   const handleFileChange = async (e) => {
@@ -823,9 +791,9 @@ useEffect(() => {
       else if (res?.avatar_url) { setAvatarServerUrl(res.avatar_url); setAvatarBase64(null); }
       setRemoveAvatar(false);
     } catch {
-   setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
-   tError(t("errors.profile_save") || "Не удалось сохранить профиль", { autoClose: 2000 });
- }
+      setError(t("errors.profile_save", { defaultValue: "Не удалось сохранить профиль" }));
+      tError(t("errors.profile_save") || "Не удалось сохранить профиль", { autoClose: 2000 });
+    }
     finally { setSavingProfile(false); }
   };
 
@@ -836,21 +804,21 @@ useEffect(() => {
       await apiPost("/api/clients/change-password", { password: newPassword });
       setMessage(t("client.dashboard.passwordChanged", { defaultValue: "Пароль изменён" }));
       tSuccess(t("client.dashboard.passwordChanged") || "Пароль изменён", { autoClose: 1800 });
-     } catch {
-   setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
-   tError(t("errors.password_change") || "Не удалось изменить пароль", { autoClose: 2000 });
- }
+    } catch {
+      setError(t("errors.password_change", { defaultValue: "Не удалось изменить пароль" }));
+      tError(t("errors.password_change") || "Не удалось изменить пароль", { autoClose: 2000 });
+    }
     finally { setChangingPass(false); }
   };
 
-   const handleLogout = () => {
-   try {
-     localStorage.removeItem("clientToken");
-     localStorage.removeItem("token");
-   } finally {
-     window.location.href = "/client/login";
-   }
- };
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("clientToken");
+      localStorage.removeItem("token");
+    } finally {
+      window.location.href = "/client/login";
+    }
+  };
 
   // старый remove по itemId (оставляю — может вызывать из других мест)
   const handleRemoveFavorite = async (itemId) => {
@@ -860,192 +828,178 @@ useEffect(() => {
     tInfo(t("favorites.removed_toast") || "Удалено из избранного", { autoClose: 1500 });
   };
 
-  // 🔴 новый тоггл по serviceId для сердечка ServiceCard
+  // тоггл по serviceId для сердечка ServiceCard
   const toggleFavoriteClient = async (serviceId) => {
-  const key = String(serviceId || "");
-
-  if (!key) {
-    tError(t("toast.favoriteError") || "Не удалось изменить избранное", { autoClose: 2000 });
-    setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
-    return;
-  }
-
-  try {
-    // сервер может вернуть либо { added: true/false }, либо завернуть это в data
-    const res = await apiPost("/api/wishlist/toggle", { serviceId });
-    const added = !!(res?.added ?? res?.data?.added);
-
-    // тост, как у провайдера
-    (added ? tSuccess : tInfo)(
-      added
-        ? (t("favorites.added_toast") || "Добавлено в избранное")
-        : (t("favorites.removed_toast") || "Удалено из избранного"),
-      { autoClose: 1800, toastId: `fav-${key}-${added ? "add" : "rem"}` }
-    );
-
-    // синхронизируем Set избранных id
-    setFavIds((prev) => {
-      const next = new Set(prev);
-      if (added) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-
-    // при снятии избранного — удаляем карточку из списка и корректируем пагинацию
-    if (!added) {
-      let newLen = 0;
-      setFavorites((prev) => {
-        const updated = prev.filter((row) => {
-          const sid =
-            row?.service?.id ??
-            row?.service_id ??
-            row?.serviceId ??
-            row?.id ??
-            null;
-          return String(sid) !== key;
-        });
-        newLen = updated.length;
-        return updated;
-      });
-
-      setFavPage((p) => {
-        const maxPage = Math.max(1, Math.ceil(newLen / FAV_PAGE_SIZE));
-        return Math.min(p, maxPage);
-      });
-    }
-
-    // для старого UI, где есть message/error-лента — оставим текст
-    setMessage(
-      added
-        ? t("messages.favorite_added", { defaultValue: "Добавлено в избранное" })
-        : t("messages.favorite_removed", { defaultValue: "Удалено из избранного" })
-    );
-  } catch (err) {
-    // аккуратно разбираем ошибку
-    const status =
-      err?.status ||
-      err?.response?.status ||
-      err?.data?.status ||
-      (typeof err?.message === "string" && /(^|\\s)4\\d\\d(\\s|$)/.test(err.message) ? 400 : undefined);
-
-    if (status === 401 || status === 403) {
-      tInfo(t("auth.login_required") || "Войдите, чтобы использовать избранное", {
-        autoClose: 2200,
-        toastId: "login-required",
-      });
-    } else {
+    const key = String(serviceId || "");
+    if (!key) {
       tError(t("toast.favoriteError") || "Не удалось изменить избранное", { autoClose: 2000 });
-    }
-
-    setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
-  }
-};
-
-  // quick request из «Избранного» (+локальный черновик) — оставил как было
-  // quick request из «Избранного» — без локальных черновиков и без dispatch события
-const handleQuickRequest = async (serviceId, meta = {}) => {
-  if (!serviceId) {
-    setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
-    return;
-  }
-
-  const note = window.prompt(
-    t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
-  ) || undefined;
-
-  try {
-    await apiPost("/api/requests", { service_id: serviceId, note });
-    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
-    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
-
-    setActiveTab("requests");
-
-    // Обновляем список из API (без создания локальных копий)
-    const apiList = await fetchClientRequestsSafe(myId);
-    const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-    setRequests(mergeRequests(apiList, drafts));
-  } catch (err) {
-    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
-
-    const status =
-      err?.status || err?.response?.status || err?.data?.status;
-    const code =
-      err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
-    const msg = String(code).toLowerCase();
-
-    // Повторный запрос на ту же услугу
-    if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
-      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
-        autoClose: 2000,
-        toastId: "req-already",
-      });
+      setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
       return;
     }
 
-    if (msg.includes("self_request_forbidden")) {
-      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
-        toastId: "self-req",
-        autoClose: 2200
+    try {
+      const res = await apiPost("/api/wishlist/toggle", { serviceId });
+      const added = !!(res?.added ?? res?.data?.added);
+
+      (added ? tSuccess : tInfo)(
+        added
+          ? (t("favorites.added_toast") || "Добавлено в избранное")
+          : (t("favorites.removed_toast") || "Удалено из избранного"),
+        { autoClose: 1800, toastId: `fav-${key}-${added ? "add" : "rem"}` }
+      );
+
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        if (added) next.add(key);
+        else next.delete(key);
+        return next;
       });
-    } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
-        toastId: "login-required",
-        autoClose: 2000
-      });
-    } else {
-      tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+
+      if (!added) {
+        let newLen = 0;
+        setFavorites((prev) => {
+          const updated = prev.filter((row) => {
+            const sid =
+              row?.service?.id ??
+              row?.service_id ??
+              row?.serviceId ??
+              row?.id ??
+              null;
+            return String(sid) !== key;
+          });
+          newLen = updated.length;
+          return updated;
+        });
+
+        setFavPage((p) => {
+          const maxPage = Math.max(1, Math.ceil(newLen / FAV_PAGE_SIZE));
+          return Math.min(p, maxPage);
+        });
+      }
+
+      setMessage(
+        added
+          ? t("messages.favorite_added", { defaultValue: "Добавлено в избранное" })
+          : t("messages.favorite_removed", { defaultValue: "Удалено из избранного" })
+      );
+    } catch (err) {
+      const status =
+        err?.status ||
+        err?.response?.status ||
+        err?.data?.status ||
+        (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
+
+      if (status === 401 || status === 403) {
+        tInfo(t("auth.login_required") || "Войдите, чтобы использовать избранное", {
+          autoClose: 2200,
+          toastId: "login-required",
+        });
+      } else {
+        tError(t("toast.favoriteError") || "Не удалось изменить избранное", { autoClose: 2000 });
+      }
+
+      setError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }));
+    }
+  };
+
+  // quick request из «Избранного»
+  const handleQuickRequest = async (serviceId, meta = {}) => {
+    if (!serviceId) {
+      setError(t("errors.service_unknown", { defaultValue: "Не удалось определить услугу" }));
+      return;
+    }
+
+    const note = window.prompt(
+      t("common.note_optional", { defaultValue: "Комментарий к запросу (необязательно):" })
+    ) || undefined;
+
+    try {
+      await apiPost("/api/requests", { service_id: serviceId, note });
+      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+
+      setActiveTab("requests");
+
+      const apiList = await fetchClientRequestsSafe(myId);
+      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+      setRequests(mergeRequests(apiList, drafts));
+    } catch (err) {
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+
+      const status =
+        err?.status || err?.response?.status || err?.data?.status;
+      const code =
+        err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
+      const msg = String(code).toLowerCase();
+
+      if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
+        tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
+          autoClose: 2000,
+          toastId: "req-already",
+        });
+        return;
+      }
+
+      if (msg.includes("self_request_forbidden")) {
+        tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
+          toastId: "self-req",
+          autoClose: 2200,
+        });
+      } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+        tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+          toastId: "login-required",
+          autoClose: 2000,
+        });
+      } else {
+        tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+      }
+    }
+  };
+
+  // удаление заявки
+  function askDeleteRequest(id) {
+    if (!id) return;
+    const isDraftFromState = Array.isArray(requests) && requests.some(
+      (x) => String(x.id) === String(id) && x.is_draft
+    );
+    const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
+    setDelUI({ open: true, id, isDraft, sending: false });
+  }
+
+  async function confirmDeleteRequest() {
+    if (!delUI.id) return;
+    setDelUI((s) => ({ ...s, sending: true }));
+    try {
+      if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
+        const keyId = myId || null;
+        const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
+        saveDrafts(keyId, updated);
+        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
+      } else {
+        await apiDelete(`/api/requests/${delUI.id}`);
+        setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
+      }
+    } catch (err) {
+      const status = err?.status || err?.response?.status;
+      const msgText = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
+      if (status === 404 || msgText.includes("not found")) {
+        setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
+        setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
+        tInfo(t("client.dashboard.requestDeleted") || "Заявка удалена (уже была удалена)", {
+          autoClose: 1600, toastId: `req-del-${delUI.id}-404`
+        });
+      } else {
+        setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
+        tError(t("client.dashboard.requestDeleteFailed") || "Не удалось удалить заявку", { autoClose: 1800 });
+      }
+    } finally {
+      setDelUI({ open: false, id: null, isDraft: false, sending: false });
     }
   }
-};
-
-  
-  // Удаление заявки (API или локальный черновик)
-   function askDeleteRequest(id) {
-       if (!id) return;
-       // черновик — если id начинается с "d_" ИЛИ в текущем списке есть флаг is_draft
-       const isDraftFromState = Array.isArray(requests) && requests.some(
-         (x) => String(x.id) === String(id) && x.is_draft
-       );
-       const isDraft = String(id).startsWith("d_") || !!isDraftFromState;
-       setDelUI({ open: true, id, isDraft, sending: false });
-     }
-
-    async function confirmDeleteRequest() {
-   if (!delUI.id) return;
-   setDelUI((s) => ({ ...s, sending: true }));
-   try {
-     // локальный черновик — удаляем без API
-     if (delUI.isDraft || String(delUI.id).startsWith("d_")) {
-       const keyId = myId || null;
-       const updated = loadDrafts(keyId).filter((d) => String(d.id) !== String(delUI.id));
-       saveDrafts(keyId, updated);
-       setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
-       setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
-       tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
-     } else {
-       await apiDelete(`/api/requests/${delUI.id}`);
-       setRequests((prev) => prev.filter((x) => x.id !== delUI.id));
-       setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
-       tSuccess(t("client.dashboard.requestDeleted") || "Заявка удалена", { autoClose: 1500 });
-     }
-   } catch (err) {
-     const status = err?.status || err?.response?.status;
-     const msgText = (err?.response?.data?.error || err?.data?.error || err?.message || "").toString().toLowerCase();
-     // если на бэке 404 — считаем, что запись уже удалена → убираем из UI и показываем инфо-тост
-     if (status === 404 || msgText.includes("not found")) {
-       setRequests((prev) => prev.filter((x) => String(x.id) !== String(delUI.id)));
-       setMessage(t("client.dashboard.requestDeleted", { defaultValue: "Заявка удалена" }));
-       tInfo(t("client.dashboard.requestDeleted") || "Заявка удалена (уже была удалена)", {
-         autoClose: 1600, toastId: `req-del-${delUI.id}-404`
-       });
-     } else {
-       setError(t("client.dashboard.requestDeleteFailed", { defaultValue: "Не удалось удалить заявку" }));
-       tError(t("client.dashboard.requestDeleteFailed") || "Не удалось удалить заявку", { autoClose: 1800 });
-     }
-   } finally {
-     setDelUI({ open: false, id: null, isDraft: false, sending: false });
-   }
- }
 
   function closeDeleteModal() {
     setDelUI({ open: false, id: null, isDraft: false, sending: false });
@@ -1062,63 +1016,67 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     setQrServiceId(null);
     setQrTitle("");
   }
+
+  // Quick Request (единый модал)
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrServiceId, setQrServiceId] = useState(null);
+  const [qrTitle, setQrTitle] = useState("");
+  const [qrSending, setQrSending] = useState(false);
+
   async function submitQuickRequest(note) {
-  if (!qrServiceId || qrSending) return;
+    if (!qrServiceId || qrSending) return;
     setQrSending(true);
 
-  try {
-    await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
-    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
-    setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
+    try {
+      await apiPost("/api/requests", { service_id: qrServiceId, note: note || undefined });
+      tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+      setMessage(t("messages.request_sent", { defaultValue: "Запрос отправлен" }));
 
-    setActiveTab("requests");
+      setActiveTab("requests");
 
-    // Обновляем список из API (без локальных дублей)
-    const apiList = await fetchClientRequestsSafe(myId);
-    const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-    setRequests(mergeRequests(apiList, drafts));
-  } catch (err) {
-    setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
+      const apiList = await fetchClientRequestsSafe(myId);
+      const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+      setRequests(mergeRequests(apiList, drafts));
+    } catch (err) {
+      setError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }));
 
-    const status =
-      err?.status || err?.response?.status || err?.data?.status;
-    const code =
-      err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
-    const msg = String(code).toLowerCase();
+      const status =
+        err?.status || err?.response?.status || err?.data?.status;
+      const code =
+        err?.response?.data?.error || err?.data?.error || err?.error || err?.code || err?.message || "";
+      const msg = String(code).toLowerCase();
 
-    if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
-      tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
-        toastId: "req-already",
-        autoClose: 2000,
-      });
-      return;
+      if (status === 409 || msg.includes("request_already_sent") || msg.includes("already")) {
+        tInfo(t("errors.request_already_sent") || "Вы уже отправляли запрос", {
+          toastId: "req-already",
+          autoClose: 2000,
+        });
+        return;
+      }
+      if (msg.includes("self_request_forbidden") || status === 400) {
+        tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
+          toastId: "self-req",
+          autoClose: 2200,
+        });
+      } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+        tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
+          toastId: "login-required",
+          autoClose: 2000,
+        });
+      } else {
+        tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
+      }
+    } finally {
+      setQrSending(false);
+      closeQuickRequestModal();
     }
-    if (msg.includes("self_request_forbidden") || status === 400) {
-      tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
-        toastId: "self-req",
-        autoClose: 2200,
-      });
-    } else if (status === 401 || status === 403 || msg.includes("unauthorized")) {
-      tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
-        toastId: "login-required",
-        autoClose: 2000,
-      });
-    } else {
-      tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-    }
-  } finally {
-    setQrSending(false);
-    closeQuickRequestModal();
   }
-}
-  
+
   function openQuickEdit() {
-  tInfo(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }), { autoClose: 1500 });
-}
+    tInfo(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }), { autoClose: 1500 });
+  }
 
-  
-  /* -------- Render helpers -------- */
-
+  // Avatar block
   const Avatar = () => {
     const src = avatarBase64 || avatarServerUrl || null;
     if (src) return <img src={src} alt="" className="w-24 h-24 rounded-full object-cover border" />;
@@ -1143,40 +1101,41 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     return (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {requests.map((r) => {
-  const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
-  const status = r?.status || "new";
-  const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
-  const expireAt = resolveRequestExpireAt(r);
-  const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
-  const hasTimer = !!expireAt;
-  const timerText = hasTimer ? formatLeft(leftMs) : null;
-    // 👇 ВЛАДЕЛЕЦ КАРТОЧКИ (для ссылки и подписи)
-  const providerId =
-    r?.provider?.id ??
-    r?.service?.provider_id ?? r?.service?.providerId ??
-    r?.provider_id ?? r?.providerId ?? null;
-  const providerName =
-    r?.provider?.name ?? r?.provider_name ?? r?.service?.provider_name ?? r?.service?.providerTitle ?? null;
-  const providerType =
-    r?.provider?.type ?? r?.provider_type ?? r?.service?.provider_type ?? null;
-  const providerPhone =
-    r?.provider?.phone ?? r?.provider_phone ?? r?.phone ?? null;
-  const providerTg =
-    r?.provider?.telegram ?? r?.provider?.social ?? r?.provider_telegram ?? r?.telegram ?? null;
+          const serviceTitle = r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
+          const status = r?.status || "new";
+          const created = r?.created_at ? new Date(r.created_at).toLocaleString() : "";
+          const expireAt = resolveRequestExpireAt(r);
+          const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+          const hasTimer = !!expireAt;
+          const timerText = hasTimer ? formatLeft(leftMs) : null;
 
-  return (
-    <div key={r.id} className={`bg-white border rounded-xl p-4 overflow-hidden ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
-      <div className="font-semibold leading-tight break-words line-clamp-2">{serviceTitle}</div>
-                  {providerId && (
-              <div className="mt-2 text-sm text-gray-700 min-w-0">
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/profile/provider/${providerId}`}
-                    className="underline hover:no-underline block max-w-full truncate"
-                  >
-                    {providerName || "—"}
-                  </Link>
-                  {(providerType || authorProvTypes[providerId]) && (
+          const providerId =
+            r?.provider?.id ??
+            r?.service?.provider_id ?? r?.service?.providerId ??
+            r?.provider_id ?? r?.providerId ?? null;
+          const providerName =
+            r?.provider?.name ?? r?.provider_name ?? r?.service?.provider_name ?? r?.service?.providerTitle ?? null;
+          const providerType =
+            r?.provider?.type ?? r?.provider_type ?? r?.service?.provider_type ?? null;
+          const providerPhone =
+            r?.provider?.phone ?? r?.provider_phone ?? r?.phone ?? null;
+          const providerTg =
+            r?.provider?.telegram ?? r?.provider?.social ?? r?.provider_telegram ?? r?.telegram ?? null;
+
+          return (
+            <div key={r.id} className={`bg-white border rounded-xl p-4 overflow-hidden ${r.is_draft ? "ring-1 ring-orange-200" : ""}`}>
+              <div className="font-semibold leading-tight break-words line-clamp-2">{serviceTitle}</div>
+
+              {providerId && (
+                <div className="mt-2 text-sm text-gray-700 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/profile/provider/${providerId}`}
+                      className="underline hover:no-underline block max-w-full truncate"
+                    >
+                      {providerName || "—"}
+                    </Link>
+                    {(providerType || authorProvTypes[providerId]) && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
                         {providerType
                           ? providerTypeLabel(providerType, t)
@@ -1184,19 +1143,17 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                             t("roles.provider", { defaultValue: "Поставщик" })}
                       </span>
                     )}
-
-                </div>
-                <div className="flex gap-4 mt-1">
-                  {providerPhone && (
+                  </div>
+                  <div className="flex gap-4 mt-1">
+                    {providerPhone && (
                       <a
                         className="hover:underline break-all"
                         href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}
                       >
                         {providerPhone}
                       </a>
-                   )}
-                  
-                  {(() => {
+                    )}
+                    {(() => {
                       const tg = normalizeTelegram(providerTg);
                       return tg ? (
                         <a
@@ -1209,52 +1166,50 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                         </a>
                       ) : null;
                     })()}
-
+                  </div>
                 </div>
+              )}
+
+              <div className="text-sm text-gray-500 mt-1">
+                {t("common.status", { defaultValue: "Статус" })}: {statusLabel(status)}
               </div>
-            )}
-                        
-      <div className="text-sm text-gray-500 mt-1">
-        {t("common.status", { defaultValue: "Статус" })}: {statusLabel(status)}
-      </div>
 
-      {hasTimer && (
-        <div className="mt-2">
-          <span
-            className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
-            title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
-          >
-            {timerText}
-          </span>
-        </div>
-      )}
+              {hasTimer && (
+                <div className="mt-2">
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-white text-xs ${leftMs > 0 ? "bg-orange-600" : "bg-gray-400"}`}
+                    title={leftMs > 0 ? t("countdown.until_end", { defaultValue: "До окончания" }) : t("countdown.expired", { defaultValue: "Время истекло" })}
+                  >
+                    {timerText}
+                  </span>
+                </div>
+              )}
 
-      {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
-       {r?.note && (
-          <div className="text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
-            {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
-          </div>
-           )}
+              {created && <div className="text-xs text-gray-400 mt-1">{t("common.created", { defaultValue: "Создан" })}: {created}</div>}
 
-      {/* действия */}
-      <div className="mt-3 flex gap-2">
-        <button
-          onClick={() => openQuickEdit(r)}          // ← новая модалка (ниже)
-          className="px-3 py-1.5 rounded border hover:bg-gray-50"
-        >
-          {t("actions.edit", { defaultValue: "Править" })}
-        </button>
-        <button
-            onClick={() => askDeleteRequest(r.id)}
-            className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
-          >
-            {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
-          </button>
-      </div>
-    </div>
-  );
-})}
+              {r?.note && (
+                <div className="text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
+                  {t("common.comment", { defaultValue: "Комментарий" })}: {r.note}
+                </div>
+              )}
 
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => openQuickEdit(r)}
+                  className="px-3 py-1.5 rounded border hover:bg-gray-50"
+                >
+                  {t("actions.edit", { defaultValue: "Править" })}
+                </button>
+                <button
+                  onClick={() => askDeleteRequest(r.id)}
+                  className="px-3 py-1.5 rounded border hover:bg-gray-50 text-red-600"
+                >
+                  {t("client.dashboard.deleteRequest", { defaultValue: "Удалить" })}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -1273,6 +1228,33 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
         now={now}
       />
     );
+  };
+
+  const handleRefreshClick = async () => {
+    try {
+      if (activeTab === "requests") {
+        setLoadingTab(true);
+        const apiList = await fetchClientRequestsSafe(myId);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        setRequests(mergeRequests(apiList, drafts));
+      } else if (activeTab === "favorites") {
+        setLoadingTab(true);
+        const data = await apiGet("/api/wishlist?expand=service");
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        setFavorites(arr);
+        try {
+          const ids = await apiGet("/api/wishlist/ids");
+          const list = Array.isArray(ids) ? ids : [];
+          setFavIds(new Set(list.map(String)));
+        } catch {}
+      } else if (activeTab === "bookings") {
+        // даём сигнал компоненту <ClientBookings /> на перезагрузку
+        setBookingsRefreshKey((x) => x + 1);
+        window.dispatchEvent(new Event("client:bookings:refresh"));
+      }
+    } finally {
+      if (activeTab !== "bookings") setLoadingTab(false);
+    }
   };
 
   return (
@@ -1352,97 +1334,28 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
               <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
               <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
               <div className="ml-auto">
-                <button
-                  onClick={async () => {
-                    try {
-                      setLoadingTab(true);
-                      if (activeTab === "requests") {
-                        const apiList = await fetchClientRequestsSafe(myId);
-                        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-                        setRequests(mergeRequests(apiList, drafts));
-                      } else {
-                        const data = await apiGet("/api/wishlist?expand=service");
-                        const arr = Array.isArray(data) ? data : data?.items || [];
-                        setFavorites(arr);
-                        try {
-                          const ids = await apiGet("/api/wishlist/ids");
-                          const list = Array.isArray(ids) ? ids : [];
-                          setFavIds(new Set(list.map(String)));
-                        } catch {}
-                      }
-                    } finally {
-                      setLoadingTab(false);
-                    }
-                  }}
-                  className="text-orange-600 hover:underline text-sm"
-                >
+                <button onClick={handleRefreshClick} className="text-orange-600 hover:underline text-sm">
                   {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
                 </button>
               </div>
             </div>
 
             {activeTab === "requests" && <RequestsList />}
-            {activeTab === "bookings" && <ClientBookings />}
-            {activeTab === "favorites" && (
-              <FavoritesList
-                items={favorites}
-                page={favPage}
-                perPage={FAV_PAGE_SIZE}
-                favIds={favIds}
-                onToggleFavorite={toggleFavoriteClient}
-                onQuickRequest={(id, meta) => openQuickRequestModal(id, meta)}
-                onPageChange={(p) => setFavPage(p)}
-                now={now}
-              />
-            )}
+            {activeTab === "bookings" && <ClientBookings refreshKey={bookingsRefreshKey} />}
+            {activeTab === "favorites" && <FavoritesTab />}
           </div>
         </div>
       </div>
 
-      {/* Booking modal */}
-      {bookingUI.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow p-5">
-            <div className="text-lg font-semibold mb-3">{t("booking.title", { defaultValue: "Быстрое бронирование" })}</div>
-
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm text-gray-600">{t("booking.date", { defaultValue: "Дата" })}</label>
-                  <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkDate} onChange={(e) => setBkDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">{t("booking.time", { defaultValue: "Время" })}</label>
-                  <input type="time" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkTime} onChange={(e) => setBkTime(e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-600">{t("booking.pax", { defaultValue: "Кол-во людей" })}</label>
-                <input type="number" min="1" className="mt-1 w-full border rounded-lg px-3 py-2" value={bkPax} onChange={(e) => setBkPax(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-600">{t("common.note_optional", { defaultValue: "Комментарий (необязательно)" })}</label>
-                <textarea rows={3} className="mt-1 w-full border rounded-lg px-3 py-2" value={bkNote} onChange={(e) => setBkNote(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button onClick={createBooking} disabled={bkSending} className="flex-1 bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
-                {bkSending ? t("common.sending", { defaultValue: "Отправка..." }) : t("booking.submit", { defaultValue: "Забронировать" })}
-              </button>
-              <button onClick={closeBooking} className="px-4 py-2 rounded-lg border">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Quick Request modal */}
       <QuickRequestModal
         open={qrOpen}
         onClose={closeQuickRequestModal}
         onSubmit={submitQuickRequest}
         busy={qrSending}
       />
+
+      {/* Delete confirm */}
       <ConfirmModal
         open={delUI.open}
         danger
@@ -1459,53 +1372,12 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
 }
 
 /* ---------- срок действия / обратный счёт ---------- */
-function resolveExpireAt(service) {
-  const s = service || {};
-  const d = s.details || {};
-  const cand = [
-    s.expires_at, s.expire_at, s.expireAt,
-    d.expires_at, d.expire_at, d.expiresAt,
-    d.expiration, d.expiration_at, d.expirationAt,
-    d.expiration_ts, d.expirationTs,
-  ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
-
-  if (!cand) {
-    const ttl = d.ttl_hours || d.ttlHours || s.ttl_hours || s.ttlHours;
-    if (ttl) {
-      let ts = null;
-      if (d.created_at || s.created_at) {
-        const created = Date.parse(d.created_at || s.created_at);
-        if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
-      }
-      return ts;
-    }
-    return null;
-  }
-
-  let ts = null;
-  if (typeof cand === "number") {
-    // если меньше 1e12 — это секунды, домножаем до мс
-    ts = cand > 1e12 ? cand : cand * 1000;
-  } else {
-    const n = Number(cand);
-    if (Number.isFinite(n)) {
-      ts = n > 1e12 ? n : n * 1000;
-    } else {
-      const parsed = Date.parse(String(cand));
-      ts = Number.isNaN(parsed) ? null : parsed;
-    }
-  }
-  return (typeof ts === "number" && Number.isFinite(ts)) ? ts : null;
-}
-
 function resolveRequestExpireAt(r) {
   if (!r) return null;
-  // Явная дата
   if (r.expires_at) {
     const ts = Number(r.expires_at) || Date.parse(r.expires_at);
     if (Number.isFinite(ts)) return ts;
   }
-  // TTL в часах + created_at
   const details = typeof r.details === "string" ? (() => { try { return JSON.parse(r.details); } catch { return {}; } })() : (r.details || {});
   const ttl = r.ttl_hours || r.ttlHours || details.ttl_hours || details.ttlHours;
   if (ttl && r.created_at) {
