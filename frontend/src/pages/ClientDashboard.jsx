@@ -1,4 +1,5 @@
 // frontend/src/pages/ClientDashboard.jsx
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams, Link } from "react-router-dom";
@@ -7,6 +8,7 @@ import QuickRequestModal from "../components/QuickRequestModal";
 import ConfirmModal from "../components/ConfirmModal";
 import ServiceCard from "../components/ServiceCard";
 import { tSuccess, tError, tInfo } from "../shared/toast";
+import ClientBookings from "./ClientBookings";
 
 const FAV_PAGE_SIZE = 6;
 
@@ -564,7 +566,6 @@ export default function ClientDashboard() {
 
   // Data for tabs
   const [requests, setRequests] = useState([]);
-  const [bookings, setBookings] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
@@ -1307,30 +1308,6 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
     );
   };
 
-  const BookingsList = () => {
-    const { t } = useTranslation();
-    if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!bookings?.length) return <div className="text-gray-500">{t("empty.no_bookings", { defaultValue: "Пока нет бронирований." })}</div>;
-    return (
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {bookings.map((b) => {
-          const serviceTitle = b?.service?.title || b?.service_title || b?.title || t("common.booking", { defaultValue: "Бронирование" });
-          const status = b?.status || "new";
-          const date = b?.date || b?.created_at;
-          const when = date ? new Date(date).toLocaleString() : "";
-          return (
-            <div key={b.id} className="bg-white border rounded-xl p-4">
-              <div className="font-semibold">{serviceTitle}</div>
-              <div className="text-sm text-gray-500 mt-1">{t("common.status", { defaultValue: "Статус" })}: {status}</div>
-              {when && <div className="text-xs text-gray-400 mt-1">{t("common.date", { defaultValue: "Дата" })}: {when}</div>}
-              {b?.price && <div className="text-sm text-gray-600 mt-2">{t("common.amount", { defaultValue: "Сумма" })}: {b.price}</div>}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   const FavoritesTab = () => {
     if (loadingTab) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     return (
@@ -1432,8 +1409,6 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
                         const apiList = await fetchClientRequestsSafe(myId);
                         const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
                         setRequests(mergeRequests(apiList, drafts));
-                      } else if (activeTab === "bookings") {
-                        setBookings(await fetchClientBookingsSafe());
                       } else {
                         const data = await apiGet("/api/wishlist?expand=service");
                         const arr = Array.isArray(data) ? data : data?.items || [];
@@ -1456,7 +1431,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
             </div>
 
             {activeTab === "requests" && <RequestsList />}
-            {activeTab === "bookings" && <BookingsList />}
+            {activeTab === "bookings" && <ClientBookings />}
             {activeTab === "favorites" && (
               <FavoritesList
                 items={favorites}
