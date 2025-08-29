@@ -3081,29 +3081,6 @@ useEffect(() => {
               onAfterAction={refreshInbox}
             />
           </section> */}
-
-          {/* ===== МОИ БРОНИ (E2E) ===== */}
-          <div className="mt-6">
-              <div className="text-lg font-semibold mb-2">{t("dashboard.my_bookings") || "Мои брони"}</div>
-              {!["guide","transport"].includes(String(profile?.type || "")) ? (
-                <div className="text-gray-500">—</div>
-              ) : !providerBookings.length ? (
-                <div className="text-gray-500">{t("bookings.empty") || "Пока нет заявок"}</div>
-              ) : (
-                <div className="space-y-3">
-                  {providerBookings.map(b => (
-                    <BookingRow
-                      key={b.id}
-                      booking={b}
-                      viewerRole="provider"
-                      onAccept={(bk) => acceptBooking(bk.id)}
-                      onReject={(bk) => rejectBooking(bk.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
         </div>
       </div>
 
