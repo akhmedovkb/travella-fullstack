@@ -110,85 +110,65 @@ const createBooking = async (req, res) => {
 };
 
 // Брони провайдера (гид/транспорт) — реальные поля БД + attachments
-// Брони провайдера (гид/транспорт) — реальные поля БД + attachments
-const getProviderBookings = async (req, res) => {
+async function getProviderBookings(req, res) {
   try {
     const providerId = req.user?.id;
 
-    const q = await pool.query(
-      `
+    const sql = `
       SELECT
-        b.id,
-        b.service_id,
-        b.client_id,
-        b.provider_id,
-        b.status,
-        b.message        AS client_message,
-        b.created_at,
-        b.updated_at,
-        -- ⚠️ attachments может быть json/jsonb/text. Приведем к jsonb и дадим [] по умолчанию:
+        b.id, b.provider_id, b.service_id, b.client_id,
+        b.status, b.created_at, b.updated_at,
+        b.client_message, b.provider_note, b.provider_price,
+
+        -- прикреплённые файлы
+        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+
+        -- даты: сперва из booking_dates, иначе из b.date
         COALESCE(
-          CASE
-            WHEN pg_typeof(b.attachments)::text IN ('json', 'jsonb') THEN b.attachments::jsonb
-            WHEN b.attachments IS NULL OR b.attachments::text = '' THEN '[]'::jsonb
-            ELSE b.attachments::jsonb
-          END,
-          '[]'::jsonb
-        ) AS attachments,
+          ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
+          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+        ) AS dates,
 
-        -- даты брони
-        ARRAY_AGG(bd.date::date ORDER BY bd.date) AS dates,
+        -- заголовок услуги (если нужен на фронте)
+        s.title AS service_title,
 
-        -- инициатор (клиент)
-        c.id         AS requester_client_id,
-        c.name       AS requester_client_name,
-        c.phone      AS requester_client_phone,
-        c.email      AS requester_client_email,
-        c.telegram   AS requester_client_telegram,
-        c.location   AS requester_client_location,
-        c.avatar_url AS requester_client_avatar_url,
+        -- клиент (кто отправил заявку)
+        c.id          AS client_id,
+        c.name        AS client_name,
+        c.phone       AS client_phone,
+        c.email       AS client_email,
+        c.telegram    AS client_social,
+        c.location    AS client_address,   -- у clients адреса нет, подставляем location
+        c.avatar_url  AS client_avatar_url,
 
-        -- удобные алиасы для фронта
-        c.name     AS requester_name,
-        c.phone    AS requester_phone,
-        c.telegram AS requester_telegram,
-        c.location AS requester_location,
-        'client'   AS requester_role,
-        ('/profile/client/' || c.id)::text AS requester_url,
-
-        -- сам провайдер (контекст)
+        -- провайдер (получатель заявки)
         p.id       AS provider_profile_id,
         p.name     AS provider_name,
         p.type     AS provider_type,
         p.phone    AS provider_phone,
         p.email    AS provider_email,
-        p.social   AS provider_social,     -- у providers телеграм в social
+        p.social   AS provider_social,     -- в providers телеграм лежит в social
         p.address  AS provider_address,
         p.location AS provider_location,
         p.photo    AS provider_photo
 
       FROM bookings b
-      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+      LEFT JOIN booking_dates bd ON bd.booking_id = b.id         -- если таблицы нет, можно убрать весь LEFT JOIN и часть с ARRAY_AGG
       LEFT JOIN clients  c       ON c.id = b.client_id
       LEFT JOIN providers p      ON p.id = b.provider_id
+      LEFT JOIN services  s      ON s.id = b.service_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, c.id, p.id
+      GROUP BY b.id, s.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
-      `,
-      [providerId]
-    );
+    `;
 
-    res.json(q.rows);
+    const q = await pool.query(sql, [providerId]);
+    return res.json(q.rows);
   } catch (err) {
     console.error("getProviderBookings error:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
-};
-
-
-module.exports = { getProviderBookings /* ...остальные экспорты */ };
-
-
+}
 
 // Брони клиента (мой кабинет)
 const getMyBookings = async (req, res) => {
