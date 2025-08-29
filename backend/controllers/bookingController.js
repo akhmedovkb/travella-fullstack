@@ -110,6 +110,7 @@ const createBooking = async (req, res) => {
 };
 
 // Брони провайдера (гид/транспорт) — только реальные поля БД
+// Брони провайдера (гид/транспорт) — реальные поля БД + attachments
 const getProviderBookings = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -117,49 +118,61 @@ const getProviderBookings = async (req, res) => {
     const q = await pool.query(
       `
       SELECT
-        b.*,
-        s.title AS service_title,
+        b.id,
+        b.service_id,
+        b.client_id,
+        b.provider_id,
+        b.status,
+        b.message        AS client_message,
+        b.created_at,
+        b.updated_at,
+        -- ⚠️ attachments может быть json/jsonb/text. Приведем к jsonb и дадим [] по умолчанию:
+        COALESCE(
+          CASE
+            WHEN pg_typeof(b.attachments)::text IN ('json', 'jsonb') THEN b.attachments::jsonb
+            WHEN b.attachments IS NULL OR b.attachments::text = '' THEN '[]'::jsonb
+            ELSE b.attachments::jsonb
+          END,
+          '[]'::jsonb
+        ) AS attachments,
 
+        -- даты брони
         ARRAY_AGG(bd.date::date ORDER BY bd.date) AS dates,
 
-        -- клиент (кто отправил запрос на бронь)
-        c.id          AS requester_client_id,
-        c.name        AS requester_client_name,
-        c.phone       AS requester_client_phone,
-        c.email       AS requester_client_email,
-        c.telegram    AS requester_client_telegram,
-        c.location    AS requester_client_location,
-        c.avatar_url  AS requester_client_avatar_url,
+        -- инициатор (клиент)
+        c.id         AS requester_client_id,
+        c.name       AS requester_client_name,
+        c.phone      AS requester_client_phone,
+        c.email      AS requester_client_email,
+        c.telegram   AS requester_client_telegram,
+        c.location   AS requester_client_location,
+        c.avatar_url AS requester_client_avatar_url,
 
-        -- универсальные алиасы под фронт (для простоты)
-        c.name        AS requester_name,
-        c.phone       AS requester_phone,
-        c.telegram    AS requester_telegram,
-        c.location    AS requester_location,
-        'client'      AS requester_role,
+        -- удобные алиасы для фронта
+        c.name     AS requester_name,
+        c.phone    AS requester_phone,
+        c.telegram AS requester_telegram,
+        c.location AS requester_location,
+        'client'   AS requester_role,
         ('/profile/client/' || c.id)::text AS requester_url,
 
-        -- провайдер (кому пришла бронь)
-        p.id          AS provider_profile_id,
-        p.name        AS provider_name,
-        p.type        AS provider_type,
-        p.phone       AS provider_phone,
-        p.email       AS provider_email,
-        p.social      AS provider_social,
-        p.address     AS provider_address,
-        p.location    AS provider_location,
-        p.photo       AS provider_photo,
-
-        -- 📎 файл, прикреплённый клиентом (если колонка есть в таблице bookings)
-        b.client_file_url
+        -- сам провайдер (контекст)
+        p.id       AS provider_profile_id,
+        p.name     AS provider_name,
+        p.type     AS provider_type,
+        p.phone    AS provider_phone,
+        p.email    AS provider_email,
+        p.social   AS provider_social,     -- у providers телеграм в social
+        p.address  AS provider_address,
+        p.location AS provider_location,
+        p.photo    AS provider_photo
 
       FROM bookings b
-      LEFT JOIN services       s  ON s.id  = b.service_id
-      LEFT JOIN booking_dates  bd ON bd.booking_id = b.id
-      LEFT JOIN clients        c  ON c.id  = b.client_id
-      LEFT JOIN providers      p  ON p.id  = b.provider_id
+      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+      LEFT JOIN clients  c       ON c.id = b.client_id
+      LEFT JOIN providers p      ON p.id = b.provider_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, s.id, c.id, p.id
+      GROUP BY b.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
       `,
       [providerId]
@@ -171,6 +184,7 @@ const getProviderBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 module.exports = { getProviderBookings /* ...остальные экспорты */ };
 
