@@ -1,15 +1,16 @@
 // components/PriceAgreementCard.jsx
+
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
-
-const onlyDigitsDot = (s) => s.replace(/[^\d.]/g, "");
+const onlyDigitsDot = (s) => String(s || "").replace(/[^\d.]/g, "");
+const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) =>
-  Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
+  isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
 
 export default function PriceAgreementCard({
-  booking,                 // { id, provider_price, provider_note, updated_at, status }
+  booking,                 // { id, provider_price, provider_note, updated_at, status, currency }
   onSendPrice,             // async (bookingId, { price, currency, note }) => void
   disabled = false,
 }) {
@@ -20,12 +21,16 @@ export default function PriceAgreementCard({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  const bookCurrency = booking?.currency || "USD";
+
+  // Показываем последнее отправленное предложение
   const lastReply = useMemo(() => {
-    if (!booking?.provider_price) return null;
+    const p = Number(booking?.provider_price);
+    if (!isFiniteNum(p)) return null;
     const at = booking?.updated_at ? new Date(booking.updated_at) : null;
     return {
-      price: booking.provider_price,
-      note: booking.provider_note,
+      price: p,
+      note: booking?.provider_note,
       at: at
         ? at.toLocaleString(undefined, {
             year: "numeric",
@@ -36,25 +41,25 @@ export default function PriceAgreementCard({
           })
         : null,
     };
-  }, [booking]);
+  }, [booking?.provider_price, booking?.provider_note, booking?.updated_at]);
 
   const priceNumber = useMemo(() => {
     const n = Number(onlyDigitsDot(priceRaw));
-    return Number.isFinite(n) ? n : NaN;
+    return isFiniteNum(n) ? n : NaN;
   }, [priceRaw]);
 
   const canSend =
     !disabled &&
     !busy &&
-    booking?.status === "pending" &&
-    Number.isFinite(priceNumber) &&
+    String(booking?.status) === "pending" &&
+    isFiniteNum(priceNumber) &&
     priceNumber > 0 &&
     CURRENCIES.includes(currency);
 
   const submit = async () => {
     setErr("");
     if (!canSend) {
-      setErr(t("bookings.fill_price", { defaultValue: "Укажите корректную цену" }));
+      setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
       return;
     }
     try {
@@ -63,7 +68,7 @@ export default function PriceAgreementCard({
       setPriceRaw("");
       setNote("");
     } catch (e) {
-      setErr(e?.response?.data?.message || t("common.error", { defaultValue: "Ошибка" }));
+      setErr(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
     } finally {
       setBusy(false);
     }
@@ -71,7 +76,7 @@ export default function PriceAgreementCard({
 
   return (
     <div className="mt-4 rounded-xl border bg-white">
-      {/* header */}
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="font-semibold text-gray-900">
           {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
@@ -81,7 +86,7 @@ export default function PriceAgreementCard({
         </span>
       </div>
 
-      {/* last reply */}
+      {/* Last offer */}
       {lastReply && (
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
@@ -89,68 +94,64 @@ export default function PriceAgreementCard({
               {t("bookings.last_offer", { defaultValue: "Последнее предложение" })}:
             </span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">
-              {fmt(Number(lastReply.price))} {currency}
+              {fmt(lastReply.price)} {bookCurrency}
             </span>
             {lastReply.note ? <span>· {lastReply.note}</span> : null}
-            {lastReply.at ? (
-              <span className="text-gray-500">· {lastReply.at}</span>
-            ) : null}
+            {lastReply.at ? <span className="text-gray-500">· {lastReply.at}</span> : null}
           </div>
         </div>
       )}
 
-      {/* form */}
+      {/* Form */}
       <div className="px-4 pb-4 pt-3">
-        <div className="grid gap-3 md:grid-cols-[220px,1fr,140px]">
-          {/* price input */}
+        <div className="grid gap-3 md:grid-cols-[260px,1fr,160px]">
+          {/* Price + currency (единый блок) */}
           <label className="relative">
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.price", { defaultValue: "Цена" })}
             </span>
-            <div className="flex rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
+            <div className="flex items-stretch h-11 rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
               <div className="flex items-center px-3 text-gray-500">💵</div>
               <input
                 inputMode="decimal"
                 placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
-                className="flex-1 rounded-xl px-0 py-2 outline-none"
+                className="flex-1 px-0 pr-2 outline-none border-0 focus:ring-0 placeholder:text-gray-400 bg-transparent"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
               />
               <select
-                className="rounded-r-xl border-l bg-gray-50 px-3 py-2 text-sm outline-none"
+                className="h-full border-0 border-l border-gray-200 bg-gray-50 px-3 outline-none focus:ring-0 rounded-r-xl"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
                 {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+                  <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
           </label>
 
-          {/* note */}
-          <label className="md:col-span-1">
+          {/* Note */}
+          <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
             </span>
             <input
-              className="w-full rounded-xl border bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full h-11 rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
               placeholder={t("bookings.comment_placeholder", {
-                defaultValue: "Например: в цену включены парковки",
+                defaultValue: "Например: парковки и ожидание включены",
               })}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
           </label>
 
-          {/* send */}
+          {/* Send button */}
           <div className="flex items-end">
             <button
               onClick={submit}
               disabled={!canSend}
-              className="w-full rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy
                 ? t("common.sending", { defaultValue: "Отправка…" })
