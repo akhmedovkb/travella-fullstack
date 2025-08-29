@@ -1,5 +1,4 @@
-// components/PriceAgreementCard.jsx
-
+// frontend/src/components/PriceAgreementCard.jsx
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +11,7 @@ const fmt = (n) =>
 export default function PriceAgreementCard({
   booking,                 // { id, provider_price, provider_note, updated_at, status, currency }
   onSendPrice,             // async (bookingId, { price, currency, note }) => void
+  onSent,                  // (legacy) optional
   disabled = false,
 }) {
   const { t } = useTranslation();
@@ -23,7 +23,6 @@ export default function PriceAgreementCard({
 
   const bookCurrency = booking?.currency || "USD";
 
-  // Показываем последнее отправленное предложение
   const lastReply = useMemo(() => {
     const p = Number(booking?.provider_price);
     if (!isFiniteNum(p)) return null;
@@ -64,11 +63,22 @@ export default function PriceAgreementCard({
     }
     try {
       setBusy(true);
-      await onSendPrice?.(booking.id, { price: priceNumber, currency, note: note.trim() });
+      if (onSendPrice) {
+        await onSendPrice(booking.id, {
+          price: priceNumber,
+          currency,
+          note: note.trim(),
+        });
+      } else {
+        onSent?.();
+      }
       setPriceRaw("");
       setNote("");
     } catch (e) {
-      setErr(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
+      setErr(
+        e?.response?.data?.message ||
+          t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" })
+      );
     } finally {
       setBusy(false);
     }
@@ -76,7 +86,7 @@ export default function PriceAgreementCard({
 
   return (
     <div className="mt-4 rounded-xl border bg-white">
-      {/* Header */}
+      {/* header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="font-semibold text-gray-900">
           {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
@@ -86,7 +96,7 @@ export default function PriceAgreementCard({
         </span>
       </div>
 
-      {/* Last offer */}
+      {/* last offer */}
       {lastReply && (
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
@@ -102,36 +112,46 @@ export default function PriceAgreementCard({
         </div>
       )}
 
-      {/* Form */}
+      {/* form */}
       <div className="px-4 pb-4 pt-3">
-        <div className="grid gap-3 md:grid-cols-[260px,1fr,160px]">
-          {/* Price + currency (единый блок) */}
-          <label className="relative">
+        {/* На десктопе 4 колонки: Цена | Валюта | Комментарий | Кнопка */}
+        <div className="grid gap-3 md:grid-cols-[220px,110px,1fr,170px]">
+          {/* price */}
+          <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.price", { defaultValue: "Цена" })}
             </span>
-            <div className="flex items-stretch h-11 rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
-              <div className="flex items-center px-3 text-gray-500">💵</div>
+            <div className="flex h-11 items-center rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
+              <div className="px-3 text-gray-500">💵</div>
               <input
                 inputMode="decimal"
                 placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
-                className="flex-1 px-0 pr-2 outline-none border-0 focus:ring-0 placeholder:text-gray-400 bg-transparent"
+                className="w-full h-full flex-1 bg-transparent px-0 pr-3 outline-none"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
               />
-              <select
-                className="h-full border-0 border-l border-gray-200 bg-gray-50 px-3 outline-none focus:ring-0 rounded-r-xl"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
             </div>
           </label>
 
-          {/* Note */}
+          {/* currency — отдельная колонка */}
+          <label>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.currency", { defaultValue: "Валюта" })}
+            </span>
+            <select
+              className="w-full h-11 rounded-xl border bg-gray-50 px-3 outline-none"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* note */}
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
@@ -146,7 +166,7 @@ export default function PriceAgreementCard({
             />
           </label>
 
-          {/* Send button */}
+          {/* button */}
           <div className="flex items-end">
             <button
               onClick={submit}
