@@ -118,10 +118,11 @@ const getProviderBookings = async (req, res) => {
       `
       SELECT
         b.*,
-        -- даты брони
+        s.title AS service_title,
+
         ARRAY_AGG(bd.date::date ORDER BY bd.date) AS dates,
 
-        -- инициатор-бронировщик (клиент)
+        -- клиент (кто отправил запрос на бронь)
         c.id          AS requester_client_id,
         c.name        AS requester_client_name,
         c.phone       AS requester_client_phone,
@@ -130,31 +131,35 @@ const getProviderBookings = async (req, res) => {
         c.location    AS requester_client_location,
         c.avatar_url  AS requester_client_avatar_url,
 
-        -- 🔽 универсальные алиасы под фронт
-        c.name     AS requester_name,
-        c.phone    AS requester_phone,
-        c.telegram AS requester_telegram,
-        c.location AS requester_location,
-        'client'   AS requester_role,
+        -- универсальные алиасы под фронт (для простоты)
+        c.name        AS requester_name,
+        c.phone       AS requester_phone,
+        c.telegram    AS requester_telegram,
+        c.location    AS requester_location,
+        'client'      AS requester_role,
         ('/profile/client/' || c.id)::text AS requester_url,
 
-        -- сам провайдер, к которому пришла бронь (для отображения/контекста)
+        -- провайдер (кому пришла бронь)
         p.id          AS provider_profile_id,
         p.name        AS provider_name,
         p.type        AS provider_type,
         p.phone       AS provider_phone,
         p.email       AS provider_email,
-        p.social      AS provider_social,     -- у providers телеграм лежит в social
+        p.social      AS provider_social,
         p.address     AS provider_address,
         p.location    AS provider_location,
-        p.photo       AS provider_photo
+        p.photo       AS provider_photo,
+
+        -- 📎 файл, прикреплённый клиентом (если колонка есть в таблице bookings)
+        b.client_file_url
 
       FROM bookings b
-      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-      LEFT JOIN clients  c       ON c.id = b.client_id
-      LEFT JOIN providers p      ON p.id = b.provider_id
+      LEFT JOIN services       s  ON s.id  = b.service_id
+      LEFT JOIN booking_dates  bd ON bd.booking_id = b.id
+      LEFT JOIN clients        c  ON c.id  = b.client_id
+      LEFT JOIN providers      p  ON p.id  = b.provider_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, c.id, p.id
+      GROUP BY b.id, s.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
       `,
       [providerId]
@@ -166,6 +171,9 @@ const getProviderBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
+module.exports = { getProviderBookings /* ...остальные экспорты */ };
+
 
 
 // Брони клиента (мой кабинет)
