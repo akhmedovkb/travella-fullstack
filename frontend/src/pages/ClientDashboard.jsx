@@ -637,38 +637,33 @@ export default function ClientDashboard() {
 
   // загрузка данных табов (+черновики), без «bookings»
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
+  (async () => {
+    try {
+      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+      if (isExternalTab) setLoadingTab(true);
 
-    (async () => {
-      try {
-        const isExternalTab = activeTab === "requests" || activeTab === "favorites";
-        if (isExternalTab) setLoadingTab(true);
-
-        if (activeTab === "requests") {
-          const apiList = await fetchClientRequestsSafe(myId);
-          const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-          if (!cancelled) setRequests(mergeRequests(apiList, drafts));
-        } else if (activeTab === "favorites") {
-          const data = await apiGet("/api/wishlist?expand=service");
-          const arr = Array.isArray(data) ? data : data?.items || [];
-          if (!cancelled) {
-            setFavorites(arr);
-            const maxPage = Math.max(1, Math.ceil(arr.length / 8));
-            setFavPage((p) => Math.min(Math.max(1, p), maxPage));
-          }
-        }
-        // bookings — управляет сам <ClientBookings />
-      } catch {
-        if (activeTab === "favorites") setFavorites([]);
-        else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
-      } finally {
-        const isExternalTab = activeTab === "requests" || activeTab === "favorites";
-        if (!cancelled && isExternalTab) setLoadingTab(false);
+      if (activeTab === "requests") {
+        const apiList = await fetchClientRequestsSafe(myId);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        if (!cancelled) setRequests(mergeRequests(apiList, drafts));
+      } else if (activeTab === "favorites") {
+        const data = await apiGet("/api/wishlist?expand=service");
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        if (!cancelled) setFavorites(arr);
       }
-    })();
+      // bookings управляет <ClientBookings />
+    } catch {
+      if (activeTab === "favorites") setFavorites([]);
+      else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
+    } finally {
+      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+      if (!cancelled && isExternalTab) setLoadingTab(false);
+    }
+  })();
+  return () => { cancelled = true; };
+}, [activeTab, t, myId]);
 
-    return () => { cancelled = true; };
-  }, [activeTab, t, myId]);
 
   // подгрузка типов провайдеров для заявок
   useEffect(() => {
@@ -1330,18 +1325,18 @@ export default function ClientDashboard() {
 
           <div className="mt-6 bg-white rounded-xl shadow p-6 border">
             <div className="flex items-center gap-3 border-b pb-3 mb-4">
-              <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
-              <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
-              <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
-              <div className="ml-auto">
-                <button onClick={handleRefreshClick} className="text-orange-600 hover:underline text-sm">
-                  {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
-                </button>
+                <TabButton tabKey="requests">{t("tabs.my_requests", { defaultValue: "Мои запросы" })}</TabButton>
+                <TabButton tabKey="bookings">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</TabButton>
+                <TabButton tabKey="favorites">{t("tabs.favorites", { defaultValue: "Избранное" })}</TabButton>
+                <div className="ml-auto">
+                  <button onClick={handleRefreshClick} className="text-orange-600 hover:underline text-sm">
+                    {t("client.dashboard.refresh", { defaultValue: "Обновить" })}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {activeTab === "requests" && <RequestsList />}
-            {activeTab === "bookings" && <ClientBookings refreshKey={bookingsRefreshKey} />}
+            {activeTab === "requests"  && <RequestsList />}
+            {activeTab === "bookings"  && <ClientBookings refreshKey={bookingsRefreshKey} />}
             {activeTab === "favorites" && <FavoritesTab />}
           </div>
         </div>
