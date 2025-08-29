@@ -7,6 +7,7 @@ const {
   createBooking,
   getProviderBookings,
   getMyBookings,
+  providerQuote,
   acceptBooking,
   rejectBooking,
   cancelBooking,
@@ -22,6 +23,7 @@ router.get("/my",       authenticateToken, getMyBookings);       // мои ка�
 // Действия провайдера
 router.post("/:id/accept", authenticateToken, acceptBooking);
 router.post("/:id/reject", authenticateToken, rejectBooking);
+router.post("/:id/quote", authProvider, bookingController.providerQuote);
 
 // Действие клиента
 router.post("/:id/cancel", authenticateToken, cancelBooking);
