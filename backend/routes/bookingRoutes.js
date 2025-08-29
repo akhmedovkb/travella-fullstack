@@ -23,7 +23,7 @@ router.get("/my",       authenticateToken, getMyBookings);       // мои ка�
 // Действия провайдера
 router.post("/:id/accept", authenticateToken, acceptBooking);
 router.post("/:id/reject", authenticateToken, rejectBooking);
-router.post("/:id/quote", authenticateToken, bookingController.providerQuote);
+router.post("/:id/quote", authenticateToken, providerQuote);
 
 // Действие клиента
 router.post("/:id/cancel", authenticateToken, cancelBooking);
