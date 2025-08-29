@@ -1,5 +1,4 @@
-//frontend/src/components/BookingRow.jsx
-import React, { useMemo } from "react";
+//frontend/src/components/BookingRow.jsximport React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 /* ===== helpers ===== */
@@ -12,129 +11,117 @@ function normalizeTg(v) {
   return { label: s, href: null };
 }
 
-// Человечный ярлык типа провайдера (умеет числа: 1=agent, 2=guide, 3=transport, 4=hotel)
-function typeLabel(raw, t) {
-  if (raw === undefined || raw === null) return "";
-  const s = String(raw).trim().toLowerCase();
-  const byCode = { "1": "agent", "2": "guide", "3": "transport", "4": "hotel" };
+const typeLabel = (raw, t) => {
+  if (!raw && raw !== 0) return "";
+  const s = String(raw).toLowerCase();
+  const byCode = { "1":"agent","2":"guide","3":"transport","4":"hotel" };
   const key =
-    byCode[s] ||
-    (["agent", "guide", "transport", "hotel"].includes(s)
-      ? s
-      : s.includes("guide")
-      ? "guide"
-      : s.includes("trans")
-      ? "transport"
-      : s.includes("hotel")
-      ? "hotel"
-      : "agent");
-
-  const fallback = { agent: "Агент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
+    byCode[s] || (["agent","guide","transport","hotel"].includes(s) ? s
+      : s.includes("guide") ? "guide"
+      : s.includes("trans") ? "transport"
+      : s.includes("hotel") ? "hotel" : "agent");
+  const fallback = { agent:"Агент", guide:"Гид", transport:"Транспорт", hotel:"Отель" }[key];
   return t(`provider.types.${key}`, { defaultValue: fallback });
-}
+};
 
-const toDatesText = (dlist) => {
-  if (!dlist || !dlist.length) return "—";
-  const arr = dlist.map((d) => String(d).slice(0, 10));
-  return Array.from(new Set(arr)).join(", ");
+const makeAbsolute = (u) => {
+  if (!u) return null;
+  const s = String(u).trim();
+  if (/^(data:|https?:|blob:)/i.test(s)) return s;
+  if (s.startsWith("//")) return `${window.location.protocol}${s}`;
+  const base = (import.meta.env.VITE_API_BASE_URL || window.location.origin || "").replace(/\/+$/,"");
+  return `${base}/${s.replace(/^\/+/, "")}`;
+};
+
+const isImageUrl = (url, type) => {
+  if (type && String(type).toLowerCase().startsWith("image/")) return true;
+  const s = String(url || "").toLowerCase();
+  return /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(s) || s.startsWith("data:image/");
+};
+
+const toArray = (v) => Array.isArray(v) ? v : (v ? [v] : []);
+
+const normalizeAttachment = (a) => {
+  // поддержка: строка-URL | {url|href|path|file, name, type} | base64 dataURL
+  if (typeof a === "string") {
+    return { name: a.split("/").pop() || "file", url: makeAbsolute(a), type: "" };
+  }
+  if (a && typeof a === "object") {
+    const url = makeAbsolute(a.url || a.href || a.path || a.file || a.src);
+    const name = a.name || (url ? url.split("/").pop() : "file");
+    const type = a.type || a.mime || "";
+    return { name, url, type };
+  }
+  return null;
 };
 
 /* ===== component ===== */
 export default function BookingRow({
   booking,
-  viewerRole,               // 'provider' | 'client'
+  viewerRole,                // 'provider' | 'client'
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
 }) {
   const { t } = useTranslation();
 
-  // Унифицированные поля (поддержка нового API с requester_* и старых client_* / provider_*)
+  // контрагент
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-      // инициатор — КЛИЕНТ
-      const id =
-        booking.requester_client_id ??
-        booking.requester_id ??
-        booking.client_id;
-
-      const name =
-        booking.requester_name ??
-        booking.client_name ??
-        t("roles.client", { defaultValue: "Клиент" });
-
-      const phone   = booking.requester_phone   ?? booking.client_phone   ?? null;
-      // у clients «адреса» нет, используем location
-      const address = booking.requester_location ?? booking.client_location ?? null;
-
-      const tgRaw =
-        booking.requester_telegram ??
-        booking.client_telegram ??
-        booking.client_social ?? // если вдруг так названо
-        null;
-
+      const tg = normalizeTg(booking.client_social || booking.requester_telegram);
       return {
         role: t("roles.client", { defaultValue: "Клиент" }),
+        id: booking.client_id,
+        name: booking.client_name || booking.requester_name || t("roles.client", { defaultValue: "Клиент" }),
+        href: booking.client_id ? `/profile/client/${booking.client_id}` : (booking.requester_url || null),
+        phone: booking.client_phone || booking.requester_phone || null,
+        address: booking.client_address || null,
+        telegram: tg,
         extra: null,
-        href: id ? `/profile/client/${id}` : null,
-        name,
-        phone,
-        address,
-        telegram: normalizeTg(tgRaw),
       };
     }
-
-    // viewerRole === "client" -> контрагент — ПОСТАВЩИК
-    const id = booking.provider_id ?? booking.provider_profile_id;
-    const name = booking.provider_name ?? t("roles.provider", { defaultValue: "Поставщик" });
-    const phone   = booking.provider_phone   ?? null;
-    const address = booking.provider_address ?? null;
-    const tgRaw   =
-      booking.provider_social ?? // у providers «social» = Telegram
-      booking.provider_telegram ??
-      null;
-
+    const tg = normalizeTg(booking.provider_social);
     return {
       role: t("roles.provider", { defaultValue: "Поставщик" }),
+      id: booking.provider_id,
+      name: booking.provider_name || t("roles.provider", { defaultValue: "Поставщик" }),
+      href: booking.provider_id ? `/profile/provider/${booking.provider_id}` : null,
+      phone: booking.provider_phone || null,
+      address: booking.provider_address || null,
+      telegram: tg,
       extra: typeLabel(booking.provider_type, t),
-      href: id ? `/profile/provider/${id}` : null,
-      name,
-      phone,
-      address,
-      telegram: normalizeTg(tgRaw),
     };
   }, [booking, viewerRole, t]);
 
-  const canAcceptReject = viewerRole === "provider" && String(booking.status) === "pending";
-  const canCancel = viewerRole === "client" && ["pending", "active"].includes(String(booking.status));
-  const datesText = toDatesText(booking.dates);
+  const canAcceptReject = viewerRole === "provider" && booking.status === "pending";
+  const canCancel = viewerRole === "client" && ["pending","active"].includes(String(booking.status));
+  const dates = (booking.dates || []).map(d => String(d).slice(0,10)).join(", ");
 
-  const serviceTitle =
-    booking.service_title ||
-    booking.service?.title ||
-    t("common.service", { defaultValue: "услуга" });
+  // attachments из API (json/jsonb) или строка — приведем к массиву нормализованных объектов
+  let attachments = [];
+  try {
+    const raw = booking.attachments;
+    const arr = Array.isArray(raw) ? raw : (typeof raw === "string" ? JSON.parse(raw) : []);
+    attachments = arr.map(normalizeAttachment).filter(Boolean);
+  } catch {
+    // если пришло мусорное значение — тихо игнорируем
+    attachments = [];
+  }
 
   return (
     <div className="border rounded-lg p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-gray-500">
-            #{booking.id} · {serviceTitle} · {booking.status}
+            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {booking.status}
           </div>
 
           <div className="text-base">
             <span className="text-gray-500">{counterpart.role}</span>
-            {counterpart.extra && (
-              <>
-                {" · "}
-                <span className="text-gray-500">{counterpart.extra}</span>
-              </>
-            )}
+            {counterpart.extra && <> · <span className="text-gray-500">{counterpart.extra}</span></>}
             {" · "}
             {counterpart.href ? (
-              <a className="font-semibold underline" href={counterpart.href}>
-                {counterpart.name}
-              </a>
+              <a className="font-semibold underline" href={counterpart.href}>{counterpart.name}</a>
             ) : (
               <span className="font-semibold">{counterpart.name}</span>
             )}
@@ -144,24 +131,14 @@ export default function BookingRow({
             {counterpart.phone && (
               <span>
                 {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
-                <a
-                  className="underline"
-                  href={`tel:${String(counterpart.phone).replace(/\s+/g, "")}`}
-                >
-                  {counterpart.phone}
-                </a>
+                <a className="underline" href={`tel:${String(counterpart.phone).replace(/\s+/g,"")}`}>{counterpart.phone}</a>
               </span>
             )}
             {counterpart.telegram?.label && (
               <span>
                 {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
                 {counterpart.telegram.href ? (
-                  <a
-                    className="underline break-all"
-                    href={counterpart.telegram.href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <a className="underline break-all" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
                     {counterpart.telegram.label}
                   </a>
                 ) : (
@@ -171,49 +148,79 @@ export default function BookingRow({
             )}
             {counterpart.address && (
               <span>
-                {t("marketplace.address", { defaultValue: "Адрес" })}:{" "}
-                <b>{counterpart.address}</b>
+                {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{counterpart.address}</b>
               </span>
             )}
           </div>
 
           <div className="text-sm text-gray-500 mt-1">
-            {t("common.date", { defaultValue: "Дата" })}: {datesText}
+            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
           </div>
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
           {canAcceptReject && (
             <>
-              <button
-                onClick={() => onAccept(booking)}
-                className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
-              >
+              <button onClick={() => onAccept(booking)} className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm">
                 {t("actions.accept", { defaultValue: "Подтвердить" })}
               </button>
-              <button
-                onClick={() => onReject(booking)}
-                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
-              >
+              <button onClick={() => onReject(booking)} className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm">
                 {t("actions.reject", { defaultValue: "Отклонить" })}
               </button>
             </>
           )}
-
           {canCancel && (
-            <button
-              onClick={() => onCancel(booking)}
-              className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
-            >
+            <button onClick={() => onCancel(booking)} className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm">
               {t("actions.cancel", { defaultValue: "Отменить" })}
             </button>
           )}
         </div>
       </div>
 
+      {/* сообщение клиента */}
       {booking.client_message && (
         <div className="text-sm text-gray-700 whitespace-pre-line">
           {booking.client_message}
+        </div>
+      )}
+
+      {/* вложения */}
+      {!!attachments.length && (
+        <div className="mt-1">
+          <div className="text-sm text-gray-500 mb-1">
+            {attachments.length > 1
+              ? t("attachments.list", { defaultValue: "Вложения" })
+              : t("attachments.single", { defaultValue: "Вложение" })}
+            :
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {attachments.map((att, i) => {
+              const img = isImageUrl(att.url, att.type);
+              return (
+                <a
+                  key={i}
+                  href={att.url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 no-underline"
+                  title={att.name}
+                >
+                  {img ? (
+                    <img
+                      src={att.url}
+                      alt={att.name}
+                      className="w-16 h-16 rounded border object-cover"
+                    />
+                  ) : (
+                    <span className="inline-block px-2 py-1 text-xs rounded border bg-gray-50">
+                      {att.name}
+                    </span>
+                  )}
+                </a>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
