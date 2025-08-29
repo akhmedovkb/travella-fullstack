@@ -1,30 +1,31 @@
 // frontend/src/pages/ProviderBookings.jsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
 import { tSuccess, tError } from "../shared/toast";
 
-/* =============== helpers =============== */
+/* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const getToken =
-  () => localStorage.getItem("token") || localStorage.getItem("providerToken");
+const getToken = () =>
+  localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
 const onlyDigitsDot = (s) => String(s || "").replace(/[^\d.]/g, "");
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) =>
-  isFiniteNum(n)
-    ? n.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    : "";
+  isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
 
-// attachments helpers
+/* attachments helpers */
 function tryParseJSON(val) {
   if (!val) return null;
   if (Array.isArray(val) || typeof val === "object") return val;
-  try { return JSON.parse(String(val)); } catch { return null; }
+  try {
+    return JSON.parse(String(val));
+  } catch {
+    return null;
+  }
 }
 function asArray(x) {
   const v = tryParseJSON(x) ?? x;
@@ -33,7 +34,7 @@ function asArray(x) {
 }
 function isImage(att) {
   const type = att?.type || "";
-  const url  = att?.url || att?.src || att?.href || att;
+  const url = att?.url || att?.src || att?.href || att;
   return /(^image\/)/i.test(String(type)) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""));
 }
 
@@ -45,13 +46,13 @@ function AttachmentList({ items }) {
 
   return (
     <div className="mt-4">
-      <div className="text-xs text-gray-500 mb-1">
+      <div className="mb-1 text-xs text-gray-500">
         {t("bookings.attachments", { defaultValue: "Вложения" })}
       </div>
       <div className="flex flex-wrap gap-2">
         {files.map((raw, i) => {
-          const att  = typeof raw === "string" ? { url: raw } : raw || {};
-          const url  = att.url || att.src || att.href || "";
+          const att = typeof raw === "string" ? { url: raw } : raw || {};
+          const url = att.url || att.src || att.href || "";
           const name = att.name || att.filename || url.split("?")[0].split("/").pop();
           if (!url) return null;
 
@@ -61,10 +62,10 @@ function AttachmentList({ items }) {
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="block w-28 h-20 rounded border overflow-hidden bg-gray-50"
+              className="block h-20 w-28 overflow-hidden rounded border bg-gray-50"
               title={name}
             >
-              <img src={url} alt={name} className="w-full h-full object-cover" />
+              <img src={url} alt={name} className="h-full w-full object-cover" />
             </a>
           ) : (
             <a
@@ -72,7 +73,7 @@ function AttachmentList({ items }) {
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="px-2 py-1 text-sm rounded border bg-gray-50 hover:bg-gray-100"
+              className="rounded border bg-gray-50 px-2 py-1 text-sm hover:bg-gray-100"
             >
               {name || t("bookings.file", { defaultValue: "файл" })}
             </a>
@@ -92,7 +93,6 @@ function PriceAgreementCard({ booking, onSent }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // если цена уже есть — показываем как "последнее предложение"
   const last = useMemo(() => {
     if (!isFiniteNum(Number(booking?.provider_price))) return null;
     const at = booking?.updated_at ? new Date(booking.updated_at) : null;
@@ -101,8 +101,11 @@ function PriceAgreementCard({ booking, onSent }) {
       note: booking.provider_note,
       at: at
         ? at.toLocaleString(undefined, {
-            year: "numeric", month: "2-digit", day: "2-digit",
-            hour: "2-digit", minute: "2-digit",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
           })
         : null,
     };
@@ -133,12 +136,15 @@ function PriceAgreementCard({ booking, onSent }) {
         { price: priceNum, currency, note: note.trim() },
         cfg()
       );
-      tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
       setPriceRaw("");
       setNote("");
+      tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
       onSent?.();
     } catch (e) {
-      tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
+      tError(
+        e?.response?.data?.message ||
+          t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" })
+      );
     } finally {
       setBusy(false);
     }
@@ -146,7 +152,8 @@ function PriceAgreementCard({ booking, onSent }) {
 
   return (
     <div className="mt-4 rounded-xl border bg-white">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
+      {/* header */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="font-semibold text-gray-900">
           {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
         </div>
@@ -155,6 +162,7 @@ function PriceAgreementCard({ booking, onSent }) {
         </span>
       </div>
 
+      {/* last offer */}
       {last && (
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
@@ -170,43 +178,52 @@ function PriceAgreementCard({ booking, onSent }) {
         </div>
       )}
 
+      {/* form */}
       <div className="px-4 pb-4 pt-3">
-        <div className="grid gap-3 md:grid-cols-[260px,1fr,160px]">
-          {/* Цена (+ валюта в одном поле) */}
-          <label className="relative">
+        {/* на десктопе 4 колонки: цена | валюта | комментарий | кнопка */}
+        <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
+          {/* price */}
+          <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.price", { defaultValue: "Цена" })}
             </span>
-
-            {/* группа: без внутренних бордеров, одинаковая высота */}
-            <div className="flex items-stretch h-11 rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
-              <div className="flex items-center px-3 text-gray-500">💵</div>
+            <div className="flex h-11 items-center rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
+              <div className="px-3 text-gray-500">💵</div>
               <input
                 inputMode="decimal"
                 placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
-                className="flex-1 px-0 pr-2 outline-none border-0 focus:ring-0 placeholder:text-gray-400 bg-transparent"
+                className="h-full w-full flex-1 bg-transparent px-0 pr-3 outline-none placeholder:text-gray-400"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
               />
-              <select
-                className="border-0 border-l border-gray-200 bg-gray-50 px-3 outline-none focus:ring-0 rounded-r-xl"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
             </div>
           </label>
 
-          {/* Комментарий */}
+          {/* currency */}
+          <label>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.currency", { defaultValue: "Валюта" })}
+            </span>
+            <select
+              className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* note */}
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
             </span>
             <input
-              className="w-full h-11 rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
+              className="h-11 w-full rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
               placeholder={t("bookings.comment_placeholder", {
                 defaultValue: "Например: парковки и ожидание включены",
               })}
@@ -215,12 +232,12 @@ function PriceAgreementCard({ booking, onSent }) {
             />
           </label>
 
-          {/* Кнопка */}
+          {/* button */}
           <div className="flex items-end">
             <button
               onClick={submit}
               disabled={!canSend}
-              className="w-full h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy
                 ? t("common.sending", { defaultValue: "Отправка…" })
@@ -235,10 +252,7 @@ function PriceAgreementCard({ booking, onSent }) {
   );
 }
 
-// алиас на случай старого импорта
-const QuoteForm = PriceAgreementCard;
-
-/* =============== Page =============== */
+/* ================= page ================= */
 export default function ProviderBookings() {
   const { t } = useTranslation();
   const [list, setList] = useState([]);
@@ -259,7 +273,9 @@ export default function ProviderBookings() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const hasQuotedPrice = (b) =>
     isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
@@ -318,7 +334,7 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-4">
         {list.map((b) => (
-          <div key={b.id} className="border rounded-xl p-3 bg-white">
+          <div key={b.id} className="rounded-xl border bg-white p-3">
             <BookingRow
               booking={b}
               viewerRole="provider"
@@ -336,9 +352,7 @@ export default function ProviderBookings() {
               </div>
             )}
 
-            {String(b.status) === "pending" && (
-              <PriceAgreementCard booking={b} onSent={load} />
-            )}
+            {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} />}
 
             <AttachmentList items={b.attachments} />
           </div>
@@ -348,8 +362,8 @@ export default function ProviderBookings() {
   }, [list, loading, t]);
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6">
-      <h1 className="text-2xl font-bold mb-4">
+    <div className="mx-auto max-w-5xl p-4 md:p-6">
+      <h1 className="mb-4 text-2xl font-bold">
         {t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}
       </h1>
       {content}
