@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
+import { tSuccess, tError } from "../shared/toast";
 
 /* ==== helpers ==== */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -29,8 +30,8 @@ function isImage(att) {
 function AttachmentList({ items }) {
   const { t } = useTranslation();
   const files = asArray(items);
-
   if (!files.length) return null;
+
   return (
     <div className="mt-2">
       <div className="text-xs text-gray-500 mb-1">
@@ -74,6 +75,76 @@ function AttachmentList({ items }) {
   );
 }
 
+/* ==== Quote form (цена + комментарий) ==== */
+function QuoteForm({ booking, onSent }) {
+  const { t } = useTranslation();
+  const [price, setPrice] = useState(booking?.provider_price ?? "");
+  const [note, setNote] = useState(booking?.provider_note ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const n = Number(String(price).replace(",", "."));
+    if (!Number.isFinite(n) || n <= 0) {
+      tError(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
+      return;
+    }
+    setBusy(true);
+    try {
+      await axios.post(
+        `${API_BASE}/api/bookings/${booking.id}/quote`,
+        { price: n, note },
+        cfg()
+      );
+      tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
+      onSent?.();
+    } catch (e) {
+      console.error(e);
+      tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded border p-3 bg-gray-50">
+      <div className="text-sm font-medium mb-2">
+        {t("bookings.quote_title", { defaultValue: "Согласование цены" })}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="number"
+          min="1"
+          step="0.01"
+          className="border rounded px-3 py-2 w-full sm:w-48"
+          placeholder={t("bookings.price_placeholder", { defaultValue: "Цена (USD)" })}
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+        />
+        <input
+          type="text"
+          className="border rounded px-3 py-2 flex-1"
+          placeholder={t("bookings.note_placeholder", { defaultValue: "Комментарий (необязательно)" })}
+          value={note || ""}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <button
+          onClick={submit}
+          disabled={busy}
+          className="px-4 py-2 rounded bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-60"
+        >
+          {t("bookings.send_price", { defaultValue: "Отправить цену" })}
+        </button>
+      </div>
+      {!!booking?.provider_price && (
+        <div className="text-xs text-gray-500 mt-2">
+          {t("bookings.current_price", { defaultValue: "Текущая цена" })}: <b>{booking.provider_price}</b>{" "}
+          {booking.provider_note ? `· ${booking.provider_note}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ==== Page ==== */
 export default function ProviderBookings() {
   const { t } = useTranslation();
@@ -97,25 +168,46 @@ export default function ProviderBookings() {
 
   useEffect(() => { load(); }, []);
 
-  const accept = async (id) => {
+  const ensureQuoted = (b) => Number.isFinite(Number(b?.provider_price)) && Number(b.provider_price) > 0;
+
+  const accept = async (b) => {
+    if (!ensureQuoted(b)) {
+      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
+      return;
+    }
     try {
-      await axios.post(`${API_BASE}/api/bookings/${id}/accept`, {}, cfg());
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/accept`, {}, cfg());
+      tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
     }
   };
-  const reject = async (id) => {
+
+  const reject = async (b) => {
+    if (!ensureQuoted(b)) {
+      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
+      return;
+    }
     try {
-      await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, cfg());
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/reject`, {}, cfg());
+      tSuccess(t("bookings.rejected", { defaultValue: "Бронь отклонена" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
     }
   };
-  const cancel = async (id) => {
+
+  const cancel = async (b) => {
     try {
-      await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, cfg());
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/cancel`, {}, cfg());
+      tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
@@ -136,10 +228,24 @@ export default function ProviderBookings() {
             <BookingRow
               booking={b}
               viewerRole="provider"
-              onAccept={(bk) => accept(bk.id)}
-              onReject={(bk) => reject(bk.id)}
-              onCancel={(bk) => cancel(bk.id)}
+              onAccept={(bk) => accept(bk)}
+              onReject={(bk) => reject(bk)}
+              onCancel={(bk) => cancel(bk)}
             />
+
+            {/* текущее предложение цены (если уже есть) */}
+            {!!b?.provider_price && (
+              <div className="mt-2 text-sm text-gray-700">
+                {t("bookings.current_price", { defaultValue: "Текущая цена" })}: <b>{b.provider_price}</b>{" "}
+                {b.provider_note ? `· ${b.provider_note}` : ""}
+              </div>
+            )}
+
+            {/* форма согласования цены доступна в pending */}
+            {String(b.status) === "pending" && (
+              <QuoteForm booking={b} onSent={load} />
+            )}
+
             <AttachmentList items={b.attachments} />
           </div>
         ))}
