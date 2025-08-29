@@ -109,7 +109,7 @@ const createBooking = async (req, res) => {
   }
 };
 
-// Брони провайдера (гид/транспорт) — только реальные поля БД
+// Брони провайдера (гид/транспорт) — реальные поля БД + attachments
 // Брони провайдера (гид/транспорт) — реальные поля БД + attachments
 const getProviderBookings = async (req, res) => {
   try {
