@@ -1,4 +1,5 @@
-// frontend/src/pages/ProviderBookings.jsx// frontend/src/pages/ProviderBookings.jsx
+// frontend/src/pages/ProviderBookings.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -7,8 +8,8 @@ import { tSuccess, tError } from "../shared/toast";
 
 /* =============== helpers =============== */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const getToken = () =>
-  localStorage.getItem("token") || localStorage.getItem("providerToken");
+const getToken =
+  () => localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
@@ -19,15 +20,11 @@ const fmt = (n) =>
     ? n.toLocaleString(undefined, { maximumFractionDigits: 2 })
     : "";
 
-// JSON/helpers для вложений
+// attachments helpers
 function tryParseJSON(val) {
   if (!val) return null;
   if (Array.isArray(val) || typeof val === "object") return val;
-  try {
-    return JSON.parse(String(val));
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(String(val)); } catch { return null; }
 }
 function asArray(x) {
   const v = tryParseJSON(x) ?? x;
@@ -36,11 +33,8 @@ function asArray(x) {
 }
 function isImage(att) {
   const type = att?.type || "";
-  const url = att?.url || att?.src || att?.href || att;
-  return (
-    /(^image\/)/i.test(String(type)) ||
-    /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""))
-  );
+  const url  = att?.url || att?.src || att?.href || att;
+  return /(^image\/)/i.test(String(type)) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""));
 }
 
 /* =============== Attachments =============== */
@@ -56,10 +50,9 @@ function AttachmentList({ items }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {files.map((raw, i) => {
-          const att = typeof raw === "string" ? { url: raw } : raw || {};
-          const url = att.url || att.src || att.href || "";
-          const name =
-            att.name || att.filename || url.split("?")[0].split("/").pop();
+          const att  = typeof raw === "string" ? { url: raw } : raw || {};
+          const url  = att.url || att.src || att.href || "";
+          const name = att.name || att.filename || url.split("?")[0].split("/").pop();
           if (!url) return null;
 
           return isImage(att) ? (
@@ -99,7 +92,7 @@ function PriceAgreementCard({ booking, onSent }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // показать актуальное предложение, если уже отправляли
+  // если цена уже есть — показываем как "последнее предложение"
   const last = useMemo(() => {
     if (!isFiniteNum(Number(booking?.provider_price))) return null;
     const at = booking?.updated_at ? new Date(booking.updated_at) : null;
@@ -108,11 +101,8 @@ function PriceAgreementCard({ booking, onSent }) {
       note: booking.provider_note,
       at: at
         ? at.toLocaleString(undefined, {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit",
           })
         : null,
     };
@@ -133,9 +123,7 @@ function PriceAgreementCard({ booking, onSent }) {
   const submit = async () => {
     setErr("");
     if (!canSend) {
-      setErr(
-        t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" })
-      );
+      setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
       return;
     }
     try {
@@ -150,10 +138,7 @@ function PriceAgreementCard({ booking, onSent }) {
       setNote("");
       onSent?.();
     } catch (e) {
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" })
-      );
+      tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
     } finally {
       setBusy(false);
     }
@@ -174,8 +159,7 @@ function PriceAgreementCard({ booking, onSent }) {
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
             <span className="font-medium">
-              {t("bookings.last_offer", { defaultValue: "Последнее предложение" })}
-              :
+              {t("bookings.last_offer", { defaultValue: "Последнее предложение" })}:
             </span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">
               {fmt(last.price)} {booking.currency || "USD"}
@@ -187,44 +171,42 @@ function PriceAgreementCard({ booking, onSent }) {
       )}
 
       <div className="px-4 pb-4 pt-3">
-        <div className="grid gap-3 md:grid-cols-[220px,1fr,140px]">
+        <div className="grid gap-3 md:grid-cols-[260px,1fr,160px]">
+          {/* Цена (+ валюта в одном поле) */}
           <label className="relative">
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.price", { defaultValue: "Цена" })}
             </span>
-            <div className="flex rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
+
+            {/* группа: без внутренних бордеров, одинаковая высота */}
+            <div className="flex items-stretch h-11 rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
               <div className="flex items-center px-3 text-gray-500">💵</div>
               <input
                 inputMode="decimal"
-                placeholder={t("bookings.price_placeholder", {
-                  defaultValue: "Напр. 120",
-                })}
-                className="flex-1 rounded-xl px-0 py-2 outline-none"
+                placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
+                className="flex-1 px-0 pr-2 outline-none border-0 focus:ring-0 placeholder:text-gray-400 bg-transparent"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
               />
               <select
-                className="rounded-r-xl border-l bg-gray-50 px-3 py-2 text-sm outline-none"
+                className="border-0 border-l border-gray-200 bg-gray-50 px-3 outline-none focus:ring-0 rounded-r-xl"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
                 {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+                  <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
           </label>
 
-        <label>
+          {/* Комментарий */}
+          <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
-              {t("bookings.comment_optional", {
-                defaultValue: "Комментарий (необязательно)",
-              })}
+              {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
             </span>
             <input
-              className="w-full rounded-xl border bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full h-11 rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
               placeholder={t("bookings.comment_placeholder", {
                 defaultValue: "Например: парковки и ожидание включены",
               })}
@@ -233,11 +215,12 @@ function PriceAgreementCard({ booking, onSent }) {
             />
           </label>
 
+          {/* Кнопка */}
           <div className="flex items-end">
             <button
               onClick={submit}
               disabled={!canSend}
-              className="w-full rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full h-11 rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy
                 ? t("common.sending", { defaultValue: "Отправка…" })
@@ -252,7 +235,7 @@ function PriceAgreementCard({ booking, onSent }) {
   );
 }
 
-// алиас, если где-то в коде ожидали старое имя компонента
+// алиас на случай старого импорта
 const QuoteForm = PriceAgreementCard;
 
 /* =============== Page =============== */
@@ -276,30 +259,21 @@ export default function ProviderBookings() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const hasQuotedPrice = (b) =>
     isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
   const accept = async (b) => {
     if (!hasQuotedPrice(b)) {
-      tError(
-        t("bookings.need_price_first", {
-          defaultValue: "Сначала отправьте цену",
-        })
-      );
+      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
       return;
     }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/accept`, {}, cfg());
       tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }));
     } catch (e) {
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" })
-      );
+      tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
@@ -308,21 +282,14 @@ export default function ProviderBookings() {
 
   const reject = async (b) => {
     if (!hasQuotedPrice(b)) {
-      tError(
-        t("bookings.need_price_first", {
-          defaultValue: "Сначала отправьте цену",
-        })
-      );
+      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
       return;
     }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/reject`, {}, cfg());
       tSuccess(t("bookings.rejected", { defaultValue: "Бронь отклонена" }));
     } catch (e) {
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.reject_error", { defaultValue: "Ошибка отклонения" })
-      );
+      tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
@@ -334,10 +301,7 @@ export default function ProviderBookings() {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/cancel`, {}, cfg());
       tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
     } catch (e) {
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.cancel_error", { defaultValue: "Ошибка отмены" })
-      );
+      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
@@ -346,18 +310,10 @@ export default function ProviderBookings() {
 
   const content = useMemo(() => {
     if (loading) {
-      return (
-        <div className="text-gray-500">
-          {t("common.loading", { defaultValue: "Загрузка..." })}
-        </div>
-      );
+      return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     }
     if (!list.length) {
-      return (
-        <div className="text-gray-500">
-          {t("bookings.empty", { defaultValue: "Пока нет бронирований." })}
-        </div>
-      );
+      return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
     }
     return (
       <div className="space-y-4">
@@ -371,7 +327,6 @@ export default function ProviderBookings() {
               onCancel={(bk) => cancel(bk)}
             />
 
-            {/* уже отправленная цена (если есть) */}
             {hasQuotedPrice(b) && (
               <div className="mt-3 text-sm text-gray-700">
                 {t("bookings.current_price", { defaultValue: "Текущая цена" })}:{" "}
@@ -381,12 +336,10 @@ export default function ProviderBookings() {
               </div>
             )}
 
-            {/* блок согласования цены (только при pending) */}
             {String(b.status) === "pending" && (
               <PriceAgreementCard booking={b} onSent={load} />
             )}
 
-            {/* вложения клиента к заявке */}
             <AttachmentList items={b.attachments} />
           </div>
         ))}
