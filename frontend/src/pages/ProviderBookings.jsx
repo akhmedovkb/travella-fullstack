@@ -5,10 +5,14 @@ import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
 import { tSuccess, tError } from "../shared/toast";
 
-/* ==== helpers ==== */
+/* ================== helpers ================== */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const token = () => localStorage.getItem("token") || localStorage.getItem("providerToken");
-const cfg = () => ({ headers: { Authorization: `Bearer ${token()}` } });
+const getToken = () => localStorage.getItem("token") || localStorage.getItem("providerToken");
+const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
+
+const CURRENCIES = ["USD", "EUR", "UZS"];
+const onlyDigitsDot = (s) => String(s || "").replace(/[^\d.]/g, "");
+const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 
 function tryParseJSON(val) {
   if (!val) return null;
@@ -16,49 +20,48 @@ function tryParseJSON(val) {
   try { return JSON.parse(String(val)); } catch { return null; }
 }
 function asArray(x) {
-  if (!x) return [];
   const v = tryParseJSON(x) ?? x;
+  if (!v) return [];
   return Array.isArray(v) ? v : typeof v === "object" ? [v] : [];
 }
 function isImage(att) {
   const type = att?.type || "";
-  const url  = att?.url  || att;
-  return /(^image\/)|(.(png|jpe?g|webp|gif|bmp)(\?|$))/i.test(`${type}`) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(`${url}`);
+  const url  = att?.url  || att?.src || att?.href || att;
+  return /(^image\/)/i.test(String(type)) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""));
 }
+const fmt = (n) =>
+  isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
 
-/* ==== Attachments block ==== */
+/* ================== Attachments ================== */
 function AttachmentList({ items }) {
   const { t } = useTranslation();
   const files = asArray(items);
   if (!files.length) return null;
 
   return (
-    <div className="mt-2">
+    <div className="mt-4">
       <div className="text-xs text-gray-500 mb-1">
         {t("bookings.attachments", { defaultValue: "Вложения" })}
       </div>
       <div className="flex flex-wrap gap-2">
         {files.map((raw, i) => {
-          const att = typeof raw === "string" ? { url: raw, name: raw.split("/").pop() } : raw;
-          const url = att.url || att.src || att.href || "";
+          const att  = typeof raw === "string" ? { url: raw } : raw || {};
+          const url  = att.url || att.src || att.href || "";
           const name = att.name || att.filename || url.split("?")[0].split("/").pop();
           if (!url) return null;
 
-          if (isImage(att)) {
-            return (
-              <a
-                key={i}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                className="block w-28 h-20 rounded border overflow-hidden"
-                title={name}
-              >
-                <img src={url} alt={name} className="w-full h-full object-cover" />
-              </a>
-            );
-          }
-          return (
+          return isImage(att) ? (
+            <a
+              key={i}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="block w-28 h-20 rounded border overflow-hidden bg-gray-50"
+              title={name}
+            >
+              <img src={url} alt={name} className="w-full h-full object-cover" />
+            </a>
+          ) : (
             <a
               key={i}
               href={url}
@@ -75,30 +78,61 @@ function AttachmentList({ items }) {
   );
 }
 
-/* ==== Quote form (цена + комментарий) ==== */
-function QuoteForm({ booking, onSent }) {
+/* ================== Красивый блок согласования цены ================== */
+function PriceAgreementCard({ booking, onSent }) {
   const { t } = useTranslation();
-  const [price, setPrice] = useState(booking?.provider_price ?? "");
-  const [note, setNote] = useState(booking?.provider_note ?? "");
+  const [priceRaw, setPriceRaw] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  // показать актуальное предложение, если уже отправляли
+  const last = useMemo(() => {
+    if (!isFiniteNum(Number(booking?.provider_price))) return null;
+    const at = booking?.updated_at ? new Date(booking.updated_at) : null;
+    return {
+      price: Number(booking.provider_price),
+      note: booking.provider_note,
+      at: at
+        ? at.toLocaleString(undefined, {
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit",
+          })
+        : null,
+    };
+  }, [booking?.provider_price, booking?.provider_note, booking?.updated_at]);
+
+  const priceNum = useMemo(() => {
+    const n = Number(onlyDigitsDot(priceRaw));
+    return isFiniteNum(n) ? n : NaN;
+  }, [priceRaw]);
+
+  const canSend =
+    !busy &&
+    String(booking?.status) === "pending" &&
+    isFiniteNum(priceNum) &&
+    priceNum > 0 &&
+    CURRENCIES.includes(currency);
 
   const submit = async () => {
-    const n = Number(String(price).replace(",", "."));
-    if (!Number.isFinite(n) || n <= 0) {
-      tError(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
+    setErr("");
+    if (!canSend) {
+      setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
       return;
     }
-    setBusy(true);
     try {
+      setBusy(true);
       await axios.post(
         `${API_BASE}/api/bookings/${booking.id}/quote`,
-        { price: n, note },
+        { price: priceNum, currency, note: note.trim() },
         cfg()
       );
       tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
+      setPriceRaw("");
+      setNote("");
       onSent?.();
     } catch (e) {
-      console.error(e);
       tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
     } finally {
       setBusy(false);
@@ -106,53 +140,99 @@ function QuoteForm({ booking, onSent }) {
   };
 
   return (
-    <div className="mt-3 rounded border p-3 bg-gray-50">
-      <div className="text-sm font-medium mb-2">
-        {t("bookings.quote_title", { defaultValue: "Согласование цены" })}
+    <div className="mt-4 rounded-xl border bg-white">
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="font-semibold text-gray-900">
+          {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
+        </div>
+        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
+          {t("status.pending", { defaultValue: "ожидает" })}
+        </span>
       </div>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          type="number"
-          min="1"
-          step="0.01"
-          className="border rounded px-3 py-2 w-full sm:w-48"
-          placeholder={t("bookings.price_placeholder", { defaultValue: "Цена (USD)" })}
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-        />
-        <input
-          type="text"
-          className="border rounded px-3 py-2 flex-1"
-          placeholder={t("bookings.note_placeholder", { defaultValue: "Комментарий (необязательно)" })}
-          value={note || ""}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <button
-          onClick={submit}
-          disabled={busy}
-          className="px-4 py-2 rounded bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-60"
-        >
-          {t("bookings.send_price", { defaultValue: "Отправить цену" })}
-        </button>
-      </div>
-      {!!booking?.provider_price && (
-        <div className="text-xs text-gray-500 mt-2">
-          {t("bookings.current_price", { defaultValue: "Текущая цена" })}: <b>{booking.provider_price}</b>{" "}
-          {booking.provider_note ? `· ${booking.provider_note}` : ""}
+
+      {last && (
+        <div className="px-4 pt-3 text-sm text-gray-700">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+            <span className="font-medium">
+              {t("bookings.last_offer", { defaultValue: "Последнее предложение" })}:
+            </span>
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">
+              {fmt(last.price)} {booking.currency || "USD"}
+            </span>
+            {last.note ? <span>· {last.note}</span> : null}
+            {last.at ? <span className="text-gray-500">· {last.at}</span> : null}
+          </div>
         </div>
       )}
+
+      <div className="px-4 pb-4 pt-3">
+        <div className="grid gap-3 md:grid-cols-[220px,1fr,140px]">
+          <label className="relative">
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.price", { defaultValue: "Цена" })}
+            </span>
+            <div className="flex rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
+              <div className="flex items-center px-3 text-gray-500">💵</div>
+              <input
+                inputMode="decimal"
+                placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
+                className="flex-1 rounded-xl px-0 py-2 outline-none"
+                value={priceRaw}
+                onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
+              />
+              <select
+                className="rounded-r-xl border-l bg-gray-50 px-3 py-2 text-sm outline-none"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </label>
+
+          <label>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
+            </span>
+            <input
+              className="w-full rounded-xl border bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-orange-400"
+              placeholder={t("bookings.comment_placeholder", {
+                defaultValue: "Например: парковки и ожидание включены",
+              })}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+
+          <div className="flex items-end">
+            <button
+              onClick={submit}
+              disabled={!canSend}
+              className="w-full rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy
+                ? t("common.sending", { defaultValue: "Отправка…" })
+                : t("bookings.send_price", { defaultValue: "Отправить цену" })}
+            </button>
+          </div>
+        </div>
+
+        {err ? <div className="mt-2 text-sm text-red-600">{err}</div> : null}
+      </div>
     </div>
   );
 }
 
-/* ==== Page ==== */
+/* ================== Page ================== */
 export default function ProviderBookings() {
   const { t } = useTranslation();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    if (!token()) return;
+    if (!getToken()) return;
     setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/api/bookings/provider`, cfg());
@@ -168,10 +248,10 @@ export default function ProviderBookings() {
 
   useEffect(() => { load(); }, []);
 
-  const ensureQuoted = (b) => Number.isFinite(Number(b?.provider_price)) && Number(b.provider_price) > 0;
+  const hasQuotedPrice = (b) => isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
   const accept = async (b) => {
-    if (!ensureQuoted(b)) {
+    if (!hasQuotedPrice(b)) {
       tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
       return;
     }
@@ -187,7 +267,7 @@ export default function ProviderBookings() {
   };
 
   const reject = async (b) => {
-    if (!ensureQuoted(b)) {
+    if (!hasQuotedPrice(b)) {
       tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
       return;
     }
@@ -224,7 +304,7 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-4">
         {list.map((b) => (
-          <div key={b.id} className="border rounded-xl p-3">
+          <div key={b.id} className="border rounded-xl p-3 bg-white">
             <BookingRow
               booking={b}
               viewerRole="provider"
@@ -233,19 +313,22 @@ export default function ProviderBookings() {
               onCancel={(bk) => cancel(bk)}
             />
 
-            {/* текущее предложение цены (если уже есть) */}
-            {!!b?.provider_price && (
-              <div className="mt-2 text-sm text-gray-700">
-                {t("bookings.current_price", { defaultValue: "Текущая цена" })}: <b>{b.provider_price}</b>{" "}
-                {b.provider_note ? `· ${b.provider_note}` : ""}
+            {/* уже отправленная цена (если есть) */}
+            {hasQuotedPrice(b) && (
+              <div className="mt-3 text-sm text-gray-700">
+                {t("bookings.current_price", { defaultValue: "Текущая цена" })}:{" "}
+                <b>{fmt(Number(b.provider_price))}</b>
+                {b.currency ? ` ${b.currency}` : " USD"}
+                {b.provider_note ? ` · ${b.provider_note}` : ""}
               </div>
             )}
 
-            {/* форма согласования цены доступна в pending */}
+            {/* блок согласования цены (только при pending) */}
             {String(b.status) === "pending" && (
-              <QuoteForm booking={b} onSent={load} />
+              <PriceAgreementCard booking={b} onSent={load} />
             )}
 
+            {/* вложения клиента к заявке */}
             <AttachmentList items={b.attachments} />
           </div>
         ))}
