@@ -291,22 +291,7 @@ async function fetchClientRequestsSafe(myId) {
   return [];
 }
 
-// «мои» брони
-async function fetchClientBookingsSafe() {
-  const candidates = [
-    "/api/bookings/my",
-    "/api/bookings/mine",
-    "/api/my/bookings",
-    "/api/client/bookings",
-    "/api/clients/bookings",
-    "/api/bookings?mine=1",
-    "/api/bookings?me=1",
-  ];
-  for (const url of candidates) {
-    try { return arrify(await apiGet(url)); } catch {}
-  }
-  return [];
-}
+
 
 /* ===================== Локальные черновики (без бэка) ===================== */
 const draftsKey = (id) => (id ? `client:req:drafts:${id}` : `client:req:drafts:anon`);
@@ -677,36 +662,42 @@ export default function ClientDashboard() {
   }, []);
 
   // загрузка данных табов + подмешивание черновиков
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingTab(true);
-        if (activeTab === "requests") {
-          const apiList = await fetchClientRequestsSafe(myId);
-          const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
-          if (!cancelled) setRequests(mergeRequests(apiList, drafts));
-        } else if (activeTab === "bookings") {
-          const data = await fetchClientBookingsSafe();
-          if (!cancelled) setBookings(data);
-        } else if (activeTab === "favorites") {
-          const data = await apiGet("/api/wishlist?expand=service");
-          const arr = Array.isArray(data) ? data : data?.items || [];
-          if (!cancelled) {
-            setFavorites(arr);
-            const maxPage = Math.max(1, Math.ceil(arr.length / 8));
-            setFavPage((p) => Math.min(Math.max(1, p), maxPage));
-          }
+useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
+    try {
+      // ⚠️ Не включаем табовый спиннер для "bookings": этим табом управляет ClientBookings
+      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+      if (isExternalTab) setLoadingTab(true);
+
+      if (activeTab === "requests") {
+        const apiList = await fetchClientRequestsSafe(myId);
+        const drafts  = [...loadDrafts(myId), ...loadDrafts(null)];
+        if (!cancelled) setRequests(mergeRequests(apiList, drafts));
+      } else if (activeTab === "favorites") {
+        const data = await apiGet("/api/wishlist?expand=service");
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        if (!cancelled) {
+          setFavorites(arr);
+          const maxPage = Math.max(1, Math.ceil(arr.length / 8));
+          setFavPage((p) => Math.min(Math.max(1, p), maxPage));
         }
-      } catch {
-        if (activeTab === "favorites") setFavorites([]);
-        else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
-      } finally {
-        if (!cancelled) setLoadingTab(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [activeTab, t, myId]);
+
+      // 👉 activeTab === "bookings" — ничего не делаем.
+      // Этим полностью занимается <ClientBookings /> внутри своего файла.
+    } catch {
+      if (activeTab === "favorites") setFavorites([]);
+      else setError(t("errors.tab_load", { defaultValue: "Ошибка загрузки данных" }));
+    } finally {
+      const isExternalTab = activeTab === "requests" || activeTab === "favorites";
+      if (!cancelled && isExternalTab) setLoadingTab(false);
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, [activeTab, t, myId]);
 
 
   useEffect(() => {
@@ -1007,34 +998,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
   }
 };
 
-  const handleAcceptProposal = async (id) => {
-    try {
-      setActingReqId(id); setError(null);
-      await apiPost(`/api/requests/${id}/accept`, {});
-      setMessage(t("client.dashboard.accepted", { defaultValue: "Предложение принято" }));
-      const [r, b] = await Promise.allSettled([fetchClientRequestsSafe(myId), fetchClientBookingsSafe()]);
-      if (r.status === "fulfilled") setRequests(mergeRequests(r.value, [...loadDrafts(myId), ...loadDrafts(null)]));
-      if (b.status === "fulfilled") setBookings(b.value);
-      setActiveTab("bookings");
-     } catch (e) {
-   setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" }));
-   tError(t("errors.action_failed") || "Не удалось выполнить действие", { autoClose: 2000 });
- }
-    finally { setActingReqId(null); }
-  };
-
-  const handleRejectProposal = async (id) => {
-    try {
-      setActingReqId(id); setError(null);
-      await apiPost(`/api/requests/${id}/reject`, {});
-      setMessage(t("client.dashboard.rejected", { defaultValue: "Предложение отклонено" }));
-      tInfo(t("client.dashboard.rejected") || "Предложение отклонено", { autoClose: 1800 });
-      const data = await fetchClientRequestsSafe(myId);
-      setRequests(mergeRequests(data, [...loadDrafts(myId), ...loadDrafts(null)]));
-    } catch (e) { setError(e?.message || t("errors.action_failed", { defaultValue: "Не удалось выполнить действие" })); }
-    finally { setActingReqId(null); }
-  };
-
+  
   // Удаление заявки (API или локальный черновик)
    function askDeleteRequest(id) {
        if (!id) return;
@@ -1152,20 +1116,7 @@ const handleQuickRequest = async (serviceId, meta = {}) => {
   tInfo(t("wip.edit_soon", { defaultValue: "Редактирование скоро будет" }), { autoClose: 1500 });
 }
 
-  function openBooking(serviceId) { setBookingUI({ open: true, serviceId }); setBkDate(""); setBkTime(""); setBkPax(1); setBkNote(""); }
-  function closeBooking() { setBookingUI({ open: false, serviceId: null }); }
-  async function createBooking() {
-    if (!bookingUI.serviceId) return;
-    setBkSending(true);
-    try {
-      const details = { date: bkDate || undefined, time: bkTime || undefined, pax: Number(bkPax) || 1, note: bkNote || undefined };
-      await apiPost("/api/bookings", { service_id: bookingUI.serviceId, details });
-      closeBooking(); setMessage(t("messages.booking_created", { defaultValue: "Бронирование отправлено" })); setActiveTab("bookings");
-      try { setBookings(await fetchClientBookingsSafe()); } catch {}
-    } catch (e) { setError(e?.message || t("errors.booking_create", { defaultValue: "Не удалось создать бронирование" })); }
-    finally { setBkSending(false); }
-  }
-
+  
   /* -------- Render helpers -------- */
 
   const Avatar = () => {
