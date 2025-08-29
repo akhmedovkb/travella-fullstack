@@ -1,4 +1,5 @@
-//frontend/src/components/BookingRow.jsximport React, { useMemo } from "react";
+//frontend/src/components/BookingRow.jsx
+import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 /* ===== helpers ===== */
