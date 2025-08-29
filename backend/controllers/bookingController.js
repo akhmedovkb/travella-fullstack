@@ -313,10 +313,49 @@ const cancelBooking = async (req, res) => {
   }
 };
 
+// Провайдер отправляет цену/комментарий по брони
+const providerQuote = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const providerId = req.user?.id;
+    const price = Number(req.body?.price);
+    const note  = req.body?.note ?? null;
+
+    if (!Number.isFinite(bookingId) || bookingId <= 0) {
+      return res.status(400).json({ message: "Invalid booking id" });
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ message: "Invalid price" });
+    }
+
+    const q = await pool.query(
+      `UPDATE bookings
+         SET provider_price = $2,
+             provider_note  = $3,
+             updated_at     = NOW()
+       WHERE id = $1 AND provider_id = $4
+       RETURNING id, provider_price, provider_note`,
+      [bookingId, price, note, providerId]
+    );
+
+    if (!q.rowCount) return res.status(404).json({ message: "Booking not found" });
+    res.json({ ok: true, booking: q.rows[0] });
+  } catch (err) {
+    console.error("providerQuote error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = {
+  // ...остальные экспортируемые обработчики...
+  providerQuote,
+};
+
 module.exports = {
   createBooking,
   getProviderBookings,
   getMyBookings,
+  providerQuote,
   acceptBooking,
   rejectBooking,
   cancelBooking,
