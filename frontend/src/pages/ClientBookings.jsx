@@ -1,96 +1,93 @@
 // frontend/src/pages/ClientBookings.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { apiGet, apiPost } from "../api";
-import { tSuccess, tError, tInfo } from "../shared/toast";
+import { tSuccess, tError } from "../shared/toast";
 
-/* ================= helpers ================= */
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const getToken = () =>
+  localStorage.getItem("clientToken") ||
+  localStorage.getItem("token") ||
+  localStorage.getItem("providerToken"); // на всякий случай
+const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
-const arrify = (res) =>
-  Array.isArray(res) ? res : res?.items || res?.data || res?.list || res?.results || [];
+/* helpers */
+const arrify = (x) =>
+  Array.isArray(x) ? x : x?.items || x?.data || x?.list || [];
 
-/** безопасная загрузка «моих» бронирований с фолбэками */
-async function fetchClientBookingsSafe() {
-  const candidates = [
-    "/api/bookings/my",
-    "/api/bookings/mine",
-    "/api/my/bookings",
-    "/api/client/bookings",
-    "/api/clients/bookings",
-    "/api/bookings?mine=1",
-    "/api/bookings?me=1",
-  ];
+const tryParse = (v) => {
+  if (!v) return null;
+  if (typeof v === "object") return v;
+  try {
+    return JSON.parse(String(v));
+  } catch {
+    return null;
+  }
+};
+const asArray = (x) => {
+  const v = tryParse(x) ?? x;
+  if (!v) return [];
+  return Array.isArray(v) ? v : typeof v === "object" ? [v] : [];
+};
+const isImg = (att) => {
+  const type = att?.type || "";
+  const url = att?.url || att?.src || att?.href || att;
+  return (
+    /(^image\/)/i.test(String(type)) ||
+    /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""))
+  );
+};
+const fmt = (n) =>
+  Number.isFinite(n)
+    ? n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    : "";
+
+/* маленький util: последовательно пробуем список эндпойнтов */
+async function tryEndpoints(method, candidates, body) {
+  let lastErr;
   for (const url of candidates) {
     try {
-      const r = await apiGet(url);
-      return arrify(r);
-    } catch {}
-  }
-  return [];
-}
-
-/** постим на первый сработавший эндпоинт из списка */
-async function postOneOf(paths = [], body = {}) {
-  let lastErr;
-  for (const p of paths) {
-    try {
-      return await apiPost(p, body);
+      const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
+      if (method === "GET") {
+        const { data } = await axios.get(full, cfg());
+        return data;
+      } else if (method === "POST") {
+        const { data } = await axios.post(full, body ?? {}, cfg());
+        return data;
+      } else if (method === "PUT") {
+        const { data } = await axios.put(full, body ?? {}, cfg());
+        return data;
+      }
     } catch (e) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error("No endpoint accepted the request");
+  throw lastErr;
 }
 
-function tryParseJSON(val) {
-  if (!val) return null;
-  if (Array.isArray(val) || typeof val === "object") return val;
-  try { return JSON.parse(String(val)); } catch { return null; }
-}
-function asArray(x) {
-  const v = tryParseJSON(x) ?? x;
-  if (!v) return [];
-  return Array.isArray(v) ? v : typeof v === "object" ? [v] : [];
-}
-function isImage(att) {
-  const type = att?.type || "";
-  const url  = att?.url || att?.src || att?.href || (typeof att === "string" ? att : "");
-  return /(^image\/)/i.test(String(type)) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(url || ""));
-}
-function normalizeTelegram(v) {
-  if (!v) return null;
-  let s = String(v).trim().replace(/\s+/g, "");
-  if (!s) return null;
-
-  const mUrl = s.match(/(?:https?:\/\/)?(?:t\.me|telegram\.(?:me|dog))\/(@?[\w\d_]+)/i);
-  if (mUrl) { const u = mUrl[1].replace(/^@/, ""); return { href: `https://t.me/${u}`, label: `@${u}` }; }
-  const mUser = s.match(/^@?([\w\d_]{3,})$/);
-  if (mUser) { const u = mUser[1]; return { href: `https://t.me/${u}`, label: `@${u}` }; }
-  return { href: s.startsWith("http") ? s : `https://t.me/${s.replace(/^@/, "")}`, label: s.startsWith("@") ? s : `@${s}` };
-}
-const fmtMoney = (n) =>
-  Number.isFinite(Number(n)) ? Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
-
-/* ================ Attachments block ================ */
+/* вложения */
 function AttachmentList({ items }) {
   const { t } = useTranslation();
   const files = asArray(items);
   if (!files.length) return null;
 
   return (
-    <div className="mt-3">
+    <div className="mt-2">
       <div className="text-xs text-gray-500 mb-1">
         {t("bookings.attachments", { defaultValue: "Вложения" })}
       </div>
       <div className="flex flex-wrap gap-2">
         {files.map((raw, i) => {
-          const att  = typeof raw === "string" ? { url: raw } : raw || {};
-          const url  = att.url || att.src || att.href || "";
-          const name = att.name || att.filename || url.split("?")[0].split("/").pop();
+          const att =
+            typeof raw === "string"
+              ? { url: raw, name: raw.split("/").pop() }
+              : raw || {};
+          const url = att.url || att.src || att.href || "";
+          const name =
+            att.name || att.filename || url.split("?")[0].split("/").pop();
           if (!url) return null;
 
-          return isImage(att) ? (
+          return isImg(att) ? (
             <a
               key={i}
               href={url}
@@ -118,136 +115,8 @@ function AttachmentList({ items }) {
   );
 }
 
-/* ================ Single booking card ================ */
-function ClientBookingCard({ b, onConfirm, onReject }) {
-  const { t } = useTranslation();
-
-  // провайдерские поля из плоских алиасов + запасные из вложенного объекта
-  const providerId    = b.provider_id ?? b.providerId ?? b.provider?.id ?? null;
-  const providerName  = b.provider_name ?? b.provider?.name ?? null;
-  const providerAddr  = b.provider_address ?? b.provider?.address ?? b.address ?? null;
-  const providerPhone = b.provider_phone ?? b.provider?.phone ?? b.phone ?? null;
-  const providerTgRaw = b.provider_telegram ?? b.provider_social ?? b.provider?.telegram ?? b.provider?.social ?? null;
-  const providerTg    = normalizeTelegram(providerTgRaw);
-
-  const created = b.created_at ? new Date(b.created_at).toLocaleString() : "";
-  const status  = String(b.status || "").toLowerCase();
-
-  const datesList = (b.dates && Array.isArray(b.dates) ? b.dates : []).map(d => String(d).slice(0,10)).join(", ");
-
-  const canConfirmOrReject =
-    Number.isFinite(Number(b.provider_price)) &&
-    Number(b.provider_price) > 0 &&
-    ["pending","quoted","awaiting_client","waiting_client","price_sent"].includes(status);
-
-  return (
-    <div className="border rounded-xl p-4 bg-white">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          {/* header line */}
-          <div className="text-sm text-gray-500">
-            #{b.id} · {b.service_title || t("common.service", { defaultValue: "услуга" })} · {status}
-          </div>
-
-          {/* provider line */}
-          <div className="mt-0.5 text-base">
-            <span className="text-gray-500">{t("roles.provider", { defaultValue: "Поставщик" })}</span>
-            {" · "}
-            {providerId ? (
-              <Link className="font-semibold underline" to={`/profile/provider/${providerId}`}>
-                {providerName || t("roles.provider", { defaultValue: "Поставщик" })}
-              </Link>
-            ) : (
-              <span className="font-semibold">{providerName || t("roles.provider", { defaultValue: "Поставщик" })}</span>
-            )}
-          </div>
-
-          {/* contacts */}
-          <div className="text-sm text-gray-700 mt-1 space-x-3">
-            {providerPhone && (
-              <span>
-                {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
-                <a className="underline" href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}>{providerPhone}</a>
-              </span>
-            )}
-            {providerTg?.label && (
-              <span>
-                {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
-                {providerTg.href ? (
-                  <a className="underline break-all" href={providerTg.href} target="_blank" rel="noreferrer">
-                    {providerTg.label}
-                  </a>
-                ) : (
-                  <span>{providerTg.label}</span>
-                )}
-              </span>
-            )}
-            {providerAddr && (
-              <span>
-                {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{providerAddr}</b>
-              </span>
-            )}
-          </div>
-
-          {/* dates & created */}
-          <div className="text-sm text-gray-500 mt-1">
-            {t("common.date", { defaultValue: "Дата" })}: {datesList || "—"}
-          </div>
-          {created && (
-            <div className="text-xs text-gray-400 mt-0.5">
-              {t("common.created", { defaultValue: "Создан" })}: {created}
-            </div>
-          )}
-
-          {/* your message */}
-          {b.client_message && (
-            <div className="text-sm text-gray-700 whitespace-pre-line mt-2">
-              <b>{t("common.comment", { defaultValue: "Комментарий" })}:</b> {b.client_message}
-            </div>
-          )}
-
-          {/* provider price / note */}
-          {Number.isFinite(Number(b.provider_price)) && Number(b.provider_price) > 0 && (
-            <div className="mt-2 text-sm text-gray-800">
-              <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">
-                {t("bookings.provider_offer", { defaultValue: "Предложение поставщика" })}:
-                {" "}
-                <b>{fmtMoney(b.provider_price)}</b> {b.currency || "USD"}
-              </span>
-              {b.provider_note ? <span className="ml-2 text-gray-600">· {b.provider_note}</span> : null}
-            </div>
-          )}
-
-          {/* attachments */}
-          <AttachmentList items={b.attachments} />
-        </div>
-
-        {/* actions */}
-        <div className="shrink-0 flex flex-col gap-2">
-          {canConfirmOrReject && (
-            <>
-              <button
-                onClick={() => onConfirm?.(b)}
-                className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
-              >
-                {t("actions.confirm", { defaultValue: "Подтвердить" })}
-              </button>
-              <button
-                onClick={() => onReject?.(b)}
-                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
-              >
-                {t("actions.reject", { defaultValue: "Отклонить" })}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ================= Page ================= */
-export default function ClientBookings({ refreshKey = 0 }) {
+/* основной компонент */
+export default function ClientBookings({ refreshKey }) {
   const { t } = useTranslation();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -255,87 +124,215 @@ export default function ClientBookings({ refreshKey = 0 }) {
   const load = async () => {
     setLoading(true);
     try {
-      const rows = await fetchClientBookingsSafe();
-      setList(rows);
+      const data = await tryEndpoints("GET", [
+        "/api/bookings/my",
+        "/api/bookings/mine",
+        "/api/my/bookings",
+        "/api/client/bookings",
+        "/api/clients/bookings",
+        "/api/bookings?mine=1",
+        "/api/bookings?me=1",
+      ]);
+      setList(arrify(data));
     } catch (e) {
-      console.error("load client bookings failed", e);
+      console.error("client bookings load failed", e);
       setList([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { load(); }, [refreshKey]); // реагируем на проп от Dashboard
-
-  // слушатель глобального события
+  useEffect(() => {
+    load();
+  }, []);
+  useEffect(() => {
+    if (refreshKey !== undefined) load();
+  }, [refreshKey]);
   useEffect(() => {
     const onRefresh = () => load();
     window.addEventListener("client:bookings:refresh", onRefresh);
     return () => window.removeEventListener("client:bookings:refresh", onRefresh);
   }, []);
 
-  const confirm = async (b) => {
-    try {
-      // согласие клиента на цену поставщика
-      await postOneOf(
-        [
-          `/api/bookings/${b.id}/confirm`,        // предпочтительно
-          `/api/bookings/${b.id}/accept-client`,  // вариант 2
-          `/api/bookings/${b.id}/approve`,        // вариант 3
-          `/api/bookings/${b.id}/accept`,         // крайний случай (если бэк не различает роли)
-        ],
-        {}
+  const canConfirm = (b) =>
+    Number.isFinite(Number(b?.provider_price)) &&
+    Number(b.provider_price) > 0 &&
+    String(b.status) === "pending";
+
+  const confirmBooking = async (b) => {
+    if (!canConfirm(b)) {
+      tError(
+        t("bookings.need_price_first", {
+          defaultValue: "Сначала дождитесь цены от поставщика",
+        })
       );
-      tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }), { autoClose: 1600 });
-    } catch (e) {
-      tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
-    } finally {
+      return;
+    }
+    try {
+      await tryEndpoints("POST", [
+        `/api/bookings/${b.id}/confirm`,
+        `/api/bookings/${b.id}/approve`,
+        `/api/bookings/${b.id}/client-accept`,
+        `/api/bookings/${b.id}/accept-client`,
+        `/api/bookings/${b.id}/accept`, // вдруг один общий эндпойнт
+        "/api/bookings/confirm",
+      ], { id: b.id });
+
+      tSuccess(t("bookings.confirmed", { defaultValue: "Бронирование подтверждено" }));
       await load();
-      window.dispatchEvent(new Event("client:counts:refresh"));
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" });
+      tError(String(msg));
+      console.error("confirmBooking failed", e);
     }
   };
 
-  const reject = async (b) => {
+  const declineBooking = async (b) => {
     try {
-      // отказ клиента от предложенной цены/брони
-      await postOneOf(
-        [
-          `/api/bookings/${b.id}/reject-client`,
-          `/api/bookings/${b.id}/decline`,
-          `/api/bookings/${b.id}/reject`,
-          `/api/bookings/${b.id}/cancel`,
-        ],
-        {}
-      );
-      tInfo(t("bookings.rejected", { defaultValue: "Бронь отклонена" }), { autoClose: 1500 });
-    } catch (e) {
-      tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
-    } finally {
+      await tryEndpoints("POST", [
+        `/api/bookings/${b.id}/client-reject`,
+        `/api/bookings/${b.id}/reject-client`,
+        `/api/bookings/${b.id}/decline`,
+        `/api/bookings/${b.id}/reject`,
+        `/api/bookings/${b.id}/cancel`,
+        "/api/bookings/cancel",
+      ], { id: b.id });
+
+      tSuccess(t("bookings.rejected", { defaultValue: "Бронирование отклонено" }));
       await load();
-      window.dispatchEvent(new Event("client:counts:refresh"));
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        t("bookings.reject_error", { defaultValue: "Ошибка отклонения" });
+      tError(String(msg));
+      console.error("declineBooking failed", e);
     }
   };
 
   const content = useMemo(() => {
     if (loading) {
-      return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
+      return (
+        <div className="text-gray-500">
+          {t("common.loading", { defaultValue: "Загрузка..." })}
+        </div>
+      );
     }
     if (!list.length) {
-      return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
+      return (
+        <div className="text-gray-500">
+          {t("bookings.empty_client", { defaultValue: "Пока нет бронирований." })}
+        </div>
+      );
     }
+
     return (
       <div className="space-y-4">
-        {list.map((b) => (
-          <ClientBookingCard key={b.id} b={b} onConfirm={confirm} onReject={reject} />
-        ))}
+        {list.map((b) => {
+          const dates =
+            Array.isArray(b?.dates) && b.dates.length >= 2
+              ? `${String(b.dates[0]).slice(0, 10)}, ${String(b.dates[1]).slice(0, 10)}`
+              : `${b?.date || ""}`;
+          const providerName =
+            b?.provider_name || b?.provider?.name || b?.service?.provider_name;
+          const providerPhone =
+            b?.provider_phone || b?.provider?.phone;
+          const providerTg =
+            b?.provider_telegram || b?.provider?.telegram;
+          const address = b?.service_city || b?.city || b?.address;
+
+          return (
+            <div key={b.id} className="border rounded-xl p-4 bg-white">
+              <div className="text-sm text-gray-600">
+                #{b.id} · {b?.service_title || b?.title || t("booking.title", { defaultValue: "Бронирование" })} ·{" "}
+                <span className="text-gray-500">{String(b.status || "").toLowerCase()}</span>
+              </div>
+
+              <div className="mt-1">
+                <b>{t("common.provider", { defaultValue: "Поставщик" })}</b>:{" "}
+                {providerName || "—"}
+              </div>
+
+              <div className="text-sm text-gray-700 mt-1">
+                {providerPhone && (
+                  <>
+                    {t("client.dashboard.phone", { defaultValue: "Телефон" })}:{" "}
+                    <a className="hover:underline" href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}>
+                      {providerPhone}
+                    </a>{" "}
+                  </>
+                )}
+                {providerTg && (
+                  <>
+                    · Telegram:{" "}
+                    <a
+                      className="hover:underline"
+                      href={`https://t.me/${String(providerTg).replace(/^@/, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      @{String(providerTg).replace(/^@/, "")}
+                    </a>
+                  </>
+                )}
+                {address && <> · {t("common.address", { defaultValue: "Адрес" })}: {address}</>}
+              </div>
+
+              {dates && (
+                <div className="text-sm text-gray-700 mt-1">
+                  {t("common.date", { defaultValue: "Дата" })}: {dates}
+                </div>
+              )}
+
+              {!!b?.client_message && (
+                <div className="mt-2 text-sm">
+                  <b>{t("common.comment", { defaultValue: "Комментарий" })}</b>: {b.client_message}
+                </div>
+              )}
+
+              {!!b?.provider_price && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 text-emerald-800 px-2 py-1 text-sm">
+                    {t("bookings.last_offer", { defaultValue: "Предложение поставщика" })}:{" "}
+                    <b>{fmt(Number(b.provider_price))}</b>{" "}
+                    {b.currency || "USD"}
+                    {b.provider_note ? ` · ${b.provider_note}` : ""}
+                  </span>
+                </div>
+              )}
+
+              <AttachmentList items={b.attachments} />
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => confirmBooking(b)}
+                  disabled={!canConfirm(b)}
+                  className="px-4 py-2 rounded bg-green-600 text-white disabled:opacity-50"
+                >
+                  {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                </button>
+                <button
+                  onClick={() => declineBooking(b)}
+                  className="px-4 py-2 rounded bg-red-600 text-white"
+                >
+                  {t("actions.reject", { defaultValue: "Отклонить" })}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }, [list, loading, t]);
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">
+      <h2 className="text-xl font-semibold mb-3">
         {t("bookings.title_client", { defaultValue: "Мои бронирования" })}
       </h2>
       {content}
