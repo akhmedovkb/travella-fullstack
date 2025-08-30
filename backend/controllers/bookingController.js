@@ -345,40 +345,54 @@ const providerQuote = async (req, res) => {
 };
 
 // Клиент подтверждает: POST /api/bookings/:id/confirm
+
 const confirmBooking = async (req, res) => {
   try {
     const clientId = req.user?.id;
     const id = Number(req.params.id);
 
+    // Проверяем владельца брони и сразу забираем нужные поля
     const own = await pool.query(
-      `SELECT provider_id, client_id FROM bookings WHERE id=$1`,
+      `SELECT provider_id, client_id, status, date
+         FROM bookings
+        WHERE id = $1`,
       [id]
     );
     if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
-    if (own.rows[0].client_id !== clientId) {
+
+    const b = own.rows[0];
+    if (b.client_id !== clientId) {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
+    // Если уже обработана — не даём подтверждать повторно
+    if (b.status !== "pending") {
+      return res.status(409).json({ message: "Бронирование уже обработано" });
+    }
+
+    // Берём даты из booking_dates, иначе — fallback на bookings.date
     const dQ = await pool.query(
-      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`,
+      `SELECT date AS d FROM booking_dates WHERE booking_id = $1`,
       [id]
     );
-    let days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
-
+    let days = dQ.rows.map(r => toISO(r.d)).filter(Boolean);
     if (!days.length) {
-      const bQ = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
-      if (bQ.rowCount) days = [toISO(bQ.rows[0].d)].filter(Boolean);
+      days = [toISO(b.date)].filter(Boolean);
     }
-    if (!days.length) return res.status(400).json({ message: "Не удалось определить даты бронирования" });
+    if (!days.length) {
+      return res.status(400).json({ message: "Не удалось определить даты бронирования" });
+    }
 
-    const ok = await isDatesFree(own.rows[0].provider_id, days, id);
+    // Финальная проверка занятости (игнорируя текущую бронь)
+    const ok = await isDatesFree(b.provider_id, days, id);
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
+    // Подтверждаем
     await pool.query(
       `UPDATE bookings
-         SET status='confirmed',
-             updated_at = NOW()
-       WHERE id=$1`,
+          SET status = 'confirmed',
+              updated_at = NOW()
+        WHERE id = $1`,
       [id]
     );
 
@@ -388,6 +402,7 @@ const confirmBooking = async (req, res) => {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 module.exports = {
   createBooking,
