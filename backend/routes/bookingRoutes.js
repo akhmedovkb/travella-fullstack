@@ -13,6 +13,8 @@ const {
   cancelBooking,
 } = require("../controllers/bookingController");
 
+const { confirmBooking } = require("../controllers/bookingController");
+
 // Создать заявку (клиент/провайдер с токеном)
 router.post("/", authenticateToken, createBooking);
 
@@ -27,5 +29,6 @@ router.post("/:id/quote", authenticateToken, providerQuote);
 
 // Действие клиента
 router.post("/:id/cancel", authenticateToken, cancelBooking);
+router.post("/:id/confirm", authClient, confirmBooking);
 
 module.exports = router;
