@@ -346,9 +346,47 @@ const providerQuote = async (req, res) => {
   }
 };
 
-module.exports = {
-  // ...остальные экспортируемые обработчики...
-  providerQuote,
+
+// Клиент подтверждает бронь: POST /api/bookings/:id/confirm
+const confirmBooking = async (req, res) => {
+  try {
+    const clientId = req.user?.id;
+    const id = Number(req.params.id);
+
+    // проверка владельца брони
+    const own = await pool.query(
+      `SELECT provider_id, client_id FROM bookings WHERE id=$1`,
+      [id]
+    );
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].client_id !== clientId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    // вытаскиваем даты заявки
+    const dQ = await pool.query(
+      `SELECT date::date AS d FROM booking_dates WHERE booking_id=$1`,
+      [id]
+    );
+    const days = dQ.rows.map((r) => normYMD(r.d));
+
+    // финальная проверка занятости (игнорируем текущую бронь)
+    const ok = await isDatesFree(own.rows[0].provider_id, days, id);
+    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+
+    await pool.query(
+      `UPDATE bookings
+         SET status='active',
+             updated_at = NOW()
+       WHERE id=$1`,
+      [id]
+    );
+
+    return res.json({ ok: true, status: "active" });
+  } catch (err) {
+    console.error("confirmBooking error:", err);
+    return res.status(500).json({ message: "Ошибka сервера" });
+  }
 };
 
 module.exports = {
@@ -359,4 +397,5 @@ module.exports = {
   acceptBooking,
   rejectBooking,
   cancelBooking,
+  confirmBooking,
 };
