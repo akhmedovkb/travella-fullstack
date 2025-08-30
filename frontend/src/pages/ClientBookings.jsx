@@ -56,8 +56,17 @@ const initials = (name = "") =>
     .join("");
 
 const cx = (...arr) => arr.filter(Boolean).join(" ");
+const statusKey = (s) => String(s || "").toLowerCase();
+const statusLabel = (s) =>
+  ({
+    pending: "ожидает",
+    confirmed: "подтверждено",
+    active: "активно",
+    rejected: "отклонено",
+    cancelled: "отменено",
+  }[statusKey(s)] || s);
 
-/* ========= иконки (inline, без либ) ========= */
+/* ========= иконки ========= */
 const Icon = ({ name, className = "w-5 h-5" }) => {
   switch (name) {
     case "calendar":
@@ -78,10 +87,37 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
           <path d="M9.5 15.3l-.2 3.2c.3 0 .5-.1.6-.3l1.5-1.4 3.1 2.2c.6.3 1 .1 1.1-.6l2-12c.2-.9-.3-1.3-1-1L3.8 9.9c-.9.3-.9.8-.2 1l3.8 1.2 8.8-5.5-6.4 6.5-.3 1.2Z"/>
         </svg>
       );
+    case "refresh":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8M20 8V3m0 5h-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      );
     case "badge":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
           <path d="M12 2l2.39 4.84L20 8l-4 3.9L17 18l-5-2.6L7 18l1-6.1L4 8l5.61-1.16L12 2Z" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      );
+    case "compact":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none">
+          <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      );
+    case "pdf":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12V8l-4-6Z" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M9 15h1.5a2 2 0 1 0 0-4H9v4Zm5-4h2v4h-2Zm5 0h-1.5v4H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       );
     default:
@@ -89,9 +125,8 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
   }
 };
 
-/* ========= UI кусочки ========= */
 const StatusBadge = ({ status }) => {
-  const s = String(status || "").toLowerCase();
+  const s = statusKey(status);
   const map = {
     pending: { text: "ожидает", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
     confirmed: { text: "подтверждено", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
@@ -142,6 +177,30 @@ export default function ClientBookings() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
+
+  // фильтрация
+  const FILTERS = [
+    { key: "all", label: "Все" },
+    { key: "pending", label: "Ожидают" },
+    { key: "confirmed", label: "Подтверждено" },
+    { key: "active", label: "Активные" },
+    { key: "rejected", label: "Отклонено" },
+    { key: "cancelled", label: "Отменено" },
+  ];
+  const [filter, setFilter] = useState("all");
+
+  // поиск
+  const [query, setQuery] = useState("");
+
+  // компакт-режим
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const setByMedia = () => setCompact(mq.matches);
+    setByMedia();
+    mq.addEventListener?.("change", setByMedia);
+    return () => mq.removeEventListener?.("change", setByMedia);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -197,6 +256,112 @@ export default function ClientBookings() {
     }
   };
 
+  // счётчики статусов
+  const counts = useMemo(() => {
+    const c = { all: list.length };
+    for (const b of list) {
+      const k = statusKey(b.status);
+      c[k] = (c[k] || 0) + 1;
+    }
+    return c;
+  }, [list]);
+
+  // применяем фильтр по статусу
+  const filteredByStatus = useMemo(
+    () => list.filter((b) => (filter === "all" ? true : statusKey(b.status) === filter)),
+    [list, filter]
+  );
+
+  // затем поиск по провайдеру/услуге/заметке/статусу
+  const visibleList = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return filteredByStatus;
+    return filteredByStatus.filter((b) => {
+      const providerName =
+        b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "";
+      const serviceTitle = b.service_title || b.service?.title || "";
+      const note = b.provider_note || b.client_message || "";
+      const s = statusLabel(b.status);
+      return (
+        providerName.toLowerCase().includes(q) ||
+        serviceTitle.toLowerCase().includes(q) ||
+        note.toLowerCase().includes(q) ||
+        String(b.id).includes(q) ||
+        s.toLowerCase().includes(q)
+      );
+    });
+  }, [filteredByStatus, query]);
+
+  /* ===== экспорт в PDF (через печать) ===== */
+  const buildPrintHtml = (rows) => {
+    const now = new Date().toLocaleString();
+    const items = rows
+      .map((b) => {
+        const provider =
+          b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "—";
+        const title = b.service_title || b.service?.title || "Бронирование";
+        const dates = formatDateRange(b.dates);
+        const price = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : "—";
+        const note = b.provider_note ? ` · ${b.provider_note}` : "";
+        return `
+          <div class="card">
+            <div class="hdr">
+              <div class="num">#${b.id}</div>
+              <div class="status ${statusKey(b.status)}">${statusLabel(b.status)}</div>
+            </div>
+            <div class="line"><span class="lbl">Услуга:</span> ${title}</div>
+            <div class="line"><span class="lbl">Поставщик:</span> ${provider}</div>
+            <div class="line"><span class="lbl">Даты:</span> ${dates || "—"}</div>
+            <div class="line"><span class="lbl">Предложение:</span> <b>${price}</b>${note}</div>
+            ${b.client_message ? `<div class="line"><span class="lbl">Комментарий:</span> ${b.client_message}</div>` : ""}
+          </div>`;
+      })
+      .join("");
+    return `<!DOCTYPE html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Мои бронирования — печать</title>
+<style>
+  *{box-sizing:border-box} body{font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;color:#111;margin:24px;background:#fff}
+  h1{font-size:20px;margin:0 0 6px} .meta{color:#666;margin-bottom:18px}
+  .card{border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin:0 0 12px;background:#fff;break-inside:avoid}
+  .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .num{color:#6b7280}
+  .status{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid}
+  .status.pending{background:#fff7ed;color:#92400e;border-color:#fed7aa}
+  .status.confirmed,.status.active{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+  .status.rejected{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
+  .status.cancelled{background:#f3f4f6;color:#374151;border-color:#e5e7eb}
+  .line{margin:4px 0}
+  .lbl{color:#6b7280;margin-right:6px}
+  @page{margin:16mm}
+  @media print {.no-print{display:none}}
+</style>
+<body>
+  <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h1>Мои бронирования</h1>
+    <button onclick="window.print()" style="padding:6px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;cursor:pointer">Печать / PDF</button>
+  </div>
+  <div class="meta">Сформировано: ${now}. Всего: ${rows.length}</div>
+  ${items || "<div>Пусто</div>"}
+</body></html>`;
+  };
+
+  const exportPdf = () => {
+    const html = buildPrintHtml(visibleList);
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) {
+      alert("Разрешите всплывающие окна для экспорта в PDF.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+  };
+
+  /* ========= UI ========= */
+
   const content = useMemo(() => {
     if (loading) {
       return (
@@ -211,7 +376,7 @@ export default function ClientBookings() {
         </div>
       );
     }
-    if (!list.length) {
+    if (!visibleList.length) {
       return (
         <div className="text-gray-500">
           {t("bookings.empty", { defaultValue: "Пока нет бронирований." })}
@@ -220,34 +385,37 @@ export default function ClientBookings() {
     }
     return (
       <div className="space-y-4">
-        {list.map((b) => {
+        {visibleList.map((b) => {
           const providerName =
             b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle;
           const providerPhone = b.provider_phone || b.provider?.phone;
           const providerTg = b.provider_telegram || b.provider?.telegram || b.provider?.social;
-          const status = String(b.status || "").toLowerCase();
+          const status = statusKey(b.status);
           const dateText = formatDateRange(b.dates);
           const lastOffer =
             b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
 
           return (
-            <div key={b.id} className="border rounded-2xl p-4 bg-white shadow-sm">
+            <div key={b.id} className={cx("border rounded-2xl bg-white shadow-sm", compact ? "p-3" : "p-4")}>
               {/* header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-indigo-600 text-white grid place-items-center font-semibold">
+              <div className={cx("flex justify-between gap-3", compact ? "items-center" : "items-start")}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={cx("rounded-full text-white grid place-items-center font-semibold shrink-0",
+                                     compact ? "w-9 h-9 bg-indigo-600" : "w-10 h-10 bg-indigo-600")}>
                     {initials(providerName || "P")}
                   </div>
-                  <div>
-                    <div className="text-sm text-gray-500">
+                  <div className="min-w-0">
+                    <div className={cx("text-gray-500 truncate", compact ? "text-xs" : "text-sm")}>
                       #{b.id} · {b.service_title || b.service?.title || t("booking.title", { defaultValue: "Бронирование" })} ·{" "}
                       <StatusBadge status={status} />
                     </div>
-                    <div className="font-semibold text-gray-900 mt-0.5">{providerName || "—"}</div>
-                    <div className="text-sm text-gray-700 mt-1 flex items-center gap-3">
+                    <div className={cx("text-gray-900 font-semibold truncate", compact ? "text-sm" : "")}>
+                      {providerName || "—"}
+                    </div>
+                    <div className={cx("text-gray-700 flex items-center gap-3", compact ? "text-xs mt-0.5" : "text-sm mt-1")}>
                       {providerPhone && (
                         <a className="hover:underline inline-flex items-center gap-1" href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}>
-                          <Icon name="phone" className="w-4 h-4" /> {providerPhone}
+                          <Icon name="phone" className={compact ? "w-3.5 h-3.5" : "w-4 h-4"} /> {providerPhone}
                         </a>
                       )}
                       {providerTg && (
@@ -261,7 +429,8 @@ export default function ClientBookings() {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <Icon name="tg" className="w-4 h-4" /> {String(providerTg).startsWith("@") ? providerTg : `@${String(providerTg).replace(/^@/, "")}`}
+                          <Icon name="tg" className={compact ? "w-3.5 h-3.5" : "w-4 h-4"} />{" "}
+                          {String(providerTg).startsWith("@") ? providerTg : `@${String(providerTg).replace(/^@/, "")}`}
                         </a>
                       )}
                     </div>
@@ -271,7 +440,10 @@ export default function ClientBookings() {
                 {/* price chip */}
                 {lastOffer && (
                   <div className="shrink-0">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                    <div className={cx(
+                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+                      compact && "text-sm px-2 py-1"
+                    )}>
                       <span className="font-semibold">{lastOffer}</span>
                       {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
                     </div>
@@ -280,15 +452,16 @@ export default function ClientBookings() {
               </div>
 
               {/* dates */}
-              <div className="mt-3 inline-flex items-center gap-2 text-sm text-gray-700">
-                <Icon name="calendar" className="w-5 h-5" />
+              <div className={cx("inline-flex items-center gap-2 text-gray-700 mt-3",
+                                 compact ? "text-xs" : "text-sm")}>
+                <Icon name="calendar" className={compact ? "w-4 h-4" : "w-5 h-5"} />
                 <span className="font-medium">{t("common.date", { defaultValue: "Дата" })}:</span>
                 <span>{dateText || "—"}</span>
               </div>
 
               {/* client message */}
               {b.client_message && (
-                <div className="text-sm text-gray-700 mt-2">
+                <div className={cx("text-gray-700 mt-2", compact ? "text-xs" : "text-sm")}>
                   <span className="text-gray-500">{t("common.comment", { defaultValue: "Комментарий" })}:</span>{" "}
                   {b.client_message}
                 </div>
@@ -320,13 +493,85 @@ export default function ClientBookings() {
         })}
       </div>
     );
-  }, [list, loading, actingId, t]);
+  }, [visibleList, loading, actingId, t, compact]);
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-3">
-        {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
-      </h2>
+      {/* ШАПКА */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">
+          {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
+        </h2>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Поиск */}
+          <div className="relative flex-1 sm:flex-none">
+            <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Поиск: поставщик, услуга, статус…"
+              className="w-full sm:w-72 pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white outline-none focus:ring-2 ring-indigo-100"
+            />
+          </div>
+
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+            title="Обновить"
+          >
+            <Icon name="refresh" className="w-4 h-4" />
+            <span className="hidden sm:inline">Обновить</span>
+          </button>
+          <button
+            onClick={() => setCompact((v) => !v)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+            title="Компактный режим"
+          >
+            <Icon name="compact" className="w-4 h-4" />
+            <span className="hidden sm:inline">{compact ? "Обычный" : "Компактный"}</span>
+          </button>
+          <button
+            onClick={exportPdf}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+            title="Экспорт в PDF"
+          >
+            <Icon name="pdf" className="w-4 h-4" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ФИЛЬТРЫ */}
+      <div className="mb-4 overflow-x-auto">
+        <div className="flex gap-2 min-w-max">
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            const counter = f.key === "all" ? counts.all : (counts[f.key] || 0);
+            return (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={cx(
+                  "px-3 py-1.5 rounded-full text-sm ring-1 transition whitespace-nowrap",
+                  active
+                    ? "bg-indigo-600 text-white ring-indigo-600"
+                    : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
+                )}
+              >
+                {f.label}
+                <span className={cx(
+                  "ml-2 inline-flex items-center justify-center rounded-full px-1.5 text-xs",
+                  active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
+                )}>
+                  {counter}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {content}
     </div>
   );
