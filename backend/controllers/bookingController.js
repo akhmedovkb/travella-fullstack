@@ -194,7 +194,8 @@ const getMyBookings = async (req, res) => {
         p.type    AS provider_type,
         p.phone   AS provider_phone,
         p.address AS provider_address,
-        p.social  AS provider_telegram
+        p.social  AS provider_telegram,
+        p.photo   AS provider_photo        
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
