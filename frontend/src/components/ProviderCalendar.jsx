@@ -30,11 +30,11 @@ const ymdToLocalDate = (ymd) => {
 const ProviderCalendar = ({ token }) => {
   const { t } = useTranslation();
 
-  // ручные блокировки (строки YYYY-MM-DD)
+  // ручные блокировки (YYYY-MM-DD)
   const [manual, setManual] = useState([]);
   const [manualInitial, setManualInitial] = useState([]);
 
-  // системно занятые (строки YYYY-MM-DD)
+  // системно занятые по бронированиям (YYYY-MM-DD)
   const [booked, setBooked] = useState([]);
 
   const cfg = useMemo(() => {
@@ -45,13 +45,12 @@ const ProviderCalendar = ({ token }) => {
     return { headers: { Authorization: `Bearer ${stored}` } };
   }, [token]);
 
-  // Загрузка данных календаря
+  // Загрузка данных календаря: сначала единый /api/providers/calendar, затем фолбэк на 2 ручки
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       try {
-        // 1) предпочтительно — единый эндпоинт
         const { data } = await axios.get(
           `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
           cfg
@@ -70,19 +69,36 @@ const ProviderCalendar = ({ token }) => {
         setManualInitial(blockedArr);
         setBooked(bookedArr);
       } catch {
-        // 2) фолбэк — только ручные блокировки
         try {
-          const { data } = await axios.get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-            cfg
-          );
+          const [blk, bkd] = await Promise.all([
+            axios
+              .get(
+                `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+                cfg
+              )
+              .then((r) => r.data)
+              .catch(() => []),
+            axios
+              .get(
+                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
+                cfg
+              )
+              .then((r) => r.data)
+              .catch(() => []),
+          ]);
+
           if (cancelled) return;
-          const blockedArr = (Array.isArray(data) ? data : [])
+
+          const blockedArr = (Array.isArray(blk) ? blk : [])
             .map(toYMD)
             .filter(Boolean);
+          const bookedArr = (Array.isArray(bkd) ? bkd : [])
+            .map(toYMD)
+            .filter(Boolean);
+
           setManual(blockedArr);
           setManualInitial(blockedArr);
-          setBooked([]); // ничего не знаем о системных
+          setBooked(bookedArr);
         } catch (e) {
           if (!cancelled) {
             console.error("Ошибка загрузки календаря", e);
