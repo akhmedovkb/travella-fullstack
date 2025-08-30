@@ -199,9 +199,6 @@ function AttachmentList({ items }) {
   );
 }
 
-const providerPhoto =
-  b.provider_photo || b.provider?.photo || b.provider?.avatar_url || b.service?.providerPhoto;
-
 /* ========= основная страница ========= */
 export default function ClientBookings() {
   const { t } = useTranslation();
@@ -410,6 +407,8 @@ export default function ClientBookings() {
           const dateText = formatDateRange(b.dates);
           const lastOffer =
             b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
+          const providerPhoto =
+            b.provider_photo || b.provider?.photo || b.provider?.avatar_url || b.service?.providerPhoto;
 
           // URL публичного профиля провайдера
           const profileUrl = `/profile/provider/${b.provider_id}`;
