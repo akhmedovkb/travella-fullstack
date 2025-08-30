@@ -1,4 +1,5 @@
 // frontend/src/pages/ClientBookings.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -16,92 +17,22 @@ const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) =>
   isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
 
-/** единственный загрузчик */
+/** загрузчик */
 async function fetchMyBookings() {
   const url = `${API_BASE}/api/bookings/my`;
   const res = await axios.get(url, cfg());
   return Array.isArray(res.data) ? res.data : res.data?.items || [];
 }
 
-/** универсальная попытка запроса; 2xx – успех, остальные пробуем дальше */
-async function tryOne(method, url, data) {
-  try {
-    const r = await axios({
-      method,
-      url,
-      data,
-      ...cfg(),
-      validateStatus: (s) => s >= 200 && s < 300, // считаем успехом только 2xx
-    });
-    return { ok: true, data: r.data };
-  } catch (e) {
-    // 404/400/… — возвращаем как "неудачу", чтобы попробовать следующий вариант
-    return { ok: false, error: e };
-  }
+/** точные вызовы API */
+async function confirmBookingByClient(id) {
+  await axios.post(`${API_BASE}/api/bookings/${id}/confirm`, {}, cfg());
+}
+async function cancelBookingByClient(id) {
+  await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, cfg());
 }
 
-/**
- * Фолбэк-исполнитель действия клиента над бронированием.
- * action: "confirm" | "reject"
- */
-async function performClientAction(bookingId, action) {
-  const id = String(bookingId);
-  const isConfirm = action === "confirm";
-
-  // множество синонимов для бэков разных версий
-  const slugs = isConfirm
-    ? ["confirm", "approve", "accept", "client-accept", "accept-client", "confirm-client", "approve-client"]
-    : ["reject", "decline", "cancel", "client-reject", "reject-client", "client-decline", "cancel-client"];
-
-  // кандидаты URL/метод/данные в порядке убывания вероятности
-  const candidates = [];
-
-  // 1) POST /api/bookings/:id/<slug>
-  slugs.forEach((slug) => {
-    candidates.push(["post", `${API_BASE}/api/bookings/${id}/${slug}`, undefined]);
-  });
-
-  // 2) POST /api/client/bookings/:id/<slug>  и  /api/clients/…
-  slugs.forEach((slug) => {
-    candidates.push(["post", `${API_BASE}/api/client/bookings/${id}/${slug}`, undefined]);
-    candidates.push(["post", `${API_BASE}/api/clients/bookings/${id}/${slug}`, undefined]);
-  });
-
-  // 3) POST /api/bookings/<slug>  с id в теле
-  slugs.forEach((slug) => {
-    candidates.push(["post", `${API_BASE}/api/bookings/${slug}`, { id }]);
-  });
-
-  // 4) POST /api/client/bookings/<slug>  и  /api/clients/bookings/<slug>  с id в теле
-  slugs.forEach((slug) => {
-    candidates.push(["post", `${API_BASE}/api/client/bookings/${slug}`, { id }]);
-    candidates.push(["post", `${API_BASE}/api/clients/bookings/${slug}`, { id }]);
-  });
-
-  // 5) PATCH /api/bookings/:id  c status
-  candidates.push([
-    "patch",
-    `${API_BASE}/api/bookings/${id}`,
-    { status: isConfirm ? "confirmed" : "rejected" },
-  ]);
-  candidates.push([
-    "put",
-    `${API_BASE}/api/bookings/${id}`,
-    { status: isConfirm ? "confirmed" : "rejected" },
-  ]);
-
-  // Пробуем по очереди
-  let lastErr = null;
-  for (const [method, url, data] of candidates) {
-    const res = await tryOne(method, url, data);
-    if (res.ok) return { ok: true, data: res.data, url, method };
-    lastErr = res.error;
-    // продолжим попытки
-  }
-  return { ok: false, error: lastErr };
-}
-
-/* ========= простая карточка ========= */
+/* ========= простая карточка вложений ========= */
 function AttachmentList({ items }) {
   const files = Array.isArray(items) ? items : items ? [items] : [];
   if (!files.length) return null;
@@ -162,17 +93,15 @@ export default function ClientBookings() {
   const confirm = async (b) => {
     setActingId(b.id);
     try {
-      const res = await performClientAction(b.id, "confirm");
-      if (res.ok) {
-        tSuccess(t("bookings.confirmed", { defaultValue: "Бронирование подтверждено" }));
-        await load();
-      } else {
-        console.warn("confirm failed last error:", res.error);
-        tError(
-          res.error?.response?.data?.message ||
-            t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" })
-        );
-      }
+      await confirmBookingByClient(b.id);
+      tSuccess(t("bookings.confirmed", { defaultValue: "Бронирование подтверждено" }));
+      await load();
+    } catch (e) {
+      console.warn("confirm failed:", e);
+      tError(
+        e?.response?.data?.message ||
+          t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" })
+      );
     } finally {
       setActingId(null);
     }
@@ -181,17 +110,15 @@ export default function ClientBookings() {
   const reject = async (b) => {
     setActingId(b.id);
     try {
-      const res = await performClientAction(b.id, "reject");
-      if (res.ok) {
-        tInfo(t("bookings.rejected", { defaultValue: "Бронирование отклонено" }));
-        await load();
-      } else {
-        console.warn("reject failed last error:", res.error);
-        tError(
-          res.error?.response?.data?.message ||
-            t("bookings.reject_error", { defaultValue: "Ошибка отклонения" })
-        );
-      }
+      await cancelBookingByClient(b.id);
+      tInfo(t("bookings.rejected", { defaultValue: "Бронирование отклонено" }));
+      await load();
+    } catch (e) {
+      console.warn("reject failed:", e);
+      tError(
+        e?.response?.data?.message ||
+          t("bookings.reject_error", { defaultValue: "Ошибка отклонения" })
+      );
     } finally {
       setActingId(null);
     }
@@ -209,14 +136,14 @@ export default function ClientBookings() {
         {list.map((b) => {
           const providerName =
             b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle;
-          const providerPhone =
-            b.provider_phone || b.provider?.phone;
-          const providerTg =
-            b.provider_telegram || b.provider?.telegram || b.provider?.social;
+          const providerPhone = b.provider_phone || b.provider?.phone;
+          const providerTg = b.provider_telegram || b.provider?.telegram || b.provider?.social;
 
           const dates =
             Array.isArray(b.dates) && b.dates.length >= 2
-              ? `${b.dates[0].slice(0, 10)}, ${b.dates[1].slice(0, 10)}`
+              ? `${String(b.dates[0]).slice(0, 10)}, ${String(b.dates[1]).slice(0, 10)}`
+              : Array.isArray(b.dates) && b.dates[0]
+              ? String(b.dates[0]).slice(0, 10)
               : "";
 
           const lastOffer =
