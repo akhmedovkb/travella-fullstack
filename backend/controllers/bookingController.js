@@ -16,15 +16,15 @@ async function getProviderType(providerId) {
 }
 
 // Проверка доступности набора дат для провайдера
-// excludeBookingId — опционально игнорируем конкретную бронь (нужно на accept)
+// excludeBookingId — опционально игнорируем конкретную бронь (нужно на accept/confirm)
 async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
   if (!ymdList.length) return false;
 
-  // 1) нет в ручных блокировках
+  // 1) нет в ручных блокировках (ВАЖНО: колонка называется date)
   const q1 = await pool.query(
     `SELECT 1
        FROM provider_blocked_dates
-      WHERE provider_id=$1 AND day = ANY($2::date[]) LIMIT 1`,
+      WHERE provider_id=$1 AND date = ANY($2::date[]) LIMIT 1`,
     [providerId, ymdList]
   );
   if (q1.rowCount) return false;
@@ -129,7 +129,7 @@ async function getProviderBookings(req, res) {
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
 
-        -- заголовок услуги (если нужен на фронте)
+        -- заголовок услуги
         s.title AS service_title,
 
         -- клиент (кто отправил заявку)
@@ -153,7 +153,7 @@ async function getProviderBookings(req, res) {
         p.photo    AS provider_photo
 
       FROM bookings b
-      LEFT JOIN booking_dates bd ON bd.booking_id = b.id         -- если таблицы нет, можно убрать весь LEFT JOIN и часть с ARRAY_AGG
+      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
       LEFT JOIN clients  c       ON c.id = b.client_id
       LEFT JOIN providers p      ON p.id = b.provider_id
       LEFT JOIN services  s      ON s.id = b.service_id
@@ -179,13 +179,18 @@ const getMyBookings = async (req, res) => {
       `
       SELECT
         b.id, b.service_id, b.provider_id, b.client_id, b.status,
-        b.client_message, b.attachments, b.provider_price, b.provider_note,
+        b.client_message,
+        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        b.provider_price, b.provider_note,
         b.created_at, b.updated_at,
 
-        (
-          SELECT array_agg(d.date::date ORDER BY d.date)
-          FROM booking_dates d
-          WHERE d.booking_id = b.id
+        COALESCE(
+          (
+            SELECT array_agg(d.date::date ORDER BY d.date)
+            FROM booking_dates d
+            WHERE d.booking_id = b.id
+          ),
+          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
 
         s.title AS service_title,
@@ -211,7 +216,6 @@ const getMyBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
 
 // Принять бронь: POST /api/bookings/:id/accept { price?: number, note?: string }
 const acceptBooking = async (req, res) => {
@@ -346,7 +350,6 @@ const providerQuote = async (req, res) => {
   }
 };
 
-
 // Клиент подтверждает бронь: POST /api/bookings/:id/confirm
 const confirmBooking = async (req, res) => {
   try {
@@ -385,7 +388,7 @@ const confirmBooking = async (req, res) => {
     return res.json({ ok: true, status: "active" });
   } catch (err) {
     console.error("confirmBooking error:", err);
-    return res.status(500).json({ message: "Ошибka сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
