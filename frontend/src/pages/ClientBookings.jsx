@@ -142,6 +142,34 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+/* ==== тип поставщика: бейдж + нормализация ==== */
+const normalizeProviderType = (t) => {
+  const s = String(t || "").toLowerCase();
+  if (s.includes("guide") || s.includes("гид")) return "guide";
+  if (s.includes("transport") || s.includes("driver") || s.includes("транспорт")) return "transport";
+  if (s.includes("agency") || s.includes("agent") || s.includes("тураг")) return "agency";
+  if (s.includes("hotel") || s.includes("отел")) return "hotel";
+  return s || "provider";
+};
+const providerTypeLabel = (k) =>
+  ({ guide: "гид", transport: "транспорт", agency: "турагент", hotel: "отель", provider: "поставщик" }[k] || k);
+
+const ProviderTypeBadge = ({ type }) => {
+  const key = normalizeProviderType(type);
+  const map = {
+    guide: "bg-sky-50 text-sky-700 ring-sky-200",
+    transport: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+    agency: "bg-violet-50 text-violet-700 ring-violet-200",
+    hotel: "bg-teal-50 text-teal-700 ring-teal-200",
+    provider: "bg-gray-100 text-gray-700 ring-gray-200",
+  };
+  return (
+    <span className={cx("ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", map[key])}>
+      {providerTypeLabel(key)}
+    </span>
+  );
+};
+
 function AttachmentList({ items }) {
   const files = Array.isArray(items) ? items : items ? [items] : [];
   if (!files.length) return null;
@@ -178,7 +206,7 @@ export default function ClientBookings() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
 
-  // фильтрация
+  // фильтры/поиск/режим
   const FILTERS = [
     { key: "all", label: "Все" },
     { key: "pending", label: "Ожидают" },
@@ -188,11 +216,7 @@ export default function ClientBookings() {
     { key: "cancelled", label: "Отменено" },
   ];
   const [filter, setFilter] = useState("all");
-
-  // поиск
   const [query, setQuery] = useState("");
-
-  // компакт-режим
   const [compact, setCompact] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -230,10 +254,7 @@ export default function ClientBookings() {
       await load();
     } catch (e) {
       console.warn("confirm failed:", e);
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" })
-      );
+      tError(e?.response?.data?.message || t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" }));
     } finally {
       setActingId(null);
     }
@@ -247,32 +268,23 @@ export default function ClientBookings() {
       await load();
     } catch (e) {
       console.warn("reject failed:", e);
-      tError(
-        e?.response?.data?.message ||
-          t("bookings.reject_error", { defaultValue: "Ошибка отклонения" })
-      );
+      tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
     } finally {
       setActingId(null);
     }
   };
 
-  // счётчики статусов
   const counts = useMemo(() => {
     const c = { all: list.length };
-    for (const b of list) {
-      const k = statusKey(b.status);
-      c[k] = (c[k] || 0) + 1;
-    }
+    for (const b of list) c[statusKey(b.status)] = (c[statusKey(b.status)] || 0) + 1;
     return c;
   }, [list]);
 
-  // применяем фильтр по статусу
   const filteredByStatus = useMemo(
     () => list.filter((b) => (filter === "all" ? true : statusKey(b.status) === filter)),
     [list, filter]
   );
 
-  // затем поиск по провайдеру/услуге/заметке/статусу
   const visibleList = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return filteredByStatus;
@@ -292,7 +304,7 @@ export default function ClientBookings() {
     });
   }, [filteredByStatus, query]);
 
-  /* ===== экспорт в PDF (через печать) ===== */
+  /* ===== экспорт в PDF (печать) ===== */
   const buildPrintHtml = (rows) => {
     const now = new Date().toLocaleString();
     const items = rows
@@ -303,6 +315,7 @@ export default function ClientBookings() {
         const dates = formatDateRange(b.dates);
         const price = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : "—";
         const note = b.provider_note ? ` · ${b.provider_note}` : "";
+        const pType = providerTypeLabel(normalizeProviderType(b.provider_type));
         return `
           <div class="card">
             <div class="hdr">
@@ -310,7 +323,7 @@ export default function ClientBookings() {
               <div class="status ${statusKey(b.status)}">${statusLabel(b.status)}</div>
             </div>
             <div class="line"><span class="lbl">Услуга:</span> ${title}</div>
-            <div class="line"><span class="lbl">Поставщик:</span> ${provider}</div>
+            <div class="line"><span class="lbl">Поставщик:</span> ${provider} (${pType})</div>
             <div class="line"><span class="lbl">Даты:</span> ${dates || "—"}</div>
             <div class="line"><span class="lbl">Предложение:</span> <b>${price}</b>${note}</div>
             ${b.client_message ? `<div class="line"><span class="lbl">Комментарий:</span> ${b.client_message}</div>` : ""}
@@ -395,6 +408,9 @@ export default function ClientBookings() {
           const lastOffer =
             b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
 
+          // URL публичного профиля провайдера
+          const profileUrl = `/profile/provider/${b.provider_id}`;
+
           return (
             <div key={b.id} className={cx("border rounded-2xl bg-white shadow-sm", compact ? "p-3" : "p-4")}>
               {/* header */}
@@ -409,9 +425,15 @@ export default function ClientBookings() {
                       #{b.id} · {b.service_title || b.service?.title || t("booking.title", { defaultValue: "Бронирование" })} ·{" "}
                       <StatusBadge status={status} />
                     </div>
+
+                    {/* ИМЯ → кликабельно + тип */}
                     <div className={cx("text-gray-900 font-semibold truncate", compact ? "text-sm" : "")}>
-                      {providerName || "—"}
+                      <a href={profileUrl} className="hover:underline">
+                        {providerName || "—"}
+                      </a>
+                      <ProviderTypeBadge type={b.provider_type} />
                     </div>
+
                     <div className={cx("text-gray-700 flex items-center gap-3", compact ? "text-xs mt-0.5" : "text-sm mt-1")}>
                       {providerPhone && (
                         <a className="hover:underline inline-flex items-center gap-1" href={`tel:${String(providerPhone).replace(/[^+\d]/g, "")}`}>
