@@ -6,25 +6,21 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
-/** Возвращает YYYY-MM-DD из строки/объекта/Date */
+/** YYYY-MM-DD из строки/объекта/Date */
 const toYMD = (val) => {
   if (!val) return "";
-  if (typeof val === "string") {
-    // если это ISO с T...Z — отрежем время
-    return val.slice(0, 10);
-  }
+  if (typeof val === "string") return val.slice(0, 10);
   if (val instanceof Date && !isNaN(val)) {
     const y = val.getFullYear();
     const m = String(val.getMonth() + 1).padStart(2, "0");
     const d = String(val.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
-  // бэкенд мог прислать {date: "..."} или {day: "..."}
   const s = val?.date || val?.day || "";
   return String(s).slice(0, 10);
 };
 
-/** Превращает YYYY-MM-DD в локальную дату (без TZ-сдвига) */
+/** Локальная Date из YYYY-MM-DD */
 const ymdToLocalDate = (ymd) => {
   const [y, m, d] = String(ymd).split("-").map(Number);
   if (!y || !m || !d) return null;
@@ -34,103 +30,153 @@ const ymdToLocalDate = (ymd) => {
 const ProviderCalendar = ({ token }) => {
   const { t } = useTranslation();
 
-  // то, что пришло с бэка (массив YYYY-MM-DD)
-  const [initial, setInitial] = useState([]);
-  // текущее выделение (массив YYYY-MM-DD)
-  const [selected, setSelected] = useState([]);
+  // ручные блокировки (строки YYYY-MM-DD)
+  const [manual, setManual] = useState([]);
+  const [manualInitial, setManualInitial] = useState([]);
 
-  const config = useMemo(
-    () => ({ headers: { Authorization: `Bearer ${token}` } }),
-    [token]
-  );
+  // системно занятые (строки YYYY-MM-DD)
+  const [booked, setBooked] = useState([]);
 
-  // Загрузка занятых/заблокированных дат
-  useEffect(() => {
-    if (!token) return;
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, config)
-      .then(({ data }) => {
-        const arr = (Array.isArray(data) ? data : [])
-          .map(toYMD)
-          .filter(Boolean);
-        setInitial(arr);
-        setSelected(arr);
-      })
-      .catch((err) => {
-        console.error("Ошибка загрузки занятых дат", err);
-        toast.error(t("calendar.load_error") || "Не удалось загрузить занятые даты");
-      });
+  const cfg = useMemo(() => {
+    const stored =
+      token ||
+      localStorage.getItem("providerToken") ||
+      localStorage.getItem("token");
+    return { headers: { Authorization: `Bearer ${stored}` } };
   }, [token]);
 
-  // Преобразуем строки YYYY-MM-DD в Date для DayPicker
-  const selectedAsDates = useMemo(
-    () => selected.map(ymdToLocalDate).filter(Boolean),
-    [selected]
+  // Загрузка данных календаря
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        // 1) предпочтительно — единый эндпоинт
+        const { data } = await axios.get(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
+          cfg
+        );
+
+        if (cancelled) return;
+
+        const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
+          .map(toYMD)
+          .filter(Boolean);
+        const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
+          .map(toYMD)
+          .filter(Boolean);
+
+        setManual(blockedArr);
+        setManualInitial(blockedArr);
+        setBooked(bookedArr);
+      } catch {
+        // 2) фолбэк — только ручные блокировки
+        try {
+          const { data } = await axios.get(
+            `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+            cfg
+          );
+          if (cancelled) return;
+          const blockedArr = (Array.isArray(data) ? data : [])
+            .map(toYMD)
+            .filter(Boolean);
+          setManual(blockedArr);
+          setManualInitial(blockedArr);
+          setBooked([]); // ничего не знаем о системных
+        } catch (e) {
+          if (!cancelled) {
+            console.error("Ошибка загрузки календаря", e);
+            toast.error(
+              t("calendar.load_error") || "Не удалось загрузить календарь"
+            );
+          }
+        }
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [cfg, t]);
+
+  // преобразование для DayPicker
+  const manualAsDates = useMemo(
+    () => manual.map(ymdToLocalDate).filter(Boolean),
+    [manual]
+  );
+  const bookedAsDates = useMemo(
+    () => booked.map(ymdToLocalDate).filter(Boolean),
+    [booked]
   );
 
+  // клик по дню — меняем ТОЛЬКО ручные, и только если день не системно занят
   const toggleDate = (day) => {
     const ymd = toYMD(day);
-    setSelected((prev) =>
+    if (booked.includes(ymd)) return; // нельзя трогать занятые системой
+    setManual((prev) =>
       prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
     );
   };
 
   const handleSave = async () => {
-    // итоговый набор без дублей
-    const finalSet = Array.from(new Set(selected)).sort();
+    const final = Array.from(new Set(manual)).sort();
 
-    // сначала пробуем формат { dates }
     try {
       const { data } = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-        { dates: finalSet },
-        config
+        { dates: final },
+        cfg
       );
-      setInitial(finalSet);
+      setManualInitial(final);
       toast.success(
         data?.message || t("calendar.saved_successfully") || "Даты сохранены"
       );
-      return;
-    } catch (e1) {
-      // если сервер ждёт diff { add, remove } — отправим diff
-      const initialSet = new Set(initial);
-      const final = new Set(finalSet);
-      const add = finalSet.filter((d) => !initialSet.has(d));
-      const remove = initial.filter((d) => !final.has(d));
-
-      try {
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-          { add, remove },
-          config
-        );
-        setInitial(finalSet);
-        toast.success(t("calendar.saved_successfully") || "Даты сохранены");
-      } catch (e2) {
-        console.error("Ошибка сохранения занятых дат", e2);
-        toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
-      }
+    } catch (e) {
+      console.error("Ошибка сохранения занятых дат", e);
+      toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
     }
   };
+
+  // запрет на прошлые дни и системно занятые
+  const disabledMatchers = useMemo(
+    () => [{ before: new Date() }, ...bookedAsDates],
+    [bookedAsDates]
+  );
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-md mt-6">
       <DayPicker
         mode="multiple"
-        selected={selectedAsDates}
+        selected={manualAsDates}
         onDayClick={toggleDate}
-        disabled={[{ before: new Date() }]}
-        modifiersClassNames={{ selected: "bg-red-500 text-white" }}
+        disabled={disabledMatchers}
+        modifiers={{ booked: bookedAsDates }}
+        modifiersClassNames={{
+          // ручные выделенные — красные
+          selected: "bg-red-500 text-white",
+          // системно занятые — серые (и они disabled)
+          booked: "bg-gray-300 text-gray-600 cursor-not-allowed",
+        }}
       />
+
+      <div className="mt-3 flex items-center gap-4 text-sm text-gray-700">
+        <span>
+          <span className="inline-block w-3 h-3 rounded-full align-middle mr-2 bg-red-500" />
+          {t("calendar.manual_blocked") || "Заблокировано вручную"}
+        </span>
+        <span>
+          <span className="inline-block w-3 h-3 rounded-full align-middle mr-2 bg-gray-300" />
+          {t("calendar.system_booked") || "Занято по бронированиям"}
+        </span>
+      </div>
+
       <button
         onClick={handleSave}
         className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
       >
         {t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
       </button>
-      <p className="text-sm mt-2 text-gray-600">
-        🔴 {t("calendar.manual_blocked") || "Заблокировано вручную"}
-      </p>
     </div>
   );
 };
