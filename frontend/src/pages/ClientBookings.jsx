@@ -32,11 +32,16 @@ async function cancelBookingByClient(id) {
 
 /* ========= форматирование ========= */
 const toYMD = (s) => String(s || "").slice(0, 10);
+const ymdToDate = (ymd) => {
+  const [y, m, d] = String(ymd).split("-").map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : null;
+};
 const formatDate = (ymd) => {
   try {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+    const dt = ymdToDate(ymd);
+    return dt
+      ? dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+      : ymd;
   } catch {
     return ymd;
   }
@@ -46,6 +51,10 @@ const formatDateRange = (dates) => {
   const a = toYMD(dates[0]);
   const b = toYMD(dates[1] || dates[0]);
   return a === b ? formatDate(a) : `${formatDate(a)}, ${formatDate(b)}`;
+};
+const maxDateYMD = (dates) => {
+  if (!Array.isArray(dates) || !dates.length) return null;
+  return [...dates.map(toYMD)].sort().pop() || null;
 };
 const initials = (name = "") =>
   name
@@ -212,6 +221,7 @@ export default function ClientBookings() {
     { key: "pending", label: "Ожидают" },
     { key: "confirmed", label: "Подтверждено" },
     { key: "active", label: "Активные" },
+    { key: "upcoming", label: "Предстоящие" }, // NEW
     { key: "rejected", label: "Отклонено" },
     { key: "cancelled", label: "Отменено" },
   ];
@@ -274,16 +284,30 @@ export default function ClientBookings() {
     }
   };
 
+  // counters + "upcoming"
   const counts = useMemo(() => {
-    const c = { all: list.length };
-    for (const b of list) c[statusKey(b.status)] = (c[statusKey(b.status)] || 0) + 1;
+    const c = { all: list.length, upcoming: 0 };
+    const todayYMD = toYMD(new Date().toISOString());
+    for (const b of list) {
+      const k = statusKey(b.status);
+      c[k] = (c[k] || 0) + 1;
+      const last = maxDateYMD(b.dates);
+      if (last && last >= todayYMD) c.upcoming += 1;
+    }
     return c;
   }, [list]);
 
-  const filteredByStatus = useMemo(
-    () => list.filter((b) => (filter === "all" ? true : statusKey(b.status) === filter)),
-    [list, filter]
-  );
+  const filteredByStatus = useMemo(() => {
+    const todayYMD = toYMD(new Date().toISOString());
+    return list.filter((b) => {
+      if (filter === "all") return true;
+      if (filter === "upcoming") {
+        const last = maxDateYMD(b.dates);
+        return last && last >= todayYMD;
+      }
+      return statusKey(b.status) === filter;
+    });
+  }, [list, filter]);
 
   const visibleList = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -316,15 +340,18 @@ export default function ClientBookings() {
         const price = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : "—";
         const note = b.provider_note ? ` · ${b.provider_note}` : "";
         const pType = providerTypeLabel(normalizeProviderType(b.provider_type));
+        const confirmedAt =
+          ["confirmed", "active"].includes(statusKey(b.status)) ? formatDate(toYMD(b.updated_at)) : "";
+        const confirmedLine = confirmedAt ? ` · подтверждено ${confirmedAt}` : "";
         return `
           <div class="card">
             <div class="hdr">
               <div class="num">#${b.id}</div>
-              <div class="status ${statusKey(b.status)}">${statusLabel(b.status)}</div>
+              <div class="status ${statusKey(b.status)}">${statusLabel(b.status)}${confirmedLine}</div>
             </div>
             <div class="line"><span class="lbl">Услуга:</span> ${title}</div>
             <div class="line"><span class="lbl">Поставщик:</span> ${provider} (${pType})</div>
-            <div class="line"><span class="lbl">Даты:</span> ${dates || "—"}</div>
+            <div class="line"><span class="lbl">Даты забронированы:</span> ${dates || "—"}</div>
             <div class="line"><span class="lbl">Предложение:</span> <b>${price}</b>${note}</div>
             ${b.client_message ? `<div class="line"><span class="lbl">Комментарий:</span> ${b.client_message}</div>` : ""}
           </div>`;
@@ -405,13 +432,19 @@ export default function ClientBookings() {
           const providerTg = b.provider_telegram || b.provider?.telegram || b.provider?.social;
           const status = statusKey(b.status);
           const dateText = formatDateRange(b.dates);
-          const lastOffer =
-            b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
-          const providerPhoto =
-            b.provider_photo || b.provider?.photo || b.provider?.avatar_url || b.service?.providerPhoto;
+          const lastOffer = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
 
           // URL публичного профиля провайдера
           const profileUrl = `/profile/provider/${b.provider_id}`;
+
+          const providerPhoto =
+            b.provider_photo || b.provider?.photo || b.provider?.avatar_url || b.service?.providerPhoto;
+
+          // дата подтверждения (после бейджа)
+          const confirmedAt =
+            ["confirmed", "active"].includes(status) && b.updated_at
+              ? formatDate(toYMD(b.updated_at))
+              : null;
 
           return (
             <div key={b.id} className={cx("border rounded-2xl bg-white shadow-sm", compact ? "p-3" : "p-4")}>
@@ -440,6 +473,9 @@ export default function ClientBookings() {
                     <div className={cx("text-gray-500 truncate", compact ? "text-xs" : "text-sm")}>
                       #{b.id} · {b.service_title || b.service?.title || t("booking.title", { defaultValue: "Бронирование" })} ·{" "}
                       <StatusBadge status={status} />
+                      {confirmedAt ? (
+                        <span className="ml-2 text-gray-500">{confirmedAt}</span>
+                      ) : null}
                     </div>
 
                     {/* ИМЯ → кликабельно + тип */}
@@ -478,10 +514,12 @@ export default function ClientBookings() {
                 {/* price chip */}
                 {lastOffer && (
                   <div className="shrink-0">
-                    <div className={cx(
-                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-                      compact && "text-sm px-2 py-1"
-                    )}>
+                    <div
+                      className={cx(
+                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+                        compact && "text-sm px-2 py-1"
+                      )}
+                    >
                       <span className="font-semibold">{lastOffer}</span>
                       {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
                     </div>
@@ -490,10 +528,9 @@ export default function ClientBookings() {
               </div>
 
               {/* dates */}
-              <div className={cx("inline-flex items-center gap-2 text-gray-700 mt-3",
-                                 compact ? "text-xs" : "text-sm")}>
+              <div className={cx("inline-flex items-center gap-2 text-gray-700 mt-3", compact ? "text-xs" : "text-sm")}>
                 <Icon name="calendar" className={compact ? "w-4 h-4" : "w-5 h-5"} />
-                <span className="font-medium">{t("common.date", { defaultValue: "Дата" })}:</span>
+                <span className="font-medium">Даты забронированы:</span>
                 <span>{dateText || "—"}</span>
               </div>
 
@@ -541,7 +578,7 @@ export default function ClientBookings() {
           {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
         </h2>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w/full sm:w-auto">
           {/* Поиск */}
           <div className="relative flex-1 sm:flex-none">
             <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -598,10 +635,12 @@ export default function ClientBookings() {
                 )}
               >
                 {f.label}
-                <span className={cx(
-                  "ml-2 inline-flex items-center justify-center rounded-full px-1.5 text-xs",
-                  active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
-                )}>
+                <span
+                  className={cx(
+                    "ml-2 inline-flex items-center justify-center rounded-full px-1.5 text-xs",
+                    active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
+                  )}
+                >
                   {counter}
                 </span>
               </button>
