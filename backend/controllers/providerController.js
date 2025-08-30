@@ -35,12 +35,15 @@ const sanitizeImages = (images) =>
     .slice(0, 20);
 
 function normalizeServicePayload(body) {
-  const { title, description, price, category, images, availability, details } = body || {};
+  const { title, description, price, category, images, availability, details } =
+    body || {};
 
   const imagesArr = sanitizeImages(images);
-  const availabilityArr = Array.isArray(availability) ? availability : toArray(availability);
+  const availabilityArr = Array.isArray(availability)
+    ? availability
+    : toArray(availability);
 
-  // details разрешаем для всех категорий, т.к. тут теперь живёт grossPrice
+  // details разрешаем для всех категорий (здесь, например, может жить grossPrice)
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
@@ -85,16 +88,22 @@ const normalizeDateArray = (arr) => {
 // ---------- Auth ----------
 const registerProvider = async (req, res) => {
   try {
-    const { name, email, password, type, location, phone, social, photo, address } = req.body || {};
+    const { name, email, password, type, location, phone, social, photo, address } =
+      req.body || {};
 
     if (!name || !email || !password || !type || !location || !phone) {
-      return res.status(400).json({ message: "Заполните все обязательные поля" });
+      return res
+        .status(400)
+        .json({ message: "Заполните все обязательные поля" });
     }
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
 
-    const existing = await pool.query("SELECT 1 FROM providers WHERE email = $1", [email]);
+    const existing = await pool.query(
+      "SELECT 1 FROM providers WHERE email = $1",
+      [email]
+    );
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
     }
@@ -103,7 +112,17 @@ const registerProvider = async (req, res) => {
     await pool.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [name, email, hashed, type, location, phone, social ?? null, photo ?? null, address ?? null]
+      [
+        name,
+        email,
+        hashed,
+        type,
+        location,
+        phone,
+        social ?? null,
+        photo ?? null,
+        address ?? null,
+      ]
     );
     res.status(201).json({ message: "Регистрация успешна" });
   } catch (err) {
@@ -115,7 +134,9 @@ const registerProvider = async (req, res) => {
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [
+      email,
+    ]);
     if (!q.rows.length) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
@@ -124,8 +145,14 @@ const loginProvider = async (req, res) => {
     if (!ok) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
-    const token = jwt.sign({ id: row.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    res.json({ message: "Вход успешен", provider: { id: row.id, name: row.name, email: row.email }, token });
+    const token = jwt.sign({ id: row.id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+    res.json({
+      message: "Вход успешен",
+      provider: { id: row.id, name: row.name, email: row.email },
+      token,
+    });
   } catch (err) {
     console.error("❌ Ошибка входа:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -156,14 +183,19 @@ const updateProviderProfile = async (req, res) => {
        FROM providers WHERE id = $1`,
       [id]
     );
-    if (!oldQ.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
+    if (!oldQ.rows.length)
+      return res.status(404).json({ message: "Провайдер не найден" });
     const old = oldQ.rows[0];
 
     // location как массив (text[])
     const toTextArray = (v, fallback) => {
       if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
       if (typeof v === "string") return [v.trim()].filter(Boolean);
-      return Array.isArray(fallback) ? fallback : typeof fallback === "string" ? [fallback] : [];
+      return Array.isArray(fallback)
+        ? fallback
+        : typeof fallback === "string"
+        ? [fallback]
+        : [];
     };
 
     const updated = {
@@ -180,7 +212,16 @@ const updateProviderProfile = async (req, res) => {
       `UPDATE providers
          SET name=$1, location=$2, phone=$3, social=$4, photo=$5, certificate=$6, address=$7
        WHERE id=$8`,
-      [updated.name, updated.location, updated.phone, updated.social, updated.photo, updated.certificate, updated.address, id]
+      [
+        updated.name,
+        updated.location,
+        updated.phone,
+        updated.social,
+        updated.photo,
+        updated.certificate,
+        updated.address,
+        id,
+      ]
     );
     res.json({ message: "Профиль обновлён успешно" });
   } catch (err) {
@@ -193,12 +234,21 @@ const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
-    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
-    if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
-    const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
+    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [
+      id,
+    ]);
+    if (!q.rows.length)
+      return res.status(404).json({ message: "Провайдер не найден" });
+    const ok = await bcrypt.compare(
+      String(oldPassword || ""),
+      q.rows[0].password
+    );
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
     const hashed = await bcrypt.hash(String(newPassword || ""), 10);
-    await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
+    await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [
+      hashed,
+      id,
+    ]);
     res.json({ message: "Пароль обновлён" });
   } catch (err) {
     console.error("❌ Ошибка смены пароля:", err);
@@ -210,8 +260,15 @@ const changeProviderPassword = async (req, res) => {
 const addService = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const { title, category, imagesArr, availabilityArr, priceNum, descriptionStr, detailsObj } =
-      normalizeServicePayload(req.body);
+    const {
+      title,
+      category,
+      imagesArr,
+      availabilityArr,
+      priceNum,
+      descriptionStr,
+      detailsObj,
+    } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
 
@@ -241,7 +298,10 @@ const addService = async (req, res) => {
 const getServices = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const r = await pool.query("SELECT * FROM services WHERE provider_id=$1 ORDER BY id DESC", [providerId]);
+    const r = await pool.query(
+      "SELECT * FROM services WHERE provider_id=$1 ORDER BY id DESC",
+      [providerId]
+    );
     res.json(r.rows);
   } catch (err) {
     console.error("❌ Ошибка получения услуг:", err);
@@ -254,8 +314,15 @@ const updateService = async (req, res) => {
     const providerId = req.user.id;
     const serviceId = req.params.id;
 
-    const { title, category, imagesArr, availabilityArr, priceNum, descriptionStr, detailsObj } =
-      normalizeServicePayload(req.body);
+    const {
+      title,
+      category,
+      imagesArr,
+      availabilityArr,
+      priceNum,
+      descriptionStr,
+      detailsObj,
+    } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
 
@@ -295,7 +362,10 @@ const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [serviceId, providerId]);
+    const del = await pool.query(
+      "DELETE FROM services WHERE id=$1 AND provider_id=$2",
+      [serviceId, providerId]
+    );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ message: "Удалено" });
   } catch (err) {
@@ -339,131 +409,84 @@ const getProviderPublicById = async (req, res) => {
 
 // ---------- Calendar (booked / blocked dates) ----------
 
-// Даты, занятые бронированиями (для провайдера). Возвращаем [{date:"YYYY-MM-DD"}, ...] — как ждёт фронт.
-
+// ЗАНЯТЫЕ БРОНЯМИ (для провайдера, под токеном)
+// Возвращаем [{ date: 'YYYY-MM-DD' }, ...]
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    // отдаем ТОЛЬКО YYYY-MM-DD без часовых поясов
-    const r = await pool
-      .query(
-        `SELECT to_char(day, 'YYYY-MM-DD') AS date
-           FROM provider_blocked_dates
-          WHERE provider_id = $1
-          ORDER BY day`,
-        [providerId]
-      )
-      .catch(() => ({ rows: [] }));
-
-    res.json(r.rows.map(x => x.date));
+    const q = await pool.query(
+      `SELECT DISTINCT bd.date::text AS date
+         FROM booking_dates bd
+         JOIN bookings b ON b.id = bd.booking_id
+        WHERE b.provider_id = $1
+          AND b.status IN ('pending','confirmed','active')
+          AND bd.date >= CURRENT_DATE
+        ORDER BY 1`,
+      [providerId]
+    );
+    res.json(q.rows);
   } catch (err) {
-    console.error("❌ Ошибка получения занятых дат:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("getBookedDates error:", err);
+    res.status(500).json({ message: "booked-dates error" });
   }
 };
 
-
-// Ручные блокировки провайдера (сам провайдер). Возвращаем массив "YYYY-MM-DD".
+// РУЧНЫЕ БЛОКИРОВКИ (для провайдера под токеном)
+// Возвращаем [{ date: 'YYYY-MM-DD' }, ...]
 const getBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
-    const r = await pool
-      .query(
-        `SELECT day::date AS day
-           FROM provider_blocked_dates
-          WHERE provider_id=$1
-          ORDER BY day`,
-        [providerId]
-      )
-      .catch(() => ({ rows: [] }));
-    res.json(r.rows.map((x) => x.day));
+    const q = await pool.query(
+      `SELECT date::text AS date
+         FROM provider_blocked_dates
+        WHERE provider_id=$1
+        ORDER BY 1`,
+      [providerId]
+    );
+    res.json(q.rows);
   } catch (err) {
-    console.error("❌ Ошибка получения blocked-dates:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("getBlockedDates error:", err);
+    res.status(500).json({ message: "blocked-dates error" });
   }
 };
 
-// Принимает либо { add:[...], remove:[...] }, либо { dates:[...] } — полная замена.
+// Сохранение ручных блокировок (полная замена: { dates: [...] })
 const saveBlockedDates = async (req, res) => {
-  try {
-    const providerId = req.user.id;
+  const providerId = req.user.id;
+  const incoming = Array.isArray(req.body?.dates) ? req.body.dates : [];
+  const dates = Array.from(new Set(incoming.map((v) => String(v).slice(0, 10)).filter(Boolean)));
 
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS provider_blocked_dates (
-         provider_id integer not null,
-         day date not null,
-         PRIMARY KEY(provider_id, day)
-       )`
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    await client.query(
+      `DELETE FROM provider_blocked_dates WHERE provider_id = $1`,
+      [providerId]
     );
 
-    let add = normalizeDateArray(req.body?.add);
-    let remove = normalizeDateArray(req.body?.remove);
-
-    // Полная замена { dates: [...] }
-    if (Array.isArray(req.body?.dates)) {
-      const incoming = new Set(normalizeDateArray(req.body.dates));
-
-      const curr = await pool
-        .query(`SELECT day::date AS day FROM provider_blocked_dates WHERE provider_id = $1`, [providerId])
-        .catch(() => ({ rows: [] }));
-
-      const current = new Set(curr.rows.map((r) => (r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day))));
-
-      add = [...incoming].filter((d) => !current.has(d));
-      remove = [...current].filter((d) => !incoming.has(d));
+    if (dates.length) {
+      const values = dates.map((_, i) => `($1, $${i + 2}::date)`).join(",");
+      await client.query(
+        `INSERT INTO provider_blocked_dates (provider_id, date)
+         VALUES ${values}
+         ON CONFLICT (provider_id, date) DO NOTHING`,
+        [providerId, ...dates]
+      );
     }
 
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-
-      for (const d of add) {
-        await client.query(
-          `INSERT INTO provider_blocked_dates(provider_id, day)
-           VALUES ($1, $2::date)
-           ON CONFLICT (provider_id, day) DO NOTHING`,
-          [providerId, d]
-        );
-      }
-
-      if (remove.length) {
-        await client.query(
-          `DELETE FROM provider_blocked_dates
-            WHERE provider_id=$1 AND day = ANY ($2::date[])`,
-          [providerId, remove]
-        );
-      }
-
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    const after = await pool
-      .query(
-        `SELECT day::date AS day
-           FROM provider_blocked_dates
-          WHERE provider_id=$1
-          ORDER BY day`,
-        [providerId]
-      )
-      .catch(() => ({ rows: [] }));
-
-    res.json({
-      added: add.length,
-      removed: remove.length,
-      dates: after.rows.map((r) => r.day),
-    });
-  } catch (err) {
-    console.error("❌ Ошибка сохранения blocked-dates:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    await client.query("COMMIT");
+    res.json({ ok: true, count: dates.length });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("saveBlockedDates error:", e);
+    res.status(500).json({ message: "blocked-dates save error" });
+  } finally {
+    client.release();
   }
 };
 
-// Публичный календарь для клиентов: объединяем ручные блоки и занятые бронированиями
+// Публичный календарь (для клиента по providerId)
 const getCalendarPublic = async (req, res) => {
   try {
     const providerId = Number(req.params.providerId);
@@ -471,29 +494,27 @@ const getCalendarPublic = async (req, res) => {
       return res.status(400).json({ message: "Bad providerId" });
     }
 
-    const blockedPromise = pool
-      .query(`SELECT day::date AS day FROM provider_blocked_dates WHERE provider_id=$1 ORDER BY day`, [providerId])
-      .catch(() => ({ rows: [] }));
-
-    const bookedPromise = pool
-      .query(
-        `SELECT bd.date::date AS day
+    const [booked, blocked] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT bd.date::text AS date
            FROM booking_dates bd
            JOIN bookings b ON b.id = bd.booking_id
           WHERE b.provider_id = $1
-            AND b.status IN ('pending','active')
-          GROUP BY bd.date
-          ORDER BY bd.date`,
+            AND b.status IN ('pending','confirmed','active')
+            AND bd.date >= CURRENT_DATE
+          ORDER BY 1`,
         [providerId]
-      )
-      .catch(() => ({ rows: [] }));
+      ),
+      pool.query(
+        `SELECT date::text AS date
+           FROM provider_blocked_dates
+          WHERE provider_id=$1
+          ORDER BY 1`,
+        [providerId]
+      ),
+    ]);
 
-    const [blocked, booked] = await Promise.all([blockedPromise, bookedPromise]);
-
-    res.json({
-      blocked: blocked.rows.map((r) => r.day),
-      booked: booked.rows.map((r) => r.day),
-    });
+    res.json({ booked: booked.rows, blocked: blocked.rows });
   } catch (err) {
     console.error("❌ Ошибка getCalendarPublic:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -533,7 +554,8 @@ const toggleProviderFavorite = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { service_id } = req.body || {};
-    if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
+    if (!service_id)
+      return res.status(400).json({ message: "service_id обязателен" });
 
     // попытка добавить
     const ins = await pool.query(
@@ -549,7 +571,10 @@ const toggleProviderFavorite = async (req, res) => {
     }
 
     // если уже было — удалить
-    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [providerId, service_id]);
+    await pool.query(
+      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
+      [providerId, service_id]
+    );
     res.json({ added: false });
   } catch (err) {
     console.error("❌ toggleProviderFavorite:", err);
@@ -561,7 +586,10 @@ const removeProviderFavorite = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = Number(req.params.serviceId);
-    await pool.query(`DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`, [providerId, serviceId]);
+    await pool.query(
+      `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
+      [providerId, serviceId]
+    );
     res.json({ ok: true });
   } catch (err) {
     console.error("❌ removeProviderFavorite:", err);
