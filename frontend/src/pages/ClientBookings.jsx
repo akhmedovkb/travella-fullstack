@@ -1,5 +1,4 @@
 // frontend/src/pages/ClientBookings.jsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -10,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const getToken = () =>
   localStorage.getItem("clientToken") ||
   localStorage.getItem("token") ||
-  localStorage.getItem("providerToken"); // на всякий случай
+  localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
@@ -84,7 +83,6 @@ export default function ClientBookings() {
 
   useEffect(() => {
     load();
-    // хук на «Обновить» из Dashboard
     const onRefresh = () => load();
     window.addEventListener("client:bookings:refresh", onRefresh);
     return () => window.removeEventListener("client:bookings:refresh", onRefresh);
@@ -205,22 +203,24 @@ export default function ClientBookings() {
 
               <AttachmentList items={b.attachments} />
 
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => confirm(b)}
-                  disabled={actingId === b.id}
-                  className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-60"
-                >
-                  {t("actions.confirm", { defaultValue: "Подтвердить" })}
-                </button>
-                <button
-                  onClick={() => reject(b)}
-                  disabled={actingId === b.id}
-                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-60"
-                >
-                  {t("actions.reject", { defaultValue: "Отклонить" })}
-                </button>
-              </div>
+              {String(b.status || "").toLowerCase() === "pending" && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => confirm(b)}
+                    disabled={actingId === b.id}
+                    className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-60"
+                  >
+                    {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                  </button>
+                  <button
+                    onClick={() => reject(b)}
+                    disabled={actingId === b.id}
+                    className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-60"
+                  >
+                    {t("actions.reject", { defaultValue: "Отклонить" })}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
