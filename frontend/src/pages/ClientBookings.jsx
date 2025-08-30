@@ -199,6 +199,9 @@ function AttachmentList({ items }) {
   );
 }
 
+const providerPhoto =
+  b.provider_photo || b.provider?.photo || b.provider?.avatar_url || b.service?.providerPhoto;
+
 /* ========= основная страница ========= */
 export default function ClientBookings() {
   const { t } = useTranslation();
@@ -416,9 +419,23 @@ export default function ClientBookings() {
               {/* header */}
               <div className={cx("flex justify-between gap-3", compact ? "items-center" : "items-start")}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={cx("rounded-full text-white grid place-items-center font-semibold shrink-0",
-                                     compact ? "w-9 h-9 bg-indigo-600" : "w-10 h-10 bg-indigo-600")}>
-                    {initials(providerName || "P")}
+                  <div
+                    className={
+                      (compact ? "w-9 h-9" : "w-10 h-10") +
+                      " rounded-full overflow-hidden bg-indigo-600 text-white grid place-items-center shrink-0"
+                    }
+                  >
+                    {providerPhoto ? (
+                      <img
+                        src={providerPhoto}
+                        alt={providerName || "provider"}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="font-semibold">{initials(providerName || "P")}</span>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className={cx("text-gray-500 truncate", compact ? "text-xs" : "text-sm")}>
