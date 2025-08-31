@@ -36,7 +36,7 @@ const makeAbsolute = (u) => {
   const s = String(u).trim();
   if (/^(data:|https?:|blob:)/i.test(s)) return s;
   if (s.startsWith("//")) return `${window.location.protocol}${s}`;
-  const base = (import.meta.env.VITE_API_BASE_URL || window.location.origin || "").replace(/\/+$/, "");
+  const base = (import.meta.env.VITE_API_BASE_URL || window.location.origin || "").replace(/\/+$/,"");
   return `${base}/${s.replace(/^\/+/, "")}`;
 };
 
@@ -49,7 +49,6 @@ const isImageUrl = (url, type) => {
 const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
 
 const normalizeAttachment = (a) => {
-  // поддержка: строка-URL | {url|href|path|file|src, name, type}
   if (typeof a === "string") {
     return { name: a.split("/").pop() || "file", url: makeAbsolute(a), type: "" };
   }
@@ -62,87 +61,81 @@ const normalizeAttachment = (a) => {
   return null;
 };
 
-const initials = (name = "") =>
-  name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join("");
-
 /* ===== component ===== */
 export default function BookingRow({
   booking,
-  viewerRole, // 'provider' | 'client'
+  viewerRole,                // 'provider' | 'client'
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
 }) {
   const { t } = useTranslation();
 
-  // чей аватар показываем
-  const avatarUrl = useMemo(() => {
-    if (viewerRole === "provider") {
-      return (
-        makeAbsolute(booking.client_avatar_url) ||
-        makeAbsolute(booking.client_photo) ||
-        makeAbsolute(booking.client?.avatar_url)
-      );
-    }
-    // viewerRole === 'client' → показываем провайдера
-    return (
-      makeAbsolute(booking.provider_photo) ||
-      makeAbsolute(booking.provider?.photo) ||
-      makeAbsolute(booking.provider_avatar_url)
-    );
-  }, [booking, viewerRole]);
-
-  // контрагент для подписи/ссылок
+  // Контрагент (для поставщика показываем заказчика: клиента или провайдера-заявителя)
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-      const tg = normalizeTg(booking.client_social || booking.requester_telegram);
+      // если бронировал провайдер — используем requester_* поля
+      const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
       const name =
-        booking.client_name ||
+        (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
         booking.requester_name ||
         t("roles.client", { defaultValue: "Клиент" });
+
+      // ссылка: при client_id → профиль клиента; иначе при requester_provider_id → профиль провайдера
+      const href =
+        booking.client_id
+          ? `/profile/client/${booking.client_id}`
+          : booking.requester_provider_id
+          ? `/profile/provider/${booking.requester_provider_id}`
+          : booking.requester_url || null;
+
+      const phone = isRequestedByProvider
+        ? booking.requester_phone
+        : booking.client_phone || booking.requester_phone;
+
+      const tg = normalizeTg(
+        isRequestedByProvider ? booking.requester_telegram : booking.client_social || booking.requester_telegram
+      );
+
+      const address = isRequestedByProvider ? null : booking.client_address || null;
+
+      // тип: если бронировал провайдер — это агент (или booking.requester_type, если вы его добавите)
+      const extra = isRequestedByProvider
+        ? typeLabel(booking.requester_type || "agent", t)
+        : null;
+
       return {
         role: t("roles.client", { defaultValue: "Клиент" }),
-        id: booking.client_id,
+        id: booking.client_id || booking.requester_provider_id || null,
         name,
-        href: booking.client_id ? `/profile/client/${booking.client_id}` : booking.requester_url || null,
-        phone: booking.client_phone || booking.requester_phone || null,
-        address: booking.client_address || null,
+        href,
+        phone,
+        address,
         telegram: tg,
-        extra: null, // тип клиента не нужен
+        extra,
       };
     }
+
+    // viewer === client → показываем поставщика
     const tg = normalizeTg(booking.provider_social);
-    const name =
-      booking.provider_name ||
-      booking.provider?.name ||
-      t("roles.provider", { defaultValue: "Поставщик" });
     return {
       role: t("roles.provider", { defaultValue: "Поставщик" }),
       id: booking.provider_id,
-      name,
+      name: booking.provider_name || t("roles.provider", { defaultValue: "Поставщик" }),
       href: booking.provider_id ? `/profile/provider/${booking.provider_id}` : null,
-      phone: booking.provider_phone || booking.provider?.phone || null,
+      phone: booking.provider_phone || null,
       address: booking.provider_address || null,
       telegram: tg,
-      // Для клиента показываем тип провайдера
       extra: typeLabel(booking.provider_type, t),
     };
   }, [booking, viewerRole, t]);
 
-  // разрешения
-  const canAcceptReject = viewerRole === "provider" && String(booking.status).toLowerCase() === "pending";
-  // клиент может отменить pending/confirmed (ранее было 'active', синхронизируем со статусами бекенда)
-  const canCancel =
-    viewerRole === "client" && ["pending", "confirmed"].includes(String(booking.status).toLowerCase());
+  const canAcceptReject = viewerRole === "provider" && booking.status === "pending";
+  const canCancel = viewerRole === "client" && ["pending","active"].includes(String(booking.status));
 
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
 
-  // attachments из API (json/jsonb) или строка — приводим к массиву
+  // attachments
   let attachments = [];
   try {
     const raw = booking.attachments;
@@ -153,92 +146,61 @@ export default function BookingRow({
   }
 
   return (
-    <div className="border rounded-lg p-3 flex flex-col gap-2 bg-white">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          {/* Аватар / инициалы */}
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-indigo-600 text-white grid place-items-center shrink-0">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={counterpart.name || "avatar"}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
+    <div className="border rounded-lg p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm text-gray-500">
+            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {booking.status}
+          </div>
+
+          <div className="text-base">
+            <span className="text-gray-500">{counterpart.role}</span>
+            {counterpart.extra && (
+              <>
+                {" · "}
+                <span className="text-gray-500">{counterpart.extra}</span>
+              </>
+            )}
+            {" · "}
+            {counterpart.href ? (
+              <a className="font-semibold underline" href={counterpart.href}>
+                {counterpart.name}
+              </a>
             ) : (
-              <span className="font-semibold">{initials(counterpart.name || "U")}</span>
+              <span className="font-semibold">{counterpart.name}</span>
             )}
           </div>
 
-          <div className="min-w-0">
-            <div className="text-sm text-gray-500">
-              #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} ·{" "}
-              <span className="lowercase">{String(booking.status).toLowerCase()}</span>
-            </div>
-
-            <div className="text-base">
-              <span className="text-gray-500">{counterpart.role}</span>
-              {counterpart.href ? (
-                <>
-                  {" · "}
-                  <a className="font-semibold underline" href={counterpart.href}>
-                    {counterpart.name}
+          <div className="text-sm text-gray-700 mt-1 space-x-3">
+            {counterpart.phone && (
+              <span>
+                {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
+                <a className="underline" href={`tel:${String(counterpart.phone).replace(/\s+/g, "")}`}>
+                  {counterpart.phone}
+                </a>
+              </span>
+            )}
+            {counterpart.telegram?.label && (
+              <span>
+                {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
+                {counterpart.telegram.href ? (
+                  <a className="underline break-all" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
+                    {counterpart.telegram.label}
                   </a>
-                </>
-              ) : (
-                <>
-                  {" · "}
-                  <span className="font-semibold">{counterpart.name}</span>
-                </>
-              )}
-              {/* бейдж типа поставщика только для клиента */}
-              {viewerRole === "client" && counterpart.extra && (
-                <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 bg-gray-100 text-gray-700 ring-gray-200">
-                  {counterpart.extra}
-                </span>
-              )}
-            </div>
+                ) : (
+                  <span>{counterpart.telegram.label}</span>
+                )}
+              </span>
+            )}
+            {counterpart.address && (
+              <span>
+                {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{counterpart.address}</b>
+              </span>
+            )}
+          </div>
 
-            <div className="text-sm text-gray-700 mt-1 space-x-3">
-              {counterpart.phone && (
-                <span>
-                  {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
-                  <a
-                    className="underline"
-                    href={`tel:${String(counterpart.phone).replace(/[^+\d]/g, "")}`}
-                  >
-                    {counterpart.phone}
-                  </a>
-                </span>
-              )}
-              {counterpart.telegram?.label && (
-                <span>
-                  {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
-                  {counterpart.telegram.href ? (
-                    <a
-                      className="underline break-all"
-                      href={counterpart.telegram.href}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {counterpart.telegram.label}
-                    </a>
-                  ) : (
-                    <span>{counterpart.telegram.label}</span>
-                  )}
-                </span>
-              )}
-              {counterpart.address && (
-                <span>
-                  {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{counterpart.address}</b>
-                </span>
-              )}
-            </div>
-
-            <div className="text-sm text-gray-500 mt-1">
-              {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
-            </div>
+          <div className="text-sm text-gray-500 mt-1">
+            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
           </div>
         </div>
 
@@ -271,9 +233,7 @@ export default function BookingRow({
       </div>
 
       {/* сообщение клиента */}
-      {booking.client_message && (
-        <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>
-      )}
+      {booking.client_message && <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>}
 
       {/* вложения */}
       {!!attachments.length && (
@@ -298,16 +258,9 @@ export default function BookingRow({
                   title={att.name}
                 >
                   {img ? (
-                    <img
-                      src={att.url}
-                      alt={att.name}
-                      className="w-16 h-16 rounded border object-cover"
-                      loading="lazy"
-                    />
+                    <img src={att.url} alt={att.name} className="w-16 h-16 rounded border object-cover" />
                   ) : (
-                    <span className="inline-block px-2 py-1 text-xs rounded border bg-gray-50">
-                      {att.name}
-                    </span>
+                    <span className="inline-block px-2 py-1 text-xs rounded border bg-gray-50">{att.name}</span>
                   )}
                 </a>
               );
