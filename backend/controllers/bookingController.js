@@ -74,8 +74,9 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
  */
 const createBooking = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    if (!clientId) return res.status(401).json({ message: "Требуется авторизация" });
+    const userId = req.user?.id;
+    const userRole = req.user?.role; // 'client' | 'provider'
+    if (!userId) return res.status(401).json({ message: "Требуется авторизация" });
 
     const { service_id, provider_id: pFromBody, dates, message, attachments } = req.body || {};
     let providerId = pFromBody || null;
@@ -94,23 +95,61 @@ const createBooking = async (req, res) => {
     if (!days.length) return res.status(400).json({ message: "Не указаны корректные даты" });
 
     const primaryDate = [...days].sort()[0];
-
     const ok = await isDatesFree(providerId, days);
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
+    // ── новенькое: если бронирует провайдер (агент), сохраняем его «снэпшот» в requester_*,
+    // client_id оставляем NULL
+    let requester = { id: null, name: null, phone: null, telegram: null, avatar: null };
+    let clientId = null;
+
+    if (userRole === "provider") {
+      const rq = await pool.query(
+        `SELECT id, name, phone, social AS telegram, photo AS avatar
+           FROM providers WHERE id=$1`,
+        [userId]
+      );
+      if (rq.rowCount) {
+        const r = rq.rows[0];
+        requester = {
+          id: r.id,
+          name: r.name || null,
+          phone: r.phone || null,
+          telegram: r.telegram || null,
+          avatar: r.avatar || null,
+        };
+      }
+    } else {
+      // обычный клиент
+      clientId = userId;
+    }
+
     const ins = await pool.query(
-      `INSERT INTO bookings (service_id, provider_id, client_id, date, status, client_message, attachments)
-       VALUES ($1,$2,$3,$4::date,'pending',$5,$6::jsonb)
+      `INSERT INTO bookings (
+         service_id, provider_id, client_id, date, status, client_message, attachments,
+         requester_provider_id, requester_name, requester_phone, requester_telegram, requester_avatar_url
+       )
+       VALUES ($1,$2,$3,$4::date,'pending',$5,$6::jsonb,$7,$8,$9,$10,$11)
        RETURNING id, status`,
-      [service_id ?? null, providerId, clientId, primaryDate, message ?? null, JSON.stringify(attachments ?? [])]
+      [
+        service_id ?? null,
+        providerId,
+        clientId,
+        primaryDate,
+        message ?? null,
+        JSON.stringify(attachments ?? []),
+        requester.id,
+        requester.name,
+        requester.phone,
+        requester.telegram,
+        requester.avatar,
+      ]
     );
+
     const bookingId = ins.rows[0].id;
 
     for (const d of days) {
-      await pool.query(
-        `INSERT INTO booking_dates (booking_id, date) VALUES ($1,$2::date)`,
-        [bookingId, d]
-      );
+      await pool.query(`INSERT INTO booking_dates (booking_id, date) VALUES ($1,$2::date)`, [bookingId, d]);
     }
 
     res.status(201).json({ id: bookingId, status: "pending", dates: days });
@@ -120,47 +159,63 @@ const createBooking = async (req, res) => {
   }
 };
 
+
 // Брони провайдера (гид/транспорт)
 async function getProviderBookings(req, res) {
   try {
     const providerId = req.user?.id;
 
     const sql = `
-      SELECT
-        b.id, b.provider_id, b.service_id, b.client_id,
-        b.status, b.created_at, b.updated_at,
-        b.client_message, b.provider_note, b.provider_price,
-        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-        COALESCE(
-          ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
-          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
-        ) AS dates,
-        s.title AS service_title,
-        c.id          AS client_id,
-        c.name        AS client_name,
-        c.phone       AS client_phone,
-        c.email       AS client_email,
-        c.telegram    AS client_social,
-        c.location    AS client_address,
-        c.avatar_url  AS client_avatar_url,
-        p.id       AS provider_profile_id,
-        p.name     AS provider_name,
-        p.type     AS provider_type,
-        p.phone    AS provider_phone,
-        p.email    AS provider_email,
-        p.social   AS provider_social,
-        p.address  AS provider_address,
-        p.location AS provider_location,
-        p.photo    AS provider_photo
-      FROM bookings b
-      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-      LEFT JOIN clients  c       ON c.id = b.client_id
-      LEFT JOIN providers p      ON p.id = b.provider_id
-      LEFT JOIN services  s      ON s.id = b.service_id
-      WHERE b.provider_id = $1
-      GROUP BY b.id, s.id, c.id, p.id
-      ORDER BY b.created_at DESC NULLS LAST
-    `;
+  SELECT
+    b.id, b.provider_id, b.service_id, b.client_id,
+    b.status, b.created_at, b.updated_at,
+    b.client_message, b.provider_note, b.provider_price,
+    COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+
+    -- массив дат
+    COALESCE(
+      ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
+      CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+    ) AS dates,
+
+    s.title AS service_title,
+
+    -- КЛИЕНТ (если это реальный client)
+    c.id          AS client_id,
+    c.name        AS client_name,
+    c.phone       AS client_phone,
+    c.email       AS client_email,
+    c.telegram    AS client_social,
+    c.location    AS client_address,
+    c.avatar_url  AS client_avatar_url,
+
+    -- ПРОВАЙДЕР (исполнитель)
+    p.id          AS provider_profile_id,
+    p.name        AS provider_name,
+    p.type        AS provider_type,
+    p.phone       AS provider_phone,
+    p.email       AS provider_email,
+    p.social      AS provider_social,
+    p.address     AS provider_address,
+    p.location    AS provider_location,
+    p.photo       AS provider_photo,
+
+    -- ИНИЦИАТОР (агент-провайдер), если client_id NULL:
+    b.requester_provider_id,
+    b.requester_name,
+    b.requester_phone,
+    b.requester_telegram,
+    b.requester_avatar_url
+
+  FROM bookings b
+  LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+  LEFT JOIN clients   c ON c.id = b.client_id
+  LEFT JOIN providers p ON p.id = b.provider_id
+  LEFT JOIN services  s ON s.id = b.service_id
+  WHERE b.provider_id = $1
+  GROUP BY b.id, s.id, c.id, p.id
+  ORDER BY b.created_at DESC NULLS LAST
+`;
 
     const q = await pool.query(sql, [providerId]);
     return res.json(q.rows);
