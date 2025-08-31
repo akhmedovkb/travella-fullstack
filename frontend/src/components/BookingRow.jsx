@@ -12,22 +12,24 @@ function normalizeTg(v) {
   return { label: s, href: null };
 }
 
-const typeLabelKey = (raw) => {
-  const s = String(raw ?? "").toLowerCase();
+const typeLabel = (raw, t) => {
+  if (!raw && raw !== 0) return "";
+  const s = String(raw).toLowerCase();
   const byCode = { "1": "agent", "2": "guide", "3": "transport", "4": "hotel" };
-  if (byCode[s]) return byCode[s];
-  if (["agent", "guide", "transport", "hotel"].includes(s)) return s;
-  if (s.includes("guide") || s.includes("гид")) return "guide";
-  if (s.includes("trans") || s.includes("вод") || s.includes("транс")) return "transport";
-  if (s.includes("hotel") || s.includes("отел")) return "hotel";
-  return "agent";
+  const key =
+    byCode[s] ||
+    (["agent", "guide", "transport", "hotel"].includes(s)
+      ? s
+      : s.includes("guide")
+      ? "guide"
+      : s.includes("trans")
+      ? "transport"
+      : s.includes("hotel")
+      ? "hotel"
+      : "agent");
+  const fallback = { agent: "Агент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[key];
+  return t(`provider.types.${key}`, { defaultValue: fallback });
 };
-const typeLabel = (raw, t) =>
-  t(`provider.types.${typeLabelKey(raw)}`, {
-    defaultValue: { agent: "Агент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[
-      typeLabelKey(raw)
-    ],
-  });
 
 const makeAbsolute = (u) => {
   if (!u) return null;
@@ -44,7 +46,10 @@ const isImageUrl = (url, type) => {
   return /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(s) || s.startsWith("data:image/");
 };
 
+const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+
 const normalizeAttachment = (a) => {
+  // поддержка: строка-URL | {url|href|path|file|src, name, type}
   if (typeof a === "string") {
     return { name: a.split("/").pop() || "file", url: makeAbsolute(a), type: "" };
   }
@@ -57,65 +62,87 @@ const normalizeAttachment = (a) => {
   return null;
 };
 
-const statusKey = (s) => String(s || "").toLowerCase();
-const statusView = (s, t) => {
-  const k = statusKey(s);
-  const map = {
-    pending: { text: t("status.pending", { defaultValue: "ожидает" }), cls: "bg-amber-50 text-amber-700 ring-amber-200" },
-    confirmed: { text: t("status.confirmed", { defaultValue: "подтверждено" }), cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    active: { text: t("status.active", { defaultValue: "активно" }), cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    rejected: { text: t("status.rejected", { defaultValue: "отклонено" }), cls: "bg-rose-50 text-rose-700 ring-rose-200" },
-    cancelled: { text: t("status.cancelled", { defaultValue: "отменено" }), cls: "bg-gray-100 text-gray-600 ring-gray-200" },
-  };
-  return map[k] || { text: k, cls: "bg-gray-100 text-gray-700 ring-gray-200" };
-};
+const initials = (name = "") =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
 
 /* ===== component ===== */
 export default function BookingRow({
   booking,
-  viewerRole,                // 'provider' | 'client'
+  viewerRole, // 'provider' | 'client'
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
 }) {
   const { t } = useTranslation();
 
-  // контрагент
+  // чей аватар показываем
+  const avatarUrl = useMemo(() => {
+    if (viewerRole === "provider") {
+      return (
+        makeAbsolute(booking.client_avatar_url) ||
+        makeAbsolute(booking.client_photo) ||
+        makeAbsolute(booking.client?.avatar_url)
+      );
+    }
+    // viewerRole === 'client' → показываем провайдера
+    return (
+      makeAbsolute(booking.provider_photo) ||
+      makeAbsolute(booking.provider?.photo) ||
+      makeAbsolute(booking.provider_avatar_url)
+    );
+  }, [booking, viewerRole]);
+
+  // контрагент для подписи/ссылок
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
       const tg = normalizeTg(booking.client_social || booking.requester_telegram);
+      const name =
+        booking.client_name ||
+        booking.requester_name ||
+        t("roles.client", { defaultValue: "Клиент" });
       return {
         role: t("roles.client", { defaultValue: "Клиент" }),
         id: booking.client_id,
-        name: booking.client_name || booking.requester_name || t("roles.client", { defaultValue: "Клиент" }),
+        name,
         href: booking.client_id ? `/profile/client/${booking.client_id}` : booking.requester_url || null,
         phone: booking.client_phone || booking.requester_phone || null,
         address: booking.client_address || null,
         telegram: tg,
-        extra: null, // у клиента типа нет
+        extra: null, // тип клиента не нужен
       };
     }
     const tg = normalizeTg(booking.provider_social);
+    const name =
+      booking.provider_name ||
+      booking.provider?.name ||
+      t("roles.provider", { defaultValue: "Поставщик" });
     return {
       role: t("roles.provider", { defaultValue: "Поставщик" }),
       id: booking.provider_id,
-      name: booking.provider_name || t("roles.provider", { defaultValue: "Поставщик" }),
+      name,
       href: booking.provider_id ? `/profile/provider/${booking.provider_id}` : null,
-      phone: booking.provider_phone || null,
+      phone: booking.provider_phone || booking.provider?.phone || null,
       address: booking.provider_address || null,
       telegram: tg,
-      // показываем тип поставщика для клиента
+      // Для клиента показываем тип провайдера
       extra: typeLabel(booking.provider_type, t),
     };
   }, [booking, viewerRole, t]);
 
-  const canAcceptReject = viewerRole === "provider" && statusKey(booking.status) === "pending";
-  const canCancel = viewerRole === "client" && ["pending", "active"].includes(statusKey(booking.status));
+  // разрешения
+  const canAcceptReject = viewerRole === "provider" && String(booking.status).toLowerCase() === "pending";
+  // клиент может отменить pending/confirmed (ранее было 'active', синхронизируем со статусами бекенда)
+  const canCancel =
+    viewerRole === "client" && ["pending", "confirmed"].includes(String(booking.status).toLowerCase());
 
-  const datesArr = Array.isArray(booking.dates) ? booking.dates.map((d) => String(d).slice(0, 10)) : [];
-  const dates = datesArr.join(", ");
+  const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
 
-  // attachments из API (json/jsonb/строка)
+  // attachments из API (json/jsonb) или строка — приводим к массиву
   let attachments = [];
   try {
     const raw = booking.attachments;
@@ -125,84 +152,96 @@ export default function BookingRow({
     attachments = [];
   }
 
-  const st = statusView(booking.status, t);
-
   return (
     <div className="border rounded-lg p-3 flex flex-col gap-2 bg-white">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          {/* заголовок: №, название услуги, статус-бейдж */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-            <span>#{booking.id}</span>
-            <span>·</span>
-            <span className="truncate">{booking.service_title || t("common.service", { defaultValue: "услуга" })}</span>
-            <span>·</span>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full ring-1 ${st.cls}`}>{st.text}</span>
-          </div>
-
-          {/* контрагент (имя кликабельно), для клиента показываем тип поставщика */}
-          <div className="text-base mt-0.5">
-            <span className="text-gray-500">{counterpart.role}</span>
-            {counterpart.extra && (
-              <>
-                {" · "}
-                <span className="text-gray-500">{counterpart.extra}</span>
-              </>
-            )}
-            {" · "}
-            {counterpart.href ? (
-              <a className="font-semibold underline" href={counterpart.href}>
-                {counterpart.name}
-              </a>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          {/* Аватар / инициалы */}
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-indigo-600 text-white grid place-items-center shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={counterpart.name || "avatar"}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
             ) : (
-              <span className="font-semibold">{counterpart.name}</span>
+              <span className="font-semibold">{initials(counterpart.name || "U")}</span>
             )}
           </div>
 
-          {/* контакты */}
-          <div className="text-sm text-gray-700 mt-1 space-x-3">
-            {counterpart.phone && (
-              <span>
-                {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
-                <a
-                  className="underline"
-                  href={`tel:${String(counterpart.phone).replace(/[^+\d]/g, "")}`}
-                >
-                  {counterpart.phone}
-                </a>
-              </span>
-            )}
-            {counterpart.telegram?.label && (
-              <span>
-                {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
-                {counterpart.telegram.href ? (
-                  <a
-                    className="underline break-all"
-                    href={counterpart.telegram.href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {counterpart.telegram.label}
+          <div className="min-w-0">
+            <div className="text-sm text-gray-500">
+              #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} ·{" "}
+              <span className="lowercase">{String(booking.status).toLowerCase()}</span>
+            </div>
+
+            <div className="text-base">
+              <span className="text-gray-500">{counterpart.role}</span>
+              {counterpart.href ? (
+                <>
+                  {" · "}
+                  <a className="font-semibold underline" href={counterpart.href}>
+                    {counterpart.name}
                   </a>
-                ) : (
-                  <span>{counterpart.telegram.label}</span>
-                )}
-              </span>
-            )}
-            {counterpart.address && (
-              <span>
-                {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{counterpart.address}</b>
-              </span>
-            )}
-          </div>
+                </>
+              ) : (
+                <>
+                  {" · "}
+                  <span className="font-semibold">{counterpart.name}</span>
+                </>
+              )}
+              {/* бейдж типа поставщика только для клиента */}
+              {viewerRole === "client" && counterpart.extra && (
+                <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 bg-gray-100 text-gray-700 ring-gray-200">
+                  {counterpart.extra}
+                </span>
+              )}
+            </div>
 
-          {/* даты */}
-          <div className="text-sm text-gray-500 mt-1">
-            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
+            <div className="text-sm text-gray-700 mt-1 space-x-3">
+              {counterpart.phone && (
+                <span>
+                  {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
+                  <a
+                    className="underline"
+                    href={`tel:${String(counterpart.phone).replace(/[^+\d]/g, "")}`}
+                  >
+                    {counterpart.phone}
+                  </a>
+                </span>
+              )}
+              {counterpart.telegram?.label && (
+                <span>
+                  {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
+                  {counterpart.telegram.href ? (
+                    <a
+                      className="underline break-all"
+                      href={counterpart.telegram.href}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {counterpart.telegram.label}
+                    </a>
+                  ) : (
+                    <span>{counterpart.telegram.label}</span>
+                  )}
+                </span>
+              )}
+              {counterpart.address && (
+                <span>
+                  {t("marketplace.address", { defaultValue: "Адрес" })}: <b>{counterpart.address}</b>
+                </span>
+              )}
+            </div>
+
+            <div className="text-sm text-gray-500 mt-1">
+              {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
+            </div>
           </div>
         </div>
 
-        {/* действия */}
         <div className="shrink-0 flex items-center gap-2">
           {canAcceptReject && (
             <>
@@ -263,6 +302,7 @@ export default function BookingRow({
                       src={att.url}
                       alt={att.name}
                       className="w-16 h-16 rounded border object-cover"
+                      loading="lazy"
                     />
                   ) : (
                     <span className="inline-block px-2 py-1 text-xs rounded border bg-gray-50">
