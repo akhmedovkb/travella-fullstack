@@ -74,9 +74,10 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
  */
 const createBooking = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const userRole = req.user?.role; // 'client' | 'provider'
-    if (!userId) return res.status(401).json({ message: "Требуется авторизация" });
+    // кто делает бронирование
+    const actorId = req.user?.id;
+    const actorRole = req.user?.role;            // <— важно
+    if (!actorId) return res.status(401).json({ message: "Требуется авторизация" });
 
     const { service_id, provider_id: pFromBody, dates, message, attachments } = req.body || {};
     let providerId = pFromBody || null;
@@ -98,54 +99,26 @@ const createBooking = async (req, res) => {
     const ok = await isDatesFree(providerId, days);
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
-    // ── новенькое: если бронирует провайдер (агент), сохраняем его «снэпшот» в requester_*,
-    // client_id оставляем NULL
-    let requester = { id: null, name: null, phone: null, telegram: null, avatar: null };
-    let clientId = null;
-
-    if (userRole === "provider") {
-      const rq = await pool.query(
-        `SELECT id, name, phone, social AS telegram, photo AS avatar
-           FROM providers WHERE id=$1`,
-        [userId]
-      );
-      if (rq.rowCount) {
-        const r = rq.rows[0];
-        requester = {
-          id: r.id,
-          name: r.name || null,
-          phone: r.phone || null,
-          telegram: r.telegram || null,
-          avatar: r.avatar || null,
-        };
-      }
-    } else {
-      // обычный клиент
-      clientId = userId;
-    }
+    // если бронирует клиент — пишем client_id
+    // если бронирует провайдер (агент) — client_id = NULL, а инициатора кладём в requester_provider_id
+    const clientId = actorRole === "client" ? actorId : null;
+    const requesterProviderId = actorRole === "provider" ? actorId : null;
 
     const ins = await pool.query(
-      `INSERT INTO bookings (
-         service_id, provider_id, client_id, date, status, client_message, attachments,
-         requester_provider_id, requester_name, requester_phone, requester_telegram, requester_avatar_url
-       )
-       VALUES ($1,$2,$3,$4::date,'pending',$5,$6::jsonb,$7,$8,$9,$10,$11)
+      `INSERT INTO bookings
+         (service_id, provider_id, client_id, requester_provider_id, date, status, client_message, attachments)
+       VALUES ($1,$2,$3,$4,$5::date,'pending',$6,$7::jsonb)
        RETURNING id, status`,
       [
         service_id ?? null,
         providerId,
         clientId,
+        requesterProviderId,
         primaryDate,
         message ?? null,
         JSON.stringify(attachments ?? []),
-        requester.id,
-        requester.name,
-        requester.phone,
-        requester.telegram,
-        requester.avatar,
       ]
     );
-
     const bookingId = ins.rows[0].id;
 
     for (const d of days) {
@@ -158,6 +131,7 @@ const createBooking = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 
 // Брони провайдера (гид/транспорт)
