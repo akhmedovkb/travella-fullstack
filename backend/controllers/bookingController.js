@@ -131,9 +131,10 @@ async function getProviderBookings(req, res) {
 
     const sql = `
       SELECT
-        b.id, b.provider_id, b.service_id,
-        b.client_id, b.requester_provider_id,
+        b.id, b.provider_id, b.service_id, b.client_id,
         b.status, b.created_at, b.updated_at,
+        /* когда бронь подтверждена — это и есть дата бронирования */
+        CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         COALESCE(
@@ -141,8 +142,6 @@ async function getProviderBookings(req, res) {
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
         s.title AS service_title,
-
-        -- клиент
         c.id          AS client_id,
         c.name        AS client_name,
         c.phone       AS client_phone,
@@ -150,15 +149,6 @@ async function getProviderBookings(req, res) {
         c.telegram    AS client_social,
         c.location    AS client_address,
         c.avatar_url  AS client_avatar_url,
-
-        -- заказчик-провайдер (если бронировал провайдер)
-        rp.id      AS requester_provider_id,
-        rp.name    AS requester_name,
-        rp.phone   AS requester_phone,
-        rp.social  AS requester_telegram,
-        rp.email   AS requester_email,
-
-        -- я как провайдер услуги
         p.id       AS provider_profile_id,
         p.name     AS provider_name,
         p.type     AS provider_type,
@@ -168,18 +158,15 @@ async function getProviderBookings(req, res) {
         p.address  AS provider_address,
         p.location AS provider_location,
         p.photo    AS provider_photo
-
       FROM bookings b
       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-      LEFT JOIN clients  c       ON c.id  = b.client_id
-      LEFT JOIN providers rp     ON rp.id = b.requester_provider_id
-      LEFT JOIN providers p      ON p.id  = b.provider_id
-      LEFT JOIN services  s      ON s.id  = b.service_id
+      LEFT JOIN clients  c       ON c.id = b.client_id
+      LEFT JOIN providers p      ON p.id = b.provider_id
+      LEFT JOIN services  s      ON s.id = b.service_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, s.id, c.id, p.id, rp.id
+      GROUP BY b.id, s.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
     `;
-
     const q = await pool.query(sql, [providerId]);
     return res.json(q.rows);
   } catch (err) {
@@ -191,45 +178,37 @@ async function getProviderBookings(req, res) {
 // Исходящие брони провайдера (я бронирую чужую услугу как провайдер)
 async function getProviderOutgoingBookings(req, res) {
   try {
-    const requesterId = req.user?.id;
+    const requesterProviderId = req.user?.id;
 
-    const q = await pool.query(
-      `
+    const sql = `
       SELECT
-        b.id, b.service_id, b.provider_id, b.client_id,
-        b.status, b.client_message,
-        b.provider_price, b.provider_note,
-        b.created_at, b.updated_at,
+        b.id, b.status, b.created_at, b.updated_at,
+        CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
+        b.provider_id, b.service_id, b.client_id,
+        b.client_message, b.provider_note, b.provider_price, b.attachments,
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d
             WHERE d.booking_id = b.id),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
-
         s.title AS service_title,
-
-        -- Контрагент для исходящих — поставщик услуги
-        p.name    AS provider_name,
-        p.type    AS provider_type,
-        p.phone   AS provider_phone,
-        p.address AS provider_address,
-        p.social  AS provider_telegram,
-        p.photo   AS provider_photo
-
+        p.name     AS provider_name,
+        p.type     AS provider_type,
+        p.phone    AS provider_phone,
+        p.address  AS provider_address,
+        p.social   AS provider_social
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
       WHERE b.requester_provider_id = $1
       ORDER BY b.created_at DESC NULLS LAST
-      `,
-      [requesterId]
-    );
-
-    res.json(q.rows);
+    `;
+    const q = await pool.query(sql, [requesterProviderId]);
+    return res.json(q.rows);
   } catch (err) {
     console.error("getProviderOutgoingBookings error:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 }
 
@@ -243,6 +222,8 @@ const getMyBookings = async (req, res) => {
       SELECT
         b.id, b.service_id, b.provider_id, b.client_id, b.status,
         b.client_message,
+        /* дата бронирования, если подтверждено */
+        CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
         b.created_at, b.updated_at,
