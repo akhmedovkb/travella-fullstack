@@ -61,19 +61,6 @@ const normalizeAttachment = (a) => {
   return null;
 };
 
-const fmtDateTime = (s) => {
-  if (!s) return "";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 /* ===== component ===== */
 export default function BookingRow({
   booking,
@@ -87,41 +74,42 @@ export default function BookingRow({
   // Контрагент
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-  const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
+      // если бронировал провайдер — используем requester_* поля
+      const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
 
-  const name = isRequestedByProvider
-    ? (booking.requester_name || t("roles.client", { defaultValue: "Клиент" }))
-    : (booking.client_name    || t("roles.client", { defaultValue: "Клиент" }));
+      const name = isRequestedByProvider
+        ? (booking.requester_name || t("roles.client", { defaultValue: "Клиент" }))
+        : (booking.client_name    || t("roles.client", { defaultValue: "Клиент" }));
 
-  const href = isRequestedByProvider
-    ? (booking.requester_provider_id ? `/profile/provider/${booking.requester_provider_id}` : null)
-    : (booking.client_id ? `/profile/client/${booking.client_id}` : null);
+      const href = isRequestedByProvider
+        ? (booking.requester_provider_id ? `/profile/provider/${booking.requester_provider_id}` : null)
+        : (booking.client_id ? `/profile/client/${booking.client_id}` : null);
 
-  const phone = isRequestedByProvider
-    ? booking.requester_phone
-    : booking.client_phone || booking.requester_phone;
+      const phone = isRequestedByProvider
+        ? booking.requester_phone
+        : booking.client_phone || booking.requester_phone;
 
-  const tg = normalizeTg(
-    isRequestedByProvider ? booking.requester_telegram : booking.client_social || booking.requester_telegram
-  );
+      const tg = normalizeTg(
+        isRequestedByProvider ? booking.requester_telegram : booking.client_social || booking.requester_telegram
+      );
 
-  const address = isRequestedByProvider ? null : booking.client_address || null;
+      const address = isRequestedByProvider ? null : booking.client_address || null;
 
-  // показываем тип "Турагент" для провайдера-заявителя
-  const extra = isRequestedByProvider
-    ? (t("provider.types.agency", { defaultValue: "Турагент" }))
-    : null;
+      // Явно показываем "Турагент" для заявителя-провайдера
+      const extra = isRequestedByProvider
+        ? t("provider.types.agency", { defaultValue: "Турагент" })
+        : null;
 
-  return {
-    role: t("roles.client", { defaultValue: "Клиент" }),
-    id: booking.client_id || booking.requester_provider_id || null,
-    name,
-    href,
-    phone,
-    address,
-    telegram: tg,
-    extra,
-  };
+      return {
+        role: t("roles.client", { defaultValue: "Клиент" }),
+        id: booking.client_id || booking.requester_provider_id || null,
+        name,
+        href,
+        phone,
+        address,
+        telegram: tg,
+        extra,
+      };
     }
 
     // viewer === client → показываем поставщика
@@ -143,11 +131,6 @@ export default function BookingRow({
 
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
 
-  // дата бронирования
-  const bookingDate =
-    booking.confirmed_at ||
-    (String(booking.status).toLowerCase() === "confirmed" ? booking.updated_at : null);
-
   // attachments
   let attachments = [];
   try {
@@ -162,19 +145,10 @@ export default function BookingRow({
     <div className="border rounded-lg p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          {/* первая строка */}
           <div className="text-sm text-gray-500">
             #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {booking.status}
           </div>
 
-          {/* новая строка — дата бронирования */}
-          {bookingDate && (
-            <div className="text-sm text-gray-500 mt-0.5">
-              {t("bookings.booking_date", { defaultValue: "Дата бронирования" })}: {fmtDateTime(bookingDate)}
-            </div>
-          )}
-
-          {/* вторая строка — контрагент */}
           <div className="text-base">
             <span className="text-gray-500">{counterpart.role}</span>
             {counterpart.extra && (
@@ -221,9 +195,8 @@ export default function BookingRow({
             )}
           </div>
 
-          {/* переименованная подпись */}
           <div className="text-sm text-gray-500 mt-1">
-            {t("bookings.booked_dates", { defaultValue: "Бронированные даты" })}: {dates || "—"}
+            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
           </div>
         </div>
 
