@@ -87,43 +87,41 @@ export default function BookingRow({
   // Контрагент
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-      const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
-      const name =
-        (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
-        booking.requester_name ||
-        t("roles.client", { defaultValue: "Клиент" });
+  const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
 
-      const href =
-        booking.client_id
-          ? `/profile/client/${booking.client_id}`
-          : booking.requester_provider_id
-          ? `/profile/provider/${booking.requester_provider_id}`
-          : booking.requester_url || null;
+  const name = isRequestedByProvider
+    ? (booking.requester_name || t("roles.client", { defaultValue: "Клиент" }))
+    : (booking.client_name    || t("roles.client", { defaultValue: "Клиент" }));
 
-      const phone = isRequestedByProvider
-        ? booking.requester_phone
-        : booking.client_phone || booking.requester_phone;
+  const href = isRequestedByProvider
+    ? (booking.requester_provider_id ? `/profile/provider/${booking.requester_provider_id}` : null)
+    : (booking.client_id ? `/profile/client/${booking.client_id}` : null);
 
-      const tg = normalizeTg(
-        isRequestedByProvider ? booking.requester_telegram : booking.client_social || booking.requester_telegram
-      );
+  const phone = isRequestedByProvider
+    ? booking.requester_phone
+    : booking.client_phone || booking.requester_phone;
 
-      const address = isRequestedByProvider ? null : booking.client_address || null;
+  const tg = normalizeTg(
+    isRequestedByProvider ? booking.requester_telegram : booking.client_social || booking.requester_telegram
+  );
 
-      const extra = isRequestedByProvider
-        ? typeLabel(booking.requester_type || "agent", t)
-        : null;
+  const address = isRequestedByProvider ? null : booking.client_address || null;
 
-      return {
-        role: t("roles.client", { defaultValue: "Клиент" }),
-        id: booking.client_id || booking.requester_provider_id || null,
-        name,
-        href,
-        phone,
-        address,
-        telegram: tg,
-        extra,
-      };
+  // показываем тип "Турагент" для провайдера-заявителя
+  const extra = isRequestedByProvider
+    ? (t("provider.types.agency", { defaultValue: "Турагент" }))
+    : null;
+
+  return {
+    role: t("roles.client", { defaultValue: "Клиент" }),
+    id: booking.client_id || booking.requester_provider_id || null,
+    name,
+    href,
+    phone,
+    address,
+    telegram: tg,
+    extra,
+  };
     }
 
     // viewer === client → показываем поставщика
