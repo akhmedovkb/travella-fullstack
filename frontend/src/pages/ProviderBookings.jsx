@@ -1,4 +1,5 @@
 // frontend/src/pages/ProviderBookings.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -152,7 +153,6 @@ function PriceAgreementCard({ booking, onSent }) {
 
   return (
     <div className="mt-4 rounded-xl border bg-white">
-      {/* header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="font-semibold text-gray-900">
           {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
@@ -162,7 +162,6 @@ function PriceAgreementCard({ booking, onSent }) {
         </span>
       </div>
 
-      {/* last offer */}
       {last && (
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
@@ -178,7 +177,6 @@ function PriceAgreementCard({ booking, onSent }) {
         </div>
       )}
 
-      {/* form */}
       <div className="px-4 pb-4 pt-3">
         <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
           <label>
@@ -356,10 +354,11 @@ export default function ProviderBookings() {
 
           return (
             <div key={b.id} className="rounded-xl border bg-white p-3">
-              {/* Для исходящих используем viewerRole="client", чтобы в карточке контрагентом был поставщик */}
+              {/* Для исходящих используем viewerRole="client", и скрываем стандартные экшены BookingRow */}
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
+                hideActions={!isIncoming}             {/* <<< важное изменение */}
               />
 
               {/* Входящие: моя форма согласования цены */}
