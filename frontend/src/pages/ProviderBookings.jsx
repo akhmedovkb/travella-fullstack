@@ -353,11 +353,13 @@ export default function ProviderBookings() {
 
           return (
             <div key={b.id} className="rounded-xl border bg-white p-3">
-              {/* Для исходящих используем viewerRole="client", и скрываем стандартные экшены BookingRow */}
+              {/* Для исходящих используем viewerRole="client", но скрываем верхние действия */}
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
-                hideActions={!isIncoming}             {/* <<< важное изменение */}
+                hideActions={!isIncoming}
+                onAccept={(bk) => accept(bk)}
+                onReject={(bk) => reject(bk)}
               />
 
               {/* Входящие: моя форма согласования цены */}
@@ -365,7 +367,7 @@ export default function ProviderBookings() {
                 <PriceAgreementCard booking={b} onSent={load} />
               )}
 
-              {/* Исходящие: показываем предложение и действия */}
+              {/* Исходящие: предложение и действия снизу */}
               {!isIncoming && (
                 <>
                   {isFiniteNum(Number(b.provider_price)) && (
