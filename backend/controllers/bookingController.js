@@ -125,6 +125,7 @@ const createBooking = async (req, res) => {
 };
 
 // Брони провайдера (входящие: мои услуги)
+// Брони провайдера (входящие)
 async function getProviderBookings(req, res) {
   try {
     const providerId = req.user?.id;
@@ -135,13 +136,26 @@ async function getProviderBookings(req, res) {
         b.status, b.created_at, b.updated_at,
         /* когда бронь подтверждена — это и есть дата бронирования */
         CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
+
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+
+        /* !!! ВЕРНУЛИ ПОЛЯ ЗАЯВИТЕЛЯ (когда бронирует провайдер) */
+        b.requester_provider_id,
+        b.requester_name,
+        b.requester_phone,
+        b.requester_telegram,
+        b.requester_email,
+        b.requester_type,
+
         COALESCE(
           ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
+
         s.title AS service_title,
+
+        /* данные клиента, если бронировал реальный клиент */
         c.id          AS client_id,
         c.name        AS client_name,
         c.phone       AS client_phone,
@@ -149,6 +163,8 @@ async function getProviderBookings(req, res) {
         c.telegram    AS client_social,
         c.location    AS client_address,
         c.avatar_url  AS client_avatar_url,
+
+        /* данные этого провайдера */
         p.id       AS provider_profile_id,
         p.name     AS provider_name,
         p.type     AS provider_type,
@@ -167,6 +183,7 @@ async function getProviderBookings(req, res) {
       GROUP BY b.id, s.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
     `;
+
     const q = await pool.query(sql, [providerId]);
     return res.json(q.rows);
   } catch (err) {
@@ -174,6 +191,7 @@ async function getProviderBookings(req, res) {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 }
+
 
 // Исходящие брони провайдера (я бронирую чужую услугу как провайдер)
 async function getProviderOutgoingBookings(req, res) {
