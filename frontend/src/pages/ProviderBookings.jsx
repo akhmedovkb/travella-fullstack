@@ -8,7 +8,9 @@ import { tSuccess, tError } from "../shared/toast";
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const getToken = () =>
-  localStorage.getItem("token") || localStorage.getItem("providerToken");
+  localStorage.getItem("providerToken") ||
+  localStorage.getItem("token") ||
+  localStorage.getItem("clientToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
@@ -84,7 +86,7 @@ function AttachmentList({ items }) {
   );
 }
 
-/* =============== Карточка согласования цены =============== */
+/* =============== Карточка согласования цены (для входящих) =============== */
 function PriceAgreementCard({ booking, onSent }) {
   const { t } = useTranslation();
   const [priceRaw, setPriceRaw] = useState("");
@@ -180,7 +182,6 @@ function PriceAgreementCard({ booking, onSent }) {
 
       {/* form */}
       <div className="px-4 pb-4 pt-3">
-        {/* на десктопе 4 колонки: цена | валюта | комментарий | кнопка */}
         <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
           {/* price */}
           <label>
@@ -255,19 +256,50 @@ function PriceAgreementCard({ booking, onSent }) {
 /* ================= page ================= */
 export default function ProviderBookings() {
   const { t } = useTranslation();
-  const [list, setList] = useState([]);
+
+  // вкладки
+  const [tab, setTab] = useState("incoming"); // 'incoming' | 'outgoing'
+
+  // входящие (мои услуги) и исходящие (мои брони у других поставщиков)
+  const [incoming, setIncoming] = useState([]);
+  const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ====== загрузка
   const load = async () => {
-    if (!getToken()) return;
+    if (!getToken()) {
+      setIncoming([]);
+      setOutgoing([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/bookings/provider`, cfg());
-      const rows = Array.isArray(res.data) ? res.data : res.data?.items || [];
-      setList(rows);
+      // входящие: новый эндпоинт, фолбэк на старый
+      let inc = [];
+      try {
+        const r1 = await axios.get(`${API_BASE}/api/bookings/provider/incoming`, cfg());
+        inc = Array.isArray(r1.data) ? r1.data : r1.data?.items || [];
+      } catch {
+        const r1b = await axios.get(`${API_BASE}/api/bookings/provider`, cfg());
+        inc = Array.isArray(r1b.data) ? r1b.data : r1b.data?.items || [];
+      }
+
+      // исходящие (если эндпоинта нет — просто пусто)
+      let out = [];
+      try {
+        const r2 = await axios.get(`${API_BASE}/api/bookings/provider/outgoing`, cfg());
+        out = Array.isArray(r2.data) ? r2.data : r2.data?.items || [];
+      } catch {
+        out = [];
+      }
+
+      setIncoming(inc);
+      setOutgoing(out);
     } catch (e) {
       console.error("load provider bookings failed", e);
-      setList([]);
+      setIncoming([]);
+      setOutgoing([]);
     } finally {
       setLoading(false);
     }
@@ -275,8 +307,12 @@ export default function ProviderBookings() {
 
   useEffect(() => {
     load();
+    const onRefresh = () => load();
+    window.addEventListener("provider:bookings:refresh", onRefresh);
+    return () => window.removeEventListener("provider:bookings:refresh", onRefresh);
   }, []);
 
+  // ====== бизнес-логика действий
   const hasQuotedPrice = (b) =>
     isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
@@ -324,49 +360,116 @@ export default function ProviderBookings() {
     }
   };
 
-  const content = useMemo(() => {
-    if (loading) {
-      return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    }
-    if (!list.length) {
-      return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
-    }
-    return (
-      <div className="space-y-4">
-        {list.map((b) => (
-          <div key={b.id} className="rounded-xl border bg-white p-3">
-            <BookingRow
-              booking={b}
-              viewerRole="provider"
-              onAccept={(bk) => accept(bk)}
-              onReject={(bk) => reject(bk)}
-              onCancel={(bk) => cancel(bk)}
-            />
+  // ====== UI данные
+  const counts = useMemo(
+    () => ({ incoming: incoming.length, outgoing: outgoing.length }),
+    [incoming, outgoing]
+  );
 
-            {hasQuotedPrice(b) && (
-              <div className="mt-3 text-sm text-gray-700">
-                {t("bookings.current_price", { defaultValue: "Текущая цена" })}:{" "}
-                <b>{fmt(Number(b.provider_price))}</b>
-                {b.currency ? ` ${b.currency}` : " USD"}
-                {b.provider_note ? ` · ${b.provider_note}` : ""}
-              </div>
-            )}
+  const currentList = tab === "incoming" ? incoming : outgoing;
 
-            {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} />}
-
-            <AttachmentList items={b.attachments} />
-          </div>
-        ))}
-      </div>
-    );
-  }, [list, loading, t]);
-
+  // ====== отрисовка
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <h1 className="mb-4 text-2xl font-bold">
-        {t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}
-      </h1>
-      {content}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold">
+          {t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}
+        </h1>
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={() => setTab("incoming")}
+            className={`px-3 py-1.5 rounded-full ring-1 ${
+              tab === "incoming"
+                ? "bg-indigo-600 text-white ring-indigo-600"
+                : "bg-white text-gray-700 ring-gray-200"
+            }`}
+          >
+            {t("bookings.incoming", { defaultValue: "Бронирования моих услуг" })}
+            <span
+              className={`ml-2 text-xs px-1.5 rounded-full ${
+                tab === "incoming" ? "bg-white/20" : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {counts.incoming}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setTab("outgoing")}
+            className={`px-3 py-1.5 rounded-full ring-1 ${
+              tab === "outgoing"
+                ? "bg-indigo-600 text-white ring-indigo-600"
+                : "bg-white text-gray-700 ring-gray-200"
+            }`}
+          >
+            {t("bookings.outgoing", { defaultValue: "Мои бронирования услуг" })}
+            <span
+              className={`ml-2 text-xs px-1.5 rounded-full ${
+                tab === "outgoing" ? "bg-white/20" : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {counts.outgoing}
+            </span>
+          </button>
+
+          <button
+            onClick={load}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+          >
+            {t("common.refresh", { defaultValue: "Обновить" })}
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="animate-pulse border rounded-2xl p-4 bg-white">
+              <div className="h-5 w-1/3 bg-gray-200 rounded mb-3" />
+              <div className="h-4 w-2/3 bg-gray-200 rounded mb-2" />
+              <div className="h-4 w-1/2 bg-gray-200 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : !currentList.length ? (
+        <div className="text-gray-500">
+          {t("bookings.empty", { defaultValue: "Пока нет бронирований." })}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {currentList.map((b) => {
+            const viewerRole = tab === "incoming" ? "provider" : "client"; // важно для BookingRow
+
+            return (
+              <div key={b.id} className="rounded-xl border bg-white p-3">
+                <BookingRow
+                  booking={b}
+                  viewerRole={viewerRole}
+                  onAccept={tab === "incoming" ? (bk) => accept(bk) : undefined}
+                  onReject={tab === "incoming" ? (bk) => reject(bk) : undefined}
+                  onCancel={(bk) => cancel(bk)} // в BookingRow кнопка «Отменить» показывается только у viewerRole='client'
+                />
+
+                {/* для входящих показываем текущую цену и карточку согласования */}
+                {tab === "incoming" && isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0 && (
+                  <div className="mt-3 text-sm text-gray-700">
+                    {t("bookings.current_price", { defaultValue: "Текущая цена" })}:{" "}
+                    <b>{fmt(Number(b.provider_price))}</b>
+                    {b.currency ? ` ${b.currency}` : " USD"}
+                    {b.provider_note ? ` · ${b.provider_note}` : ""}
+                  </div>
+                )}
+
+                {tab === "incoming" && String(b.status) === "pending" && (
+                  <PriceAgreementCard booking={b} onSent={load} />
+                )}
+
+                <AttachmentList items={b.attachments} />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
