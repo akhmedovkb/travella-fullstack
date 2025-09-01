@@ -165,50 +165,50 @@ async function getProviderBookings(req, res) {
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, b.created_at, b.updated_at,
-        /* дата бронирования (когда статус стал confirmed) */
-        CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
-
-        b.client_message, b.provider_note, b.provider_price,
+        b.client_message, b.provider_note, b.provider_price, b.currency,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-
-        /* ВАЖНО: данные заявителя, если бронирует провайдер */
-        b.requester_provider_id,
-        b.requester_name,
-        b.requester_phone,
-        b.requester_telegram,
-        b.requester_email,
-
         COALESCE(
-          ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
+          (SELECT array_agg(d.date::date ORDER BY d.date)
+             FROM booking_dates d
+            WHERE d.booking_id = b.id),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
 
         s.title AS service_title,
 
-        c.id          AS client_id,
-        c.name        AS client_name,
-        c.phone       AS client_phone,
-        c.email       AS client_email,
-        c.telegram    AS client_social,
-        c.location    AS client_address,
-        c.avatar_url  AS client_avatar_url,
+        -- клиент (если бронировал клиент)
+        c.id         AS client_profile_id,
+        c.name       AS client_name,
+        c.phone      AS client_phone,
+        c.email      AS client_email,
+        c.telegram   AS client_social,
+        c.location   AS client_address,
+        c.avatar_url AS client_avatar_url,
 
-        p.id       AS provider_profile_id,
-        p.name     AS provider_name,
-        p.type     AS provider_type,
-        p.phone    AS provider_phone,
-        p.email    AS provider_email,
-        p.social   AS provider_social,
-        p.address  AS provider_address,
-        p.location AS provider_location,
-        p.photo    AS provider_photo
+        -- владелец услуги (текущий провайдер)
+        p.id        AS provider_profile_id,
+        p.name      AS provider_name,
+        p.type      AS provider_type,
+        p.phone     AS provider_phone,
+        p.email     AS provider_email,
+        p.social    AS provider_social,
+        p.address   AS provider_address,
+        p.location  AS provider_location,
+        p.photo     AS provider_photo,
+
+        -- провайдер-заявитель (если бронировал провайдер)
+        b.requester_provider_id,
+        rp.name    AS requester_name,
+        rp.phone   AS requester_phone,
+        rp.social  AS requester_telegram,
+        rp.email   AS requester_email
+
       FROM bookings b
-      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-      LEFT JOIN clients  c       ON c.id = b.client_id
-      LEFT JOIN providers p      ON p.id = b.provider_id
-      LEFT JOIN services  s      ON s.id = b.service_id
+      LEFT JOIN services   s  ON s.id = b.service_id
+      LEFT JOIN clients    c  ON c.id = b.client_id
+      LEFT JOIN providers  p  ON p.id = b.provider_id
+      LEFT JOIN providers  rp ON rp.id = b.requester_provider_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, s.id, c.id, p.id
       ORDER BY b.created_at DESC NULLS LAST
     `;
 
@@ -229,12 +229,8 @@ async function getProviderOutgoingBookings(req, res) {
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, b.created_at, b.updated_at,
-        CASE WHEN b.status = 'confirmed' THEN b.updated_at ELSE NULL END AS confirmed_at,
-
-        b.client_message, b.provider_note, b.provider_price,
+        b.client_message, b.provider_note, b.provider_price, b.currency,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-
-        /* подтверждающийся набор дат */
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d
@@ -244,7 +240,7 @@ async function getProviderOutgoingBookings(req, res) {
 
         s.title AS service_title,
 
-        /* карточка ПОЛУЧАТЕЛЯ — того провайдера, чью услугу бронируем */
+        -- владелец услуги (контрагент для исходящих)
         p.id       AS provider_profile_id,
         p.name     AS provider_name,
         p.type     AS provider_type,
@@ -253,11 +249,19 @@ async function getProviderOutgoingBookings(req, res) {
         p.social   AS provider_social,
         p.address  AS provider_address,
         p.location AS provider_location,
-        p.photo    AS provider_photo
+        p.photo    AS provider_photo,
+
+        -- сам заявитель (текущий провайдер)
+        b.requester_provider_id,
+        rp.name   AS requester_name,
+        rp.phone  AS requester_phone,
+        rp.social AS requester_telegram,
+        rp.email  AS requester_email
 
       FROM bookings b
-      LEFT JOIN services  s ON s.id = b.service_id
-      LEFT JOIN providers p ON p.id = b.provider_id
+      LEFT JOIN services  s  ON s.id = b.service_id
+      LEFT JOIN providers p  ON p.id = b.provider_id         -- провайдер-владелец услуги
+      LEFT JOIN providers rp ON rp.id = b.requester_provider_id -- провайдер-заявитель (мы)
       WHERE b.requester_provider_id = $1
       ORDER BY b.created_at DESC NULLS LAST
     `;
