@@ -1,25 +1,4 @@
 // backend/routes/bookingRoutes.js
-
-const express = require("express");
-const router = express.Router();
-
-const authenticateToken = require("../middleware/authenticateToken");
-
-const {
-  createBooking,
-  // списки
-  getProviderBookings,            // ВХОДЯЩИЕ: бронирования моих услуг
-  getProviderOutgoingBookings,    // ИСХОДЯЩИЕ: мои брони у других провайдеров
-  getMyBookings,                  // мои как клиента
-  // действия
-  providerQuote,
-  acceptBooking,
-  rejectBooking,
-  cancelBooking,
-  confirmBooking,
-} = require("../controllers/bookingController");
-
-// маленький гард — роут только для провайдера
 const express = require("express");
 const router = express.Router();
 
