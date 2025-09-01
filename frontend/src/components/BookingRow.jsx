@@ -68,20 +68,20 @@ export default function BookingRow({
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
+  hideActions = false,       // <<< новое: скрыть верхние действия
 }) {
   const { t } = useTranslation();
 
   // Контрагент (для поставщика показываем заказчика: клиента или провайдера-заявителя)
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-      // если бронировал провайдер — используем requester_* поля
       const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
+
       const name =
         (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
         booking.requester_name ||
         t("roles.client", { defaultValue: "Клиент" });
 
-      // ссылка: при client_id → профиль клиента; иначе при requester_provider_id → профиль провайдера
       const href =
         booking.client_id
           ? `/profile/client/${booking.client_id}`
@@ -99,7 +99,6 @@ export default function BookingRow({
 
       const address = isRequestedByProvider ? null : booking.client_address || null;
 
-      // тип: если бронировал провайдер — это агент (или booking.requester_type, если вы его добавите)
       const extra = isRequestedByProvider
         ? typeLabel(booking.requester_type || "agent", t)
         : null;
@@ -130,8 +129,8 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  const canAcceptReject = viewerRole === "provider" && booking.status === "pending";
-  const canCancel = viewerRole === "client" && ["pending","active"].includes(String(booking.status));
+  const canAcceptReject = !hideActions && viewerRole === "provider" && booking.status === "pending";
+  const canCancel = !hideActions && viewerRole === "client" && ["pending","active"].includes(String(booking.status));
 
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
 
@@ -232,10 +231,8 @@ export default function BookingRow({
         </div>
       </div>
 
-      {/* сообщение клиента */}
       {booking.client_message && <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>}
 
-      {/* вложения */}
       {!!attachments.length && (
         <div className="mt-1">
           <div className="text-sm text-gray-500 mb-1">
