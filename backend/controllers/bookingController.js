@@ -203,43 +203,45 @@ async function getProviderBookings(req, res) {
 // Брони, созданные этим провайдером (исходящие)
 const getProviderOutgoingBookings = async (req, res) => {
   try {
-    const providerId = req.user?.id;
+    const requesterId = req.user?.id;          // текущий провайдер — Заказчик
+    if (!requesterId) return res.status(401).json({ message: "Требуется авторизация" });
 
     const q = await pool.query(
       `
       SELECT
-        b.id, b.service_id, b.provider_id, b.client_id, b.status,
+        b.id, b.service_id, b.provider_id,
+        b.status, b.created_at, b.updated_at,
         b.client_message,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-        b.provider_price, b.provider_note,
-        b.created_at, b.updated_at,
+        /* важное: отдаём цену/комментарий поставщика */
+        b.provider_price,
+        b.provider_note,
+        /* даты */
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d
             WHERE d.booking_id = b.id),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
-
+        /* инфо об услуге */
         s.title AS service_title,
-
-        -- целевой поставщик, к которому мы обратились
-        p.id       AS provider_id,
-        p.name     AS provider_name,
-        p.type     AS provider_type,
-        p.phone    AS provider_phone,
-        p.email    AS provider_email,
-        p.social   AS provider_telegram,
-        p.address  AS provider_address,
-        p.location AS provider_location,
-        p.photo    AS provider_photo
-
+        /* инфо о поставщике, у кого мы бронируем */
+        p.id        AS provider_profile_id,
+        p.name      AS provider_name,
+        p.type      AS provider_type,
+        p.phone     AS provider_phone,
+        p.email     AS provider_email,
+        p.social    AS provider_telegram,
+        p.address   AS provider_address,
+        p.location  AS provider_location,
+        p.photo     AS provider_photo
       FROM bookings b
-      LEFT JOIN services  s ON s.id  = b.service_id
-      LEFT JOIN providers p ON p.id  = b.provider_id
+      LEFT JOIN services  s ON s.id = b.service_id
+      LEFT JOIN providers p ON p.id = b.provider_id
       WHERE b.requester_provider_id = $1
       ORDER BY b.created_at DESC NULLS LAST
       `,
-      [providerId]
+      [requesterId]
     );
 
     res.json(q.rows);
