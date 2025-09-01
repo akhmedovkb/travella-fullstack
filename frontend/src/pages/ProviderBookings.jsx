@@ -315,8 +315,30 @@ export default function ProviderBookings() {
     }
   };
 
-  // Для исходящих действий пока без «отмены»: сервер сейчас разрешает cancel только client'у
-  // оставим просто просмотр.
+  // подтверждение/отмена исходящих заявок провайдером-заказчиком
+  const confirmOutgoing = async (b) => {
+    try {
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/confirm-by-requester`, {}, cfg());
+      tSuccess(t("bookings.confirmed", { defaultValue: "Бронирование подтверждено" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" }));
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
+  };
+
+  const cancelOutgoing = async (b) => {
+    try {
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/cancel-by-requester`, {}, cfg());
+      tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
+  };
 
   const list = tab === "incoming" ? incoming : outgoing;
 
@@ -331,22 +353,6 @@ export default function ProviderBookings() {
       <div className="space-y-4">
         {list.map((b) => {
           const isIncoming = tab === "incoming";
-          const headerActions = isIncoming ? (
-            <div className="shrink-0 flex items-center gap-2">
-              <button
-                onClick={() => accept(b)}
-                className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
-              >
-                {t("actions.accept", { defaultValue: "Подтвердить" })}
-              </button>
-              <button
-                onClick={() => reject(b)}
-                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
-              >
-                {t("actions.reject", { defaultValue: "Отклонить" })}
-              </button>
-            </div>
-          ) : null;
 
           return (
             <div key={b.id} className="rounded-xl border bg-white p-3">
@@ -361,17 +367,39 @@ export default function ProviderBookings() {
                 <PriceAgreementCard booking={b} onSent={load} />
               )}
 
-              {/* Исходящие: показываем последнее предложение поставщика (если есть) */}
-              {!isIncoming && isFiniteNum(Number(b.provider_price)) && (
-                <div className="mt-3">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1.5">
-                    <span className="font-medium">
-                      {t("bookings.provider_offer", { defaultValue: "Предложение поставщика" })}:
-                    </span>
-                    <b>{fmt(Number(b.provider_price))} {b.currency || "USD"}</b>
-                    {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
-                  </span>
-                </div>
+              {/* Исходящие: показываем предложение и действия */}
+              {!isIncoming && (
+                <>
+                  {isFiniteNum(Number(b.provider_price)) && (
+                    <div className="mt-3">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1.5">
+                        <span className="font-medium">
+                          {t("bookings.provider_offer", { defaultValue: "Предложение поставщика" })}:
+                        </span>
+                        <b>{fmt(Number(b.provider_price))} {b.currency || "USD"}</b>
+                        {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
+                      </span>
+                    </div>
+                  )}
+
+                  {String(b.status) === "pending" && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => confirmOutgoing(b)}
+                        disabled={!isFiniteNum(Number(b.provider_price))}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                      >
+                        {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                      </button>
+                      <button
+                        onClick={() => cancelOutgoing(b)}
+                        className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
+                      >
+                        {t("actions.cancel", { defaultValue: "Отмена" })}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               <AttachmentList items={b.attachments} />
