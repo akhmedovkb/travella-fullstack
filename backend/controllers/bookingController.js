@@ -1,3 +1,5 @@
+//backend/controllers/bookingController.js
+
 const pool = require("../db");
 
 /* ================= helpers ================= */
