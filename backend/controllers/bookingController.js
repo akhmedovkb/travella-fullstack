@@ -165,7 +165,8 @@ async function getProviderBookings(req, res) {
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, b.created_at, b.updated_at,
-        b.client_message, b.provider_note, b.provider_price, b.currency,
+        b.client_message, b.provider_note, b.provider_price,
+        NULL::text AS currency,                                   -- <== currency как алиас
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
@@ -176,7 +177,6 @@ async function getProviderBookings(req, res) {
 
         s.title AS service_title,
 
-        -- клиент (если бронировал клиент)
         c.id         AS client_profile_id,
         c.name       AS client_name,
         c.phone      AS client_phone,
@@ -185,7 +185,6 @@ async function getProviderBookings(req, res) {
         c.location   AS client_address,
         c.avatar_url AS client_avatar_url,
 
-        -- владелец услуги (текущий провайдер)
         p.id        AS provider_profile_id,
         p.name      AS provider_name,
         p.type      AS provider_type,
@@ -196,12 +195,11 @@ async function getProviderBookings(req, res) {
         p.location  AS provider_location,
         p.photo     AS provider_photo,
 
-        -- провайдер-заявитель (если бронировал провайдер)
         b.requester_provider_id,
-        rp.name    AS requester_name,
-        rp.phone   AS requester_phone,
-        rp.social  AS requester_telegram,
-        rp.email   AS requester_email
+        rp.name   AS requester_name,
+        rp.phone  AS requester_phone,
+        rp.social AS requester_telegram,
+        rp.email  AS requester_email
 
       FROM bookings b
       LEFT JOIN services   s  ON s.id = b.service_id
@@ -229,7 +227,8 @@ async function getProviderOutgoingBookings(req, res) {
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, b.created_at, b.updated_at,
-        b.client_message, b.provider_note, b.provider_price, b.currency,
+        b.client_message, b.provider_note, b.provider_price,
+        NULL::text AS currency,                                   -- <== currency как алиас
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
@@ -240,7 +239,6 @@ async function getProviderOutgoingBookings(req, res) {
 
         s.title AS service_title,
 
-        -- владелец услуги (контрагент для исходящих)
         p.id       AS provider_profile_id,
         p.name     AS provider_name,
         p.type     AS provider_type,
@@ -251,7 +249,6 @@ async function getProviderOutgoingBookings(req, res) {
         p.location AS provider_location,
         p.photo    AS provider_photo,
 
-        -- сам заявитель (текущий провайдер)
         b.requester_provider_id,
         rp.name   AS requester_name,
         rp.phone  AS requester_phone,
@@ -260,8 +257,8 @@ async function getProviderOutgoingBookings(req, res) {
 
       FROM bookings b
       LEFT JOIN services  s  ON s.id = b.service_id
-      LEFT JOIN providers p  ON p.id = b.provider_id         -- провайдер-владелец услуги
-      LEFT JOIN providers rp ON rp.id = b.requester_provider_id -- провайдер-заявитель (мы)
+      LEFT JOIN providers p  ON p.id = b.provider_id
+      LEFT JOIN providers rp ON rp.id = b.requester_provider_id
       WHERE b.requester_provider_id = $1
       ORDER BY b.created_at DESC NULLS LAST
     `;
