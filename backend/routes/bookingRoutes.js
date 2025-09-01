@@ -6,6 +6,7 @@ const authenticateToken = require("../middleware/authenticateToken");
 const {
   createBooking,
   getProviderBookings,
+  requireProvider,
   getMyBookings,
   providerQuote,
   acceptBooking,
@@ -14,12 +15,20 @@ const {
   confirmBooking
 } = require("../controllers/bookingController");
 
+// маленький гард
+function requireProvider(req, res, next) {
+  if (req.user?.role !== "provider") return res.status(403).json({ message: "Только для провайдера" });
+  next();
+}
 
 // Создать заявку (клиент/провайдер с токеном)
 router.post("/", authenticateToken, createBooking);
 
 // Списки
+// ВХОДЯЩИЕ брони моих услуг
 router.get("/provider", authenticateToken, getProviderBookings); // мои как провайдера
+// ИСХОДЯЩИЕ брони (я бронирую чужую услугу как провайдер)
+router.get("/provider/outgoing", authenticateToken, requireProvider, getProviderOutgoingBookings);
 router.get("/my",       authenticateToken, getMyBookings);       // мои как клиента
 
 // Действия провайдера
