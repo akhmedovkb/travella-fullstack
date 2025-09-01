@@ -19,36 +19,48 @@ const {
 } = require("../controllers/bookingController");
 
 // маленький гард — роут только для провайдера
+const express = require("express");
+const router = express.Router();
+
+const authenticateToken = require("../middleware/authenticateToken");
+const {
+  createBooking,
+  getProviderBookings,
+  getProviderOutgoingBookings,
+  getMyBookings,
+  providerQuote,
+  acceptBooking,
+  rejectBooking,
+  cancelBooking,
+  confirmBooking,
+  confirmBookingByRequester,
+  cancelBookingByRequester,
+} = require("../controllers/bookingController");
+
 function requireProvider(req, res, next) {
-  if (req.user?.role !== "provider") {
-    return res.status(403).json({ message: "Только для провайдера" });
-  }
+  if (req.user?.role !== "provider") return res.status(403).json({ message: "Только для провайдера" });
   next();
 }
 
-/* ================== Создать заявку (клиент/провайдер) ================== */
+// Создать заявку (клиент/провайдер с токеном)
 router.post("/", authenticateToken, createBooking);
 
-/* ================== Списки ================== */
-// ВХОДЯЩИЕ брони моих услуг (нормальный путь)
-router.get("/provider/incoming", authenticateToken, requireProvider, getProviderBookings);
-// ИСХОДЯЩИЕ брони: я (провайдер) бронирую чужие услуги
-router.get("/provider/outgoing", authenticateToken, requireProvider, getProviderOutgoingBookings);
+// Списки
+router.get("/provider", authenticateToken, requireProvider, getProviderBookings);               // входящие (мои услуги)
+router.get("/provider/outgoing", authenticateToken, requireProvider, getProviderOutgoingBookings); // исходящие (я бронирую как провайдер)
+router.get("/my", authenticateToken, getMyBookings);                                            // мои как клиента
 
-// ЛЕГАСИ-АЛИАС (оставляем для совместимости фронта, который стучится на /provider)
-router.get("/provider", authenticateToken, requireProvider, getProviderBookings);
+// Действия поставщика по входящим
+router.post("/:id/accept", authenticateToken, requireProvider, acceptBooking);
+router.post("/:id/reject", authenticateToken, requireProvider, rejectBooking);
+router.post("/:id/quote", authenticateToken, requireProvider, providerQuote);
 
-// Мои брони как клиента (кабинет клиента)
-router.get("/my", authenticateToken, getMyBookings);
-
-/* ================== Действия ================== */
-// Провайдер
-router.post("/:id/accept", authenticateToken, acceptBooking);
-router.post("/:id/reject", authenticateToken, rejectBooking);
-router.post("/:id/quote",  authenticateToken, providerQuote);
-
-// Клиент
-router.post("/:id/cancel",  authenticateToken, cancelBooking);
+// Действия клиента
+router.post("/:id/cancel", authenticateToken, cancelBooking);
 router.post("/:id/confirm", authenticateToken, confirmBooking);
+
+// Действия провайдера-заказчика по исходящим
+router.post("/:id/confirm-by-requester", authenticateToken, requireProvider, confirmBookingByRequester);
+router.post("/:id/cancel-by-requester", authenticateToken, requireProvider, cancelBookingByRequester);
 
 module.exports = router;
