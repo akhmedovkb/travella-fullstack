@@ -61,6 +61,19 @@ const normalizeAttachment = (a) => {
   return null;
 };
 
+const fmtDateTime = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 /* ===== component ===== */
 export default function BookingRow({
   booking,
@@ -68,15 +81,13 @@ export default function BookingRow({
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
-  hideActions = false,       // <<< новое: скрыть верхние действия
 }) {
   const { t } = useTranslation();
 
-  // Контрагент (для поставщика показываем заказчика: клиента или провайдера-заявителя)
+  // Контрагент
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
       const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
-
       const name =
         (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
         booking.requester_name ||
@@ -129,10 +140,15 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  const canAcceptReject = !hideActions && viewerRole === "provider" && booking.status === "pending";
-  const canCancel = !hideActions && viewerRole === "client" && ["pending","active"].includes(String(booking.status));
+  const canAcceptReject = viewerRole === "provider" && booking.status === "pending";
+  const canCancel = viewerRole === "client" && ["pending","active"].includes(String(booking.status));
 
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
+
+  // дата бронирования
+  const bookingDate =
+    booking.confirmed_at ||
+    (String(booking.status).toLowerCase() === "confirmed" ? booking.updated_at : null);
 
   // attachments
   let attachments = [];
@@ -148,10 +164,19 @@ export default function BookingRow({
     <div className="border rounded-lg p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
+          {/* первая строка */}
           <div className="text-sm text-gray-500">
             #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {booking.status}
           </div>
 
+          {/* новая строка — дата бронирования */}
+          {bookingDate && (
+            <div className="text-sm text-gray-500 mt-0.5">
+              {t("bookings.booking_date", { defaultValue: "Дата бронирования" })}: {fmtDateTime(bookingDate)}
+            </div>
+          )}
+
+          {/* вторая строка — контрагент */}
           <div className="text-base">
             <span className="text-gray-500">{counterpart.role}</span>
             {counterpart.extra && (
@@ -198,8 +223,9 @@ export default function BookingRow({
             )}
           </div>
 
+          {/* переименованная подпись */}
           <div className="text-sm text-gray-500 mt-1">
-            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
+            {t("bookings.booked_dates", { defaultValue: "Бронированные даты" })}: {dates || "—"}
           </div>
         </div>
 
@@ -231,8 +257,10 @@ export default function BookingRow({
         </div>
       </div>
 
+      {/* сообщение клиента */}
       {booking.client_message && <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>}
 
+      {/* вложения */}
       {!!attachments.length && (
         <div className="mt-1">
           <div className="text-sm text-gray-500 mb-1">
