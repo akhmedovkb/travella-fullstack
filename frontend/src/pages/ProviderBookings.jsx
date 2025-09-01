@@ -1,5 +1,4 @@
-// frontend/src/pages/ProviderBookings.jsx
-import React, { useEffect, useMemo, useState } from "react";
+// frontend/src/pages/ProviderBookings.jsximport React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
@@ -8,9 +7,7 @@ import { tSuccess, tError } from "../shared/toast";
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const getToken = () =>
-  localStorage.getItem("providerToken") ||
-  localStorage.getItem("token") ||
-  localStorage.getItem("clientToken");
+  localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
@@ -86,7 +83,7 @@ function AttachmentList({ items }) {
   );
 }
 
-/* =============== Карточка согласования цены (для входящих) =============== */
+/* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent }) {
   const { t } = useTranslation();
   const [priceRaw, setPriceRaw] = useState("");
@@ -183,7 +180,6 @@ function PriceAgreementCard({ booking, onSent }) {
       {/* form */}
       <div className="px-4 pb-4 pt-3">
         <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
-          {/* price */}
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.price", { defaultValue: "Цена" })}
@@ -200,7 +196,6 @@ function PriceAgreementCard({ booking, onSent }) {
             </div>
           </label>
 
-          {/* currency */}
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.currency", { defaultValue: "Валюта" })}
@@ -218,7 +213,6 @@ function PriceAgreementCard({ booking, onSent }) {
             </select>
           </label>
 
-          {/* note */}
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
               {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
@@ -233,7 +227,6 @@ function PriceAgreementCard({ booking, onSent }) {
             />
           </label>
 
-          {/* button */}
           <div className="flex items-end">
             <button
               onClick={submit}
@@ -257,45 +250,22 @@ function PriceAgreementCard({ booking, onSent }) {
 export default function ProviderBookings() {
   const { t } = useTranslation();
 
-  // вкладки
-  const [tab, setTab] = useState("incoming"); // 'incoming' | 'outgoing'
-
-  // входящие (мои услуги) и исходящие (мои брони у других поставщиков)
+  // вкладки: incoming / outgoing
+  const [tab, setTab] = useState("incoming");
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ====== загрузка
   const load = async () => {
-    if (!getToken()) {
-      setIncoming([]);
-      setOutgoing([]);
-      setLoading(false);
-      return;
-    }
+    if (!getToken()) return;
     setLoading(true);
     try {
-      // входящие: новый эндпоинт, фолбэк на старый
-      let inc = [];
-      try {
-        const r1 = await axios.get(`${API_BASE}/api/bookings/provider/incoming`, cfg());
-        inc = Array.isArray(r1.data) ? r1.data : r1.data?.items || [];
-      } catch {
-        const r1b = await axios.get(`${API_BASE}/api/bookings/provider`, cfg());
-        inc = Array.isArray(r1b.data) ? r1b.data : r1b.data?.items || [];
-      }
-
-      // исходящие (если эндпоинта нет — просто пусто)
-      let out = [];
-      try {
-        const r2 = await axios.get(`${API_BASE}/api/bookings/provider/outgoing`, cfg());
-        out = Array.isArray(r2.data) ? r2.data : r2.data?.items || [];
-      } catch {
-        out = [];
-      }
-
-      setIncoming(inc);
-      setOutgoing(out);
+      const [incRes, outRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/bookings/provider`, cfg()),
+        axios.get(`${API_BASE}/api/bookings/provider/outgoing`, cfg()),
+      ]);
+      setIncoming(Array.isArray(incRes.data) ? incRes.data : []);
+      setOutgoing(Array.isArray(outRes.data) ? outRes.data : []);
     } catch (e) {
       console.error("load provider bookings failed", e);
       setIncoming([]);
@@ -307,12 +277,8 @@ export default function ProviderBookings() {
 
   useEffect(() => {
     load();
-    const onRefresh = () => load();
-    window.addEventListener("provider:bookings:refresh", onRefresh);
-    return () => window.removeEventListener("provider:bookings:refresh", onRefresh);
   }, []);
 
-  // ====== бизнес-логика действий
   const hasQuotedPrice = (b) =>
     isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
@@ -348,128 +314,124 @@ export default function ProviderBookings() {
     }
   };
 
-  const cancel = async (b) => {
-    try {
-      await axios.post(`${API_BASE}/api/bookings/${b.id}/cancel`, {}, cfg());
-      tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
-    } catch (e) {
-      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
-    } finally {
-      await load();
-      window.dispatchEvent(new Event("provider:counts:refresh"));
+  // Для исходящих действий пока без «отмены»: сервер сейчас разрешает cancel только client'у
+  // оставим просто просмотр.
+
+  const list = tab === "incoming" ? incoming : outgoing;
+
+  const content = useMemo(() => {
+    if (loading) {
+      return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     }
-  };
+    if (!list.length) {
+      return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
+    }
+    return (
+      <div className="space-y-4">
+        {list.map((b) => {
+          const isIncoming = tab === "incoming";
+          const headerActions = isIncoming ? (
+            <div className="shrink-0 flex items-center gap-2">
+              <button
+                onClick={() => accept(b)}
+                className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
+              >
+                {t("actions.accept", { defaultValue: "Подтвердить" })}
+              </button>
+              <button
+                onClick={() => reject(b)}
+                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
+              >
+                {t("actions.reject", { defaultValue: "Отклонить" })}
+              </button>
+            </div>
+          ) : null;
 
-  // ====== UI данные
-  const counts = useMemo(
-    () => ({ incoming: incoming.length, outgoing: outgoing.length }),
-    [incoming, outgoing]
-  );
+          return (
+            <div key={b.id} className="rounded-xl border bg-white p-3">
+              {/* Для исходящих используем viewerRole="client", чтобы в карточке контрагентом был поставщик */}
+              <BookingRow
+                booking={b}
+                viewerRole={isIncoming ? "provider" : "client"}
+              />
 
-  const currentList = tab === "incoming" ? incoming : outgoing;
+              {/* Входящие: моя форма согласования цены */}
+              {isIncoming && String(b.status) === "pending" && (
+                <PriceAgreementCard booking={b} onSent={load} />
+              )}
 
-  // ====== отрисовка
+              {/* Исходящие: показываем последнее предложение поставщика (если есть) */}
+              {!isIncoming && isFiniteNum(Number(b.provider_price)) && (
+                <div className="mt-3">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1.5">
+                    <span className="font-medium">
+                      {t("bookings.provider_offer", { defaultValue: "Предложение поставщика" })}:
+                    </span>
+                    <b>{fmt(Number(b.provider_price))} {b.currency || "USD"}</b>
+                    {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
+                  </span>
+                </div>
+              )}
+
+              <AttachmentList items={b.attachments} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }, [list, loading, tab, t]);
+
+  const incomingCount = incoming.length;
+  const outgoingCount = outgoing.length;
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
           {t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}
         </h1>
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={() => setTab("incoming")}
-            className={`px-3 py-1.5 rounded-full ring-1 ${
-              tab === "incoming"
-                ? "bg-indigo-600 text-white ring-indigo-600"
-                : "bg-white text-gray-700 ring-gray-200"
-            }`}
-          >
-            {t("bookings.incoming", { defaultValue: "Бронирования моих услуг" })}
-            <span
-              className={`ml-2 text-xs px-1.5 rounded-full ${
-                tab === "incoming" ? "bg-white/20" : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {counts.incoming}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setTab("outgoing")}
-            className={`px-3 py-1.5 rounded-full ring-1 ${
-              tab === "outgoing"
-                ? "bg-indigo-600 text-white ring-indigo-600"
-                : "bg-white text-gray-700 ring-gray-200"
-            }`}
-          >
-            {t("bookings.outgoing", { defaultValue: "Мои бронирования услуг" })}
-            <span
-              className={`ml-2 text-xs px-1.5 rounded-full ${
-                tab === "outgoing" ? "bg-white/20" : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {counts.outgoing}
-            </span>
-          </button>
-
-          <button
-            onClick={load}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
-          >
-            {t("common.refresh", { defaultValue: "Обновить" })}
-          </button>
-        </div>
+        <button
+          onClick={load}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50"
+        >
+          {t("common.refresh", { defaultValue: "Обновить" })}
+        </button>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="animate-pulse border rounded-2xl p-4 bg-white">
-              <div className="h-5 w-1/3 bg-gray-200 rounded mb-3" />
-              <div className="h-4 w-2/3 bg-gray-200 rounded mb-2" />
-              <div className="h-4 w-1/2 bg-gray-200 rounded" />
-            </div>
-          ))}
-        </div>
-      ) : !currentList.length ? (
-        <div className="text-gray-500">
-          {t("bookings.empty", { defaultValue: "Пока нет бронирований." })}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {currentList.map((b) => {
-            const viewerRole = tab === "incoming" ? "provider" : "client"; // важно для BookingRow
+      {/* Вкладки */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          onClick={() => setTab("incoming")}
+          className={
+            "rounded-full px-4 py-2 ring-1 " +
+            (tab === "incoming"
+              ? "bg-indigo-600 text-white ring-indigo-600"
+              : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")
+          }
+        >
+          {t("bookings.incoming", { defaultValue: "Бронирования моих услуг" })}
+          <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "incoming" ? "bg-white/20" : "bg-gray-100")}>
+            {incomingCount}
+          </span>
+        </button>
 
-            return (
-              <div key={b.id} className="rounded-xl border bg-white p-3">
-                <BookingRow
-                  booking={b}
-                  viewerRole={viewerRole}
-                  onAccept={tab === "incoming" ? (bk) => accept(bk) : undefined}
-                  onReject={tab === "incoming" ? (bk) => reject(bk) : undefined}
-                  onCancel={(bk) => cancel(bk)} // в BookingRow кнопка «Отменить» показывается только у viewerRole='client'
-                />
+        <button
+          onClick={() => setTab("outgoing")}
+          className={
+            "rounded-full px-4 py-2 ring-1 " +
+            (tab === "outgoing"
+              ? "bg-indigo-600 text-white ring-indigo-600"
+              : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")
+          }
+        >
+          {t("bookings.outgoing", { defaultValue: "Мои бронирования услуг" })}
+          <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "outgoing" ? "bg-white/20" : "bg-gray-100")}>
+            {outgoingCount}
+          </span>
+        </button>
+      </div>
 
-                {/* для входящих показываем текущую цену и карточку согласования */}
-                {tab === "incoming" && isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0 && (
-                  <div className="mt-3 text-sm text-gray-700">
-                    {t("bookings.current_price", { defaultValue: "Текущая цена" })}:{" "}
-                    <b>{fmt(Number(b.provider_price))}</b>
-                    {b.currency ? ` ${b.currency}` : " USD"}
-                    {b.provider_note ? ` · ${b.provider_note}` : ""}
-                  </div>
-                )}
-
-                {tab === "incoming" && String(b.status) === "pending" && (
-                  <PriceAgreementCard booking={b} onSent={load} />
-                )}
-
-                <AttachmentList items={b.attachments} />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {content}
     </div>
   );
 }
