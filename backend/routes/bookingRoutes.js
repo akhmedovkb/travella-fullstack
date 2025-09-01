@@ -6,7 +6,6 @@ const authenticateToken = require("../middleware/authenticateToken");
 const {
   createBooking,
   getProviderBookings,
-  requireProvider,
   getMyBookings,
   providerQuote,
   acceptBooking,
