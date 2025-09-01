@@ -366,15 +366,24 @@ const rejectBooking = async (req, res) => {
   }
 };
 
-// Клиент отменяет
+// Клиент или провайдер-заявитель может отменить
 const cancelBooking = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    const id = Number(req.params.id);
+    const userId = req.user?.id;
+    const role   = req.user?.role;
+    const id     = Number(req.params.id);
 
-    const own = await pool.query(`SELECT client_id FROM bookings WHERE id=$1`, [id]);
+    const own = await pool.query(
+      `SELECT client_id, requester_provider_id FROM bookings WHERE id=$1`,
+      [id]
+    );
     if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
-    if (own.rows[0].client_id !== clientId) {
+
+    const row = own.rows[0];
+    const isClientOwner   = role === "client"   && row.client_id === userId;
+    const isProviderOwner = role === "provider" && row.requester_provider_id === userId;
+
+    if (!isClientOwner && !isProviderOwner) {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
@@ -391,6 +400,7 @@ const cancelBooking = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Провайдер отправляет цену/комментарий
 const providerQuote = async (req, res) => {
