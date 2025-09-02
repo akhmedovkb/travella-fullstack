@@ -59,6 +59,16 @@ const normalizeAttachment = (a) => {
   return null;
 };
 
+const formatLocal = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit"
+  });
+};
+
 /* ===== component ===== */
 export default function BookingRow({
   booking,
@@ -69,8 +79,10 @@ export default function BookingRow({
   // Управление кнопками:
   showActions = true,
   needPriceForAccept = false,
-  hideClientCancel = false,  // <<< новое: скрыть верхнюю кнопку «Отмена» у клиента
-   hideAcceptIfQuoted = false,
+  hideClientCancel = false,   // скрыть верхнюю кнопку «Отмена» у клиента
+  hideAcceptIfQuoted = false, // если уже отправили цену, скрыть «Подтвердить»
+  rejectedByLabel = null,     // текст «кем отклонено» (для status=rejected)
+  cancelledByLabel = null,    // текст «кем отменено» (для status=cancelled)
 }) {
   const { t } = useTranslation();
 
@@ -131,16 +143,17 @@ export default function BookingRow({
   }, [booking, viewerRole, t]);
 
   const statusStr = String(booking.status);
-  const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
+  const datesStr = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
+  const confirmedAt = statusStr === "confirmed" ? formatLocal(booking.updated_at) : null;
 
   // действия
   const canActBase = viewerRole === "provider" && statusStr === "pending";
   const hasPrice = Number(booking?.provider_price) > 0;
   const showAcceptBtn =
-   showActions &&
-   canActBase &&
-   (!needPriceForAccept || hasPrice) &&
-   !(hideAcceptIfQuoted && hasPrice); // если уже отправил цену и нам сказали прятать — прячем
+    showActions &&
+    canActBase &&
+    (!needPriceForAccept || hasPrice) &&
+    !(hideAcceptIfQuoted && hasPrice);
   const showRejectBtn = showActions && canActBase;
 
   // верхняя кнопка «Отмена» для клиента (если нужна)
@@ -203,9 +216,25 @@ export default function BookingRow({
             )}
           </div>
 
+          {/* подзаголовок */}
           <div className="text-sm text-gray-500 mt-1">
-            {t("common.date", { defaultValue: "Дата" })}: {dates || "—"}
+            {t("bookings.booking_date", { defaultValue: "Дата бронирования" })}: {confirmedAt || "—"}
           </div>
+          <div className="text-sm text-gray-500">
+            {t("bookings.booked_dates", { defaultValue: "Бронированные даты" })}: {datesStr || "—"}
+          </div>
+
+          {/* статусные подписи */}
+          {statusStr === "rejected" && rejectedByLabel && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">
+              {t("bookings.rejected_by", { defaultValue: "Отклонено" })}: {rejectedByLabel}
+            </div>
+          )}
+          {statusStr === "cancelled" && cancelledByLabel && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+              {t("bookings.cancelled_by", { defaultValue: "Отменено" })}: {cancelledByLabel}
+            </div>
+          )}
         </div>
 
         {/* Кнопки действий справа */}
@@ -224,7 +253,7 @@ export default function BookingRow({
           </div>
         )}
 
-        {/* Верхняя клиентская «Отмена» — прячем через hideClientCancel */}
+        {/* Верхняя клиентская «Отмена» */}
         {canCancelTop && (
           <div className="shrink-0">
             <button
