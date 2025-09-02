@@ -102,6 +102,20 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
+  // ссылка на профиль контрагента
+    const profileHref = useMemo(() => {
+      // Исходящие у провайдера (viewerRole === 'client'): ведём на профиль поставщика услуги
+      if (viewerRole === "client" && booking?.provider_id) {
+        return `/provider/${booking.provider_id}`;
+      }
+      // Входящие у провайдера: если заявитель — тоже провайдер, ведём на его профиль
+      if (viewerRole === "provider" && booking?.requester_provider_id) {
+        return `/provider/${booking.requester_provider_id}`;
+      }
+      return null;
+    }, [viewerRole, booking?.provider_id, booking?.requester_provider_id]);
+
+
   /* ---- аватар ----
      ВАЖНО: по просьбе — у провайдера-заявителя (viewerRole === 'client' на вкладке
      «Мои бронирования услуг») показываем ФОТО ПОСТАВЩИКА УСЛУГИ. */
@@ -181,7 +195,13 @@ export default function BookingRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="truncate font-semibold">{counterpart.title}</div>
+            {profileHref ? (
+              <a href={profileHref} className="truncate font-semibold hover:underline">
+                {counterpart.title}
+              </a>
+            ) : (
+              <div className="truncate font-semibold">{counterpart.title}</div>
+            )}
             {counterpart.extra ? (
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
                 {counterpart.extra}
