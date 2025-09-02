@@ -19,6 +19,13 @@ const TelegramIcon = ({ className = "inline-block w-4 h-4 mr-1 align-[-1px]" }) 
   </svg>
 );
 
+// базовый конструктор ссылки на профиль
+const buildProfileUrl = (kind, id) => {
+  // при необходимости поменяй сегменты 'provider' / 'client' на свои
+  const map = { provider: "provider", client: "client" }; 
+  if (!id) return null;
+  return `/${map[kind]}/${id}`;
+};
 
 function normalizeTg(v) {
   if (!v) return null;
@@ -102,18 +109,19 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  // ссылка на профиль контрагента
-    const profileHref = useMemo(() => {
-      // Исходящие у провайдера (viewerRole === 'client'): ведём на профиль поставщика услуги
-      if (viewerRole === "client" && booking?.provider_id) {
-        return `/provider/${booking.provider_id}`;
-      }
-      // Входящие у провайдера: если заявитель — тоже провайдер, ведём на его профиль
-      if (viewerRole === "provider" && booking?.requester_provider_id) {
-        return `/provider/${booking.requester_provider_id}`;
-      }
-      return null;
-    }, [viewerRole, booking?.provider_id, booking?.requester_provider_id]);
+  
+    // Куда вести по клику на имени (профиль кого)
+const profileHref = useMemo(() => {
+  if (viewerRole === "provider") {
+    // входящие у поставщика
+    if (booking.requester_provider_id) {
+      return buildProfileUrl("provider", booking.requester_provider_id); // заявитель-провайдер
+    }
+    return buildProfileUrl("client", booking.client_id); // обычный клиент
+  }
+  // исходящие у провайдера (и кабинет клиента) — идём к поставщику услуги
+  return buildProfileUrl("provider", booking.provider_id);
+}, [viewerRole, booking]);
 
 
   /* ---- аватар ----
@@ -195,10 +203,15 @@ export default function BookingRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            {profileHref ? (
-              <a href={profileHref} className="truncate font-semibold hover:underline">
-                {counterpart.title}
-              </a>
+                      {profileHref ? (
+            <a
+              href={profileHref}
+              className="truncate font-semibold hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {counterpart.title}
+            </a>
             ) : (
               <div className="truncate font-semibold">{counterpart.title}</div>
             )}
