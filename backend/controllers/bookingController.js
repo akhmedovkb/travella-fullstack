@@ -74,11 +74,10 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
 /* ================= create ================= */
 
 // Создание брони (для клиента и провайдера-заявителя)
-const createBooking = async (req, res) => {
+async function createBooking(req, res) {
   try {
-    const userId = req.user?.id;
-    const userRole = req.user?.role; // 'client' | 'provider'
-    if (!userId) return res.status(401).json({ message: "Требуется авторизация" });
+    const userId = req.user?.id || null; // client id
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const { service_id, provider_id: pFromBody, dates, message, attachments, currency } = req.body || {};
     let providerId = pFromBody || null;
@@ -94,63 +93,66 @@ const createBooking = async (req, res) => {
     }
 
     const days = toArray(dates).map(toISO).filter(Boolean);
-    if (!days.length) return res.status(400).json({ message: "Не указаны корректные даты" });
+    if (!days.length) return res.status(400).json({ message: "Укажите даты бронирования" });
 
-    const primaryDate = [...days].sort()[0];
+    const free = await isDatesFree(providerId, days, null);
+    if (!free) return res.status(409).json({ message: "Выбранные даты уже заняты" });
 
-    const ok = await isDatesFree(providerId, days);
-    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+    const cols = await getExistingColumns("bookings", ["currency", "requester_provider_id", "requester_name", "requester_phone", "requester_telegram", "requester_email"]);
+    const cur = cols.currency ? currency || "USD" : null;
 
-    // какие колонки реально есть
-    const cols = await getExistingColumns("bookings", [
-      "currency",
-      "requester_provider_id",
-      "requester_name",
-      "requester_phone",
-      "requester_telegram",
-      "requester_email",
-    ]);
-
-    // базовые колонки
-    const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
-    const values = [service_id ?? null, providerId, userRole === "client" ? userId : null, primaryDate, "pending", message ?? null, JSON.stringify(attachments ?? [])];
-
-    // опциональная валюта
-    if (cols.currency) {
-      insertCols.push("currency");
-      values.push(currency ?? null);
-    }
-
-    // если бронирует провайдер и в таблице есть requester_* — заполним
-    if (userRole === "provider" && cols.requester_provider_id) {
-      const me = await getProviderProfile(userId);
-      insertCols.push("requester_provider_id");
-      values.push(userId);
-      if (cols.requester_name)     { insertCols.push("requester_name");     values.push(me?.name ?? null); }
-      if (cols.requester_phone)    { insertCols.push("requester_phone");    values.push(me?.phone ?? null); }
-      if (cols.requester_telegram) { insertCols.push("requester_telegram"); values.push(me?.telegram ?? null); }
-      if (cols.requester_email)    { insertCols.push("requester_email");    values.push(me?.email ?? null); }
-    }
-
-    // собрать плейсхолдеры
-    const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(",");
-
-    const ins = await pool.query(
-      `INSERT INTO bookings (${insertCols.join(",")})
-       VALUES (${placeholders})
-       RETURNING id, status`,
-      values
-    );
-    const bookingId = ins.rows[0].id;
-
-    for (const d of days) {
-      await pool.query(
-        `INSERT INTO booking_dates (booking_id, date) VALUES ($1,$2::date)`,
-        [bookingId, d]
+    // собрать requester_* если это заявитель-провайдер
+    let requester = {};
+    if (req.user?.is_provider && cols.requester_provider_id) {
+      const qp = await pool.query(
+        `SELECT id, name, phone, social AS telegram, email, type FROM providers WHERE id = $1`,
+        [req.user.id]
       );
+      const rp = qp.rows?.[0] || {};
+      requester = {
+        requester_provider_id: rp.id || req.user.id,
+        requester_name: rp.name || null,
+        requester_phone: rp.phone || null,
+        requester_telegram: rp.telegram || null,
+        requester_email: rp.email || null,
+      };
     }
 
-    res.status(201).json({ id: bookingId, status: "pending", dates: days });
+    const q = await pool.query(
+      `
+      INSERT INTO bookings
+        (service_id, provider_id, client_id, status, client_message, attachments, ${cols.currency ? "currency," : ""} ${cols.requester_provider_id ? "requester_provider_id, requester_name, requester_phone, requester_telegram, requester_email," : ""} created_at, updated_at)
+      VALUES
+        ($1, $2, $3, 'pending', $4, $5::jsonb, ${cols.currency ? "$6," : ""} ${cols.requester_provider_id ? "$7,$8,$9,$10,$11," : ""} NOW(), NOW())
+      RETURNING id
+      `,
+      [
+        service_id || null,
+        providerId,
+        userId,
+        message || null,
+        JSON.stringify(toArray(attachments || [])),
+        ...(cols.currency ? [cur] : []),
+        ...(cols.requester_provider_id
+          ? [
+              requester.requester_provider_id || null,
+              requester.requester_name || null,
+              requester.requester_phone || null,
+              requester.requester_telegram || null,
+              requester.requester_email || null,
+            ]
+          : []),
+      ]
+    );
+
+    const bookingId = q.rows[0].id;
+
+    // даты в booking_dates
+    for (const d of days) {
+      await pool.query(`INSERT INTO booking_dates (booking_id, date) VALUES ($1, $2::date)`, [bookingId, d]);
+    }
+
+    res.json({ id: bookingId });
   } catch (err) {
     console.error("createBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
