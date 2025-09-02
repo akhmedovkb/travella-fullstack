@@ -194,22 +194,20 @@ function PriceAgreementCard({ booking, onSent }) {
             </div>
           </label>
 
-            <label>
-              <span className="mb-1 block text-xs font-medium text-gray-500">
-                {t("bookings.currency", { defaultValue: "Валюта" })}
-              </span>
-              <select
-                className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.currency", { defaultValue: "Валюта" })}
+            </span>
+            <select
+              className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </label>
 
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
@@ -248,7 +246,6 @@ function PriceAgreementCard({ booking, onSent }) {
 export default function ProviderBookings() {
   const { t } = useTranslation();
 
-  // вкладки: incoming / outgoing
   const [tab, setTab] = useState("incoming");
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
@@ -273,9 +270,7 @@ export default function ProviderBookings() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const hasQuotedPrice = (b) =>
     isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
@@ -296,11 +291,8 @@ export default function ProviderBookings() {
     }
   };
 
+  // Отклонять можно без цены
   const reject = async (b) => {
-    if (!hasQuotedPrice(b)) {
-      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
-      return;
-    }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/reject`, {}, cfg());
       tSuccess(t("bookings.rejected", { defaultValue: "Бронь отклонена" }));
@@ -350,50 +342,26 @@ export default function ProviderBookings() {
       <div className="space-y-4">
         {list.map((b) => {
           const isIncoming = tab === "incoming";
-          const priceKnown = isFiniteNum(Number(b.provider_price));
 
           return (
             <div key={b.id} className="rounded-xl border bg-white p-3">
-              {/* Для исходящих используем viewerRole="client", верхние действия скрываем */}
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
-                hideActions={!isIncoming}
-                onAccept={(bk) => accept(bk)}
-                onReject={(bk) => reject(bk)}
+                needPriceForAccept={isIncoming}      // скрыть "Подтвердить" пока нет цены
+                onAccept={accept}
+                onReject={reject}
               />
 
-              {/* Входящие: показываем исход (подтверждено/отклонено) или форму, если pending */}
-              {isIncoming && b.status === "pending" && (
+              {/* Входящие: форма согласования цены */}
+              {isIncoming && String(b.status) === "pending" && (
                 <PriceAgreementCard booking={b} onSent={load} />
               )}
 
-              {isIncoming && b.status !== "pending" && priceKnown && (
-                <div className="mt-3">
-                  <span
-                    className={
-                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 " +
-                      (b.status === "confirmed"
-                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                        : "bg-rose-50 text-rose-700 ring-rose-200")
-                    }
-                  >
-                    <span className="font-medium">
-                      {b.status === "confirmed"
-                        ? t("bookings.offer_accepted", { defaultValue: "Клиент подтвердил" })
-                        : t("bookings.offer_rejected", { defaultValue: "Клиент отклонил" })}
-                      :
-                    </span>
-                    <b>{fmt(Number(b.provider_price))} {b.currency || "USD"}</b>
-                    {b.provider_note ? <span className="opacity-80">· {b.provider_note}</span> : null}
-                  </span>
-                </div>
-              )}
-
-              {/* Исходящие: показываем предложение и действия */}
+              {/* Исходящие: предложение и действия */}
               {!isIncoming && (
                 <>
-                  {priceKnown && (
+                  {isFiniteNum(Number(b.provider_price)) && (
                     <div className="mt-3">
                       <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1.5">
                         <span className="font-medium">
@@ -409,7 +377,7 @@ export default function ProviderBookings() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         onClick={() => confirmOutgoing(b)}
-                        disabled={!priceKnown}
+                        disabled={!isFiniteNum(Number(b.provider_price))}
                         className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
                       >
                         {t("actions.confirm", { defaultValue: "Подтвердить" })}
