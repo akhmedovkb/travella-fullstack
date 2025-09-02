@@ -189,22 +189,19 @@ async function getProviderBookings(req, res) {
       "requester_email",
     ]);
 
-    const selectCurrency = cols.currency
-      ? `b.currency`
-      : `'USD'::text AS currency`;
+    const selectCurrency = cols.currency ? `b.currency` : `'USD'::text AS currency`;
 
-    const selectRequester =
-      cols.requester_provider_id
-        ? `b.requester_provider_id,
-           b.requester_name,
-           b.requester_phone,
-           b.requester_telegram,
-           b.requester_email`
-        : `NULL::int  AS requester_provider_id,
-           NULL::text AS requester_name,
-           NULL::text AS requester_phone,
-           NULL::text AS requester_telegram,
-           NULL::text AS requester_email`;
+    const selectRequester = cols.requester_provider_id
+      ? `b.requester_provider_id,
+         b.requester_name,
+         b.requester_phone,
+         b.requester_telegram,
+         b.requester_email`
+      : `NULL::int  AS requester_provider_id,
+         NULL::text AS requester_name,
+         NULL::text AS requester_phone,
+         NULL::text AS requester_telegram,
+         NULL::text AS requester_email`;
 
     const sql = `
       SELECT
@@ -218,7 +215,9 @@ async function getProviderBookings(req, res) {
           ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
-        s.title AS service_title,
+        s.title       AS service_title,
+
+        /* клиент */
         c.id          AS client_id,
         c.name        AS client_name,
         c.phone       AS client_phone,
@@ -226,15 +225,19 @@ async function getProviderBookings(req, res) {
         c.telegram    AS client_social,
         c.location    AS client_address,
         c.avatar_url  AS client_avatar_url,
-        p.id       AS provider_profile_id,
-        p.name     AS provider_name,
-        p.type     AS provider_type,
-        p.phone    AS provider_phone,
-        p.email    AS provider_email,
-        p.social   AS provider_social,
-        p.address  AS provider_address,
-        p.location AS provider_location,
-        p.photo    AS provider_photo
+
+        /* поставщик (для совместимости возвращаем и photo, и avatar_url) */
+        p.id          AS provider_profile_id,
+        p.name        AS provider_name,
+        p.type        AS provider_type,
+        p.phone       AS provider_phone,
+        p.email       AS provider_email,
+        p.social      AS provider_social,
+        p.address     AS provider_address,
+        p.location    AS provider_location,
+        p.photo       AS provider_photo,
+        p.photo       AS provider_avatar_url
+
       FROM bookings b
       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
       LEFT JOIN clients  c       ON c.id = b.client_id
@@ -252,7 +255,6 @@ async function getProviderBookings(req, res) {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 }
-
 // ИСХОДЯЩИЕ (я — провайдер, бронирую чужую услугу)
 async function getProviderOutgoingBookings(req, res) {
   try {
@@ -260,7 +262,6 @@ async function getProviderOutgoingBookings(req, res) {
     const cols = await getExistingColumns("bookings", ["currency", "requester_provider_id"]);
 
     if (!cols.requester_provider_id) {
-      // колонки нет — тихо возвращаем пусто (фронт корректно обработает)
       return res.json([]);
     }
 
@@ -276,17 +277,20 @@ async function getProviderOutgoingBookings(req, res) {
         b.requester_provider_id,
         b.requester_name, b.requester_phone, b.requester_telegram, b.requester_email,
         COALESCE(
-          (SELECT array_agg(d.date::date ORDER BY d.date)
-             FROM booking_dates d
-            WHERE d.booking_id = b.id),
+          (SELECT array_agg(d.date::date ORDER BY d.date) FROM booking_dates d WHERE d.booking_id = b.id),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
-        s.title AS service_title,
-        p.name    AS provider_name,
-        p.type    AS provider_type,
-        p.phone   AS provider_phone,
-        p.address AS provider_address,
-        p.social  AS provider_telegram
+        s.title      AS service_title,
+
+        /* поставщик услуги */
+        p.name       AS provider_name,
+        p.type       AS provider_type,
+        p.phone      AS provider_phone,
+        p.address    AS provider_address,
+        p.social     AS provider_telegram,
+        p.photo      AS provider_photo,
+        p.photo      AS provider_avatar_url
+
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
@@ -318,17 +322,20 @@ const getMyBookings = async (req, res) => {
         b.created_at, b.updated_at,
         ${currencySel},
         COALESCE(
-          (SELECT array_agg(d.date::date ORDER BY d.date)
-             FROM booking_dates d
-            WHERE d.booking_id = b.id),
+          (SELECT array_agg(d.date::date ORDER BY d.date) FROM booking_dates d WHERE d.booking_id = b.id),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
-        s.title AS service_title,
-        p.name    AS provider_name,
-        p.type    AS provider_type,
-        p.phone   AS provider_phone,
-        p.address AS provider_address,
-        p.social  AS provider_telegram
+        s.title      AS service_title,
+
+        /* поставщик для карточки клиента */
+        p.name       AS provider_name,
+        p.type       AS provider_type,
+        p.phone      AS provider_phone,
+        p.address    AS provider_address,
+        p.social     AS provider_telegram,
+        p.photo      AS provider_photo,
+        p.photo      AS provider_avatar_url
+
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
@@ -344,6 +351,7 @@ const getMyBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Провайдер отправляет цену/комментарий
 const providerQuote = async (req, res) => {
