@@ -180,6 +180,7 @@ const createBooking = async (req, res) => {
 async function getProviderBookings(req, res) {
   try {
     const providerId = req.user?.id;
+
     const cols = await getExistingColumns("bookings", [
       "currency",
       "requester_provider_id",
@@ -187,21 +188,25 @@ async function getProviderBookings(req, res) {
       "requester_phone",
       "requester_telegram",
       "requester_email",
+      "requester_type",
     ]);
 
     const selectCurrency = cols.currency ? `b.currency` : `'USD'::text AS currency`;
 
+    // стандартные requester_* поля из таблицы bookings
     const selectRequester = cols.requester_provider_id
       ? `b.requester_provider_id,
          b.requester_name,
          b.requester_phone,
          b.requester_telegram,
-         b.requester_email`
+         b.requester_email,
+         b.requester_type`
       : `NULL::int  AS requester_provider_id,
          NULL::text AS requester_name,
          NULL::text AS requester_phone,
          NULL::text AS requester_telegram,
-         NULL::text AS requester_email`;
+         NULL::text AS requester_email,
+         NULL::text AS requester_type`;
 
     const sql = `
       SELECT
@@ -211,10 +216,14 @@ async function getProviderBookings(req, res) {
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         ${selectCurrency},
         ${selectRequester},
+
+        /* массив дат */
         COALESCE(
           ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
           CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
         ) AS dates,
+
+        /* данные услуги */
         s.title       AS service_title,
 
         /* клиент */
@@ -226,7 +235,7 @@ async function getProviderBookings(req, res) {
         c.location    AS client_address,
         c.avatar_url  AS client_avatar_url,
 
-        /* поставщик (для совместимости возвращаем и photo, и avatar_url) */
+        /* сам поставщик (вы) — на всякий случай возвращаем фото тоже */
         p.id          AS provider_profile_id,
         p.name        AS provider_name,
         p.type        AS provider_type,
@@ -236,15 +245,19 @@ async function getProviderBookings(req, res) {
         p.address     AS provider_address,
         p.location    AS provider_location,
         p.photo       AS provider_photo,
-        p.photo       AS provider_avatar_url
+        p.photo       AS provider_avatar_url,
 
+        /* ЗАЯВИТЕЛЬ-ПОСТАВЩИК (когда заявка пришла не от клиента, а от другого провайдера) */
+        rp.photo      AS requester_photo,
+        rp.photo      AS requester_avatar_url
       FROM bookings b
       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-      LEFT JOIN clients  c       ON c.id = b.client_id
-      LEFT JOIN providers p      ON p.id = b.provider_id
-      LEFT JOIN services  s      ON s.id = b.service_id
+      LEFT JOIN clients   c  ON c.id = b.client_id
+      LEFT JOIN providers p  ON p.id = b.provider_id         -- ваш профиль (поставщик услуги)
+      LEFT JOIN providers rp ON rp.id = b.requester_provider_id  -- заявитель-поставщик
+      LEFT JOIN services  s  ON s.id = b.service_id
       WHERE b.provider_id = $1
-      GROUP BY b.id, s.id, c.id, p.id
+      GROUP BY b.id, s.id, c.id, p.id, rp.id
       ORDER BY b.created_at DESC NULLS LAST
     `;
 
@@ -255,6 +268,7 @@ async function getProviderBookings(req, res) {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 }
+
 // ИСХОДЯЩИЕ (я — провайдер, бронирую чужую услугу)
 async function getProviderOutgoingBookings(req, res) {
   try {
