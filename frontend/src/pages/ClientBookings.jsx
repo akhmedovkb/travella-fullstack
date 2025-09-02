@@ -163,7 +163,7 @@ const ProviderTypeBadge = ({ type }) => {
   return <span className={cx("ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", map[key])}>{providerTypeLabel(key)}</span>;
 };
 
-function AttachmentList({ items }) {
+{/* function AttachmentList({ items }) {
   const files = Array.isArray(items) ? items : items ? [items] : [];
   if (!files.length) return null;
   return (
@@ -184,7 +184,7 @@ function AttachmentList({ items }) {
       </div>
     </div>
   );
-}
+} */}
 
 /* ========= основная страница ========= */
 export default function ClientBookings() {
@@ -524,7 +524,7 @@ export default function ClientBookings() {
                 </div>
               )}
 
-              <AttachmentList items={b.attachments} />
+              // <AttachmentList items={b.attachments} />
 
               {/* pending без цены → информируем, что ждём предложение */}
               {status === "pending" && !hasPrice && (
