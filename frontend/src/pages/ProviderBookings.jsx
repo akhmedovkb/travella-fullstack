@@ -7,15 +7,13 @@ import { tSuccess, tError } from "../shared/toast";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const getToken = () =>
-  localStorage.getItem("token") || localStorage.getItem("providerToken");
+const getToken = () => localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
 const onlyDigitsDot = (s) => String(s || "").replace(/[^\d.]/g, "");
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
-const fmt = (n) =>
-  isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
+const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "");
 
 /* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent }) {
@@ -44,25 +42,26 @@ function PriceAgreementCard({ booking, onSent }) {
   }, [priceRaw]);
 
   const canSend =
-    !busy &&
-    String(booking?.status) === "pending" &&
-    isFiniteNum(priceNum) &&
-    priceNum > 0 &&
-    CURRENCIES.includes(currency);
+    !busy && String(booking?.status) === "pending" && isFiniteNum(priceNum) && priceNum > 0 && CURRENCIES.includes(currency);
 
   const submit = async () => {
     setErr("");
-    if (!canSend) { setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" })); return; }
+    if (!canSend) {
+      setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
+      return;
+    }
     try {
       setBusy(true);
-      await axios.post(`${API_BASE}/api/bookings/${booking.id}/quote`,
-        { price: Number(priceNum), currency, note: note.trim() }, cfg());
-      setPriceRaw(""); setNote("");
+      await axios.post(`${API_BASE}/api/bookings/${booking.id}/quote`, { price: Number(priceNum), currency, note: note.trim() }, cfg());
+      setPriceRaw("");
+      setNote("");
       tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
       onSent?.();
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -106,12 +105,18 @@ function PriceAgreementCard({ booking, onSent }) {
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.currency", { defaultValue: "Валюта" })}</span>
             <select className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </label>
 
           <label>
-            <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
+            </span>
             <input
               className="h-11 w-full rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
               placeholder={t("bookings.comment_placeholder", { defaultValue: "Например: парковки и ожидание включены" })}
@@ -121,7 +126,11 @@ function PriceAgreementCard({ booking, onSent }) {
           </label>
 
           <div className="flex items-end">
-            <button onClick={submit} disabled={!canSend} className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60">
+            <button
+              onClick={submit}
+              disabled={!canSend}
+              className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60"
+            >
               {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.send_price", { defaultValue: "Отправить цену" })}
             </button>
           </div>
@@ -143,8 +152,12 @@ export default function ProviderBookings() {
   const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { setFilter("all"); }, [tab]);
+  useEffect(() => {
+    load();
+  }, []);
+  useEffect(() => {
+    setFilter("all");
+  }, [tab]);
 
   const load = async () => {
     if (!getToken()) return;
@@ -158,20 +171,29 @@ export default function ProviderBookings() {
       setOutgoing(Array.isArray(outRes.data) ? outRes.data : []);
     } catch (e) {
       console.error("load provider bookings failed", e);
-      setIncoming([]); setOutgoing([]);
-    } finally { setLoading(false); }
+      setIncoming([]);
+      setOutgoing([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const hasQuotedPrice = (b) => isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
   const accept = async (b) => {
-    if (!hasQuotedPrice(b)) { tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" })); return; }
+    if (!hasQuotedPrice(b)) {
+      tError(t("bookings.need_price_first", { defaultValue: "Сначала отправьте цену" }));
+      return;
+    }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/accept`, {}, cfg());
       tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
-    } finally { await load(); window.dispatchEvent(new Event("provider:counts:refresh")); }
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
   };
 
   const reject = async (b) => {
@@ -180,7 +202,10 @@ export default function ProviderBookings() {
       tSuccess(t("bookings.rejected", { defaultValue: "Бронь отклонена" }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
-    } finally { await load(); window.dispatchEvent(new Event("provider:counts:refresh")); }
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
   };
 
   // исходящие (я как заказчик)
@@ -190,7 +215,10 @@ export default function ProviderBookings() {
       tSuccess(t("bookings.confirmed", { defaultValue: "Бронирование подтверждено" }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.confirm_error", { defaultValue: "Ошибка подтверждения" }));
-    } finally { await load(); window.dispatchEvent(new Event("provider:counts:refresh")); }
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
   };
   const cancelOutgoing = async (b) => {
     try {
@@ -198,13 +226,20 @@ export default function ProviderBookings() {
       tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
-    } finally { await load(); window.dispatchEvent(new Event("provider:counts:refresh")); }
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
   };
 
   const baseList = tab === "incoming" ? incoming : outgoing;
 
   // helpers для дат
-  const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
   const lastDateTs = (b) => {
     const arr = Array.isArray(b?.dates) ? b.dates : [];
     const ts = arr.map((d) => new Date(d).getTime()).filter(Number.isFinite);
@@ -231,12 +266,17 @@ export default function ProviderBookings() {
   // применяем выбранный фильтр
   const filtered = useMemo(() => {
     switch (filter) {
-      case "pending":   return baseList.filter(isPending);
-      case "confirmed": return baseList.filter(isConfirmedLike);
-      case "upcoming":  return baseList.filter(isUpcoming);
-      case "rejected":  return baseList.filter(isRejectedLike);
+      case "pending":
+        return baseList.filter(isPending);
+      case "confirmed":
+        return baseList.filter(isConfirmedLike);
+      case "upcoming":
+        return baseList.filter(isUpcoming);
+      case "rejected":
+        return baseList.filter(isRejectedLike);
       case "all":
-      default:          return baseList;
+      default:
+        return baseList;
     }
   }, [baseList, filter]);
 
@@ -268,7 +308,7 @@ export default function ProviderBookings() {
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
-                needPriceForAccept={isIncoming}
+                needPriceForAccept={isIncoming} // скрыть «Подтвердить» без цены
                 hideAcceptIfQuoted={awaitingRequester}
                 hideClientCancel={!isIncoming}
                 rejectedByLabel={rejectedByLabel}
@@ -292,7 +332,7 @@ export default function ProviderBookings() {
                 </div>
               )}
 
-              {/* Исходящие: действия подтверждения/отмены (оставляем здесь) */}
+              {/* Исходящие: действия подтверждения/отмены */}
               {!isIncoming && String(b.status) === "pending" && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
@@ -302,10 +342,7 @@ export default function ProviderBookings() {
                   >
                     {t("actions.confirm", { defaultValue: "Подтвердить" })}
                   </button>
-                  <button
-                    onClick={() => cancelOutgoing(b)}
-                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
-                  >
+                  <button onClick={() => cancelOutgoing(b)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800">
                     {t("actions.cancel", { defaultValue: "Отмена" })}
                   </button>
                 </div>
@@ -352,19 +389,16 @@ export default function ProviderBookings() {
       {/* Фильтры статуса */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[
-          { key: "all",       label: t("filter.all",        { defaultValue: "Все" }),         count: counts.all },
-          { key: "pending",   label: t("filter.pending",    { defaultValue: "Ожидают" }),     count: counts.pending },
-          { key: "confirmed", label: t("filter.confirmed",  { defaultValue: "Подтверждено" }),count: counts.confirmed },
-          { key: "upcoming",  label: t("filter.upcoming",   { defaultValue: "Предстоящие" }), count: counts.upcoming },
-          { key: "rejected",  label: t("filter.rejected",   { defaultValue: "Отклонено" }),   count: counts.rejected },
+          { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
+          { key: "pending", label: t("filter.pending", { defaultValue: "Ожидают" }), count: counts.pending },
+          { key: "confirmed", label: t("filter.confirmed", { defaultValue: "Подтверждено" }), count: counts.confirmed },
+          { key: "upcoming", label: t("filter.upcoming", { defaultValue: "Предстоящие" }), count: counts.upcoming },
+          { key: "rejected", label: t("filter.rejected", { defaultValue: "Отклонено" }), count: counts.rejected },
         ].map(({ key, label, count }) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
-            className={
-              "rounded-full px-3 py-1.5 text-sm ring-1 " +
-              (filter === key ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")
-            }
+            className={"rounded-full px-3 py-1.5 text-sm ring-1 " + (filter === key ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
           >
             {label}
             <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (filter === key ? "bg-white/20" : "bg-gray-100")}>
