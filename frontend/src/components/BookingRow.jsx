@@ -70,6 +70,7 @@ export default function BookingRow({
   showActions = true,
   needPriceForAccept = false,
   hideClientCancel = false,  // <<< новое: скрыть верхнюю кнопку «Отмена» у клиента
+   hideAcceptIfQuoted = false,
 }) {
   const { t } = useTranslation();
 
@@ -135,7 +136,11 @@ export default function BookingRow({
   // действия
   const canActBase = viewerRole === "provider" && statusStr === "pending";
   const hasPrice = Number(booking?.provider_price) > 0;
-  const showAcceptBtn = showActions && canActBase && (!needPriceForAccept || hasPrice);
+  const showAcceptBtn =
+   showActions &&
+   canActBase &&
+   (!needPriceForAccept || hasPrice) &&
+   !(hideAcceptIfQuoted && hasPrice); // если уже отправил цену и нам сказали прятать — прячем
   const showRejectBtn = showActions && canActBase;
 
   // верхняя кнопка «Отмена» для клиента (если нужна)
