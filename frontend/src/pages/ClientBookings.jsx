@@ -145,8 +145,8 @@ const StatusBadge = ({ status, text: override }) => {
   };
   const { text, cls } = map[s] || { text: s, cls: "bg-gray-100 text-gray-700 ring-gray-200" };
   return (
-    <span className={cx("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ring-1", cls)}>
-      <Icon name="badge" className="w-3.5 h-3.5" /> {override || text}
+    <span className={cx("inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1", cls)}>
+       {override || text}
     </span>
   );
 };
