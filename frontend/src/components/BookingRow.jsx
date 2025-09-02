@@ -68,22 +68,28 @@ export default function BookingRow({
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
+  // Новые пропсы:
+  showActions = true,
+  needPriceForAccept = false,
 }) {
   const { t } = useTranslation();
 
-  // Контрагент
+  // Контрагент (для поставщика показываем заказчика: клиента или провайдера-заявителя)
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
-      // если бронировал провайдер — используем requester_* поля
       const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
 
-      const name = isRequestedByProvider
-        ? (booking.requester_name || t("roles.client", { defaultValue: "Клиент" }))
-        : (booking.client_name    || t("roles.client", { defaultValue: "Клиент" }));
+      const name =
+        (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
+        booking.requester_name ||
+        t("roles.client", { defaultValue: "Клиент" });
 
-      const href = isRequestedByProvider
-        ? (booking.requester_provider_id ? `/profile/provider/${booking.requester_provider_id}` : null)
-        : (booking.client_id ? `/profile/client/${booking.client_id}` : null);
+      const href =
+        booking.client_id
+          ? `/profile/client/${booking.client_id}`
+          : booking.requester_provider_id
+          ? `/profile/provider/${booking.requester_provider_id}`
+          : booking.requester_url || null;
 
       const phone = isRequestedByProvider
         ? booking.requester_phone
@@ -95,9 +101,8 @@ export default function BookingRow({
 
       const address = isRequestedByProvider ? null : booking.client_address || null;
 
-      // Явно показываем "Турагент" для заявителя-провайдера
       const extra = isRequestedByProvider
-        ? t("provider.types.agency", { defaultValue: "Турагент" })
+        ? typeLabel(booking.requester_type || "agent", t)
         : null;
 
       return {
@@ -126,10 +131,16 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  const canAcceptReject = viewerRole === "provider" && booking.status === "pending";
-  const canCancel = viewerRole === "client" && ["pending","active"].includes(String(booking.status));
-
+  const statusStr = String(booking.status);
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
+
+  // === логика действий ===
+  const canActBase = viewerRole === "provider" && statusStr === "pending";
+  const hasPrice = Number(booking?.provider_price) > 0;
+  const showAcceptBtn = showActions && canActBase && (!needPriceForAccept || hasPrice);
+  const showRejectBtn = showActions && canActBase;
+
+  const canCancel = viewerRole === "client" && ["pending","active"].includes(statusStr);
 
   // attachments
   let attachments = [];
@@ -146,7 +157,7 @@ export default function BookingRow({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-gray-500">
-            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {booking.status}
+            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {statusStr}
           </div>
 
           <div className="text-base">
@@ -200,32 +211,39 @@ export default function BookingRow({
           </div>
         </div>
 
-        <div className="shrink-0 flex items-center gap-2">
-          {canAcceptReject && (
-            <>
+        {/* Действия (для провайдера по входящим) */}
+        {(showAcceptBtn || showRejectBtn) && (
+          <div className="shrink-0 flex items-center gap-2">
+            {showAcceptBtn && (
               <button
                 onClick={() => onAccept(booking)}
                 className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
               >
                 {t("actions.accept", { defaultValue: "Подтвердить" })}
               </button>
+            )}
+            {showRejectBtn && (
               <button
                 onClick={() => onReject(booking)}
                 className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
               >
                 {t("actions.reject", { defaultValue: "Отклонить" })}
               </button>
-            </>
-          )}
-          {canCancel && (
+            )}
+          </div>
+        )}
+
+        {/* Клиентская отмена */}
+        {canCancel && (
+          <div className="shrink-0">
             <button
               onClick={() => onCancel(booking)}
               className="px-3 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm"
             >
               {t("actions.cancel", { defaultValue: "Отменить" })}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* сообщение клиента */}
