@@ -438,22 +438,22 @@ export default function ClientBookings() {
           // URL публичного профиля провайдера
           const profileUrl = `/profile/provider/${b.provider_id}`;
 
-          const providerPhoto =
-            +          // фото поставщика — расширили список полей и берём первое непустое
-+          const providerPhoto = [
-+            b.provider_avatar_url,
-+            b.provider_photo,
-+            b.provider?.avatar_url,
-+            b.provider?.photo,
-+            b.provider?.avatar,
-+            b.provider?.image_url,
-+            b.provider?.image,
-+            b.provider?.photos?.[0],
-+            b.service?.providerPhoto,
-+            b.service?.provider_avatar_url,
-+            b.service?.providerAvatar,
-+          ].find((x) => x && String(x).trim());
-        
+          
+          // фото поставщика — расширили список полей и берём первое непустое
+          const providerPhoto = [
+            b.provider_avatar_url,
+            b.provider_photo,
+            b.provider?.avatar_url,
+            b.provider?.photo,
+            b.provider?.avatar,
+            b.provider?.image_url,
+            b.provider?.image,
+            b.provider?.photos?.[0],
+            b.service?.providerPhoto,
+            b.service?.provider_avatar_url,
+            b.service?.providerAvatar,
+          ].find((x) => x && String(x).trim());
+       
           // дата подтверждения (после бейджа)
           const confirmedAt =
             ["confirmed", "active"].includes(status) && b.updated_at ? formatDate(toYMD(b.updated_at)) : null;
