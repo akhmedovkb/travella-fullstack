@@ -501,6 +501,50 @@ export default function ClientBookings() {
                 </div>
               )}
 
+              {/* вложения (если есть), без заголовка */}
+                {(() => {
+                  const toFiles = (val) => {
+                    if (!val) return [];
+                    if (Array.isArray(val)) return val;
+                    try {
+                      const x = JSON.parse(val);
+                      if (Array.isArray(x)) return x;
+                      if (x && typeof x === "object") return [x];
+                    } catch {}
+                    return [];
+                  };
+                  const isImg = (u) => /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(u || ""));
+                  const makeAbsolute = (url) => {
+                    if (!url) return "";
+                    const s = String(url);
+                    if (/^data:|^https?:\/\//i.test(s)) return s;
+                    const base = (import.meta?.env?.VITE_API_BASE_URL) || "";
+                    return base ? `${base.replace(/\/+$/, "")}/${s.replace(/^\/+/, "")}` : s;
+                  };
+                  const files = toFiles(b.attachments);
+                  if (!files.length) return null;
+                  return (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {files.map((raw, i) => {
+                        const f = typeof raw === "string" ? { url: raw } : (raw || {});
+                        const url = makeAbsolute(f.url || f.src || f.href || "");
+                        const name = f.name || f.filename || (url ? url.split("?")[0].split("/").pop() : "file");
+                        if (!url) return null;
+                        return isImg(url) ? (
+                          <a key={i} href={url} target="_blank" rel="noreferrer" className="block h-20 w-28 overflow-hidden rounded border bg-gray-50" title={name}>
+                            <img src={url} alt={name} className="h-full w-full object-cover" />
+                          </a>
+                        ) : (
+                          <a key={i} href={url} target="_blank" rel="noreferrer" className="rounded border bg-gray-50 px-2 py-1 text-sm hover:bg-gray-100">
+                            {name}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+
               {/* pending без цены → информируем, что ждём предложение */}
               {status === "pending" && !hasPrice && (
                 <div className={cx("mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700", compact ? "text-xs" : "text-sm")}>
