@@ -46,8 +46,6 @@ const isImageUrl = (url, type) => {
   return /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(s) || s.startsWith("data:image/");
 };
 
-const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
-
 const normalizeAttachment = (a) => {
   if (typeof a === "string") {
     return { name: a.split("/").pop() || "file", url: makeAbsolute(a), type: "" };
@@ -68,17 +66,17 @@ export default function BookingRow({
   onAccept = () => {},
   onReject = () => {},
   onCancel = () => {},
-  // Новые пропсы:
+  // Управление кнопками:
   showActions = true,
   needPriceForAccept = false,
+  hideClientCancel = false,  // <<< новое: скрыть верхнюю кнопку «Отмена» у клиента
 }) {
   const { t } = useTranslation();
 
-  // Контрагент (для поставщика показываем заказчика: клиента или провайдера-заявителя)
+  // Контрагент
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
       const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
-
       const name =
         (!isRequestedByProvider && (booking.client_name || booking.requester_name)) ||
         booking.requester_name ||
@@ -134,13 +132,14 @@ export default function BookingRow({
   const statusStr = String(booking.status);
   const dates = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
 
-  // === логика действий ===
+  // действия
   const canActBase = viewerRole === "provider" && statusStr === "pending";
   const hasPrice = Number(booking?.provider_price) > 0;
   const showAcceptBtn = showActions && canActBase && (!needPriceForAccept || hasPrice);
   const showRejectBtn = showActions && canActBase;
 
-  const canCancel = viewerRole === "client" && ["pending","active"].includes(statusStr);
+  // верхняя кнопка «Отмена» для клиента (если нужна)
+  const canCancelTop = viewerRole === "client" && !hideClientCancel && ["pending","active"].includes(statusStr);
 
   // attachments
   let attachments = [];
@@ -162,17 +161,10 @@ export default function BookingRow({
 
           <div className="text-base">
             <span className="text-gray-500">{counterpart.role}</span>
-            {counterpart.extra && (
-              <>
-                {" · "}
-                <span className="text-gray-500">{counterpart.extra}</span>
-              </>
-            )}
+            {counterpart.extra && <> · <span className="text-gray-500">{counterpart.extra}</span></>}
             {" · "}
             {counterpart.href ? (
-              <a className="font-semibold underline" href={counterpart.href}>
-                {counterpart.name}
-              </a>
+              <a className="font-semibold underline" href={counterpart.href}>{counterpart.name}</a>
             ) : (
               <span className="font-semibold">{counterpart.name}</span>
             )}
@@ -211,30 +203,24 @@ export default function BookingRow({
           </div>
         </div>
 
-        {/* Действия (для провайдера по входящим) */}
+        {/* Кнопки действий справа */}
         {(showAcceptBtn || showRejectBtn) && (
           <div className="shrink-0 flex items-center gap-2">
             {showAcceptBtn && (
-              <button
-                onClick={() => onAccept(booking)}
-                className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm"
-              >
+              <button onClick={() => onAccept(booking)} className="px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white text-sm">
                 {t("actions.accept", { defaultValue: "Подтвердить" })}
               </button>
             )}
             {showRejectBtn && (
-              <button
-                onClick={() => onReject(booking)}
-                className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm"
-              >
+              <button onClick={() => onReject(booking)} className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm">
                 {t("actions.reject", { defaultValue: "Отклонить" })}
               </button>
             )}
           </div>
         )}
 
-        {/* Клиентская отмена */}
-        {canCancel && (
+        {/* Верхняя клиентская «Отмена» — прячем через hideClientCancel */}
+        {canCancelTop && (
           <div className="shrink-0">
             <button
               onClick={() => onCancel(booking)}
@@ -247,7 +233,9 @@ export default function BookingRow({
       </div>
 
       {/* сообщение клиента */}
-      {booking.client_message && <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>}
+      {booking.client_message && (
+        <div className="text-sm text-gray-700 whitespace-pre-line">{booking.client_message}</div>
+      )}
 
       {/* вложения */}
       {!!attachments.length && (
@@ -263,14 +251,7 @@ export default function BookingRow({
             {attachments.map((att, i) => {
               const img = isImageUrl(att.url, att.type);
               return (
-                <a
-                  key={i}
-                  href={att.url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 no-underline"
-                  title={att.name}
-                >
+                <a key={i} href={att.url || "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 no-underline" title={att.name}>
                   {img ? (
                     <img src={att.url} alt={att.name} className="w-16 h-16 rounded border object-cover" />
                   ) : (
