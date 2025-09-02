@@ -544,16 +544,18 @@ export default function ClientBookings() {
 
               <AttachmentList items={b.attachments} />
 
-              {/* actions — только пока pending */}
+                            {/* actions — только пока pending */}
               {status === "pending" && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => confirm(b)}
-                    disabled={actingId === b.id}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-                  >
-                    {t("actions.confirm", { defaultValue: "Подтвердить" })}
-                  </button>
+                  {Number(b?.provider_price) > 0 && (
+                    <button
+                      onClick={() => confirm(b)}
+                      disabled={actingId === b.id}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                    >
+                      {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                    </button>
+                  )}
                   <button
                     onClick={() => reject(b)}
                     disabled={actingId === b.id}
@@ -563,6 +565,7 @@ export default function ClientBookings() {
                   </button>
                 </div>
               )}
+              
             </div>
           );
         })}
