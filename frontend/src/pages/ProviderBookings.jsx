@@ -1,4 +1,5 @@
 // frontend/src/pages/ProviderBookings.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -248,21 +249,33 @@ export default function ProviderBookings() {
       <div className="space-y-4">
         {list.map((b) => {
           const isIncoming = tab === "incoming";
+          const alreadyQuoted = Number(b?.provider_price) > 0;
+          const awaitingRequester = isIncoming && alreadyQuoted && String(b?.status) === "pending";
           return (
             <div key={b.id} className="rounded-xl border bg-white p-3">
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
                 needPriceForAccept={isIncoming}    // скрыть «Подтвердить» без цены
+                hideAcceptIfQuoted={awaitingRequester}   // уже отправили цену → ждём подтверждения
                 hideClientCancel={!isIncoming}      // <<< убираем верхний «Отмена» в «Мои бронирования услуг»
                 onAccept={accept}
                 onReject={reject}
                 onCancel={cancelOutgoing}
               />
 
-              {/* Входящие: моя форма согласования цены */}
-              {isIncoming && String(b.status) === "pending" && (
+              {/* Входящие: моя форма согласования цены (прячем после отправки предложения) */}
+              {isIncoming && String(b.status) === "pending" && !awaitingRequester && (
                 <PriceAgreementCard booking={b} onSent={load} />
+              )}
+
+              {/* Плашка «ожидание подтверждения» */}
+              {awaitingRequester && (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {t("bookings.waiting_for_requester", {
+                    defaultValue: "Предложение отправлено. Ожидаем подтверждения клиента/заявителя.",
+                  })}
+                </div>
               )}
 
               {/* Исходящие: предложение и действия */}
