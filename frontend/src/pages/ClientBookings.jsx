@@ -478,6 +478,17 @@ export default function ClientBookings() {
                       ) : null}
                     </div>
 
+                    {/* Чип «кем отменено/отклонено» */}
+                      {(["cancelled", "rejected"].includes(status)) && (
+                        <div className={cx("mt-2", compact ? "text-xs" : "text-sm")}>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 ring-1 ring-rose-200">
+                            {status === "cancelled"
+                              ? t("bookings.cancelled_by_you", { defaultValue: "Отменено: вами" })
+                              : t("bookings.rejected_by_provider", { defaultValue: "Отклонено: поставщиком услуги" })}
+                          </span>
+                        </div>
+                      )}
+
                     {/* ИМЯ → кликабельно + тип */}
                     <div className={cx("text-gray-900 font-semibold truncate", compact ? "text-sm" : "")}>
                       <a href={profileUrl} className="hover:underline">
@@ -554,27 +565,31 @@ export default function ClientBookings() {
                 </div>
               )}
 
-              {/* actions — только пока pending */}
-              {status === "pending" && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {Number(b?.provider_price) > 0 && (
-                    <button
-                      onClick={() => confirm(b)}
-                      disabled={actingId === b.id}
-                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-                    >
-                      {t("actions.confirm", { defaultValue: "Подтвердить" })}
-                    </button>
+               // действия — только пока pending
+                  {status === "pending" && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {/* показываем "Подтвердить" только когда поставщик прислал цену */}
+                      {Number.isFinite(Number(b?.provider_price)) && Number(b.provider_price) > 0 && (
+                        <button
+                          onClick={() => confirm(b)}
+                          disabled={actingId === b.id}
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                        >
+                          {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                        </button>
+                      )}
+                  
+                      {/* "Отклонить" остаётся всегда в pending */}
+                      <button
+                        onClick={() => reject(b)}
+                        disabled={actingId === b.id}
+                        className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60"
+                      >
+                        {t("actions.reject", { defaultValue: "Отклонить" })}
+                      </button>
+                    </div>
                   )}
-                  <button
-                    onClick={() => reject(b)}
-                    disabled={actingId === b.id}
-                    className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60"
-                  >
-                    {t("actions.reject", { defaultValue: "Отклонить" })}
-                  </button>
-                </div>
-              )}
+
               
             </div>
           );
