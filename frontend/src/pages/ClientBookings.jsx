@@ -544,7 +544,17 @@ export default function ClientBookings() {
 
               <AttachmentList items={b.attachments} />
 
-                            {/* actions — только пока pending */}
+              {/* pending без цены → информируем, что ждём предложение */}
+              {status === "pending" && !Number(b?.provider_price) && (
+                <div className={cx(
+                  "mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700",
+                  compact ? "text-xs" : "text-sm"
+                )}>
+                  Ожидаем предложение цены от поставщика
+                </div>
+              )}
+
+              {/* actions — только пока pending */}
               {status === "pending" && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {Number(b?.provider_price) > 0 && (
