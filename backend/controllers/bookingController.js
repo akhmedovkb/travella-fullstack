@@ -9,8 +9,8 @@ async function getExistingColumns(table, cols = []) {
     `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = ANY($2::text[])`,
     [table, cols]
   );
-  const set = new Set(q.rows.map(r => r.column_name));
-  return cols.reduce((acc, c) => (acc[c] = set.has(c), acc), {});
+  const set = new Set(q.rows.map((r) => r.column_name));
+  return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
 }
 
 const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
@@ -47,7 +47,6 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
   const list = toArray(ymdList).map(toISO).filter(Boolean);
   if (!list.length) return false;
 
-  // 1) напрямую дата в bookings.date
   const q1 = await pool.query(
     `
     SELECT 1
@@ -157,11 +156,10 @@ async function createBooking(req, res) {
     console.error("createBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
   }
-};
+}
 
-// ВХОДЯЩИЕ брони провайдера (мои услуги)
-//  брони поставщика (мои услуги)
-// ВХОДЯЩИЕ брони поставщика (мои услуги)
+/* ================= lists ================= */
+
 // ВХОДЯЩИЕ брони поставщика (мои услуги)
 async function getProviderBookings(req, res) {
   try {
@@ -174,6 +172,8 @@ async function getProviderBookings(req, res) {
       "requester_phone",
       "requester_telegram",
       "requester_email",
+      "cancelled_by",
+      "rejected_by",
     ]);
 
     const selectCurrency = cols.currency ? `b.currency` : `'USD'::text AS currency`;
@@ -190,10 +190,14 @@ async function getProviderBookings(req, res) {
          NULL::text AS requester_telegram,
          NULL::text AS requester_email`;
 
+    const selectCancelledBy = cols.cancelled_by ? `b.cancelled_by` : `NULL::text AS cancelled_by`;
+    const selectRejectedBy = cols.rejected_by ? `b.rejected_by` : `NULL::text AS rejected_by`;
+
     const sql = `
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
-        b.status, b.created_at, b.updated_at,
+        b.status, ${selectCancelledBy}, ${selectRejectedBy},
+        b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         ${selectCurrency},
@@ -250,59 +254,58 @@ async function getProviderBookings(req, res) {
 }
 
 // ИСХОДЯЩИЕ брони (я как провайдер бронирую чью-то услугу)
-function getProviderOutgoingBookings(req, res) {
+async function getProviderOutgoingBookings(req, res) {
   try {
     const providerId = req.user?.id;
+    const cols = await getExistingColumns("bookings", ["currency", "requester_provider_id", "cancelled_by", "rejected_by"]);
+    if (!cols.requester_provider_id) {
+      return res.json([]);
+    }
 
-    (async () => {
-      const cols = await getExistingColumns("bookings", ["currency", "requester_provider_id"]);
-      if (!cols.requester_provider_id) return res.json([]);
+    const currencySel = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const selectCancelledBy = cols.cancelled_by ? `b.cancelled_by` : `NULL::text AS cancelled_by`;
+    const selectRejectedBy = cols.rejected_by ? `b.rejected_by` : `NULL::text AS rejected_by`;
 
-      const currencySel = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const sql = `
+      SELECT
+        b.id, b.provider_id, b.service_id, b.client_id,
+        b.status, ${selectCancelledBy}, ${selectRejectedBy},
+        b.created_at, b.updated_at,
+        b.client_message, b.provider_note, b.provider_price,
+        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        ${currencySel},
+        b.requester_provider_id,
+        b.requester_name, b.requester_phone, b.requester_telegram, b.requester_email,
 
-      const sql = `
-        SELECT
-          b.id, b.provider_id, b.service_id, b.client_id,
-          b.status, b.created_at, b.updated_at,
-          b.client_message, b.provider_note, b.provider_price,
-          COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-          ${currencySel},
-          b.requester_provider_id,
-          b.requester_name, b.requester_phone, b.requester_telegram, b.requester_email,
-
-          COALESCE(
-            (SELECT array_agg(d.date::date ORDER BY d.date)
+        COALESCE(
+          (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d
-             WHERE d.booking_id = b.id),
-            CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
-          ) AS dates,
+            WHERE d.booking_id = b.id),
+          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+        ) AS dates,
 
-          s.title      AS service_title,
+        s.title      AS service_title,
 
-          /* поставщик услуги, к кому обращаемся */
-          p.name       AS provider_name,
-          p.type       AS provider_type,
-          p.phone      AS provider_phone,
-          p.address    AS provider_address,
-          p.social     AS provider_telegram,
+        /* поставщик услуги, к кому обращаемся */
+        p.name       AS provider_name,
+        p.type       AS provider_type,
+        p.phone      AS provider_phone,
+        p.address    AS provider_address,
+        p.social     AS provider_telegram,
 
-          /* фото поставщика для фронта в двух алиасах */
-          p.photo      AS provider_photo,
-          p.photo      AS provider_avatar_url
+        /* фото поставщика для фронта в двух алиасах */
+        p.photo      AS provider_photo,
+        p.photo      AS provider_avatar_url
 
-        FROM bookings b
-        LEFT JOIN services  s ON s.id = b.service_id
-        LEFT JOIN providers p ON p.id = b.provider_id
-        WHERE b.requester_provider_id = $1
-        ORDER BY b.created_at DESC NULLS LAST
-      `;
+      FROM bookings b
+      LEFT JOIN services  s ON s.id = b.service_id
+      LEFT JOIN providers p ON p.id = b.provider_id
+      WHERE b.requester_provider_id = $1
+      ORDER BY b.created_at DESC NULLS LAST
+    `;
 
-      const q = await pool.query(sql, [providerId]);
-      return res.json(q.rows);
-    })().catch((err) => {
-      console.error("getProviderOutgoingBookings error:", err);
-      return res.status(500).json({ message: "Ошибка сервера" });
-    });
+    const q = await pool.query(sql, [providerId]);
+    return res.json(q.rows);
   } catch (err) {
     console.error("getProviderOutgoingBookings error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -313,13 +316,16 @@ function getProviderOutgoingBookings(req, res) {
 const getMyBookings = async (req, res) => {
   try {
     const clientId = req.user?.id;
-    const cols = await getExistingColumns("bookings", ["currency"]);
+    const cols = await getExistingColumns("bookings", ["currency", "cancelled_by", "rejected_by"]);
     const currencySel = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const selectCancelledBy = cols.cancelled_by ? `b.cancelled_by` : `NULL::text AS cancelled_by`;
+    const selectRejectedBy = cols.rejected_by ? `b.rejected_by` : `NULL::text AS rejected_by`;
 
     const q = await pool.query(
       `
       SELECT
         b.id, b.service_id, b.provider_id, b.client_id, b.status,
+        ${selectCancelledBy}, ${selectRejectedBy},
         b.client_message,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
@@ -370,7 +376,7 @@ async function providerQuote(req, res) {
     const bookingId = Number(req.params.id);
     const providerId = req.user?.id;
     const price = Number(req.body?.price);
-    const note  = req.body?.note ?? null;
+    const note = req.body?.note ?? null;
     const currency = req.body?.currency ?? null;
 
     if (!Number.isFinite(bookingId) || bookingId <= 0) {
@@ -381,7 +387,7 @@ async function providerQuote(req, res) {
     }
 
     const cols = await getExistingColumns("bookings", ["currency"]);
-    const cur = cols.currency ? (currency || "USD") : null;
+    const cur = cols.currency ? currency || "USD" : null;
 
     // проверка принадлежности брони
     const qb = await pool.query(`SELECT provider_id, status FROM bookings WHERE id = $1`, [bookingId]);
