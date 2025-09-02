@@ -26,6 +26,18 @@ const buildProfileUrl = (kind, id) => {
   return `/profile/${kind}/${id}`;
 };
 
+// преобразует booking.attachments в массив [{url,name,type}]
+const toFiles = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  try {
+    const x = JSON.parse(val);
+    if (Array.isArray(x)) return x;
+    if (x && typeof x === "object") return [x];
+  } catch {}
+  return [];
+};
+
 
 function normalizeTg(v) {
   if (!v) return null;
@@ -258,6 +270,41 @@ const profileHref = useMemo(() => {
           ) : null}
         </div>
       </div>
+
+      {/* вложения (если есть), без заголовка */}
+        {toFiles(booking.attachments).length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {toFiles(booking.attachments).map((raw, i) => {
+              const f = typeof raw === "string" ? { url: raw } : (raw || {});
+              const url = makeAbsolute(f.url || f.src || f.href || "");
+              const name = f.name || f.filename || (url ? url.split("?")[0].split("/").pop() : "file");
+              if (!url) return null;
+              return isImg(url) ? (
+                <a
+                  key={i}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block h-20 w-28 overflow-hidden rounded border bg-gray-50"
+                  title={name}
+                >
+                  <img src={url} alt={name} className="h-full w-full object-cover" />
+                </a>
+              ) : (
+                <a
+                  key={i}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border bg-gray-50 px-2 py-1 text-sm hover:bg-gray-100"
+                >
+                  {name}
+                </a>
+              );
+            })}
+          </div>
+        ) : null}
+
 
       {/* действия */}
       {(canAccept || canReject || canCancel) ? (
