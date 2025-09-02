@@ -1,4 +1,3 @@
-// frontend/src/components/BookingRow.jsx
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -86,7 +85,7 @@ export default function BookingRow({
 }) {
   const { t } = useTranslation();
 
-  // Контрагент
+  // Контрагент (клиент или заявитель-провайдер)
   const counterpart = useMemo(() => {
     if (viewerRole === "provider") {
       const isRequestedByProvider = !!booking.requester_provider_id || !!booking.requester_name;
@@ -143,6 +142,26 @@ export default function BookingRow({
   }, [booking, viewerRole, t]);
 
   const statusStr = String(booking.status);
+
+  // Человеко-читаемая строка статуса для заголовка
+  const statusLabel = useMemo(() => {
+    if (statusStr === "rejected" && rejectedByLabel) {
+      return `${t("bookings.rejected_by", { defaultValue: "Отклонено" })}: ${rejectedByLabel}`;
+    }
+    if (statusStr === "cancelled" && cancelledByLabel) {
+      return `${t("bookings.cancelled_by", { defaultValue: "Отменено" })}: ${cancelledByLabel}`;
+    }
+    const map = {
+      pending: t("status.pending", { defaultValue: "pending" }),
+      confirmed: t("status.confirmed", { defaultValue: "confirmed" }),
+      active: t("status.active", { defaultValue: "active" }),
+      finished: t("status.finished", { defaultValue: "finished" }),
+      rejected: t("status.rejected", { defaultValue: "rejected" }),
+      cancelled: t("status.cancelled", { defaultValue: "cancelled" }),
+    };
+    return map[statusStr] || statusStr;
+  }, [statusStr, rejectedByLabel, cancelledByLabel, t]);
+
   const datesStr = (booking.dates || []).map((d) => String(d).slice(0, 10)).join(", ");
   const confirmedAt = statusStr === "confirmed" ? formatLocal(booking.updated_at) : null;
 
@@ -174,7 +193,7 @@ export default function BookingRow({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-gray-500">
-            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {statusStr}
+            #{booking.id} · {booking.service_title || t("common.service", { defaultValue: "услуга" })} · {statusLabel}
           </div>
 
           <div className="text-base">
@@ -216,25 +235,13 @@ export default function BookingRow({
             )}
           </div>
 
-          {/* подзаголовок */}
+          {/* Под заголовком: даты */}
           <div className="text-sm text-gray-500 mt-1">
             {t("bookings.booking_date", { defaultValue: "Дата бронирования" })}: {confirmedAt || "—"}
           </div>
           <div className="text-sm text-gray-500">
             {t("bookings.booked_dates", { defaultValue: "Бронированные даты" })}: {datesStr || "—"}
           </div>
-
-          {/* статусные подписи */}
-          {statusStr === "rejected" && rejectedByLabel && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">
-              {t("bookings.rejected_by", { defaultValue: "Отклонено" })}: {rejectedByLabel}
-            </div>
-          )}
-          {statusStr === "cancelled" && cancelledByLabel && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
-              {t("bookings.cancelled_by", { defaultValue: "Отменено" })}: {cancelledByLabel}
-            </div>
-          )}
         </div>
 
         {/* Кнопки действий справа */}
