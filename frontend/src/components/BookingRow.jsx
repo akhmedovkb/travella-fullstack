@@ -107,7 +107,12 @@ export default function BookingRow({
       const phone = isRequesterProvider ? booking.requester_phone : (booking.client_phone || booking.requester_phone);
       const tg = normalizeTg(isRequesterProvider ? booking.requester_telegram : (booking.client_social || booking.requester_telegram));
       const typeLbl = isRequesterProvider ? typeLabel(booking.requester_type || "agent", t) : null;
-      return { name, href, phone, tg, typeLbl, avatarName: name || "C" };
+           // фото клиента (или заявителя-провайдера, если когда-нибудь добавите)
+      const avatarUrl =
+        (!isRequesterProvider && (booking.client_avatar_url || booking.client_photo)) ||
+        (isRequesterProvider && (booking.requester_avatar_url || booking.requester_photo)) ||
+        null;
+      return { name, href, phone, tg, typeLbl, avatarUrl, avatarName: name || "C" };
     }
     // viewer as "client" — показываем поставщика
     const name = booking.provider_name || t("roles.provider", { defaultValue: "Поставщик" });
@@ -115,7 +120,9 @@ export default function BookingRow({
     const phone = booking.provider_phone || null;
     const tg = normalizeTg(booking.provider_social);
     const typeLbl = typeLabel(booking.provider_type, t);
-    return { name, href, phone, tg, typeLbl, avatarName: name || "P" };
+        // фото поставщика услуги
+    const avatarUrl = booking.provider_photo || booking.provider_avatar_url || null;
+    return { name, href, phone, tg, typeLbl, avatarUrl, avatarName: name || "P" };
   }, [booking, viewerRole, t]);
 
   const status = statusKey(booking.status);
@@ -157,8 +164,18 @@ export default function BookingRow({
       {/* header */}
       <div className="flex justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 shrink-0 rounded-full bg-indigo-600 text-white grid place-items-center">
-            <span className="font-semibold">{initials(cp.avatarName)}</span>
+                    <div className="w-10 h-10 shrink-0 rounded-full overflow-hidden bg-indigo-600 text-white grid place-items-center">
+            {cp.avatarUrl ? (
+              <img
+                src={cp.avatarUrl}
+                alt={cp.name || "avatar"}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="font-semibold">{initials(cp.avatarName)}</span>
+            )}
           </div>
           <div className="min-w-0">
             <div className="text-sm text-gray-500 truncate">
