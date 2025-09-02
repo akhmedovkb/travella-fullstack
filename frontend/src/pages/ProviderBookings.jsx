@@ -33,7 +33,13 @@ function PriceAgreementCard({ booking, onSent }) {
       price: Number(booking.provider_price),
       note: booking.provider_note,
       at: at
-        ? at.toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+        ? at.toLocaleString(undefined, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
         : null,
     };
   }, [booking?.provider_price, booking?.provider_note, booking?.updated_at]);
@@ -52,23 +58,37 @@ function PriceAgreementCard({ booking, onSent }) {
 
   const submit = async () => {
     setErr("");
-    if (!canSend) { setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" })); return; }
+    if (!canSend) {
+      setErr(t("bookings.price_invalid", { defaultValue: "Укажите корректную цену" }));
+      return;
+    }
     try {
       setBusy(true);
-      await axios.post(`${API_BASE}/api/bookings/${booking.id}/quote`,
-        { price: Number(priceNum), currency, note: note.trim() }, cfg());
-      setPriceRaw(""); setNote("");
+      await axios.post(
+        `${API_BASE}/api/bookings/${booking.id}/quote`,
+        { price: Number(priceNum), currency, note: note.trim() },
+        cfg()
+      );
+      setPriceRaw("");
+      setNote("");
       tSuccess(t("bookings.price_sent", { defaultValue: "Цена отправлена" }));
       onSent?.();
     } catch (e) {
-      tError(e?.response?.data?.message || t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" }));
-    } finally { setBusy(false); }
+      tError(
+        e?.response?.data?.message ||
+          t("bookings.price_send_error", { defaultValue: "Ошибка отправки цены" })
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="mt-4 rounded-xl border bg-white">
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="font-semibold text-gray-900">{t("bookings.price_agreement", { defaultValue: "Согласование цены" })}</div>
+        <div className="font-semibold text-gray-900">
+          {t("bookings.price_agreement", { defaultValue: "Согласование цены" })}
+        </div>
         <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
           {t("status.pending", { defaultValue: "ожидает" })}
         </span>
@@ -77,7 +97,9 @@ function PriceAgreementCard({ booking, onSent }) {
       {last && (
         <div className="px-4 pt-3 text-sm text-gray-700">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-            <span className="font-medium">{t("bookings.last_offer", { defaultValue: "Последнее предложение" })}:</span>
+            <span className="font-medium">
+              {t("bookings.last_offer", { defaultValue: "Последнее предложение" })}:
+            </span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">
               {fmt(last.price)} {booking.currency || "USD"}
             </span>
@@ -90,7 +112,9 @@ function PriceAgreementCard({ booking, onSent }) {
       <div className="px-4 pb-4 pt-3">
         <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
           <label>
-            <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.price", { defaultValue: "Цена" })}</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.price", { defaultValue: "Цена" })}
+            </span>
             <div className="flex h-11 items-center rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
               <div className="px-3 text-gray-500">💵</div>
               <input
@@ -104,25 +128,45 @@ function PriceAgreementCard({ booking, onSent }) {
           </label>
 
           <label>
-            <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.currency", { defaultValue: "Валюта" })}</span>
-            <select className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.currency", { defaultValue: "Валюта" })}
+            </span>
+            <select
+              className="h-11 w-full rounded-xl border bg-gray-50 px-3 outline-none"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </label>
 
           <label>
-            <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
+            </span>
             <input
               className="h-11 w-full rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
-              placeholder={t("bookings.comment_placeholder", { defaultValue: "Например: парковки и ожидание включены" })}
+              placeholder={t("bookings.comment_placeholder", {
+                defaultValue: "Например: парковки и ожидание включены",
+              })}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
           </label>
 
           <div className="flex items-end">
-            <button onClick={submit} disabled={!canSend} className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60">
-              {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.send_price", { defaultValue: "Отправить цену" })}
+            <button
+              onClick={submit}
+              disabled={!canSend}
+              className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60"
+            >
+              {busy
+                ? t("common.sending", { defaultValue: "Отправка…" })
+                : t("bookings.send_price", { defaultValue: "Отправить цену" })}
             </button>
           </div>
         </div>
@@ -137,10 +181,14 @@ function PriceAgreementCard({ booking, onSent }) {
 export default function ProviderBookings() {
   const { t } = useTranslation();
 
-  const [tab, setTab] = useState("incoming");
+  const [tab, setTab] = useState("incoming"); // incoming | outgoing
+  const [filter, setFilter] = useState("all"); // all | pending | confirmed | upcoming | rejected
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => { load(); }, []);
+  useEffect(() => { setFilter("all"); }, [tab]); // при смене вкладки сбрасываем фильтр
 
   const load = async () => {
     if (!getToken()) return;
@@ -157,8 +205,6 @@ export default function ProviderBookings() {
       setIncoming([]); setOutgoing([]);
     } finally { setLoading(false); }
   };
-
-  useEffect(() => { load(); }, []);
 
   const hasQuotedPrice = (b) => isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
 
@@ -199,14 +245,64 @@ export default function ProviderBookings() {
     } finally { await load(); window.dispatchEvent(new Event("provider:counts:refresh")); }
   };
 
-  const list = tab === "incoming" ? incoming : outgoing;
+  const baseList = tab === "incoming" ? incoming : outgoing;
+
+  // helpers для дат
+  const todayStart = useMemo(() => {
+    const d = new Date(); d.setHours(0,0,0,0); return d.getTime();
+  }, []);
+  const lastDateTs = (b) => {
+    const arr = Array.isArray(b?.dates) ? b.dates : [];
+    const ts = arr
+      .map((d) => {
+        const t = new Date(d).getTime();
+        return Number.isFinite(t) ? t : NaN;
+      })
+      .filter((x) => Number.isFinite(x));
+    return ts.length ? Math.max(...ts) : NaN;
+  };
+
+  const isPending = (b) => String(b.status) === "pending";
+  const isConfirmedLike = (b) => ["confirmed", "active"].includes(String(b.status));
+  const isRejectedLike = (b) => ["rejected", "cancelled"].includes(String(b.status));
+  const isUpcoming = (b) => {
+    if (!isConfirmedLike(b)) return false;
+    const ts = lastDateTs(b);
+    return Number.isFinite(ts) && ts >= todayStart;
+    // если дат нет — не считаем «предстоящим»
+  };
+
+  // счётчики для чипов
+  const counts = useMemo(() => {
+    const all = baseList.length;
+    let pending = 0, confirmed = 0, upcoming = 0, rejected = 0;
+    for (const b of baseList) {
+      if (isPending(b)) pending++;
+      if (isConfirmedLike(b)) confirmed++;
+      if (isUpcoming(b)) upcoming++;
+      if (isRejectedLike(b)) rejected++;
+    }
+    return { all, pending, confirmed, upcoming, rejected };
+  }, [baseList]);
+
+  // применяем выбранный фильтр
+  const filtered = useMemo(() => {
+    switch (filter) {
+      case "pending":   return baseList.filter(isPending);
+      case "confirmed": return baseList.filter(isConfirmedLike);
+      case "upcoming":  return baseList.filter(isUpcoming);
+      case "rejected":  return baseList.filter(isRejectedLike);
+      case "all":
+      default:          return baseList;
+    }
+  }, [baseList, filter]);
 
   const content = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!list.length) return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
+    if (!filtered.length) return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
     return (
       <div className="space-y-4">
-        {list.map((b) => {
+        {filtered.map((b) => {
           const isIncoming = tab === "incoming";
           const alreadyQuoted = Number(b?.provider_price) > 0;
           const awaitingRequester = isIncoming && alreadyQuoted && String(b?.status) === "pending";
@@ -214,19 +310,14 @@ export default function ProviderBookings() {
           // подписи "кем отклонено/отменено"
           let rejectedByLabel = null;
           let cancelledByLabel = null;
-
           if (String(b.status) === "rejected") {
             rejectedByLabel = isIncoming
               ? t("bookings.rejected_by_you", { defaultValue: "вами (поставщиком услуги)" })
               : t("bookings.rejected_by_provider", { defaultValue: "поставщиком услуги" });
           } else if (String(b.status) === "cancelled") {
-            if (isIncoming) {
-              // входящие: отменил клиент/заявитель (клиент или провайдер-заявитель)
-              cancelledByLabel = t("bookings.cancelled_by_client", { defaultValue: "клиентом/заявителем" });
-            } else {
-              // исходящие: отменил я как заявитель
-              cancelledByLabel = t("bookings.cancelled_by_you", { defaultValue: "вами (заявителем)" });
-            }
+            cancelledByLabel = isIncoming
+              ? t("bookings.cancelled_by_client", { defaultValue: "клиентом/заявителем" })
+              : t("bookings.cancelled_by_you", { defaultValue: "вами (заявителем)" });
           }
 
           return (
@@ -234,17 +325,17 @@ export default function ProviderBookings() {
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
-                needPriceForAccept={isIncoming}          // скрыть «Подтвердить» без цены
-                hideAcceptIfQuoted={awaitingRequester}   // уже отправили цену → ждём подтверждения
-                hideClientCancel={!isIncoming}           // убрать верхний «Отмена» в исходящих
-                rejectedByLabel={rejectedByLabel}        // КЕМ ОТКЛОНЕНО (для rejected)
-                cancelledByLabel={cancelledByLabel}      // КЕМ ОТМЕНЕНО (для cancelled)
+                needPriceForAccept={isIncoming}              // скрыть «Подтвердить» без цены
+                hideAcceptIfQuoted={awaitingRequester}       // уже отправили цену → ждём подтверждения
+                hideClientCancel={!isIncoming}               // убрать верхний «Отмена» в исходящих
+                rejectedByLabel={rejectedByLabel}            // кем отклонено
+                cancelledByLabel={cancelledByLabel}          // кем отменено
                 onAccept={accept}
                 onReject={reject}
                 onCancel={cancelOutgoing}
               />
 
-              {/* Входящие: моя форма согласования цены (прячем после оффера) */}
+              {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
               {isIncoming && String(b.status) === "pending" && !awaitingRequester && (
                 <PriceAgreementCard booking={b} onSent={load} />
               )}
@@ -257,67 +348,33 @@ export default function ProviderBookings() {
                   })}
                 </div>
               )}
-
-              {/* Исходящие: предложение и действия */}
-              {!isIncoming && (
-                <>
-                  {isFiniteNum(Number(b.provider_price)) && (
-                    <div className="mt-3">
-                      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1.5">
-                        <span className="font-medium">{t("bookings.provider_offer", { defaultValue: "Предложение поставщика" })}:</span>
-                        <b>{fmt(Number(b.provider_price))} {b.currency || "USD"}</b>
-                        {b.provider_note ? <span className="text-emerald-800/70">· {b.provider_note}</span> : null}
-                      </span>
-                    </div>
-                  )}
-
-                  {String(b.status) === "pending" && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        onClick={() => confirmOutgoing(b)}
-                        disabled={!isFiniteNum(Number(b.provider_price))}
-                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-                      >
-                        {t("actions.confirm", { defaultValue: "Подтвердить" })}
-                      </button>
-                      <button
-                        onClick={() => cancelOutgoing(b)}
-                        className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
-                      >
-                        {t("actions.cancel", { defaultValue: "Отмена" })}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           );
         })}
       </div>
     );
-  }, [list, loading, tab, t]);
-
-  const incomingCount = incoming.length;
-  const outgoingCount = outgoing.length;
+  }, [filtered, loading, tab, t]);
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}</h1>
+        <h1 className="text-2xl font-bold">
+          {t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}
+        </h1>
         <button onClick={load} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50">
           {t("common.refresh", { defaultValue: "Обновить" })}
         </button>
       </div>
 
       {/* Вкладки */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         <button
           onClick={() => setTab("incoming")}
           className={"rounded-full px-4 py-2 ring-1 " + (tab === "incoming" ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
         >
           {t("bookings.incoming", { defaultValue: "Бронирования моих услуг" })}
           <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "incoming" ? "bg-white/20" : "bg-gray-100")}>
-            {incomingCount}
+            {incoming.length}
           </span>
         </button>
 
@@ -327,9 +384,35 @@ export default function ProviderBookings() {
         >
           {t("bookings.outgoing", { defaultValue: "Мои бронирования услуг" })}
           <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "outgoing" ? "bg-white/20" : "bg-gray-100")}>
-            {outgoingCount}
+            {outgoing.length}
           </span>
         </button>
+      </div>
+
+      {/* Фильтры статуса (как у клиента) */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {[
+          { key: "all",       label: t("filter.all",        { defaultValue: "Все" }),         count: counts.all },
+        ].concat([
+          { key: "pending",   label: t("filter.pending",    { defaultValue: "Ожидают" }),     count: counts.pending },
+          { key: "confirmed", label: t("filter.confirmed",  { defaultValue: "Подтверждено" }),count: counts.confirmed },
+          { key: "upcoming",  label: t("filter.upcoming",   { defaultValue: "Предстоящие" }), count: counts.upcoming },
+          { key: "rejected",  label: t("filter.rejected",   { defaultValue: "Отклонено" }),   count: counts.rejected },
+        ]).map(({ key, label, count }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={
+              "rounded-full px-3 py-1.5 text-sm ring-1 " +
+              (filter === key ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")
+            }
+          >
+            {label}
+            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (filter === key ? "bg-white/20" : "bg-gray-100")}>
+              {count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {content}
