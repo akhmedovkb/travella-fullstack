@@ -7,9 +7,7 @@ import { tSuccess, tError, tInfo } from "../shared/toast";
 /* ========= helpers ========= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const getToken = () =>
-  localStorage.getItem("clientToken") ||
-  localStorage.getItem("token") ||
-  localStorage.getItem("providerToken");
+  localStorage.getItem("clientToken") || localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
@@ -80,7 +78,7 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     case "calendar":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
-          <path d="M7 2v3M17 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M7 2v3M17 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       );
     case "phone":
@@ -92,40 +90,34 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     case "tg":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="currentColor">
-          <path d="M9.5 15.3l-.2 3.2c.3 0 .5-.1.6-.3l1.5-1.4 3.1 2.2c.6.3 1 .1 1.1-.6l2-12c.2-.9-.3-1.3-1-1L3.8 9.9c-.9.3-.9.8-.2 1l3.8 1.2 8.8-5.5-6.4 6.5-.3 1.2Z"/>
+          <path d="M9.5 15.3l-.2 3.2c.3 0 .5-.1.6-.3l1.5-1.4 3.1 2.2c.6.3 1 .1 1.1-.6l2-12c.2-.9-.3-1.3-1-1L3.8 9.9c-.9.3-.9.8-.2 1l3.8 1.2 8.8-5.5-6.4 6.5-.3 1.2Z" />
         </svg>
       );
     case "refresh":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
-          <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8M20 8V3m0 5h-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      );
-    case "badge":
-      return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-          <path d="M12 2l2.39 4.84L20 8l-4 3.9L17 18l-5-2.6L7 18l1-6.1L4 8l5.61-1.16L12 2Z" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8M20 8V3m0 5h-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "compact":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
-          <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     case "pdf":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12V8l-4-6Z" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12V8l-4-6Z" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" />
           <path d="M9 15h1.5a2 2 0 1 0 0-4H9v4Zm5-4h2v4h-2Zm5 0h-1.5v4H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     case "search":
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     default:
@@ -133,22 +125,18 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
   }
 };
 
-// ✅ теперь бейдж принимает кастомный текст
+// бейдж со своим текстом при необходимости
 const StatusBadge = ({ status, text: override }) => {
   const s = statusKey(status);
   const map = {
-    pending:   { text: "ожидает",      cls: "bg-amber-50 text-amber-700 ring-amber-200" },
+    pending: { text: "ожидает", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
     confirmed: { text: "подтверждено", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    active:    { text: "активно",      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    rejected:  { text: "отклонено",    cls: "bg-rose-50 text-rose-700 ring-rose-200" },
-    cancelled: { text: "отменено",     cls: "bg-gray-100 text-gray-600 ring-gray-200" },
+    active: { text: "активно", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+    rejected: { text: "отклонено", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+    cancelled: { text: "отменено", cls: "bg-gray-100 text-gray-600 ring-gray-200" },
   };
   const { text, cls } = map[s] || { text: s, cls: "bg-gray-100 text-gray-700 ring-gray-200" };
-  return (
-    <span className={cx("inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1", cls)}>
-       {override || text}
-    </span>
-  );
+  return <span className={cx("inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1", cls)}>{override || text}</span>;
 };
 
 /* ==== тип поставщика: бейдж + нормализация ==== */
@@ -172,11 +160,7 @@ const ProviderTypeBadge = ({ type }) => {
     hotel: "bg-teal-50 text-teal-700 ring-teal-200",
     provider: "bg-gray-100 text-gray-700 ring-gray-200",
   };
-  return (
-    <span className={cx("ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", map[key])}>
-      {providerTypeLabel(key)}
-    </span>
-  );
+  return <span className={cx("ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", map[key])}>{providerTypeLabel(key)}</span>;
 };
 
 function AttachmentList({ items }) {
@@ -192,13 +176,7 @@ function AttachmentList({ items }) {
           const name = att.name || att.filename || url.split("?")[0].split("/").pop();
           if (!url) return null;
           return (
-            <a
-              key={i}
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="px-2 py-1 text-xs rounded-full border border-gray-200 bg-white hover:bg-gray-50"
-            >
+            <a key={i} href={url} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs rounded-full border border-gray-200 bg-white hover:bg-gray-50">
               {name || "файл"}
             </a>
           );
@@ -215,13 +193,13 @@ export default function ClientBookings() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
 
-  // фильтры/поиск/режим — оставляем 5
+  // фильтры/поиск/режим — 5 штук
   const FILTERS = [
-    { key: "all",       label: "Все" },
-    { key: "pending",   label: "Ожидают" },
+    { key: "all", label: "Все" },
+    { key: "pending", label: "Ожидают" },
     { key: "confirmed", label: "Подтверждено" }, // confirmed + active
-    { key: "upcoming",  label: "Предстоящие" },  // confirmed/active и дата в будущем/сегодня
-    { key: "rejected",  label: "Отклонено" },    // rejected + cancelled
+    { key: "upcoming", label: "Предстоящие" }, // confirmed/active и дата в будущем/сегодня
+    { key: "rejected", label: "Отклонено" }, // rejected + cancelled
   ];
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -282,7 +260,7 @@ export default function ClientBookings() {
     }
   };
 
-  // ===== counters + "upcoming" (объединяем статусы как выше)
+  // ===== counters + "upcoming"
   const counts = useMemo(() => {
     const c = { all: list.length, pending: 0, confirmed: 0, upcoming: 0, rejected: 0 };
     const todayYMD = toYMD(new Date().toISOString());
@@ -317,8 +295,7 @@ export default function ClientBookings() {
     const q = query.trim().toLowerCase();
     if (!q) return filteredByStatus;
     return filteredByStatus.filter((b) => {
-      const providerName =
-        b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "";
+      const providerName = b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "";
       const serviceTitle = b.service_title || b.service?.title || "";
       const note = b.provider_note || b.client_message || "";
       const s = statusLabel(b.status);
@@ -337,8 +314,7 @@ export default function ClientBookings() {
     const now = new Date().toLocaleString();
     const items = rows
       .map((b) => {
-        const provider =
-          b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "—";
+        const provider = b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle || "—";
         const title = b.service_title || b.service?.title || "Бронирование";
         const dates = formatDateRange(b.dates);
         const price = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : "—";
@@ -426,8 +402,7 @@ export default function ClientBookings() {
     return (
       <div className="space-y-4">
         {visibleList.map((b) => {
-          const providerName =
-            b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle;
+          const providerName = b.provider_name || b.provider?.name || b.service?.provider_name || b.service?.providerTitle;
           const providerPhone = b.provider_phone || b.provider?.phone;
           const providerTg = b.provider_telegram || b.provider?.telegram || b.provider?.social;
           const status = statusKey(b.status);
@@ -438,8 +413,7 @@ export default function ClientBookings() {
           // URL публичного профиля провайдера
           const profileUrl = `/profile/provider/${b.provider_id}`;
 
-          
-          // фото поставщика — расширили список полей и берём первое непустое
+          // фото поставщика — берём первое непустое поле из возможных источников
           const providerPhoto = [
             b.provider_avatar_url,
             b.provider_photo,
@@ -453,15 +427,13 @@ export default function ClientBookings() {
             b.service?.provider_avatar_url,
             b.service?.providerAvatar,
           ].find((x) => x && String(x).trim());
-       
-          // дата подтверждения (после бейджа)
-          const confirmedAt =
-            ["confirmed", "active"].includes(status) && b.updated_at ? formatDate(toYMD(b.updated_at)) : null;
 
-          // 👇 выводим кем отменено/отклонено — прямо в верхнем бейдже
+          // дата подтверждения (после бейджа)
+          const confirmedAt = ["confirmed", "active"].includes(status) && b.updated_at ? formatDate(toYMD(b.updated_at)) : null;
+
+          // кем отменено/отклонено — прямо в верхнем бейдже
           const statusTextOverride =
-            status === "cancelled" ? "Отменено: вами" :
-            status === "rejected"  ? "Отклонено: поставщиком услуги" : null;
+            status === "cancelled" ? "Отменено: вами" : status === "rejected" ? "Отклонено: поставщиком услуги" : null;
 
           return (
             <div key={b.id} className={cx("border rounded-2xl bg-white shadow-sm", compact ? "p-3" : "p-4")}>
@@ -510,11 +482,7 @@ export default function ClientBookings() {
                       {providerTg && (
                         <a
                           className="hover:underline inline-flex items-center gap-1"
-                          href={
-                            /^https?:\/\//i.test(providerTg)
-                              ? providerTg
-                              : `https://t.me/${String(providerTg).replace(/^@/, "")}`
-                          }
+                          href={/^https?:\/\//i.test(providerTg) ? providerTg : `https://t.me/${String(providerTg).replace(/^@/, "")}`}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -546,14 +514,13 @@ export default function ClientBookings() {
               <div className={cx("inline-flex items-center gap-2 text-gray-700 mt-3", compact ? "text-xs" : "text-sm")}>
                 <Icon name="calendar" className={compact ? "w-4 h-4" : "w-5 h-5"} />
                 <span className="font-medium">Даты забронированы:</span>
-                <span>{formatDateRange(b.dates) || "—"}</span>
+                <span>{dateText || "—"}</span>
               </div>
 
               {/* client message */}
               {b.client_message && (
                 <div className={cx("text-gray-700 mt-2", compact ? "text-xs" : "text-sm")}>
-                  <span className="text-gray-500">{t("common.comment", { defaultValue: "Комментарий" })}:</span>{" "}
-                  {b.client_message}
+                  <span className="text-gray-500">{t("common.comment", { defaultValue: "Комментарий" })}:</span> {b.client_message}
                 </div>
               )}
 
@@ -561,12 +528,7 @@ export default function ClientBookings() {
 
               {/* pending без цены → информируем, что ждём предложение */}
               {status === "pending" && !hasPrice && (
-                <div
-                  className={cx(
-                    "mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700",
-                    compact ? "text-xs" : "text-sm"
-                  )}
-                >
+                <div className={cx("mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700", compact ? "text-xs" : "text-sm")}>
                   Ожидаем предложение цены от поставщика
                 </div>
               )}
@@ -575,19 +537,11 @@ export default function ClientBookings() {
               {status === "pending" && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {hasPrice && (
-                    <button
-                      onClick={() => confirm(b)}
-                      disabled={actingId === b.id}
-                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-                    >
+                    <button onClick={() => confirm(b)} disabled={actingId === b.id} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60">
                       {t("actions.confirm", { defaultValue: "Подтвердить" })}
                     </button>
                   )}
-                  <button
-                    onClick={() => reject(b)}
-                    disabled={actingId === b.id}
-                    className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60"
-                  >
+                  <button onClick={() => reject(b)} disabled={actingId === b.id} className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60">
                     {t("actions.reject", { defaultValue: "Отклонить" })}
                   </button>
                 </div>
@@ -603,9 +557,7 @@ export default function ClientBookings() {
     <div>
       {/* ШАПКА */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">
-          {t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}
-        </h2>
+        <h2 className="text-xl font-semibold">{t("tabs.my_bookings", { defaultValue: "Мои бронирования" })}</h2>
 
         <div className="flex items-center gap-2 w/full sm:w-auto">
           {/* Поиск */}
@@ -619,11 +571,7 @@ export default function ClientBookings() {
             />
           </div>
 
-          <button
-            onClick={load}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
-            title="Обновить"
-          >
+          <button onClick={load} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50" title="Обновить">
             <Icon name="refresh" className="w-4 h-4" />
             <span className="hidden sm:inline">Обновить</span>
           </button>
@@ -635,11 +583,7 @@ export default function ClientBookings() {
             <Icon name="compact" className="w-4 h-4" />
             <span className="hidden sm:inline">{compact ? "Обычный" : "Компактный"}</span>
           </button>
-          <button
-            onClick={exportPdf}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
-            title="Экспорт в PDF"
-          >
+          <button onClick={exportPdf} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50" title="Экспорт в PDF">
             <Icon name="pdf" className="w-4 h-4" />
             <span className="hidden sm:inline">PDF</span>
           </button>
@@ -651,7 +595,7 @@ export default function ClientBookings() {
         <div className="flex gap-2 min-w-max">
           {FILTERS.map((f) => {
             const active = filter === f.key;
-            const counter = f.key === "all" ? counts.all : (counts[f.key] || 0);
+            const counter = f.key === "all" ? counts.all : counts[f.key] || 0;
             return (
               <button
                 key={f.key}
