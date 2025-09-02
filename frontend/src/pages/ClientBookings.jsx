@@ -163,29 +163,6 @@ const ProviderTypeBadge = ({ type }) => {
   return <span className={cx("ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", map[key])}>{providerTypeLabel(key)}</span>;
 };
 
-{/* function AttachmentList({ items }) {
-  const files = Array.isArray(items) ? items : items ? [items] : [];
-  if (!files.length) return null;
-  return (
-    <div className="mt-3">
-      <div className="text-xs text-gray-500 mb-1">Вложения</div>
-      <div className="flex flex-wrap gap-2">
-        {files.map((raw, i) => {
-          const att = typeof raw === "string" ? { url: raw } : raw || {};
-          const url = att.url || att.href || att.dataUrl || "";
-          const name = att.name || att.filename || url.split("?")[0].split("/").pop();
-          if (!url) return null;
-          return (
-            <a key={i} href={url} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs rounded-full border border-gray-200 bg-white hover:bg-gray-50">
-              {name || "файл"}
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
-} */}
-
 /* ========= основная страница ========= */
 export default function ClientBookings() {
   const { t } = useTranslation();
@@ -523,8 +500,6 @@ export default function ClientBookings() {
                   <span className="text-gray-500">{t("common.comment", { defaultValue: "Комментарий" })}:</span> {b.client_message}
                 </div>
               )}
-
-              // <AttachmentList items={b.attachments} />
 
               {/* pending без цены → информируем, что ждём предложение */}
               {status === "pending" && !hasPrice && (
