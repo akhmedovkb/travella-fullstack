@@ -3,6 +3,23 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 /* ================= helpers ================= */
+
+// Бумажный самолетик (телеграм)
+const TelegramIcon = ({ className = "inline-block w-4 h-4 mr-1 align-[-1px]" }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+  >
+    {/* перо из Feather (paper-plane / send) */}
+    <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+
 function normalizeTg(v) {
   if (!v) return null;
   const s = String(v).trim();
@@ -177,14 +194,14 @@ export default function BookingRow({
               <a className="hover:underline" href={`tel:${counterpart.phone}`}>📞 {counterpart.phone}</a>
             ) : null}
             {counterpart.telegram ? (
-              counterpart.telegram.href ? (
-                <a className="hover:underline" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
-                  ✈️ {counterpart.telegram.label}
-                </a>
-              ) : (
-                <span>✈️ {counterpart.telegram.label}</span>
-              )
-            ) : null}
+                counterpart.telegram.href ? (
+                  <a className="hover:underline" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
+                    <TelegramIcon /> {counterpart.telegram.label}
+                  </a>
+                ) : (
+                  <span><TelegramIcon /> {counterpart.telegram.label}</span>
+                )
+              ) : null}
           </div>
 
           {/* даты */}
