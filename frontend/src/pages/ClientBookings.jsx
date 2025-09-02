@@ -13,8 +13,7 @@ const getToken = () =>
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
-const fmt = (n) =>
-  isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "";
+const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "");
 
 /** загрузчик */
 async function fetchMyBookings() {
@@ -134,19 +133,20 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
   }
 };
 
-const StatusBadge = ({ status }) => {
+// ✅ теперь бейдж принимает кастомный текст
+const StatusBadge = ({ status, text: override }) => {
   const s = statusKey(status);
   const map = {
-    pending: { text: "ожидает", cls: "bg-amber-50 text-amber-700 ring-amber-200" },
+    pending:   { text: "ожидает",      cls: "bg-amber-50 text-amber-700 ring-amber-200" },
     confirmed: { text: "подтверждено", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    active: { text: "активно", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-    rejected: { text: "отклонено", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
-    cancelled: { text: "отменено", cls: "bg-gray-100 text-gray-600 ring-gray-200" },
+    active:    { text: "активно",      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+    rejected:  { text: "отклонено",    cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+    cancelled: { text: "отменено",     cls: "bg-gray-100 text-gray-600 ring-gray-200" },
   };
   const { text, cls } = map[s] || { text: s, cls: "bg-gray-100 text-gray-700 ring-gray-200" };
   return (
     <span className={cx("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ring-1", cls)}>
-      <Icon name="badge" className="w-3.5 h-3.5" /> {text}
+      <Icon name="badge" className="w-3.5 h-3.5" /> {override || text}
     </span>
   );
 };
@@ -215,15 +215,13 @@ export default function ClientBookings() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
 
-  // фильтры/поиск/режим
+  // фильтры/поиск/режим — оставляем 5
   const FILTERS = [
-    { key: "all", label: "Все" },
-    { key: "pending", label: "Ожидают" },
-    { key: "confirmed", label: "Подтверждено" },
-    { key: "active", label: "Активные" },
-    { key: "upcoming", label: "Предстоящие" }, // NEW
-    { key: "rejected", label: "Отклонено" },
-    { key: "cancelled", label: "Отменено" },
+    { key: "all",       label: "Все" },
+    { key: "pending",   label: "Ожидают" },
+    { key: "confirmed", label: "Подтверждено" }, // confirmed + active
+    { key: "upcoming",  label: "Предстоящие" },  // confirmed/active и дата в будущем/сегодня
+    { key: "rejected",  label: "Отклонено" },    // rejected + cancelled
   ];
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -284,15 +282,17 @@ export default function ClientBookings() {
     }
   };
 
-  // counters + "upcoming"
+  // ===== counters + "upcoming" (объединяем статусы как выше)
   const counts = useMemo(() => {
-    const c = { all: list.length, upcoming: 0 };
+    const c = { all: list.length, pending: 0, confirmed: 0, upcoming: 0, rejected: 0 };
     const todayYMD = toYMD(new Date().toISOString());
     for (const b of list) {
-      const k = statusKey(b.status);
-      c[k] = (c[k] || 0) + 1;
+      const s = statusKey(b.status);
+      if (s === "pending") c.pending++;
+      if (s === "confirmed" || s === "active") c.confirmed++;
+      if (s === "rejected" || s === "cancelled") c.rejected++;
       const last = maxDateYMD(b.dates);
-      if (last && last >= todayYMD) c.upcoming += 1;
+      if ((s === "confirmed" || s === "active") && last && last >= todayYMD) c.upcoming++;
     }
     return c;
   }, [list]);
@@ -300,12 +300,16 @@ export default function ClientBookings() {
   const filteredByStatus = useMemo(() => {
     const todayYMD = toYMD(new Date().toISOString());
     return list.filter((b) => {
+      const s = statusKey(b.status);
       if (filter === "all") return true;
+      if (filter === "pending") return s === "pending";
+      if (filter === "confirmed") return s === "confirmed" || s === "active";
+      if (filter === "rejected") return s === "rejected" || s === "cancelled";
       if (filter === "upcoming") {
         const last = maxDateYMD(b.dates);
-        return last && last >= todayYMD;
+        return (s === "confirmed" || s === "active") && last && last >= todayYMD;
       }
-      return statusKey(b.status) === filter;
+      return true;
     });
   }, [list, filter]);
 
@@ -417,11 +421,7 @@ export default function ClientBookings() {
       );
     }
     if (!visibleList.length) {
-      return (
-        <div className="text-gray-500">
-          {t("bookings.empty", { defaultValue: "Пока нет бронирований." })}
-        </div>
-      );
+      return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
     }
     return (
       <div className="space-y-4">
@@ -432,7 +432,8 @@ export default function ClientBookings() {
           const providerTg = b.provider_telegram || b.provider?.telegram || b.provider?.social;
           const status = statusKey(b.status);
           const dateText = formatDateRange(b.dates);
-          const lastOffer = b.provider_price ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
+          const hasPrice = isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
+          const lastOffer = hasPrice ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}` : null;
 
           // URL публичного профиля провайдера
           const profileUrl = `/profile/provider/${b.provider_id}`;
@@ -442,9 +443,12 @@ export default function ClientBookings() {
 
           // дата подтверждения (после бейджа)
           const confirmedAt =
-            ["confirmed", "active"].includes(status) && b.updated_at
-              ? formatDate(toYMD(b.updated_at))
-              : null;
+            ["confirmed", "active"].includes(status) && b.updated_at ? formatDate(toYMD(b.updated_at)) : null;
+
+          // 👇 выводим кем отменено/отклонено — прямо в верхнем бейдже
+          const statusTextOverride =
+            status === "cancelled" ? "Отменено: вами" :
+            status === "rejected"  ? "Отклонено: поставщиком услуги" : null;
 
           return (
             <div key={b.id} className={cx("border rounded-2xl bg-white shadow-sm", compact ? "p-3" : "p-4")}>
@@ -472,22 +476,9 @@ export default function ClientBookings() {
                   <div className="min-w-0">
                     <div className={cx("text-gray-500 truncate", compact ? "text-xs" : "text-sm")}>
                       #{b.id} · {b.service_title || b.service?.title || t("booking.title", { defaultValue: "Бронирование" })} ·{" "}
-                      <StatusBadge status={status} />
-                      {confirmedAt ? (
-                        <span className="ml-2 text-gray-500">{confirmedAt}</span>
-                      ) : null}
+                      <StatusBadge status={status} text={statusTextOverride || undefined} />
+                      {confirmedAt ? <span className="ml-2 text-gray-500">{confirmedAt}</span> : null}
                     </div>
-
-                    {/* Чип «кем отменено/отклонено» */}
-                      {(["cancelled", "rejected"].includes(status)) && (
-                        <div className={cx("mt-2", compact ? "text-xs" : "text-sm")}>
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 ring-1 ring-rose-200">
-                            {status === "cancelled"
-                              ? t("bookings.cancelled_by_you", { defaultValue: "Отменено: вами" })
-                              : t("bookings.rejected_by_provider", { defaultValue: "Отклонено: поставщиком услуги" })}
-                          </span>
-                        </div>
-                      )}
 
                     {/* ИМЯ → кликабельно + тип */}
                     <div className={cx("text-gray-900 font-semibold truncate", compact ? "text-sm" : "")}>
@@ -542,7 +533,7 @@ export default function ClientBookings() {
               <div className={cx("inline-flex items-center gap-2 text-gray-700 mt-3", compact ? "text-xs" : "text-sm")}>
                 <Icon name="calendar" className={compact ? "w-4 h-4" : "w-5 h-5"} />
                 <span className="font-medium">Даты забронированы:</span>
-                <span>{dateText || "—"}</span>
+                <span>{formatDateRange(b.dates) || "—"}</span>
               </div>
 
               {/* client message */}
@@ -556,41 +547,38 @@ export default function ClientBookings() {
               <AttachmentList items={b.attachments} />
 
               {/* pending без цены → информируем, что ждём предложение */}
-              {status === "pending" && !Number(b?.provider_price) && (
-                <div className={cx(
-                  "mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700",
-                  compact ? "text-xs" : "text-sm"
-                )}>
+              {status === "pending" && !hasPrice && (
+                <div
+                  className={cx(
+                    "mt-3 px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700",
+                    compact ? "text-xs" : "text-sm"
+                  )}
+                >
                   Ожидаем предложение цены от поставщика
                 </div>
               )}
 
-              {/* действия — только пока pending */}
-                  {status === "pending" && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {/* показываем "Подтвердить" только когда поставщик прислал цену */}
-                      {Number.isFinite(Number(b?.provider_price)) && Number(b.provider_price) > 0 && (
-                        <button
-                          onClick={() => confirm(b)}
-                          disabled={actingId === b.id}
-                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
-                        >
-                          {t("actions.confirm", { defaultValue: "Подтвердить" })}
-                        </button>
-                      )}
-                  
-                      {/* "Отклонить" остаётся всегда в pending */}
-                      <button
-                        onClick={() => reject(b)}
-                        disabled={actingId === b.id}
-                        className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60"
-                      >
-                        {t("actions.reject", { defaultValue: "Отклонить" })}
-                      </button>
-                    </div>
+              {/* actions — только пока pending */}
+              {status === "pending" && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {hasPrice && (
+                    <button
+                      onClick={() => confirm(b)}
+                      disabled={actingId === b.id}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                    >
+                      {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                    </button>
                   )}
-
-              
+                  <button
+                    onClick={() => reject(b)}
+                    disabled={actingId === b.id}
+                    className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-60"
+                  >
+                    {t("actions.reject", { defaultValue: "Отклонить" })}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -657,9 +645,7 @@ export default function ClientBookings() {
                 onClick={() => setFilter(f.key)}
                 className={cx(
                   "px-3 py-1.5 rounded-full text-sm ring-1 transition whitespace-nowrap",
-                  active
-                    ? "bg-indigo-600 text-white ring-indigo-600"
-                    : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
+                  active ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
                 )}
               >
                 {f.label}
