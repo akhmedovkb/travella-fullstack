@@ -565,7 +565,7 @@ export default function ClientBookings() {
                 </div>
               )}
 
-               // действия — только пока pending
+              {/* действия — только пока pending */}
                   {status === "pending" && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {/* показываем "Подтвердить" только когда поставщик прислал цену */}
