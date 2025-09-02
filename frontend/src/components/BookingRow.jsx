@@ -21,11 +21,11 @@ const TelegramIcon = ({ className = "inline-block w-4 h-4 mr-1 align-[-1px]" }) 
 
 // базовый конструктор ссылки на профиль
 const buildProfileUrl = (kind, id) => {
-  // при необходимости поменяй сегменты 'provider' / 'client' на свои
-  const map = { provider: "providers", client: "clients" }; 
   if (!id) return null;
-  return `/${map[kind]}/${id}`;
+  // kind: "provider" | "client"
+  return `/profile/${kind}/${id}`;
 };
+
 
 function normalizeTg(v) {
   if (!v) return null;
