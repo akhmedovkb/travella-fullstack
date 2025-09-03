@@ -295,6 +295,14 @@
   "flight_details": "Детали рейса",
   "flight_type": "Тип перелёта",
 
+  "filter": {
+    "all": "Все",
+    "pending": "Ожидают",
+    "confirmed": "Подтверждено",
+    "upcoming": "Предстоящие",
+    "rejected": "Отклонено"
+  },
+
   "food": "Питание",
   "food_options": {
     "ai": "Всё включено",
