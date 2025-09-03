@@ -1,6 +1,7 @@
 // frontend/src/components/BookingRow.jsx
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 /* ================= helpers ================= */
 
@@ -240,15 +241,10 @@ const profileHref = useMemo(() => {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-                      {profileHref ? (
-            <a
-              href={profileHref}
-              className="truncate font-semibold hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {counterpart.title}
-            </a>
+            {profileHref ? (
+              <Link to={profileHref} className="truncate font-semibold hover:underline">
+                {counterpart.title}
+              </Link>
             ) : (
               <div className="truncate font-semibold">{counterpart.title}</div>
             )}
