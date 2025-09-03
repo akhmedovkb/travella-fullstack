@@ -301,8 +301,20 @@ const profileHref = useMemo(() => {
               const f = typeof raw === "string" ? { url: raw } : (raw || {});
               const url = makeAbsolute(f.url || f.src || f.href || "");
               const name = f.name || f.filename || (url ? url.split("?")[0].split("/").pop() : "file");
-              if (!url) return null;
-              return isImg(url) ? (
+                    // NEW: если url нет — просто показываем бейдж с названием
+                  if (!url) {
+                    const label = name || String(f.url || f.src || f.href || "file");
+                    return (
+                      <span
+                        key={i}
+                        className="rounded border bg-gray-50 px-2 py-1 text-sm"
+                        title={label}
+                      >
+                        {label}
+                      </span>
+                    );
+                  }
+                  return isImg(url) ? (
                 <a
                   key={i}
                   href={url}
