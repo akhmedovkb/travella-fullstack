@@ -25,6 +25,19 @@
     "title": "Bron"
   },
   "bookings": {
+    "price_agreement": "Narxni kelishish",
+    "last_offer": "Oxirgi taklif",
+    "price": "Narx",
+    "currency": "Valyuta",
+    "comment_optional": "Izoh (majburiy emas)",
+    "price_placeholder": "Mas., 120",
+    "comment_placeholder": "Masalan: to'xtash joyi va kutish kiritilgan",
+    "send_price": "Narxni yuborish",
+
+    "price_invalid": "To'g'ri narx kiriting",
+    "price_sent": "Narx yuborildi",
+    "price_send_error": "Narxni yuborishda xatolik",
+    
     "client_comment": "Izoh:",
     "empty": "Hozircha bronlar yo‘q.",
     "filters": {
