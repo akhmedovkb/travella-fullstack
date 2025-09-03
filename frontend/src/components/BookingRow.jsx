@@ -31,6 +31,8 @@ const buildProfileUrl = (kind, id) => {
 const toFiles = (val) => {
   if (!val) return [];
   if (Array.isArray(val)) return val;
+  // NEW: одно значение уже объектом → упакуем в массив
+  if (typeof val === "object") return [val];
   try {
     const x = JSON.parse(val);
     if (Array.isArray(x)) return x;
