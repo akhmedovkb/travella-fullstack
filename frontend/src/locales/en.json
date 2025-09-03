@@ -86,7 +86,7 @@
 
     "titles": {
         "provider" : "Bookings (Provider)",
-    }
+    },
     
     "types": {
       "guide": "Guide",
