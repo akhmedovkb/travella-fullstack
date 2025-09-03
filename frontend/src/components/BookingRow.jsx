@@ -178,34 +178,26 @@ export default function BookingRow({
   
   
 // статусы броней - Подменяем подпись статуса с учётом роли зрителя и того, кем выполнено действие
-const statusTextKey = useMemo(() => {
+const statusText = React.useMemo(() => {
   const s = String(booking?.status || "").toLowerCase();
 
+  // Отклонено: у нас отклоняет только поставщик услуги
   if (s === "rejected") {
-    const by = String(booking?.rejected_by || "").toLowerCase();
-    if ((viewerRole === "provider" && by === "provider") || (viewerRole === "client" && by === "client"))
-      return "bookings.status_by.rejected.you";
-    if (by === "provider")  return "bookings.status_by.rejected.provider";
-    if (by === "requester") return "bookings.status_by.rejected.requester";
-    if (by === "client")    return "bookings.status_by.rejected.client";
-    // fallback на общее слово "отклонено"
-    return "bookings.status.rejected";
+    return viewerRole === "provider"
+      ? t("bookings.status_by.rejected.you")        // «Отклонено: вами»
+      : t("bookings.status_by.rejected.provider");  // «Отклонено: поставщиком услуги»
   }
 
+  // Отменено: клиент (в т.ч. заявитель-провайдер) может отменить сам
   if (s === "cancelled") {
-    const by = String(booking?.cancelled_by || "").toLowerCase();
-    if ((viewerRole === "provider" && by === "provider") || (viewerRole === "client" && by === "client"))
-      return "bookings.status_by.cancelled.you";
-    if (by === "provider")  return "bookings.status_by.cancelled.provider";
-    if (by === "requester") return "bookings.status_by.cancelled.requester";
-    if (by === "client")    return "bookings.status_by.cancelled.client";
-    return "bookings.status.cancelled";
+    return viewerRole === "provider"
+      ? t("bookings.status_by.cancelled.client")    // «Отменено: клиентом»
+      : t("bookings.status_by.cancelled.you");      // «Отменено: вами»
   }
 
-  // base statuses через словарь status.*
-  return `bookings.status.${s}`;
-}, [booking, viewerRole]);
-
+  // Базовые статусы
+  return t(`bookings.status.${s}`);                  // pending/confirmed/active
+}, [booking?.status, viewerRole, t]);
 
 
     // Куда вести по клику на имени (профиль кого)
@@ -268,7 +260,7 @@ const profileHref = useMemo(() => {
         {booking.status ? (
           <StatusPill
             status={booking.status}
-            text={statusTextKey ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
+            text={statusText ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
           />
         ) : null}
 
