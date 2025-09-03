@@ -36,8 +36,8 @@
     "item": "Bron",
     "refresh": "Yangilash",
     "tabs": {
-      "incomingOfMine": "Mening xizmatlarimga bronlar",
-      "myOutgoing": "Men qilgan bronlar",
+      "incoming": "Mening xizmatlarimga bronlar",
+      "outgoing": "Men qilgan bronlar",
       "all": "Hammasi",
       "pending": "Kutilmoqda",
       "confirmed": "Tasdiqlandi",
