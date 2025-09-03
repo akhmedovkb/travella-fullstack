@@ -695,6 +695,13 @@
     "favorite_remove": "Remove from favorites"
   },
 
+  "types": {
+    "guide": "Guide",
+    "transport": "Transport",
+    "agent": "Travel agent",
+    "hotel": "Hotel"
+  },
+
   "gross_price": "Client price (gross)",
   "expired": "Expired",
 
