@@ -41,6 +41,40 @@ const toFiles = (val) => {
   return [];
 };
 
+// из "сырого" элемента формируем { url, name } с догадками про /uploads
+const resolveFile = (raw) => {
+  const f = typeof raw === "string" ? { url: raw } : (raw || {});
+  const uploadsPath =
+    (import.meta && import.meta.env && import.meta.env.VITE_UPLOADS_PUBLIC_PATH) || "/uploads";
+
+  let url =
+    f.url || f.href || f.src || f.path || f.dataUrl || f.downloadUrl || "";
+  let name = f.name || f.filename || "";
+
+  // если прилетела просто строка-имя (без / и без протокола) — считаем это именем файла
+  const looksLikeBareName = (s) =>
+    typeof s === "string" &&
+    !/^https?:\/\//i.test(s) &&
+    !/^data:/i.test(s) &&
+    !s.startsWith("/") &&
+    !s.includes("/");
+
+  if (!url && name) {
+    // нет url, но есть имя -> пробуем /uploads/<name>
+    url = `${uploadsPath}/${name}`;
+  } else if (looksLikeBareName(url)) {
+    // url — это на самом деле просто имя файла
+    name = name || url;
+    url = `${uploadsPath}/${url}`;
+  }
+
+  // финальный абсолютный URL (добавит VITE_API_BASE_URL при необходимости)
+  const abs = url ? makeAbsolute(url) : "";
+  const finalName =
+    name || (abs ? abs.split("?")[0].split("/").pop() : "file");
+  return { url: abs, name: finalName };
+};
+
 // СТАТУСЫ "confirmed", "Отклонено: поставщиком услуги", "Отменено: вами"
 const statusKey = (s) => String(s || "").toLowerCase();
 const StatusPill = ({ status, text, className = "" }) => {
@@ -298,10 +332,7 @@ const profileHref = useMemo(() => {
         {toFiles(booking.attachments).length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {toFiles(booking.attachments).map((raw, i) => {
-              const f = typeof raw === "string" ? { url: raw } : (raw || {});
-              const url = makeAbsolute(f.url || f.src || f.href || "");
-              const name = f.name || f.filename || (url ? url.split("?")[0].split("/").pop() : "file");
-                    // NEW: если url нет — просто показываем бейдж с названием
+              const { url, name } = resolveFile(raw);
                   if (!url) {
                     const label = name || String(f.url || f.src || f.href || "file");
                     return (
