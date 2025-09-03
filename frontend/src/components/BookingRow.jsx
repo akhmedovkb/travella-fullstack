@@ -179,8 +179,7 @@ export default function BookingRow({
 const statusTextOverride = useMemo(() => {
   const s = statusKey(booking?.status);
 
-  // Кто бы ни смотрел – отклонение всегда со стороны поставщика услуги
-  if (s === "rejected") return "Отклонено: поставщиком услуги";
+  
 
   // Для отмененных — показываем "кем", если знаем, иначе по роли зрителя
   if (s === "cancelled") {
