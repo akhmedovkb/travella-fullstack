@@ -24,7 +24,49 @@
   },
   "bookings": {
     "empty": "Hozircha bronlar yo‘q.",
-    "item": "Bron"
+    "item": "Bron",
+    "tabs": {
+      "incomingOfMine": "Mening xizmatlarimga bronlar",
+      "myOutgoing": "Men qilgan bronlar",
+      "all": "Hammasi",
+      "pending": "Kutilmoqda",
+      "confirmed": "Tasdiqlandi",
+      "upcoming": "Yaqqin",
+      "rejected": "Rad etilgan"
+    },
+    "status": {
+      "pending": "kutilmoqda",
+      "confirmed": "tasdiqlandi",
+      "active": "faol",
+      "rejected": "rad etilgan",
+      "cancelled": "bekor qilindi"
+    },
+    "status_by": {
+      "rejected": {
+        "you": "Rad etildi: siz tomondan",
+        "provider": "Rad etildi: provayder",
+        "requester": "Rad etildi: arizachi",
+        "client": "Rad etildi: mijoz"
+      },
+      "cancelled": {
+        "you": "Bekor qilindi: siz tomondan",
+        "provider": "Bekor qilindi: provayder",
+        "requester": "Bekor qilindi: arizachi",
+        "client": "Bekor qilindi: mijoz"
+      }
+    },
+    "labels": { "client_comment": "Izoh:" },
+    "types": {
+      "guide": "Gid",
+      "transport": "Transport",
+      "agent": "Turoperator",
+      "hotel": "Mehmonxona"
+    },
+    "actions": {
+      "confirm": "Tasdiqlash",
+      "reject": "Rad etish",
+      "cancel": "Bekor qilish"
+    }
   },
 
   "border_transfer": "Chegara transferi",
