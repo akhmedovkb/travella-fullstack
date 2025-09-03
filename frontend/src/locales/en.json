@@ -70,7 +70,8 @@
       "outgoing": "My service bookings"
      },
       
-      "title_provider": "Bookings (Provider)",
+      "titles": {
+        "provider" : "Bookings (Provider)",
       
       "cancelled": {
         "you": "Cancelled: by you",
