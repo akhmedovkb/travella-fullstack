@@ -45,6 +45,11 @@
       "upcoming": "Upcoming",
       "rejected": "Rejected"
     },
+
+    "incomingOfMine": "My services bookings",
+    "myOutgoing": "My booked services",
+    "incoming": " My services bookings",
+    "outgoing": "My booked services",
     "refresh": "Refresh",
     "status": {
       "pending": "pending",
