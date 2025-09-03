@@ -311,10 +311,12 @@ async function getProviderOutgoingBookings(req, res) {
         ) AS dates,
         s.title AS service_title,
         p.name    AS provider_name,
+        p.photo   AS provider_photo,
+        p.photo   AS provider_avatar_url,
         p.type    AS provider_type,
         p.phone   AS provider_phone,
-        p.address AS provider_address,
-        p.social  AS provider_telegram
+        p.address AS provider_address,        
+        p.social  AS provider_telegram        
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
@@ -353,6 +355,8 @@ const getMyBookings = async (req, res) => {
         ) AS dates,
         s.title AS service_title,
         p.name    AS provider_name,
+        p.photo   AS provider_photo,
+        p.photo   AS provider_avatar_url
         p.type    AS provider_type,
         p.phone   AS provider_phone,
         p.address AS provider_address,
