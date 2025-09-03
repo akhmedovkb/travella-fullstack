@@ -38,6 +38,23 @@ const toFiles = (val) => {
   return [];
 };
 
+// СТАТУСЫ "confirmed", "Отклонено: поставщиком услуги", "Отменено: вами"
+const statusKey = (s) => String(s || "").toLowerCase();
+const StatusPill = ({ status, text, className = "" }) => {
+  const map = {
+    pending:   "bg-amber-50  text-amber-700  ring-amber-200",
+    confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
+    cancelled: "bg-gray-100  text-gray-600  ring-gray-200",
+  };
+  const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
+  return (
+    <span className={`ml-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${cls} ${className}`}>
+      {text ?? status}
+    </span>
+  );
+};
 
 function normalizeTg(v) {
   if (!v) return null;
@@ -121,7 +138,14 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  
+  // статусы броней - цвет
+const statusTextOverride = useMemo(() => {
+  const s = statusKey(booking?.status);
+  if (viewerRole === "provider" && s === "rejected") return "Отклонено: поставщиком услуги";
+  if (viewerRole !== "provider" && s === "cancelled") return "Отменено: вами";
+  return null;
+}, [viewerRole, booking]);
+
     // Куда вести по клику на имени (профиль кого)
 const profileHref = useMemo(() => {
   if (viewerRole === "provider") {
@@ -180,9 +204,10 @@ const profileHref = useMemo(() => {
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
 
         {booking.status ? (
-          <span className="ml-1 inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
-            {t(`status.${booking.status}`, { defaultValue: booking.status })}
-          </span>
+          <StatusPill
+            status={booking.status}
+            text={statusTextOverride ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
+          />
         ) : null}
 
         {/* добавлено: дата создания */}
