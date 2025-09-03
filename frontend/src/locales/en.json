@@ -311,6 +311,14 @@
   "flight_details": "Flight details",
   "flight_type": "Flight type",
 
+  "filter": {
+    "all": "Barchasi",
+    "pending": "Kutilmoqda",
+    "confirmed": "Tasdiqlangan",
+    "upcoming": "Oldinda",
+    "rejected": "Rad etilgan"
+  },
+
   "food": "Meal plan",
   "food_options": {
     "ai": "All Inclusive",
