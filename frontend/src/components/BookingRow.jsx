@@ -83,7 +83,7 @@ const StatusPill = ({ status, text, className = "" }) => {
     confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
     rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
-    cancelled: "bg-gray-100  text-gray-600  ring-gray-200",
+    cancelled: "bg-rose-50   text-rose-700   ring-rose-200",
   };
   const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
   return (
@@ -178,8 +178,13 @@ export default function BookingRow({
   // статусы броней - цвет
 const statusTextOverride = useMemo(() => {
   const s = statusKey(booking?.status);
-  if (viewerRole === "provider" && s === "rejected") return "Отклонено: поставщиком услуги";
-  if (viewerRole !== "provider" && s === "cancelled") return "Отменено: вами";
+      if (viewerRole === "provider") {
+      if (s === "rejected")  return "Отклонено: вами";
+      if (s === "cancelled") return "Отклонено: клиентом";
+    } else {
+      // для клиента "свою" отмену оставляем как раньше
+      if (s === "cancelled") return "Отменено: вами";
+    }
   return null;
 }, [viewerRole, booking]);
 
