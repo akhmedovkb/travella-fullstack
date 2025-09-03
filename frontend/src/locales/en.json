@@ -70,8 +70,7 @@
       "outgoing": "My service bookings"
      },
       
-      "titles": {
-        "provider" : "Bookings (Provider)",
+      
       
       "cancelled": {
         "you": "Cancelled: by you",
@@ -80,9 +79,14 @@
         "client": "Cancelled: by client"
       }
     },
+
     "labels": {
       "client_comment": "Comment:"
     },
+
+    "titles": {
+        "provider" : "Bookings (Provider)",
+    
     "types": {
       "guide": "Guide",
       "transport": "Transport",
