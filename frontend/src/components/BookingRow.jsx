@@ -178,40 +178,32 @@ export default function BookingRow({
   
   
 // статусы броней - Подменяем подпись статуса с учётом роли зрителя и того, кем выполнено действие
-const statusTextOverride = useMemo(() => {
-  const s = String(booking?.status || '').toLowerCase();
+const statusTextKey = useMemo(() => {
+  const s = String(booking?.status || "").toLowerCase();
 
-  // читаем "кем" (если бек отдаёт это поле)
-  const cancelledBy = booking?.cancelled_by || null;
-  const rejectedBy  = booking?.rejected_by  || 'provider'; // по умолчанию отклоняет поставщик
-
-  if (s === 'rejected') {
-    // если отклонил поставщик
-    if (rejectedBy === 'provider') {
-      return viewerRole === 'provider' ? 'Отклонено: вами' : 'Отклонено: поставщиком услуги';
-    }
-    // если когда-нибудь появится другой «отклонивший»
-    if (rejectedBy === 'requester') {
-      return viewerRole !== 'provider' ? 'Отклонено: вами' : 'Отклонено: заявителем';
-    }
-    return 'Отклонено';
+  if (s === "rejected") {
+    const by = String(booking?.rejected_by || "").toLowerCase();
+    if ((viewerRole === "provider" && by === "provider") || (viewerRole === "client" && by === "client"))
+      return "bookings.status_by.rejected.you";
+    if (by === "provider")  return "bookings.status_by.rejected.provider";
+    if (by === "requester") return "bookings.status_by.rejected.requester";
+    if (by === "client")    return "bookings.status_by.rejected.client";
+    // fallback на общее слово "отклонено"
+    return "bookings.status.rejected";
   }
 
-  if (s === 'cancelled') {
-    if (cancelledBy === 'client') {
-      return viewerRole === 'provider' ? 'Отменено: клиентом' : 'Отменено: вами';
-    }
-    if (cancelledBy === 'requester') {
-      return viewerRole === 'provider' ? 'Отменено: заявителем' : 'Отменено: вами';
-    }
-    if (cancelledBy === 'provider') {
-      return viewerRole === 'provider' ? 'Отменено: вами' : 'Отменено: поставщиком';
-    }
-    // запасной вариант, если бек не прислал cancelled_by
-    return viewerRole === 'provider' ? 'Отменено: клиентом' : 'Отменено: вами';
+  if (s === "cancelled") {
+    const by = String(booking?.cancelled_by || "").toLowerCase();
+    if ((viewerRole === "provider" && by === "provider") || (viewerRole === "client" && by === "client"))
+      return "bookings.status_by.cancelled.you";
+    if (by === "provider")  return "bookings.status_by.cancelled.provider";
+    if (by === "requester") return "bookings.status_by.cancelled.requester";
+    if (by === "client")    return "bookings.status_by.cancelled.client";
+    return "bookings.status.cancelled";
   }
 
-  return null;
+  // base statuses через словарь status.*
+  return `bookings.status.${s}`;
 }, [booking, viewerRole]);
 
 
