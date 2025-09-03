@@ -72,9 +72,9 @@
     "status_by": {
       "rejected": {
         "you": "Rad etildi: siz tomondan",
-        "provider": "Rad etildi: provayder",
-        "requester": "Rad etildi: arizachi",
-        "client": "Rad etildi: mijoz"
+        "provider": "Rad etildi: provayder tomonidan",
+        "requester": "Rad etildi: so`rovchi tomonidan",
+        "client": "Rad etildi: mijoz tomonidan"
       },
            
       "cancelled": {
