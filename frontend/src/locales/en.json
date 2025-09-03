@@ -2,9 +2,11 @@
   "accommodation": "Accommodation",
   "accommodation_category": "Accommodation category",
   "actions": {
-    "book": "Book",
+    "book": "Book",    
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "quick_request": "Quick request",
+    "reject": "Reject",
     "send": "Send"
   },
   "address": "Address",
@@ -23,6 +25,7 @@
     "title": "Booking"
   },
   "bookings": {
+    "client_comment": "Comment:",
     "empty": "No bookings yet.",
     "item": "Booking",
     "tabs": {
@@ -34,6 +37,14 @@
       "upcoming": "Upcoming",
       "rejected": "Rejected"
     },
+    "filters": {
+      "all": "All",
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "upcoming": "Upcoming",
+      "rejected": "Rejected"
+    },
+    "refresh": "Refresh",
     "status": {
       "pending": "pending",
       "confirmed": "confirmed",
@@ -48,6 +59,13 @@
         "requester": "Rejected: by requester",
         "client": "Rejected: by client"
       },
+      "sections": {
+      "incoming": "Bookings for my services",
+      "outgoing": "My service bookings"
+     },
+      
+      "title": { "provider": "Bookings (Provider)" },
+      
       "cancelled": {
         "you": "Cancelled: by you",
         "provider": "Cancelled: by provider",
