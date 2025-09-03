@@ -62,10 +62,7 @@
         "requester": "Rad etildi: arizachi",
         "client": "Rad etildi: mijoz"
       },
-      "titles": { 
-        "provider": "Bronlar (Ta'minotchi)" 
-      },
-      
+           
       "cancelled": {
         "you": "Bekor qilindi: siz tomondan",
         "provider": "Bekor qilindi: provayder",
@@ -74,6 +71,11 @@
       }
     },
     "labels": { "client_comment": "Izoh:" },
+    
+    "titles": { 
+        "provider": "Bronlar (Ta'minotchi)" 
+      },
+    
     "types": {
       "guide": "Gid",
       "transport": "Transport",
