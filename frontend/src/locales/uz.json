@@ -684,6 +684,13 @@
     "favorite_remove": "Sevimlilardan olib tashlash"
   },
 
+  "types": {
+      "guide": "Gid",
+      "transport": "Transport",
+      "agent": "Turoperator",
+      "hotel": "Mehmonxona"
+    },
+
   "gross_price": "Mijoz uchun narx (brutto)",
   "expired": "Muddati tugagan",
 
