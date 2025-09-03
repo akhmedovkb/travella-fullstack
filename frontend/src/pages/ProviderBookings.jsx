@@ -357,7 +357,7 @@ export default function ProviderBookings() {
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t("bookings.title_provider", { defaultValue: "Бронирования (Поставщик)" })}</h1>
+        <h1 className="text-2xl font-bold">{t("bookings.titles.provider", { defaultValue: "Бронирования (Поставщик)" })}</h1>
         <button onClick={load} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50">
           {t("common.refresh", { defaultValue: "Обновить" })}
         </button>
