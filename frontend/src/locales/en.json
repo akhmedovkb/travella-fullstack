@@ -30,8 +30,8 @@
     "empty": "No bookings yet.",
     "item": "Booking",
     "tabs": {
-      "incomingOfMine": "Bookings of my services",
-      "myOutgoing": "My bookings of services",
+      "incoming": "Bookings of my services",
+      "outgoing": "My bookings of services",
       "all": "All",
       "pending": "Pending",
       "confirmed": "Confirmed",
