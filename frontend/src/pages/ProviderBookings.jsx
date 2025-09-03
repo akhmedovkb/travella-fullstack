@@ -358,8 +358,9 @@ export default function ProviderBookings() {
     <div className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t("bookings.titles.provider", { defaultValue: "Бронирования (Поставщик)" })}</h1>
-        <button onClick={load} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50">
-          {t("common.refresh", { defaultValue: "Обновить" })}
+         <button onClick={load} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50">
+          {t("actions.refresh", { defaultValue: "Обновить" })}
+          
         </button>
       </div>
 
@@ -369,7 +370,7 @@ export default function ProviderBookings() {
           onClick={() => setTab("incoming")}
           className={"rounded-full px-4 py-2 ring-1 " + (tab === "incoming" ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
         >
-          {t("bookings.incoming", { defaultValue: "Бронирования моих услуг" })}
+          {t("bookings.tabs.incoming", { defaultValue: "Бронирования моих услуг" })}
           <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "incoming" ? "bg-white/20" : "bg-gray-100")}>
             {incoming.length}
           </span>
@@ -379,7 +380,7 @@ export default function ProviderBookings() {
           onClick={() => setTab("outgoing")}
           className={"rounded-full px-4 py-2 ring-1 " + (tab === "outgoing" ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
         >
-          {t("bookings.outgoing", { defaultValue: "Мои бронирования услуг" })}
+          {t("bookings.tabs.outgoing", { defaultValue: "Мои бронирования услуг" })}
           <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "outgoing" ? "bg-white/20" : "bg-gray-100")}>
             {outgoing.length}
           </span>
