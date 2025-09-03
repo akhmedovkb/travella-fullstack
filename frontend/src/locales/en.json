@@ -651,6 +651,7 @@
   "status": {
     "new": "new",
     "processed": "processed",
+    "pending": "pending",
     "rejected": "rejected",
     "active": "active",
     "accepted": "accepted"
