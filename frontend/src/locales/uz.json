@@ -305,6 +305,14 @@
   "flight_details": "Parvoz tafsilotlari",
   "flight_type": "Parvoz turi",
 
+  "filter": {
+    "all": "Barchasi",
+    "pending": "Kutilmoqda",
+    "confirmed": "Tasdiqlangan",
+    "upcoming": "Oldinda",
+    "rejected": "Rad etilgan"
+  },
+
   "food": "Oziqlanish",
   "food_options": {
     "ai": "Hammasi ichida",
