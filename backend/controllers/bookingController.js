@@ -356,7 +356,7 @@ const getMyBookings = async (req, res) => {
         s.title AS service_title,
         p.name    AS provider_name,
         p.photo   AS provider_photo,
-        p.photo   AS provider_avatar_url
+        p.photo   AS provider_avatar_url,
         p.type    AS provider_type,
         p.phone   AS provider_phone,
         p.address AS provider_address,
