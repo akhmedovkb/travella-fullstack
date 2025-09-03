@@ -640,6 +640,7 @@
   "status": {
     "new": "yangi",
     "processed": "ko‘rib chiqilgan",
+    "pending": "kutilmoqda",
     "rejected": "rad etilgan",
     "active": "faol",
     "accepted": "qabul qilingan"
