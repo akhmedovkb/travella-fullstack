@@ -175,18 +175,30 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  // статусы броней - цвет
+  // статусы броней 
 const statusTextOverride = useMemo(() => {
   const s = statusKey(booking?.status);
-      if (viewerRole === "provider") {
-      if (s === "rejected")  return "Отклонено: вами";
-      if (s === "cancelled") return "Отклонено: клиентом";
-    } else {
-      // для клиента "свою" отмену оставляем как раньше
-      if (s === "cancelled") return "Отменено: вами";
+
+  // Кто бы ни смотрел – отклонение всегда со стороны поставщика услуги
+  if (s === "rejected") return "Отклонено: поставщиком услуги";
+
+  // Для отмененных — показываем "кем", если знаем, иначе по роли зрителя
+  if (s === "cancelled") {
+    if (booking.cancelled_by) {
+      if (booking.cancelled_by === "client")
+        return viewerRole === "provider" ? "Отменено: клиентом" : "Отменено: вами";
+      if (booking.cancelled_by === "requester")
+        return viewerRole === "provider" ? "Отменено: заявителем" : "Отменено: вами";
+      if (booking.cancelled_by === "provider")
+        return viewerRole === "provider" ? "Отменено: вами" : "Отменено: поставщиком";
     }
+    // запасной вариант, если cancelled_by не приходят
+    return viewerRole === "provider" ? "Отменено: клиентом" : "Отменено: вами";
+  }
+
   return null;
-}, [viewerRole, booking]);
+}, [booking, viewerRole]);
+
 
     // Куда вести по клику на имени (профиль кого)
 const profileHref = useMemo(() => {
