@@ -175,29 +175,45 @@ export default function BookingRow({
     };
   }, [booking, viewerRole, t]);
 
-  // статусы броней 
+  
+  
+// статусы броней - Подменяем подпись статуса с учётом роли зрителя и того, кем выполнено действие
 const statusTextOverride = useMemo(() => {
-  const s = statusKey(booking?.status);
+  const s = String(booking?.status || '').toLowerCase();
 
-  // Кто бы ни смотрел – отклонение всегда со стороны поставщика услуги
-  if (s === "rejected") return "Отклонено: поставщиком услуги";
+  // читаем "кем" (если бек отдаёт это поле)
+  const cancelledBy = booking?.cancelled_by || null;
+  const rejectedBy  = booking?.rejected_by  || 'provider'; // по умолчанию отклоняет поставщик
 
-  // Для отмененных — показываем "кем", если знаем, иначе по роли зрителя
-  if (s === "cancelled") {
-    if (booking.cancelled_by) {
-      if (booking.cancelled_by === "client")
-        return viewerRole === "provider" ? "Отменено: клиентом" : "Отменено: вами";
-      if (booking.cancelled_by === "requester")
-        return viewerRole === "provider" ? "Отменено: заявителем" : "Отменено: вами";
-      if (booking.cancelled_by === "provider")
-        return viewerRole === "provider" ? "Отменено: вами" : "Отменено: поставщиком";
+  if (s === 'rejected') {
+    // если отклонил поставщик
+    if (rejectedBy === 'provider') {
+      return viewerRole === 'provider' ? 'Отклонено: вами' : 'Отклонено: поставщиком услуги';
     }
-    // запасной вариант, если cancelled_by не приходят
-    return viewerRole === "provider" ? "Отменено: клиентом" : "Отменено: вами";
+    // если когда-нибудь появится другой «отклонивший»
+    if (rejectedBy === 'requester') {
+      return viewerRole !== 'provider' ? 'Отклонено: вами' : 'Отклонено: заявителем';
+    }
+    return 'Отклонено';
+  }
+
+  if (s === 'cancelled') {
+    if (cancelledBy === 'client') {
+      return viewerRole === 'provider' ? 'Отменено: клиентом' : 'Отменено: вами';
+    }
+    if (cancelledBy === 'requester') {
+      return viewerRole === 'provider' ? 'Отменено: заявителем' : 'Отменено: вами';
+    }
+    if (cancelledBy === 'provider') {
+      return viewerRole === 'provider' ? 'Отменено: вами' : 'Отменено: поставщиком';
+    }
+    // запасной вариант, если бек не прислал cancelled_by
+    return viewerRole === 'provider' ? 'Отменено: клиентом' : 'Отменено: вами';
   }
 
   return null;
 }, [booking, viewerRole]);
+
 
 
     // Куда вести по клику на имени (профиль кого)
