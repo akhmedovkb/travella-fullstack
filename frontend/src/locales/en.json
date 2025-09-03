@@ -24,7 +24,51 @@
   },
   "bookings": {
     "empty": "No bookings yet.",
-    "item": "Booking"
+    "item": "Booking",
+    "tabs": {
+      "incomingOfMine": "Bookings of my services",
+      "myOutgoing": "My bookings of services",
+      "all": "All",
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "upcoming": "Upcoming",
+      "rejected": "Rejected"
+    },
+    "status": {
+      "pending": "pending",
+      "confirmed": "confirmed",
+      "active": "active",
+      "rejected": "rejected",
+      "cancelled": "cancelled"
+    },
+    "status_by": {
+      "rejected": {
+        "you": "Rejected: by you",
+        "provider": "Rejected: by provider",
+        "requester": "Rejected: by requester",
+        "client": "Rejected: by client"
+      },
+      "cancelled": {
+        "you": "Cancelled: by you",
+        "provider": "Cancelled: by provider",
+        "requester": "Cancelled: by requester",
+        "client": "Cancelled: by client"
+      }
+    },
+    "labels": {
+      "client_comment": "Comment:"
+    },
+    "types": {
+      "guide": "Guide",
+      "transport": "Transport",
+      "agent": "Travel agent",
+      "hotel": "Hotel"
+    },
+    "actions": {
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "cancel": "Cancel"
+    }
   },
 
   "border_transfer": "Border transfer",
