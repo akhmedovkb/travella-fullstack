@@ -23,8 +23,17 @@
     "title": "Bron"
   },
   "bookings": {
+    "client_comment": "Izoh:",
     "empty": "Hozircha bronlar yo‘q.",
+    "filters": {
+      "all": "Barchasi",
+      "pending": "Kutilmoqda",
+      "confirmed": "Tasdiqlandi",
+      "upcoming": "Oldinda",
+      "rejected": "Rad etildi"
+    },
     "item": "Bron",
+    "refresh": "Yangilash",
     "tabs": {
       "incomingOfMine": "Mening xizmatlarimga bronlar",
       "myOutgoing": "Men qilgan bronlar",
@@ -33,6 +42,10 @@
       "confirmed": "Tasdiqlandi",
       "upcoming": "Yaqqin",
       "rejected": "Rad etilgan"
+    },
+    "sections": {
+      "incoming": "Xizmatlarimga bronlar",
+      "outgoing": "Mening bronlarim"
     },
     "status": {
       "pending": "kutilmoqda",
@@ -48,6 +61,7 @@
         "requester": "Rad etildi: arizachi",
         "client": "Rad etildi: mijoz"
       },
+      "title": { "provider": "Bronlar (Ta'minotchi)" },
       "cancelled": {
         "you": "Bekor qilindi: siz tomondan",
         "provider": "Bekor qilindi: provayder",
