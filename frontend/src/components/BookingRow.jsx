@@ -268,7 +268,7 @@ const profileHref = useMemo(() => {
         {booking.status ? (
           <StatusPill
             status={booking.status}
-            text={statusTextOverride ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
+            text={statusTextKey ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
           />
         ) : null}
 
