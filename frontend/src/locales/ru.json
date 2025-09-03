@@ -611,6 +611,7 @@
   "status": {
     "new": "новый",
     "processed": "обработано",
+    "pending": "ожидает",
     "rejected": "отклонено",
     "active": "активна",
     "accepted": "принято"
