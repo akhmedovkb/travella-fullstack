@@ -54,7 +54,7 @@ async function getProviderProfile(providerId) {
 /**
  * Проверка доступности набора дат для провайдера.
  * excludeBookingId — игнорировать конкретную бронь (на accept/confirm).
- * ВАЖНО: тут считаем занятыми статусы 'pending' и 'confirmed'.
+ * ВАЖНО: Даты блокируют только 'confirmed' и ручные блокировки provider_blocked_dates.
  */
 async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
   const list = toArray(ymdList).map(toISO).filter(Boolean);
@@ -75,7 +75,7 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
        FROM booking_dates bd
        JOIN bookings b ON b.id = bd.booking_id
       WHERE b.provider_id=$1
-        AND b.status IN ('pending','confirmed')
+        AND b.status IN ('confirmed')
         AND bd.date = ANY($2::date[])`;
   const params = [providerId, list];
   if (excludeBookingId) {
@@ -201,9 +201,15 @@ async function getProviderBookings(req, res) {
       "requester_phone",
       "requester_telegram",
       "requester_email",
+      "rejected_by",
+      "cancelled_by",
     ]);
 
     const selectCurrency = cols.currency ? `b.currency` : `'USD'::text AS currency`;
+    const selectBy = `
+      ${cols.rejected_by ? "b.rejected_by" : "NULL::text AS rejected_by"},
+      ${cols.cancelled_by ? "b.cancelled_by" : "NULL::text AS cancelled_by"}
+    `;
 
     const selectRequester = cols.requester_provider_id
       ? `b.requester_provider_id,
@@ -218,60 +224,55 @@ async function getProviderBookings(req, res) {
          NULL::text AS requester_email`;
 
     const sql = `
-  SELECT
-    b.id, b.provider_id, b.service_id, b.client_id,
-    b.status, b.rejected_by, b.cancelled_by, b.created_at, b.updated_at,
-    b.client_message, b.provider_note, b.provider_price,
-    COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+      SELECT
+        b.id, b.provider_id, b.service_id, b.client_id,
+        b.status, ${selectBy}, b.created_at, b.updated_at,
+        b.client_message, b.provider_note, b.provider_price,
+        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
 
-    ${selectCurrency},
-    ${selectRequester},
+        ${selectCurrency},
+        ${selectRequester},
 
-    /* все даты этой брони */
-    COALESCE(
-      ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
-      CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
-    ) AS dates,
+        COALESCE(
+          ARRAY_REMOVE(ARRAY_AGG(bd.date::date ORDER BY bd.date), NULL),
+          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+        ) AS dates,
 
-    /* сервис */
-    s.title AS service_title,
+        s.title AS service_title,
 
-    /* клиент (контрагент в обычном кейсе) */
-    c.id         AS client_id,
-    c.name       AS client_name,
-    c.phone      AS client_phone,
-    c.email      AS client_email,
-    c.telegram   AS client_social,
-    c.location   AS client_address,
-    c.avatar_url AS client_avatar_url,
+        c.id         AS client_id,
+        c.name       AS client_name,
+        c.phone      AS client_phone,
+        c.email      AS client_email,
+        c.telegram   AS client_social,
+        c.location   AS client_address,
+        c.avatar_url AS client_avatar_url,
 
-    /* текущий поставщик (вы) — чтобы отдать тип */
-    p.id       AS provider_profile_id,
-    p.name     AS provider_name,
-    p.type     AS provider_type,
-    p.phone    AS provider_phone,
-    p.email    AS provider_email,
-    p.social   AS provider_social,
-    p.address  AS provider_address,
-    p.location AS provider_location,
-    p.photo    AS provider_photo,
-    p.photo    AS provider_avatar_url,       -- <=== важно для карточки
+        p.id       AS provider_profile_id,
+        p.name     AS provider_name,
+        p.type     AS provider_type,
+        p.phone    AS provider_phone,
+        p.email    AS provider_email,
+        p.social   AS provider_social,
+        p.address  AS provider_address,
+        p.location AS provider_location,
+        p.photo    AS provider_photo,
+        p.photo    AS provider_avatar_url,
 
-    /* заявитель-поставщик (если есть) — для входящих «исходящих» */
-    rp.photo   AS requester_photo,
-    rp.photo   AS requester_avatar_url,      -- <=== важно для карточки
-    rp.type    AS requester_type
+        rp.photo   AS requester_photo,
+        rp.photo   AS requester_avatar_url,
+        rp.type    AS requester_type
 
-  FROM bookings b
-  LEFT JOIN booking_dates bd ON bd.booking_id = b.id
-  LEFT JOIN clients   c  ON c.id = b.client_id
-  LEFT JOIN providers p  ON p.id = b.provider_id
-  LEFT JOIN providers rp ON rp.id = b.requester_provider_id
-  LEFT JOIN services  s  ON s.id = b.service_id
-  WHERE b.provider_id = $1
-  GROUP BY b.id, s.id, c.id, p.id, rp.id
-  ORDER BY b.created_at DESC NULLS LAST
-`;
+      FROM bookings b
+      LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+      LEFT JOIN clients   c  ON c.id = b.client_id
+      LEFT JOIN providers p  ON p.id = b.provider_id
+      LEFT JOIN providers rp ON rp.id = b.requester_provider_id
+      LEFT JOIN services  s  ON s.id = b.service_id
+      WHERE b.provider_id = $1
+      GROUP BY b.id, s.id, c.id, p.id, rp.id
+      ORDER BY b.created_at DESC NULLS LAST
+    `;
 
     const q = await pool.query(sql, [providerId]);
     return res.json(q.rows);
@@ -281,26 +282,35 @@ async function getProviderBookings(req, res) {
   }
 }
 
+
 // ИСХОДЯЩИЕ (я — провайдер, бронирую чужую услугу)
 async function getProviderOutgoingBookings(req, res) {
   try {
     const providerId = req.user?.id;
-    const cols = await getExistingColumns("bookings", ["currency", "requester_provider_id"]);
+    const cols = await getExistingColumns("bookings", [
+      "currency",
+      "requester_provider_id",
+      "rejected_by",
+      "cancelled_by",
+    ]);
 
     if (!cols.requester_provider_id) {
-      // колонки нет — тихо возвращаем пусто (фронт корректно обработает)
       return res.json([]);
     }
 
-    const currencySel = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const selectCurrency = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const selectBy = `
+      ${cols.rejected_by ? "b.rejected_by" : "NULL::text AS rejected_by"},
+      ${cols.cancelled_by ? "b.cancelled_by" : "NULL::text AS cancelled_by"}
+    `;
 
     const sql = `
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
-        b.status, b.rejected_by, b.cancelled_by, b.created_at, b.updated_at,
+        b.status, ${selectBy}, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
-        ${currencySel},
+        ${selectCurrency},
         b.requester_provider_id,
         b.requester_name, b.requester_phone, b.requester_telegram, b.requester_email,
         COALESCE(
@@ -315,8 +325,8 @@ async function getProviderOutgoingBookings(req, res) {
         p.photo   AS provider_avatar_url,
         p.type    AS provider_type,
         p.phone   AS provider_phone,
-        p.address AS provider_address,        
-        p.social  AS provider_telegram        
+        p.address AS provider_address,
+        p.social  AS provider_telegram
       FROM bookings b
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
@@ -335,18 +345,23 @@ async function getProviderOutgoingBookings(req, res) {
 const getMyBookings = async (req, res) => {
   try {
     const clientId = req.user?.id;
-    const cols = await getExistingColumns("bookings", ["currency"]);
-    const currencySel = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const cols = await getExistingColumns("bookings", ["currency", "rejected_by", "cancelled_by"]);
+    const selectCurrency = cols.currency ? "b.currency" : `'USD'::text AS currency`;
+    const selectBy = `
+      ${cols.rejected_by ? "b.rejected_by" : "NULL::text AS rejected_by"},
+      ${cols.cancelled_by ? "b.cancelled_by" : "NULL::text AS cancelled_by"}
+    `;
 
     const q = await pool.query(
       `
       SELECT
-        b.id, b.service_id, b.provider_id, b.client_id, b.status, b.rejected_by, b.cancelled_by,
+        b.id, b.service_id, b.provider_id, b.client_id,
+        b.status, ${selectBy},
         b.client_message,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
         b.created_at, b.updated_at,
-        ${currencySel},
+        ${selectCurrency},
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d
@@ -376,6 +391,7 @@ const getMyBookings = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 // Провайдер отправляет цену/комментарий
 const providerQuote = async (req, res) => {
@@ -487,15 +503,17 @@ const rejectBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    await pool.query(
-      `UPDATE bookings
-          SET status='rejected',
-              rejected_by = 'provider',
-              provider_note = COALESCE($1, provider_note),
-              updated_at = NOW()
-        WHERE id=$2`,
-      [reason ?? null, id]
-    );
+    
+  const cols = await getExistingColumns("bookings", ["rejected_by"]);
+  let sql = `
+    UPDATE bookings
+       SET status='rejected',
+           provider_note = COALESCE($1, provider_note),
+           updated_at = NOW()`;
+  const params = [reason ?? null, id];
+  if (cols.rejected_by) sql += `, rejected_by='provider'`;
+  sql += ` WHERE id=$2`;
+  await pool.query(sql, params);
     res.json({ ok: true, status: "rejected" });
   } catch (err) {
     console.error("rejectBooking error:", err);
@@ -515,14 +533,14 @@ const cancelBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    await pool.query(
-      `UPDATE bookings
-         SET status='cancelled',
-             cancelled_by = 'client',
-             updated_at = NOW()
-       WHERE id=$1`,
-      [id]
-    );
+ const cols = await getExistingColumns("bookings", ["cancelled_by"]);
+  let sql = `
+    UPDATE bookings
+       SET status='cancelled',
+           updated_at = NOW()`;
+  if (cols.cancelled_by) sql += `, cancelled_by='client'`;
+  sql += ` WHERE id=$1`;
+  await pool.query(sql, [id]);
     res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBooking error:", err);
@@ -586,7 +604,7 @@ const confirmBookingByRequester = async (req, res) => {
     const cols = await getExistingColumns("bookings", ["requester_provider_id"]);
     if (!cols.requester_provider_id) return res.status(400).json({ message: "Функция недоступна (нет поддержки в БД)" });
 
-    const own = await pool.query(`SELECT requester_provider_id, status FROM bookings WHERE id=$1`, [id]);
+    const own = await pool.query(`SELECT requester_provider_id, provider_id, status FROM bookings WHERE id=$1`, [id]);
     if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
     if (own.rows[0].requester_provider_id !== requesterId) {
       return res.status(403).json({ message: "Недостаточно прав" });
@@ -594,6 +612,20 @@ const confirmBookingByRequester = async (req, res) => {
     if (own.rows[0].status !== "pending") {
       return res.status(409).json({ message: "Бронирование уже обработано" });
     }
+
+    
+    // Проверяем, что на эти даты нет другого confirmed
+    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+    let days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
+    if (!days.length) {
+      const bQ = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
+      if (bQ.rowCount) days = [toISO(bQ.rows[0].d)].filter(Boolean);
+    }
+    if (!days.length) return res.status(400).json({ message: "Не удалось определить даты бронирования" });
+
+    const providerId = own.rows[0].provider_id;
+    const ok = await isDatesFree(providerId, days, id);
+    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
     await pool.query(`UPDATE bookings SET status='confirmed', updated_at=NOW() WHERE id=$1`, [id]);
     return res.json({ ok: true, status: "confirmed" });
@@ -607,8 +639,11 @@ const cancelBookingByRequester = async (req, res) => {
   try {
     const requesterId = req.user?.id;
     const id = Number(req.params.id);
-    const cols = await getExistingColumns("bookings", ["requester_provider_id"]);
-    if (!cols.requester_provider_id) return res.status(400).json({ message: "Функция недоступна (нет поддержки в БД)" });
+
+    const support = await getExistingColumns("bookings", ["requester_provider_id", "cancelled_by"]);
+    if (!support.requester_provider_id) {
+      return res.status(400).json({ message: "Функция недоступна (нет поддержки в БД)" });
+    }
 
     const own = await pool.query(`SELECT requester_provider_id FROM bookings WHERE id=$1`, [id]);
     if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
@@ -616,16 +651,18 @@ const cancelBookingByRequester = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    await pool.query(
-      `UPDATE bookings SET status='cancelled', cancelled_by='requester', updated_at=NOW() WHERE id=$1`,
-      [id]
-    );
+    let sql = `UPDATE bookings SET status='cancelled', updated_at=NOW()`;
+    if (support.cancelled_by) sql += `, cancelled_by='requester'`;
+    sql += ` WHERE id=$1`;
+    await pool.query(sql, [id]);
+
     return res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBookingByRequester error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 module.exports = {
   createBooking,
