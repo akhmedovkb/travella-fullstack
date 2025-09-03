@@ -220,7 +220,7 @@ async function getProviderBookings(req, res) {
     const sql = `
   SELECT
     b.id, b.provider_id, b.service_id, b.client_id,
-    b.status, b.created_at, b.updated_at,
+    b.status, b.rejected_by, b.cancelled_by, b.created_at, b.updated_at,
     b.client_message, b.provider_note, b.provider_price,
     COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
 
@@ -297,7 +297,7 @@ async function getProviderOutgoingBookings(req, res) {
     const sql = `
       SELECT
         b.id, b.provider_id, b.service_id, b.client_id,
-        b.status, b.created_at, b.updated_at,
+        b.status, b.rejected_by, b.cancelled_by, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         ${currencySel},
@@ -341,7 +341,7 @@ const getMyBookings = async (req, res) => {
     const q = await pool.query(
       `
       SELECT
-        b.id, b.service_id, b.provider_id, b.client_id, b.status,
+        b.id, b.service_id, b.provider_id, b.client_id, b.status, b.rejected_by, b.cancelled_by,
         b.client_message,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
@@ -432,7 +432,7 @@ const providerQuote = async (req, res) => {
 const acceptBooking = async (req, res) => {
   try {
     const providerId = req.user?.id;
-       const id = Number(req.params.id);
+    const id = Number(req.params.id);
     const { price, note } = req.body || {};
 
     const pType = await getProviderType(providerId);
@@ -490,6 +490,7 @@ const rejectBooking = async (req, res) => {
     await pool.query(
       `UPDATE bookings
           SET status='rejected',
+              rejected_by = 'provider',
               provider_note = COALESCE($1, provider_note),
               updated_at = NOW()
         WHERE id=$2`,
@@ -517,6 +518,7 @@ const cancelBooking = async (req, res) => {
     await pool.query(
       `UPDATE bookings
          SET status='cancelled',
+             cancelled_by = 'client',
              updated_at = NOW()
        WHERE id=$1`,
       [id]
@@ -540,7 +542,7 @@ const confirmBooking = async (req, res) => {
     );
     if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
     if (own.rows[0].client_id !== clientId) {
-           return res.status(403).json({ message: "Недостаточно прав" });
+      return res.status(403).json({ message: "Недостаточно прав" });
     }
     if (own.rows[0].status !== "pending") {
       return res.status(409).json({ message: "Бронирование уже обработано" });
@@ -614,7 +616,10 @@ const cancelBookingByRequester = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    await pool.query(`UPDATE bookings SET status='cancelled', updated_at=NOW() WHERE id=$1`, [id]);
+    await pool.query(
+      `UPDATE bookings SET status='cancelled', cancelled_by='requester', updated_at=NOW() WHERE id=$1`,
+      [id]
+    );
     return res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBookingByRequester error:", err);
