@@ -26,6 +26,19 @@
     "title": "Booking"
   },
   "bookings": {
+    "price_agreement": "Price agreement",
+    "last_offer": "Last offer",
+    "price": "Price",
+    "currency": "Currency",
+    "comment_optional": "Comment (optional)",
+    "price_placeholder": "e.g. 120",
+    "comment_placeholder": "For example: parking and waiting included",
+    "send_price": "Send price",
+
+    "price_invalid": "Enter a valid price",
+    "price_sent": "Price sent",
+    "price_send_error": "Failed to send price",
+    
     "client_comment": "Comment:",
     "empty": "No bookings yet.",
     "item": "Booking",
