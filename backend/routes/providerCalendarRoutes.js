@@ -43,7 +43,7 @@ router.get("/booked-dates", authenticateToken, async (req, res) => {
          FROM booking_dates bd
          JOIN bookings b ON b.id = bd.booking_id
         WHERE b.provider_id = $1
-          AND b.status IN ('pending','confirmed')
+          AND b.status IN ('confirmed','active')
           AND bd.date >= CURRENT_DATE
         ORDER BY bd.date`,
       [providerId]
