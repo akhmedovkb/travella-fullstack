@@ -374,6 +374,43 @@ export default function ServiceCard({
             />
           </div>
         </div>
+        
+       {/* hover info overlay (glass) — из версии 28AUG25 */}
+        <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute inset-x-0 bottom-0 p-3">
+            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+              <div className="font-semibold line-clamp-2">{title}</div>
+              {/* Направление показываем только для отказных авиабилетов */}
+              {svc?.category === "refused_flight" && direction && (
+                <div>
+                  <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
+                  <span className="font-medium">{direction}</span>
+                </div>
+              )}
+              {hotel && (
+                <div>
+                  <span className="opacity-80">Отель: </span>
+                  <span className="font-medium">{hotel}</span>
+                </div>
+              )}
+              {accommodation && (
+                <div>
+                  <span className="opacity-80">Размещение: </span>
+                  <span className="font-medium">{accommodation}</span>
+                </div>
+              )}
+              {dates && (
+                <div>
+                  <span className="opacity-80">{t("common.date") || "Дата"}: </span>
+                  <span className="font-medium">{dates}</span>
+                </div>
+             )}
+              {prettyPrice && (
+                <div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* reviews tooltip portal */}
