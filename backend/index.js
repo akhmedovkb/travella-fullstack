@@ -122,6 +122,10 @@ app.use("/api/wishlist", wishlistRoutes);
 const reviewRoutes = require("./routes/reviewRoutes");
 app.use("/api/reviews", reviewRoutes);
 
+// Telegram bor
+const telegramRoutes = require("./routes/telegramRoutes");
+app.use("/api/telegram", express.json({ limit: "2mb" }), telegramRoutes);
+
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
