@@ -185,6 +185,18 @@ const createBooking = async (req, res) => {
     }
 
     res.status(201).json({ id: bookingId, status: "pending", dates: days });
+    const bkg = {
+      id: bookingId,
+      provider_id: providerId,
+      dates: days,
+      client_message: message ?? null,
+    };
+const service = { title: (await pool.query(`SELECT title FROM services WHERE id=$1`, [service_id ?? null])).rows[0]?.title || null };
+const client = userRole === "client"
+  ? (await pool.query(`SELECT name FROM clients WHERE id=$1`, [userId])).rows[0]
+  : null;
+
+tg.notifyNewRequest({ booking: bkg, provider: null, client, service }).catch(() => {});
   } catch (err) {
     console.error("createBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -439,6 +451,25 @@ const providerQuote = async (req, res) => {
 
     if (!q.rowCount) return res.status(404).json({ message: "Booking not found" });
     res.json({ ok: true, booking: q.rows[0] });
+        try {
+      // узнаём даты и booking поля
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [bookingId]
+      );
+      const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [bookingId]);
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyQuote({
+        booking,
+        price: Number(price),
+        currency,
+        note,
+      }).catch(() => {});
+    } catch {}
+
   } catch (err) {
     console.error("providerQuote error:", err);
     res.status(500).json({ message: "Server error" });
@@ -480,6 +511,19 @@ const acceptBooking = async (req, res) => {
       [price ?? null, note ?? null, id]
     );
     res.json({ ok: true, status: "confirmed" });
+        try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyConfirmed({ booking }).catch(() => {});
+    } catch {}
+
   } catch (err) {
     console.error("acceptBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -516,6 +560,20 @@ const rejectBooking = async (req, res) => {
   sql += ` WHERE id=$2`;
   await pool.query(sql, params);
     res.json({ ok: true, status: "rejected" });
+
+    try {
+  const bQ = await pool.query(
+    `SELECT id, provider_id, client_id, requester_provider_id
+       FROM bookings WHERE id=$1`, [id]
+  );
+  const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+  const booking = {
+    ...bQ.rows[0],
+    dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+  };
+  tg.notifyRejected({ booking, reason }).catch(() => {});
+} catch {}
+
   } catch (err) {
     console.error("rejectBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -543,6 +601,21 @@ const cancelBooking = async (req, res) => {
   sql += ` WHERE id=$1`;
   await pool.query(sql, [id]);
     res.json({ ok: true, status: "cancelled" });
+
+    try {
+  const bQ = await pool.query(
+    `SELECT id, provider_id, client_id, requester_provider_id
+       FROM bookings WHERE id=$1`, [id]
+  );
+  const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+  const booking = {
+    ...bQ.rows[0],
+    dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+  };
+  tg.notifyCancelled({ booking }).catch(() => {});
+} catch {}
+
+    
   } catch (err) {
     console.error("cancelBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -590,7 +663,24 @@ const confirmBooking = async (req, res) => {
       [id]
     );
 
-    return res.json({ ok: true, status: "confirmed" });
+      res.json({ ok: true, status: "confirmed" });
+
+  // TG: сообщаем о подтверждении клиентом
+  try {
+    const bQ = await pool.query(
+      `SELECT id, provider_id, client_id, requester_provider_id
+         FROM bookings WHERE id=$1`, [id]
+    );
+    const dQ = await pool.query(
+      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+    );
+    const booking = {
+      ...bQ.rows[0],
+      dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+    };
+    tg.notifyConfirmed({ booking }).catch(() => {});
+  } catch {}
+    
   } catch (err) {
     console.error("confirmBooking error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -629,7 +719,23 @@ const confirmBookingByRequester = async (req, res) => {
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
     await pool.query(`UPDATE bookings SET status='confirmed', updated_at=NOW() WHERE id=$1`, [id]);
-    return res.json({ ok: true, status: "confirmed" });
+      res.json({ ok: true, status: "confirmed" });
+
+  // TG: подтверждение исходящей поставщиком-заявителем
+  try {
+    const bQ = await pool.query(
+      `SELECT id, provider_id, client_id, requester_provider_id
+         FROM bookings WHERE id=$1`, [id]
+    );
+    const dQ = await pool.query(
+      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+    );
+    const booking = {
+      ...bQ.rows[0],
+      dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+    };
+    tg.notifyConfirmed({ booking }).catch(() => {});
+  } catch {}
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
