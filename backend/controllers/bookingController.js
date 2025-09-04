@@ -763,6 +763,25 @@ const cancelBookingByRequester = async (req, res) => {
     sql += ` WHERE id=$1`;
     await pool.query(sql, [id]);
 
+    // TG: отмена исходящей поставщиком-заявителем
+          
+    try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(
+        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+      );
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r =>
+          (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d))
+        )
+      };
+      tg.notifyCancelledByRequester({ booking }).catch(() => {});
+    } catch {}
+
     return res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBookingByRequester error:", err);
