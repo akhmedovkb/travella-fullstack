@@ -610,7 +610,7 @@ export default function ClientDashboard() {
     })();
   }, [t]);
 
-  const botUser = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
+  const botUser = import.meta.env.VITE_TG_BOT_USERNAME || "";
   const clientId = me?.id || me?._id || me?.client_id || me?.user_id;
   const isTgLinked = !!(me?.tg_chat_id || me?.telegram_chat_id);
   const tgDeepLink = useMemo(() => {
