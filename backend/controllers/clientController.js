@@ -81,6 +81,8 @@ exports.login = async (req, res) => {
         phone: client.phone,
         telegram: client.telegram,          // ← здесь
         avatar_url: client.avatar_url,
+        telegram_chat_id: client.telegram_chat_id || null,
+        tg_chat_id: client.telegram_chat_id || null,
       },
     });
   } catch (e) {
