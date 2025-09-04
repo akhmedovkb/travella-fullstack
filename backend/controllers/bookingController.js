@@ -1,5 +1,6 @@
 // backend/controllers/bookingController.js
 const pool = require("../db");
+const tg = require("../utils/telegram");
 
 /* ================= helpers ================= */
 
