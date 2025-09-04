@@ -664,6 +664,11 @@
     "my_bookings": "My bookings",
     "my_requests": "My requests"
   },
+  "telegram": {
+    "enable_title": "Telegram notifications",
+    "enable_text": "Tap the button below to link Telegram and receive notifications about requests and bookings.",
+    "connect_button": "Connect Telegram"
+  },
 
   "ticket_details": "Ticket details (row, seat, etc.)",
   "title": "Title",
