@@ -653,6 +653,11 @@
     "my_bookings": "Bronlarim",
     "my_requests": "So‘rovlarim"
   },
+  "telegram": {
+    "enable_title": "Telegram bildirishnomalari",
+    "enable_text": "Quyidagi tugmani bosing, Telegramni ulab, so'rovlar va bronlar haqida bildirishnomalar oling.",
+    "connect_button": "Telegramni ulash"
+  },
 
   "ticket_details": "Chipta tafsilotlari (qator, o‘rin va h.k.)",
   "title": "Sarlavha",
