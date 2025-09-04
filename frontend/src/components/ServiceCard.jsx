@@ -174,6 +174,12 @@ function extractServiceFields(item, viewerRole) {
     item.directionTo, item.to, item.cityTo, item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
+    // Категория услуги (может лежать в разных местах)
+  const category = firstNonEmpty(
+    svc.category, details?.category, item?.category,
+    svc.type, details?.type
+  );
+
 
   const inlineProvider = firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
@@ -203,7 +209,7 @@ function extractServiceFields(item, viewerRole) {
 
   return {
     svc, details, title, hotel, accommodation, dates, direction,
-    rawPrice, prettyPrice,
+   rawPrice, prettyPrice, category,
     inlineProvider, providerId, flatName, flatPhone, flatTg, status
   };
 }
@@ -235,7 +241,7 @@ export default function ServiceCard({
     flatPhone,
     flatTg,
     status: statusRaw,
-    details,
+    details, category,
     direction
   } = extractServiceFields(item, viewerRole);
 
@@ -374,6 +380,31 @@ export default function ServiceCard({
             />
           </div>
         </div>
+        
+        {/* hover glass tooltip: Направление / Даты / Отель / Категория / Размещение */}
+        {(direction || dates || hotel || category || accommodation) && (
+          <div className="pointer-events-none absolute left-2 right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="rounded-lg bg-black/45 backdrop-blur-md text-white text-[13px] leading-snug ring-1 ring-white/10 p-3 shadow-lg">
+              <ul className="space-y-1.5">
+                {direction && (
+                  <li><span className="opacity-75">{t("marketplace.tooltip.direction",{defaultValue:"Направление"})}:</span> <span className="font-medium">{direction}</span></li>
+                )}
+                {dates && (
+                  <li><span className="opacity-75">{t("marketplace.tooltip.dates",{defaultValue:"Даты"})}:</span> <span className="font-medium">{dates}</span></li>
+                )}
+                {hotel && (
+                  <li><span className="opacity-75">{t("marketplace.tooltip.hotel",{defaultValue:"Отель"})}:</span> <span className="font-medium">{hotel}</span></li>
+                )}
+                {category && (
+                  <li><span className="opacity-75">{t("marketplace.tooltip.category",{defaultValue:"Категория"})}:</span> <span className="font-medium">{category}</span></li>
+                )}
+                {accommodation && (
+                  <li><span className="opacity-75">{t("marketplace.tooltip.accommodation",{defaultValue:"Размещение"})}:</span> <span className="font-medium">{accommodation}</span></li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* reviews tooltip portal */}
