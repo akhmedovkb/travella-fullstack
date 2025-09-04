@@ -97,10 +97,26 @@ exports.getMe = async (req, res) => {
       return res.status(403).json({ message: "Only client" });
     }
     const q = await db.query(
-      "SELECT id, name, email, phone, telegram, avatar_url FROM clients WHERE id = $1",
+      `SELECT id, name, email, phone, telegram, avatar_url, telegram_chat_id
+         FROM clients
+        WHERE id = $1`,
       [req.user.id]
     );
-    res.json(q.rows[0] || null);
+
+    const row = q.rows[0] || null;
+    if (!row) return res.json(null);
+
+    // отдаём chat_id и алиас, чтобы фронту было удобно
+    res.json({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      telegram: row.telegram,
+      avatar_url: row.avatar_url,
+      telegram_chat_id: row.telegram_chat_id || null,
+      tg_chat_id: row.telegram_chat_id || null,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to load profile" });
@@ -115,35 +131,44 @@ exports.updateMe = async (req, res) => {
     }
     const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
-    // вычисляем, что писать в avatar_url
     let avatar_url = null;
     if (avatar_base64) {
-      // храним как data URL
       avatar_url = `data:image/jpeg;base64,${avatar_base64}`;
     } else if (!remove_avatar) {
-      const cur = await db.query(
-        "SELECT avatar_url FROM clients WHERE id=$1",
-        [req.user.id]
-      );
+      const cur = await db.query("SELECT avatar_url FROM clients WHERE id=$1", [req.user.id]);
       avatar_url = cur.rows[0]?.avatar_url || null;
-    } // если remove_avatar = true, то avatar_url = null
+    }
 
     await db.query(
       `UPDATE clients
-         SET name = COALESCE($1, name),
-             phone = COALESCE($2, phone),
-             telegram = COALESCE($3, telegram),
-             avatar_url = $4,
-             updated_at = NOW()
-       WHERE id = $5`,
+          SET name = COALESCE($1, name),
+              phone = COALESCE($2, phone),
+              telegram = COALESCE($3, telegram),
+              avatar_url = $4,
+              updated_at = NOW()
+        WHERE id = $5`,
       [name ?? null, phone ?? null, telegram ?? null, remove_avatar ? null : avatar_url, req.user.id]
     );
 
     const q = await db.query(
-      "SELECT id, name, email, phone, telegram, avatar_url FROM clients WHERE id=$1",
+      `SELECT id, name, email, phone, telegram, avatar_url, telegram_chat_id
+         FROM clients
+        WHERE id=$1`,
       [req.user.id]
     );
-    res.json(q.rows[0] || null);
+    const row = q.rows[0] || null;
+    if (!row) return res.json(null);
+
+    res.json({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      telegram: row.telegram,
+      avatar_url: row.avatar_url,
+      telegram_chat_id: row.telegram_chat_id || null,
+      tg_chat_id: row.telegram_chat_id || null,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to update profile" });
