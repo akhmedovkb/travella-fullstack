@@ -1,10 +1,11 @@
-// frontend/src/components/ServiceCard.jsx
+//frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet } from "../api";
 import WishHeart from "./WishHeart";
-const SHOW_REVIEWS = false;
+const SHOW_REVIEWS = false; // выключаем блок «Отзывы об услуге»
+
 
 /* ============== small utils ============== */
 const firstNonEmpty = (...vals) => {
@@ -57,13 +58,52 @@ const firstImageFrom = (val) => {
   }
   return null;
 };
-
-/* Тип провайдера/категории: гид/транспорт? */
-const isGuideOrTransport = (raw) => {
-  if (raw == null) return false;
-  const s = String(raw).trim().toLowerCase();
-  if (s === "guide" || s === "transport") return true;
-  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
+const resolveExpireAt = (service) => {
+  const s = service || {};
+  const d = s.details || {};
+  const cand = [
+    s.expires_at, s.expire_at, s.expireAt,
+    d.expires_at, d.expire_at, d.expiresAt,
+    d.expiration, d.expiration_at, d.expirationAt,
+    d.expiration_ts, d.expirationTs,
+  ].find((v) => v !== undefined && v !== null && String(v).trim?.() !== "");
+  let ts = null;
+  if (cand !== undefined && cand !== null) {
+    if (typeof cand === "number") ts = cand > 1e12 ? cand : cand * 1000;
+    else {
+      const parsed = Date.parse(String(cand));
+      if (!Number.isNaN(parsed)) ts = parsed;
+    }
+  }
+  if (!ts) {
+    const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
+    if (ttl && Number(ttl) > 0 && s.created_at) {
+      const created = Date.parse(s.created_at);
+      if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
+    }
+  }
+  return ts;
+};
+const formatLeft = (ms) => {
+  if (ms <= 0) return "00:00:00";
+  const total = Math.floor(ms / 1000);
+  const dd = Math.floor(total / 86400);
+  const hh = Math.floor((total % 86400) / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  if (dd > 0) return `${dd}д ${pad(hh)}:${pad(mm)}`;
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+};
+const renderTelegram = (value) => {
+  if (!value) return null;
+  const s = String(value).trim();
+  let href = null;
+  let label = s;
+  if (/^https?:\/\//i.test(s)) href = s;
+  else if (s.startsWith("@")) { href = `https://t.me/${s.slice(1)}`; label = s; }
+  else if (/^[A-Za-z0-9_]+$/.test(s)) { href = `https://t.me/${s}`; label = `@${s}`; }
+  return { href, label };
 };
 
 /* ============== provider profile cache ============== */
@@ -162,7 +202,8 @@ function extractServiceFields(item, viewerRole) {
     bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
-
+  
+    // ---------- direction (for refused_flight, etc.) ----------
   const dirFrom = firstNonEmpty(
     details?.directionFrom, details?.from, details?.cityFrom, details?.origin, details?.departureCity,
     svc.directionFrom, svc.from, svc.cityFrom, svc.origin, svc.departureCity,
@@ -174,13 +215,7 @@ function extractServiceFields(item, viewerRole) {
     item.directionTo, item.to, item.cityTo, item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
-    // Категория услуги (может лежать в разных местах)
-  const category = firstNonEmpty(
-    svc.category, details?.category, item?.category,
-    svc.type, details?.type
-  );
-
-
+  
   const inlineProvider = firstNonEmpty(
     svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
     item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
@@ -209,7 +244,7 @@ function extractServiceFields(item, viewerRole) {
 
   return {
     svc, details, title, hotel, accommodation, dates, direction,
-   rawPrice, prettyPrice, category,
+    rawPrice, prettyPrice,
     inlineProvider, providerId, flatName, flatPhone, flatTg, status
   };
 }
@@ -217,12 +252,12 @@ function extractServiceFields(item, viewerRole) {
 /* ============== the card ============== */
 export default function ServiceCard({
   item,
-  viewerRole = null,
-  favoriteIds,
-  isFav,
+  viewerRole = null,        // 'client' | 'provider' | null
+  favoriteIds,              // Set<string> (optional)
+  isFav,                    // boolean (optional; overrides favoriteIds)
   favActive,
-  onToggleFavorite,
-  onQuickRequest,
+  onToggleFavorite,         // (serviceId) => void|Promise<void>
+  onQuickRequest,           // (serviceId, providerId, title) => void
   now = Date.now(),
   className = "",
 }) {
@@ -241,7 +276,7 @@ export default function ServiceCard({
     flatPhone,
     flatTg,
     status: statusRaw,
-    details, category,
+    details,
     direction
   } = extractServiceFields(item, viewerRole);
 
@@ -254,7 +289,7 @@ export default function ServiceCard({
     svc.image_url, item?.image_url,
   ]);
 
-  // provider profile enrichment (чтобы достать тип провайдера)
+  // provider profile enrichment
   const [provider, setProvider] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -274,28 +309,20 @@ export default function ServiceCard({
     prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
     prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone, flatPhone
   );
-  const supplierTg = (() => {
-    const value = firstNonEmpty(
-      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
-      prov?.contacts?.telegram, prov?.socials?.telegram,
-      prov?.social, prov?.social_link, flatTg
-    );
-    if (!value) return null;
-    const s = String(value).trim();
-    if (/^https?:\/\//i.test(s)) return { href: s, label: s };
-    if (s.startsWith("@")) return { href: `https://t.me/${s.slice(1)}`, label: s };
-    if (/^[A-Za-z0-9_]+$/.test(s)) return { href: `https://t.me/${s}`, label: `@${s}` };
-    return { href: null, label: s };
-  })();
+  const supplierTg = renderTelegram(firstNonEmpty(
+    prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
+    prov?.contacts?.telegram, prov?.socials?.telegram,
+    prov?.social, prov?.social_link, flatTg
+  ));
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
   const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
 
-  // ====== ВАЖНО: логика «кнопка Бронировать» только для гида/транспорта ======
-  const serviceLooksBookable = isGuideOrTransport(svc.category || details?.category || item?.category);
-  const providerLooksBookable = isGuideOrTransport(prov?.type || prov?.provider_type || prov?.category);
-  const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
+  const expireAt = resolveExpireAt(svc);
+  const leftMs = expireAt ? Math.max(0, expireAt - now) : null;
+  const hasTimer = !!expireAt;
+  const timerText = hasTimer ? formatLeft(leftMs) : null;
 
   // reviews tooltip
   const [revOpen, setRevOpen] = useState(false);
@@ -322,12 +349,12 @@ export default function ServiceCard({
   };
   const closeReviews = () => setRevOpen(false);
 
-  const activeFav =
-    typeof isFav === "boolean"
-      ? isFav
-      : typeof favActive === "boolean"
-        ? favActive
-        : (favoriteIds ? favoriteIds.has(String(id)) : false);
+   const activeFav =
+   typeof isFav === "boolean"
+     ? isFav
+     : typeof favActive === "boolean"
+       ? favActive
+       : (favoriteIds ? favoriteIds.has(String(id)) : false);
 
   return (
     <div className={["group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col", className].join(" ")}>
@@ -348,24 +375,35 @@ export default function ServiceCard({
         {/* top overlay */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2">
-            {badge && (
+            {hasTimer && (
+              <span
+                className={`pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs backdrop-blur-md ring-1 ring-white/20 shadow ${
+                  leftMs > 0 ? "bg-orange-600/95" : "bg-gray-400/90"
+                }`}
+                title={leftMs > 0 ? (t("countdown.until_end") || "До окончания") : (t("countdown.expired") || "Время истекло")}
+              >
+                {timerText}
+              </span>
+            )}
+
+            {!hasTimer && badge && (
               <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                 {badge}
               </span>
             )}
 
             {SHOW_REVIEWS && (
-              <button
-                ref={revBtnRef}
-                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
-                onMouseEnter={openReviews}
-                onMouseLeave={closeReviews}
-                title={t("marketplace.reviews") || "Отзывы об услуге"}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
-                </svg>
-              </button>
+            <button
+              ref={revBtnRef}
+              className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
+              onMouseEnter={openReviews}
+              onMouseLeave={closeReviews}
+              title={t("marketplace.reviews") || "Отзывы об услуге"}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
+              </svg>
+            </button>
             )}
           </div>
 
@@ -380,59 +418,73 @@ export default function ServiceCard({
             />
           </div>
         </div>
-        
-        {/* hover glass tooltip: Направление / Даты / Отель / Категория / Размещение */}
-        {(direction || dates || hotel || category || accommodation) && (
-          <div className="pointer-events-none absolute left-2 right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="rounded-lg bg-black/45 backdrop-blur-md text-white text-[13px] leading-snug ring-1 ring-white/10 p-3 shadow-lg">
-              <ul className="space-y-1.5">
-                {direction && (
-                  <li><span className="opacity-75">{t("marketplace.tooltip.direction",{defaultValue:"Направление"})}:</span> <span className="font-medium">{direction}</span></li>
-                )}
-                {dates && (
-                  <li><span className="opacity-75">{t("marketplace.tooltip.dates",{defaultValue:"Даты"})}:</span> <span className="font-medium">{dates}</span></li>
-                )}
-                {hotel && (
-                  <li><span className="opacity-75">{t("marketplace.tooltip.hotel",{defaultValue:"Отель"})}:</span> <span className="font-medium">{hotel}</span></li>
-                )}
-                {category && (
-                  <li><span className="opacity-75">{t("marketplace.tooltip.category",{defaultValue:"Категория"})}:</span> <span className="font-medium">{category}</span></li>
-                )}
-                {accommodation && (
-                  <li><span className="opacity-75">{t("marketplace.tooltip.accommodation",{defaultValue:"Размещение"})}:</span> <span className="font-medium">{accommodation}</span></li>
-                )}
-              </ul>
+
+        {/* hover info overlay */}
+        <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute inset-x-0 bottom-0 p-3">
+            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
+              <div className="font-semibold line-clamp-2">{title}</div>
+                            {/* Направление только для отказных авиабилетов */}
+              {svc?.category === "refused_flight" && direction && (
+                <div>
+                  <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
+                  <span className="font-medium">{direction}</span>
+                </div>
+              )}
+              {hotel && (
+                <div>
+                  <span className="opacity-80">Отель: </span>
+                  <span className="font-medium">{hotel}</span>
+                </div>
+              )}
+              {accommodation && (
+                <div>
+                  <span className="opacity-80">Размещение: </span>
+                  <span className="font-medium">{accommodation}</span>
+                </div>
+              )}
+              {dates && (
+                <div>
+                  <span className="opacity-80">{t("common.date") || "Дата"}: </span>
+                  <span className="font-medium">{dates}</span>
+                </div>
+              )}
+              {prettyPrice && (
+                <div>
+                  <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
+                  <span className="font-semibold">{prettyPrice}</span>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* reviews tooltip portal */}
       {SHOW_REVIEWS && (
-        <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
-          <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
-            <div className="flex items-center gap-2">
-              <Stars value={revData.avg} />
-              <span className="opacity-80">({revData.count || 0})</span>
-            </div>
-            <div className="mt-1">
-              {!revData.items?.length ? (
-                <span className="opacity-80">—</span>
-              ) : (
-                <ul className="list-disc ml-4 space-y-1">
-                  {revData.items.slice(0, 2).map((r) => (
-                    <li key={r.id} className="line-clamp-2 opacity-90">
-                      {r.text || ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
+        <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
+          <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
+          <div className="flex items-center gap-2">
+            <Stars value={revData.avg} />
+            <span className="opacity-80">({revData.count || 0})</span>
           </div>
-        </TooltipPortal>
+          <div className="mt-1">
+            {!revData.items?.length ? (
+              <span className="opacity-80">—</span>
+            ) : (
+              <ul className="list-disc ml-4 space-y-1">
+                {revData.items.slice(0, 2).map((r) => (
+                  <li key={r.id} className="line-clamp-2 opacity-90">
+                    {r.text || ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </TooltipPortal>
       )}
-
       {/* BODY */}
       <div className="p-3 flex-1 flex flex-col">
         <div className="font-semibold line-clamp-2">{title}</div>
@@ -449,11 +501,12 @@ export default function ServiceCard({
                 <span className="text-gray-500">
                   {t("marketplace.supplier") || "Поставщик"}:{" "}
                 </span>
+            
                 {providerId ? (
                   <a
                     href={`/profile/provider/${providerId}`}
                     className="underline hover:text-gray-900"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()} // чтобы клик по ссылке не триггерил клики карточки
                   >
                     {supplierName}
                   </a>
@@ -487,22 +540,12 @@ export default function ServiceCard({
         )}
 
         <div className="mt-auto pt-3">
-          {showBookButton ? (
-            <a
-              href={`/profile/provider/${providerId}?service=${id}#book`}
-              className="w-full inline-flex items-center justify-center bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {t("actions.book") || "Бронировать"}
-            </a>
-          ) : (
-            <button
-              onClick={() => onQuickRequest?.(id, providerId, title)}
-              className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
-            >
-              {t("actions.quick_request") || "Быстрый запрос"}
-            </button>
-          )}
+          <button
+            onClick={() => onQuickRequest?.(id, providerId, title)}
+            className="w-full bg-orange-500 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-orange-600"
+          >
+            {t("actions.quick_request") || "Быстрый запрос"}
+          </button>
         </div>
       </div>
     </div>
