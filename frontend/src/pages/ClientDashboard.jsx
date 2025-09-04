@@ -1,6 +1,6 @@
 // frontend/src/pages/ClientDashboard.jsx
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams, Link } from "react-router-dom";
 import { apiGet, apiPut, apiPost, apiDelete } from "../api";
@@ -497,6 +497,7 @@ function FavoritesList({
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
+  const [me, setMe] = useState(null);
   const fileRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -588,18 +589,19 @@ export default function ClientDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  useEffect(() => {
+    useEffect(() => {
     (async () => {
       try {
         setLoadingProfile(true);
-        const me = await apiGet("/api/clients/me");
-        setName(me?.name || "");
-        setPhone(me?.phone || "");
-        setTelegram(me?.telegram || "");
-        setAvatarBase64(me?.avatar_base64 ? toDataUrl(me.avatar_base64) : null);
-        setAvatarServerUrl(me?.avatar_url || null);
+        const profile = await apiGet("/api/clients/me");
+        setMe(profile); // <-- сохраняем в стейт
+        setName(profile?.name || "");
+        setPhone(profile?.phone || "");
+        setTelegram(profile?.telegram || "");
+        setAvatarBase64(profile?.avatar_base64 ? toDataUrl(profile.avatar_base64) : null);
+        setAvatarServerUrl(profile?.avatar_url || null);
         setRemoveAvatar(false);
-        setMyId(me?.id || me?._id || me?.user_id || me?.client_id || null);
+        setMyId(profile?.id || profile?._id || profile?.user_id || profile?.client_id || null);
       } catch {
         setError(t("errors.profile_load", { defaultValue: "Не удалось загрузить профиль" }));
       } finally {
@@ -607,6 +609,14 @@ export default function ClientDashboard() {
       }
     })();
   }, [t]);
+
+  const botUser = import.meta.env.VITE_TG_BOT_USERNAME || "";
+  const clientId = me?.id || me?._id || me?.client_id || me?.user_id;
+  const isTgLinked = !!(me?.tg_chat_id || me?.telegram_chat_id);
+  const tgDeepLink = useMemo(() => {
+    if (!botUser || !clientId) return null;
+    return `https://t.me/${botUser}?start=c_${clientId}`;
+  }, [botUser, clientId]);
 
   // миграция «anon» черновиков
   useEffect(() => {
@@ -1286,6 +1296,27 @@ export default function ClientDashboard() {
                 <label className="text-sm text-gray-600">{t("telegram", { defaultValue: "Telegram" })}</label>
                 <input className="mt-1 w-full border rounded-lg px-3 py-2" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username" />
               </div>
+                    {/* Баннер «Подключить Telegram», показываем только если ещё не привязано */}
+                {!isTgLinked && tgDeepLink && (
+                  <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
+                    <div className="font-medium mb-1">
+                      {t("telegram.enable_title", { defaultValue: "Уведомления в Telegram" })}
+                    </div>
+                    <div className="mb-2">
+                      {t("telegram.enable_text", {
+                        defaultValue: "Нажмите кнопку ниже, чтобы привязать Telegram и получать уведомления о заявках и бронированиях.",
+                      })}
+                    </div>
+                    <a
+                      href={tgDeepLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                    >
+                      {t("telegram.connect_button", { defaultValue: "Подключить Telegram" })}
+                    </a>
+                  </div>
+                )}
 
               <div className="pt-2">
                 <button onClick={handleSaveProfile} disabled={savingProfile || loadingProfile} className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
