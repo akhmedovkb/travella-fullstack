@@ -5,36 +5,14 @@ import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
-import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
-import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
 
 
 /** ================= Helpers ================= */
-//для календаря гида и трансп.
-const toLocalDate = (val) => {
-  const s =
-    typeof val === "string"
-      ? val
-      : val?.date || val?.day || ""; // поддержим и {date}, и {day}
-  const [y, m, d] = String(s).split("-").map((n) => Number(n));
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d); // локальная дата без TZ-сдвига
-};
-
-// Date -> "YYYY-MM-DD"
-const dateToYMD = (d) => {
-  const dt = new Date(d);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const da = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
-};
-
 
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
@@ -630,42 +608,7 @@ direction: "",
     });
   };
 
-  // === Calendar save  ===
-const handleSaveBlockedDates = async () => {
-  if (!Array.isArray(blockedDates)) return;
-  setSaving(true);
-
-   try {
-    const payload = blockedDates.map((d) =>
-      typeof d === "string" ? d : datetoYMD(d)
-    );
-
-    await axios.post(
-      `${API_BASE}/api/providers/blocked-dates`,
-      { dates: payload },
-      config
-    );
-
-    tSuccess(t("calendar.saved_successfully") || "Даты сохранены");
-
-    // опционально: сразу перезагрузить актуальные блокировки с сервера
-    const { data } = await axios.get(
-      `${API_BASE}/api/providers/blocked-dates`,
-      config
-    );
-    
-    setBlockedDates((Array.isArray(data) ? data : []).map(toLocalDate).filter(Boolean));
-  } catch (err) {
-    console.error("Ошибка сохранения дат", err);
-    const msg = err?.response?.data?.message || t("calendar.save_error") || "Ошибка сохранения дат";
-    tError(msg);
-  } finally {
-    setSaving(false);
-  }
-};
-
-
-
+  
   /** ===== Delete service modal ===== */
   const confirmDeleteService = (id) => {
     setServiceToDelete(id);
@@ -770,16 +713,7 @@ useEffect(() => {
       setNewPhone(res.data?.phone || "");
       setNewAddress(res.data?.address || "");
 
-      if (["guide", "transport"].includes(res.data?.type)) {
-        const [blockedRes, bookedRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/providers/blocked-dates`, config), // РУЧНЫЕ
-          axios.get(`${API_BASE}/api/providers/booked-dates`,  config), // БРОНИ
-        ]);
-
-        setBlockedDates((blockedRes.data || []).map(toLocalDate).filter(Boolean)); // 🔴 вручную
-        setBookedDates ((bookedRes.data  || []).map(toLocalDate).filter(Boolean)); // 🔵 брони
-      }
-    })
+     })
     .catch((err) => {
       console.error("Ошибка загрузки профиля", err);
       tError(t("profile_load_error") || "Не удалось загрузить профиль");
@@ -3070,15 +3004,7 @@ useEffect(() => {
             </>
           )}
 
-          {/*  ===== ВХОДЯЩИЕ ЗАПРОСЫ ===== 
-          <section className="mt-8">
-            <ProviderInboxList
-              showHeader
-              cleanupExpired={serverCleanupExpired}
-              nameResolver={typeof window !== "undefined" ? window.__providerClientNameResolver : undefined}
-              onAfterAction={refreshInbox}
-            />
-          </section> */}
+         
         </div>
       </div>
 
