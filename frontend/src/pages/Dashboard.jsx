@@ -443,12 +443,6 @@ const Dashboard = () => {
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
-  // Calendar (guide/transport)
-  const [bookedDates, setBookedDates] = useState([]);  // Date[]
-  const [blockedDates, setBlockedDates] = useState([]); // Date[]
-  const [saving, setSaving] = useState(false);
- 
-
   // Delete service modal
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState(null);
