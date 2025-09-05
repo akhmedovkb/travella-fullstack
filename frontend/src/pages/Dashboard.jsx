@@ -1352,12 +1352,16 @@ useEffect(() => {
                   <div className="flex gap-4 mb-2">
                     <Select
                       options={countryOptions}
-                      value={selectedCountry}
-                      onChange={(value) => setSelectedCountry(value)}
+                      value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                      onChange={(val) => {
+                        setSelectedCountry(val);
+                        setDetails(d => ({ ...d, directionCountry: val?.value || "" }));
+                      }}
                       placeholder={t("direction_country")}
                       noOptionsMessage={() => t("country_not_chosen")}
                       className="w-1/3"
                     />
+
                     <AsyncSelect
                       cacheOptions
                       defaultOptions
@@ -2165,12 +2169,16 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={selectedCountry}
-                          onChange={(value) => setSelectedCountry(value)}
+                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                          onChange={(val) => {
+                            setSelectedCountry(val);
+                            setDetails(d => ({ ...d, directionCountry: val?.value || "" }));
+                          }}
                           placeholder={t("direction_country")}
                           noOptionsMessage={() => t("country_not_chosen")}
                           className="w-1/3"
                         />
+
 
                         <AsyncSelect
                           cacheOptions
