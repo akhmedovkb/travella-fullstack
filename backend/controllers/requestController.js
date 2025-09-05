@@ -1,9 +1,8 @@
 // backend/controllers/requestController.js
 const db = require("../db");
+const tg = require("../utils/telegram");
 
 /* ===================== Helpers ===================== */
-
-
 
 function parseTs(v) {
   if (v == null) return null;
@@ -122,6 +121,7 @@ async function markProcessedIfNew(id, providerIds) {
 }
 
 // --- helper: пометить как "прочитано/обработано" (id может быть строкой)
+// --- helper: пометить как "прочитано/обработано" (id может быть строкой)
 exports.touchByProvider = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -131,6 +131,11 @@ exports.touchByProvider = async (req, res) => {
     if (!id) return res.status(400).json({ error: "id_required" });
 
     const changed = await markProcessedIfNew(id, providerIds);
+
+    // если статус изменился на processed — уведомим заявителя
+    if (changed > 0) {
+      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(() => {});
+    }
 
     // дополнительно проверим владение, чтобы не выдавать лишнего
     if (!changed) {
@@ -305,6 +310,8 @@ exports.createQuickRequest = async (req, res) => {
        RETURNING id, service_id, client_id, status, note, created_at`,
       [service_id, clientId, note || null]
     );
+    const newId = ins.rows?.[0]?.id;
+      if (newId) tg.notifyReqNew({ request_id: newId }).catch(() => {});
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("quick request error:", err);
@@ -364,6 +371,12 @@ exports.getProviderRequests = async (req, res) => {
  *  - владельцу услуги (JOIN services.provider_id ∈ providerIds)
  *  - провайдеру-инициатору (requests.provider_id / author_provider_id / created_by / owner_id ∈ providerIds), если такие колонки есть
  */
+/** DELETE /api/requests/:id
+ * Разрешаем удалять:
+ *  - автору заявки (client_id = текущий user.id либо зеркальный client_id для провайдера)
+ *  - владельцу услуги (JOIN services.provider_id ∈ providerIds)
+ *  - провайдеру-инициатору (requests.provider_id / author_provider_id / created_by / owner_id ∈ providerIds), если такие колонки есть
+ */
 exports.deleteRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -378,6 +391,22 @@ exports.deleteRequest = async (req, res) => {
 
     // 2) набор возможных provider-id (id, provider_id, company_id, …)
     const providerIds = collectProviderIdsFromUser(req.user);
+
+    // helper: пробуем SELECT по «необязательным» колонкам; если нет — не считаем за ошибку
+    const trySelect = async (sql, params) => {
+      try {
+        const q = await db.query(sql, params);
+        return q;
+      } catch (e) {
+        if (
+          /column .* does not exist/i.test(String(e?.message)) ||
+          /missing FROM-clause entry/i.test(String(e?.message))
+        ) {
+          return { rowCount: 0, rows: [] };
+        }
+        throw e;
+      }
+    };
 
     // helper: пробуем DELETE; если нет колонки — не считаем за ошибку
     const tryDelete = async (sql, params) => {
@@ -394,6 +423,47 @@ exports.deleteRequest = async (req, res) => {
         throw e;
       }
     };
+
+    // NEW: «снимок» — чтобы знать, кому слать уведомление ДО удаления
+    const r0 = await db.query(
+      `SELECT r.client_id, s.provider_id
+         FROM requests r
+         JOIN services s ON s.id = r.service_id
+        WHERE r.id::text = $1
+        LIMIT 1`,
+      [id]
+    );
+    if (!r0.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+
+    const snap = r0.rows[0];
+    const isAuthor = String(snap.client_id) === clientIdStr;
+    const isOwnerProvider = providerIds.includes(Number(snap.provider_id));
+
+    // В некоторых схемах заявитель может быть провайдером (инициатор), колонка в requests:
+    // provider_id / author_provider_id / created_by / owner_id
+    let isInitiatorProvider = false;
+    if (!isAuthor && !isOwnerProvider && providerIds.length) {
+      const cols = ["provider_id", "author_provider_id", "created_by", "owner_id"];
+      for (const col of cols) {
+        const sel = await trySelect(
+          `SELECT 1 FROM requests WHERE id::text = $1 AND ${col} = ANY($2::int[]) LIMIT 1`,
+          [id, providerIds]
+        );
+        if (sel.rowCount > 0) {
+          isInitiatorProvider = true;
+          break;
+        }
+      }
+    }
+
+    // NEW: отправляем уведомление ДО удаления
+    if (isAuthor || isInitiatorProvider) {
+      // заявитель удаляет → уведомить владельца услуги
+      tg.notifyReqCancelledByRequester({ request_id: id }).catch(() => {});
+    } else if (isOwnerProvider) {
+      // владелец услуги удаляет → уведомить заявителя
+      tg.notifyReqDeletedByProvider({ request_id: id }).catch(() => {});
+    }
 
     let affected = 0;
 
@@ -440,7 +510,6 @@ exports.deleteRequest = async (req, res) => {
 };
 
 
-
 /** GET /api/requests/provider/stats */
 exports.getProviderStats = async (req, res) => {
   try {
@@ -475,6 +544,7 @@ exports.getProviderStats = async (req, res) => {
 };
 
 /** GET /api/requests/provider/:id (детали заявки; помечает как processed) */
+/** GET /api/requests/provider/:id (детали заявки; помечает как processed) */
 exports.getProviderRequestById = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -488,6 +558,11 @@ exports.getProviderRequestById = async (req, res) => {
       return 0;
     });
 
+    // если изменили статус на processed — уведомим заявителя
+    if (changed > 0) {
+      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(() => {});
+    }
+
     const q = await db.query(
       `
       SELECT
@@ -496,7 +571,7 @@ exports.getProviderRequestById = async (req, res) => {
         COALESCE(r.status, 'new') AS status,
         r.note,
         json_build_object('id', s.id, 'title', COALESCE(s.title, '—')) AS service,
-                json_build_object(
+        json_build_object(
           'id', c.id,
           'name', COALESCE(c.name, '—'),
           'phone', c.phone,
@@ -523,6 +598,7 @@ exports.getProviderRequestById = async (req, res) => {
   }
 };
 
+
 /** PATCH /api/requests/provider/:id (обновить статус: processed/accepted/rejected) */
 exports.updateStatusByProvider = async (req, res) => {
   try {
@@ -548,6 +624,8 @@ exports.updateStatusByProvider = async (req, res) => {
     );
 
     if (!q.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
+    const reqId = String(id);
+    tg.notifyReqStatusChanged({ request_id: reqId, status }).catch(() => {});
     res.json({ success: true });
   } catch (e) {
     console.error("updateStatusByProvider error:", e);
@@ -555,6 +633,7 @@ exports.updateStatusByProvider = async (req, res) => {
   }
 };
 
+/** DELETE /api/requests/provider/:id (удалить заявку провайдером) */
 /** DELETE /api/requests/provider/:id (удалить заявку провайдером) */
 exports.deleteByProvider = async (req, res) => {
   try {
@@ -580,8 +659,8 @@ exports.deleteByProvider = async (req, res) => {
       return res.status(403).json({ error: "forbidden" });
     }
 
-    // (опционально) запретить удаление уже "accepted"
-    // if (row.status === "accepted") return res.status(400).json({ error: "cannot_delete_accepted" });
+    // уведомить заявителя ДО удаления
+    tg.notifyReqDeletedByProvider({ request_id: id }).catch(() => {});
 
     await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
     res.json({ success: true, deleted: id });
