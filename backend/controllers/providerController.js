@@ -134,9 +134,7 @@ const registerProvider = async (req, res) => {
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [
-      email,
-    ]);
+    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
     if (!q.rows.length) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
@@ -145,12 +143,29 @@ const loginProvider = async (req, res) => {
     if (!ok) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
-    const token = jwt.sign({ id: row.id }, process.env.JWT_SECRET, {
+
+    // ВАЖНО: добавляем роль "provider" в токен
+    const token = jwt.sign({ id: row.id, role: "provider" }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+
+    // Отдаём telegram_chat_id (и алиас tg_chat_id) — для баннера на фронте
     res.json({
       message: "Вход успешен",
-      provider: { id: row.id, name: row.name, email: row.email },
+      provider: {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        type: row.type,
+        location: row.location,
+        phone: row.phone,
+        social: row.social,
+        photo: row.photo,
+        address: row.address,
+        certificate: row.certificate,
+        telegram_chat_id: row.telegram_chat_id || null,
+        tg_chat_id: row.telegram_chat_id || null, // алиас для удобства
+      },
       token,
     });
   } catch (err) {
@@ -164,11 +179,30 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id
        FROM providers WHERE id = $1`,
       [id]
     );
-    res.json(r.rows[0] || null);
+    const p = r.rows[0] || null;
+    if (!p) return res.json(null);
+
+    // Возвращаем tg_chat_id как алиас
+    res.json({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      type: p.type,
+      location: p.location,
+      phone: p.phone,
+      social: p.social,
+      photo: p.photo,
+      certificate: p.certificate,
+      address: p.address,
+      telegram_chat_id: p.telegram_chat_id || null,
+      tg_chat_id: p.telegram_chat_id || null,
+      // бонусом можно отдать avatar_url, если фронту удобно
+      avatar_url: p.photo || null,
+    });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -223,7 +257,35 @@ const updateProviderProfile = async (req, res) => {
         id,
       ]
     );
-    res.json({ message: "Профиль обновлён успешно" });
+
+    // Отдаём и message, и актуальные данные (совместимо с текущим фронтом)
+    const r = await pool.query(
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id
+         FROM providers WHERE id = $1`,
+      [id]
+    );
+    const p = r.rows[0] || null;
+
+    res.json({
+      message: "Профиль обновлён успешно",
+      provider: p
+        ? {
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            type: p.type,
+            location: p.location,
+            phone: p.phone,
+            social: p.social,
+            photo: p.photo,
+            certificate: p.certificate,
+            address: p.address,
+            telegram_chat_id: p.telegram_chat_id || null,
+            tg_chat_id: p.telegram_chat_id || null,
+            avatar_url: p.photo || null,
+          }
+        : null,
+    });
   } catch (err) {
     console.error("❌ Ошибка обновления профиля:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -234,21 +296,13 @@ const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
-    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [
-      id,
-    ]);
+    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
     if (!q.rows.length)
       return res.status(404).json({ message: "Провайдер не найден" });
-    const ok = await bcrypt.compare(
-      String(oldPassword || ""),
-      q.rows[0].password
-    );
+    const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
     const hashed = await bcrypt.hash(String(newPassword || ""), 10);
-    await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [
-      hashed,
-      id,
-    ]);
+    await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
     res.json({ message: "Пароль обновлён" });
   } catch (err) {
     console.error("❌ Ошибка смены пароля:", err);
@@ -362,10 +416,10 @@ const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const del = await pool.query(
-      "DELETE FROM services WHERE id=$1 AND provider_id=$2",
-      [serviceId, providerId]
-    );
+    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [
+      serviceId,
+      providerId,
+    ]);
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ message: "Удалено" });
   } catch (err) {
@@ -410,7 +464,6 @@ const getProviderPublicById = async (req, res) => {
 // ---------- Calendar (booked / blocked dates) ----------
 
 // ЗАНЯТЫЕ БРОНЯМИ (для провайдера, под токеном)
-// Возвращаем [{ date: 'YYYY-MM-DD' }, ...]
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -432,7 +485,6 @@ const getBookedDates = async (req, res) => {
 };
 
 // РУЧНЫЕ БЛОКИРОВКИ (для провайдера под токеном)
-// Возвращаем [{ date: 'YYYY-MM-DD' }, ...]
 const getBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -460,10 +512,9 @@ const saveBlockedDates = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    await client.query(
-      `DELETE FROM provider_blocked_dates WHERE provider_id = $1`,
-      [providerId]
-    );
+    await client.query(`DELETE FROM provider_blocked_dates WHERE provider_id = $1`, [
+      providerId,
+    ]);
 
     if (dates.length) {
       const values = dates.map((_, i) => `($1, $${i + 2}::date)`).join(",");
