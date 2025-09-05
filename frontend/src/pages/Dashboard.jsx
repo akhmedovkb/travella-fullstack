@@ -484,12 +484,27 @@ direction: "",
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   /** ===== Utils ===== */
-  const isServiceActive = (s) => {
-    const exp = s?.details?.expiration;
-    if (!exp) return true;
-    const ts = Date.parse(exp);
-    return Number.isFinite(ts) ? Date.now() < ts : true;
+    const isServiceActive = (s) => {
+    const ts = resolveExpireAtFromService(s);
+    return ts ? Date.now() < ts : true;
   };
+
+  function MoneyField({ label, value, onChange, placeholder }) {
+  return (
+        <div className="mb-2">
+          {label ? <label className="block font-medium mb-1">{label}</label> : null}
+          <input
+            inputMode="decimal"
+            pattern="[0-9,.\s-]*"
+            value={value ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      );
+    }
+
 
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
@@ -982,6 +997,13 @@ useEffect(() => {
       tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
       return;
           }
+    if (!isExtendedCategory) {
+           const p = parseMoneySafe(price);
+           if (!Number.isFinite(p) || p <= 0) {
+             tError(t("validation.gross_positive", "Цена должна быть больше 0"));
+             return;
+           }
+         }
 
     // Validate net/gross prices for extended categories
     if (isExtendedCategory) {
@@ -1012,6 +1034,12 @@ useEffect(() => {
       return Number.isFinite(n) ? n : undefined;
     })();
 
+     const __expTs = (() => {
+       if (!hasVal(details?.expiration)) return undefined;
+       const d = new Date(details.expiration);
+       return Number.isFinite(d.getTime()) ? d.getTime() : undefined;
+     })();
+
 
     const raw = {
       title,
@@ -1025,6 +1053,7 @@ useEffect(() => {
           ...details,
           ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
+          ...(__expTs   !== undefined ? { expiration_ts: __expTs } : {}),
         }
       : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
     
@@ -1531,20 +1560,19 @@ useEffect(() => {
                     {t("changeable")}
                   </label>
 
-                  <input
-                    value={details.netPrice || ""}
-                    onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                    placeholder={t("net_price")}
-                    className="w-full border px-3 py-2 rounded mb-2"
-                  />
+                   <MoneyField
+                     label={null}
+                     value={details.netPrice}
+                     onChange={(v) => setDetails({ ...details, netPrice: v })}
+                     placeholder={t("net_price")}
+                   />
                   
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                   <MoneyField
+                     value={details.grossPrice}
+                     onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                     placeholder={t("gross_price")}
+                   />
+                  
     <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                   <input
                     type="datetime-local"
@@ -1695,20 +1723,17 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <input
-                      type="number"
-                      value={details.netPrice || ""}
-                      placeholder={t("net_price")}
-                      onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                      className="w-full border px-3 py-2 rounded"
-                    />                    
-                    <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                    />
+                     <MoneyField
+                       label={null}
+                       value={details.netPrice}
+                       onChange={(v) => setDetails({ ...details, netPrice: v })}
+                       placeholder={t("net_price")}
+                     />              
+                     <MoneyField
+                       value={details.grossPrice}
+                       onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                       placeholder={t("gross_price")}
+                     />
                   </div>
 
                   <div className="mb-2">
@@ -1819,6 +1844,7 @@ useEffect(() => {
                           <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                           <input
                             type="date"
+                            min={DATE_MIN}
                             value={details.startDate || ""}
                             onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -1829,6 +1855,7 @@ useEffect(() => {
                             <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                             <input
                               type="date"
+                              min={details.startDate || DATE_MIN}
                               value={details.returnDate || ""}
                               onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
                               className="w-full border px-3 py-2 rounded"
@@ -1858,21 +1885,17 @@ useEffect(() => {
                         />
                       </div>
 
-                      <input
-                        value={details.netPrice || ""}
-                        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                        placeholder={t("net_price")}
-                        className="w-full border px-3 py-2 rounded mb-3"
-                      />
-
-                      
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                          label={null}
+                          value={details.netPrice}
+                          onChange={(v) => setDetails({ ...details, netPrice: v })}
+                          placeholder={t("net_price")}
+                        />                      
+                       <MoneyField
+                         value={details.grossPrice}
+                         onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                         placeholder={t("gross_price")}
+                       />
                   <div className="mb-3">
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
@@ -1946,22 +1969,16 @@ useEffect(() => {
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
 
-                  <input
-                    type="number"
-                    value={details.netPrice || ""}
-                    onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                    placeholder={t("net_price")}
-                    className="w-full border px-3 py-2 rounded mb-2"
-                  />
-
-                  
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                   <MoneyField
+                      value={details.grossPrice}
+                      onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                      placeholder={t("gross_price")}
+                    />
+                    <MoneyField
+                       value={details.grossPrice}
+                       onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                       placeholder={t("gross_price")}
+                     />
     <label className="inline-flex items-center mb-2">
                     <input
                       type="checkbox"
@@ -2000,22 +2017,19 @@ useEffect(() => {
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
 
-                  <input
-                    type="number"
-                    value={details.netPrice}
-                    onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                    placeholder={t("net_price")}
-                    className="w-full border px-3 py-2 rounded mb-2"
-                  />
+                   <MoneyField
+                     label={null}
+                     value={details.netPrice}
+                     onChange={(v) => setDetails({ ...details, netPrice: v })}
+                     placeholder={t("net_price")}
+                   />
 
                   
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                   <MoneyField
+                     value={details.grossPrice}
+                     onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                     placeholder={t("gross_price")}
+                   />
     <label className="flex items-center space-x-2 mb-2">
                     <input
                       type="checkbox"
@@ -2103,6 +2117,8 @@ useEffect(() => {
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
+                  setSelectedCountry(null);
+                  setDepartureCity(null);
                   setTitle("");
                   setDescription("");
                   setPrice("");
@@ -2359,20 +2375,19 @@ useEffect(() => {
                         {t("changeable")}
                       </label>
 
-                      <input
-                        value={details.netPrice || ""}
-                        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                        placeholder={t("net_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                         label={null}
+                         value={details.netPrice}
+                         onChange={(v) => setDetails({ ...details, netPrice: v })}
+                         placeholder={t("net_price")}
+                       />
                       
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                         label={null}
+                         value={details.netPrice}
+                         onChange={(v) => setDetails({ ...details, netPrice: v })}
+                         placeholder={t("net_price")}
+                       />
     <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                       <input
                         type="datetime-local"
@@ -2525,22 +2540,18 @@ useEffect(() => {
 
                     <div className="mb-2">
                         
-                        <input
-                          type="number"
-                          value={details.netPrice || ""}
-                          onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
+                        <MoneyField
+                          label={null}
+                          value={details.netPrice}
+                          onChange={(v) => setDetails({ ...details, netPrice: v })}
                           placeholder={t("net_price")}
-                          className="w-full border px-3 py-2 rounded"
                         />
-                        
                          
-                          <input
-                              type="number"
-                              value={details.grossPrice || ""}
-                              onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                              placeholder={t("gross_price")}
-                              className="w-full border px-3 py-2 rounded mb-2"
-                          />
+                        <MoneyField
+                           value={details.grossPrice}
+                           onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                           placeholder={t("gross_price")}
+                         />
                       </div>
 
                       <div className="mb-2">
@@ -2701,21 +2712,18 @@ useEffect(() => {
                         />
                       </div>
 
-                      <input
-                        value={details.netPrice || ""}
-                        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                        placeholder={t("net_price")}
-                        className="w-full border px-3 py-2 rounded mb-3"
-                      />
+                       <MoneyField
+                          value={details.grossPrice}
+                          onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                          placeholder={t("gross_price")}
+                        />
 
                       
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                           value={details.grossPrice}
+                           onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                           placeholder={t("gross_price")}
+                         />
     <div className="mb-3">
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
@@ -2787,21 +2795,18 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <input
-                        type="text"
-                        value={details.ticketDetails || ""}
-                        onChange={(e) => setDetails({ ...details, ticketDetails: e.target.value })}
-                        placeholder={t("ticket_details")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                         label={null}
+                         value={details.netPrice}
+                         onChange={(v) => setDetails({ ...details, netPrice: v })}
+                         placeholder={t("net_price")}
+                       />
 
-                      <input
-                        type="number"
-                        value={details.netPrice || ""}
-                        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                        placeholder={t("net_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                           value={details.grossPrice}
+                           onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                           placeholder={t("gross_price")}
+                        />
 
                       
                       <input
