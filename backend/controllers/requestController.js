@@ -121,7 +121,6 @@ async function markProcessedIfNew(id, providerIds) {
 }
 
 // --- helper: пометить как "прочитано/обработано" (id может быть строкой)
-// --- helper: пометить как "прочитано/обработано" (id может быть строкой)
 exports.touchByProvider = async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ error: "unauthorized" });
@@ -365,12 +364,7 @@ exports.getProviderRequests = async (req, res) => {
   }
 };
 
-/** DELETE /api/requests/:id
- * Разрешаем удалять:
- *  - автору заявки (client_id = текущий user.id либо зеркальный client_id для провайдера)
- *  - владельцу услуги (JOIN services.provider_id ∈ providerIds)
- *  - провайдеру-инициатору (requests.provider_id / author_provider_id / created_by / owner_id ∈ providerIds), если такие колонки есть
- */
+
 /** DELETE /api/requests/:id
  * Разрешаем удалять:
  *  - автору заявки (client_id = текущий user.id либо зеркальный client_id для провайдера)
@@ -543,7 +537,7 @@ exports.getProviderStats = async (req, res) => {
   }
 };
 
-/** GET /api/requests/provider/:id (детали заявки; помечает как processed) */
+
 /** GET /api/requests/provider/:id (детали заявки; помечает как processed) */
 exports.getProviderRequestById = async (req, res) => {
   try {
