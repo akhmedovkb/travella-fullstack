@@ -837,7 +837,7 @@ useEffect(() => {
            console.error("Ошибка смены пароля", err);
            // если хочешь показывать серверное сообщение:
            // toastApiError(t, err, ["password_error"], "Ошибка смены пароля");
-           tError(t("password_error") || (err?.response?.data?.message) || "Ошибка смены пароля");
+           tError(extractApiErrorText(err) || t("password_error") || "Ошибка смены пароля");
          });
      };
 
