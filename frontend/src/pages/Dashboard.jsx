@@ -744,13 +744,7 @@ useEffect(() => {
       }
     }, [profile?.id]);
 
-  useEffect(() => {
-      if (!profile?.type || !["guide", "transport"].includes(String(profile.type))) return;
-      axios
-        .get(`${API_BASE}/api/bookings/provider`, config)
-        .then(res => setProviderBookings(Array.isArray(res.data) ? res.data : []))
-        .catch(() => setProviderBookings([]));
-    }, [profile?.type]);
+ 
 
   const acceptBooking = async (id) => {
       await axios.post(`${API_BASE}/api/bookings/${id}/accept`, {}, config);
