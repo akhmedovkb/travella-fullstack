@@ -54,37 +54,37 @@ const validateNetGross = (details, t) => {
   const { netRaw, grossRaw, net, gross } = extractPrices(details || {});
     // недопустимые символы — ловим и показываем точную причину
   if (hasInvalidMoneyChars(netRaw)) {
-    tError(t("validation.net_invalid_chars", "Цена нетто: допустимы только цифры, точка или запятая"));
+    tError(t("validation.net_invalid_chars", { defaultValue: "Цена нетто: допустимы только цифры, точка или запятая" }));
     return false;
   }
   if (hasInvalidMoneyChars(grossRaw)) {
-    tError(t("validation.gross_invalid_chars", "Цена брутто: допустимы только цифры, точка или запятая"));
+    tError(t("validation.gross_invalid_chars", { defaultValue: "Цена брутто: допустимы только цифры, точка или запятая" }));
     return false;
   }
 
   if (!hasVal(netRaw) || Number.isNaN(net)) {
-    tError(t("validation.net_required", "Укажите корректную цену нетто"));
+    tError(t("validation.net_required", { defaultValue: "Укажите корректную цену нетто" }));
     return false;
   }
   if (net <= 0) {
-    tError(t("validation.net_positive", "Цена нетто должна быть больше 0"));
+    tError(t("validation.net_positive", { defaultValue: "Цена нетто должна быть больше 0" }));
     return false;
   }
   if (!hasVal(grossRaw) || Number.isNaN(gross)) {
-    tError(t("validation.gross_required", "Укажите корректную цену для клиента (брутто)"));
+    tError(t("validation.gross_required", { defaultValue: "Укажите корректную цену для клиента (брутто)" }));
     return false;
   }
   if (gross <= 0) {
-    tError(t("validation.gross_positive", "Цена для клиента (брутто) должна быть больше 0"));
+    tError(t("validation.gross_positive", { defaultValue: "Цена для клиента (брутто) должна быть больше 0" }));
     return false;
   }
   if (gross < net) {
-    tError(t("validation.gross_ge_net", "Брутто не может быть меньше нетто"));
+    tError(t("validation.gross_ge_net", { defaultValue: "Брутто не может быть меньше нетто" }));
     return false;
   }
-  // Мягкое предупреждение на слишком большие числа
-  if (net > 100000000 || gross > 100000000) {
-    tWarn(t("validation.too_large", "Слишком большое значение цены — проверьте валюту/единицы"));
+  // Мягкое предупреждение на «слишком большую» наценку (опционально)
+  if (gross > net * 2) {
+    tWarn(t("validation.gross_high", { defaultValue: "Брутто сильно больше нетто — проверьте наценку" }));
   }
   return true;
 };
@@ -369,9 +369,10 @@ const todayLocalDate = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 };
-
-// Удобные константы, пересчёт на каждый рендер ок:
-const DATE_MIN = todayLocalDate();
+const todayLocalDateTime = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 
 /** ================= Main ================= */
@@ -432,14 +433,10 @@ const Dashboard = () => {
   const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
-  //Мои брони
-  const [providerBookings, setProviderBookings] = useState([]);
-
-
   // Details for agent categories
-  const [details, setDetails] = useState({
-        grossPrice: "",
-direction: "",
+  const DEFAULT_DETAILS = {
+    grossPrice: "",
+    direction: "",
     directionCountry: "",
     directionFrom: "",
     directionTo: "",
@@ -476,7 +473,8 @@ direction: "",
     // visa
     description: "",
     visaCountry: "",
-  });
+  };
+  const [details, setDetails] = useState(DEFAULT_DETAILS);
 
   // === Provider Inbox / Bookings ===
 
@@ -485,6 +483,7 @@ direction: "",
 
   /** ===== Utils ===== */
     const isServiceActive = (s) => {
+    if (s?.details?.isActive === false) return false;
     const ts = resolveExpireAtFromService(s);
     return ts ? Date.now() < ts : true;
   };
@@ -578,12 +577,15 @@ direction: "",
   
     const processed = [];
     for (const f of toProcess) {
-      if (f.size > MAX_FILE_SIZE) {
-        tWarn(t("image_too_big", { defaultValue: `Файл "${f.name}" больше 3 МБ — пропущен` }));
-        continue;
-      }
       try {
         const dataUrl = await resizeImageFile(f, 1600, 1000, 0.85, "image/jpeg");
+        // оценка размера после сжатия
+        const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+        const approxBytes = Math.ceil((base64.length * 3) / 4);
+        if (approxBytes > MAX_FILE_SIZE) {
+          tWarn(t("image_too_big", { defaultValue: `Файл "${f.name}" после сжатия > 3 МБ — пропущен` }));
+          continue;
+        }
         processed.push(dataUrl);
       } catch {
         // ignore
@@ -770,22 +772,8 @@ useEffect(() => {
     }, [profile?.id]);
 
   
-
- 
-
-  const acceptBooking = async (id) => {
-      await axios.post(`${API_BASE}/api/bookings/${id}/accept`, {}, config);
-      const res = await axios.get(`${API_BASE}/api/bookings/provider`, config);
-      setProviderBookings(Array.isArray(res.data) ? res.data : []);
-    };
-  const rejectBooking = async (id) => {
-      await axios.post(`${API_BASE}/api/bookings/${id}/reject`, {}, config);
-      const res = await axios.get(`${API_BASE}/api/bookings/provider`, config);
-      setProviderBookings(Array.isArray(res.data) ? res.data : []);
-    };
-
-
   /** ===== Profile handlers ===== */
+ 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -825,7 +813,7 @@ useEffect(() => {
       })
       .catch((err) => {
         console.error("Ошибка обновления профиля", err);
-        tError(t("update_error") || "Ошибка обновления профиля");
+        tError(extractApiErrorText(err) || t("update_error") || "Ошибка обновления профиля");
       });
   };
 
@@ -865,42 +853,7 @@ useEffect(() => {
     setImages([]);
     setSelectedCountry(null);     
     setDepartureCity(null); 
-    setDetails({
-      direction: "",
-      directionCountry: "",
-      directionFrom: "",
-      directionTo: "",
-      startDate: "",
-      endDate: "",
-      hotel: "",
-      accommodation: "",
-      accommodationCategory: "",
-      adt: "",
-      chd: "",
-      inf: "",
-      food: "",
-      halal: false,
-      transfer: "",
-      changeable: false,
-      visaIncluded: false,
-      netPrice: "",
-      expiration: "",
-      isActive: true,
-      flightType: "one_way",
-      oneWay: true,
-      airline: "",
-      returnDate: "",
-      startFlightDate: "",
-      endFlightDate: "",
-      flightDetails: "",
-      flightDetailsText: "",
-      location: "",
-      eventName: "",
-      eventCategory: "",
-      ticketDetails: "",
-      description: "",
-      visaCountry: "",
-    });
+    setDetails(DEFAULT_DETAILS);
   };
 
   const loadServiceToEdit = (service) => {
@@ -955,10 +908,7 @@ useEffect(() => {
       setDescription(service.description || "");
       setPrice(service.price || "");
       const sd = (service && service.details && typeof service.details === "object") ? service.details : {};
-      setDetails((prev) => ({
-        ...prev,
-        ...sd,
-        }));
+      setDetails({ ...DEFAULT_DETAILS, ...sd });
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
@@ -1000,7 +950,7 @@ useEffect(() => {
     if (!isExtendedCategory) {
            const p = parseMoneySafe(price);
            if (!Number.isFinite(p) || p <= 0) {
-             tError(t("validation.gross_positive", "Цена должна быть больше 0"));
+             tError(t("validation.gross_positive", { defaultValue: "Цена должна быть больше 0" }));
              return;
            }
          }
@@ -1445,7 +1395,7 @@ useEffect(() => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                       <input
                         type="date"
-                        min={DATE_MIN}
+                        min={todayLocalDate()}
                         value={details.startFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1455,7 +1405,7 @@ useEffect(() => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                       <input
                         type="date"
-                        min={details.startFlightDate || DATE_MIN}   // конец не раньше начала
+                        min={details.startFlightDate || todayLocalDate()}   // конец не раньше начала
                         value={details.endFlightDate || ""}
                         onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1576,6 +1526,8 @@ useEffect(() => {
     <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                   <input
                     type="datetime-local"
+                    step="60"
+                    min={todayLocalDateTime()}
                     value={details.expiration || ""}
                     onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                     className="w-full border px-3 py-2 rounded mb-2"
@@ -1635,7 +1587,7 @@ useEffect(() => {
                       <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                       <input
                         type="date"
-                        min={DATE_MIN}
+                        min={todayLocalDate()}
                         value={details.startDate}
                         onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1645,7 +1597,7 @@ useEffect(() => {
                       <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                       <input
                         type="date"
-                        min={details.startDate || DATE_MIN}
+                        min={details.startDate || todayLocalDate()}
                         value={details.endDate}
                         onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
                         className="w-full border px-3 py-2 rounded"
@@ -1740,6 +1692,8 @@ useEffect(() => {
                     <label className="block font-medium mb-1">{t("expiration_timer")}</label>
                     <input
                       type="datetime-local"
+                      step="60"
+                      min={todayLocalDateTime()}
                       value={details.expiration || ""}
                       onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                       className="w-full border px-3 py-2 rounded"
@@ -1844,7 +1798,7 @@ useEffect(() => {
                           <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                           <input
                             type="date"
-                            min={DATE_MIN}
+                            min={todayLocalDate()}
                             value={details.startDate || ""}
                             onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -1855,7 +1809,7 @@ useEffect(() => {
                             <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                             <input
                               type="date"
-                              min={details.startDate || DATE_MIN}
+                              min={details.startDate || todayLocalDate()}
                               value={details.returnDate || ""}
                               onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
                               className="w-full border px-3 py-2 rounded"
@@ -1900,6 +1854,8 @@ useEffect(() => {
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
+                          step="60"
+                          min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
@@ -1954,7 +1910,7 @@ useEffect(() => {
 
                   <input
                     type="date"
-                    min={DATE_MIN}
+                    min={todayLocalDate()}
                     value={details.startDate || ""}
                     onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                     placeholder={t("event_date")}
@@ -1970,10 +1926,11 @@ useEffect(() => {
                   />
 
                    <MoneyField
-                      value={details.grossPrice}
-                      onChange={(v) => setDetails({ ...details, grossPrice: v })}
-                      placeholder={t("gross_price")}
-                    />
+                          label={null}
+                          value={details.netPrice}
+                          onChange={(v) => setDetails({ ...details, netPrice: v })}
+                          placeholder={t("net_price")}
+                    />   
                     <MoneyField
                        value={details.grossPrice}
                        onChange={(v) => setDetails({ ...details, grossPrice: v })}
@@ -1991,6 +1948,8 @@ useEffect(() => {
 
                   <input
                     type="datetime-local"
+                    step="60"
+                    min={todayLocalDateTime()}
                     value={details.expiration || ""}
                     onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                     placeholder={t("expiration_timer")}
@@ -2058,23 +2017,21 @@ useEffect(() => {
                 
                     <div className="mb-2">
                       <label className="block font-medium mb-1">{t("price")}</label>
-                      <input
-                        type="number"
+                      <MoneyField
+                        label={t("price")}
                         value={price}
-                        onChange={(e) => setPrice(e.target.value)}
+                        onChange={setPrice}
                         placeholder={t("price")}
-                        className="w-full border px-3 py-2 rounded"
                       />
                     </div>
                 
                     <div className="mb-2">
                       <label className="block font-medium mb-1">{t("gross_price")}</label>
-                      <input
-                        type="number"
+                      <MoneyField
+                        label={t("gross_price")}
                         value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        onChange={(v) => setDetails({ ...details, grossPrice: v })}
                         placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded"
                       />
                     </div>
                   </>
@@ -2124,42 +2081,7 @@ useEffect(() => {
                   setPrice("");
                   setAvailability([]);
                   setImages([]);
-                  setDetails({
-                    direction: "",
-                    directionCountry: "",
-                    directionFrom: "",
-                    directionTo: "",
-                    startDate: "",
-                    endDate: "",
-                    hotel: "",
-                    accommodation: "",
-                    accommodationCategory: "",
-                    adt: "",
-                    chd: "",
-                    inf: "",
-                    food: "",
-                    halal: false,
-                    transfer: "",
-                    changeable: false,
-                    visaIncluded: false,
-                    netPrice: "",
-                    expiration: "",
-                    isActive: true,
-                    flightType: "one_way",
-                    oneWay: true,
-                    airline: "",
-                    returnDate: "",
-                    startFlightDate: "",
-                    endFlightDate: "",
-                    flightDetails: "",
-                    flightDetailsText: "",
-                    location: "",
-                    eventName: "",
-                    eventCategory: "",
-                    ticketDetails: "",
-                    description: "",
-                    visaCountry: "",
-                  });
+                  setDetails(DEFAULT_DETAILS);
                 }}
                 className="w-full border px-3 py-2 rounded mb-4 bg-white"
               >
@@ -2261,7 +2183,7 @@ useEffect(() => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                           <input
                             type="date"
-                            min={DATE_MIN}
+                            min={todayLocalDate()}
                             value={details.startFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, startFlightDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2383,14 +2305,15 @@ useEffect(() => {
                        />
                       
                        <MoneyField
-                         label={null}
-                         value={details.netPrice}
-                         onChange={(v) => setDetails({ ...details, netPrice: v })}
-                         placeholder={t("net_price")}
+                         value={details.grossPrice}
+                         onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                         placeholder={t("gross_price")}
                        />
     <label className="block font-medium mt-2 mb-1">{t("expiration_timer")}</label>
                       <input
                         type="datetime-local"
+                        step="60"
+                        min={todayLocalDateTime()}
                         value={details.expiration || ""}
                         onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                         className="w-full border px-3 py-2 rounded mb-2"
@@ -2451,7 +2374,7 @@ useEffect(() => {
                           <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                           <input
                             type="date"
-                            min={DATE_MIN}
+                            min={todayLocalDate()}
                             value={details.startDate}
                             onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2461,7 +2384,7 @@ useEffect(() => {
                           <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                           <input
                             type="date"
-                            min={details.startDate || DATE_MIN}
+                            min={details.startDate || todayLocalDate()}
                             value={details.endDate}
                             onChange={(e) => setDetails({ ...details, endDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2558,6 +2481,8 @@ useEffect(() => {
                         <label className="block font-medium mb-1">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
+                          step="60"
+                          min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
@@ -2683,6 +2608,7 @@ useEffect(() => {
                             <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                             <input
                               type="date"
+                              min={details.startDate || todayLocalDate()}
                               value={details.returnDate || ""}
                               onChange={(e) => setDetails({ ...details, returnDate: e.target.value })}
                               className="w-full border px-3 py-2 rounded"
@@ -2713,9 +2639,10 @@ useEffect(() => {
                       </div>
 
                        <MoneyField
-                          value={details.grossPrice}
-                          onChange={(v) => setDetails({ ...details, grossPrice: v })}
-                          placeholder={t("gross_price")}
+                          label={null}
+                          value={details.netPrice}
+                          onChange={(v) => setDetails({ ...details, netPrice: v })}
+                          placeholder={t("net_price")}
                         />
 
                       
@@ -2728,6 +2655,8 @@ useEffect(() => {
                         <label className="block text-sm font-medium mb-1">{t("expiration_timer")}</label>
                         <input
                           type="datetime-local"
+                          step="60"
+                          min={todayLocalDateTime()}
                           value={details.expiration || ""}
                           onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
@@ -2809,13 +2738,7 @@ useEffect(() => {
                         />
 
                       
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                      
     <label className="inline-flex items-center mb-2">
                         <input
                           type="checkbox"
@@ -2828,6 +2751,8 @@ useEffect(() => {
 
                       <input
                         type="datetime-local"
+                        step="60"
+                        min={todayLocalDateTime()}
                         value={details.expiration || ""}
                         onChange={(e) => setDetails({ ...details, expiration: e.target.value })}
                         placeholder={t("expiration_timer")}
@@ -2862,22 +2787,18 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <input
-                        type="number"
-                        value={details.netPrice}
-                        onChange={(e) => setDetails({ ...details, netPrice: e.target.value })}
-                        placeholder={t("net_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                      <MoneyField
+                         label={null}
+                         value={details.netPrice}
+                         onChange={(v) => setDetails({ ...details, netPrice: v })}
+                         placeholder={t("net_price")}
+                       />
 
-                      
-                      <input
-                        type="number"
-                        value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
-                        placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
-                      />
+                       <MoneyField
+                           value={details.grossPrice}
+                           onChange={(v) => setDetails({ ...details, grossPrice: v })}
+                           placeholder={t("gross_price")}
+                        />
     <label className="flex items-center space-x-2 mb-2">
                         <input
                           type="checkbox"
@@ -2902,19 +2823,18 @@ useEffect(() => {
                         placeholder={t("description")}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
-                      <input
+                      <MoneyField
+                        label={null}
                         value={price}
-                        onChange={(e) => setPrice(e.target.value)}
+                        onChange={setPrice}
                         placeholder={t("price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
                       />
                     
-                      <input
-                        type="number"
+                      <MoneyField
+                        label={null}
                         value={details.grossPrice || ""}
-                        onChange={(e) => setDetails({ ...details, grossPrice: e.target.value })}
+                        onChange={(v) => setDetails({ ...details, grossPrice: v })}
                         placeholder={t("gross_price")}
-                        className="w-full border px-3 py-2 rounded mb-2"
                       />
     </>
                   )}
