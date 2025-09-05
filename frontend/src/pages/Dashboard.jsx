@@ -732,6 +732,16 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
+  useEffect(() => {
+  if (!selectedService) return;
+  const d = selectedService.details || {};
+  const val = d.directionCountry || d.direction; // что есть
+  if (!val) return;
+  const co = countryOptions.find(c => c.value === val);
+  if (co) setSelectedCountry(co);
+}, [selectedService, countryOptions]);
+
+
 
 
   useEffect(() => {
@@ -739,6 +749,8 @@ useEffect(() => {
         localStorage.setItem("provider_id", String(profile.id));
       }
     }, [profile?.id]);
+
+  
 
  
 
