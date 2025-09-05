@@ -47,17 +47,47 @@ if (has(getProviderStats)) {
 }
 
 /* ---------- Обновить статус ---------- */
+// 1) Если есть универсальный контроллер updateRequestStatus — используем его и даём алиасы
 if (has(updateRequestStatus)) {
   router.put("/:id/status", authenticateToken, updateRequestStatus);
-  // алиас "processed"
-  router.put("/:id/processed", authenticateToken, (req, res, next) => {
-    req.body = { ...(req.body || {}), status: "processed" };
+
+  // алиасы под фронт: PUT/PATCH /:id/(processed|accepted|rejected)
+  const statusAlias = (status) => (req, res, next) => {
+    req.body = { ...(req.body || {}), status };
     return updateRequestStatus(req, res, next);
-  });
+  };
+
+  router.put("/:id/processed", authenticateToken, statusAlias("processed"));
+  router.put("/:id/accepted",  authenticateToken, statusAlias("accepted"));
+  router.put("/:id/rejected",  authenticateToken, statusAlias("rejected"));
+
+  router.patch("/:id/processed", authenticateToken, statusAlias("processed"));
+  router.patch("/:id/accepted",  authenticateToken, statusAlias("accepted"));
+  router.patch("/:id/rejected",  authenticateToken, statusAlias("rejected"));
 }
+
+// 2) Родной маршрут провайдера (оставляем как был)
 if (has(updateStatusByProvider)) {
   router.patch("/provider/:id", authenticateToken, updateStatusByProvider);
 }
+
+// 3) Если updateRequestStatus НЕТ, но есть updateStatusByProvider — алиасы мапим на него
+if (!has(updateRequestStatus) && has(updateStatusByProvider)) {
+  const statusAlias = (status) => (req, res, next) => {
+    req.body = { ...(req.body || {}), status };
+    return updateStatusByProvider(req, res, next);
+  };
+
+  router.put("/:id/processed", authenticateToken, statusAlias("processed"));
+  router.put("/:id/accepted",  authenticateToken, statusAlias("accepted"));
+  router.put("/:id/rejected",  authenticateToken, statusAlias("rejected"));
+
+  router.patch("/:id/processed", authenticateToken, statusAlias("processed"));
+  router.patch("/:id/accepted",  authenticateToken, statusAlias("accepted"));
+  router.patch("/:id/rejected",  authenticateToken, statusAlias("rejected"));
+}
+
+
 
 /* ---------- Удалить заявку ---------- */
 // автор / инициатор (клиент или «зеркальный клиент» провайдера)
@@ -121,6 +151,7 @@ if (has(updateMyRequest)) {
 /* ---------- Провайдер «коснулся» заявки ---------- */
 if (has(touchByProvider)) {
   router.post("/:id/touch", authenticateToken, touchByProvider);
+  router.post("/provider/:id/touch", authenticateToken, touchByProvider); // алиас
 }
 
 /* ---------- Ручная очистка просроченных ---------- */
