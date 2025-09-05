@@ -2193,7 +2193,7 @@ useEffect(() => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                           <input
                             type="date"
-                            min={details.startFlightDate || DATE_MIN}   // конец не раньше начала
+                            min={details.startFlightDate || todayLocalDate()}   // конец не раньше начала
                             value={details.endFlightDate || ""}
                             onChange={(e) => setDetails({ ...details, endFlightDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
