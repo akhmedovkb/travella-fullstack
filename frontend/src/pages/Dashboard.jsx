@@ -5,7 +5,6 @@ import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
-import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useTranslation } from "react-i18next";
 import ProviderStatsHeader from "../components/ProviderStatsHeader";
@@ -13,7 +12,6 @@ import ProviderReviews from "../components/ProviderReviews";
 import ProviderInboxList from "../components/ProviderInboxList";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
-import BookingRow from "../components/BookingRow";
 
 
 /** ================= Helpers ================= */
@@ -28,13 +26,6 @@ const toLocalDate = (val) => {
   return new Date(y, m - 1, d); // локальная дата без TZ-сдвига
 };
 
-// безопасное преобразование "YYYY-MM-DD" -> Date (локальная, без TZ-сдвига)
-const ymdToLocalDate = (s) => {
-  const [y, m, d] = String(s || "").split("-").map(Number);
-  return Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)
-    ? new Date(y, m - 1, d)
-    : null;
-};
 // Date -> "YYYY-MM-DD"
 const dateToYMD = (d) => {
   const dt = new Date(d);
@@ -196,7 +187,6 @@ const firstNonEmpty = (...vals) => {
   }
   return null;
 };
-const clientCache = new Map();
 
 // NEW: локализованный “первый подходящий перевод”
 function makeTr(t) {
@@ -401,10 +391,6 @@ const todayLocalDate = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 };
-const nowLocalDateTime = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 // Удобные константы, пересчёт на каждый рендер ок:
 const DATE_MIN = todayLocalDate();
@@ -461,9 +447,7 @@ const Dashboard = () => {
   const [bookedDates, setBookedDates] = useState([]);  // Date[]
   const [blockedDates, setBlockedDates] = useState([]); // Date[]
   const [saving, setSaving] = useState(false);
-  // то, что пришло с сервера (в виде строк YYYY-MM-DD)
-  const [serverBlockedYMD, setServerBlockedYMD] = useState([]); 
-
+ 
 
   // Delete service modal
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -657,17 +641,9 @@ const handleSaveBlockedDates = async () => {
   if (!Array.isArray(blockedDates)) return;
   setSaving(true);
 
-  const toYMD = (d) => {
-    const dt = new Date(d);
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, "0");
-    const day = String(dt.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  try {
+   try {
     const payload = blockedDates.map((d) =>
-      typeof d === "string" ? d : toYMD(d)
+      typeof d === "string" ? d : datetoYMD(d)
     );
 
     await axios.post(
@@ -683,11 +659,7 @@ const handleSaveBlockedDates = async () => {
       `${API_BASE}/api/providers/blocked-dates`,
       config
     );
-    const toLocalDate = (v) => {
-      const s = typeof v === "string" ? v : v?.date || v?.day || "";
-      const [Y, M, D] = s.split("-").map(Number);
-      return Y && M && D ? new Date(Y, M - 1, D) : null;
-    };
+    
     setBlockedDates((Array.isArray(data) ? data : []).map(toLocalDate).filter(Boolean));
   } catch (err) {
     console.error("Ошибка сохранения дат", err);
@@ -809,12 +781,6 @@ useEffect(() => {
           axios.get(`${API_BASE}/api/providers/blocked-dates`, config), // РУЧНЫЕ
           axios.get(`${API_BASE}/api/providers/booked-dates`,  config), // БРОНИ
         ]);
-
-        const toLocalDate = (v) => {
-          const s = typeof v === "string" ? v : v?.date || v?.day || "";
-          const [Y, M, D] = s.split("-").map(Number);
-          return Y && M && D ? new Date(Y, M - 1, D) : null;
-        };
 
         setBlockedDates((blockedRes.data || []).map(toLocalDate).filter(Boolean)); // 🔴 вручную
         setBookedDates ((bookedRes.data  || []).map(toLocalDate).filter(Boolean)); // 🔵 брони
