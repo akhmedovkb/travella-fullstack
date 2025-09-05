@@ -1712,7 +1712,7 @@ useEffect(() => {
                        <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={selectedCountry}
+                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -2539,7 +2539,7 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={selectedCountry}
+                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -2552,6 +2552,7 @@ useEffect(() => {
                           noOptionsMessage={() => t("country_not_found")}
                           className="w-1/3"
                         />
+
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
