@@ -34,8 +34,13 @@ function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
   }
+  // Совместимо со старыми токенами: если role есть — проверяем, если нет — пропускаем.
+  if (req.user.role && req.user.role !== "provider") {
+    return res.status(403).json({ message: "Только для провайдера" });
+  }
   next();
 }
+
 
 // Auth
 router.post("/register", registerProvider);
