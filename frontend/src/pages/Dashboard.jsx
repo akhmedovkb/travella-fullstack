@@ -1407,6 +1407,8 @@ useEffect(() => {
                       noOptionsMessage={() => t("direction_to_not_chosen")}
                       className="w-1/3"
                     />
+                  
+                    </div>
                     
 
                   <div className="flex gap-4 mb-2">
