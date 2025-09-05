@@ -735,10 +735,14 @@ useEffect(() => {
   useEffect(() => {
   if (!selectedService) return;
   const d = selectedService.details || {};
-  const val = d.directionCountry || d.direction; // что есть
-  if (!val) return;
-  const co = countryOptions.find(c => c.value === val);
+
+  const valCountry = d.directionCountry || d.direction; // что есть
+  const co = countryOptions.find(c => c.value === valCountry);
   if (co) setSelectedCountry(co);
+
+  if (d.directionFrom) {
+    setDepartureCity({ value: d.directionFrom, label: d.directionFrom });
+  }
 }, [selectedService, countryOptions]);
 
 
@@ -844,6 +848,8 @@ useEffect(() => {
     setCategory("");
     setAvailability([]);
     setImages([]);
+    setSelectedCountry(null);     
+    setDepartureCity(null); 
     setDetails({
       direction: "",
       directionCountry: "",
@@ -1375,27 +1381,33 @@ useEffect(() => {
                     />
 
                     <AsyncSelect
-                      cacheOptions
-                      defaultOptions
-                      loadOptions={loadDepartureCities}
-                      onChange={(selected) => {
-                        setDepartureCity(selected);
-                        setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
-                      }}
-                      placeholder={t("direction_from")}
-                      noOptionsMessage={() => t("direction_from_not_chosen")}
-                      className="w-1/3"
-                    />
+                        cacheOptions
+                        defaultOptions
+                        loadOptions={loadDepartureCities}
+                        value={
+                          departureCity
+                            || (details.directionFrom
+                                  ? { value: details.directionFrom, label: details.directionFrom }
+                                  : null)
+                        }
+                        onChange={(selected) => {
+                          setDepartureCity(selected);
+                          setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
+                        }}
+                        placeholder={t("direction_from")}
+                        noOptionsMessage={() => t("direction_from_not_chosen")}
+                        className="w-1/3"
+                      />
+
                     <Select
                       options={cityOptionsTo}
+                      value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
+                      onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
                       placeholder={t("direction_to")}
                       noOptionsMessage={() => t("direction_to_not_chosen")}
-                      onChange={(value) =>
-                        setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))
-                      }
                       className="w-1/3"
                     />
-                  </div>
+                    
 
                   <div className="flex gap-4 mb-2">
                     <div className="w-1/2">
@@ -1741,18 +1753,21 @@ useEffect(() => {
                           cacheOptions
                           defaultOptions
                           loadOptions={loadDepartureCities}
+                          value={
+                            departureCity
+                              || (details.directionFrom
+                                    ? { value: details.directionFrom, label: details.directionFrom }
+                                    : null)
+                          }
                           onChange={(selected) => {
                             setDepartureCity(selected);
-                            setDetails((prev) => ({
-                              ...prev,
-                              directionFrom: selected?.value || "",
-                              direction: `${selectedCountry?.label || ""} — ${selected?.label || ""} → ${details.directionTo || ""}`,
-                            }));
+                            setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
                           placeholder={t("direction_from")}
-                          noOptionsMessage={() => t("direction_from_not_found")}
+                          noOptionsMessage={() => t("direction_from_not_chosen")}
                           className="w-1/3"
                         />
+
                         <Select
                           options={cityOptionsTo}
                           value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
@@ -2196,6 +2211,12 @@ useEffect(() => {
                           cacheOptions
                           defaultOptions
                           loadOptions={loadDepartureCities}
+                          value={
+                            departureCity
+                              || (details.directionFrom
+                                    ? { value: details.directionFrom, label: details.directionFrom }
+                                    : null)
+                          }
                           onChange={(selected) => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
@@ -2205,14 +2226,16 @@ useEffect(() => {
                           className="w-1/3"
                         />
 
+
                         <Select
                           options={cityOptionsTo}
+                          value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
+                          onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
                           placeholder={t("direction_to")}
                           noOptionsMessage={() => t("direction_to_not_chosen")}
-                          onChange={(value) => setDetails({ ...details, directionTo: value?.value || "" })}
                           className="w-1/3"
                         />
-                      </div>
+
 
                       <div className="flex gap-4 mb-2">
                         <div className="w-1/2">
@@ -2569,6 +2592,12 @@ useEffect(() => {
                           cacheOptions
                           defaultOptions
                           loadOptions={loadDepartureCities}
+                          value={
+                            departureCity
+                              || (details.directionFrom
+                                    ? { value: details.directionFrom, label: details.directionFrom }
+                                    : null)
+                          }
                           onChange={(selected) => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({
