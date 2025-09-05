@@ -1,6 +1,6 @@
 //frontend/src/pages/Dashboard.jsx
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
@@ -431,6 +431,16 @@ const Dashboard = () => {
   profile?.id ?? localStorage.getItem("provider_id") ?? localStorage.getItem("id");
   const providerId = providerIdRaw != null ? Number(providerIdRaw) : null;
   const hasProviderId = Number.isFinite(providerId) && providerId > 0;
+
+  // TG deep-link для провайдера
+  const botUser = import.meta.env.VITE_TG_BOT_USERNAME || "";
+  const isTgLinked = Boolean(profile?.telegram_chat_id || profile?.tg_chat_id); // поле придёт из backend профиля
+  
+  const tgDeepLink = useMemo(() => {
+    if (!botUser || !hasProviderId) return null;
+    return `https://t.me/${botUser}?start=p_${providerId}`;
+  }, [botUser, hasProviderId, providerId]);
+
 
   // Services
   const [services, setServices] = useState([]);
@@ -1362,17 +1372,43 @@ useEffect(() => {
                 )}
               </div>
               <div>
-                <label className="block font-medium">{t("social")}</label>
-                {isEditing ? (
-                  <input
-                    value={newSocial}
-                    onChange={(e) => setNewSocial(e.target.value)}
-                    className="border px-3 py-2 rounded w-full"
-                  />
-                ) : (
-                  <div className="border px-3 py-2 rounded bg-gray-100">{profile.social || t("not_specified")}</div>
-                )}
-              </div>
+                    <label className="block font-medium">{t("social")}</label>
+                    {isEditing ? (
+                      <>
+                        <input
+                          value={newSocial}
+                          onChange={(e) => setNewSocial(e.target.value)}
+                          className="w-full border px-3 py-2 rounded"
+                        />
+                        {!isTgLinked && tgDeepLink && (
+                          <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
+                            <div className="font-medium mb-1">
+                              {t("tg.title", { defaultValue: "Уведомления в Telegram" })}
+                            </div>
+                            <div className="mb-2">
+                              {t("tg.subtitle", {
+                                defaultValue:
+                                  "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
+                              })}
+                            </div>
+                            <a
+                              href={tgDeepLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                            >
+                              {t("tg.connect", { defaultValue: "Подключить Telegram" })}
+                            </a>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="border px-3 py-2 rounded bg-gray-100">
+                        {profile.social || t("not_specified")}
+                      </div>
+                    )}
+                  </div>
+
 
               {/* Сертификат */}
               <div>
