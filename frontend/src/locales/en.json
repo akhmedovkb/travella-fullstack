@@ -643,7 +643,9 @@
   "select_event_category": "Choose an event category",
   "select_files": "Choose files",
   "select_hotel": "Choose a hotel",
+  
 
+  "service": "Service",
   "service_added": "Service added",
   "service_deleted": "Service deleted",
   "service_images": "Service images",
