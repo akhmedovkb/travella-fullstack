@@ -292,6 +292,8 @@ export default function ServiceCard({
     const expireAt = resolveExpireAt(svc, details);
     const leftMs = expireAt ? (expireAt - now) : null;
     const isExpired = expireAt && leftMs <= 0;
+    const dayShort = t("countdown.days_short", { defaultValue: "d" });
+
 
   const id = svc.id ?? item.id;
 
@@ -400,17 +402,18 @@ export default function ServiceCard({
             {expireAt && (
               isExpired ? (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                  {t("marketplace.time_expired") || "Время истекло"}
+                  {t("countdown.expired", { defaultValue: "Expired" })}
                 </span>
               ) : (
                 <span
                   className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20"
-                  title={t("marketplace.time_left") || "До окончания"}
+                  title={t("countdown.until_end", { defaultValue: "Time left" })}
                 >
-                  ⏳ {formatLeft(leftMs)}
+                  ⏳ {formatLeft(leftMs, dayShort)}
                 </span>
               )
             )}
+
 
             
             {badge && (
