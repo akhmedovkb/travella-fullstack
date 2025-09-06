@@ -610,13 +610,45 @@ export default function ClientDashboard() {
     })();
   }, [t]);
 
-  const botUser = import.meta.env.VITE_TG_BOT_USERNAME || "";
-  const clientId = me?.id || me?._id || me?.client_id || me?.user_id;
-  const isTgLinked = !!(me?.tg_chat_id || me?.telegram_chat_id);
-  const tgDeepLink = useMemo(() => {
-    if (!botUser || !clientId) return null;
-    return `https://t.me/${botUser}?start=c_${clientId}`;
-  }, [botUser, clientId]);
+  // 1) Имя бота — пробуем несколько источников
+const botUser =
+  import.meta.env.VITE_TG_BOT_USERNAME ||
+  import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
+  import.meta.env.VITE_TELEGRAM_BOT ||
+  (window.__APP_CONFIG__ && window.__APP_CONFIG__.telegram_bot_username) ||
+  localStorage.getItem("telegramBotUsername") ||
+  "";
+
+// 2) Клиентский id для payload
+const clientId =
+  me?.id || me?._id || me?.client_id || me?.user_id;
+
+// 3) Привязка к боту — учитываем больше названий полей
+const rawDetails =
+  typeof me?.details === "string"
+    ? (() => { try { return JSON.parse(me.details); } catch { return {}; } })()
+    : (me?.details || {});
+
+const chatId =
+  me?.telegram_chat_id ??
+  me?.tg_chat_id ??
+  me?.telegramChatId ??
+  me?.tgChatId ??
+  me?.chat_id ??
+  me?.chatId ??
+  rawDetails?.telegram_chat_id ??
+  rawDetails?.tg_chat_id ??
+  rawDetails?.chat_id ??
+  null;
+
+const isTgLinked = Boolean(chatId);
+
+// 4) Deep-link строим, если знаем имя бота и clientId
+const tgDeepLink = useMemo(() => {
+  if (!botUser || !clientId) return null;
+  return `https://t.me/${botUser}?start=c_${clientId}`;
+}, [botUser, clientId]);
+
 
   // миграция «anon» черновиков
   useEffect(() => {
@@ -1297,26 +1329,54 @@ export default function ClientDashboard() {
                 <input className="mt-1 w-full border rounded-lg px-3 py-2" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username" />
               </div>
                     {/* Баннер «Подключить Telegram», показываем только если ещё не привязано */}
-                {!isTgLinked && tgDeepLink && (
-                  <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
-                    <div className="font-medium mb-1">
-                      {t("telegram.enable_title", { defaultValue: "Уведомления в Telegram" })}
+                {!isTgLinked && (
+                    <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
+                      <div className="font-medium mb-1">
+                        {t("telegram.enable_title", { defaultValue: "Уведомления в Telegram" })}
+                      </div>
+                  
+                      {/* Текст всегда показываем, даже если deep-link не построился */}
+                      <div className="mb-2">
+                        {t("telegram.enable_text", {
+                          defaultValue:
+                            "Нажмите кнопку ниже, чтобы привязать Telegram и получать уведомления о заявках и бронированиях.",
+                        })}
+                      </div>
+                  
+                      {tgDeepLink ? (
+                        <a
+                          href={tgDeepLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                        >
+                          {t("telegram.connect_button", { defaultValue: "Подключить Telegram" })}
+                        </a>
+                      ) : (
+                        <div className="text-blue-700/90">
+                          {/* Фолбэк, если имя бота не задано в .env */}
+                          {botUser ? (
+                            <a
+                              href={`https://t.me/${botUser}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                            >
+                              {t("telegram.open_bot", { defaultValue: "Открыть бота в Telegram" })}
+                            </a>
+                          ) : (
+                            <span className="inline-block">
+                              {t("telegram.bot_missing", {
+                                defaultValue:
+                                  "Имя Telegram-бота не настроено. Обратитесь к администратору, чтобы указать VITE_TG_BOT_USERNAME.",
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="mb-2">
-                      {t("telegram.enable_text", {
-                        defaultValue: "Нажмите кнопку ниже, чтобы привязать Telegram и получать уведомления о заявках и бронированиях.",
-                      })}
-                    </div>
-                    <a
-                      href={tgDeepLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
-                    >
-                      {t("telegram.connect_button", { defaultValue: "Подключить Telegram" })}
-                    </a>
-                  </div>
-                )}
+                  )}
+
 
               <div className="pt-2">
                 <button onClick={handleSaveProfile} disabled={savingProfile || loadingProfile} className="w-full bg-orange-500 text-white rounded-lg px-4 py-2 font-semibold disabled:opacity-60">
