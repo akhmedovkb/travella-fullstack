@@ -279,7 +279,7 @@
 
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
   "countdown": { "until_end": "Tugashigacha", "expired": "Muddati tugadi" },
-  "countdown.days_short": "k"
+  "countdown.days_short": "k",
 
   "country_not_chosen": "Mamlakatlar topilmadi",
   "cover": "Muqova",
