@@ -516,10 +516,12 @@ const Dashboard = () => {
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   /** ===== Utils ===== */
-    const isServiceActive = (s) => {
-    if (s?.details?.isActive === false) return false;
+    
+  const isServiceInactive = (s) => {
+    const disabled = s?.details?.isActive === false;
     const ts = resolveExpireAtFromService(s);
-    return ts ? Date.now() < ts : true;
+    const expired = ts ? Date.now() > ts : false;
+    return disabled || expired;
   };
 
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
@@ -1394,6 +1396,11 @@ useEffect(() => {
                       <div className="flex-1">
                         <div className="font-bold text-lg">{s.title}</div>
                         <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
+                        {isServiceInactive(s) && (
+                          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700">
+                          {t("not_actual", { defaultValue: "неактуально" })}
+                          </span>
+                          )}
                         {s.details?.netPrice != null ? (
                           <div className="text-sm text-gray-800">
                             {t("net_price")}: {s.details.netPrice} USD
