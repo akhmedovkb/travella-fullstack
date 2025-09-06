@@ -556,13 +556,11 @@ export default function ClientBookings() {
 
           // кем отменено/отклонено — прямо в верхнем бейдже
           const statusTextOverride =
-            status === "cancelled"
-              ? t("bookings.cancelled.by_you", { defaultValue: "Отменено: вами" })
-              : status === "rejected"
-              ? t("bookings.rejected.by_provider", {
-                  defaultValue: "Отклонено: поставщиком услуги",
-                })
-              : null;
+          status === "cancelled"
+            ? t("bookings.status_by.cancelled.you", { defaultValue: "Отменено: вами" })
+            : status === "rejected"
+            ? t("bookings.status_by.rejected.provider", { defaultValue: "Отклонено: поставщиком услуги" })
+            : null;
 
           return (
             <div
