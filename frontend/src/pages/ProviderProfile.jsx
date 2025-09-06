@@ -399,7 +399,16 @@ export default function ProviderProfile() {
   // Языки поставщика (нормализация + дедуп + сортировка по уровню)
 const langs = useMemo(() => {
   const d = maybeParse(prov?.details) || prov?.details || {};
-  let raw = first(prov?.languages, d?.languages, prov?.langs, d?.langs, prov?.language, d?.language);
+  let raw = first(
+  prov?.languages, d?.languages,
+  prov?.langs, d?.langs,
+  prov?.language, d?.language,
+  // новые фолбэки:
+  prov?.languages_text, d?.languages_text,
+  prov?.language_text, d?.language_text,
+  prov?.lang, d?.lang,
+  prov?.lang_list, d?.lang_list
+);
 
   // === 1) парсинг из разных форматов -> массив {code, level}
   let arr = [];
