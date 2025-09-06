@@ -109,6 +109,29 @@ function formatLeft(ms) {
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
+// --- Видимость карточки только для Marketplace (учитываем "Актуально" и таймер)
+function parseDetails(svc) {
+  const d = svc?.details;
+  if (!d) return {};
+  if (typeof d === "string") {
+    try { return JSON.parse(d); } catch { return {}; }
+  }
+  return d || {};
+}
+
+function isMarketplaceVisible(it, nowTs = Date.now()) {
+  const svc = it?.service || it || {};
+  const d = parseDetails(svc);
+
+  // если выключено вручную — не показываем
+  if (d.isActive === false) return false;
+
+  // если истёк таймер — не показываем
+  const exp = resolveExpireAt(svc);
+  return exp ? nowTs <= exp : true;
+}
+
+
 /* ---------- маленький компонент звёзд ---------- */
 function Stars({ value = 0, size = 14 }) {
   const full = Math.round(Number(value) * 2) / 2;
@@ -693,11 +716,15 @@ const search = async (opts = {}) => {
         filtered = enriched.filter((it) => matchQuery(filters.q, it));
       }
 
-      // ⬅️ важно: сохранить результат фильтрации
+        // ⬅️ важно: сохранить результат фильтрации
       list = filtered;
     }
-
+    
+    // 🎯 Marketplace: показываем только актуальные по флагу/таймеру
+    list = list.filter((it) => isMarketplaceVisible(it, now));
+    
     setItems(list);
+
   } catch {
     setItems([]);
     setError(t("common.loading_error") || "Не удалось загрузить данные");
