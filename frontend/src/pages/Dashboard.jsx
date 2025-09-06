@@ -17,6 +17,21 @@ import ProviderCalendar from "../components/ProviderCalendar";
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
 
+function MoneyField({ label, value, onChange, placeholder }) {
+  return (
+        <div className="mb-2">
+          {label ? <label className="block font-medium mb-1">{label}</label> : null}
+          <input
+            inputMode="decimal"
+            pattern="[0-9,.\s-]*"
+            value={value ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      );
+    }
 const parseMoneySafe = (v) => {
   if (!hasVal(v)) return NaN;
   const s = String(v).replace(/\s+/g, "").replace(",", ".");
@@ -506,23 +521,6 @@ const Dashboard = () => {
     const ts = resolveExpireAtFromService(s);
     return ts ? Date.now() < ts : true;
   };
-
-  function MoneyField({ label, value, onChange, placeholder }) {
-  return (
-        <div className="mb-2">
-          {label ? <label className="block font-medium mb-1">{label}</label> : null}
-          <input
-            inputMode="decimal"
-            pattern="[0-9,.\s-]*"
-            value={value ?? ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            className="w-full border px-3 py-2 rounded"
-          />
-        </div>
-      );
-    }
-
 
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
