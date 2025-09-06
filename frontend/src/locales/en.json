@@ -279,6 +279,7 @@
 
   "confirm_delete": "Delete this item?",
   "countdown": { "until_end": "Time left", "expired": "Expired" },
+  "countdown.days_short": "d",
 
   "country_not_chosen": "No countries found",
   "cover": "Cover",
