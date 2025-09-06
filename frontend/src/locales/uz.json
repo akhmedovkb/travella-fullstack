@@ -112,7 +112,6 @@
       "cancel": "Bekor qilish"
     },
 
-    /* ---- добавлено для согласованности с RU ---- */
     "confirmed": "Bron tasdiqlandi",
     "confirm_error": "Tasdiqlash xatosi",
     "rejected": "Bron rad etildi",
