@@ -9,6 +9,29 @@ function signToken(payload) {
   return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
+// Нормализуем любые варианты ввода Telegram в вид "@username"
+function normalizeTelegramUsername(input) {
+  if (!input) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+  s = s.replace(/\s+/g, "");
+
+  // tg://resolve?domain=USERNAME
+  let m = s.match(/^tg:\/\/resolve\?domain=([A-Za-z0-9_]{3,})/i);
+  if (m) return "@" + m[1];
+
+  // https://t.me/USERNAME, telegram.me, telegram.dog
+  m = s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i);
+  if (m) return "@" + m[1];
+
+  // @username или username
+  m = s.match(/^@?([A-Za-z0-9_]{3,})$/);
+  if (m) return "@" + m[1];
+
+  // если это приглашение/группа — оставим как есть
+  return s;
+}
+
 /* =============== AUTH =============== */
 // POST /api/clients/register
 exports.register = async (req, res) => {
@@ -31,7 +54,7 @@ exports.register = async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-
+    const telegramNorm = normalizeTelegramUsername(telegram);
     const ins = await db.query(
       `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5, NOW(), NOW())
@@ -126,6 +149,7 @@ exports.getMe = async (req, res) => {
 };
 
 // PUT /api/clients/me
+// PUT /api/clients/me
 exports.updateMe = async (req, res) => {
   try {
     if (req.user?.role !== "client") {
@@ -133,25 +157,54 @@ exports.updateMe = async (req, res) => {
     }
     const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
+    // 1) читаем текущие значения, чтобы понять, изменился ли telegram
+    const curQ = await db.query(
+      "SELECT name, phone, telegram, avatar_url, telegram_chat_id FROM clients WHERE id=$1",
+      [req.user.id]
+    );
+    const cur = curQ.rows[0] || {};
+
+    // 2) нормализуем входной telegram (если поле вообще прислали)
+    const telegramProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "telegram");
+    const telegramNorm = telegramProvided ? normalizeTelegramUsername(telegram) : null;
+
+    // 3) решаем, нужно ли сбрасывать chat_id
+    const norm = (v) => (normalizeTelegramUsername(v) || "").toLowerCase();
+    const telegramChanged =
+      telegramProvided && norm(telegramNorm) !== norm(cur.telegram);
+
+    // 4) аватар
     let avatar_url = null;
     if (avatar_base64) {
       avatar_url = `data:image/jpeg;base64,${avatar_base64}`;
     } else if (!remove_avatar) {
-      const cur = await db.query("SELECT avatar_url FROM clients WHERE id=$1", [req.user.id]);
-      avatar_url = cur.rows[0]?.avatar_url || null;
+      avatar_url = cur.avatar_url || null;
     }
 
+    // 5) итоговый chat_id к сохранению
+    const chatIdToSave = telegramChanged ? null : cur.telegram_chat_id || null;
+
+    // 6) обновляем запись
     await db.query(
       `UPDATE clients
-          SET name = COALESCE($1, name),
-              phone = COALESCE($2, phone),
-              telegram = COALESCE($3, telegram),
-              avatar_url = $4,
-              updated_at = NOW()
-        WHERE id = $5`,
-      [name ?? null, phone ?? null, telegram ?? null, remove_avatar ? null : avatar_url, req.user.id]
+          SET name            = COALESCE($1, name),
+              phone           = COALESCE($2, phone),
+              telegram        = COALESCE($3, telegram),
+              avatar_url      = $4,
+              telegram_chat_id= $5,
+              updated_at      = NOW()
+        WHERE id = $6`,
+      [
+        name ?? null,
+        phone ?? null,
+        telegramProvided ? (telegramNorm ?? null) : null,
+        remove_avatar ? null : avatar_url,
+        chatIdToSave,
+        req.user.id,
+      ]
     );
 
+    // 7) отдаём обновлённый профиль
     const q = await db.query(
       `SELECT id, name, email, phone, telegram, avatar_url, telegram_chat_id
          FROM clients
@@ -176,6 +229,7 @@ exports.updateMe = async (req, res) => {
     res.status(500).json({ message: "Failed to update profile" });
   }
 };
+
 
 /* ============== STATISTICS ============== */
 // GET /api/clients/stats
