@@ -367,6 +367,14 @@
   "loading_stats": "Загрузка статистики...",
   "location": "Регион или место проведения",
 
+  "labels": {
+  "client": "Клиент",
+  "agent": "Турагент",
+  "guide": "Гид",
+  "transport": "Транспорт",
+  "hotel": "Отель"
+},
+
   "login": {
     "button": "Войти",
     "email": "Email",
