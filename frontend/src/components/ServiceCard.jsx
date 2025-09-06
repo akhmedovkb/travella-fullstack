@@ -66,6 +66,44 @@ const isGuideOrTransport = (raw) => {
   return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
 };
 
+// --- expiry helpers ---
+function resolveExpireAt(svc, details) {
+  const s = svc || {};
+  const d = details || {};
+  const cand =
+    s.expires_at ?? s.expire_at ?? s.expireAt ??
+    d.expires_at ?? d.expire_at ?? d.expiresAt ??
+    d.expiration ?? d.expiration_at ?? d.expirationAt ??
+    d.expiration_ts ?? d.expirationTs;
+  let ts = null;
+  if (cand != null) {
+    if (typeof cand === "number") ts = cand > 1e12 ? cand : cand * 1000;
+    else {
+      const parsed = Date.parse(String(cand));
+      if (!Number.isNaN(parsed)) ts = parsed;
+    }
+  }
+  if (!ts) {
+    const ttl = d.ttl_hours ?? d.ttlHours ?? s.ttl_hours ?? null;
+    if (ttl && Number(ttl) > 0 && s.created_at) {
+      const created = Date.parse(s.created_at);
+      if (!Number.isNaN(created)) ts = created + Number(ttl) * 3600 * 1000;
+    }
+  }
+  return ts;
+}
+function formatLeft(ms) {
+  if (ms <= 0) return "00:00:00";
+  const total = Math.floor(ms / 1000);
+  const dd = Math.floor(total / 86400);
+  const hh = Math.floor((total % 86400) / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return dd > 0 ? `${dd}д ${pad(hh)}:${pad(mm)}` : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+}
+
+
 /* ============== provider profile cache ============== */
 const providerCache = new Map();
 async function fetchProviderProfile(providerId) {
@@ -139,6 +177,10 @@ function extractServiceFields(item, viewerRole) {
   const title = firstNonEmpty(
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
+/* ============== таймер карточки услуги ============== */
+const expireAt = resolveExpireAt(svc, details);
+const leftMs = expireAt ? (expireAt - now) : null;
+const isExpired = expireAt && leftMs <= 0;
 
   // если ПРОВАЙДЕР — показываем net (с фолбэком на gross),
 // иначе (клиент ИЛИ ГОСТЬ) — показываем gross
@@ -352,6 +394,23 @@ export default function ServiceCard({
         {/* top overlay */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2">
+
+            {expireAt && (
+              isExpired ? (
+                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                  {t("marketplace.time_expired") || "Время истекло"}
+                </span>
+              ) : (
+                <span
+                  className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20"
+                  title={t("marketplace.time_left") || "До окончания"}
+                >
+                  ⏳ {formatLeft(leftMs)}
+                </span>
+              )
+            )}
+
+            
             {badge && (
               <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                 {badge}
