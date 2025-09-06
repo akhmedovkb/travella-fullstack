@@ -1,4 +1,4 @@
-//frontend/src/components/ProviderInboxList.jsx
+// frontend/src/components/ProviderInboxList.jsx
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
@@ -7,26 +7,27 @@ import { Link } from "react-router-dom";
 import ConfirmModal from "./ConfirmModal";
 
 function StatusBadge({ status }) {
+  const { t } = useTranslation();
+  const k = String(status || "").toLowerCase();
   const map =
-    status === "new"
+    k === "new"
       ? "bg-yellow-100 text-yellow-800"
-      : status === "rejected"
+      : k === "rejected"
       ? "bg-red-100 text-red-700"
-      : status === "processed"
+      : k === "processed"
       ? "bg-green-100 text-green-700"
-      : status === "active"
+      : k === "active"
       ? "bg-blue-100 text-blue-700"
       : "bg-gray-100 text-gray-700";
+
   const label =
-    status === "new"
-      ? "New"
-      : status === "rejected"
-      ? "Rejected"
-      : status === "processed"
-      ? "Processed"
-      : status === "active"
-      ? "Active"
-      : status || "—";
+    {
+      new: t("status.new", { defaultValue: "new" }),
+      rejected: t("status.rejected", { defaultValue: "rejected" }),
+      processed: t("status.processed", { defaultValue: "processed" }),
+      active: t("status.active", { defaultValue: "active" }),
+    }[k] || status || "—";
+
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map}`}>
       {label}
@@ -124,7 +125,6 @@ const ProviderInboxList = ({ showHeader = false }) => {
   };
 
   const askDelete = (id) => setDelUI({ open: true, id, sending: false });
-
   const confirmDelete = async () => {
     if (!delUI.id) return;
     setDelUI((s) => ({ ...s, sending: true }));
@@ -205,13 +205,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
                 <span className="font-medium">#{r.id}</span>
                 <span>•</span>
                 <span>{formatDate(r.created_at)}</span>
-                {r.status ? (
-                  <StatusBadge status={r.status} />
-                ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                    New
-                  </span>
-                )}
+                <StatusBadge status={r.status || "new"} />
               </div>
 
               {/* Заголовок услуги */}
@@ -233,13 +227,16 @@ const ProviderInboxList = ({ showHeader = false }) => {
                       ? `/profile/client/${c.id}`
                       : null;
 
-                    const typeLabel = {
-                      client: t("labels.client", { defaultValue: "Клиент" }),
-                      agent: t("labels.agent", { defaultValue: "Турагент" }),
-                      guide: t("labels.guide", { defaultValue: "Гид" }),
-                      transport: t("labels.transport", { defaultValue: "Транспорт" }),
-                      hotel: t("labels.hotel", { defaultValue: "Отель" }),
-                    }[(c.type || "").toLowerCase()] || c.type;
+                    const tkey = String(c.type || "").toLowerCase();
+                    const typeLabel =
+                      tkey === "client"
+                        ? t("roles.client", { defaultValue: "Клиент" })
+                        : ["agent", "guide", "transport", "hotel"].includes(tkey)
+                        ? t(`provider.types.${tkey}`, {
+                            defaultValue:
+                              { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[tkey],
+                          })
+                        : c.type;
 
                     return (
                       <div className="font-medium flex items-center gap-2 min-w-0">
@@ -334,7 +331,7 @@ const ProviderInboxList = ({ showHeader = false }) => {
           defaultValue: "Удалить этот быстрый запрос без возможности восстановления?",
         })}
         confirmLabel={t("delete", { defaultValue: "Удалить" })}
-        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        cancelLabel={t("cancel", { defaultValue: "Отмена" })}
         danger
         busy={delUI.sending}
         onConfirm={confirmDelete}
