@@ -341,6 +341,7 @@
 
   "favorites": {
     "add": "Sevimlilarga qo‘shish",
+    "empty": "Bo`m-bo`sh",
     "expired_badge": "Muddati tugagan",
     "expired_title": "Bu taklif endi mavjud emas",
     "remove_from": "Sevimlilardan olib tashlash",
