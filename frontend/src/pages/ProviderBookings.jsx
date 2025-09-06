@@ -6,12 +6,17 @@ import BookingRow from "../components/BookingRow";
 import { tSuccess, tError } from "../shared/toast";
 
 /* ================= helpers ================= */
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const getToken = () => localStorage.getItem("token") || localStorage.getItem("providerToken");
 const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
 
 const CURRENCIES = ["USD", "EUR", "UZS"];
-const onlyDigitsDot = (s) => String(s || "").replace(/[^\d.]/g, "");
+const onlyDigitsDot = (s) =>
+  String(s || "")
+    .replace(",", ".")
+    .replace(/[^\d.]/g, "")
+    .replace(/(\..*)\./g, "$1"); // вторую точку выкидываем
+
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "");
 
@@ -241,10 +246,13 @@ export default function ProviderBookings() {
     return d.getTime();
   }, []);
   const lastDateTs = (b) => {
-    const arr = Array.isArray(b?.dates) ? b.dates : [];
-    const ts = arr.map((d) => new Date(d).getTime()).filter(Number.isFinite);
-    return ts.length ? Math.max(...ts) : NaN;
-  };
+  const arr = Array.isArray(b?.dates) ? b.dates : [];
+  const ts = arr
+    .map((d) => new Date(`${d}T00:00:00`).getTime())
+    .filter(Number.isFinite);
+  return ts.length ? Math.max(...ts) : NaN;
+};
+
 
   const isPending = (b) => String(b.status) === "pending";
   const isConfirmedLike = (b) => ["confirmed", "active"].includes(String(b.status));
