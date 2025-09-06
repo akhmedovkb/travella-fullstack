@@ -1,14 +1,19 @@
 {
   "accommodation": "Joylashuv",
   "accommodation_category": "Joylashuv toifasi",
+
   "actions": {
     "book": "Bron qilish",
     "cancel": "Bekor qilish",
     "quick_request": "Tez so‘rov",
     "reject": "Rad etish",
     "refresh": "Yangilash",
-    "send": "Yuborish"
+    "send": "Yuborish",
+    "confirm": "Tasdiqlash",
+    "edit": "Tahrirlash",
+    "delete": "O‘chirish"
   },
+
   "address": "Manzil",
   "add_error": "Qo‘shishda xatolik",
   "adt": "Kattalar (ADT)",
@@ -24,6 +29,7 @@
     "time": "Vaqt",
     "title": "Bron"
   },
+
   "bookings": {
     "price_agreement": "Narxni kelishish",
     "last_offer": "Oxirgi taklif",
@@ -33,13 +39,13 @@
     "price_placeholder": "Mas., 120",
     "comment_placeholder": "Masalan: to'xtash joyi va kutish kiritilgan",
     "send_price": "Narxni yuborish",
-
     "price_invalid": "To'g'ri narx kiriting",
     "price_sent": "Narx yuborildi",
     "price_send_error": "Narxni yuborishda xatolik",
-    
+
     "client_comment": "Izoh:",
     "empty": "Hozircha bronlar yo‘q.",
+
     "filters": {
       "all": "Barchasi",
       "pending": "Kutilmoqda",
@@ -47,8 +53,10 @@
       "upcoming": "Oldinda",
       "rejected": "Rad etildi"
     },
+
     "item": "Bron",
     "refresh": "Yangilash",
+
     "tabs": {
       "incoming": "Mening xizmatlarimga bronlar",
       "outgoing": "Men qilgan bronlar",
@@ -58,10 +66,12 @@
       "upcoming": "Yaqqin",
       "rejected": "Rad etilgan"
     },
+
     "sections": {
       "incoming": "Xizmatlarimga bronlar",
       "outgoing": "Mening bronlarim"
     },
+
     "status": {
       "pending": "kutilmoqda",
       "confirmed": "tasdiqlandi",
@@ -69,6 +79,7 @@
       "rejected": "rad etilgan",
       "cancelled": "bekor qilindi"
     },
+
     "status_by": {
       "rejected": {
         "you": "Rad etildi: siz tomondan",
@@ -76,7 +87,6 @@
         "requester": "Rad etildi: so`rovchi tomonidan",
         "client": "Rad etildi: mijoz tomonidan"
       },
-           
       "cancelled": {
         "you": "Bekor qilindi: siz tomondan",
         "provider": "Bekor qilindi: provayder",
@@ -84,22 +94,48 @@
         "client": "Bekor qilindi: mijoz"
       }
     },
+
     "labels": { "client_comment": "Izoh:" },
-    
-    "titles": { 
-        "provider": "Bronlar (Ta'minotchi)" 
-      },
-    
+
+    "titles": { "provider": "Bronlar (Ta'minotchi)" },
+
     "types": {
       "guide": "Gid",
       "transport": "Transport",
       "agent": "Turoperator",
       "hotel": "Mehmonxona"
     },
+
     "actions": {
       "confirm": "Tasdiqlash",
       "reject": "Rad etish",
       "cancel": "Bekor qilish"
+    },
+
+    /* ---- добавлено для согласованности с RU ---- */
+    "confirmed": "Bron tasdiqlandi",
+    "confirm_error": "Tasdiqlash xatosi",
+    "rejected": "Bron rad etildi",
+    "reject_error": "Rad etish xatosi",
+
+    "dates_label": "Band qilingan sanalar:",
+    "wait_price": "Ta’minotchidan narx taklifi kutilmoqda",
+
+    "search": {
+      "placeholder": "Qidiruv: ta’minotchi, xizmat, holat…"
+    },
+
+    "view": {
+      "compact": "Kompakt",
+      "normal": "Oddiy",
+      "compact_title": "Kompakt rejim"
+    },
+
+    "allow_popups_pdf": "PDF eksporti uchun qalqib chiquvchi oynalarga ruxsat bering.",
+    "pdf": {
+      "generated_at": "Tuzilgan vaqti",
+      "total": "Jami",
+      "confirmed_at": "tasdiqlangan"
     }
   },
 
@@ -120,6 +156,7 @@
   },
 
   "cancel": "Bekor qilish",
+
   "category": {
     "author_tour": "Mualliflik turi",
     "border_transfer": "Chegara transferi",
@@ -150,9 +187,7 @@
   "clear_all_images_confirm": "Barcha rasmlar o‘chirilsinmi?",
 
   "client": {
-    "profile": {
-      "title": "Mijoz"
-    },
+    "profile": { "title": "Mijoz" },
     "dashboard": {
       "avatarUrl": "Avatar havolasi",
       "changeBtn": "Almashtirish",
@@ -176,6 +211,7 @@
       "refusedTours": "Rad etilgan turlar",
       "removePhoto": "Rasmni olib tashlash",
       "requestDeleted": "So‘rov o‘chirildi",
+      "deleteRequest": "O‘chirish",
       "saveBtn": "Saqlash",
       "tabs": {
         "myBookings": "Bronlarim",
@@ -242,10 +278,7 @@
   },
 
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
-  "countdown": {
-    "until_end": "Tugashigacha",
-    "expired": "Muddati tugadi"
-  },
+  "countdown": { "until_end": "Tugashigacha", "expired": "Muddati tugadi" },
 
   "country_not_chosen": "Mamlakatlar topilmadi",
   "cover": "Muqova",
@@ -454,10 +487,7 @@
   "one_way": "Bir tomonga",
   "one_way_transfer": "Bir tomonga transfer",
 
-  "pagination": {
-    "next": "Keyingi",
-    "prev": "Oldingi"
-  },
+  "pagination": { "next": "Keyingi", "prev": "Oldingi" },
 
   "password_change": "Parolni o‘zgartirish",
   "password_changed": "Parol o‘zgartirildi",
@@ -468,10 +498,7 @@
   "photo": "Rasm",
   "price": "Narx",
 
-  "profile": {
-    "password_changed": "Parol yangilandi",
-    "saved": "Profil saqlandi"
-  },
+  "profile": { "password_changed": "Parol yangilandi", "saved": "Profil saqlandi" },
   "profile_load_error": "Profilni yuklab bo‘lmadi",
   "profile_updated": "Profil yangilandi",
 
@@ -530,11 +557,7 @@
   },
 
   "provider_profile": "Ta’minotchi profili",
-  "providerProfile": {
-    "type": "Ta’minotchi turi",
-    "region": "Ta’minotchi mintaqasi",
-    "address": "Manzil"
-  },
+  "providerProfile": { "type": "Ta’minotchi turi", "region": "Ta’minotchi mintaqasi", "address": "Manzil" },
 
   "refused_hotel": "Rad etilgan mehmonxona",
   "refused_hotel_city": "Shahar",
@@ -574,7 +597,7 @@
   "return_date": "Qaytish sanasi",
 
   "reviews": {
-    "already_left" : "Bunga oldin sharh qoldirgansiz!",
+    "already_left": "Bunga oldin sharh qoldirgansiz!",
     "count": "ta sharh",
     "count_one": "{{count}} sharh",
     "count_few": "{{count}} sharh",
@@ -596,11 +619,7 @@
     "your_rating": "Sizning bahoyingiz"
   },
 
-  "roles": {
-    "client": "Mijoz",
-    "provider": "Ta’minotchi",
-    "admin": "Admin"
-  },
+  "roles": { "client": "Mijoz", "provider": "Ta’minotchi", "admin": "Admin" },
 
   "room_rent": "Xona ijarasi",
   "round_trip": "Qaytish bilan",
@@ -644,7 +663,7 @@
     "rejected": "rad etilgan",
     "active": "faol",
     "accepted": "qabul qilingan"
-    },
+  },
 
   "sum": "Summasi",
 
@@ -653,6 +672,7 @@
     "my_bookings": "Bronlarim",
     "my_requests": "So‘rovlarim"
   },
+
   "telegram": {
     "enable_title": "Telegram bildirishnomalari",
     "enable_text": "Quyidagi tugmani bosing, Telegramni ulab, so'rovlar va bronlar haqida bildirishnomalar oling.",
@@ -669,12 +689,7 @@
   },
 
   "transfer": "Transfer",
-  "transfer_options": {
-    "group": "Guruhli",
-    "individual": "Individual",
-    "none": "Yo‘q",
-    "select": "Transferni tanlang"
-  },
+  "transfer_options": { "group": "Guruhli", "individual": "Individual", "none": "Yo‘q", "select": "Transferni tanlang" },
 
   "transport": "Transport",
   "type": "Ta’minotchi turi",
@@ -684,17 +699,9 @@
   "visa_included": "Viza kiritilgan",
   "visa_support": "Viza yordami",
 
-  "tooltips": {
-    "favorite_add": "Sevimlilarga qo‘shish",
-    "favorite_remove": "Sevimlilardan olib tashlash"
-  },
+  "tooltips": { "favorite_add": "Sevimlilarga qo‘shish", "favorite_remove": "Sevimlilardan olib tashlash" },
 
-  "types": {
-      "guide": "Gid",
-      "transport": "Transport",
-      "agent": "Turoperator",
-      "hotel": "Mehmonxona"
-    },
+  "types": { "guide": "Gid", "transport": "Transport", "agent": "Turoperator", "hotel": "Mehmonxona" },
 
   "gross_price": "Mijoz uchun narx (brutto)",
   "expired": "Muddati tugagan",
