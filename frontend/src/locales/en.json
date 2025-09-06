@@ -393,6 +393,14 @@
   "loading": "Loading…",
   "loading_stats": "Loading stats...",
   "location": "Region or venue",
+  
+  "labels": {
+  "client": "Client",
+  "agent": "Agent",
+  "guide": "Guide",
+  "transport": "Transport",
+  "hotel": "Hotel"
+},
 
   "login": {
     "button": "Log in",
