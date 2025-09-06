@@ -536,7 +536,7 @@
     "outbox": {
       "confirm_delete_title": "So‘rov o‘chirilsinmi?",
       "confirm_delete_msg": "Ushbu tez so‘rovni qayta tiklab bo‘lmaydi. O‘chirishni tasdiqlaysizmi?",
-      "edit_soon_title": "Travella.uz" da harakatingizni tasdiqlang,
+      "edit_soon_title": ""Travella.uz" da harakatingizni tasdiqlang",
       "edit_soon_msg": "Tahrirlash imkoniyati kutilmoqda",
       "title": "Chiqib ketgan so‘rovlar",
       "total": "Jami",
