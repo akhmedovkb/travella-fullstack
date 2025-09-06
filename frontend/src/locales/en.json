@@ -585,6 +585,8 @@
     "type": "Provider type"
   },
 
+  "requests.tabs.incoming": "Incoming", "requests.tabs.outgoing": "Outgoing",
+
   "requests_list": {
     "empty": "No requests yet.",
     "error": "Failed to send request",
