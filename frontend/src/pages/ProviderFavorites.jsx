@@ -1,5 +1,4 @@
 // src/pages/ProviderFavorites.jsx
-
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiPost } from "../api";
@@ -11,17 +10,6 @@ import { tSuccess, tInfo, tError } from "../shared/toast";
 // роль здесь всегда провайдер
 const __viewerRole = "provider";
 
-
-/* ========== helpers ========== */
-const firstNonEmpty = (...vals) => {
-  for (const v of vals) {
-    if (v === 0) return 0;
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return null;
-};
-
-/* ===================== страница ===================== */
 export default function ProviderFavorites() {
   const { t } = useTranslation();
 
@@ -42,65 +30,64 @@ export default function ProviderFavorites() {
     setQrServiceTitle(serviceTitle || "");
     setQrOpen(true);
   };
+
   const submitQuickRequest = async (note) => {
-  try {
-    await apiPost("/api/requests", {
-      service_id: qrServiceId,
-      provider_id: qrProviderId || undefined,
-      service_title: qrServiceTitle || undefined,
-      note: note || undefined,
-    });
+    try {
+      await apiPost("/api/requests", {
+        service_id: qrServiceId,
+        provider_id: qrProviderId || undefined,
+        service_title: qrServiceTitle || undefined,
+        note: note || undefined,
+      });
 
-    tSuccess(t("messages.request_sent") || "Запрос отправлен", { autoClose: 1800 });
+      tSuccess(t("messages.request_sent", { defaultValue: "Запрос отправлен" }), { autoClose: 1800 });
 
-    window.dispatchEvent(
-      new CustomEvent("request:created", {
-        detail: { service_id: qrServiceId, title: qrServiceTitle },
-      })
-    );
-  } catch (err) {
-  // максимально надёжный разбор
-  const status =
-    err?.status ||
-    err?.response?.status ||
-    err?.data?.status ||
-    (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
+      window.dispatchEvent(
+        new CustomEvent("request:created", {
+          detail: { service_id: qrServiceId, title: qrServiceTitle },
+        })
+      );
+    } catch (err) {
+      const status =
+        err?.status ||
+        err?.response?.status ||
+        err?.data?.status ||
+        (typeof err?.message === "string" && /(^|\s)4\d\d(\s|$)/.test(err.message) ? 400 : undefined);
 
-  const code =
-    err?.data?.error ||
-    err?.response?.data?.error ||
-    err?.error ||
-    err?.code ||
-    (typeof err?.message === "string" ? err.message : "") ||
-    (typeof err === "string" ? err : "");
+      const code =
+        err?.data?.error ||
+        err?.response?.data?.error ||
+        err?.error ||
+        err?.code ||
+        (typeof err?.message === "string" ? err.message : "") ||
+        (typeof err === "string" ? err : "");
 
-  const msgStr = String(code).toLowerCase();
+      const msgStr = String(code).toLowerCase();
 
-  if (status === 400 || msgStr.includes("self_request_forbidden") || msgStr.includes("bad request")) {
-    tInfo(t("errors.self_request_forbidden") || "Вы не можете отправить себе быстрый запрос!", {
-      autoClose: 2200,
-      toastId: "self-req",
-    });
-    return;
-  }
+      if (status === 400 || msgStr.includes("self_request_forbidden") || msgStr.includes("bad request")) {
+        tInfo(t("errors.self_request_forbidden", { defaultValue: "Вы не можете отправить себе быстрый запрос!" }), {
+          autoClose: 2200,
+          toastId: "self-req",
+        });
+        return;
+      }
 
-  if (status === 401 || status === 403 || msgStr.includes("unauthorized")) {
-    tInfo(t("auth.login_required") || "Войдите, чтобы отправить запрос", {
-      autoClose: 2000,
-      toastId: "login-required",
-    });
-    return;
-  }
+      if (status === 401 || status === 403 || msgStr.includes("unauthorized")) {
+        tInfo(t("auth.login_required", { defaultValue: "Войдите, чтобы продолжить" }), {
+          autoClose: 2000,
+          toastId: "login-required",
+        });
+        return;
+      }
 
-  tError(t("errors.request_send") || "Не удалось отправить запрос", { autoClose: 1800 });
-} finally {
-    setQrOpen(false);
-    setQrServiceId(null);
-    setQrProviderId(null);
-    setQrServiceTitle("");
-  }
-};
-
+      tError(t("errors.request_send", { defaultValue: "Не удалось отправить запрос" }), { autoClose: 1800 });
+    } finally {
+      setQrOpen(false);
+      setQrServiceId(null);
+      setQrProviderId(null);
+      setQrServiceTitle("");
+    }
+  };
 
   // load favorites
   useEffect(() => {
@@ -124,14 +111,15 @@ export default function ProviderFavorites() {
   // toggle/remove
   const toggleFavorite = async (serviceId) => {
     const key = String(serviceId);
-    // оптимистично перевернём
-    const flipTo = !favIds.has(key);
+    const flipTo = !favIds.has(key); // оптимистично перевернём
+
     setFavIds((prev) => {
       const next = new Set(prev);
       if (flipTo) next.add(key);
       else next.delete(key);
       return next;
     });
+
     if (!flipTo) {
       // если сняли избранное — сразу убираем карточку из списка
       setItems((prev) => prev.filter((x) => String(x?.service_id ?? x?.service?.id ?? x?.id) !== key));
@@ -139,6 +127,7 @@ export default function ProviderFavorites() {
 
     try {
       const res = await apiToggleProviderFavorite(serviceId);
+
       // если сервер сказал иначе — синхронизируем
       if (typeof res?.added === "boolean" && res.added !== flipTo) {
         setFavIds((prev) => {
@@ -151,12 +140,14 @@ export default function ProviderFavorites() {
           setItems((prev) => prev.filter((x) => String(x?.service_id ?? x?.service?.id ?? x?.id) !== key));
         }
       }
+
       // обновим бейдж в Header.jsx
       window.dispatchEvent(new Event("provider:favorites:changed"));
+
       (res?.added ? tSuccess : tInfo)(
         res?.added
-          ? (t("favorites.added_toast") || "Добавлено в избранное")
-          : (t("favorites.removed_toast") || "Удалено из избранного"),
+          ? t("favorites.added_toast", { defaultValue: "Добавлено в избранное" })
+          : t("favorites.removed_toast", { defaultValue: "Удалено из избранного" }),
         { autoClose: 1800, toastId: `fav-${serviceId}-${res?.added ? "add" : "rem"}` }
       );
     } catch {
@@ -167,24 +158,25 @@ export default function ProviderFavorites() {
         else next.add(key);
         return next;
       });
-      if (!flipTo) {
-        // если откатываем снятие — вернём карточку (если удаляли)
-        const lost = items.find((x) => String(x?.service_id ?? x?.service?.id ?? x?.id) === key);
-        if (!lost) {
-          // ничего, список уже без неё; в следующий fetch вернётся
-        }
-      }
-      tError(t("errors.favorite_toggle") || "Не удалось обновить избранное", { autoClose: 1800 });
+
+      // универсальный ключ ошибки, чтобы не плодить разных
+      tError(t("toast.favoriteError", { defaultValue: "Не удалось изменить избранное" }), { autoClose: 1800 });
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <h2 className="text-xl font-semibold mb-4">{t("nav.favorites") || "Избранное"}</h2>
+      <h2 className="text-xl font-semibold mb-4">
+        {t("nav.favorites", { defaultValue: "Избранное" })}
+      </h2>
 
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">Загрузка…</div>}
-        {!loading && !items.length && <div className="text-gray-500">Пусто</div>}
+        {loading && <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка…" })}</div>}
+
+        {!loading && !items.length && (
+          <div className="text-gray-500">{t("favorites.empty", { defaultValue: "Пусто" })}</div>
+        )}
+
         {!loading && !!items.length && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => {
