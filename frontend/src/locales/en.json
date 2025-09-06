@@ -5,6 +5,7 @@
   "actions": {
     "book": "Book",
     "cancel": "Cancel",
+    "ok": "ОК",
     "quick_request": "Quick request",
     "reject": "Reject",
     "refresh": "Refresh",
