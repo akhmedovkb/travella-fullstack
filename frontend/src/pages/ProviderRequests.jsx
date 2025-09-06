@@ -1,20 +1,19 @@
 // frontend/src/pages/ProviderRequests.jsx
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ProviderInboxList from "../components/ProviderInboxList";
 import ProviderOutboxList from "../components/ProviderOutboxList";
 
 export default function ProviderRequests() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const resolveTab = (sp) =>
-    String(sp.get("tab") || "").toLowerCase() === "outgoing"
-      ? "outgoing"
-      : "incoming";
+    (sp.get("tab") || "").toLowerCase() === "outgoing" ? "outgoing" : "incoming";
 
   const [tab, setTab] = useState(resolveTab(searchParams));
 
-  // синхронизация c URL (?tab=outgoing)
   useEffect(() => {
     const next = resolveTab(searchParams);
     if (next !== tab) setTab(next);
@@ -29,7 +28,7 @@ export default function ProviderRequests() {
     setSearchParams(p, { replace: true });
   };
 
-  const TabBtn = ({ k, children }) => {
+  const TabBtn = ({ k, labelKey }) => {
     const active = tab === k;
     return (
       <button
@@ -38,7 +37,7 @@ export default function ProviderRequests() {
           active ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500"
         }`}
       >
-        {children}
+        {t(labelKey, { defaultValue: k === "incoming" ? "Входящие" : "Исходящие" })}
       </button>
     );
   };
@@ -47,8 +46,8 @@ export default function ProviderRequests() {
     <div className="max-w-6xl mx-auto p-4 md:p-6">
       <div className="bg-white rounded-xl shadow p-6 border">
         <div className="flex items-center gap-3 border-b pb-3 mb-4">
-          <TabBtn k="incoming">Входящие</TabBtn>
-          <TabBtn k="outgoing">Исходящие</TabBtn>
+          <TabBtn k="incoming" labelKey="requests.tabs.incoming" />
+          <TabBtn k="outgoing" labelKey="requests.tabs.outgoing" />
         </div>
 
         {tab === "incoming" ? (
