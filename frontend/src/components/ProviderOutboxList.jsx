@@ -1,4 +1,5 @@
 // src/components/ProviderOutboxList.jsx
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -143,6 +144,16 @@ export default function ProviderOutboxList({ showHeader = false }) {
             r?.service?.title || r?.service_title || r?.title || t("common.request", { defaultValue: "Запрос" });
           const created = r?.created_at ? formatDate(r.created_at) : "";
 
+          const tkey = String(dst?.type || "").toLowerCase();
+          const typeLabel =
+            tkey === "client"
+              ? t("roles.client", { defaultValue: "Клиент" })
+              : ["agent", "guide", "transport", "hotel"].includes(tkey)
+              ? t(`provider.types.${tkey}`, {
+                  defaultValue: { agent: "Турагент", guide: "Гид", transport: "Транспорт", hotel: "Отель" }[tkey],
+                })
+              : dst?.type;
+
           return (
             <div key={r.id} className="bg-white border rounded-xl p-4 overflow-hidden">
               <div className="font-semibold leading-tight break-words line-clamp-2">{serviceTitle}</div>
@@ -159,13 +170,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
                   )}
                   {!!dst?.type && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
-                      {{
-                        agent: t("labels.agent", { defaultValue: "Турагент" }),
-                        guide: t("labels.guide", { defaultValue: "Гид" }),
-                        transport: t("labels.transport", { defaultValue: "Транспорт" }),
-                        hotel: t("labels.hotel", { defaultValue: "Отель" }),
-                        client: t("labels.client", { defaultValue: "Клиент" }),
-                      }[String(dst.type).toLowerCase()] || dst.type}
+                      {typeLabel}
                     </span>
                   )}
                 </div>
@@ -205,18 +210,15 @@ export default function ProviderOutboxList({ showHeader = false }) {
 
               {/* действия */}
               <div className="mt-3 flex gap-2">
-                <button
-                  onClick={askEdit}
-                  className="px-3 py-1.5 rounded border hover:bg-gray-50"
-                >
-                  {t("actions.edit", { defaultValue: "Править" })}
+                <button onClick={askEdit} className="px-3 py-1.5 rounded border hover:bg-gray-50">
+                  {t("edit", { defaultValue: "Править" })}
                 </button>
                 <button
                   onClick={() => askDelete(r.id)}
                   disabled={!!busyDel[r.id]}
                   className="px-3 py-1.5 rounded border text-red-600 hover:bg-red-50 disabled:opacity-60"
                 >
-                  {t("actions.delete", { defaultValue: "Удалить" })}
+                  {t("delete", { defaultValue: "Удалить" })}
                 </button>
               </div>
             </div>
@@ -233,7 +235,7 @@ export default function ProviderOutboxList({ showHeader = false }) {
         message={t("provider.outbox.edit_soon_msg", {
           defaultValue: "Редактирование скоро будет",
         })}
-        confirmLabel={t("actions.ok", { defaultValue: "ОК" })}
+        confirmLabel={t("ok", { defaultValue: "OK" })}
         hideCancel
         onClose={() => setEditUI({ open: false })}
       />
@@ -245,8 +247,8 @@ export default function ProviderOutboxList({ showHeader = false }) {
         message={t("provider.outbox.confirm_delete_msg", {
           defaultValue: "Удалить этот быстрый запрос без возможности восстановления?",
         })}
-        confirmLabel={t("actions.delete", { defaultValue: "Удалить" })}
-        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        confirmLabel={t("delete", { defaultValue: "Удалить" })}
+        cancelLabel={t("cancel", { defaultValue: "Отмена" })}
         danger
         busy={delUI.sending}
         onConfirm={confirmDelete}
