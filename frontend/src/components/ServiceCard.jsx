@@ -140,9 +140,19 @@ function extractServiceFields(item, viewerRole) {
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
 
-  const rawPrice = viewerRole === "client"
-    ? firstNonEmpty(details?.grossPrice, details?.priceGross, details?.totalPrice, svc.grossPrice, svc.price_gross)
-    : firstNonEmpty(details?.netPrice, details?.price, details?.totalPrice, details?.priceNet, svc.netPrice, svc.price, item?.price, details?.grossPrice);
+  // если ПРОВАЙДЕР — показываем net (с фолбэком на gross),
+// иначе (клиент ИЛИ ГОСТЬ) — показываем gross
+const rawPrice = (viewerRole === "provider")
+  ? firstNonEmpty(
+      details?.netPrice, details?.price, details?.totalPrice, details?.priceNet,
+      svc.netPrice, svc.price, item?.price, details?.grossPrice
+    )
+  : firstNonEmpty(
+      details?.grossPrice, details?.priceGross, details?.totalPrice,
+      svc.grossPrice, svc.price_gross,
+      // фолбэк на net, если gross отсутствует
+      details?.netPrice, details?.price, svc.netPrice, svc.price
+    );
 
   const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
