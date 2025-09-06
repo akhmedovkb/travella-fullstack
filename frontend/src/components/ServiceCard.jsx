@@ -92,7 +92,7 @@ function resolveExpireAt(svc, details) {
   }
   return ts;
 }
-function formatLeft(ms) {
+function formatLeft(ms, dayLabel = "d") {
   if (ms <= 0) return "00:00:00";
   const total = Math.floor(ms / 1000);
   const dd = Math.floor(total / 86400);
@@ -100,7 +100,7 @@ function formatLeft(ms) {
   const mm = Math.floor((total % 3600) / 60);
   const ss = total % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  return dd > 0 ? `${dd}д ${pad(hh)}:${pad(mm)}` : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+  return dd > 0 ? `${dd}${dayLabel} ${pad(hh)}:${pad(mm)}` : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
 
