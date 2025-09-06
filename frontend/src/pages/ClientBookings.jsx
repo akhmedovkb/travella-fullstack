@@ -404,13 +404,15 @@ export default function ClientBookings() {
           ? `${fmt(Number(b.provider_price))} ${b.currency || "USD"}`
           : "—";
         const note = b.provider_note ? ` · ${b.provider_note}` : "";
-        const pType = {
-          guide: t("provider.types.guide", { defaultValue: "гид" }),
-          transport: t("provider.types.transport", { defaultValue: "транспорт" }),
-          agency: t("provider.types.agent", { defaultValue: "турагент" }),
-          hotel: t("provider.types.hotel", { defaultValue: "отель" }),
-          provider: t("roles.provider", { defaultValue: "поставщик" }),
-        }[normalizeProviderType(b.provider_type)]!;
+        const pType =
+          ({
+            guide:      t("provider.types.guide",    { defaultValue: "гид" }),
+            transport:  t("provider.types.transport", { defaultValue: "транспорт" }),
+            agency:     t("provider.types.agent",     { defaultValue: "турагент" }),
+            hotel:      t("provider.types.hotel",     { defaultValue: "отель" }),
+            provider:   t("roles.provider",           { defaultValue: "поставщик" }),
+          }[normalizeProviderType(b.provider_type)]) ||
+          t("roles.provider", { defaultValue: "поставщик" });
         const confirmedAt =
           ["confirmed", "active"].includes(statusKey(b.status))
             ? formatDate(toYMD(b.updated_at))
