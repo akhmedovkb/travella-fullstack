@@ -374,6 +374,23 @@ const todayLocalDateTime = () => {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// === Languages dictionaries ===
+const LANGUAGE_OPTIONS = [
+  { value: "uz", label: "O‘zbekcha" },
+  { value: "ru", label: "Русский" },
+  { value: "en", label: "English" },
+  { value: "tr", label: "Türkçe" },
+  { value: "de", label: "Deutsch" },
+  { value: "ar", label: "العربية" },
+];
+
+const LEVEL_OPTIONS = [
+  { value: "basic",        label: "A2 — Basic" },
+  { value: "intermediate", label: "B1/B2 — Intermediate" },
+  { value: "advanced",     label: "C1/C2 — Advanced" },
+  { value: "native",       label: "Native" },
+];
+
 
 /** ================= Main ================= */
 const Dashboard = () => {
@@ -391,6 +408,8 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
+  const [langs, setLangs] = useState([]);
+
   //review
   const providerIdRaw =
   profile?.id ?? localStorage.getItem("provider_id") ?? localStorage.getItem("id");
@@ -721,6 +740,7 @@ useEffect(() => {
     .get(`${API_BASE}/api/providers/profile`, config)
     .then(async (res) => {
       setProfile(res.data || {});
+      setLangs(Array.isArray(res.data?.languages) ? res.data.languages : []);
       setNewLocation(res.data?.location || "");
       setNewSocial(res.data?.social || "");
       setNewPhone(res.data?.phone || "");
@@ -798,6 +818,13 @@ useEffect(() => {
     if (newAddress !== profile.address) updated.address = newAddress;
     if (newPhoto) updated.photo = newPhoto;
     if (newCertificate) updated.certificate = newCertificate;
+
+    const sanitizedLangs = (langs || [])
+      .filter(x => x?.code && x?.level)
+      .map(x => ({ code: x.code, level: x.level }));
+    if (JSON.stringify(sanitizedLangs) !== JSON.stringify(profile.languages || [])) {
+      updated.languages = sanitizedLangs;
+    }
 
     if (Object.keys(updated).length === 0) {
       tInfo(t("no_changes") || "Изменений нет");
@@ -1187,7 +1214,67 @@ useEffect(() => {
                       </div>
                     )}
                   </div>
-
+                                        {/* Владение языками */}
+                          <div>
+                            <label className="block font-medium">Языки</label>
+                          
+                            {isEditing ? (
+                              <>
+                                {langs.map((row, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 mb-2">
+                                    <Select
+                                      className="flex-1"
+                                      options={LANGUAGE_OPTIONS}
+                                      value={LANGUAGE_OPTIONS.find(o => o.value === row.code) || null}
+                                      onChange={(opt) =>
+                                        setLangs(prev => prev.map((x,i) => i === idx ? { ...x, code: opt?.value || "" } : x))
+                                      }
+                                      placeholder="Язык"
+                                    />
+                                    <Select
+                                      className="flex-1"
+                                      options={LEVEL_OPTIONS}
+                                      value={LEVEL_OPTIONS.find(o => o.value === row.level) || null}
+                                      onChange={(opt) =>
+                                        setLangs(prev => prev.map((x,i) => i === idx ? { ...x, level: opt?.value || "" } : x))
+                                      }
+                                      placeholder="Уровень"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setLangs(prev => prev.filter((_,i) => i !== idx))}
+                                      className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                                      title="Удалить"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+                          
+                                <button
+                                  type="button"
+                                  onClick={() => setLangs(prev => [...prev, { code: "", level: "" }])}
+                                  className="mt-1 text-sm text-orange-600 underline"
+                                >
+                                  + Добавить язык
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {Array.isArray(langs) && langs.length ? (
+                                  <ul className="list-disc ml-5 text-sm">
+                                    {langs.map((l, i) => {
+                                      const langLabel = LANGUAGE_OPTIONS.find(o => o.value === l.code)?.label || l.code;
+                                      const levelLabel = LEVEL_OPTIONS.find(o => o.value === l.level)?.label || l.level;
+                                      return <li key={i}>{langLabel} — {levelLabel}</li>;
+                                    })}
+                                  </ul>
+                                ) : (
+                                  <div className="border px-3 py-2 rounded bg-gray-100">{t("not_specified")}</div>
+                                )}
+                              </>
+                            )}
+                          </div>                     
 
               {/* Сертификат */}
               <div>
