@@ -149,7 +149,7 @@ const loginProvider = async (req, res) => {
       expiresIn: "7d",
     });
 
-    // Отдаём telegram_chat_id (и алиас tg_chat_id) — для баннера на фронте
+    // Отдаём telegram_chat_id (и алиас tg_chat_id) + languages — для фронта
     res.json({
       message: "Вход успешен",
       provider: {
@@ -165,6 +165,7 @@ const loginProvider = async (req, res) => {
         certificate: row.certificate,
         telegram_chat_id: row.telegram_chat_id || null,
         tg_chat_id: row.telegram_chat_id || null, // алиас для удобства
+        languages: row.languages ?? [],           // ← НОВОЕ
       },
       token,
     });
@@ -174,12 +175,32 @@ const loginProvider = async (req, res) => {
   }
 };
 
+// -------- languages normalizer --------
+function normalizeLanguages(input, fallback = []) {
+  if (input == null) return Array.isArray(fallback) || typeof fallback === "object" ? fallback : [];
+  if (Array.isArray(input)) {
+    // допускаем ["ru","en"] или [{code:"ru",level:"native"}, ...]
+    return input;
+  }
+  if (typeof input === "object") {
+    // допускаем {"ru":"native","en":"advanced"}
+    return input;
+  }
+  if (typeof input === "string") {
+    // "ru, en" | "ru|en" | "ru;en" | "ru\nen" | "ru • en"
+    const arr = input.split(/[,\|;\n•]+/).map(s => s.trim()).filter(Boolean);
+    return arr;
+  }
+  return Array.isArray(fallback) || typeof fallback === "object" ? fallback : [];
+}
+
+
 // ---------- Profile ----------
 const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
        FROM providers WHERE id = $1`,
       [id]
     );
@@ -200,8 +221,8 @@ const getProviderProfile = async (req, res) => {
       address: p.address,
       telegram_chat_id: p.telegram_chat_id || null,
       tg_chat_id: p.telegram_chat_id || null,
-      // бонусом можно отдать avatar_url, если фронту удобно
       avatar_url: p.photo || null,
+      languages: p.languages ?? [],
     });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
@@ -213,7 +234,7 @@ const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const oldQ = await pool.query(
-      `SELECT name, location, phone, social, photo, certificate, address
+      `SELECT name, location, phone, social, photo, certificate, address, languages
        FROM providers WHERE id = $1`,
       [id]
     );
@@ -240,12 +261,20 @@ const updateProviderProfile = async (req, res) => {
       photo: req.body.photo ?? old.photo,
       certificate: req.body.certificate ?? old.certificate,
       address: req.body.address ?? old.address,
+      languages: normalizeLanguages(req.body.languages, old.languages), // ← НОВОЕ
     };
 
     await pool.query(
       `UPDATE providers
-         SET name=$1, location=$2, phone=$3, social=$4, photo=$5, certificate=$6, address=$7
-       WHERE id=$8`,
+         SET name=$1,
+             location=$2,
+             phone=$3,
+             social=$4,
+             photo=$5,
+             certificate=$6,
+             address=$7,
+             languages=$8::jsonb
+       WHERE id=$9`,
       [
         updated.name,
         updated.location,
@@ -254,13 +283,14 @@ const updateProviderProfile = async (req, res) => {
         updated.photo,
         updated.certificate,
         updated.address,
+        JSON.stringify(updated.languages ?? []), // ← ключевой параметр
         id,
       ]
     );
 
     // Отдаём и message, и актуальные данные (совместимо с текущим фронтом)
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
          FROM providers WHERE id = $1`,
       [id]
     );
@@ -283,6 +313,7 @@ const updateProviderProfile = async (req, res) => {
             telegram_chat_id: p.telegram_chat_id || null,
             tg_chat_id: p.telegram_chat_id || null,
             avatar_url: p.photo || null,
+            languages: p.languages ?? [], // ← НОВОЕ
           }
         : null,
     });
@@ -451,10 +482,25 @@ const getProviderPublicById = async (req, res) => {
   try {
     const id = Number(req.params.id);
     const r = await pool.query(
-      `SELECT id, name, type, location, phone, social, photo, address FROM providers WHERE id=$1`,
+      `SELECT id, name, type, location, phone, social, photo, address, languages
+         FROM providers
+        WHERE id=$1`,
       [id]
     );
-    res.json(r.rows[0] || null);
+    const row = r.rows[0] || null;
+    if (!row) return res.json(null);
+
+    res.json({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      location: row.location,
+      phone: row.phone,
+      social: row.social,
+      photo: row.photo,
+      address: row.address,
+      languages: row.languages ?? [], // ← НОВОЕ
+    });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
     res.status(500).json({ message: "Ошибка сервера" });
