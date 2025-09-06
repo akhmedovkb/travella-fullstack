@@ -171,39 +171,21 @@ const StatusBadge = ({ status, text: override }) => {
   const { t } = useTranslation();
   const s = statusKey(status);
   const map = {
-    pending: {
-      text: t("status.pending", { defaultValue: "ожидает" }),
-      cls: "bg-amber-50 text-amber-700 ring-amber-200",
-    },
-    confirmed: {
-      text: t("status.confirmed", { defaultValue: "подтверждено" }),
-      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    },
-    active: {
-      text: t("status.active", { defaultValue: "активно" }),
-      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    },
-    rejected: {
-      text: t("status.rejected", { defaultValue: "отклонено" }),
-      cls: "bg-rose-50 text-rose-700 ring-rose-200",
-    },
-    cancelled: {
-      text: t("status.cancelled", { defaultValue: "отменено" }),
-      cls: "bg-gray-100 text-gray-600 ring-gray-200",
-    },
+    pending:   { text: t("bookings.status.pending",   { defaultValue: "ожидает" }),     cls: "bg-amber-50 text-amber-700 ring-amber-200" },
+    confirmed: { text: t("bookings.status.confirmed", { defaultValue: "подтверждено" }), cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+    active:    { text: t("bookings.status.active",    { defaultValue: "активно" }),      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+    rejected:  { text: t("bookings.status.rejected",  { defaultValue: "отклонено" }),    cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+    cancelled: { text: t("bookings.status.cancelled", { defaultValue: "отменено" }),     cls: "bg-gray-100 text-gray-600 ring-gray-200" },
   };
   const { text, cls } =
-    map[s] || {
-      text: s,
-      cls: "bg-gray-100 text-gray-700 ring-gray-200",
-    };
+    map[s] || { text: t(`bookings.status.${s}`, { defaultValue: s }), cls: "bg-gray-100 text-gray-700 ring-gray-200" };
+
   return (
     <span className={cx("inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1", cls)}>
       {override || text}
     </span>
   );
 };
-
 /* ==== тип поставщика: бейдж + нормализация ==== */
 const normalizeProviderType = (t) => {
   const s = String(t || "").toLowerCase();
