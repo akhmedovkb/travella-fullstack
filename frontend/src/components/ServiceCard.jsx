@@ -7,85 +7,6 @@ import WishHeart from "./WishHeart";
 const SHOW_REVIEWS = false;
 
 /* ============== small utils ============== */
-
-const LANGUAGE_OPTIONS = [
-  { value: "uz", label: "O‘zbekcha" },
-  { value: "ru", label: "Русский" },
-  { value: "en", label: "English" },
-  { value: "tr", label: "Türkçe" },
-  { value: "de", label: "Deutsch" },
-  { value: "ar", label: "العربية" },
-];
-const LEVEL_OPTIONS = [
-  { value: "basic",        label: "A2 — Basic" },
-  { value: "intermediate", label: "B1/B2 — Intermediate" },
-  { value: "advanced",     label: "C1/C2 — Advanced" },
-  { value: "native",       label: "Native" },
-];
-const normalizeLangCode = (c) => String(c || "").toLowerCase().split(/[_-]/)[0];
-const normalizeLevel = (s) => {
-  const x = String(s || "").toLowerCase().trim();
-  if (!x) return "";
-  if (/native|родной/.test(x)) return "native";
-  if (/^(c1|c2)|adv/.test(x)) return "advanced";
-  if (/^(b1|b2)|inter/.test(x)) return "intermediate";
-  if (/^(a1|a2)|basic|elem|pre/.test(x)) return "basic";
-  return x;
-};
-const getLangLabel  = (code) => {
-  const c = normalizeLangCode(code);
-  return LANGUAGE_OPTIONS.find(o => o.value === c)?.label || code;
-};
-const getLevelLabel = (lvl)  => {
-  const v = normalizeLevel(lvl);
-  return LEVEL_OPTIONS.find(o => o.value === v)?.label || (lvl ? String(lvl).toUpperCase() : "");
-};
-function extractProviderLangs(p) {
-  const d = maybeParse(p?.details) || p?.details || {};
-  let raw = firstNonEmpty(
-    p?.languages, d?.languages,
-    p?.langs, d?.langs,
-    p?.language, d?.language,
-    // фолбэки:
-    p?.languages_text, d?.languages_text,
-    p?.language_text, d?.language_text,
-    p?.lang, d?.lang,
-    p?.lang_list, d?.lang_list
-  );
-  let arr = [];
-  if (!raw) arr = [];
-  else if (typeof raw === "string") {
-  arr = raw
-    .split(/[,\|;\n•]+/)   // было /[,\|]/
-    .map(s => ({ code: s.trim(), level: "" }))
-    .filter(x => x.code);
-}
- else if (Array.isArray(raw)) {
-    arr = raw.map(x => {
-      if (!x) return null;
-      if (typeof x === "string") return { code: x.trim(), level: "" };
-      if (typeof x === "object") return { code: x.code || x.lang || x.language || x.value || "", level: x.level || x.proficiency || x.cefr || "" };
-      return null;
-    }).filter(Boolean);
-  } else if (typeof raw === "object") {
-    arr = Object.entries(raw).map(([k, v]) => ({ code: k, level: v || "" }));
-  }
-  // нормализация + выбор лучшего уровня на один язык
-  const rank = { native: 3, advanced: 2, intermediate: 1, basic: 0 };
-  const best = new Map();
-  for (const it of arr) {
-    const code = normalizeLangCode(it.code);
-    const level = normalizeLevel(it.level);
-    if (!code) continue;
-    const prev = best.get(code);
-    if (!prev || (rank[level] ?? -1) > (rank[prev.level] ?? -1)) {
-      best.set(code, { code, level });
-    }
-  }
-  return Array.from(best.values()).sort((a,b) => (rank[b.level]??-1)-(rank[a.level]??-1) || a.code.localeCompare(b.code));
-}
-
-
 const firstNonEmpty = (...vals) => {
   for (const v of vals) {
     if (v === 0) return 0;
@@ -395,7 +316,7 @@ export default function ServiceCard({
     return () => { alive = false; };
   }, [providerId]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
-  const provLangs = extractProviderLangs(prov);
+  
 
   const supplierName = firstNonEmpty(
     prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand, flatName
@@ -642,17 +563,6 @@ export default function ServiceCard({
         )}
       </div>
     )}
-  </div>
-)}
-
-{provLangs.length > 0 && (
-  <div className="mt-2 text-sm">
-    <span className="text-gray-500">{t("provider.languages") || "Языки"}: </span>
-    <span className="font-medium">
-      {provLangs
-        .map(l => (l.level ? `${getLangLabel(l.code)} — ${getLevelLabel(l.level)}` : getLangLabel(l.code)))
-        .join(", ")}
-    </span>
   </div>
 )}
 
