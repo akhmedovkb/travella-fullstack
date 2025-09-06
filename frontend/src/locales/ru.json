@@ -568,6 +568,8 @@
     "type": "Тип поставщика"
   },
 
+  "requests.tabs.incoming": "Входящие", "requests.tabs.outgoing": "Исходящие",
+
   "requests_list": {
     "empty": "Пока нет запросов.",
     "error": "Не удалось отправить запрос",
