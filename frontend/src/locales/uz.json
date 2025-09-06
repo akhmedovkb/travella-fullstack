@@ -585,6 +585,8 @@
     "type": "Ta’minotchi turi"
   },
 
+  "requests.tabs.incoming": "Kelib tushgan", "requests.tabs.outgoing": "Chiqib ketgan",
+
   "requests_list": {
     "empty": "Hozircha so‘rovlar yo‘q.",
     "error": "So‘rovni yuborib bo‘lmadi",
