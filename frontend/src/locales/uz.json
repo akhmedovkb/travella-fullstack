@@ -5,6 +5,7 @@
   "actions": {
     "book": "Bron qilish",
     "cancel": "Bekor qilish",
+    "ok": "ОК",
     "quick_request": "Tez so‘rov",
     "reject": "Rad etish",
     "refresh": "Yangilash",
