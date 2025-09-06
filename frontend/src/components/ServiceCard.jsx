@@ -177,10 +177,7 @@ function extractServiceFields(item, viewerRole) {
   const title = firstNonEmpty(
     svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
   );
-/* ============== таймер карточки услуги ============== */
-const expireAt = resolveExpireAt(svc, details);
-const leftMs = expireAt ? (expireAt - now) : null;
-const isExpired = expireAt && leftMs <= 0;
+
 
   // если ПРОВАЙДЕР — показываем net (с фолбэком на gross),
 // иначе (клиент ИЛИ ГОСТЬ) — показываем gross
@@ -290,6 +287,11 @@ export default function ServiceCard({
     details,
     direction
   } = extractServiceFields(item, viewerRole);
+
+  /* ============== таймер карточки услуги ============== */
+    const expireAt = resolveExpireAt(svc, details);
+    const leftMs = expireAt ? (expireAt - now) : null;
+    const isExpired = expireAt && leftMs <= 0;
 
   const id = svc.id ?? item.id;
 
