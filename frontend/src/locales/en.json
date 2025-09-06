@@ -341,6 +341,7 @@
 
   "favorites": {
     "add": "Add to favorites",
+    "empty": "Empty",
     "expired_badge": "Expired",
     "expired_title": "This service is no longer available",
     "remove_from": "Remove from favorites",
