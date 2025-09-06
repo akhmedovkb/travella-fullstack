@@ -1,15 +1,19 @@
 {
   "accommodation": "Размещение",
   "accommodation_category": "Категория размещения",
-  
+
   "actions": {
     "book": "Бронировать",
     "cancel": "Отмена",
     "send": "Отправить",
     "quick_request": "Быстрый запрос",
-    "refresh": "Обновить"
+    "refresh": "Обновить",
+    "edit": "Править",
+    "delete": "Удалить",
+    "confirm": "Подтвердить",
+    "reject": "Отклонить"
   },
-  
+
   "address": "Адрес",
   "add_error": "Ошибка добавления",
   "adt": "Взрослые (ADT)",
@@ -23,8 +27,12 @@
     "pax": "Пассажиры",
     "submit": "Забронировать",
     "time": "Время",
-    "title": "Бронирование"
+    "title": "Бронирование",
+    "service": "Услуга:",
+    "provider": "Поставщик:",
+    "offer": "Предложение:"
   },
+
   "bookings": {
     "empty": "Пока нет бронирований.",
     "item": "Бронирование",
@@ -71,6 +79,30 @@
       "confirm": "Подтвердить",
       "reject": "Отклонить",
       "cancel": "Отмена"
+    },
+
+    /* ---- добавлено для ClientBookings ---- */
+    "confirmed": "Бронирование подтверждено",
+    "confirm_error": "Ошибка подтверждения",
+    "rejected": "Бронирование отклонено",
+    "reject_error": "Ошибка отклонения",
+
+    "dates_label": "Даты забронированы:",
+    "wait_price": "Ожидаем предложение цены от поставщика",
+
+    "search": {
+      "placeholder": "Поиск: поставщик, услуга, статус…"
+    },
+    "view": {
+      "compact": "Компактный",
+      "normal": "Обычный",
+      "compact_title": "Компактный режим"
+    },
+    "allow_popups_pdf": "Разрешите всплывающие окна для экспорта в PDF.",
+    "pdf": {
+      "generated_at": "Сформировано",
+      "total": "Всего",
+      "confirmed_at": "подтверждено"
     }
   },
 
@@ -147,6 +179,7 @@
       "refusedTours": "Отказные туры",
       "removePhoto": "Удалить фото",
       "requestDeleted": "Запрос удалён",
+      "deleteRequest": "Удалить",
       "saveBtn": "Сохранить",
       "tabs": {
         "myBookings": "Мои бронирования",
@@ -209,7 +242,9 @@
     "email": "Email",
     "website": "Сайт",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "export_pdf": "Экспорт в PDF",
+    "print_pdf": "Печать / PDF"
   },
 
   "confirm_delete": "Удалить элемент?",
@@ -545,7 +580,7 @@
   "return_date": "Дата возвращения",
 
   "reviews": {
-    "already_left" : "Вы уже оставляли на него отзыв", 
+    "already_left": "Вы уже оставляли на него отзыв",
     "count": "отзыв(ов)",
     "count_one": "{{count}} отзыв",
     "count_few": "{{count}} отзыва",
