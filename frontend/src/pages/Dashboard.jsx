@@ -1,6 +1,6 @@
 //frontend/src/pages/Dashboard.jsx
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
@@ -34,10 +34,13 @@ function MoneyField({ label, value, onChange, placeholder }) {
     }
 const parseMoneySafe = (v) => {
   if (!hasVal(v)) return NaN;
-  const s = String(v).replace(/\s+/g, "").replace(",", ".");
+  const s = String(v)
+    .replace(/\s+/g, "")           // любые пробелы, включая NBSP
+    .replace(/,/g, ".");           // ВСЕ запятые в точки
   const n = Number.parseFloat(s);
   return Number.isFinite(n) ? n : NaN;
 };
+
 
 // Только цифры, пробел, точка, запятая, минус. Любая буква/символ — ошибка ввода.
 const hasInvalidMoneyChars = (v) => hasVal(v) && /[^\d.,\s-]/.test(String(v));
@@ -106,6 +109,7 @@ const validateNetGross = (details, t) => {
 
 
 function HotelSelect({ value, onChange, loadOptions, t }) {
+  const i18n = makeAsyncSelectI18n(t);
   return (
     <AsyncCreatableSelect
       cacheOptions
@@ -119,7 +123,8 @@ function HotelSelect({ value, onChange, loadOptions, t }) {
       formatCreateLabel={(inputValue) =>
         `${t("common.add_hotel") || "Добавить"}: "${inputValue}"`
       }
-      noOptionsMessage={() => t("hotel.no_options") || "Ничего не найдено"}
+      noOptionsMessage={i18n.noOptionsMessage}
+      loadingMessage={i18n.loadingMessage}
       styles={{
         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
       }}
@@ -406,6 +411,70 @@ const LEVEL_OPTIONS = [
   { value: "native",       label: "Native" },
 ];
 
+/** Debounced + cancellable loader for AsyncSelect/AsyncCreatableSelect */
+function useDebouncedLoader(asyncFn, delay = 400) {
+  const timerRef = useRef(null);
+  const ctrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (ctrlRef.current) ctrlRef.current.abort();
+    };
+  }, []);
+
+  return useCallback((inputValue) => {
+    return new Promise((resolve, reject) => {
+      const text = (inputValue || "").trim();
+
+      // guard: короткий ввод — не стреляем в сеть
+      if (text.length < 2) {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        if (ctrlRef.current) ctrlRef.current.abort();
+        resolve([]);
+        return;
+      }
+
+      // сбрасываем предыдущие попытки
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (ctrlRef.current) ctrlRef.current.abort();
+
+      // новый контроллер отмены
+      const controller = new AbortController();
+      ctrlRef.current = controller;
+
+      timerRef.current = setTimeout(async () => {
+        try {
+          const out = await asyncFn(text, controller.signal);
+          resolve(out);
+        } catch (e) {
+          // тихо игнорируем отменённые запросы
+          if (
+            e?.name === "AbortError" ||
+            e?.code === "ERR_CANCELED" ||
+            e?.message === "canceled"
+          ) {
+            resolve([]);
+            return;
+          }
+          reject(e);
+        }
+      }, delay);
+    });
+  }, [asyncFn, delay]);
+}
+
+const makeAsyncSelectI18n = (t) => ({
+  noOptionsMessage: ({ inputValue }) => {
+    const s = (inputValue || "").trim();
+    if (s.length < 2) {
+      return t("select.type_more", { defaultValue: "Введите минимум 2 символа" });
+    }
+    return t("select.no_options", { defaultValue: "Ничего не найдено" });
+  },
+  loadingMessage: () => t("select.loading", { defaultValue: "Загрузка…" }),
+});
+
 
 /** ================= Main ================= */
 const Dashboard = () => {
@@ -508,7 +577,7 @@ const Dashboard = () => {
     description: "",
     visaCountry: "",
   };
-  const [details, setDetails] = useState(DEFAULT_DETAILS);
+  const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
 
   // === Provider Inbox / Bookings ===
 
@@ -529,60 +598,63 @@ const Dashboard = () => {
   /** ===== API helpers ===== */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-  const loadHotelOptions = async (inputValue) => {
-    try {
-      const res = await axios.get(
-        `${API_BASE}/api/hotels/search?query=${encodeURIComponent(inputValue || "")}`
-      );
-      return (res.data || []).map((x) => ({ value: x.label || x.name || x, label: x.label || x.name || x }));
-    } catch (err) {
-      console.error("Ошибка загрузки отелей:", err);
-      tError(t("hotels_load_error") || "Не удалось загрузить отели");
-      return [];
-    }
-  };
+  // raw-функция (принимает AbortSignal)
+const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
+  try {
+    const res = await axios.get(
+      `${API_BASE}/api/hotels/search`,
+      { params: { query: inputValue || "" }, signal }
+    );
+    return (res.data || []).map((x) => ({
+      value: x.label || x.name || x,
+      label: x.label || x.name || x,
+    }));
+  } catch (err) {
+    // игнорируем отмену
+    if (err?.code === "ERR_CANCELED") return [];
+    console.error("Ошибка загрузки отелей:", err);
+    tError(t("hotels_load_error") || "Не удалось загрузить отели");
+    return [];
+  }
+}, [API_BASE, t]);
 
-  const loadDepartureCities = async (inputValue) => {
-    if (!inputValue) return [];
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          name_startsWith: inputValue,
-          featureClass: "P",
-          maxRows: 10,
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      return response.data.geonames.map((city) => ({
-        value: city.name,
-        label: `${city.name}, ${city.countryName}`,
-      }));
-    } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
-    }
-  };
+// обёртка с дебаунсом + отменой
+const loadHotelOptions = useDebouncedLoader(loadHotelOptionsRaw, 400);
+const ASYNC_I18N = makeAsyncSelectI18n(t);
+const ASYNC_MENU_PORTAL = {
+  menuPortalTarget: typeof document !== "undefined" ? document.body : null,
+  styles: { menuPortal: (base) => ({ ...base, zIndex: 9999 }) },
+};
 
-  const loadCitiesFromInput = async (inputValue) => {
-    if (!inputValue) return [];
-    try {
-      const response = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          name_startsWith: inputValue,
-          featureClass: "P",
-          maxRows: 10,
-          username: import.meta.env.VITE_GEONAMES_USERNAME,
-        },
-      });
-      return response.data.geonames.map((city) => ({
-        value: city.name,
-        label: `${city.name}, ${city.countryName}`,
-      }));
-    } catch (error) {
-      console.error("Ошибка загрузки городов:", error);
-      return [];
-    }
-  };
+
+
+  // raw-функция (принимает AbortSignal)
+const loadCitiesRaw = useCallback(async (inputValue, signal) => {
+  if (!inputValue) return [];
+  try {
+    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        name_startsWith: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      },
+      signal,
+    });
+    return (data.geonames || []).map((city) => ({
+      value: city.name,
+      label: `${city.name}, ${city.countryName}`,
+    }));
+  } catch (error) {
+    if (error?.code === "ERR_CANCELED") return [];
+    console.error("Ошибка загрузки городов:", error);
+    return [];
+  }
+}, []);
+
+// обёртка с дебаунсом + отменой
+const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
+
 
   /** ===== Images handlers ===== */
   const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB
@@ -668,24 +740,26 @@ const Dashboard = () => {
 
   /** ===== Load dictionaries ===== */
   useEffect(() => {
-    const fetchCountries = async () => {
-      try {
-        const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
-        const countries = response.data.map((country) => ({
-          value: country.name.common,
-          label: country.name.common,
-          code: country.cca2,
-        }));
-        setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
-      } catch (error) {
-        console.error("Ошибка загрузки стран:", error);
-      }
-    };
-    fetchCountries();
-  }, []);
+  let alive = true;
+  (async () => {
+    try {
+      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+      if (!alive) return;
+      const countries = response.data.map((country) => ({
+        value: country.name.common,
+        label: country.name.common,
+        code: country.cca2,
+      }));
+      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+    } catch (e) { /* ... */ }
+  })();
+  return () => { alive = false; };
+}, []);
+
 
   // Departure cities (top by population)
   useEffect(() => {
+    const controller = new AbortController();
     const fetchCities = async () => {
       try {
         const response = await axios.get("https://secure.geonames.org/searchJSON", {
@@ -695,6 +769,7 @@ const Dashboard = () => {
             orderby: "population",
             username: import.meta.env.VITE_GEONAMES_USERNAME,
           },
+          signal: controller.signal,
         });
         const cities = response.data.geonames.map((city) => ({
           value: city.name,
@@ -702,15 +777,19 @@ const Dashboard = () => {
         }));
         setCityOptionsFrom(cities);
       } catch (error) {
+              if (error?.code !== "ERR_CANCELED") {
         console.error("Ошибка загрузки городов отправления:", error);
+      }
       }
     };
     fetchCities();
+    return () => controller.abort();
   }, []);
 
   // Arrival cities based on selected country
   useEffect(() => {
     if (!selectedCountry?.code) return;
+    const controller = new AbortController();
     const fetchCities = async () => {
       try {
         const response = await axios.get("https://secure.geonames.org/searchJSON", {
@@ -718,8 +797,10 @@ const Dashboard = () => {
             country: selectedCountry.code,
             featureClass: "P",
             maxRows: 100,
+            orderby: "population",
             username: import.meta.env.VITE_GEONAMES_USERNAME,
           },
+          signal: controller.signal,
         });
         const cities = response.data.geonames.map((city) => ({
           value: city.name,
@@ -727,10 +808,13 @@ const Dashboard = () => {
         }));
         setCityOptionsTo(cities);
       } catch (error) {
+              if (error?.code !== "ERR_CANCELED") {
         console.error("Ошибка загрузки городов прибытия:", error);
+      }
       }
     };
     fetchCities();
+    return () => controller.abort();
   }, [selectedCountry]);
 
       /** ===== Load profile + services + stats ===== */
@@ -831,17 +915,25 @@ useEffect(() => {
       return;
     }
 
-    axios
-      .put(`${API_BASE}/api/providers/profile`, updated, config)
-      .then(() => {
-        setProfile((prev) => ({ ...prev, ...updated }));
-        setIsEditing(false);
-        tSuccess(t("profile_updated") || "Профиль обновлён");
-      })
-      .catch((err) => {
-        console.error("Ошибка обновления профиля", err);
-        tError(extractApiErrorText(err) || t("update_error") || "Ошибка обновления профиля");
-      });
+    axios.put(`${API_BASE}/api/providers/profile`, updated, config)
+  .then((res) => {
+    const p = res?.data?.provider;
+    if (p) {
+      setProfile(p);
+      setLangs(Array.isArray(p.languages) ? p.languages : []);
+    } else {
+      setProfile((prev) => ({ ...prev, ...updated }));
+    }
+    setNewPhoto(null);
+    setNewCertificate(null);
+    setIsEditing(false);
+    tSuccess(t("profile_updated") || "Профиль обновлён");
+  })
+   .catch((err) => {
+    console.error("Ошибка обновления профиля", err);
+    tError(extractApiErrorText(err) || t("update_error") || "Ошибка обновления профиля");
+  });
+
   };
 
    const handleChangePassword = () => {
@@ -880,7 +972,7 @@ useEffect(() => {
     setImages([]);
     setSelectedCountry(null);     
     setDepartureCity(null); 
-    setDetails(DEFAULT_DETAILS);
+    setDetails(() => ({ ...DEFAULT_DETAILS }));
   };
 
   const loadServiceToEdit = (service) => {
@@ -989,15 +1081,30 @@ useEffect(() => {
       if (!validateNetGross(detailsToCheck, t)) return;
     }
 
-    const compact = (obj) =>
-      Object.fromEntries(
-        Object.entries(obj).filter(([_, v]) => {
-          if (v === undefined || v === null) return false;
-          if (Array.isArray(v)) return v.length > 0;
-          if (typeof v === "object") return Object.keys(v).length > 0;
-          return true;
-        })
-      );
+    const compactDeep = (val) => {
+  if (Array.isArray(val)) {
+    const arr = val.map(compactDeep).filter((v) =>
+      v !== undefined && v !== null && v !== "" &&
+      !(Array.isArray(v) && v.length === 0) &&
+      !(typeof v === "object" && v !== null && Object.keys(v).length === 0)
+    );
+    return arr;
+  }
+  if (val && typeof val === "object") {
+    const obj = Object.fromEntries(
+      Object.entries(val)
+        .map(([k, v]) => [k, compactDeep(v)])
+        .filter(([_, v]) =>
+          v !== undefined && v !== null && v !== "" &&
+          !(Array.isArray(v) && v.length === 0) &&
+          !(typeof v === "object" && v !== null && Object.keys(v).length === 0)
+        )
+    );
+    return obj;
+  }
+  return val;
+};
+
 
     const __grossNum = (() => {
       const g = details?.grossPrice;
@@ -1036,8 +1143,8 @@ useEffect(() => {
     
         };
 
-    const data = compact(raw);
-
+    const data = compactDeep(raw);
+    
     const req = selectedService
       ? axios.put(
           `${API_BASE}/api/providers/services/${selectedService.id}`,
@@ -1063,6 +1170,13 @@ useEffect(() => {
         const fallback = t(selectedService ? "update_error" : "add_error") || "Ошибка";
         tError(text || fallback);
       });
+  };
+
+  const buildDirection = (countryLabel, fromLabel, toLabel) => {
+  const left = countryLabel || "";
+  const mid  = fromLabel ? ` — ${fromLabel}` : "";
+  const right= toLabel   ? ` → ${toLabel}`   : "";
+  return (left + mid + right).trim();
   };
 
   /** ===== Render ===== */
@@ -1097,7 +1211,7 @@ useEffect(() => {
               <h3 className="font-semibold text-lg mt-6 mb-2">{t("phone")}</h3>
               {isEditing ? (
                 <input
-                  type="text"
+                  type="tel"
                   placeholder={t("phone")}
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
@@ -1178,42 +1292,45 @@ useEffect(() => {
                 )}
               </div>
               <div>
-                    <label className="block font-medium">{t("social")}</label>
-                    {isEditing ? (
-                      <>
-                        <input
-                          value={newSocial}
-                          onChange={(e) => setNewSocial(e.target.value)}
-                          className="w-full border px-3 py-2 rounded"
-                        />
-                        {!isTgLinked && tgDeepLink && (
-                          <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
-                            <div className="font-medium mb-1">
-                              {t("tg.title", { defaultValue: "Уведомления в Telegram" })}
+                <label className="block font-medium">{t("social")}</label>
+                         {isEditing ? (
+                            <>
+                              <input
+                                value={newSocial}
+                                onChange={(e) => setNewSocial(e.target.value)}
+                                className="w-full border px-3 py-2 rounded"
+                              />
+                            </>
+                          ) : (
+                            <div className="border px-3 py-2 rounded bg-gray-100">
+                              {profile.social || t("not_specified")}
                             </div>
-                            <div className="mb-2">
-                              {t("tg.subtitle", {
-                                defaultValue:
-                                  "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
-                              })}
+                          )}
+                        
+                          {/* ⬇️ Плашка вынесена за пределы isEditing */}
+                          {!isTgLinked && tgDeepLink && (
+                            <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
+                              <div className="font-medium mb-1">
+                                {t("tg.title", { defaultValue: "Уведомления в Telegram" })}
+                              </div>
+                              <div className="mb-2">
+                                {t("tg.subtitle", {
+                                  defaultValue:
+                                    "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
+                                })}
+                              </div>
+                              <a
+                                href={tgDeepLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                              >
+                                {t("tg.connect", { defaultValue: "Подключить Telegram" })}
+                              </a>
                             </div>
-                            <a
-                              href={tgDeepLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
-                            >
-                              {t("tg.connect", { defaultValue: "Подключить Telegram" })}
-                            </a>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="border px-3 py-2 rounded bg-gray-100">
-                        {profile.social || t("not_specified")}
-                      </div>
-                    )}
-                  </div>
+                          )}
+                        </div>
+
                                         {/* Владение языками */}
                           <div>
                             <label className="block font-medium">Языки</label>
@@ -1444,7 +1561,11 @@ useEffect(() => {
                       value={countryOptions.find(c => c.value === details.directionCountry) || null}
                       onChange={(val) => {
                         setSelectedCountry(val);
-                        setDetails(d => ({ ...d, directionCountry: val?.value || "" }));
+                        setDetails((d) => ({
+                          ...d,
+                          directionCountry: val?.value || "",
+                          direction: buildDirection(val?.label, d.directionFrom, d.directionTo),
+                        }));
                       }}
                       placeholder={t("direction_country")}
                       noOptionsMessage={() => t("country_not_chosen")}
@@ -1454,26 +1575,46 @@ useEffect(() => {
                     <AsyncSelect
                         cacheOptions
                         defaultOptions
-                        loadOptions={loadDepartureCities}
+                        {...ASYNC_MENU_PORTAL}
+                        loadOptions={loadCities}
+                        noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                        loadingMessage={ASYNC_I18N.loadingMessage}
                         value={
                           departureCity
                             || (details.directionFrom
                                   ? { value: details.directionFrom, label: details.directionFrom }
                                   : null)
                         }
-                        onChange={(selected) => {
-                          setDepartureCity(selected);
-                          setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
-                        }}
+                         onChange={(selected) => {
+                             setDepartureCity(selected);
+                             setDetails((d) => ({
+                               ...d,
+                               directionFrom: selected?.value || "",
+                               direction: buildDirection(
+                                 selectedCountry?.label || d.directionCountry,
+                                 selected?.label,
+                                 d.directionTo
+                               ),
+                             }));
+                          }}
                         placeholder={t("direction_from")}
-                        noOptionsMessage={() => t("direction_from_not_chosen")}
                         className="w-1/3"
                       />
 
                     <Select
                       options={cityOptionsTo}
                       value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
-                      onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
+                      onChange={(value) =>
+                         setDetails((d) => ({
+                           ...d,
+                           directionTo: value?.value || "",
+                           direction: buildDirection(
+                             selectedCountry?.label || d.directionCountry,
+                             departureCity?.label || d.directionFrom,
+                             value?.label
+                           ),
+                         }))
+                      }
                       placeholder={t("direction_to")}
                       noOptionsMessage={() => t("direction_to_not_chosen")}
                       className="w-1/3"
@@ -1654,8 +1795,11 @@ useEffect(() => {
                     <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                     <AsyncSelect
                       cacheOptions
-                      loadOptions={loadCitiesFromInput}
+                      loadOptions={loadCities}
+                      noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                      loadingMessage={ASYNC_I18N.loadingMessage}
                       defaultOptions
+                      {...ASYNC_MENU_PORTAL}
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
                       onChange={(selected) =>
                         setDetails({ ...details, directionTo: selected?.value || "" })
@@ -1825,7 +1969,10 @@ useEffect(() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCities}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
                           value={
                             departureCity
                               || (details.directionFrom
@@ -1837,7 +1984,6 @@ useEffect(() => {
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
                           placeholder={t("direction_from")}
-                          noOptionsMessage={() => t("direction_from_not_chosen")}
                           className="w-1/3"
                         />
 
@@ -2242,7 +2388,10 @@ useEffect(() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCities}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
                           value={
                             departureCity
                               || (details.directionFrom
@@ -2254,7 +2403,6 @@ useEffect(() => {
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
                           placeholder={t("direction_from")}
-                          noOptionsMessage={() => t("direction_from_not_chosen")}
                           className="w-1/3"
                         />
 
@@ -2444,8 +2592,11 @@ useEffect(() => {
                         <label className="block font-medium mb-1">{t("refused_hotel_city")}</label>
                         <AsyncSelect
                           cacheOptions
-                          loadOptions={loadCitiesFromInput}
+                          loadOptions={loadCities}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
                           defaultOptions
+                          {...ASYNC_MENU_PORTAL}
                           onChange={(selected) => setDetails({ ...details, directionTo: selected?.value || "" })}
                           placeholder={t("refused_hotel_select_city")}
                         />
@@ -2622,7 +2773,10 @@ useEffect(() => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
-                          loadOptions={loadDepartureCities}
+                          {...ASYNC_MENU_PORTAL}
+                          loadOptions={loadCities}
+                          noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                          loadingMessage={ASYNC_I18N.loadingMessage}
                           value={
                             departureCity
                               || (details.directionFrom
@@ -2638,7 +2792,6 @@ useEffect(() => {
                             }));
                           }}
                           placeholder={t("direction_from")}
-                          noOptionsMessage={() => t("direction_from_not_found")}
                           className="w-1/3"
                         />
                         <Select
@@ -2690,6 +2843,7 @@ useEffect(() => {
                           <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                           <input
                             type="date"
+                            min={todayLocalDate()}
                             value={details.startDate || ""}
                             onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                             className="w-full border px-3 py-2 rounded"
@@ -2810,6 +2964,7 @@ useEffect(() => {
 
                       <input
                         type="date"
+                        min={todayLocalDate()}
                         value={details.startDate || ""}
                         onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
                         placeholder={t("event_date")}
