@@ -37,6 +37,7 @@ function normalizeTelegramUsername(input) {
 exports.register = async (req, res) => {
   try {
     const { name, email, phone, password, telegram } = req.body || {};
+    const telegramNorm = normalizeTelegramUsername(telegram);
 
     if (!name || !password || (!email && !phone)) {
       return res
@@ -59,7 +60,7 @@ exports.register = async (req, res) => {
       `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5, NOW(), NOW())
        RETURNING id, name, email, phone, telegram, avatar_url`,
-      [name, email || null, phone || null, telegram || null, password_hash]
+      [name, email || null, phone || null, telegramNorm || null, password_hash]
     );
 
     const client = ins.rows[0];
@@ -155,67 +156,55 @@ exports.updateMe = async (req, res) => {
     if (req.user?.role !== "client") {
       return res.status(403).json({ message: "Only client" });
     }
-       const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
-   // узнаем старый username, чтобы понять — поменялся ли он
-   const cur = await db.query(
-     "SELECT telegram, telegram_chat_id FROM clients WHERE id = $1",
-     [req.user.id]
-   );
-   const oldTg = cur.rows[0]?.telegram || null;
-   const norm = (s) => (s || "").toString().trim().replace(/^@/, "").toLowerCase();
-   const tgChanged =
-     telegram !== undefined && norm(telegram) !== norm(oldTg);
+    const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
 
-
-    // 1) читаем текущие значения, чтобы понять, изменился ли telegram
+    // Текущее состояние
     const curQ = await db.query(
-      "SELECT name, phone, telegram, avatar_url, telegram_chat_id FROM clients WHERE id=$1",
+      "SELECT telegram, avatar_url, telegram_chat_id FROM clients WHERE id=$1",
       [req.user.id]
     );
-    const cur = curQ.rows[0] || {};
+    const current = curQ.rows[0] || {};
 
-    // 2) нормализуем входной telegram (если поле вообще прислали)
-    const telegramProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "telegram");
-    const telegramNorm = telegramProvided ? normalizeTelegramUsername(telegram) : null;
+    // Прислали ли поле telegram вообще
+    const hasTelegramInPayload = Object.prototype.hasOwnProperty.call(req.body || {}, "telegram");
 
-    // 3) решаем, нужно ли сбрасывать chat_id
-    const norm = (v) => (normalizeTelegramUsername(v) || "").toLowerCase();
-    const telegramChanged =
-      telegramProvided && norm(telegramNorm) !== norm(cur.telegram);
+    // Нормализуем вход
+    const newTelegramNorm = hasTelegramInPayload ? normalizeTelegramUsername(telegram) : null;
 
-    // 4) аватар
+    // Сравниваем «по-честному»
+    const canon = (v) => (normalizeTelegramUsername(v) || "").replace(/^@/, "").toLowerCase();
+    const tgChanged = hasTelegramInPayload && canon(newTelegramNorm) !== canon(current.telegram);
+
+    // Готовим аватар
     let avatar_url = null;
     if (avatar_base64) {
       avatar_url = `data:image/jpeg;base64,${avatar_base64}`;
     } else if (!remove_avatar) {
-      avatar_url = cur.avatar_url || null;
+      avatar_url = current.avatar_url || null;
     }
 
-    // 5) итоговый chat_id к сохранению
-    const chatIdToSave = telegramChanged ? null : cur.telegram_chat_id || null;
-
-    // 6) обновляем запись
-       await db.query(
-     `UPDATE clients
-         SET name = COALESCE($1, name),
+    // Обновление
+    await db.query(
+      `UPDATE clients
+         SET name  = COALESCE($1, name),
              phone = COALESCE($2, phone),
              telegram = COALESCE($3, telegram),
              avatar_url = $4,
-             -- если username изменился → обнуляем chat_id, чтобы заново привязаться
              telegram_chat_id = CASE WHEN $6::bool THEN NULL ELSE telegram_chat_id END,
              updated_at = NOW()
        WHERE id = $5`,
-     [
-       name ?? null,
-       phone ?? null,
-       telegram ?? null,
-       remove_avatar ? null : avatar_url,
-       req.user.id,
-       tgChanged
-     ]
-   );
-    // 7) отдаём обновлённый профиль
+      [
+        name ?? null,
+        phone ?? null,
+        newTelegramNorm ?? null,
+        remove_avatar ? null : avatar_url,
+        req.user.id,
+        tgChanged
+      ]
+    );
+
+    // Возвращаем обновлённое
     const q = await db.query(
       `SELECT id, name, email, phone, telegram, avatar_url, telegram_chat_id
          FROM clients
