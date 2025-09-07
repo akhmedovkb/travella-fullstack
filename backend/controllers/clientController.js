@@ -55,7 +55,6 @@ exports.register = async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-    const telegramNorm = normalizeTelegramUsername(telegram);
     const ins = await db.query(
       `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5, NOW(), NOW())
