@@ -155,7 +155,18 @@ exports.updateMe = async (req, res) => {
     if (req.user?.role !== "client") {
       return res.status(403).json({ message: "Only client" });
     }
-    const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
+       const { name, phone, telegram, avatar_base64, remove_avatar } = req.body || {};
+
+   // узнаем старый username, чтобы понять — поменялся ли он
+   const cur = await db.query(
+     "SELECT telegram, telegram_chat_id FROM clients WHERE id = $1",
+     [req.user.id]
+   );
+   const oldTg = cur.rows[0]?.telegram || null;
+   const norm = (s) => (s || "").toString().trim().replace(/^@/, "").toLowerCase();
+   const tgChanged =
+     telegram !== undefined && norm(telegram) !== norm(oldTg);
+
 
     // 1) читаем текущие значения, чтобы понять, изменился ли telegram
     const curQ = await db.query(
@@ -185,25 +196,25 @@ exports.updateMe = async (req, res) => {
     const chatIdToSave = telegramChanged ? null : cur.telegram_chat_id || null;
 
     // 6) обновляем запись
-    await db.query(
-      `UPDATE clients
-          SET name            = COALESCE($1, name),
-              phone           = COALESCE($2, phone),
-              telegram        = COALESCE($3, telegram),
-              avatar_url      = $4,
-              telegram_chat_id= $5,
-              updated_at      = NOW()
-        WHERE id = $6`,
-      [
-        name ?? null,
-        phone ?? null,
-        telegramProvided ? (telegramNorm ?? null) : null,
-        remove_avatar ? null : avatar_url,
-        chatIdToSave,
-        req.user.id,
-      ]
-    );
-
+       await db.query(
+     `UPDATE clients
+         SET name = COALESCE($1, name),
+             phone = COALESCE($2, phone),
+             telegram = COALESCE($3, telegram),
+             avatar_url = $4,
+             -- если username изменился → обнуляем chat_id, чтобы заново привязаться
+             telegram_chat_id = CASE WHEN $6::bool THEN NULL ELSE telegram_chat_id END,
+             updated_at = NOW()
+       WHERE id = $5`,
+     [
+       name ?? null,
+       phone ?? null,
+       telegram ?? null,
+       remove_avatar ? null : avatar_url,
+       req.user.id,
+       tgChanged
+     ]
+   );
     // 7) отдаём обновлённый профиль
     const q = await db.query(
       `SELECT id, name, email, phone, telegram, avatar_url, telegram_chat_id
