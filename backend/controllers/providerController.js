@@ -5,6 +5,20 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
 // ---------- Helpers ----------
+function normalizeTelegramUsername(input) {
+  if (!input) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+  s = s.replace(/\s+/g, "");
+  let m = s.match(/^tg:\/\/resolve\?domain=([A-Za-z0-9_]{3,})/i);
+  if (m) return "@" + m[1];
+  m = s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i);
+  if (m) return "@" + m[1];
+  m = s.match(/^@?([A-Za-z0-9_]{3,})$/);
+  if (m) return "@" + m[1];
+  return s;
+}
+
 const EXT_CATS = new Set([
   "refused_tour",
   "author_tour",
@@ -233,13 +247,36 @@ const getProviderProfile = async (req, res) => {
 const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
+
+    // локальный хелпер: нормализуем в формат "@username"
+    const normalizeTelegramUsername = (input) => {
+      if (!input) return null;
+      let s = String(input).trim();
+      if (!s) return null;
+      s = s.replace(/\s+/g, "");
+
+      let m = s.match(/^tg:\/\/resolve\?domain=([A-Za-z0-9_]{3,})/i);
+      if (m) return "@" + m[1];
+
+      m = s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i);
+      if (m) return "@" + m[1];
+
+      m = s.match(/^@?([A-Za-z0-9_]{3,})$/);
+      if (m) return "@" + m[1];
+
+      return s;
+    };
+
+    // читаем текущее состояние (нужно social + telegram_chat_id)
     const oldQ = await pool.query(
-      `SELECT name, location, phone, social, photo, certificate, address, languages
-       FROM providers WHERE id = $1`,
+      `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id
+         FROM providers
+        WHERE id = $1`,
       [id]
     );
-    if (!oldQ.rows.length)
+    if (!oldQ.rows.length) {
       return res.status(404).json({ message: "Провайдер не найден" });
+    }
     const old = oldQ.rows[0];
 
     // location как массив (text[])
@@ -253,28 +290,42 @@ const updateProviderProfile = async (req, res) => {
         : [];
     };
 
+    // прислали ли social в payload?
+    const hasSocial = Object.prototype.hasOwnProperty.call(req.body || {}, "social");
+    // нормализуем новый social (или оставляем старый)
+    const newSocialNorm = hasSocial
+      ? normalizeTelegramUsername(req.body.social)
+      : old.social;
+
+    // сравниваем по канону (без "@", в нижнем регистре)
+    const canon = (v) => (normalizeTelegramUsername(v) || "").replace(/^@/, "").toLowerCase();
+    const tgChanged = hasSocial && canon(newSocialNorm) !== canon(old.social);
+
     const updated = {
       name: req.body.name ?? old.name,
       location: toTextArray(req.body.location, old.location),
       phone: req.body.phone ?? old.phone,
-      social: req.body.social ?? old.social,
+      social: newSocialNorm, // сохраняем уже нормализованным
       photo: req.body.photo ?? old.photo,
       certificate: req.body.certificate ?? old.certificate,
       address: req.body.address ?? old.address,
-      languages: normalizeLanguages(req.body.languages, old.languages), // ← НОВОЕ
+      languages: normalizeLanguages(req.body.languages, old.languages), // jsonb
     };
 
     await pool.query(
       `UPDATE providers
-         SET name=$1,
-             location=$2,
-             phone=$3,
-             social=$4,
-             photo=$5,
-             certificate=$6,
-             address=$7,
-             languages=$8::jsonb
-       WHERE id=$9`,
+          SET name=$1,
+              location=$2,
+              phone=$3,
+              social=$4,
+              photo=$5,
+              certificate=$6,
+              address=$7,
+              languages=$8::jsonb,
+              -- если username поменялся, обнуляем chat_id для повторной привязки
+              telegram_chat_id = CASE WHEN $10::bool THEN NULL ELSE telegram_chat_id END,
+              updated_at=NOW()
+        WHERE id=$9`,
       [
         updated.name,
         updated.location,
@@ -283,15 +334,17 @@ const updateProviderProfile = async (req, res) => {
         updated.photo,
         updated.certificate,
         updated.address,
-        JSON.stringify(updated.languages ?? []), // ← ключевой параметр
-        id,
+        JSON.stringify(updated.languages ?? []),
+        id,         // $9
+        tgChanged,  // $10
       ]
     );
 
-    // Отдаём и message, и актуальные данные (совместимо с текущим фронтом)
+    // отдаём актуальные данные
     const r = await pool.query(
       `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
-         FROM providers WHERE id = $1`,
+         FROM providers
+        WHERE id = $1`,
       [id]
     );
     const p = r.rows[0] || null;
@@ -306,14 +359,14 @@ const updateProviderProfile = async (req, res) => {
             type: p.type,
             location: p.location,
             phone: p.phone,
-            social: p.social,
+            social: p.social, // уже нормализованный "@username"
             photo: p.photo,
             certificate: p.certificate,
             address: p.address,
             telegram_chat_id: p.telegram_chat_id || null,
             tg_chat_id: p.telegram_chat_id || null,
             avatar_url: p.photo || null,
-            languages: p.languages ?? [], // ← НОВОЕ
+            languages: p.languages ?? [],
           }
         : null,
     });
@@ -322,6 +375,7 @@ const updateProviderProfile = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 const changeProviderPassword = async (req, res) => {
   try {
