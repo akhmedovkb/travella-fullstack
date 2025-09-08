@@ -133,7 +133,10 @@ exports.touchByProvider = async (req, res) => {
 
     // если статус изменился на processed — уведомим заявителя
     if (changed > 0) {
-      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(() => {});
+      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(e => {
+  console.error("tg.notifyReqStatusChanged failed:", e?.response?.data || e?.message || e);
+});
+
     }
 
     // дополнительно проверим владение, чтобы не выдавать лишнего
@@ -310,7 +313,10 @@ exports.createQuickRequest = async (req, res) => {
       [service_id, clientId, note || null]
     );
     const newId = ins.rows?.[0]?.id;
-      if (newId) tg.notifyReqNew({ request_id: newId }).catch(() => {});
+      if (newId) tg.notifyReqNew({ request_id: newId }).catch(e => {
+  console.error("tg.notifyReqNew failed:", e?.response?.data || e?.message || e);
+});
+
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("quick request error:", err);
@@ -453,10 +459,16 @@ exports.deleteRequest = async (req, res) => {
     // NEW: отправляем уведомление ДО удаления
     if (isAuthor || isInitiatorProvider) {
       // заявитель удаляет → уведомить владельца услуги
-      tg.notifyReqCancelledByRequester({ request_id: id }).catch(() => {});
+      tg.notifyReqCancelledByRequester({ request_id: id }).catch(e => {
+  console.error("tg.notifyReqCancelledByRequester failed:", e?.response?.data || e?.message || e);
+});
+
     } else if (isOwnerProvider) {
       // владелец услуги удаляет → уведомить заявителя
-      tg.notifyReqDeletedByProvider({ request_id: id }).catch(() => {});
+      tg.notifyReqDeletedByProvider({ request_id: id }).catch(e => {
+  console.error("tg.notifyReqDeletedByProvider failed:", e?.response?.data || e?.message || e);
+});
+
     }
 
     let affected = 0;
@@ -554,7 +566,10 @@ exports.getProviderRequestById = async (req, res) => {
 
     // если изменили статус на processed — уведомим заявителя
     if (changed > 0) {
-      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(() => {});
+      tg.notifyReqStatusChanged({ request_id: id, status: "processed" }).catch(e => {
+  console.error("tg.notifyReqStatusChanged failed:", e?.response?.data || e?.message || e);
+});
+
     }
 
     const q = await db.query(
@@ -654,7 +669,10 @@ exports.deleteByProvider = async (req, res) => {
     }
 
     // уведомить заявителя ДО удаления
-    tg.notifyReqDeletedByProvider({ request_id: id }).catch(() => {});
+    tg.notifyReqDeletedByProvider({ request_id: id }).catch(e => {
+  console.error("tg.notifyReqDeletedByProvider failed:", e?.response?.data || e?.message || e);
+});
+
 
     await db.query(`DELETE FROM requests WHERE id::text = $1`, [id]);
     res.json({ success: true, deleted: id });
