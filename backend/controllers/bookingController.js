@@ -472,8 +472,9 @@ const providerQuote = async (req, res) => {
       }).catch(e => {
         console.error("tg.notifyQuote failed:", e?.response?.data || e?.message || e);
       });
-    } catch {}
-
+    } catch (e) {
+  console.error("providerQuote notify block failed:", e?.message || e);
+}
   } catch (err) {
     console.error("providerQuote error:", err);
     res.status(500).json({ message: "Server error" });
@@ -528,8 +529,9 @@ const acceptBooking = async (req, res) => {
       tg.notifyConfirmed({ booking }).catch(e => {
         console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
       });
-    } catch {}
-
+    } catch (e) {
+  console.error("acceptBooking notify block failed:", e?.message || e);
+}
   } catch (err) {
     console.error("acceptBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -580,8 +582,9 @@ const rejectBooking = async (req, res) => {
   tg.notifyRejected({ booking, reason }).catch(e => {
   console.error("tg.notifyRejected failed:", e?.response?.data || e?.message || e);
 });
-} catch {}
-
+} catch (e) {
+  console.error("rejectBooking notify block failed:", e?.message || e);
+}
   } catch (err) {
     console.error("rejectBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -623,9 +626,10 @@ const cancelBooking = async (req, res) => {
   tg.notifyCancelled({ booking }).catch(e => {
   console.error("tg.notifyCancelled failed:", e?.response?.data || e?.message || e);
 });
-} catch {}
-
-    
+} catch (e) {
+  console.error("cancelBooking notify block failed:", e?.message || e);
+}
+  
   } catch (err) {
     console.error("cancelBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -691,8 +695,10 @@ const confirmBooking = async (req, res) => {
     tg.notifyConfirmed({ booking }).catch(e => {
   console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
 });
-  } catch {}
-    
+  } catch (e) {
+  console.error("confirmBooking notify block failed:", e?.message || e);
+}
+   
   } catch (err) {
     console.error("confirmBooking error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -750,7 +756,9 @@ const confirmBookingByRequester = async (req, res) => {
   console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
 });
 
-  } catch {}
+  } catch (e) {
+  console.error("confirmBookingByRequester notify block failed:", e?.message || e);
+}
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -797,9 +805,9 @@ const cancelBookingByRequester = async (req, res) => {
       tg.notifyCancelledByRequester({ booking }).catch(e => {
   console.error("tg.notifyCancelledByRequester failed:", e?.response?.data || e?.message || e);
 });
-
-    } catch {}
-
+    } catch (e) {
+  console.error("cancelBookingByRequester notify block failed:", e?.message || e);
+}
     return res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBookingByRequester error:", err);
