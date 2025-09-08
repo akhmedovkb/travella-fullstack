@@ -28,7 +28,9 @@
     "pax": "Yo‘lovchilar",
     "submit": "Bron qilish",
     "time": "Vaqt",
-    "title": "Bron"
+    "title": "Bron",
+    "selected_dates": "Tanlangan sanalar",
+    "attachments_hint": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)"
   },
 
   "bookings": {
