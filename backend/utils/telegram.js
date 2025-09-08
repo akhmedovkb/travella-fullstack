@@ -1,6 +1,7 @@
 // backend/utils/telegram.js
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
+const axios = require("axios");
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
@@ -19,12 +20,8 @@ async function tgSend(chatId, text, extra = {}) {
       disable_web_page_preview: true,
       ...extra,
     };
-    const res = await fetch(`${API}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    return res.ok;
+    const res = await axios.post(`${API}/sendMessage`, payload);
+    return Boolean(res?.data?.ok);
   } catch {
     return false;
   }
@@ -36,14 +33,8 @@ async function tgGetUsername(chatId) {
   if (!enabled || !chatId) return "";
   if (__chatUserCache.has(chatId)) return __chatUserCache.get(chatId) || "";
   try {
-    const res = await fetch(`${API}/getChat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId }),
-    });
-    if (!res.ok) return "";
-    const data = await res.json().catch(() => ({}));
-    const uname = data?.result?.username || "";
+    const res = await axios.post(`${API}/getChat`, { chat_id: chatId });
+    const uname = res?.data?.result?.username || "";
     __chatUserCache.set(chatId, uname);
     return uname || "";
   } catch {
@@ -56,29 +47,55 @@ function esc(v) {
   return String(v)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/\n/g, "\n");
 }
 
+function urlProvider(path) {
+  if (!SITE) return "";
+  const slug = String(path || "").replace(/^\/+/, "");
+  return `${SITE}/dashboard/${slug}`;
+}
+function urlClient(path) {
+  if (!SITE) return "";
+  const slug = String(path || "").replace(/^\/+/, "");
+  return `${SITE}/client/${slug}`;
+}
+
+/** format dates like 12–14 Sep 2025 */
 function fmtDates(arr) {
-  if (!Array.isArray(arr) || !arr.length) return "—";
-  return arr.map((d) => String(d).slice(0, 10)).join(", ");
+  try {
+    const dates = Array.isArray(arr) ? arr : [];
+    if (!dates.length) return "—";
+    const [a, b] = [dates[0], dates[dates.length - 1]];
+    const d1 = new Date(a);
+    const d2 = new Date(b);
+    const sameMonth = d1.getUTCFullYear() === d2.getUTCFullYear() && d1.getUTCMonth() === d2.getUTCMonth();
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const pad = (n) => String(n).padStart(2, "0");
+    const dd1 = pad(d1.getUTCDate());
+    const dd2 = pad(d2.getUTCDate());
+    const mm1 = monthNames[d1.getUTCMonth()];
+    const mm2 = monthNames[d2.getUTCMonth()];
+    const YYYY = d2.getUTCFullYear();
+    return sameMonth ? `${dd1}–${dd2} ${mm2} ${YYYY}` : `${dd1} ${mm1} – ${dd2} ${mm2} ${YYYY}`;
+  } catch {
+    return "";
+  }
 }
-function urlProvider(tab = "bookings") {
-  return `${SITE}/dashboard?tab=${tab}`;
-}
-function urlClient(tab = "bookings") {
-  return `${SITE}/client?tab=${tab}`;
-}
-function lineContact(prefixEmoji, prefixLabel, name, phone, username) {
+
+function lineContact(emoji, label, name, phone, username) {
   const parts = [];
   if (name) parts.push(`<b>${esc(name)}</b>`);
-  if (phone) parts.push(`☎️ ${esc(phone)}`);
-  if (username) parts.push(`@${esc(username)}`);
-  return `${prefixEmoji} ${esc(prefixLabel)}: ${parts.join(" • ")}`;
+  if (phone) parts.push(esc(phone));
+  if (username) parts.push(`@${String(username).replace(/^@/, "")}`);
+  const val = parts.length ? parts.join(" · ") : "—";
+  return `${emoji} ${esc(label)}: ${val}`;
 }
 
-/* ===== chat_id linking (как было) ===== */
-
+/* ================== LINK CHAT IDS ================== */
 async function linkProviderChat(providerId, chatId) {
   if (!providerId || !chatId) return;
   await pool.query(`UPDATE providers SET telegram_chat_id=$2 WHERE id=$1`, [providerId, chatId]);
@@ -116,34 +133,35 @@ async function getBookingActors(input) {
       p.phone AS provider__phone,
       p.telegram_chat_id AS provider__chat,
 
-      -- клиент
+      -- исходный клиент
       c.id   AS client__id,
       c.name AS client__name,
       c.phone AS client__phone,
       c.telegram_chat_id AS client__chat,
 
-      -- провайдер-заявитель (агент), если есть
-      pa.id   AS agent__id,
-      pa.name AS agent__name,
-      pa.phone AS agent__phone,
-      pa.telegram_chat_id AS agent__chat
-
+      -- агент-заявитель (если есть)
+      p2.id   AS agent__id,
+      p2.name AS agent__name,
+      p2.phone AS agent__phone,
+      p2.telegram_chat_id AS agent__chat
     FROM bookings b
-    LEFT JOIN services  s  ON s.id = b.service_id
-    LEFT JOIN providers p  ON p.id = b.provider_id
-    LEFT JOIN clients   c  ON c.id = b.client_id
-    LEFT JOIN providers pa ON pa.id = b.requester_provider_id
+    LEFT JOIN services s ON s.id = b.service_id
+    LEFT JOIN providers p ON p.id = b.provider_id
+    LEFT JOIN clients   c ON c.id = b.client_id
+    LEFT JOIN providers p2 ON p2.id = b.requester_provider_id
     WHERE b.id = $1
+    LIMIT 1
     `,
     [bookingId]
   );
   if (!q.rowCount) return null;
   const row = q.rows[0];
 
-  // usernames (если чаты есть)
-  const unameClient  = row.client__chat  ? await tgGetUsername(row.client__chat)  : "";
-  const unameProv    = row.provider__chat? await tgGetUsername(row.provider__chat): "";
-  const unameAgent   = row.agent__chat   ? await tgGetUsername(row.agent__chat)   : "";
+  const [unameProv, unameClient, unameAgent] = await Promise.all([
+    tgGetUsername(row.provider__chat),
+    tgGetUsername(row.client__chat),
+    tgGetUsername(row.agent__chat),
+  ]);
 
   return {
     id: row.id,
@@ -176,7 +194,7 @@ async function getBookingActors(input) {
   };
 }
 
-/** Для заявок (быстрые запросы/requests) — кто кому. */
+/** Подтянуть максимум данных по inbox-заявке */
 async function getRequestActors(requestId) {
   const q = await pool.query(
     `
@@ -193,30 +211,36 @@ async function getRequestActors(requestId) {
       p2.id   AS agent_id,
       p2.name AS agent_name,
       p2.phone AS agent_phone,
-      p2.telegram_chat_id AS agent_chat
+      p2.telegram_chat_id AS agent_chat,
 
+      -- провайдер, которому адресована заявка
+      p.id AS provider_id, p.telegram_chat_id AS provider_chat
     FROM requests r
-    LEFT JOIN services  s  ON s.id = r.service_id
-    LEFT JOIN clients   c  ON c.id = r.client_id
-    LEFT JOIN providers p2 ON (p2.email IS NOT DISTINCT FROM c.email OR p2.phone IS NOT DISTINCT FROM c.phone)
+    LEFT JOIN services  s ON s.id = r.service_id
+    LEFT JOIN clients   c ON c.id = r.client_id
+    LEFT JOIN providers p2 ON p2.id = r.requester_provider_id
+    LEFT JOIN providers p  ON p.id  = s.provider_id
     WHERE r.id = $1
+    LIMIT 1
     `,
     [requestId]
   );
   if (!q.rowCount) return null;
-
   const row = q.rows[0];
 
-  const toProvChat = await getProviderChatId(row.to_provider_id);
-  const unameClient = row.client_chat ? await tgGetUsername(row.client_chat) : "";
-  const unameAgent  = row.agent_chat  ? await tgGetUsername(row.agent_chat)  : "";
+  const [unameClient, unameAgent] = await Promise.all([
+    tgGetUsername(row.client_chat),
+    tgGetUsername(row.agent_chat),
+  ]);
+
+  const from = row.agent_id
+    ? { kind: "agent", id: row.agent_id, name: row.agent_name, phone: row.agent_phone, chatId: row.agent_chat, username: unameAgent }
+    : { kind: "client", id: row.client_id, name: row.client_name, phone: row.client_phone, chatId: row.client_chat, username: unameClient };
 
   return {
     row,
-    toProviderChat: toProvChat,
-    from: row.agent_id
-      ? { kind: "agent",   id: row.agent_id,   name: row.agent_name,   phone: row.agent_phone,   chatId: row.agent_chat,   username: unameAgent }
-      : { kind: "client",  id: row.client_id,  name: row.client_name,  phone: row.client_phone,  chatId: row.client_chat,  username: unameClient },
+    from,
+    toProviderChat: row.provider_chat || null,
   };
 }
 
