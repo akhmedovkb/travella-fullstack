@@ -383,11 +383,17 @@ async function notifyConfirmed({ booking }) {
 }
 
 /** Отклонение → заявителю (клиенту или агенту) */
+/** Отклонение → заявителю (клиенту или агенту) + показываем, КТО поставщик */
 async function notifyRejected({ booking, reason }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
-    const dest = a.agent?.chatId ? { chatId: a.agent.chatId, isProv: true } : { chatId: a.client?.chatId, isProv: false };
+
+    // кому шлём: если есть агент-заявитель → ему, иначе клиенту
+    const dest = a.agent?.chatId
+      ? { chatId: a.agent.chatId, isProv: true }   // заявитель — провайдер (агент)
+      : { chatId: a.client?.chatId, isProv: false }; // заявитель — клиент
+
     if (!dest.chatId) return;
 
     const lines = [];
@@ -395,15 +401,21 @@ async function notifyRejected({ booking, reason }) {
     if (a.serviceTitle) lines.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
     lines.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
     if (reason) lines.push(`📝 Причина: ${esc(reason)}`);
+
+    // ⬇️ добавили подробный блок про Поставщика для получателя (клиента/агента)
+    lines.push(
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username)
+    );
+
     lines.push("");
     lines.push(`🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`);
 
     await tgSend(dest.chatId, lines.join("\n"));
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyRejected failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
 
 /** Отмена системой/провайдером → клиенту/заявителю */
 async function notifyCancelled({ booking }) {
