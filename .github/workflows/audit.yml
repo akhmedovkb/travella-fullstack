@@ -18,17 +18,16 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
 
       - name: Install & Audit (${{ matrix.dir }})
         working-directory: ${{ matrix.dir }}
         run: |
           set -e
-          # создать lock при его отсутствии (для веток без lock)
           if [ ! -f package-lock.json ]; then
             npm i --package-lock-only
           fi
-          # не запускаем аудит во время установки
           npm ci --no-audit
-          # аудитим только prod-зависимости и фейлимся лишь на critical
           npm audit --omit=dev --audit-level=critical
