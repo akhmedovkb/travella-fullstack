@@ -6,8 +6,6 @@
   "overrides": {
     "debug": "^4.3.7",
     "@babel/traverse": "^7.25.9",
-
-    // убираем связку error-ex/is-arrayish за счёт новой parse-json
     "parse-json": "^8.1.0",
     "cosmiconfig": "^9.0.0"
   },
