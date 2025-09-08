@@ -31,7 +31,9 @@
     "title": "Бронирование",
     "service": "Услуга:",
     "provider": "Поставщик:",
-    "offer": "Предложение:"
+    "offer": "Предложение:",
+    "selected_dates": "Выбранные даты",
+    "attachments_hint": "Вложения (PDF, Word, Excel, PPT, изображения и т.д.)"
   },
 
   "bookings": {
