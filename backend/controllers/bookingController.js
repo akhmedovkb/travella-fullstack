@@ -196,7 +196,9 @@ const client = userRole === "client"
   ? (await pool.query(`SELECT name FROM clients WHERE id=$1`, [userId])).rows[0]
   : null;
 
-tg.notifyNewRequest({ booking: bkg, provider: null, client, service }).catch(() => {});
+tg.notifyNewRequest({ booking: bkg, provider: null, client, service }).catch(e => {
+  console.error("tg.notifyNewRequest failed:", e?.response?.data || e?.message || e);
+});
   } catch (err) {
     console.error("createBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -467,7 +469,9 @@ const providerQuote = async (req, res) => {
         price: Number(price),
         currency,
         note,
-      }).catch(() => {});
+      }).catch(e => {
+        console.error("tg.notifyQuote failed:", e?.response?.data || e?.message || e);
+      });
     } catch {}
 
   } catch (err) {
@@ -521,7 +525,9 @@ const acceptBooking = async (req, res) => {
         ...bQ.rows[0],
         dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
       };
-      tg.notifyConfirmed({ booking }).catch(() => {});
+      tg.notifyConfirmed({ booking }).catch(e => {
+        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
+      });
     } catch {}
 
   } catch (err) {
@@ -571,7 +577,9 @@ const rejectBooking = async (req, res) => {
     ...bQ.rows[0],
     dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
   };
-  tg.notifyRejected({ booking, reason }).catch(() => {});
+  tg.notifyRejected({ booking, reason }).catch(e => {
+  console.error("tg.notifyRejected failed:", e?.response?.data || e?.message || e);
+});
 } catch {}
 
   } catch (err) {
@@ -612,7 +620,9 @@ const cancelBooking = async (req, res) => {
     ...bQ.rows[0],
     dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
   };
-  tg.notifyCancelled({ booking }).catch(() => {});
+  tg.notifyCancelled({ booking }).catch(e => {
+  console.error("tg.notifyCancelled failed:", e?.response?.data || e?.message || e);
+});
 } catch {}
 
     
@@ -678,7 +688,9 @@ const confirmBooking = async (req, res) => {
       ...bQ.rows[0],
       dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
     };
-    tg.notifyConfirmed({ booking }).catch(() => {});
+    tg.notifyConfirmed({ booking }).catch(e => {
+  console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
+});
   } catch {}
     
   } catch (err) {
@@ -734,7 +746,10 @@ const confirmBookingByRequester = async (req, res) => {
       ...bQ.rows[0],
       dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
     };
-    tg.notifyConfirmed({ booking }).catch(() => {});
+    tg.notifyConfirmed({ booking }).catch(e => {
+  console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
+});
+
   } catch {}
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);
@@ -779,7 +794,10 @@ const cancelBookingByRequester = async (req, res) => {
           (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d))
         )
       };
-      tg.notifyCancelledByRequester({ booking }).catch(() => {});
+      tg.notifyCancelledByRequester({ booking }).catch(e => {
+  console.error("tg.notifyCancelledByRequester failed:", e?.response?.data || e?.message || e);
+});
+
     } catch {}
 
     return res.json({ ok: true, status: "cancelled" });
