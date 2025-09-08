@@ -634,8 +634,10 @@ exports.updateStatusByProvider = async (req, res) => {
 
     if (!q.rowCount) return res.status(404).json({ error: "not_found_or_forbidden" });
     const reqId = String(id);
-    tg.notifyReqStatusChanged({ request_id: reqId, status }).catch(() => {});
-    res.json({ success: true });
+      tg.notifyReqStatusChanged({ request_id: reqId, status }).catch(e => {
+        console.error("tg.notifyReqStatusChanged failed:", e?.response?.data || e?.message || e);
+      });
+      res.json({ success: true });
   } catch (e) {
     console.error("updateStatusByProvider error:", e);
     res.status(500).json({ error: "status_update_failed" });
