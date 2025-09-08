@@ -4,6 +4,8 @@
   "name": "travella-backend",
   "version": "1.0.0",
   "main": "index.js",
+  "overrides": {
+    "debug": "4.3.4",
   "scripts": {
     "start": "node index.js"
   },
