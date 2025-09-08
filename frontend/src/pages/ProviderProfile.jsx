@@ -14,11 +14,12 @@ import "react-day-picker/dist/style.css";
 import axios from "axios";
 
 // начало сегодняшнего дня (локально)
-const startOfToday = useMemo(() => {
+const getStartOfToday = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
-}, []);
+};
+
 
 
 // helpers
@@ -292,6 +293,9 @@ export default function ProviderProfile() {
   const [bookedYMD, setBookedYMD] = useState([]);   // includes blocked + booked
   const [selectedYMD, setSelectedYMD] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const startOfToday = useMemo(() => getStartOfToday(), []);
+
 
   // tokens
   const token =
