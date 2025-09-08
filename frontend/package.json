@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+    "overrides": {
+    "debug": "4.3.4"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
