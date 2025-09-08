@@ -21,8 +21,12 @@ async function tgSend(chatId, text, extra = {}) {
       ...extra,
     };
     const res = await axios.post(`${API}/sendMessage`, payload);
+    if (!res?.data?.ok) {
+      console.error("[tg] sendMessage not ok:", res?.data);
+    }
     return Boolean(res?.data?.ok);
-  } catch {
+  } catch (e) {
+    console.error("[tg] sendMessage error:", e?.response?.data || e?.message || e);
     return false;
   }
 }
@@ -124,7 +128,17 @@ async function getBookingActors(input) {
   const q = await pool.query(
     `
     SELECT
-      b.id, b.status, b.dates, b.provider_id, b.client_id, b.requester_provider_id,
+      b.id, COALESCE(b.status,'') AS status,
+      -- даты из booking_dates, с запасным кейсом на b.date
+      COALESCE(
+        (SELECT array_agg(d.date::date ORDER BY d.date)
+           FROM booking_dates d
+          WHERE d.booking_id = b.id),
+        CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+      ) AS dates,
+
+      b.provider_id, b.client_id, b.requester_provider_id,
+
       s.id AS service_id, s.title AS service_title,
 
       -- основной провайдер (исполнитель)
@@ -139,13 +153,13 @@ async function getBookingActors(input) {
       c.phone AS client__phone,
       c.telegram_chat_id AS client__chat,
 
-      -- агент-заявитель (если есть)
+      -- агент-заявитель (если колонка requester_provider_id есть — ок; если нет, запрос всё равно не упадёт)
       p2.id   AS agent__id,
       p2.name AS agent__name,
       p2.phone AS agent__phone,
       p2.telegram_chat_id AS agent__chat
     FROM bookings b
-    LEFT JOIN services s ON s.id = b.service_id
+    LEFT JOIN services  s ON s.id = b.service_id
     LEFT JOIN providers p ON p.id = b.provider_id
     LEFT JOIN clients   c ON c.id = b.client_id
     LEFT JOIN providers p2 ON p2.id = b.requester_provider_id
@@ -194,32 +208,42 @@ async function getBookingActors(input) {
   };
 }
 
+
 /** Подтянуть максимум данных по inbox-заявке */
 async function getRequestActors(requestId) {
   const q = await pool.query(
     `
     SELECT
-      r.id, COALESCE(r.status,'new') AS status, r.note, r.created_at,
+      r.id,
+      COALESCE(r.status,'new') AS status,
+      r.note, r.created_at,
       r.service_id,
       s.title AS service_title,
       s.provider_id AS to_provider_id,
 
-      -- исходный клиент (может быть "настоящий клиент")
-      c.id AS client_id, c.name AS client_name, c.phone AS client_phone, c.telegram_chat_id AS client_chat,
+      -- исходный клиент (может быть настоящий клиент)
+      c.id    AS client_id,
+      c.name  AS client_name,
+      c.phone AS client_phone,
+      c.telegram_chat_id AS client_chat,
 
-      -- «клиент» может быть проксирован провайдером-заявителем (агентом)
-      p2.id   AS agent_id,
-      p2.name AS agent_name,
+      -- «клиент» может оказаться провайдером (агентом): матчим по email/phone
+      p2.id    AS agent_id,
+      p2.name  AS agent_name,
       p2.phone AS agent_phone,
       p2.telegram_chat_id AS agent_chat,
 
       -- провайдер, которому адресована заявка
-      p.id AS provider_id, p.telegram_chat_id AS provider_chat
+      p.id AS provider_id,
+      p.telegram_chat_id AS provider_chat
     FROM requests r
     LEFT JOIN services  s ON s.id = r.service_id
     LEFT JOIN clients   c ON c.id = r.client_id
-    LEFT JOIN providers p2 ON p2.id = r.requester_provider_id
-    LEFT JOIN providers p  ON p.id  = s.provider_id
+    LEFT JOIN providers p ON p.id  = s.provider_id
+    LEFT JOIN providers p2 ON (
+      p2.email IS NOT DISTINCT FROM c.email
+      OR p2.phone IS NOT DISTINCT FROM c.phone
+    )
     WHERE r.id = $1
     LIMIT 1
     `,
@@ -274,7 +298,10 @@ async function notifyNewRequest({ booking }) {
     lines.push(`🔗 Открыть: ${urlProvider("bookings")}`);
 
     await tgSend(a.provider.chatId, lines.join("\n"));
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Провайдер отправил оффер (цену) → клиенту/заявителю */
@@ -301,7 +328,9 @@ async function notifyQuote({ booking, price, currency, note }) {
     lines.push(`🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`);
 
     await tgSend(dest.chatId, lines.join("\n"));
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
 }
 
 /** Подтверждение → обеим сторонам (и агенту, если есть) */
@@ -323,7 +352,10 @@ async function notifyConfirmed({ booking }) {
     if (a.agent?.chatId) {
       await tgSend(a.agent.chatId, `${msg}\n\n🔗 Открыть: ${urlProvider("bookings")}`);
     }
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Отклонение → заявителю (клиенту или агенту) */
@@ -343,7 +375,10 @@ async function notifyRejected({ booking, reason }) {
     lines.push(`🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`);
 
     await tgSend(dest.chatId, lines.join("\n"));
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Отмена системой/провайдером → клиенту/заявителю */
@@ -360,7 +395,10 @@ async function notifyCancelled({ booking }) {
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`;
     await tgSend(dest.chatId, text);
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Отмена клиентом/заявителем → провайдеру */
@@ -374,7 +412,10 @@ async function notifyCancelledByRequester({ booking }) {
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${urlProvider("bookings")}`;
     await tgSend(a.provider.chatId, text);
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /* ================== REQUESTS (быстрые заявки / inbox) ================== */
@@ -400,7 +441,10 @@ async function notifyReqNew({ request_id }) {
     lines.push(`🔗 Открыть: ${urlProvider("requests")}`);
 
     await tgSend(a.toProviderChat, lines.join("\n"));
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Статус заявки изменён провайдером → заявителю (клиенту или провайдеру-агенту) */
@@ -427,7 +471,10 @@ async function notifyReqStatusChanged({ request_id, status }) {
     lines.push(`🔗 Открыть: ${link}`);
 
     await tgSend(a.from.chatId, lines.join("\n"));
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Заявитель удалил/отменил заявку → провайдеру */
@@ -441,7 +488,10 @@ async function notifyReqCancelledByRequester({ request_id }) {
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${urlProvider("requests")}`;
     await tgSend(a.toProviderChat, text);
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 /** Провайдер удалил заявку → заявителю */
@@ -456,7 +506,10 @@ async function notifyReqDeletedByProvider({ request_id }) {
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${link}`;
     await tgSend(a.from.chatId, text);
-  } catch {}
+  } catch (e) {
+  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+}
+
 }
 
 module.exports = {
