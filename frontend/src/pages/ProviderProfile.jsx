@@ -13,6 +13,14 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import axios from "axios";
 
+// начало сегодняшнего дня (локально)
+const startOfToday = useMemo(() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}, []);
+
+
 // helpers
 const first = (...vals) => {
   for (const v of vals) {
@@ -540,23 +548,33 @@ arr = arr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canBook, pid]);
 
-  const disabledDays = useMemo(
-    () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
-    [bookedYMD]
-  );
+ // уже занятые как Date[]
+const disabledDays = useMemo(
+  () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
+  [bookedYMD]
+);
+  // ПЛЮС запрет на все прошлые даты
+const disabledMatchers = useMemo(
+  () => [{ before: startOfToday }, ...disabledDays],
+  [startOfToday, disabledDays]
+);
+  
   const selectedDates = useMemo(
     () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
     [selectedYMD]
   );
 
   const toggleDay = (day) => {
-    const ymd = dateToYMD(day);
-    // если день занят — игнор
-    if (bookedYMD.includes(ymd)) return;
-    setSelectedYMD((prev) =>
-      prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
-    );
-  };
+  // не даём выбрать прошлое
+  if (day < startOfToday) return;
+
+  const ymd = dateToYMD(day);
+  if (bookedYMD.includes(ymd)) return; // занято системой
+  setSelectedYMD((prev) =>
+    prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
+  );
+};
+
 
   const openBookingModal = () => {
     if (!selectedYMD.length) {
@@ -748,7 +766,7 @@ arr = arr
             mode="multiple"
             onDayClick={toggleDay}
             selected={selectedDates}
-            disabled={disabledDays}
+            disabled={disabledMatchers}
             modifiersClassNames={{
               selected: "bg-orange-500 text-white",
               disabled: "bg-gray-300 text-white opacity-80",
