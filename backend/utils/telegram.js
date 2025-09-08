@@ -338,24 +338,48 @@ async function notifyConfirmed({ booking }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
-    const msg =
-      `<b>✅ Бронь подтверждена №${a.id}</b>\n` +
-      (a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>\n` : "") +
-      `📅 Даты: <b>${fmtDates(a.dates)}</b>`;
 
-    if (a.client?.chatId) {
-      await tgSend(a.client.chatId, `${msg}\n\n🔗 Открыть: ${urlClient("bookings")}`);
+    // Базовые строки (общие для всех получателей)
+    const base = [];
+    base.push(`<b>✅ Бронь подтверждена №${a.id}</b>`);
+    if (a.serviceTitle) base.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
+    base.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
+
+    // Кто заявитель (как в ноти о новой заявке)
+    const applicantLines = [];
+    if (a.agent) {
+      applicantLines.push(
+        lineContact("🧑‍💼", "Агент",  a.agent.name,  a.agent.phone,  a.agent.username)
+      );
+      if (a.client?.name || a.client?.phone || a.client?.username) {
+        applicantLines.push(
+          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
+        );
+      }
+    } else {
+      applicantLines.push(
+        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
+      );
     }
-    if (a.provider?.chatId) {
-      await tgSend(a.provider.chatId, `${msg}\n\n🔗 Открыть: ${urlProvider("bookings")}`);
-    }
-    if (a.agent?.chatId) {
-      await tgSend(a.agent.chatId, `${msg}\n\n🔗 Открыть: ${urlProvider("bookings")}`);
-    }
+
+    // Текст для провайдера (и для агента, если он есть): показываем заявителя
+    const textForProvider = [...base, ...applicantLines, "", `🔗 Открыть: ${urlProvider("bookings")}`].join("\n");
+    const textForAgent    = textForProvider;
+
+    // Текст для клиента: полезнее показать контакт поставщика
+    const textForClient   = [
+      ...base,
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      "",
+      `🔗 Открыть: ${urlClient("bookings")}`
+    ].join("\n");
+
+    if (a.client?.chatId)   { await tgSend(a.client.chatId,   textForClient); }
+    if (a.provider?.chatId) { await tgSend(a.provider.chatId, textForProvider); }
+    if (a.agent?.chatId)    { await tgSend(a.agent.chatId,    textForAgent); }
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
-}
-
+    console.error("[tg] notifyConfirmed failed:", e?.response?.data || e?.message || e);
+  }
 }
 
 /** Отклонение → заявителю (клиенту или агенту) */
