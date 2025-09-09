@@ -12,6 +12,13 @@ import { tSuccess, tError } from "../shared/toast";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import axios from "axios";
+// начало сегодняшнего дня (локально)
+const getStartOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
 
 // helpers
 const first = (...vals) => {
@@ -267,8 +274,6 @@ export default function ProviderProfile() {
   const [params] = useSearchParams();
   const pid = Number(id);
   const { t } = useTranslation();
-  const tx = (key, fallback) => t(key, { defaultValue: fallback });
-
   const serviceIdParam = params.get("service");
   const serviceId = serviceIdParam ? Number(serviceIdParam) : null;
 
@@ -284,6 +289,26 @@ export default function ProviderProfile() {
   const [bookedYMD, setBookedYMD] = useState([]);   // includes blocked + booked
   const [selectedYMD, setSelectedYMD] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const startOfToday = useMemo(() => getStartOfToday(), []);
+
+  // уже занятые как Date[]
+const busyDates = useMemo(
+  () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
+  [bookedYMD]
+);
+
+// матчер для прошедших
+const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
+
+// итоговый disabled для кликов: прошлые + занятые
+const disabledDays = useMemo(() => [pastMatcher, ...busyDates], [pastMatcher, busyDates]);
+
+// выбранные
+const selectedDates = useMemo(
+  () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
+  [selectedYMD]
+);
+
 
   // tokens
   const token =
@@ -540,23 +565,19 @@ arr = arr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canBook, pid]);
 
-  const disabledDays = useMemo(
-    () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
-    [bookedYMD]
-  );
-  const selectedDates = useMemo(
-    () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
-    [selectedYMD]
-  );
+ const toggleDay = (day) => {
+  // не даём выбрать прошлое
+  if (day < startOfToday) return;
 
-  const toggleDay = (day) => {
-    const ymd = dateToYMD(day);
-    // если день занят — игнор
-    if (bookedYMD.includes(ymd)) return;
-    setSelectedYMD((prev) =>
-      prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
-    );
-  };
+  const ymd = dateToYMD(day);
+  // если день занят — игнор
+  if (bookedYMD.includes(ymd)) return;
+
+  setSelectedYMD((prev) =>
+    prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
+  );
+};
+
 
   const openBookingModal = () => {
     if (!selectedYMD.length) {
@@ -749,9 +770,12 @@ arr = arr
             onDayClick={toggleDay}
             selected={selectedDates}
             disabled={disabledDays}
+            modifiers={{ past: pastMatcher, busy: busyDates }}
             modifiersClassNames={{
-              selected: "bg-orange-500 text-white",
-              disabled: "bg-gray-300 text-white opacity-80",
+                
+                selected: "bg-orange-500 text-white",          // выбранные — оранжевые
+                busy: "bg-gray-300 text-white",                 // занятые — серый кружок
+                past: "text-gray-400 cursor-not-allowed",       // прошлые — просто бледный текст, БЕЗ фона
             }}
             className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
           />
