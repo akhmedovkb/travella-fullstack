@@ -256,8 +256,7 @@ const ProviderCalendar = ({ token }) => {
   }, [providerType]);
 
   // Кастомный контент ячейки дня с tooltip
-  const [hoveredYmd, setHoveredYmd] = useState(null);
-  const DayCell = (dayProps) => {
+    const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd] || [];
     const isBookedDay = booked.includes(dateYmd);
