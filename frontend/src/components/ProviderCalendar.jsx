@@ -102,7 +102,8 @@ const ProviderCalendar = ({ token }) => {
               item?.telegram_handle ||
               item?.tg ||
               "")?.replace?.(/^@/, "") || "",
-          profileId: item?.profileId || item?.clientId || item?.userId || item?.id || null,
+          profileId:
+            item?.profileId || item?.clientId || item?.userId || item?.id || null,
           profileUrl:
             item?.profileUrl ||
             item?.url ||
@@ -305,21 +306,25 @@ const ProviderCalendar = ({ token }) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd];
     const isBooked = dayProps?.activeModifiers?.booked;
-    const showTooltip = isGuideOrTransport && isBooked && Array.isArray(infoList) && infoList.length > 0;
+    const showTooltip =
+      isGuideOrTransport &&
+      isBooked &&
+      Array.isArray(infoList) &&
+      infoList.length > 0;
 
     const dayNum = dayProps.date.getDate();
 
     return (
-      <div className="relative group flex items-center justify-center w-full h-full">
+      <div className="relative flex items-center justify-center w-full h-full">
         <span>{dayNum}</span>
 
         {showTooltip && (
           <div
             className="
-              invisible opacity-0 group-hover:visible group-hover:opacity-100
-              absolute z-20 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+              pointer-events-none
+              absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
               bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800
-              transition-opacity duration-150
+              opacity-0 group-hover:opacity-100 transition-opacity duration-150
             "
           >
             <div className="max-h-48 overflow-auto space-y-2">
@@ -327,17 +332,24 @@ const ProviderCalendar = ({ token }) => {
                 const profileHref =
                   it?.profileUrl ||
                   (it?.profileId ? `/profile/${it.profileId}` : null);
-                const name = it?.name || t("calendar.unknown_name", { defaultValue: "Noma'lum foydalanuvchi" });
+                const name =
+                  it?.name ||
+                  t("calendar.unknown_name", {
+                    defaultValue: "Noma'lum foydalanuvchi",
+                  });
 
                 return (
-                  <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
+                  <div
+                    key={idx}
+                    className="border-b last:border-b-0 pb-2 last:pb-0"
+                  >
                     <div className="font-semibold truncate">
                       {profileHref ? (
                         <a
                           href={profileHref}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline"
+                          className="text-blue-600 hover:underline pointer-events-auto"
                         >
                           {name}
                         </a>
@@ -349,7 +361,10 @@ const ProviderCalendar = ({ token }) => {
                     {it?.phone && (
                       <div className="mt-1">
                         {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
-                        <a href={`tel:${it.phone}`} className="text-blue-600 hover:underline">
+                        <a
+                          href={`tel:${it.phone}`}
+                          className="text-blue-600 hover:underline pointer-events-auto"
+                        >
                           {it.phone}
                         </a>
                       </div>
@@ -359,10 +374,13 @@ const ProviderCalendar = ({ token }) => {
                       <div className="mt-1">
                         Telegram:{" "}
                         <a
-                          href={`https://t.me/${String(it.telegram).replace(/^@/, "")}`}
+                          href={`https://t.me/${String(it.telegram).replace(
+                            /^@/,
+                            ""
+                          )}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline"
+                          className="text-blue-600 hover:underline pointer-events-auto"
                         >
                           @{String(it.telegram).replace(/^@/, "")}
                         </a>
@@ -385,7 +403,7 @@ const ProviderCalendar = ({ token }) => {
       {/* Шапка: заголовок слева, легенда справа */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-800">
-          {t("calendar.title_public", {
+          {t("calendar.availability_calendar", {
             defaultValue: "Bandlik kalendari",
           })}
         </h3>
@@ -401,27 +419,34 @@ const ProviderCalendar = ({ token }) => {
         </div>
       </div>
 
-      <DayPicker
-        locale={dpLocale}
-        weekStartsOn={weekStartsOn}
-        mode="multiple"
-        selected={manualAsDates}
-        onDayClick={toggleDate}
-        disabled={disabledMatchers}
-        modifiers={{ past: pastMatcher, booked: bookedAsDates }}
-        modifiersClassNames={{
-          // как в ProviderProfile: выбранные — оранжевые, занятые — серые
-          selected: "bg-orange-500 text-white",
-          booked: "bg-gray-300 text-white cursor-not-allowed",
-          past: "text-gray-400 cursor-not-allowed",
-        }}
-        modifiersStyles={{
-          selected: { backgroundColor: "#f97316", color: "#fff" },
-          booked: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
-          past: { color: "#9ca3af", background: "transparent" },
-        }}
-        components={{ DayContent: DayCell }}
-      />
+      {/* Важно: делаем day "group", чтобы group-hover работал на кнопке дня */}
+      <div className="relative overflow-visible">
+        <DayPicker
+          locale={dpLocale}
+          weekStartsOn={weekStartsOn}
+          mode="multiple"
+          selected={manualAsDates}
+          onDayClick={toggleDate}
+          disabled={disabledMatchers}
+          modifiers={{ past: pastMatcher, booked: bookedAsDates }}
+          modifiersClassNames={{
+            // как в ProviderProfile: выбранные — оранжевые, занятые — серые
+            selected: "bg-orange-500 text-white",
+            booked: "bg-gray-300 text-white cursor-not-allowed",
+            past: "text-gray-400 cursor-not-allowed",
+          }}
+          modifiersStyles={{
+            selected: { backgroundColor: "#f97316", color: "#fff" },
+            booked: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
+            past: { color: "#9ca3af", background: "transparent" },
+          }}
+          components={{ DayContent: DayCell }}
+          classNames={{
+            // добавляем класс group к кнопке дня
+            day: "rdp-day group",
+          }}
+        />
+      </div>
 
       <button
         onClick={handleSave}
