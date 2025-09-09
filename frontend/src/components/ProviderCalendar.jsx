@@ -255,13 +255,13 @@ const ProviderCalendar = ({ token }) => {
   const startOfToday = useMemo(() => getStartOfToday(), []);
   const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
 
-  // клик по дню — меняем ТОЛЬКО ручные, и только если день не системно занят
-  const toggleDate = (day) => {
-    const ymd = toYMD(day);
-    if (booked.includes(ymd)) return; // нельзя трогать занятые системой
-    setManual((prev) =>
-      prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
-    );
+    // контролируемый выбор через onSelect (DayPicker сам даст полный набор дат)
+  const handleSelect = (dates) => {
+    const arr = Array.isArray(dates) ? dates : dates ? [dates] : [];
+    const ymds = arr.map(toYMD).filter(Boolean);
+    // запрещаем добавлять системно занятые
+    const filtered = ymds.filter((d) => !booked.includes(d));
+    setManual(filtered);
   };
 
   const handleSave = async () => {
@@ -283,11 +283,8 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-  // запрет на прошлые дни (с полуночи) и системно занятые
-  const disabledMatchers = useMemo(
-    () => [pastMatcher, ...bookedAsDates],
-    [pastMatcher, bookedAsDates]
-  );
+// запрет только на прошлые дни (занятые НЕ дизейблим, чтобы работал hover)
+  const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
 
   // показывать подсказку только гиду/транспортнику
   const isGuideOrTransport = useMemo(() => {
@@ -415,17 +412,18 @@ const ProviderCalendar = ({ token }) => {
       </div>
 
       <div className="relative overflow-visible">
+        onMouseLeave={() => setHoveredYmd(null)}>
         <DayPicker
           locale={dpLocale}
           weekStartsOn={weekStartsOn}
           mode="multiple"
           selected={manualAsDates}
-          onDayClick={toggleDate}
+          onSelect={handleSelect}
           disabled={disabledMatchers}
           modifiers={{ past: pastMatcher, booked: bookedAsDates }}
           modifiersClassNames={{
             selected: "bg-orange-500 text-white",
-            booked: "bg-gray-300 text-white cursor-not-allowed",
+            booked: "bg-gray-300 text-white cursor-help",
             past: "text-gray-400 cursor-not-allowed",
           }}
           modifiersStyles={{
@@ -434,14 +432,12 @@ const ProviderCalendar = ({ token }) => {
             past: { color: "#9ca3af", background: "transparent" },
           }}
           components={{ DayContent: DayCell }}
-          // показываем/скрываем тултип через состояние hoveredYmd
-          onDayMouseEnter={(day, modifiers) => {
-            if (modifiers?.booked) setHoveredYmd(toYMD(day));
-          }}
-          onDayMouseLeave={(day, modifiers) => {
-            if (modifiers?.booked) setHoveredYmd((prev) =>
-              prev === toYMD(day) ? null : prev
-            );
+                    // Наведение опираем на наличие деталей, а не на modifiers
+          onDayMouseEnter={(day) => {
+            const ymd = toYMD(day);
+            if (isGuideOrTransport && bookedDetails[ymd]?.length) {
+              setHoveredYmd(ymd);
+            }
           }}
         />
       </div>
