@@ -1,12 +1,15 @@
 // frontend/src/pages/ProviderProfile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+const { t, i18n } = useTranslation();
 import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
 import { tSuccess, tError } from "../shared/toast";
+// локали для DayPicker
+import { enUS, ru, uz } from "date-fns/locale";
+
 
 // >>> NEW: calendar deps
 import { DayPicker } from "react-day-picker";
@@ -308,6 +311,20 @@ const selectedDates = useMemo(
   () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
   [selectedYMD]
 );
+
+const dpLocale = useMemo(() => {
+  const lang = (i18n.language || "en").split("-")[0];
+  if (lang === "ru") return ru;
+  if (lang === "uz") return uz;
+  return enUS; // по умолчанию — English
+}, [i18n.language]);
+
+// хотим, чтобы Пн был первым для ru/uz
+const weekStartsOn = useMemo(() => {
+  const lang = (i18n.language || "en").split("-")[0];
+  return lang === "ru" || lang === "uz" ? 1 : 0;
+}, [i18n.language]);
+
 
 
   // tokens
@@ -766,6 +783,8 @@ arr = arr
           </div>
 
           <DayPicker
+              locale={dpLocale}
+              weekStartsOn={weekStartsOn}
               mode="multiple"
               onDayClick={toggleDay}
               selected={selectedDates}
