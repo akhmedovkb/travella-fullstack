@@ -552,16 +552,18 @@ arr = arr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canBook, pid]);
 
- // уже занятые как Date[]
-const disabledDays = useMemo(
-  () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
-  [bookedYMD]
-);
-  // ПЛЮС запрет на все прошлые даты
-const disabledMatchers = useMemo(
-  () => [{ before: startOfToday }, ...disabledDays],
-  [startOfToday, disabledDays]
-);
+ // разделяем "занятые" и "прошедшие", чтобы стилизовать по-разному
+ const busyDates = useMemo(
+   () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
+   [bookedYMD]
+ );
+ const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
+
+ // итоговые отключённые дни: прошлые + занятые
+ const disabledMatchers = useMemo(
+   () => [pastMatcher, ...busyDates],
+   [pastMatcher, busyDates]
+ );
   
   const selectedDates = useMemo(
     () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
@@ -771,9 +773,11 @@ const disabledMatchers = useMemo(
             onDayClick={toggleDay}
             selected={selectedDates}
             disabled={disabledMatchers}
+            modifiers={{ past: pastMatcher, busy: busyDates }}
             modifiersClassNames={{
-              selected: "bg-orange-500 text-white",
-              disabled: "bg-gray-300 text-white opacity-80",
+                 selected: "bg-orange-500 text-white",
+                 busy: "bg-gray-300 text-white",             // занято — серый кружок
+                 past: "text-gray-400 cursor-not-allowed",   // прошедшие — без кружка
             }}
             className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
           />
