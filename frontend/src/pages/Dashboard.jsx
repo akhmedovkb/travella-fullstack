@@ -2254,7 +2254,6 @@ useEffect(() => {
                     </div>
                 
                     <div className="mb-2">
-                      <label className="block font-medium mb-1">{t("price")}</label>
                       <MoneyField
                         label={t("price")}
                         value={price}
@@ -2264,8 +2263,7 @@ useEffect(() => {
                     </div>
                 
                     <div className="mb-2">
-                      <label className="block font-medium mb-1">{t("gross_price")}</label>
-                      <MoneyField
+                       <MoneyField
                         label={t("gross_price")}
                         value={details.grossPrice || ""}
                         onChange={(v) => setDetails({ ...details, grossPrice: v })}
