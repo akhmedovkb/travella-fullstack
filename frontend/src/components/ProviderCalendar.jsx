@@ -118,107 +118,107 @@ const ProviderCalendar = ({ token }) => {
     };
 
     const load = async () => {
+  try {
+    const { data } = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
+      cfg
+    );
+    if (cancelled) return;
+
+    // booked может быть строками или объектами { date }
+    const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
+      .map((x) =>
+        typeof x === "string" ? x.slice(0, 10) : toYMD(x?.date || x)
+      )
+      .filter(Boolean);
+
+    const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
+      .map(toYMD)
+      .filter(Boolean);
+
+    // ВАЖНО: детали берём из bookedDetails
+    const detailsMap = normalizeDetailsList(data?.bookedDetails || []);
+
+    setManual(blockedArr);
+    setManualInitial(blockedArr);
+    setBooked(bookedArr);
+    setBookedDetails(detailsMap);
+
+    // Фолбэк — отдельная ручка, если деталей нет
+    if (!Object.keys(detailsMap).length) {
       try {
-        const { data } = await axios.get(
-          `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
-          cfg
-        );
-        if (cancelled) return;
-
-        const rawBooked = Array.isArray(data?.booked) ? data.booked : [];
-        let bookedArr = [];
-        let detailsMap = {};
-
-        if (rawBooked.length && typeof rawBooked[0] === "string") {
-          bookedArr = rawBooked.map(toYMD).filter(Boolean);
-          if (Array.isArray(data?.bookedDetails)) {
-            detailsMap = normalizeDetailsList(data.bookedDetails);
-          }
-        } else if (rawBooked.length && typeof rawBooked[0] === "object") {
-          bookedArr = rawBooked.map((x) => toYMD(x?.date || x)).filter(Boolean);
-          detailsMap = normalizeDetailsList(rawBooked);
-        }
-
-        const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
-          .map(toYMD)
-          .filter(Boolean);
-
-        setManual(blockedArr);
-        setManualInitial(blockedArr);
-        setBooked(bookedArr);
-        setBookedDetails(detailsMap);
-
-        if (!Object.keys(detailsMap).length) {
-          try {
-            const det = await axios
-              .get(
-                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
-                cfg
-              )
-              .then((r) => r.data)
-              .catch(() => null);
-            if (!cancelled && Array.isArray(det)) {
-              setBookedDetails(normalizeDetailsList(det));
-            }
-          } catch {
-            /* ignore */
-          }
+        const det = await axios
+          .get(
+            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
+            cfg
+          )
+          .then((r) => r.data)
+          .catch(() => null);
+        if (!cancelled && Array.isArray(det)) {
+          setBookedDetails(normalizeDetailsList(det));
         }
       } catch {
-        try {
-          const [blk, bkd] = await Promise.all([
-            axios
-              .get(
-                `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-                cfg
-              )
-              .then((r) => r.data)
-              .catch(() => []),
-            axios
-              .get(
-                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
-                cfg
-              )
-              .then((r) => r.data)
-              .catch(() => []),
-          ]);
-          if (cancelled) return;
-
-          const blockedArr = (Array.isArray(blk) ? blk : [])
-            .map(toYMD)
-            .filter(Boolean);
-          const bookedArr = (Array.isArray(bkd) ? bkd : [])
-            .map(toYMD)
-            .filter(Boolean);
-
-          setManual(blockedArr);
-          setManualInitial(blockedArr);
-          setBooked(bookedArr);
-
-          try {
-            const det = await axios
-              .get(
-                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
-                cfg
-              )
-              .then((r) => r.data)
-              .catch(() => null);
-            if (!cancelled && Array.isArray(det)) {
-              setBookedDetails(normalizeDetailsList(det));
-            }
-          } catch {
-            /* ignore */
-          }
-        } catch (e) {
-          if (!cancelled) {
-            console.error("Ошибка загрузки календаря", e);
-            toast.error(
-              t("calendar.load_error") || "Не удалось загрузить календарь"
-            );
-          }
-        }
+        /* ignore */
       }
-    };
+    }
+  } catch {
+    // Фолбэк по старым ручкам
+    try {
+      const [blk, bkd] = await Promise.all([
+        axios
+          .get(
+            `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
+            cfg
+          )
+          .then((r) => r.data)
+          .catch(() => []),
+        axios
+          .get(
+            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
+            cfg
+          )
+          .then((r) => r.data)
+          .catch(() => []),
+      ]);
+      if (cancelled) return;
+
+      const blockedArr = (Array.isArray(blk) ? blk : [])
+        .map(toYMD)
+        .filter(Boolean);
+      const bookedArr = (Array.isArray(bkd) ? bkd : [])
+        .map(toYMD)
+        .filter(Boolean);
+
+      setManual(blockedArr);
+      setManualInitial(blockedArr);
+      setBooked(bookedArr);
+
+      // Попробуем подтянуть детали отдельно
+      try {
+        const det = await axios
+          .get(
+            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
+            cfg
+          )
+          .then((r) => r.data)
+          .catch(() => null);
+        if (!cancelled && Array.isArray(det)) {
+          setBookedDetails(normalizeDetailsList(det));
+        }
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      if (!cancelled) {
+        console.error("Ошибка загрузки календаря", e);
+        toast.error(
+          t("calendar.load_error") || "Не удалось загрузить календарь"
+        );
+      }
+    }
+  }
+};
+
 
     load();
     return () => {
