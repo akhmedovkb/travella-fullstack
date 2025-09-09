@@ -362,45 +362,42 @@ const ProviderCalendar = ({ token }) => {
       {/* overflow-visible + сброс hover */}
       <div className="relative overflow-visible" onMouseLeave={() => setHoveredYmd(null)}>
         <DayPicker
-          locale={dpLocale}
-          weekStartsOn={weekStartsOn}
-          mode="multiple"
-          selected={manualAsDates}            // текущее состояние блокировок
-          onSelect={handleSelect}
-          disabled={disabledMatchers}         // только прошлое запрещаем
-          modifiers={{
-            past: pastMatcher,
-            booked: bookedAsDates,
-            manualSaved: manualSavedAsDates,   // сохранённые
-            manualNew: manualNewAsDates,       // новые несохранённые
-          }}
-          modifiersClassNames={{
-            // базовый selected — делаем текст белым; цвет подменим модификаторами ниже
-            selected: "text-white",
-            booked: "bg-gray-300 text-white cursor-help",
-            past: "text-gray-400 cursor-not-allowed",
-          }}
-          modifiersStyles={{
-            manualSaved: { backgroundColor: "#0ea5e9", color: "#fff" }, // sky-500
-            manualNew:   { backgroundColor: "#f97316", color: "#fff" }, // orange-500
-            booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
-          }}
-          components={{ DayContent: DayCell }}
-          classNames={{
-            cell: "overflow-visible relative",
-            day: "rdp-day overflow-visible relative",
-          }}
-          styles={{
-            cell: { overflow: "visible" },
-            day: { overflow: "visible" },
-          }}
-          onDayMouseEnter={(date) => {
-            const ymd = toYMD(date);
-            if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
-              setHoveredYmd(ymd);
-            }
-          }}
-        />
+            locale={dpLocale}
+            weekStartsOn={weekStartsOn}
+            mode="multiple"
+            selected={manualAsDates}
+            onSelect={handleSelect}
+            disabled={disabledMatchers} // только прошлое запрещаем
+            modifiers={{
+              past: pastMatcher,
+              booked: bookedAsDates,
+              manualSaved: manualSavedAsDates, // сохранённые с бэка
+              manualNew: manualNewAsDates,     // новые, ещё не сохранённые
+            }}
+            /* ВАЖНО: НЕТ stylings для "selected", чтобы не красить всё в оранжевый */
+            modifiersClassNames={{
+              booked: "bg-gray-300 text-white cursor-help",
+              past: "text-gray-400 cursor-not-allowed",
+            }}
+            modifiersStyles={{
+              manualSaved: { backgroundColor: "#0ea5e9", color: "#fff" }, // синие — сохранено
+              manualNew:   { backgroundColor: "#f97316", color: "#fff" }, // оранжевые — черновик
+              booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
+            }}
+            components={{ DayContent: DayCell }}
+            classNames={{
+              cell: "overflow-visible relative",
+              day: "rdp-day overflow-visible relative",
+            }}
+            styles={{ cell: { overflow: "visible" }, day: { overflow: "visible" } }}
+            onDayMouseEnter={(date) => {
+              const ymd = toYMD(date);
+              if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
+                setHoveredYmd(ymd);
+              }
+            }}
+          />
+
       </div>
 
       <button
