@@ -766,19 +766,24 @@ arr = arr
           </div>
 
           <DayPicker
-            mode="multiple"
-            onDayClick={toggleDay}
-            selected={selectedDates}
-            disabled={disabledDays}
-            modifiers={{ past: pastMatcher, busy: busyDates }}
-            modifiersClassNames={{
-                
-                selected: "bg-orange-500 text-white",          // выбранные — оранжевые
-                busy: "bg-gray-300 text-white",                 // занятые — серый кружок
-                past: "text-gray-400 cursor-not-allowed",       // прошлые — просто бледный текст, БЕЗ фона
-            }}
-            className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
-          />
+              mode="multiple"
+              onDayClick={toggleDay}
+              selected={selectedDates}
+              disabled={disabledDays}
+              modifiers={{ past: pastMatcher, busy: busyDates }}
+              modifiersClassNames={{
+                selected: "bg-orange-500 text-white",
+                busy: "bg-gray-300 text-white",
+                past: "text-gray-400 cursor-not-allowed",
+              }}
+              modifiersStyles={{
+                selected: { backgroundColor: "#f97316", color: "#fff" }, // оранжевый
+                busy: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 }, // серый кружок без побледнения
+                past: { color: "#9ca3af", background: "transparent" }, // бледный текст, без фона
+              }}
+              className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
+            />
+
 
           <div className="mt-4 flex items-center gap-2">
             <button
