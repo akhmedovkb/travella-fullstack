@@ -349,7 +349,7 @@ const ProviderCalendar = ({ token }) => {
           </span>
           <span>
             <span className="inline-block w-3 h-3 bg-sky-500 rounded-sm align-middle mr-2" />
-            {t("calendar.manual", { defaultValue: "моё (сохранено)" })}
+            {t("calendar.manual_blocked", { defaultValue: "Заблокировано мною" })}
           </span>
           <span>
             <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-2" />
