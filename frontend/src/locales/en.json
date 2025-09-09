@@ -28,7 +28,18 @@
     "pax": "Passengers",
     "submit": "Book",
     "time": "Time",
-    "title": "Booking"
+    "title": "Booking",
+    "modal_title": "Booking",
+    "selected_dates": "Selected dates",
+    "message_label": "Message",
+    "message_ph": "Describe the request details...",
+    "attachments_label": "Attachments (PDF, Word, Excel, PPT, images, etc.)",
+    "send": "Send booking",
+    "need_auth": "Sign in to book",
+    "need_auth_hint": "Please sign in to send a booking request.",
+    "no_dates": "Select at least one free date",
+    "sent": "Booking request sent",
+    "error": "Failed to send booking"
   },
 
   "bookings": {
@@ -142,6 +153,9 @@
   "border_transfer": "Border transfer",
 
   "calendar": {
+    "title_public": "Availability calendar",
+    "busy": "busy",
+    "selected": "selected",
     "blocking_title": "Availability calendar",
     "booked": "Booked",
     "dates_saved": "Blocked dates saved",
@@ -529,6 +543,7 @@
       "cancel": "Cancel",
       "confirm": "Confirm",
       "details": "Details",
+      "languages": "Languages",
       "noItems": "No bookings.",
       "reject": "Reject",
       "status": "Status",
