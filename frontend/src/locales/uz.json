@@ -45,6 +45,16 @@
     "price_invalid": "To'g'ri narx kiriting",
     "price_sent": "Narx yuborildi",
     "price_send_error": "Narxni yuborishda xatolik",
+    "modal_title": "Bron",
+    "message_label": "Xabar",
+    "message_ph": "So‘rov tafsilotlarini yozing...",
+    "attachments_label": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)",
+    "send": "Bronni yuborish",
+    "need_auth": "Bron qilish uchun tizimga kiring",
+    "need_auth_hint": "Bron yuborish uchun tizimga kiring.",
+    "no_dates": "Hech bo‘lmaganda bitta bo‘sh sanani tanlang",
+    "sent": "Bron so‘rovi yuborildi",
+    "error": "Bronni yuborib bo‘lmadi",
 
     "client_comment": "Izoh:",
     "empty": "Hozircha bronlar yo‘q.",
@@ -154,7 +164,10 @@
     "save_blocked_dates": "Band sanalarni saqlash",
     "save_button": "Band sanalarni saqlash",
     "save_error": "Sanalarni saqlab bo‘lmadi",
-    "saved_successfully": "Sanalar saqlandi"
+    "saved_successfully": "Sanalar saqlandi",
+    "title_public": "Bandlik kalendari",
+    "busy": "band",
+    "selected": "tanlangan"
   },
 
   "cancel": "Bekor qilish",
@@ -511,6 +524,7 @@
   "profile_updated": "Profil yangilandi",
 
   "provider": {
+    "languages": "Tillar",
     "type": "Ta’minotchi turi",
     "region": "Ta’minotchi mintaqasi",
     "types": {
