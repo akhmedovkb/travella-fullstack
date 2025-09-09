@@ -158,8 +158,6 @@ const getLevelLabel = (lvl) => {
   return LEVEL_OPTIONS.find(o => o.value === v)?.label || (lvl ? String(lvl).toUpperCase() : "");
 };
 
-// ===== Local helpers for dates (no TZ shift) =====
-
 // ====== Inline modal for booking ======
 export default function ProviderProfile() {
   const { id } = useParams();
