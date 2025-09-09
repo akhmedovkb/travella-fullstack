@@ -28,7 +28,7 @@ const ymdToLocalDate = (ymd) => {
   return new Date(y, m - 1, d);
 };
 
-// локальная «полночь сегодня» — чтобы не блочить текущий день из-за времени
+// локальная «полночь сегодня»
 const getStartOfToday = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -48,10 +48,10 @@ const ProviderCalendar = ({ token }) => {
   // подробности по бронированиям: { [ymd]: [{ name, phone, telegram, profileId, profileUrl }] }
   const [bookedDetails, setBookedDetails] = useState({});
 
-  // тип провайдера: guide / transport / agent / hotel / ...
+  // тип провайдера: guide / transport / ...
   const [providerType, setProviderType] = useState("");
 
-  // какая дата сейчас под курсором (для tooltip)
+  // для tooltip
   const [hoveredYmd, setHoveredYmd] = useState(null);
 
   const cfg = useMemo(() => {
@@ -62,7 +62,7 @@ const ProviderCalendar = ({ token }) => {
     return { headers: { Authorization: `Bearer ${stored}` } };
   }, [token]);
 
-  // подгружаем профиль провайдера, чтобы понять тип
+  // профиль провайдера (тип)
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -73,7 +73,7 @@ const ProviderCalendar = ({ token }) => {
         );
         if (!cancel) setProviderType(data?.type || "");
       } catch {
-        // тихо игнорируем: тип не обязателен
+        /* ignore */
       }
     })();
     return () => {
@@ -81,7 +81,7 @@ const ProviderCalendar = ({ token }) => {
     };
   }, [cfg]);
 
-  // Загрузка данных календаря
+  // загрузка календаря
   useEffect(() => {
     let cancelled = false;
 
@@ -105,8 +105,7 @@ const ProviderCalendar = ({ token }) => {
               item?.telegram_handle ||
               item?.tg ||
               "")?.replace?.(/^@/, "") || "",
-          profileId:
-            item?.profileId || item?.clientId || item?.userId || item?.id || null,
+          profileId: item?.profileId || item?.clientId || item?.userId || item?.id || null,
           profileUrl:
             item?.profileUrl ||
             item?.url ||
@@ -124,7 +123,6 @@ const ProviderCalendar = ({ token }) => {
           `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
           cfg
         );
-
         if (cancelled) return;
 
         const rawBooked = Array.isArray(data?.booked) ? data.booked : [];
@@ -184,7 +182,6 @@ const ProviderCalendar = ({ token }) => {
               .then((r) => r.data)
               .catch(() => []),
           ]);
-
           if (cancelled) return;
 
           const blockedArr = (Array.isArray(blk) ? blk : [])
@@ -255,7 +252,7 @@ const ProviderCalendar = ({ token }) => {
   const startOfToday = useMemo(() => getStartOfToday(), []);
   const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
 
-    // контролируемый выбор через onSelect (DayPicker сам даст полный набор дат)
+  // контролируемый выбор через onSelect (DayPicker сам даст массив дат)
   const handleSelect = (dates) => {
     const arr = Array.isArray(dates) ? dates : dates ? [dates] : [];
     const ymds = arr.map(toYMD).filter(Boolean);
@@ -266,7 +263,6 @@ const ProviderCalendar = ({ token }) => {
 
   const handleSave = async () => {
     const final = Array.from(new Set(manual)).sort();
-
     try {
       const { data } = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
@@ -283,7 +279,7 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-// запрет только на прошлые дни (занятые НЕ дизейблим, чтобы работал hover)
+  // запрет только на прошлые дни (занятые НЕ дизейблим, чтобы работал hover)
   const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
 
   // показывать подсказку только гиду/транспортнику
@@ -295,14 +291,9 @@ const ProviderCalendar = ({ token }) => {
   // Кастомный контент ячейки дня с tooltip (по состоянию hoveredYmd)
   const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
-    const infoList = bookedDetails[dateYmd];
+    const infoList = bookedDetails[dateYmd] || [];
     const isBooked = dayProps?.activeModifiers?.booked;
-    const showTooltip =
-      isGuideOrTransport &&
-      isBooked &&
-      Array.isArray(infoList) &&
-      infoList.length > 0 &&
-      hoveredYmd === dateYmd;
+    const showTooltip = isGuideOrTransport && isBooked && hoveredYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
 
@@ -312,6 +303,7 @@ const ProviderCalendar = ({ token }) => {
 
         {showTooltip && (
           <div
+            role="tooltip"
             className="
               absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
               bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800
@@ -320,67 +312,64 @@ const ProviderCalendar = ({ token }) => {
             onMouseLeave={() => setHoveredYmd(null)}
           >
             <div className="max-h-48 overflow-auto space-y-2">
-              {infoList.map((it, idx) => {
-                const profileHref =
-                  it?.profileUrl ||
-                  (it?.profileId ? `/profile/${it.profileId}` : null);
-                const name =
-                  it?.name ||
-                  t("calendar.unknown_name", {
-                    defaultValue: "Noma'lum foydalanuvchi",
-                  });
+              {infoList.length ? (
+                infoList.map((it, idx) => {
+                  const profileHref =
+                    it?.profileUrl ||
+                    (it?.profileId ? `/profile/${it.profileId}` : null);
+                  const name =
+                    it?.name ||
+                    t("calendar.unknown_name", {
+                      defaultValue: "Noma'lum foydalanuvchi",
+                    });
 
-                return (
-                  <div
-                    key={idx}
-                    className="border-b last:border-b-0 pb-2 last:pb-0"
-                  >
-                    <div className="font-semibold truncate">
-                      {profileHref ? (
-                        <a
-                          href={profileHref}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          {name}
-                        </a>
-                      ) : (
-                        <span>{name}</span>
+                  return (
+                    <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
+                      <div className="font-semibold truncate">
+                        {profileHref ? (
+                          <a
+                            href={profileHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {name}
+                          </a>
+                        ) : (
+                          <span>{name}</span>
+                        )}
+                      </div>
+
+                      {it?.phone && (
+                        <div className="mt-1">
+                          {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
+                          <a href={`tel:${it.phone}`} className="text-blue-600 hover:underline">
+                            {it.phone}
+                          </a>
+                        </div>
+                      )}
+
+                      {it?.telegram && (
+                        <div className="mt-1">
+                          Telegram:{" "}
+                          <a
+                            href={`https://t.me/${String(it.telegram).replace(/^@/, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            @{String(it.telegram).replace(/^@/, "")}
+                          </a>
+                        </div>
                       )}
                     </div>
-
-                    {it?.phone && (
-                      <div className="mt-1">
-                        {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
-                        <a
-                          href={`tel:${it.phone}`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {it.phone}
-                        </a>
-                      </div>
-                    )}
-
-                    {it?.telegram && (
-                      <div className="mt-1">
-                        Telegram:{" "}
-                        <a
-                          href={`https://t.me/${String(it.telegram).replace(
-                            /^@/,
-                            ""
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          @{String(it.telegram).replace(/^@/, "")}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <div className="text-gray-600">
+                  {t("calendar.booked", { defaultValue: "Забронировано" })}
+                </div>
+              )}
             </div>
             {/* «Хвостик» тултипа */}
             <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-r border-b border-gray-200" />
@@ -395,9 +384,7 @@ const ProviderCalendar = ({ token }) => {
       {/* Шапка: заголовок слева, легенда справа */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-800">
-          {t("calendar.title_public", {
-            defaultValue: "Bandlik kalendari",
-          })}
+          {t("calendar.title_public", { defaultValue: "Bandlik kalendari" })}
         </h3>
         <div className="flex items-center gap-4 text-sm text-gray-700">
           <span>
@@ -411,14 +398,18 @@ const ProviderCalendar = ({ token }) => {
         </div>
       </div>
 
-      <div className="relative overflow-visible" onMouseLeave={() => setHoveredYmd(null)}>
-         <DayPicker
+      {/* Важно: overflow-visible для подсказок, сбрасываем hover при уходе мыши */}
+      <div
+        className="relative overflow-visible"
+        onMouseLeave={() => setHoveredYmd(null)}
+      >
+        <DayPicker
           locale={dpLocale}
           weekStartsOn={weekStartsOn}
           mode="multiple"
           selected={manualAsDates}
           onSelect={handleSelect}
-          disabled={disabledMatchers}
+          disabled={disabledMatchers} // только прошлое, booked НЕ дизейблим
           modifiers={{ past: pastMatcher, booked: bookedAsDates }}
           modifiersClassNames={{
             selected: "bg-orange-500 text-white",
@@ -431,13 +422,12 @@ const ProviderCalendar = ({ token }) => {
             past: { color: "#9ca3af", background: "transparent" },
           }}
           components={{ DayContent: DayCell }}
-                    // Наведение опираем на наличие деталей, а не на modifiers
-           onDayMouseEnter={(day, modifiers) => {
-             const ymd = toYMD(day);
-             if (isGuideOrTransport && (modifiers?.booked || booked.includes(ymd))) {
-               setHoveredYmd(ymd);
-             }
-           }}
+          onDayMouseEnter={(day, modifiers) => {
+            const ymd = toYMD(day);
+            if (isGuideOrTransport && (modifiers?.booked || booked.includes(ymd))) {
+              setHoveredYmd(ymd);
+            }
+          }}
         />
       </div>
 
