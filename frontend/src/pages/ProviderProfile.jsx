@@ -1,7 +1,6 @@
 // frontend/src/pages/ProviderProfile.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-const { t, i18n } = useTranslation();
 import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
@@ -277,7 +276,7 @@ export default function ProviderProfile() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const pid = Number(id);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const serviceIdParam = params.get("service");
   const serviceId = serviceIdParam ? Number(serviceIdParam) : null;
 
