@@ -9,6 +9,7 @@ import { getProviderReviews, addProviderReview } from "../api/reviews";
 import { tSuccess, tError } from "../shared/toast";
 // локали для DayPicker
 import { enUS, ru, uz } from "date-fns/locale";
+const { t, i18n } = useTranslation();
 
 
 // >>> NEW: calendar deps
