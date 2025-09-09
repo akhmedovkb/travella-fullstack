@@ -6,8 +6,12 @@ import { apiGet } from "../api";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
-import { tSuccess } from "../shared/toast";
-import ProviderPublicCalendar from "../components/ProviderPublicCalendar";
+import { tSuccess, tError } from "../shared/toast";
+
+// >>> NEW: calendar deps
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
+import axios from "axios";
 
 // helpers
 const first = (...vals) => {
@@ -158,12 +162,113 @@ const getLevelLabel = (lvl) => {
   return LEVEL_OPTIONS.find(o => o.value === v)?.label || (lvl ? String(lvl).toUpperCase() : "");
 };
 
+
+
+// ===== Local helpers for dates (no TZ shift) =====
+const ymdToDateLocal = (s) => {
+  if (!s) return null;
+  const [y, m, d] = String(s).slice(0,10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+};
+const dateToYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const da = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
+};
+
 // ====== Inline modal for booking ======
+function BookingModal({ open, onClose, onSubmit, selectedYmd = [] }) {
+  const { t } = useTranslation();
+  const [message, setMessage] = useState("");
+  const [files, setFiles] = useState([]);
+
+  useEffect(() => {
+    if (!open) {
+      setMessage("");
+      setFiles([]);
+    }
+  }, [open]);
+
+  const handleFiles = (e) => {
+    setFiles(Array.from(e.target.files || []));
+  };
+
+  const submit = async () => {
+    try {
+      const attachments = [];
+      for (const f of files) {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(f);
+        });
+        attachments.push({ name: f.name, type: f.type || "application/octet-stream", dataUrl });
+      }
+      await onSubmit({ message, attachments });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[3000] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+        <div className="p-4 border-b font-semibold">
+          {t("booking.modal_title", { defaultValue: "Бронирование" })}
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="text-sm text-gray-600">
+            {t("booking.selected_dates", { defaultValue: "Выбранные даты" })}:{" "}
+            <b>{selectedYmd.join(", ") || "—"}</b>
+          </div>
+          <div>
+            <label className="text-sm text-gray-700 block mb-1">
+              {t("booking.message_label", { defaultValue: "Сообщение" })}
+            </label>
+            <textarea
+              className="w-full border rounded-md p-2 min-h-[96px]"
+              placeholder={t("booking.message_ph", { defaultValue: "Опишите детали запроса..." })}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-700 block mb-1">
+              {t("booking.attachments_label", { defaultValue: "Вложения (PDF, Word, Excel, PPT, изображения и т.д.)" })}
+            </label>
+            <input type="file" multiple onChange={handleFiles} />
+          </div>
+        </div>
+        <div className="p-4 border-t flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md border hover:bg-gray-50"
+          >
+            {t("common.cancel", { defaultValue: "Отмена" })}
+          </button>
+          <button
+            onClick={submit}
+            className="px-4 py-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            {t("booking.send", { defaultValue: "Отправить бронь" })}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProviderProfile() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const pid = Number(id);
   const { t } = useTranslation();
+  const tx = (key, fallback) => t(key, { defaultValue: fallback });
+
   const serviceIdParam = params.get("service");
   const serviceId = serviceIdParam ? Number(serviceIdParam) : null;
 
@@ -173,7 +278,14 @@ export default function ProviderProfile() {
   const [reviews, setReviews] = useState([]);
   const [authorProvTypes, setAuthorProvTypes] = useState({});
 
-   // tokens
+  // >>> NEW: calendar state
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [bookedYMD, setBookedYMD] = useState([]);   // includes blocked + booked
+  const [selectedYMD, setSelectedYMD] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  // tokens
   const token =
     localStorage.getItem("clientToken") ||
     localStorage.getItem("token") ||
@@ -392,7 +504,97 @@ arr = arr
   const provTypeKey = providerTypeKey(details?.type || prov?.type);
   const canBook = ["guide", "transport"].includes(String(provTypeKey || ""));
 
+  const loadCalendar = async () => {
+    setCalendarLoading(true);
+    try {
+      // публичный эндпоинт: занятые (бронь) + ручные блокировки
+      const { data } = await axios.get(
+        `${API_BASE}/api/providers/${pid}/calendar`
+      );
 
+      // поддержим разные формы ответа
+      // 1) { blocked: [YYYY-MM-DD], booked: [YYYY-MM-DD] }
+      // 2) [YYYY-MM-DD]
+      // 3) [{date:"YYYY-MM-DD"}]
+      let ymd = [];
+      if (Array.isArray(data)) {
+        ymd = data.map((v) => (typeof v === "string" ? v : v?.date || v?.day)).filter(Boolean);
+      } else if (data && typeof data === "object") {
+        const blocked = Array.isArray(data.blocked) ? data.blocked : [];
+        const booked  = Array.isArray(data.booked)  ? data.booked  : [];
+        ymd = [...blocked, ...booked].map((v) => (typeof v === "string" ? v : v?.date || v?.day)).filter(Boolean);
+      }
+      // уникализируем
+      setBookedYMD(Array.from(new Set(ymd)));
+    } catch (e) {
+      console.error("calendar load error", e);
+      tError(t("calendar.load_error", { defaultValue: "Не удалось загрузить занятые даты" }));
+      setBookedYMD([]);
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (canBook) loadCalendar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canBook, pid]);
+
+  const disabledDays = useMemo(
+    () => bookedYMD.map(ymdToDateLocal).filter(Boolean),
+    [bookedYMD]
+  );
+  const selectedDates = useMemo(
+    () => selectedYMD.map(ymdToDateLocal).filter(Boolean),
+    [selectedYMD]
+  );
+
+  const toggleDay = (day) => {
+    const ymd = dateToYMD(day);
+    // если день занят — игнор
+    if (bookedYMD.includes(ymd)) return;
+    setSelectedYMD((prev) =>
+      prev.includes(ymd) ? prev.filter((x) => x !== ymd) : [...prev, ymd]
+    );
+  };
+
+  const openBookingModal = () => {
+    if (!selectedYMD.length) {
+      tError(t("booking.no_dates", { defaultValue: "Выберите хотя бы одну свободную дату" }));
+      return;
+    }
+    if (!token) {
+      tError(t("booking.need_auth", { defaultValue: "Авторизуйтесь, чтобы забронировать" }));
+      return;
+    }
+    setModalOpen(true);
+  };
+
+  const submitBooking = async ({ message, attachments }) => {
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const payload = {
+        provider_id: pid,
+        dates: selectedYMD.slice().sort(),
+        message: message || null,
+        attachments: attachments || [],
+      };
+      if (serviceId) payload.service_id = serviceId;
+
+      const { data } = await axios.post(`${API_BASE}/api/bookings`, payload, { headers });
+      tSuccess(t("booking.sent", { defaultValue: "Заявка на бронирование отправлена" }));
+      setModalOpen(false);
+      setSelectedYMD([]);
+      // обновим календарь, чтобы занятые даты стали серыми
+      await loadCalendar();
+      return data;
+    } catch (e) {
+      console.error(e);
+      const msg = e?.response?.data?.message || t("booking.error", { defaultValue: "Не удалось отправить бронь" });
+      tError(msg);
+      throw e;
+    }
+  };
 
   if (loading) {
     return (
@@ -528,12 +730,61 @@ arr = arr
 
       {/* ===== NEW: Публичный календарь бронирования (только гид/транспорт) ===== */}
       {canBook && (
-          <ProviderPublicCalendar
-            providerId={pid}
-            serviceId={serviceId}
-            token={token}
+        <div id="book" className="bg-white rounded-xl border shadow p-4 md:p-6">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <h2 className="text-lg font-semibold">
+              {t("calendar.title_public", { defaultValue: "Календарь занятости" })}
+            </h2>
+            <div className="text-sm text-gray-600">
+              <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-1" />{" "}
+              {t("calendar.busy", { defaultValue: "занято" })}
+              <span className="mx-2">·</span>
+              <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-1" />{" "}
+              {t("calendar.selected", { defaultValue: "выбрано" })}
+            </div>
+          </div>
+
+          <DayPicker
+            mode="multiple"
+            onDayClick={toggleDay}
+            selected={selectedDates}
+            disabled={disabledDays}
+            modifiersClassNames={{
+              selected: "bg-orange-500 text-white",
+              disabled: "bg-gray-300 text-white opacity-80",
+            }}
+            className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
           />
-        )}
+
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              onClick={openBookingModal}
+              className="px-4 py-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+              disabled={!selectedYMD.length}
+            >
+              {t("actions.book", { defaultValue: "Бронировать" })}
+            </button>
+            {!!selectedYMD.length && (
+              <div className="text-sm text-gray-600">
+                {t("calendar.selected_dates", { defaultValue: "Выбрано дат" })}: <b>{selectedYMD.length}</b>
+              </div>
+            )}
+          </div>
+
+          {!token && (
+            <div className="mt-2 text-sm text-gray-500">
+              {t("booking.need_auth_hint", { defaultValue: "Чтобы отправить бронь, войдите в систему." })}
+            </div>
+          )}
+
+          <BookingModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            onSubmit={submitBooking}
+            selectedYmd={selectedYMD}
+          />
+        </div>
+      )}
 
       {canReview && (
         <div className="bg-white rounded-xl border shadow p-4 md:p-6 mt-6">
