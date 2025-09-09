@@ -51,6 +51,9 @@ const ProviderCalendar = ({ token }) => {
   // тип провайдера: guide / transport / agent / hotel / ...
   const [providerType, setProviderType] = useState("");
 
+  // какая дата сейчас под курсором (для tooltip)
+  const [hoveredYmd, setHoveredYmd] = useState(null);
+
   const cfg = useMemo(() => {
     const stored =
       token ||
@@ -78,7 +81,7 @@ const ProviderCalendar = ({ token }) => {
     };
   }, [cfg]);
 
-  // Загрузка данных календаря: сначала единый /api/providers/calendar, затем фолбэк на 2 ручки
+  // Загрузка данных календаря
   useEffect(() => {
     let cancelled = false;
 
@@ -124,37 +127,29 @@ const ProviderCalendar = ({ token }) => {
 
         if (cancelled) return;
 
-        // booked может быть: [ 'YYYY-MM-DD', ... ] или [ { date, ... }, ... ]
         const rawBooked = Array.isArray(data?.booked) ? data.booked : [];
         let bookedArr = [];
         let detailsMap = {};
 
         if (rawBooked.length && typeof rawBooked[0] === "string") {
           bookedArr = rawBooked.map(toYMD).filter(Boolean);
-          // если есть отдельный массив деталей — используем
           if (Array.isArray(data?.bookedDetails)) {
             detailsMap = normalizeDetailsList(data.bookedDetails);
           }
         } else if (rawBooked.length && typeof rawBooked[0] === "object") {
-          // объектный формат — извлечём и даты, и детали
           bookedArr = rawBooked.map((x) => toYMD(x?.date || x)).filter(Boolean);
           detailsMap = normalizeDetailsList(rawBooked);
         }
 
-        setManual(
-          (Array.isArray(data?.blocked) ? data.blocked : [])
-            .map(toYMD)
-            .filter(Boolean)
-        );
-        setManualInitial(
-          (Array.isArray(data?.blocked) ? data.blocked : [])
-            .map(toYMD)
-            .filter(Boolean)
-        );
+        const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
+          .map(toYMD)
+          .filter(Boolean);
+
+        setManual(blockedArr);
+        setManualInitial(blockedArr);
         setBooked(bookedArr);
         setBookedDetails(detailsMap);
 
-        // фолбэк — если деталей нет, пробуем отдельную ручку (если она есть)
         if (!Object.keys(detailsMap).length) {
           try {
             const det = await axios
@@ -203,7 +198,6 @@ const ProviderCalendar = ({ token }) => {
           setManualInitial(blockedArr);
           setBooked(bookedArr);
 
-          // отдельной ручкой для деталей попробуем после фолбэка
           try {
             const det = await axios
               .get(
@@ -245,7 +239,7 @@ const ProviderCalendar = ({ token }) => {
     [booked]
   );
 
-  // локаль и первый день недели как в ProviderProfile
+  // локаль и первый день недели
   const dpLocale = useMemo(() => {
     const lang = (i18n.language || "en").split("-")[0];
     if (lang === "ru") return ru;
@@ -301,7 +295,7 @@ const ProviderCalendar = ({ token }) => {
     return tp === "guide" || tp === "transport";
   }, [providerType]);
 
-  // Кастомный контент ячейки дня с tooltip
+  // Кастомный контент ячейки дня с tooltip (по состоянию hoveredYmd)
   const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd];
@@ -310,7 +304,8 @@ const ProviderCalendar = ({ token }) => {
       isGuideOrTransport &&
       isBooked &&
       Array.isArray(infoList) &&
-      infoList.length > 0;
+      infoList.length > 0 &&
+      hoveredYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
 
@@ -321,11 +316,11 @@ const ProviderCalendar = ({ token }) => {
         {showTooltip && (
           <div
             className="
-              pointer-events-none
               absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
               bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800
-              opacity-0 group-hover:opacity-100 transition-opacity duration-150
             "
+            onMouseEnter={() => setHoveredYmd(dateYmd)}
+            onMouseLeave={() => setHoveredYmd(null)}
           >
             <div className="max-h-48 overflow-auto space-y-2">
               {infoList.map((it, idx) => {
@@ -349,7 +344,7 @@ const ProviderCalendar = ({ token }) => {
                           href={profileHref}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline pointer-events-auto"
+                          className="text-blue-600 hover:underline"
                         >
                           {name}
                         </a>
@@ -363,7 +358,7 @@ const ProviderCalendar = ({ token }) => {
                         {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
                         <a
                           href={`tel:${it.phone}`}
-                          className="text-blue-600 hover:underline pointer-events-auto"
+                          className="text-blue-600 hover:underline"
                         >
                           {it.phone}
                         </a>
@@ -380,7 +375,7 @@ const ProviderCalendar = ({ token }) => {
                           )}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline pointer-events-auto"
+                          className="text-blue-600 hover:underline"
                         >
                           @{String(it.telegram).replace(/^@/, "")}
                         </a>
@@ -419,7 +414,6 @@ const ProviderCalendar = ({ token }) => {
         </div>
       </div>
 
-      {/* Важно: делаем day "group", чтобы group-hover работал на кнопке дня */}
       <div className="relative overflow-visible">
         <DayPicker
           locale={dpLocale}
@@ -430,7 +424,6 @@ const ProviderCalendar = ({ token }) => {
           disabled={disabledMatchers}
           modifiers={{ past: pastMatcher, booked: bookedAsDates }}
           modifiersClassNames={{
-            // как в ProviderProfile: выбранные — оранжевые, занятые — серые
             selected: "bg-orange-500 text-white",
             booked: "bg-gray-300 text-white cursor-not-allowed",
             past: "text-gray-400 cursor-not-allowed",
@@ -441,9 +434,14 @@ const ProviderCalendar = ({ token }) => {
             past: { color: "#9ca3af", background: "transparent" },
           }}
           components={{ DayContent: DayCell }}
-          classNames={{
-            // добавляем класс group к кнопке дня
-            day: "rdp-day group",
+          // показываем/скрываем тултип через состояние hoveredYmd
+          onDayMouseEnter={(day, modifiers) => {
+            if (modifiers?.booked) setHoveredYmd(toYMD(day));
+          }}
+          onDayMouseLeave={(day, modifiers) => {
+            if (modifiers?.booked) setHoveredYmd((prev) =>
+              prev === toYMD(day) ? null : prev
+            );
           }}
         />
       </div>
