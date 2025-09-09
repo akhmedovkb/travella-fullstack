@@ -411,9 +411,8 @@ const ProviderCalendar = ({ token }) => {
         </div>
       </div>
 
-      <div className="relative overflow-visible">
-        onMouseLeave={() => setHoveredYmd(null)}>
-        <DayPicker
+      <div className="relative overflow-visible" onMouseLeave={() => setHoveredYmd(null)}>
+         <DayPicker
           locale={dpLocale}
           weekStartsOn={weekStartsOn}
           mode="multiple"
