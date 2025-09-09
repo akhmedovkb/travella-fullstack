@@ -121,7 +121,6 @@ const ProviderCalendar = ({ token }) => {
         );
         if (cancelled) return;
 
-        // booked может быть строками или объектами { date }
         const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
           .map((x) => (typeof x === "string" ? x.slice(0, 10) : toYMD(x?.date || x)))
           .filter(Boolean);
@@ -130,7 +129,6 @@ const ProviderCalendar = ({ token }) => {
           .map(toYMD)
           .filter(Boolean);
 
-        // детали берём из bookedDetails
         const detailsMap = normalizeDetailsList(data?.bookedDetails || []);
 
         setManual(blockedArr);
@@ -138,7 +136,6 @@ const ProviderCalendar = ({ token }) => {
         setBooked(bookedArr);
         setBookedDetails(detailsMap);
 
-        // Фолбэк — отдельная ручка, если деталей нет
         if (!Object.keys(detailsMap).length) {
           try {
             const det = await axios
@@ -151,7 +148,6 @@ const ProviderCalendar = ({ token }) => {
           } catch { /* ignore */ }
         }
       } catch {
-        // Фолбэк по старым ручкам
         try {
           const [blk, bkd] = await Promise.all([
             axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, cfg).then((r) => r.data).catch(() => []),
@@ -166,7 +162,6 @@ const ProviderCalendar = ({ token }) => {
           setManualInitial(blockedArr);
           setBooked(bookedArr);
 
-          // подтягиваем детали отдельно
           try {
             const det = await axios
               .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`, cfg)
@@ -189,9 +184,27 @@ const ProviderCalendar = ({ token }) => {
     return () => { cancelled = true; };
   }, [cfg, t]);
 
-  // преобразование для DayPicker
+  // преобразования дат
   const manualAsDates = useMemo(() => manual.map(ymdToLocalDate).filter(Boolean), [manual]);
   const bookedAsDates = useMemo(() => booked.map(ymdToLocalDate).filter(Boolean), [booked]);
+
+  // разрез: сохранённые вручную / новые несохранённые
+  const manualSavedYmd = useMemo(
+    () => manual.filter((d) => manualInitial.includes(d)),
+    [manual, manualInitial]
+  );
+  const manualNewYmd = useMemo(
+    () => manual.filter((d) => !manualInitial.includes(d)),
+    [manual, manualInitial]
+  );
+  const manualSavedAsDates = useMemo(
+    () => manualSavedYmd.map(ymdToLocalDate).filter(Boolean),
+    [manualSavedYmd]
+  );
+  const manualNewAsDates = useMemo(
+    () => manualNewYmd.map(ymdToLocalDate).filter(Boolean),
+    [manualNewYmd]
+  );
 
   // локаль и первый день недели
   const dpLocale = useMemo(() => {
@@ -209,12 +222,11 @@ const ProviderCalendar = ({ token }) => {
   const startOfToday = useMemo(() => getStartOfToday(), []);
   const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
 
-  // контролируемый выбор через onSelect (DayPicker сам даст массив дат)
+  // контролируемый выбор
   const handleSelect = (dates) => {
     const arr = Array.isArray(dates) ? dates : dates ? [dates] : [];
     const ymds = arr.map(toYMD).filter(Boolean);
-    // запрещаем добавлять системно занятые
-    const filtered = ymds.filter((d) => !booked.includes(d));
+    const filtered = ymds.filter((d) => !booked.includes(d)); // нельзя выбирать системно занятые
     setManual(filtered);
   };
 
@@ -234,7 +246,7 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-  // запрет только на прошлые дни (занятые НЕ дизейблим, чтобы работал hover)
+  // только прошлые запрещаем (booked НЕ дизейблим, чтобы работал hover)
   const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
 
   // показывать подсказку только гиду/транспортнику
@@ -243,11 +255,12 @@ const ProviderCalendar = ({ token }) => {
     return tp === "guide" || tp === "transport";
   }, [providerType]);
 
-  // Кастомный контент ячейки дня с tooltip (по состоянию hoveredYmd)
+  // Кастомный контент ячейки дня с tooltip
+  const [hoveredYmd, setHoveredYmd] = useState(null);
   const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd] || [];
-    const isBookedDay = booked.includes(dateYmd); // ← вместо activeModifiers.booked
+    const isBookedDay = booked.includes(dateYmd);
     const showTooltip = isGuideOrTransport && isBookedDay && hoveredYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
@@ -259,10 +272,7 @@ const ProviderCalendar = ({ token }) => {
         {showTooltip && (
           <div
             role="tooltip"
-            className="
-              absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
-              bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800
-            "
+            className="absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800"
             onMouseEnter={() => setHoveredYmd(dateYmd)}
             onMouseLeave={() => setHoveredYmd(null)}
           >
@@ -280,12 +290,7 @@ const ProviderCalendar = ({ token }) => {
                     <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
                       <div className="font-semibold truncate">
                         {profileHref ? (
-                          <a
-                            href={profileHref}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
+                          <a href={profileHref} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
                             {name}
                           </a>
                         ) : (
@@ -333,7 +338,7 @@ const ProviderCalendar = ({ token }) => {
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-md mt-6">
-      {/* Шапка: заголовок слева, легенда справа */}
+      {/* Шапка + легенда */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-800">
           {t("calendar.title_public", { defaultValue: "Bandlik kalendari" })}
@@ -341,11 +346,15 @@ const ProviderCalendar = ({ token }) => {
         <div className="flex items-center gap-4 text-sm text-gray-700">
           <span>
             <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-2" />
-            {t("calendar.busy", { defaultValue: "band" })}
+            {t("calendar.busy", { defaultValue: "занято" })}
+          </span>
+          <span>
+            <span className="inline-block w-3 h-3 bg-sky-500 rounded-sm align-middle mr-2" />
+            {t("calendar.manual", { defaultValue: "моё (сохранено)" })}
           </span>
           <span>
             <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-2" />
-            {t("calendar.selected", { defaultValue: "tanlangan" })}
+            {t("calendar.selected", { defaultValue: "выбрано (не сохранено)" })}
           </span>
         </div>
       </div>
@@ -356,22 +365,27 @@ const ProviderCalendar = ({ token }) => {
           locale={dpLocale}
           weekStartsOn={weekStartsOn}
           mode="multiple"
-          selected={manualAsDates}
+          selected={manualAsDates}            // текущее состояние блокировок
           onSelect={handleSelect}
-          disabled={disabledMatchers} // только прошлое, booked НЕ дизейблим
-          modifiers={{ past: pastMatcher, booked: bookedAsDates }}
+          disabled={disabledMatchers}         // только прошлое запрещаем
+          modifiers={{
+            past: pastMatcher,
+            booked: bookedAsDates,
+            manualSaved: manualSavedAsDates,   // сохранённые
+            manualNew: manualNewAsDates,       // новые несохранённые
+          }}
           modifiersClassNames={{
-            selected: "bg-orange-500 text-white",
+            // базовый selected — делаем текст белым; цвет подменим модификаторами ниже
+            selected: "text-white",
             booked: "bg-gray-300 text-white cursor-help",
             past: "text-gray-400 cursor-not-allowed",
           }}
           modifiersStyles={{
-            selected: { backgroundColor: "#f97316", color: "#fff" },
-            booked: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
-            past: { color: "#9ca3af", background: "transparent" },
+            manualSaved: { backgroundColor: "#0ea5e9", color: "#fff" }, // sky-500
+            manualNew:   { backgroundColor: "#f97316", color: "#fff" }, // orange-500
+            booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
           }}
           components={{ DayContent: DayCell }}
-          // КЛЮЧ: принудительно разрешаем вылезать тултипу
           classNames={{
             cell: "overflow-visible relative",
             day: "rdp-day overflow-visible relative",
@@ -380,7 +394,6 @@ const ProviderCalendar = ({ token }) => {
             cell: { overflow: "visible" },
             day: { overflow: "visible" },
           }}
-          // Ховер запускаем, только если есть детали и это гид/транспортник
           onDayMouseEnter={(date) => {
             const ymd = toYMD(date);
             if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
