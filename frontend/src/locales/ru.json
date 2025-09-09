@@ -33,7 +33,17 @@
     "provider": "Поставщик:",
     "offer": "Предложение:",
     "selected_dates": "Выбранные даты",
-    "attachments_hint": "Вложения (PDF, Word, Excel, PPT, изображения и т.д.)"
+    "attachments_hint": "Вложения (PDF, Word, Excel, PPT, изображения и т.д.)",
+    "modal_title": "Бронирование",
+    "message_label": "Сообщение",
+    "message_ph": "Опишите детали запроса...",
+    "attachments_label": "Вложения (PDF, Word, Excel, PPT, изображения и т.д.)",
+    "send": "Отправить бронь",
+    "need_auth": "Авторизуйтесь, чтобы забронировать",
+    "need_auth_hint": "Чтобы отправить бронь, войдите в систему.",
+    "no_dates": "Выберите хотя бы одну свободную дату",
+    "sent": "Заявка на бронирование отправлена",
+    "error": "Не удалось отправить бронь"
   },
 
   "bookings": {
@@ -121,7 +131,10 @@
     "save_blocked_dates": "Сохранить занятые даты",
     "save_button": "Сохранить занятые даты",
     "save_error": "Ошибка сохранения дат",
-    "saved_successfully": "Даты сохранены"
+    "saved_successfully": "Даты сохранены",
+    "title_public": "Календарь занятости",
+    "busy": "занято",
+    "selected": "выбрано"
   },
 
   "cancel": "Отмена",
@@ -505,6 +518,7 @@
       "cancel": "Отменить",
       "confirm": "Подтвердить",
       "details": "Детали",
+      "languages": "Языки",
       "noItems": "Нет бронирований.",
       "reject": "Отклонить",
       "status": "Статус",
