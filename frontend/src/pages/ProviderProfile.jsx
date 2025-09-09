@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { apiGet } from "../api";
+import { useTranslation } from "react-i18next";
 import RatingStars from "../components/RatingStars";
 import ReviewForm from "../components/ReviewForm";
 import { getProviderReviews, addProviderReview } from "../api/reviews";
