@@ -5,6 +5,7 @@ import "react-day-picker/dist/style.css";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
+import { enUS, ru, uz } from "date-fns/locale";
 
 /** YYYY-MM-DD из строки/объекта/Date */
 const toYMD = (val) => {
@@ -27,8 +28,15 @@ const ymdToLocalDate = (ymd) => {
   return new Date(y, m - 1, d);
 };
 
+// локальная «полночь сегодня» — чтобы не блочить текущий день из-за времени
+const getStartOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
 const ProviderCalendar = ({ token }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // ручные блокировки (YYYY-MM-DD)
   const [manual, setManual] = useState([]);
@@ -126,6 +134,22 @@ const ProviderCalendar = ({ token }) => {
     [booked]
   );
 
+  // локаль и первый день недели как в ProviderProfile
+  const dpLocale = useMemo(() => {
+    const lang = (i18n.language || "en").split("-")[0];
+    if (lang === "ru") return ru;
+    if (lang === "uz") return uz;
+    return enUS;
+  }, [i18n.language]);
+
+  const weekStartsOn = useMemo(() => {
+    const lang = (i18n.language || "en").split("-")[0];
+    return lang === "ru" || lang === "uz" ? 1 : 0;
+  }, [i18n.language]);
+
+  const startOfToday = useMemo(() => getStartOfToday(), []);
+  const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
+
   // клик по дню — меняем ТОЛЬКО ручные, и только если день не системно занят
   const toggleDate = (day) => {
     const ymd = toYMD(day);
@@ -154,38 +178,53 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-  // запрет на прошлые дни и системно занятые
+  // запрет на прошлые дни (с полуночи) и системно занятые
   const disabledMatchers = useMemo(
-    () => [{ before: new Date() }, ...bookedAsDates],
-    [bookedAsDates]
+    () => [pastMatcher, ...bookedAsDates],
+    [pastMatcher, bookedAsDates]
   );
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-md mt-6">
+      {/* Шапка: заголовок слева, легенда справа */}
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-semibold text-gray-800">
+          {t("calendar.availability_calendar", {
+            defaultValue: "Bandlik kalendari",
+          })}
+        </h3>
+        <div className="flex items-center gap-4 text-sm text-gray-700">
+          <span>
+            <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-2" />
+            {t("calendar.busy", { defaultValue: "band" })}
+          </span>
+          <span>
+            <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-2" />
+            {t("calendar.selected", { defaultValue: "tanlangan" })}
+          </span>
+        </div>
+      </div>
+
       <DayPicker
+        locale={dpLocale}
+        weekStartsOn={weekStartsOn}
         mode="multiple"
         selected={manualAsDates}
         onDayClick={toggleDate}
         disabled={disabledMatchers}
-        modifiers={{ booked: bookedAsDates }}
+        modifiers={{ past: pastMatcher, booked: bookedAsDates }}
         modifiersClassNames={{
-          // ручные выделенные — красные
-          selected: "bg-red-500 text-white",
-          // системно занятые — серые (и они disabled)
-          booked: "bg-gray-300 text-gray-600 cursor-not-allowed",
+          // как в ProviderProfile: выбранные — оранжевые, занятые — серые
+          selected: "bg-orange-500 text-white",
+          booked: "bg-gray-300 text-white cursor-not-allowed",
+          past: "text-gray-400 cursor-not-allowed",
+        }}
+        modifiersStyles={{
+          selected: { backgroundColor: "#f97316", color: "#fff" },
+          booked: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
+          past: { color: "#9ca3af", background: "transparent" },
         }}
       />
-
-      <div className="mt-3 flex items-center gap-4 text-sm text-gray-700">
-        <span>
-          <span className="inline-block w-3 h-3 rounded-full align-middle mr-2 bg-red-500" />
-          {t("calendar.manual_blocked") || "Заблокировано вручную"}
-        </span>
-        <span>
-          <span className="inline-block w-3 h-3 rounded-full align-middle mr-2 bg-gray-300" />
-          {t("calendar.system_booked") || "Занято по бронированиям"}
-        </span>
-      </div>
 
       <button
         onClick={handleSave}
