@@ -432,12 +432,12 @@ const ProviderCalendar = ({ token }) => {
           }}
           components={{ DayContent: DayCell }}
                     // Наведение опираем на наличие деталей, а не на modifiers
-          onDayMouseEnter={(day) => {
-            const ymd = toYMD(day);
-            if (isGuideOrTransport && bookedDetails[ymd]?.length) {
-              setHoveredYmd(ymd);
-            }
-          }}
+           onDayMouseEnter={(day, modifiers) => {
+             const ymd = toYMD(day);
+             if (isGuideOrTransport && (modifiers?.booked || booked.includes(ymd))) {
+               setHoveredYmd(ymd);
+             }
+           }}
         />
       </div>
 
