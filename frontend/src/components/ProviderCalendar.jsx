@@ -17,7 +17,7 @@ const toYMD = (val) => {
     const d = String(val.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
-  const s = val?.date || val?.day || "";
+  const s = val?.date || val?.day || val?.ymd || val?.bookingDate || "";
   return String(s).slice(0, 10);
 };
 
@@ -45,6 +45,12 @@ const ProviderCalendar = ({ token }) => {
   // системно занятые по бронированиям (YYYY-MM-DD)
   const [booked, setBooked] = useState([]);
 
+  // подробности по бронированиям: { [ymd]: [{ name, phone, telegram, profileId, profileUrl }] }
+  const [bookedDetails, setBookedDetails] = useState({});
+
+  // тип провайдера: guide / transport / agent / hotel / ...
+  const [providerType, setProviderType] = useState("");
+
   const cfg = useMemo(() => {
     const stored =
       token ||
@@ -53,9 +59,60 @@ const ProviderCalendar = ({ token }) => {
     return { headers: { Authorization: `Bearer ${stored}` } };
   }, [token]);
 
+  // подгружаем профиль провайдера, чтобы понять тип
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const { data } = await axios.get(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`,
+          cfg
+        );
+        if (!cancel) setProviderType(data?.type || "");
+      } catch {
+        // тихо игнорируем: тип не обязателен
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [cfg]);
+
   // Загрузка данных календаря: сначала единый /api/providers/calendar, затем фолбэк на 2 ручки
   useEffect(() => {
     let cancelled = false;
+
+    const normalizeDetailsList = (arr) => {
+      const map = {};
+      (arr || []).forEach((item) => {
+        const date = toYMD(item?.date || item);
+        if (!date) return;
+        const info = {
+          name:
+            item?.name ||
+            item?.clientName ||
+            item?.fullName ||
+            item?.companyName ||
+            item?.title ||
+            "",
+          phone: item?.phone || item?.clientPhone || item?.phoneNumber || "",
+          telegram:
+            (item?.telegram ||
+              item?.telegramUsername ||
+              item?.telegram_handle ||
+              item?.tg ||
+              "")?.replace?.(/^@/, "") || "",
+          profileId: item?.profileId || item?.clientId || item?.userId || item?.id || null,
+          profileUrl:
+            item?.profileUrl ||
+            item?.url ||
+            (item?.profileId ? `/profile/${item.profileId}` : null),
+        };
+        if (!map[date]) map[date] = [];
+        map[date].push(info);
+      });
+      return map;
+    };
 
     const load = async () => {
       try {
@@ -66,16 +123,53 @@ const ProviderCalendar = ({ token }) => {
 
         if (cancelled) return;
 
-        const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
-          .map(toYMD)
-          .filter(Boolean);
-        const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
-          .map(toYMD)
-          .filter(Boolean);
+        // booked может быть: [ 'YYYY-MM-DD', ... ] или [ { date, ... }, ... ]
+        const rawBooked = Array.isArray(data?.booked) ? data.booked : [];
+        let bookedArr = [];
+        let detailsMap = {};
 
-        setManual(blockedArr);
-        setManualInitial(blockedArr);
+        if (rawBooked.length && typeof rawBooked[0] === "string") {
+          bookedArr = rawBooked.map(toYMD).filter(Boolean);
+          // если есть отдельный массив деталей — используем
+          if (Array.isArray(data?.bookedDetails)) {
+            detailsMap = normalizeDetailsList(data.bookedDetails);
+          }
+        } else if (rawBooked.length && typeof rawBooked[0] === "object") {
+          // объектный формат — извлечём и даты, и детали
+          bookedArr = rawBooked.map((x) => toYMD(x?.date || x)).filter(Boolean);
+          detailsMap = normalizeDetailsList(rawBooked);
+        }
+
+        setManual(
+          (Array.isArray(data?.blocked) ? data.blocked : [])
+            .map(toYMD)
+            .filter(Boolean)
+        );
+        setManualInitial(
+          (Array.isArray(data?.blocked) ? data.blocked : [])
+            .map(toYMD)
+            .filter(Boolean)
+        );
         setBooked(bookedArr);
+        setBookedDetails(detailsMap);
+
+        // фолбэк — если деталей нет, пробуем отдельную ручку (если она есть)
+        if (!Object.keys(detailsMap).length) {
+          try {
+            const det = await axios
+              .get(
+                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
+                cfg
+              )
+              .then((r) => r.data)
+              .catch(() => null);
+            if (!cancelled && Array.isArray(det)) {
+              setBookedDetails(normalizeDetailsList(det));
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } catch {
         try {
           const [blk, bkd] = await Promise.all([
@@ -107,6 +201,22 @@ const ProviderCalendar = ({ token }) => {
           setManual(blockedArr);
           setManualInitial(blockedArr);
           setBooked(bookedArr);
+
+          // отдельной ручкой для деталей попробуем после фолбэка
+          try {
+            const det = await axios
+              .get(
+                `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
+                cfg
+              )
+              .then((r) => r.data)
+              .catch(() => null);
+            if (!cancelled && Array.isArray(det)) {
+              setBookedDetails(normalizeDetailsList(det));
+            }
+          } catch {
+            /* ignore */
+          }
         } catch (e) {
           if (!cancelled) {
             console.error("Ошибка загрузки календаря", e);
@@ -184,12 +294,98 @@ const ProviderCalendar = ({ token }) => {
     [pastMatcher, bookedAsDates]
   );
 
+  // показывать подсказку только гиду/транспортнику
+  const isGuideOrTransport = useMemo(() => {
+    const tp = (providerType || "").toLowerCase();
+    return tp === "guide" || tp === "transport";
+  }, [providerType]);
+
+  // Кастомный контент ячейки дня с tooltip
+  const DayCell = (dayProps) => {
+    const dateYmd = toYMD(dayProps.date);
+    const infoList = bookedDetails[dateYmd];
+    const isBooked = dayProps?.activeModifiers?.booked;
+    const showTooltip = isGuideOrTransport && isBooked && Array.isArray(infoList) && infoList.length > 0;
+
+    const dayNum = dayProps.date.getDate();
+
+    return (
+      <div className="relative group flex items-center justify-center w-full h-full">
+        <span>{dayNum}</span>
+
+        {showTooltip && (
+          <div
+            className="
+              invisible opacity-0 group-hover:visible group-hover:opacity-100
+              absolute z-20 -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+              bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800
+              transition-opacity duration-150
+            "
+          >
+            <div className="max-h-48 overflow-auto space-y-2">
+              {infoList.map((it, idx) => {
+                const profileHref =
+                  it?.profileUrl ||
+                  (it?.profileId ? `/profile/${it.profileId}` : null);
+                const name = it?.name || t("calendar.unknown_name", { defaultValue: "Noma'lum foydalanuvchi" });
+
+                return (
+                  <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
+                    <div className="font-semibold truncate">
+                      {profileHref ? (
+                        <a
+                          href={profileHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          {name}
+                        </a>
+                      ) : (
+                        <span>{name}</span>
+                      )}
+                    </div>
+
+                    {it?.phone && (
+                      <div className="mt-1">
+                        {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
+                        <a href={`tel:${it.phone}`} className="text-blue-600 hover:underline">
+                          {it.phone}
+                        </a>
+                      </div>
+                    )}
+
+                    {it?.telegram && (
+                      <div className="mt-1">
+                        Telegram:{" "}
+                        <a
+                          href={`https://t.me/${String(it.telegram).replace(/^@/, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          @{String(it.telegram).replace(/^@/, "")}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* «Хвостик» тултипа */}
+            <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-r border-b border-gray-200" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white p-4 rounded-lg shadow-md mt-6">
       {/* Шапка: заголовок слева, легенда справа */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-800">
-          {t("calendar.title_public", {
+          {t("calendar.availability_calendar", {
             defaultValue: "Bandlik kalendari",
           })}
         </h3>
@@ -224,6 +420,7 @@ const ProviderCalendar = ({ token }) => {
           booked: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
           past: { color: "#9ca3af", background: "transparent" },
         }}
+        components={{ DayContent: DayCell }}
       />
 
       <button
