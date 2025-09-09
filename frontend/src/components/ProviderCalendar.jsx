@@ -189,7 +189,7 @@ const ProviderCalendar = ({ token }) => {
       {/* Шапка: заголовок слева, легенда справа */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-800">
-          {t("calendar.availability_calendar", {
+          {t("calendar.title_public", {
             defaultValue: "Bandlik kalendari",
           })}
         </h3>
