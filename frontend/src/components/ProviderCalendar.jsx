@@ -72,13 +72,9 @@ const ProviderCalendar = ({ token }) => {
           cfg
         );
         if (!cancel) setProviderType(data?.type || "");
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [cfg]);
 
   // загрузка календаря
@@ -118,124 +114,84 @@ const ProviderCalendar = ({ token }) => {
     };
 
     const load = async () => {
-  try {
-    const { data } = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
-      cfg
-    );
-    if (cancelled) return;
-
-    // booked может быть строками или объектами { date }
-    const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
-      .map((x) =>
-        typeof x === "string" ? x.slice(0, 10) : toYMD(x?.date || x)
-      )
-      .filter(Boolean);
-
-    const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
-      .map(toYMD)
-      .filter(Boolean);
-
-    // ВАЖНО: детали берём из bookedDetails
-    const detailsMap = normalizeDetailsList(data?.bookedDetails || []);
-
-    setManual(blockedArr);
-    setManualInitial(blockedArr);
-    setBooked(bookedArr);
-    setBookedDetails(detailsMap);
-    console.log('bookedDetails map →', detailsMap);
-
-    // Фолбэк — отдельная ручка, если деталей нет
-    if (!Object.keys(detailsMap).length) {
       try {
-        const det = await axios
-          .get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
-            cfg
-          )
-          .then((r) => r.data)
-          .catch(() => null);
-        if (!cancelled && Array.isArray(det)) {
-          setBookedDetails(normalizeDetailsList(det));
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch {
-    // Фолбэк по старым ручкам
-    try {
-      const [blk, bkd] = await Promise.all([
-        axios
-          .get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
-            cfg
-          )
-          .then((r) => r.data)
-          .catch(() => []),
-        axios
-          .get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,
-            cfg
-          )
-          .then((r) => r.data)
-          .catch(() => []),
-      ]);
-      if (cancelled) return;
-
-      const blockedArr = (Array.isArray(blk) ? blk : [])
-        .map(toYMD)
-        .filter(Boolean);
-      const bookedArr = (Array.isArray(bkd) ? bkd : [])
-        .map(toYMD)
-        .filter(Boolean);
-
-      setManual(blockedArr);
-      setManualInitial(blockedArr);
-      setBooked(bookedArr);
-
-      // Попробуем подтянуть детали отдельно
-      try {
-        const det = await axios
-          .get(
-            `${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`,
-            cfg
-          )
-          .then((r) => r.data)
-          .catch(() => null);
-        if (!cancelled && Array.isArray(det)) {
-          setBookedDetails(normalizeDetailsList(det));
-        }
-      } catch {
-        /* ignore */
-      }
-    } catch (e) {
-      if (!cancelled) {
-        console.error("Ошибка загрузки календаря", e);
-        toast.error(
-          t("calendar.load_error") || "Не удалось загрузить календарь"
+        const { data } = await axios.get(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
+          cfg
         );
-      }
-    }
-  }
-};
+        if (cancelled) return;
 
+        // booked может быть строками или объектами { date }
+        const bookedArr = (Array.isArray(data?.booked) ? data.booked : [])
+          .map((x) => (typeof x === "string" ? x.slice(0, 10) : toYMD(x?.date || x)))
+          .filter(Boolean);
+
+        const blockedArr = (Array.isArray(data?.blocked) ? data.blocked : [])
+          .map(toYMD)
+          .filter(Boolean);
+
+        // детали берём из bookedDetails
+        const detailsMap = normalizeDetailsList(data?.bookedDetails || []);
+
+        setManual(blockedArr);
+        setManualInitial(blockedArr);
+        setBooked(bookedArr);
+        setBookedDetails(detailsMap);
+
+        // Фолбэк — отдельная ручка, если деталей нет
+        if (!Object.keys(detailsMap).length) {
+          try {
+            const det = await axios
+              .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`, cfg)
+              .then((r) => r.data)
+              .catch(() => null);
+            if (!cancelled && Array.isArray(det)) {
+              setBookedDetails(normalizeDetailsList(det));
+            }
+          } catch { /* ignore */ }
+        }
+      } catch {
+        // Фолбэк по старым ручкам
+        try {
+          const [blk, bkd] = await Promise.all([
+            axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`, cfg).then((r) => r.data).catch(() => []),
+            axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-dates`,  cfg).then((r) => r.data).catch(() => []),
+          ]);
+          if (cancelled) return;
+
+          const blockedArr = (Array.isArray(blk) ? blk : []).map(toYMD).filter(Boolean);
+          const bookedArr  = (Array.isArray(bkd) ? bkd : []).map(toYMD).filter(Boolean);
+
+          setManual(blockedArr);
+          setManualInitial(blockedArr);
+          setBooked(bookedArr);
+
+          // подтягиваем детали отдельно
+          try {
+            const det = await axios
+              .get(`${import.meta.env.VITE_API_BASE_URL}/api/providers/booked-details`, cfg)
+              .then((r) => r.data)
+              .catch(() => null);
+            if (!cancelled && Array.isArray(det)) {
+              setBookedDetails(normalizeDetailsList(det));
+            }
+          } catch { /* ignore */ }
+        } catch (e) {
+          if (!cancelled) {
+            console.error("Ошибка загрузки календаря", e);
+            toast.error(t("calendar.load_error") || "Не удалось загрузить календарь");
+          }
+        }
+      }
+    };
 
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [cfg, t]);
 
   // преобразование для DayPicker
-  const manualAsDates = useMemo(
-    () => manual.map(ymdToLocalDate).filter(Boolean),
-    [manual]
-  );
-  const bookedAsDates = useMemo(
-    () => booked.map(ymdToLocalDate).filter(Boolean),
-    [booked]
-  );
+  const manualAsDates = useMemo(() => manual.map(ymdToLocalDate).filter(Boolean), [manual]);
+  const bookedAsDates = useMemo(() => booked.map(ymdToLocalDate).filter(Boolean), [booked]);
 
   // локаль и первый день недели
   const dpLocale = useMemo(() => {
@@ -271,9 +227,7 @@ const ProviderCalendar = ({ token }) => {
         cfg
       );
       setManualInitial(final);
-      toast.success(
-        data?.message || t("calendar.saved_successfully") || "Даты сохранены"
-      );
+      toast.success(data?.message || t("calendar.saved_successfully") || "Даты сохранены");
     } catch (e) {
       console.error("Ошибка сохранения занятых дат", e);
       toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
@@ -293,8 +247,8 @@ const ProviderCalendar = ({ token }) => {
   const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd] || [];
-    const isBooked = dayProps?.activeModifiers?.booked;
-    const showTooltip = isGuideOrTransport && isBooked && hoveredYmd === dateYmd;
+    const isBookedDay = booked.includes(dateYmd); // ← вместо activeModifiers.booked
+    const showTooltip = isGuideOrTransport && isBookedDay && hoveredYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
 
@@ -320,9 +274,7 @@ const ProviderCalendar = ({ token }) => {
                     (it?.profileId ? `/profile/${it.profileId}` : null);
                   const name =
                     it?.name ||
-                    t("calendar.unknown_name", {
-                      defaultValue: "Noma'lum foydalanuvchi",
-                    });
+                    t("calendar.unknown_name", { defaultValue: "Noma'lum foydalanuvchi" });
 
                   return (
                     <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
@@ -372,7 +324,6 @@ const ProviderCalendar = ({ token }) => {
                 </div>
               )}
             </div>
-            {/* «Хвостик» тултипа */}
             <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-r border-b border-gray-200" />
           </div>
         )}
@@ -399,11 +350,8 @@ const ProviderCalendar = ({ token }) => {
         </div>
       </div>
 
-      {/* Важно: overflow-visible для подсказок, сбрасываем hover при уходе мыши */}
-      <div
-        className="relative overflow-visible"
-        onMouseLeave={() => setHoveredYmd(null)}
-      >
+      {/* overflow-visible + сброс hover */}
+      <div className="relative overflow-visible" onMouseLeave={() => setHoveredYmd(null)}>
         <DayPicker
           locale={dpLocale}
           weekStartsOn={weekStartsOn}
@@ -423,9 +371,19 @@ const ProviderCalendar = ({ token }) => {
             past: { color: "#9ca3af", background: "transparent" },
           }}
           components={{ DayContent: DayCell }}
-          onDayMouseEnter={(day, modifiers) => {
-            const ymd = toYMD(day);
-            if (isGuideOrTransport && (modifiers?.booked || booked.includes(ymd))) {
+          // КЛЮЧ: принудительно разрешаем вылезать тултипу
+          classNames={{
+            cell: "overflow-visible relative",
+            day: "rdp-day overflow-visible relative",
+          }}
+          styles={{
+            cell: { overflow: "visible" },
+            day: { overflow: "visible" },
+          }}
+          // Ховер запускаем, только если есть детали и это гид/транспортник
+          onDayMouseEnter={(date) => {
+            const ymd = toYMD(date);
+            if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
               setHoveredYmd(ymd);
             }
           }}
