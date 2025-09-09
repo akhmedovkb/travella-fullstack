@@ -143,6 +143,7 @@ const ProviderCalendar = ({ token }) => {
     setManualInitial(blockedArr);
     setBooked(bookedArr);
     setBookedDetails(detailsMap);
+    console.log('bookedDetails map →', detailsMap);
 
     // Фолбэк — отдельная ручка, если деталей нет
     if (!Object.keys(detailsMap).length) {
