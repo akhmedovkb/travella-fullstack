@@ -10,6 +10,7 @@ import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
+import ProviderLanguages from "@/components/ProviderLanguages";
 
 
 /** ================= Helpers ================= */
@@ -492,7 +493,7 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
-  const [langs, setLangs] = useState([]);
+  
 
   //review
   const providerIdRaw =
@@ -824,7 +825,6 @@ useEffect(() => {
     .get(`${API_BASE}/api/providers/profile`, config)
     .then(async (res) => {
       setProfile(res.data || {});
-      setLangs(Array.isArray(res.data?.languages) ? res.data.languages : []);
       setNewLocation(res.data?.location || "");
       setNewSocial(res.data?.social || "");
       setNewPhone(res.data?.phone || "");
@@ -903,13 +903,6 @@ useEffect(() => {
     if (newPhoto) updated.photo = newPhoto;
     if (newCertificate) updated.certificate = newCertificate;
 
-    const sanitizedLangs = (langs || [])
-      .filter(x => x?.code && x?.level)
-      .map(x => ({ code: x.code, level: x.level }));
-    if (JSON.stringify(sanitizedLangs) !== JSON.stringify(profile.languages || [])) {
-      updated.languages = sanitizedLangs;
-    }
-
     if (Object.keys(updated).length === 0) {
       tInfo(t("no_changes") || "Изменений нет");
       return;
@@ -920,8 +913,7 @@ useEffect(() => {
     const p = res?.data?.provider;
     if (p) {
       setProfile(p);
-      setLangs(Array.isArray(p.languages) ? p.languages : []);
-    } else {
+      } else {
       setProfile((prev) => ({ ...prev, ...updated }));
     }
     setNewPhoto(null);
@@ -1190,7 +1182,7 @@ useEffect(() => {
               {/* Фото */}
               <div className="relative flex flex-col items-center">
                 <img
-                  src={newPhoto || profile.photo || "https://via.placehold.co/96x96"}
+                  src={newPhoto || profile.photo || "https://placehold.co/96x96"}
                   className="w-24 h-24 rounded-full object-cover mb-2"
                   alt="Фото"
                 />
@@ -1332,66 +1324,11 @@ useEffect(() => {
                         </div>
 
                                         {/* Владение языками */}
-                          <div>
-                            <label className="block font-medium">Языки</label>
-                          
-                            {isEditing ? (
-                              <>
-                                {langs.map((row, idx) => (
-                                  <div key={idx} className="flex items-center gap-2 mb-2">
-                                    <Select
-                                      className="flex-1"
-                                      options={LANGUAGE_OPTIONS}
-                                      value={LANGUAGE_OPTIONS.find(o => o.value === row.code) || null}
-                                      onChange={(opt) =>
-                                        setLangs(prev => prev.map((x,i) => i === idx ? { ...x, code: opt?.value || "" } : x))
-                                      }
-                                      placeholder="Язык"
-                                    />
-                                    <Select
-                                      className="flex-1"
-                                      options={LEVEL_OPTIONS}
-                                      value={LEVEL_OPTIONS.find(o => o.value === row.level) || null}
-                                      onChange={(opt) =>
-                                        setLangs(prev => prev.map((x,i) => i === idx ? { ...x, level: opt?.value || "" } : x))
-                                      }
-                                      placeholder="Уровень"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => setLangs(prev => prev.filter((_,i) => i !== idx))}
-                                      className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                                      title="Удалить"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                ))}
-                          
-                                <button
-                                  type="button"
-                                  onClick={() => setLangs(prev => [...prev, { code: "", level: "" }])}
-                                  className="mt-1 text-sm text-orange-600 underline"
-                                >
-                                  + Добавить язык
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {Array.isArray(langs) && langs.length ? (
-                                  <ul className="list-disc ml-5 text-sm">
-                                    {langs.map((l, i) => {
-                                      const langLabel = LANGUAGE_OPTIONS.find(o => o.value === l.code)?.label || l.code;
-                                      const levelLabel = LEVEL_OPTIONS.find(o => o.value === l.level)?.label || l.level;
-                                      return <li key={i}>{langLabel} — {levelLabel}</li>;
-                                    })}
-                                  </ul>
-                                ) : (
-                                  <div className="border px-3 py-2 rounded bg-gray-100">{t("not_specified")}</div>
-                                )}
-                              </>
-                            )}
-                          </div>                     
+                          {(profile.type === "guide" || profile.type === "transport") && (
+                            <div className="mt-4">
+                              <ProviderLanguages token={token} />
+                            </div>
+                          )}        
 
               {/* Сертификат */}
               <div>
@@ -1463,7 +1400,7 @@ useEffect(() => {
                 bookings_total:  Number(stats?.bookings_total)  || 0,
                 completed:       Number(stats?.completed)       || 0,
                 cancelled:       Number(stats?.cancelled)       || 0,
-                points:          Number(stats?.points) || Number(stats?.completed) || 0,
+                points:          Number(stats?.points ?? stats?.completed ?? 0),
               }}
               bonusTarget={500}
               t={t}
@@ -2317,7 +2254,7 @@ useEffect(() => {
                   setPrice("");
                   setAvailability([]);
                   setImages([]);
-                  setDetails(DEFAULT_DETAILS);
+                  setDetails(() => ({ ...DEFAULT_DETAILS }));
                 }}
                 className="w-full border px-3 py-2 rounded mb-4 bg-white"
               >
