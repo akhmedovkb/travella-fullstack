@@ -5,13 +5,13 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
-// превращаем ["ru","en"] -> [{value:"ru",label:"Русский (ru)"}, ...]
+/** Превращаем ["ru","en"] -> [{value:"ru",label:"Русский (ru)"}, ...] */
 const toOptions = (codes, uiLang = "en") =>
   (codes || []).map((code) => {
     const native = ISO6391.getNativeName(code) || ISO6391.getName(code) || code;
-    // если интерфейс на русском — покажем русское имя, иначе нативное
+
+    // красивые русские названия для популярных языков
     const ruNameMap = {
-      // опционально можно покрыть популярные языки «красивыми» русскими именами
       en: "Английский",
       ru: "Русский",
       uz: "Узбекский",
@@ -28,14 +28,16 @@ const toOptions = (codes, uiLang = "en") =>
       id: "Индонезийский",
       kk: "Казахский",
     };
+
     const label =
-      uiLang.startsWith("ru")
+      uiLang?.startsWith("ru")
         ? `${ruNameMap[code] || native} (${code})`
         : `${native} (${code})`;
+
     return { value: code, label };
   });
 
-/** Все языки мира (ISO-639-1), отсортировано по имени */
+/** Все языки мира (ISO-639-1), отсортированы по локали интерфейса */
 const allLanguageOptions = (uiLang = "en") => {
   const codes = ISO6391.getAllCodes();
   const opts = toOptions(codes, uiLang);
@@ -48,7 +50,6 @@ const ProviderLanguages = ({ token }) => {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState([]); // массив ISO-кодов
 
-  // токен берём как в других компонентах
   const cfg = useMemo(() => {
     const stored =
       token ||
@@ -62,7 +63,7 @@ const ProviderLanguages = ({ token }) => {
     [i18n.language]
   );
 
-  // загрузка текущих языков
+  // загрузить выбранные у провайдера языки
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -83,9 +84,7 @@ const ProviderLanguages = ({ token }) => {
         if (!cancel) setLoading(false);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => void (cancel = true);
   }, [cfg, t]);
 
   const selectedOptions = useMemo(
@@ -93,10 +92,7 @@ const ProviderLanguages = ({ token }) => {
     [selected, i18n.language]
   );
 
-  const handleChange = (vals) => {
-    const codes = (vals || []).map((v) => v.value);
-    setSelected(codes);
-  };
+  const handleChange = (vals) => setSelected((vals || []).map((v) => v.value));
 
   const handleSave = async () => {
     setSaving(true);
@@ -106,9 +102,7 @@ const ProviderLanguages = ({ token }) => {
         { languages: selected },
         cfg
       );
-      toast.success(
-        t("languages.saved", { defaultValue: "Языки сохранены" })
-      );
+      toast.success(t("languages.saved", { defaultValue: "Языки сохранены" }));
     } catch (e) {
       console.error("save languages error", e);
       toast.error(
@@ -121,16 +115,10 @@ const ProviderLanguages = ({ token }) => {
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-md">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-gray-800">
-          {t("languages.title", { defaultValue: "Языки обслуживания" })}
-        </h3>
-        <div className="text-sm text-gray-500">
-          {t("languages.hint", {
-            defaultValue: "Выберите все языки, на которых вы можете работать",
-          })}
-        </div>
-      </div>
+      {/* ТОЛЬКО заголовок — без подписи справа */}
+      <h3 className="text-lg font-semibold text-gray-800 mb-3">
+        {t("languages.heading", { defaultValue: "Владение языками" })}
+      </h3>
 
       <div className="mb-3">
         <Select
