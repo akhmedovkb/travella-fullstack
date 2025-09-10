@@ -122,9 +122,14 @@ app.use("/api/wishlist", wishlistRoutes);
 const reviewRoutes = require("./routes/reviewRoutes");
 app.use("/api/reviews", reviewRoutes);
 
-// Telegram bor
+// Telegram bot
 const telegramRoutes = require("./routes/telegramRoutes");
 app.use("/api/telegram", express.json({ limit: "2mb" }), telegramRoutes);
+
+//языки
+const metaRoutes = require("./routes/metaRoutes");
+app.use("/api/meta", metaRoutes);
+
 
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
