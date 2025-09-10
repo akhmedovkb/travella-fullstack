@@ -422,6 +422,14 @@
   "hotel": "Hotel"
 },
 
+  "languages": {
+    "heading": "Language proficiency",
+    "placeholder": "Start typing a language…",
+    "load_error": "Failed to load languages",
+    "saved": "Languages saved",
+    "save_error": "Failed to save languages"
+  },
+
   "login": {
     "button": "Log in",
     "email": "Email",
