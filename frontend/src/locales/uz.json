@@ -415,6 +415,14 @@
   "loading_stats": "Statistika yuklanmoqda...",
   "location": "Hudud yoki maydon",
 
+  "languages": {
+    "heading": "Tillarni bilish",
+    "placeholder": "Til nomini yozing…",
+    "load_error": "Tillarni yuklab bo‘lmadi",
+    "saved": "Tillar saqlandi",
+    "save_error": "Tillarni saqlashda xatolik"
+  },
+
   "login": {
     "button": "Kirish",
     "email": "Email",
