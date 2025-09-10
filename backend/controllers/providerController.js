@@ -194,7 +194,7 @@ const loginProvider = async (req, res) => {
         certificate: row.certificate,
         telegram_chat_id: row.telegram_chat_id || null,
         tg_chat_id: row.telegram_chat_id || null,
-        languages: row.languages ?? [], // JSONB: ["en","ru",...]
+        languages: normalizeLanguagesISO(row.languages ?? []),
       },
       token,
     });
@@ -230,7 +230,7 @@ const getProviderProfile = async (req, res) => {
       telegram_chat_id: p.telegram_chat_id || null,
       tg_chat_id: p.telegram_chat_id || null,
       avatar_url: p.photo || null,
-      languages: p.languages ?? [],
+      languages: normalizeLanguagesISO(p.languages ?? []),
     });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
@@ -332,7 +332,7 @@ const updateProviderProfile = async (req, res) => {
             telegram_chat_id: p.telegram_chat_id || null,
             tg_chat_id: p.telegram_chat_id || null,
             avatar_url: p.photo || null,
-            languages: p.languages ?? [],
+            languages: normalizeLanguagesISO(p.languages ?? []),
           }
         : null,
     });
@@ -517,7 +517,7 @@ const getProviderPublicById = async (req, res) => {
       social: row.social,
       photo: row.photo,
       address: row.address,
-      languages: row.languages ?? [],
+      languages: normalizeLanguagesISO(row.languages ?? []),
     });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
