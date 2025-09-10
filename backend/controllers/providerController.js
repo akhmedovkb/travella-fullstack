@@ -5,6 +5,38 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
 // ---------- Helpers ----------
+
+// ISO-639-1: приводим любые названия/коды к массиву кодов ["ru","en","uz"]
+const ISO6391 = require("iso-639-1");
+function normalizeLanguagesISO(input, fallback = []) {
+  let raw;
+  if (input == null) {
+    raw = Array.isArray(fallback)
+      ? fallback
+      : (typeof fallback === "object" && fallback) ? Object.keys(fallback) : [];
+  } else if (Array.isArray(input)) {
+    raw = input;
+  } else if (typeof input === "object") {
+    raw = Object.keys(input); // {"ru":"native"} -> ["ru"]
+  } else if (typeof input === "string") {
+    raw = input.split(/[,\|;\n•]+/).map((s) => s.trim()).filter(Boolean);
+  } else {
+    raw = [];
+  }
+
+  const codes = raw
+    .map((x) => String(x || "").trim())
+    .map((x) => {
+      if (x.length === 2 && ISO6391.validate(x)) return x.toLowerCase();
+      const code = ISO6391.getCode(x); // English/Русский/... -> en/ru
+      return code || null;
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(codes));
+}
+
+// Нормализуем Telegram username к виду "@username"
 function normalizeTelegramUsername(input) {
   if (!input) return null;
   let s = String(input).trim();
@@ -57,7 +89,6 @@ function normalizeServicePayload(body) {
     ? availability
     : toArray(availability);
 
-  // details разрешаем для всех категорий (здесь, например, может жить grossPrice)
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
@@ -87,18 +118,6 @@ function normalizeServicePayload(body) {
   };
 }
 
-// Нормализация дат к "YYYY-MM-DD"
-const normalizeDateArray = (arr) => {
-  const unique = new Set(
-    toArray(arr)
-      .map(String)
-      .map((s) => s.split("T")[0])
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
-  return Array.from(unique);
-};
-
 // ---------- Auth ----------
 const registerProvider = async (req, res) => {
   try {
@@ -106,9 +125,7 @@ const registerProvider = async (req, res) => {
       req.body || {};
 
     if (!name || !email || !password || !type || !location || !phone) {
-      return res
-        .status(400)
-        .json({ message: "Заполните все обязательные поля" });
+      return res.status(400).json({ message: "Заполните все обязательные поля" });
     }
     if (photo && typeof photo !== "string") {
       return res.status(400).json({ message: "Некорректный формат изображения" });
@@ -158,12 +175,10 @@ const loginProvider = async (req, res) => {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
 
-    // ВАЖНО: добавляем роль "provider" в токен
     const token = jwt.sign({ id: row.id, role: "provider" }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    // Отдаём telegram_chat_id (и алиас tg_chat_id) + languages — для фронта
     res.json({
       message: "Вход успешен",
       provider: {
@@ -178,8 +193,8 @@ const loginProvider = async (req, res) => {
         address: row.address,
         certificate: row.certificate,
         telegram_chat_id: row.telegram_chat_id || null,
-        tg_chat_id: row.telegram_chat_id || null, // алиас для удобства
-        languages: row.languages ?? [],           // ← НОВОЕ
+        tg_chat_id: row.telegram_chat_id || null,
+        languages: row.languages ?? [], // JSONB: ["en","ru",...]
       },
       token,
     });
@@ -188,26 +203,6 @@ const loginProvider = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
-// -------- languages normalizer --------
-function normalizeLanguages(input, fallback = []) {
-  if (input == null) return Array.isArray(fallback) || typeof fallback === "object" ? fallback : [];
-  if (Array.isArray(input)) {
-    // допускаем ["ru","en"] или [{code:"ru",level:"native"}, ...]
-    return input;
-  }
-  if (typeof input === "object") {
-    // допускаем {"ru":"native","en":"advanced"}
-    return input;
-  }
-  if (typeof input === "string") {
-    // "ru, en" | "ru|en" | "ru;en" | "ru\nen" | "ru • en"
-    const arr = input.split(/[,\|;\n•]+/).map(s => s.trim()).filter(Boolean);
-    return arr;
-  }
-  return Array.isArray(fallback) || typeof fallback === "object" ? fallback : [];
-}
-
 
 // ---------- Profile ----------
 const getProviderProfile = async (req, res) => {
@@ -221,7 +216,6 @@ const getProviderProfile = async (req, res) => {
     const p = r.rows[0] || null;
     if (!p) return res.json(null);
 
-    // Возвращаем tg_chat_id как алиас
     res.json({
       id: p.id,
       name: p.name,
@@ -248,26 +242,7 @@ const updateProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
 
-    // локальный хелпер: нормализуем в формат "@username"
-    const normalizeTelegramUsername = (input) => {
-      if (!input) return null;
-      let s = String(input).trim();
-      if (!s) return null;
-      s = s.replace(/\s+/g, "");
-
-      let m = s.match(/^tg:\/\/resolve\?domain=([A-Za-z0-9_]{3,})/i);
-      if (m) return "@" + m[1];
-
-      m = s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/@?([A-Za-z0-9_]{3,})$/i);
-      if (m) return "@" + m[1];
-
-      m = s.match(/^@?([A-Za-z0-9_]{3,})$/);
-      if (m) return "@" + m[1];
-
-      return s;
-    };
-
-    // читаем текущее состояние (нужно social + telegram_chat_id)
+    // читаем текущее состояние
     const oldQ = await pool.query(
       `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id
          FROM providers
@@ -283,21 +258,14 @@ const updateProviderProfile = async (req, res) => {
     const toTextArray = (v, fallback) => {
       if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
       if (typeof v === "string") return [v.trim()].filter(Boolean);
-      return Array.isArray(fallback)
-        ? fallback
-        : typeof fallback === "string"
-        ? [fallback]
-        : [];
+      return Array.isArray(fallback) ? fallback : (typeof fallback === "string" ? [fallback] : []);
     };
 
     // прислали ли social в payload?
     const hasSocial = Object.prototype.hasOwnProperty.call(req.body || {}, "social");
-    // нормализуем новый social (или оставляем старый)
-    const newSocialNorm = hasSocial
-      ? normalizeTelegramUsername(req.body.social)
-      : old.social;
+    const newSocialNorm = hasSocial ? normalizeTelegramUsername(req.body.social) : old.social;
 
-    // сравниваем по канону (без "@", в нижнем регистре)
+    // сравнение username без "@"
     const canon = (v) => (normalizeTelegramUsername(v) || "").replace(/^@/, "").toLowerCase();
     const tgChanged = hasSocial && canon(newSocialNorm) !== canon(old.social);
 
@@ -305,11 +273,11 @@ const updateProviderProfile = async (req, res) => {
       name: req.body.name ?? old.name,
       location: toTextArray(req.body.location, old.location),
       phone: req.body.phone ?? old.phone,
-      social: newSocialNorm, // сохраняем уже нормализованным
+      social: newSocialNorm,
       photo: req.body.photo ?? old.photo,
       certificate: req.body.certificate ?? old.certificate,
       address: req.body.address ?? old.address,
-      languages: normalizeLanguages(req.body.languages, old.languages), // jsonb
+      languages: normalizeLanguagesISO(req.body.languages, old.languages), // jsonb
     };
 
     await pool.query(
@@ -322,7 +290,6 @@ const updateProviderProfile = async (req, res) => {
               certificate=$6,
               address=$7,
               languages=$8::jsonb,
-              -- если username поменялся, обнуляем chat_id для повторной привязки
               telegram_chat_id = CASE WHEN $10::bool THEN NULL ELSE telegram_chat_id END,
               updated_at=NOW()
         WHERE id=$9`,
@@ -335,12 +302,11 @@ const updateProviderProfile = async (req, res) => {
         updated.certificate,
         updated.address,
         JSON.stringify(updated.languages ?? []),
-        id,         // $9
-        tgChanged,  // $10
+        id,
+        tgChanged,
       ]
     );
 
-    // отдаём актуальные данные
     const r = await pool.query(
       `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
          FROM providers
@@ -359,7 +325,7 @@ const updateProviderProfile = async (req, res) => {
             type: p.type,
             location: p.location,
             phone: p.phone,
-            social: p.social, // уже нормализованный "@username"
+            social: p.social,
             photo: p.photo,
             certificate: p.certificate,
             address: p.address,
@@ -376,14 +342,12 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
-
 const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
     const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
-    if (!q.rows.length)
-      return res.status(404).json({ message: "Провайдер не найден" });
+    if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
     const hashed = await bcrypt.hash(String(newPassword || ""), 10);
@@ -501,10 +465,10 @@ const deleteService = async (req, res) => {
   try {
     const providerId = req.user.id;
     const serviceId = req.params.id;
-    const del = await pool.query("DELETE FROM services WHERE id=$1 AND provider_id=$2", [
-      serviceId,
-      providerId,
-    ]);
+    const del = await pool.query(
+      "DELETE FROM services WHERE id=$1 AND provider_id=$2",
+      [serviceId, providerId]
+    );
     if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
     res.json({ message: "Удалено" });
   } catch (err) {
@@ -553,7 +517,7 @@ const getProviderPublicById = async (req, res) => {
       social: row.social,
       photo: row.photo,
       address: row.address,
-      languages: row.languages ?? [], // ← НОВОЕ
+      languages: row.languages ?? [],
     });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
@@ -561,9 +525,7 @@ const getProviderPublicById = async (req, res) => {
   }
 };
 
-// ---------- Calendar (booked / blocked dates) ----------
-
-// ЗАНЯТЫЕ БРОНЯМИ (для провайдера, под токеном)
+// ---------- Calendar ----------
 const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -584,7 +546,6 @@ const getBookedDates = async (req, res) => {
   }
 };
 
-// РУЧНЫЕ БЛОКИРОВКИ (для провайдера под токеном)
 const getBlockedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -602,7 +563,7 @@ const getBlockedDates = async (req, res) => {
   }
 };
 
-// Сохранение ручных блокировок (полная замена: { dates: [...] })
+// полная замена: { dates: ["YYYY-MM-DD", ...] }
 const saveBlockedDates = async (req, res) => {
   const providerId = req.user.id;
   const incoming = Array.isArray(req.body?.dates) ? req.body.dates : [];
@@ -611,10 +572,7 @@ const saveBlockedDates = async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    await client.query(`DELETE FROM provider_blocked_dates WHERE provider_id = $1`, [
-      providerId,
-    ]);
+    await client.query(`DELETE FROM provider_blocked_dates WHERE provider_id = $1`, [providerId]);
 
     if (dates.length) {
       const values = dates.map((_, i) => `($1, $${i + 2}::date)`).join(",");
@@ -637,7 +595,6 @@ const saveBlockedDates = async (req, res) => {
   }
 };
 
-// Публичный календарь (для клиента по providerId)
 const getCalendarPublic = async (req, res) => {
   try {
     const providerId = Number(req.params.providerId);
@@ -672,8 +629,8 @@ const getCalendarPublic = async (req, res) => {
   }
 };
 
-// ---------- Stats (safe placeholder) ----------
-const getProviderStats = async (req, res) => {
+// ---------- Stats ----------
+const getProviderStats = async (_req, res) => {
   try {
     res.json({ new: 0, booked: 0 });
   } catch {
@@ -681,7 +638,7 @@ const getProviderStats = async (req, res) => {
   }
 };
 
-// ===== Provider Favorites =====
+// ---------- Favorites ----------
 const listProviderFavorites = async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -705,10 +662,8 @@ const toggleProviderFavorite = async (req, res) => {
   try {
     const providerId = req.user.id;
     const { service_id } = req.body || {};
-    if (!service_id)
-      return res.status(400).json({ message: "service_id обязателен" });
+    if (!service_id) return res.status(400).json({ message: "service_id обязателен" });
 
-    // попытка добавить
     const ins = await pool.query(
       `INSERT INTO provider_favorites(provider_id, service_id)
        VALUES ($1,$2)
@@ -717,11 +672,8 @@ const toggleProviderFavorite = async (req, res) => {
       [providerId, service_id]
     );
 
-    if (ins.rowCount) {
-      return res.json({ added: true });
-    }
+    if (ins.rowCount) return res.json({ added: true });
 
-    // если уже было — удалить
     await pool.query(
       `DELETE FROM provider_favorites WHERE provider_id=$1 AND service_id=$2`,
       [providerId, service_id]
