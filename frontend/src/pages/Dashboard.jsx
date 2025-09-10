@@ -10,8 +10,7 @@ import ProviderStatsHeader from "../components/ProviderStatsHeader";
 import ProviderReviews from "../components/ProviderReviews";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
-import ProviderLanguages from "@/components/ProviderLanguages";
-
+import ProviderLanguages from "../components/ProviderLanguages";
 
 /** ================= Helpers ================= */
 
