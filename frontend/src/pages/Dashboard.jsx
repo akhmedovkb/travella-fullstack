@@ -337,7 +337,10 @@ function ImagesEditor({
               onDragOver={(e) => e.preventDefault()}
               title={t("drag_to_reorder", { defaultValue: "Перетащите, чтобы поменять порядок" })}
             >
-              <img src={src} alt="" className="w-full h-32 object-cover" />
+                            <img
+                src={src}
+                alt={t("service_image", { defaultValue: "Изображение услуги" })}
+                className="w-full h-32 object-cover" />
               <div className="absolute top-1 right-1 flex gap-1">
                 {onMakeCover && (
                   <button
@@ -534,7 +537,6 @@ const Dashboard = () => {
   const [countryOptions, setCountryOptions] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState(null); // {value,label,code}
   const [departureCity, setDepartureCity] = useState(null);
-  const [cityOptionsFrom, setCityOptionsFrom] = useState([]);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
   // Details for agent categories
@@ -758,36 +760,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
 }, []);
 
 
-  // Departure cities (top by population)
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchCities = async () => {
-      try {
-        const response = await axios.get("https://secure.geonames.org/searchJSON", {
-          params: {
-            featureClass: "P",
-            maxRows: 100,
-            orderby: "population",
-            username: import.meta.env.VITE_GEONAMES_USERNAME,
-          },
-          signal: controller.signal,
-        });
-        const cities = response.data.geonames.map((city) => ({
-          value: city.name,
-          label: city.name,
-        }));
-        setCityOptionsFrom(cities);
-      } catch (error) {
-              if (error?.code !== "ERR_CANCELED") {
-        console.error("Ошибка загрузки городов отправления:", error);
-      }
-      }
-    };
-    fetchCities();
-    return () => controller.abort();
-  }, []);
-
-  // Arrival cities based on selected country
+   // Arrival cities based on selected country
   useEffect(() => {
     if (!selectedCountry?.code) return;
     const controller = new AbortController();
@@ -977,7 +950,11 @@ useEffect(() => {
         service.category
       )
     ) {
-      const d = (service && service.details && typeof service.details === "object") ? service.details : {};
+            const d = (service && service.details && typeof service.details === "object") ? service.details : {};
+      const hotelStr =
+        typeof d.hotel === "object"
+          ? (d.hotel?.label || d.hotel?.name || "")
+          : (d.hotel || "");
       setDetails({
         grossPrice: d.grossPrice ?? "",
         direction: d.direction || "",
@@ -986,7 +963,7 @@ useEffect(() => {
         directionTo: d.directionTo || "",
         startDate: d.startDate || "",
         endDate: d.endDate || "",
-        hotel: d.hotel || "",
+        hotel: hotelStr,
         accommodation: d.accommodation || "",
         accommodationCategory: d.accommodationCategory || "",
         adt: d.adt || "",
@@ -1016,10 +993,14 @@ useEffect(() => {
         visaCountry: d.visaCountry || "",
       });
     } else {
-      setDescription(service.description || "");
+            setDescription(service.description || "");
       setPrice(service.price || "");
       const sd = (service && service.details && typeof service.details === "object") ? service.details : {};
-      setDetails({ ...DEFAULT_DETAILS, ...sd });
+      const hotelStr2 =
+        typeof sd.hotel === "object"
+          ? (sd.hotel?.label || sd.hotel?.name || "")
+          : (sd.hotel || "");
+      setDetails({ ...DEFAULT_DETAILS, ...sd, hotel: hotelStr2 });
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
@@ -1189,7 +1170,7 @@ useEffect(() => {
                 {isEditing && (
                   <>
                     <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm">
-                      {t("choose_files")}
+                      {t("choose_files", { defaultValue: "Выбрать файлы" })}
                       <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
                     </label>
                     <div className="text-sm text-gray-600 mt-1">
@@ -1336,7 +1317,7 @@ useEffect(() => {
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
                     <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
-                      {t("choose_files")}
+                      {t("choose_files", { defaultValue: "Выбрать файлы" })}
                       <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" />
                     </label>
                     {newCertificate ? (
@@ -1441,7 +1422,9 @@ useEffect(() => {
                       {s.images?.length ? (
                         <img
                           src={s.images[0]}
-                          alt=""
+                                                    alt={
+                            s.title || t("service_image", { defaultValue: "Изображение услуги" })
+                          }
                           className="w-12 h-12 object-cover rounded"
                         />
                       ) : (
