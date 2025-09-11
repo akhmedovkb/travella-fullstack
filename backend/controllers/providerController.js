@@ -417,6 +417,42 @@ const updateService = async (req, res) => {
     const providerId = req.user.id;
     const serviceId = req.params.id;
 
+    // 1) Узнаём текущий статус и владение
+    const cur = await pool.query(
+      `SELECT status FROM services WHERE id=$1 AND provider_id=$2`,
+      [serviceId, providerId]
+    );
+    if (!cur.rowCount) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    const currentStatus = cur.rows[0].status;
+
+    // 2) Правила редактирования по статусу
+    if (currentStatus === "pending") {
+      // На модерации редактировать запрещаем (чтобы модерация имела смысл)
+      return res.status(409).json({
+        message: "Услуга на модерации. Дождитесь решения или снимите с модерации.",
+        code: "SERVICE_PENDING",
+      });
+    }
+
+    if (currentStatus === "published" || currentStatus === "rejected") {
+      // Любые правки по опубликованной/отклонённой — это новый черновик
+      await pool.query(
+        `UPDATE services
+            SET status='draft',
+                submitted_at=NULL,
+                published_at=NULL,
+                approved_at=NULL,
+                rejected_at=NULL,
+                rejected_reason=NULL
+          WHERE id=$1 AND provider_id=$2`,
+        [serviceId, providerId]
+      );
+    }
+
+    // 3) Нормализуем вход
     const {
       title,
       category,
@@ -429,6 +465,7 @@ const updateService = async (req, res) => {
 
     const extended = isExtendedCategory(category);
 
+    // 4) Обновляем основное содержимое
     const upd = await pool.query(
       `UPDATE services
           SET title=$1,
@@ -437,7 +474,8 @@ const updateService = async (req, res) => {
               category=$4,
               images=$5::jsonb,
               availability=$6::jsonb,
-              details=$7::jsonb
+              details=$7::jsonb,
+              updated_at=NOW()
         WHERE id=$8 AND provider_id=$9
         RETURNING *`,
       [
@@ -445,21 +483,26 @@ const updateService = async (req, res) => {
         extended ? null : descriptionStr,
         extended ? null : priceNum,
         category,
-        JSON.stringify(imagesArr),
-        JSON.stringify(extended ? [] : availabilityArr),
+        JSON.stringify(imagesArr ?? []),
+        JSON.stringify(extended ? [] : (availabilityArr ?? [])),
         JSON.stringify(detailsObj ?? {}),
         serviceId,
         providerId,
       ]
     );
 
-    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
-    res.json(upd.rows[0]);
+    if (!upd.rowCount) {
+      return res.status(404).json({ message: "Услуга не найдена" });
+    }
+
+    // В rows[0] уже будет статус (включая 'draft', если мы его демотировали выше)
+    return res.json(upd.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка обновления услуги:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 const deleteService = async (req, res) => {
   try {
