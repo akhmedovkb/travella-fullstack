@@ -1432,6 +1432,42 @@ useEffect(() => {
                       <div className="flex-1">
                         <div className="font-bold text-lg">{s.title}</div>
                         <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
+                            {/* статус + кнопка модерации */}                            
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  {typeof s.status === "string" && (
+                                    <span
+                                      className={`inline-block text-xs px-2 py-0.5 rounded
+                                        ${s.status === "published" ? "bg-emerald-100 text-emerald-700" :
+                                          s.status === "pending"   ? "bg-amber-100 text-amber-800"   :
+                                          s.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
+                                                                     "bg-gray-100 text-gray-700"}`}
+                                    >
+                                      {t(`status.${s.status}`, { defaultValue: s.status })}
+                                    </span>
+                                  )}
+                                
+                                  {(s.status === "draft" || s.status === "rejected") && (
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation(); // чтобы не открывался редактор
+                                        try {
+                                          await axios.post(`${API_BASE}/api/providers/services/${s.id}/submit`, {}, config);
+                                          tSuccess(t("service_submitted", { defaultValue: "Отправлено на модерацию" }));
+                                          // Локально обновим статус
+                                          setServices((prev) =>
+                                            prev.map((x) => (x.id === s.id ? { ...x, status: "pending", submitted_at: new Date().toISOString() } : x))
+                                          );
+                                        } catch (err) {
+                                          tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+                                        }
+                                      }}
+                                      className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                    >
+                                      {t("send_to_review", { defaultValue: "Отправить на модерацию" })}
+                                    </button>
+                                  )}
+                                </div>
+
                         {isServiceInactive(s) && (
                           <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700">
                           {t("not_actual", { defaultValue: "неактуально" })}
@@ -1459,6 +1495,48 @@ useEffect(() => {
             /* ====== Edit form (by category) ====== */
             <>
               <h3 className="text-xl font-semibold mb-2">{t("edit_service")}</h3>
+              {/* статус услуги в форме */}
+                      {selectedService?.status && (
+                        <div className="mb-3 flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-block text-xs px-2 py-0.5 rounded
+                              ${selectedService.status === "published" ? "bg-emerald-100 text-emerald-700" :
+                                selectedService.status === "pending"   ? "bg-amber-100 text-amber-800"   :
+                                selectedService.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
+                                                                         "bg-gray-100 text-gray-700"}`}
+                          >
+                            {t(`status.${selectedService.status}`, { defaultValue: selectedService.status })}
+                          </span>
+                      
+                          {(selectedService.status === "draft" || selectedService.status === "rejected") && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await axios.post(`${API_BASE}/api/providers/services/${selectedService.id}/submit`, {}, config);
+                                  tSuccess(t("service_submitted", { defaultValue: "Отправлено на модерацию" }));
+                                  setServices((prev) =>
+                                    prev.map((x) => (x.id === selectedService.id ? { ...x, status: "pending", submitted_at: new Date().toISOString() } : x))
+                                  );
+                                  setSelectedService((prev) => (prev ? { ...prev, status: "pending" } : prev));
+                                } catch {
+                                  tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+                                }
+                              }}
+                              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              {t("send_to_review", { defaultValue: "Отправить на модерацию" })}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* причина отклонения (если есть) */}
+                      {selectedService?.status === "rejected" && selectedService?.rejected_reason && (
+                        <div className="mb-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+                          {t("rejected_reason", { defaultValue: "Причина отклонения" })}: {selectedService.rejected_reason}
+                        </div>
+                      )}
+
 
               {/* Общие поля для названия */}
               <div className="mb-2">
