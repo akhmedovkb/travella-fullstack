@@ -936,7 +936,7 @@ const search = async (opts = {}) => {
           <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
         )}
         {!loading && !error && !!items.length && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {items.map((it) => {
               const sid = getServiceId(it);
               return (
