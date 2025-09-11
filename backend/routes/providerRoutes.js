@@ -178,19 +178,19 @@ router.get("/:id(\\d+)", getProviderPublicById);
 // отправить на модерацию
 router.post(
   "/services/:id/submit",
-  authenticateToken, // уже есть
+  authenticateToken,
   requireProvider,
   async (req, res, next) => {
     try {
       const { query } = require("../db");
       const { id } = req.params;
 
-      // проверяем, что услуга принадлежит текущему провайдеру и не удалена
       const { rows } = await query(
         `UPDATE services
-           SET status='pending', published_at = NOW()
+           SET status='pending',
+               submitted_at = NOW()
          WHERE id=$1 AND provider_id=$2
-         RETURNING id, status, published_at`,
+         RETURNING id, status, submitted_at`,
         [id, req.user.id]
       );
       if (!rows.length) return res.status(404).json({ message: "Service not found" });
@@ -198,6 +198,5 @@ router.post(
     } catch (e) { next(e); }
   }
 );
-
 
 module.exports = router;
