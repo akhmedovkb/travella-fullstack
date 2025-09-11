@@ -130,6 +130,9 @@ app.use("/api/telegram", express.json({ limit: "2mb" }), telegramRoutes);
 const metaRoutes = require("./routes/metaRoutes");
 app.use("/api/meta", metaRoutes);
 
+//модерация админом
+const adminRoutes = require("./routes/adminRoutes");
+app.use("/api/admin", adminRoutes);
 
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
