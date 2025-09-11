@@ -1,3 +1,5 @@
+//frontend/src/pages/AdminModeration.jsx
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { tSuccess, tError, tInfo } from "../shared/toast";
