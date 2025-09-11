@@ -175,4 +175,29 @@ router.delete("/favorites/:serviceId", authenticateToken, requireProvider, remov
 // Публичная страница провайдера
 router.get("/:id(\\d+)", getProviderPublicById);
 
+// отправить на модерацию
+router.post(
+  "/services/:id/submit",
+  authenticateToken, // уже есть
+  requireProvider,
+  async (req, res, next) => {
+    try {
+      const { query } = require("../db");
+      const { id } = req.params;
+
+      // проверяем, что услуга принадлежит текущему провайдеру и не удалена
+      const { rows } = await query(
+        `UPDATE services
+           SET status='pending', published_at = NOW()
+         WHERE id=$1 AND provider_id=$2
+         RETURNING id, status, published_at`,
+        [id, req.user.id]
+      );
+      if (!rows.length) return res.status(404).json({ message: "Service not found" });
+      res.json({ ok: true, service: rows[0] });
+    } catch (e) { next(e); }
+  }
+);
+
+
 module.exports = router;
