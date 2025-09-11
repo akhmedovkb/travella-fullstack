@@ -22,3 +22,9 @@ label {
 @tailwind utilities;
 
 /* Можно добавить кастомные стили ниже, если потребуется */
+
+/* Safe-area helpers for iOS */
+@supports (padding: env(safe-area-inset-top)) {
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+}
