@@ -488,14 +488,14 @@
 
   "moderation": {
     "service_status": {
-      "draft": "Qoralama",
-      "pending": "Moderator ko‘rib chiqishiga yuborildi",
-      "published": "Moderator tasdiqlagan",
-      "rejected": "Rad etildi",
-      "archived": "E’lonlardan olib tashlandi"
+      "draft": "Draft",
+      "pending": "Submitted for review",
+      "published": "Approved by moderator",
+      "rejected": "Rejected",
+      "archived": "Archived"
     },
-    "send_to_review": "Moderatsiyaga yuborish",
-    "submitted_toast": "Moderatsiyaga yuborildi"
+    "send_to_review": "Send to review",
+    "submitted_toast": "Submitted for review"
   },
 
   "mountain_tour": "Mountain tour",
