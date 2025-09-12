@@ -98,6 +98,7 @@ module.exports.search = async (req, res, next) => {
         ])
         // только активные + неистёкшие
         .modify((qb) => {
+          qb.andWhere('status', 'published');
           if (only_active) {
             qb.andWhereRaw(`COALESCE((details->>'isActive')::boolean, true) = true`)
               .andWhere((q2) =>
@@ -166,6 +167,10 @@ module.exports.search = async (req, res, next) => {
 
     // ---------- ВЕТКА PG (node-postgres) ----------
     // Собираем where вручную
+    // только опубликованные
+    params.push('published');
+    where.push(`status = $${p++}`);
+
     const where = [];
     const params = [];
     let p = 1;
