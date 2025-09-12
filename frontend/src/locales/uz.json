@@ -455,6 +455,7 @@
     "refused_event": "Rad etilgan tadbir chiptasi",
     "results": "Qidiruv natijalari",
     "reviews": "Xizmat sharhlari",
+    "sections": { "top": "Top", "new": "Yangi", "upcoming": "Yaqinda" },
     "search": "Qidirish",
     "search_filters": "Qidiruv filtrlari",
     "search_in": "{{category}} bo‘yicha qidirish:",
