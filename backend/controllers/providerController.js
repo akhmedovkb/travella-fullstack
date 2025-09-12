@@ -532,7 +532,11 @@ const updateServiceImagesOnly = async (req, res) => {
     const serviceId = req.params.id;
     const imagesArr = sanitizeImages(req.body.images);
     const upd = await pool.query(
-      `UPDATE services SET images=$1::jsonb WHERE id=$2 AND provider_id=$3 RETURNING *`,
+      `UPDATE services
+          SET images=$1::jsonb,
+              updated_at=NOW()
+        WHERE id=$2 AND provider_id=$3
+        RETURNING *`,
       [JSON.stringify(imagesArr), serviceId, providerId]
     );
     if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
