@@ -172,9 +172,6 @@ router.get   ("/favorites",            authenticateToken, requireProvider, listP
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
 
-// Публичная страница провайдера
-router.get("/:id(\\d+)", getProviderPublicById);
-
 // отправить на модерацию
 router.post(
   "/services/:id/submit",
@@ -203,5 +200,8 @@ router.post(
     } catch (e) { next(e); }
   }
 );
+
+// Публичная страница провайдера
+router.get("/:id(\\d+)", getProviderPublicById);
 
 module.exports = router;
