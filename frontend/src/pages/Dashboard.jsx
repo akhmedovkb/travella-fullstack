@@ -707,7 +707,7 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
         featureClass: "P",
         maxRows: 10,
         username: import.meta.env.VITE_GEONAMES_USERNAME,
-        ang: pickGeoLang(), // ← ru/uz/en
+        lang: pickGeoLang(), // ← ru/uz/en
       },
       signal,
     });
@@ -720,7 +720,7 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
     console.error("Ошибка загрузки городов:", error);
     return [];
   }
-}, [i18n]);
+}, [pickGeoLang]);
 
 // обёртка с дебаунсом + отменой
 const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
@@ -829,7 +829,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
     } catch (e) { /* ... */ }
   })();
   return () => { alive = false; };
-}, [i18n]);
+}, [pickGeoLang]);
 
 
    // Arrival cities based on selected country
@@ -845,6 +845,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
             maxRows: 100,
             orderby: "population",
             username: import.meta.env.VITE_GEONAMES_USERNAME,
+            lang: pickGeoLang(), // локализация городов прибытия
           },
           signal: controller.signal,
         });
@@ -861,7 +862,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
     };
     fetchCities();
     return () => controller.abort();
-  }, [selectedCountry]);
+  }, [selectedCountry, pickGeoLang]);
 
       /** ===== Load profile + services + stats ===== */
 useEffect(() => {
