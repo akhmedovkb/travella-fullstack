@@ -23,6 +23,9 @@ const STATUS_LABELS = {
   archived:  "Снято с публикации",
 };
 
+const MOD_STATUS_FALLBACK = STATUS_LABELS; // backward-compat
+
+
 
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
