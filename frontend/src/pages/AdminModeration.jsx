@@ -78,15 +78,23 @@ export default function AdminModeration() {
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
 
+    // читаем роль/флаг из JWT, который вернул бэкенд при логине
   const isAdmin = (() => {
     try {
-      const raw = localStorage.getItem("user") || localStorage.getItem("auth");
-      if (raw) {
-        const u = JSON.parse(raw);
-        return u?.role === "admin" || u?.is_admin === true;
-      }
-    } catch {}
-    return false;
+      const t = localStorage.getItem("token");
+      if (!t) return false;
+      const base64 = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const json = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      const claims = JSON.parse(json);
+      return claims.role === "admin" || claims.is_admin === true;
+    } catch {
+      return false;
+    }
   })();
 
   const load = async () => {
