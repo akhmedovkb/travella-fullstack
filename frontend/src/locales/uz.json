@@ -90,8 +90,7 @@
       "confirmed": "tasdiqlandi",
       "active": "faol",
       "rejected": "rad etilgan",
-      "cancelled": "bekor qilindi",
-      "not_actual": "nofaol"
+      "cancelled": "bekor qilindi"
     },
 
     "status_by": {
@@ -710,7 +709,8 @@
     "pending": "kutilmoqda",
     "rejected": "rad etilgan",
     "active": "faol",
-    "accepted": "qabul qilingan"
+    "accepted": "qabul qilingan",
+    "not_actual": "nofaol"
   },
 
   "sum": "Summasi",
