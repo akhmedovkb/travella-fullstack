@@ -1,6 +1,6 @@
 //frontend/src/pages/Marketplace.jsx
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
@@ -15,6 +15,15 @@ function getRole() {
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   return hasClient ? "client" : (hasProvider ? "provider" : null);
 }
+
+/* ===================== sections (Top/New/Upcoming) ===================== */
+const SECTIONS = [
+  { key: "top",      labelKey: "marketplace.sections.top",       fallback: "Top" },
+  { key: "new",      labelKey: "marketplace.sections.new",       fallback: "Новые" },
+  { key: "upcoming", labelKey: "marketplace.sections.upcoming",  fallback: "Ближайшие" },
+];
+const SECTION_LIMIT = 12;
+
 
 /* ===================== utils ===================== */
 
@@ -499,6 +508,14 @@ export default function Marketplace() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
 
+    // ---- Секции: активная вкладка (по умолчанию Top) и данные секции
+  const [activeSection, setActiveSection] = useState("top"); // null => показываем результаты поиска
+  const [secItems, setSecItems] = useState([]);
+  const [secLoading, setSecLoading] = useState(false);
+  const [secError, setSecError] = useState(null);
+  const [secPage, setSecPage] = useState(1);
+  const [secTotal, setSecTotal] = useState(0);
+
   const filters = useMemo(
     () => ({
       q: q?.trim() || undefined,
@@ -513,6 +530,7 @@ const norm = (s) =>
   String(s ?? "")
     .toLowerCase()
     .replace(/[ё]/g, "е")
+    .replace(/[`ʼʻ’']/g, "'") // единый апостроф
     .replace(/\s+/g, " ")   // схлопываем
     .trim();
 
@@ -529,8 +547,14 @@ const cyr2lat = (s) =>
     .replace(/ё/g, "e")
     .replace(/ъ|’|ʻ|`/g, "")
     .replace(/ь/g, "")
+        // RU
     .replace(/х/g, "kh")
     .replace(/ц/g, "ts")
+    // UZ cyr → lat
+    .replace(/қ/g, "q")
+    .replace(/ғ/g, "g'")
+    .replace(/ў/g, "o'")
+    .replace(/ҳ/g, "h")
     .replace(/а/g, "a").replace(/б/g, "b").replace(/в/g, "v").replace(/г/g, "g")
     .replace(/д/g, "d").replace(/е/g, "e").replace(/з/g, "z").replace(/и/g, "i")
     .replace(/к/g, "k").replace(/л/g, "l").replace(/м/g, "m").replace(/н/g, "n")
@@ -538,19 +562,26 @@ const cyr2lat = (s) =>
     .replace(/т/g, "t").replace(/у/g, "u").replace(/ф/g, "f").replace(/ы/g, "y");
 
 const lat2cyr = (s) => {
-  let x = norm(s);
-  x = x.replace(/shch/g, "щ").replace(/sch/g, "щ");
-  x = x.replace(/sh/g, "ш").replace(/ch/g, "ч").replace(/zh/g, "ж");
-  x = x.replace(/ya/g, "я").replace(/yu/g, "ю").replace(/yo/g, "ё");
-  x = x.replace(/kh/g, "х").replace(/ts/g, "ц");
+  let x = norm(s)
+    .replace(/shch/g, "щ").replace(/sch/g, "щ")   // RU
+    .replace(/sh/g, "ш").replace(/ch/g, "ч").replace(/zh/g, "ж")
+    .replace(/ya/g, "я").replace(/yu/g, "ю").replace(/yo/g, "ё")
+    .replace(/kh/g, "х").replace(/ts/g, "ц");
+  // UZ lat → cyr (апострофы унифицированы выше)
+  x = x
+    .replace(/g'|gʼ|g‘/g, "ғ")
+    .replace(/o'|oʼ|o‘/g, "ў")
+    .replace(/q/g, "қ")
+    .replace(/x/g, "х")   // в узбекском x ~ «х»
+    .replace(/h/g, "ҳ");  // обычный h → «ҳ»
+  // Остальные латинские буквы (общая кириллизация)
   x = x
     .replace(/a/g, "а").replace(/b/g, "б").replace(/v/g, "в").replace(/g/g, "г")
     .replace(/d/g, "д").replace(/e/g, "е").replace(/z/g, "з").replace(/i/g, "и")
     .replace(/j/g, "й").replace(/k/g, "к").replace(/l/g, "л").replace(/m/g, "м")
     .replace(/n/g, "н").replace(/o/g, "о").replace(/p/g, "п").replace(/r/g, "р")
     .replace(/s/g, "с").replace(/t/g, "т").replace(/u/g, "у").replace(/f/g, "ф")
-    .replace(/y/g, "ы").replace(/h/g, "х").replace(/c/g, "к").replace(/w/g, "в")
-    .replace(/q/g, "к").replace(/x/g, "кс");
+    .replace(/y/g, "ы").replace(/c/g, "к").replace(/w/g, "в");
   return x;
 };
 
@@ -745,6 +776,43 @@ const search = async (opts = {}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+    // ---- Загрузка данных выбранной секции
+  const loadSection = async (nextPage = 1) => {
+    if (!activeSection) return; // если секция отключена (режим результатов поиска)
+    setSecLoading(true);
+    setSecError(null);
+    try {
+      const qs = new URLSearchParams({
+        page: String(nextPage),
+        limit: String(SECTION_LIMIT),
+        ...(category ? { category } : {}),
+      }).toString();
+      const res = await apiGet(`/api/marketplace/sections/${activeSection}?${qs}`);
+      const list = normalizeList(res);
+      const total =
+        (res?.total ?? res?.data?.total ?? res?.count ?? res?.total_count ?? 0) | 0;
+      const page =
+        (res?.page ?? res?.data?.page ?? nextPage) | 0;
+      setSecItems(list);
+      setSecTotal(total);
+      setSecPage(page || nextPage);
+    } catch (e) {
+      console.error("loadSection error:", e);
+      setSecItems([]);
+      setSecTotal(0);
+      setSecError(t("common.load_error") || "Не удалось загрузить данные");
+    } finally {
+      setSecLoading(false);
+    }
+  };
+
+  // Подгружаем секцию при смене вкладки или категории
+  useEffect(() => {
+    if (activeSection) loadSection(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, category]);
+
+
   useEffect(() => {
       (async () => {
         try {
@@ -886,6 +954,41 @@ const search = async (opts = {}) => {
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
+    // --- данные для рендера: секции тоже фильтруем по видимости/статусу
+  const isBusy  = (activeSection ? secLoading : loading);
+  const errMsg  = (activeSection ? secError   : error);
+  const listForRender = activeSection
+    ? secItems.filter((it) => {
+        const svc = it?.service || it || {};
+        const published = (svc.status ?? 'published') === 'published';
+        return published && isMarketplaceVisible(it, now);
+      })
+    : items;
+  const showEmpty = !isBusy && !errMsg && listForRender.length === 0;
+
+
+    // ---- UI: вкладки секций
+  const renderSectionTabs = () => (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {SECTIONS.map((s) => (
+        <button
+          key={s.key}
+          onClick={() => setActiveSection(s.key)}
+          className={[
+            "px-3 py-2 rounded-lg border text-sm transition",
+            activeSection === s.key
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-white text-gray-700 border-gray-200 hover:border-gray-300",
+          ].join(" ")}
+          aria-pressed={activeSection === s.key}
+        >
+          {t(s.labelKey) || s.fallback}
+        </button>
+      ))}
+    </div>
+  );
+
+
   
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -929,21 +1032,33 @@ const search = async (opts = {}) => {
           ))}
         </select>
 
-        <button onClick={() => search()} className="px-5 py-2 rounded-lg bg-gray-900 text-white" disabled={loading}>
+                <button
+          onClick={() => { setActiveSection(null); search(); }}
+          className="px-5 py-2 rounded-lg bg-gray-900 text-white"
+          disabled={loading}
+        >
           {t("common.find") || "Найти"}
         </button>
       </div>
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-        {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
-        {!loading && error && <div className="text-red-600">{error}</div>}
-        {!loading && !error && !items.length && (
+                {/* Вкладки секций над списком */}
+        {renderSectionTabs()}
+
+        {/* Источник данных зависит от режима: секция или поиск */}
+        { isBusy && (
+          <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>
+        )}
+                { !isBusy && errMsg && (
+          <div className="text-red-600">{errMsg}</div>
+        )}
+                { showEmpty && (
           <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
         )}
-        {!loading && !error && !!items.length && (
+                { !isBusy && !errMsg && !!listForRender.length && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((it) => {
+            {listForRender.map((it) => {
               const sid = getServiceId(it);
               return (
                  <ServiceCard
@@ -959,9 +1074,34 @@ const search = async (opts = {}) => {
                  />
               );
             })}
-      </div>
-      )}
-   </div> 
+                </div>
+        )}
+
+        {/* Пагинация только для секций */}
+        {activeSection && secTotal > SECTION_LIMIT && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <button
+              className="px-3 py-2 border rounded disabled:opacity-50"
+              onClick={() => loadSection(secPage - 1)}
+              disabled={secPage <= 1 || secLoading}
+              aria-label={t("pagination.prev") || "Предыдущая"}
+            >
+              «
+            </button>
+            <span className="text-sm">
+              {secPage} / {Math.max(1, Math.ceil(secTotal / SECTION_LIMIT))}
+            </span>
+            <button
+              className="px-3 py-2 border rounded disabled:opacity-50"
+              onClick={() => loadSection(secPage + 1)}
+              disabled={secPage >= Math.ceil(secTotal / SECTION_LIMIT) || secLoading}
+              aria-label={t("pagination.next") || "Следующая"}
+            >
+              »
+            </button>
+          </div>
+        )}
+      </div> 
       {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
     </div>
