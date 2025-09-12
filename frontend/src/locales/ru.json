@@ -22,6 +22,7 @@
   "airline": "Авиакомпания",
   "authored_tour": "Авторский тур",
   "back": "← Назад",
+  "badges": { "boosted": "Рекомендовано" }, 
 
   "booking": {
     "date": "Дата",
