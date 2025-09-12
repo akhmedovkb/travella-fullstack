@@ -722,8 +722,12 @@ const search = async (opts = {}) => {
       list = filtered;
     }
     
-    // 🎯 Marketplace: показываем только актуальные по флагу/таймеру
-    list = list.filter((it) => isMarketplaceVisible(it, now));
+        // 🎯 Marketplace: только опубликованные и актуальные
+    list = list.filter((it) => {
+      const svc = it?.service || it || {};
+      const published = (svc.status ?? 'published') === 'published';
+      return published && isMarketplaceVisible(it, now);
+    });
     
     setItems(list);
 
