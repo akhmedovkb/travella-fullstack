@@ -535,7 +535,18 @@ const makeAsyncSelectI18n = (t) => ({
 
 /** ================= Main ================= */
 const Dashboard = () => {
-  const { t } = useTranslation();
+   const { t, i18n } = useTranslation();
+
+ // RU/UZ/EN приоритет: i18n → navigator → en
+ const pickGeoLang = () => {
+   const allowed = ["ru", "uz", "en"];
+   const fromI18n = (i18n?.language || "").slice(0, 2).toLowerCase();
+   if (allowed.includes(fromI18n)) return fromI18n;
+   const nav = (typeof navigator !== "undefined" ? (navigator.languages || [navigator.language]) : [])
+     .filter(Boolean)
+     .map((l) => String(l).slice(0, 2).toLowerCase());
+   return nav.find((l) => allowed.includes(l)) || "en";
+ };
   const tr = useMemo(() => makeTr(t), [t]);
   
 
@@ -640,8 +651,8 @@ const Dashboard = () => {
 
   // === Provider Inbox / Bookings ===
 
-  const token = (typeof localStorage !== "undefined" && localStorage.getItem("token")) || null;
-  const config = { headers: { Authorization: `Bearer ${token}` } };
+  const token = (typeof localStorage !== "undefined" && localStorage.getItem("token")) || "";
+  const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 
   /** ===== Utils ===== */
     
@@ -696,6 +707,7 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
         featureClass: "P",
         maxRows: 10,
         username: import.meta.env.VITE_GEONAMES_USERNAME,
+        ang: pickGeoLang(), // ← ru/uz/en
       },
       signal,
     });
@@ -708,7 +720,7 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
     console.error("Ошибка загрузки городов:", error);
     return [];
   }
-}, []);
+}, [i18n]);
 
 // обёртка с дебаунсом + отменой
 const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
@@ -801,18 +813,23 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
   let alive = true;
   (async () => {
     try {
-      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2");
+      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2,translations");
       if (!alive) return;
-      const countries = response.data.map((country) => ({
-        value: country.name.common,
-        label: country.name.common,
-        code: country.cca2,
-      }));
+           const ui = pickGeoLang();
+     // RestCountries использует ключи 'rus' и 'uzb' для переводов
+     const trKey = ui === "ru" ? "rus" : ui === "uz" ? "uzb" : null;
+     const countries = response.data.map((country) => {
+       const label =
+         (trKey && country.translations?.[trKey]?.common) ||
+         country.name?.common ||
+         country.cca2;
+       return { value: label, label, code: country.cca2 };
+     });
       setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
     } catch (e) { /* ... */ }
   })();
   return () => { alive = false; };
-}, []);
+}, [i18n]);
 
 
    // Arrival cities based on selected country
@@ -1207,7 +1224,7 @@ useEffect(() => {
       details: isExtendedCategory
       ? {
           ...details,
-                    ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
+          ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
           // NOTE: if API expects seconds, use Math.floor(__expTs/1000)
           ...(__expTs   !== undefined ? { expiration_ts: __expTs } : {}),
