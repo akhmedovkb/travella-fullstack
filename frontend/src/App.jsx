@@ -11,6 +11,7 @@ import Marketplace from "./pages/Marketplace";
 import ProviderFavorites from "./pages/ProviderFavorites";
 import ProviderProfile from "./pages/ProviderProfile";
 import ClientProfile from "./pages/ClientProfile";
+import AdminModeration from "./pages/AdminModeration";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -87,6 +88,7 @@ export default function App() {
             }
           />
            <Route path="/profile/client/:id" element={<ClientProfile />} />
+          <Route path="/admin/moderation" element={<AdminModeration />} />
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
         </Routes>
       </div>
