@@ -15,6 +15,17 @@ import ProviderLanguages from "../components/ProviderLanguages";
 
 /** ================= Helpers ================= */
 
+const EVENT_CATEGORY_OPTIONS = (t) => ([
+  { value: "concert",      label: t("event_category_concert") },
+  { value: "exhibition",   label: t("event_category_exhibition") },
+  { value: "show",         label: t("event_category_show") },
+  { value: "masterclass",  label: t("event_category_masterclass") },
+  { value: "football",     label: t("event_category_football") },
+  { value: "fight",        label: t("event_category_fight") },
+]);
+const findEventOpt = (t, v) => EVENT_CATEGORY_OPTIONS(t).find(o => o.value === v) || null;
+
+
 // Фоллбэк-подписи на случай отсутствия ключей в i18n
 const STATUS_LABELS = {
   draft:     "Черновик",
@@ -26,24 +37,33 @@ const STATUS_LABELS = {
 
 const MOD_STATUS_FALLBACK = STATUS_LABELS; // backward-compat
 
-// Показывать «Модерацию» только админам
-function isAdminRole() {
-  try {
-    const raw =
-      localStorage.getItem("user") ||
-      localStorage.getItem("me") ||
-      localStorage.getItem("auth");
-    if (raw) {
-      const u = JSON.parse(raw);
-      const role = (u?.role || u?.roles)?.toString().toLowerCase?.() || "";
-      if (role.includes("admin")) return true;
+// Показывать «Модерацию» только админам/модераторам — берём из профиля И/ИЛИ localStorage
+const YES = new Set(["1","true","yes","on"]);
+function detectAdmin(profile) {
+  const p = profile || {};
+  const roles = []
+  .concat(p.role || [])
+  .concat(p.roles || [])
+  .flatMap(r => String(r).split(","))
+  .map(s => s.trim());
+
+  const perms = []
+    .concat(p.permissions || p.perms || [])
+    .map(String);
+  let is =
+    !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
+    roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+    perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()));
+
+    // Dev-режим: разрешаем "подсветку" UI через LS, но только в dev (сервер всё равно защищает роуты)
+  if (typeof window !== "undefined" && import.meta?.env?.DEV) {
+    for (const k of ["isAdminUiHint"]) {
+      const v = localStorage.getItem(k);
+      if (v && YES.has(String(v).toLowerCase())) is = true;
     }
-  } catch {}
-  // запасной вариант — отдельный ключ
-  return (localStorage.getItem("role") || "").toLowerCase() === "admin";
+  }
+  return is;
 }
-
-
 
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
@@ -65,16 +85,36 @@ function MoneyField({ label, value, onChange, placeholder }) {
     }
 const parseMoneySafe = (v) => {
   if (!hasVal(v)) return NaN;
-  const s = String(v)
-    .replace(/\s+/g, "")           // любые пробелы, включая NBSP
-    .replace(/,/g, ".");           // ВСЕ запятые в точки
+  let s = String(v).replace(/\s+/g, "");
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  if (hasComma && hasDot) {
+    s = s.replace(/\./g, ""); // убрать «тысячные» точки, если есть запятая
+  }
+  s = s.replace(/,/g, ".");   // запятую — в точку
+  s = s.replace(/\.(?=.*\.)/g, ""); // оставить только последнюю точку (десятичную)
   const n = Number.parseFloat(s);
   return Number.isFinite(n) ? n : NaN;
 };
 
+const formatMoney = (val, currency) => {
+  const num = typeof val === "number" ? val : parseMoneySafe(val);
+  if (!Number.isFinite(num)) return `${val} ${currency || ""}`.trim();
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(num);
+  } catch {
+    return `${num.toLocaleString()} ${currency || ""}`.trim();
+  }
+};
 
 // Только цифры, пробел, точка, запятая, минус. Любая буква/символ — ошибка ввода.
-const hasInvalidMoneyChars = (v) => hasVal(v) && /[^\d.,\s-]/.test(String(v));
+const hasInvalidMoneyChars = (v) => {
+  if (!hasVal(v)) return false;
+  const s = String(v).trim();
+  if ((s.match(/-/g) || []).length > 1 || (s.includes("-") && !s.startsWith("-"))) return true;
+  return /[^\d.,\s-]/.test(s);
+};
+
 const pick = (...vals) => vals.find((v) => hasVal(v));
 
 const extractPrices = (details) => {
@@ -428,23 +468,6 @@ const todayLocalDateTime = () => {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-// === Languages dictionaries ===
-const LANGUAGE_OPTIONS = [
-  { value: "uz", label: "O‘zbekcha" },
-  { value: "ru", label: "Русский" },
-  { value: "en", label: "English" },
-  { value: "tr", label: "Türkçe" },
-  { value: "de", label: "Deutsch" },
-  { value: "ar", label: "العربية" },
-];
-
-const LEVEL_OPTIONS = [
-  { value: "basic",        label: "A2 — Basic" },
-  { value: "intermediate", label: "B1/B2 — Intermediate" },
-  { value: "advanced",     label: "C1/C2 — Advanced" },
-  { value: "native",       label: "Native" },
-];
-
 /** Debounced + cancellable loader for AsyncSelect/AsyncCreatableSelect */
 function useDebouncedLoader(asyncFn, delay = 400) {
   const timerRef = useRef(null);
@@ -513,6 +536,8 @@ const makeAsyncSelectI18n = (t) => ({
 /** ================= Main ================= */
 const Dashboard = () => {
   const { t } = useTranslation();
+  const tr = useMemo(() => makeTr(t), [t]);
+  
 
   // Profile
   const [profile, setProfile] = useState({});
@@ -526,6 +551,7 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(() => detectAdmin());
   
 
   //review
@@ -614,7 +640,7 @@ const Dashboard = () => {
 
   // === Provider Inbox / Bookings ===
 
-  const token = localStorage.getItem("token");
+  const token = (typeof localStorage !== "undefined" && localStorage.getItem("token")) || null;
   const config = { headers: { Authorization: `Bearer ${token}` } };
 
   /** ===== Utils ===== */
@@ -643,12 +669,11 @@ const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
       label: x.label || x.name || x,
     }));
   } catch (err) {
-    // игнорируем отмену
-    if (err?.code === "ERR_CANCELED") return [];
-    console.error("Ошибка загрузки отелей:", err);
-    tError(t("hotels_load_error") || "Не удалось загрузить отели");
-    return [];
-  }
+  if (err?.code === "ERR_CANCELED") return [];
+  console.error("Ошибка загрузки отелей:", err);
+  tError(extractApiErrorText(err) || t("hotels_load_error") || "Не удалось загрузить отели");
+  return [];
+}
 }, [API_BASE, t]);
 
 // обёртка с дебаунсом + отменой
@@ -823,38 +848,56 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
 
       /** ===== Load profile + services + stats ===== */
 useEffect(() => {
+  const c1 = new AbortController(), c2 = new AbortController(), c3 = new AbortController();
+
   // Profile
   axios
-    .get(`${API_BASE}/api/providers/profile`, config)
-    .then(async (res) => {
+    .get(`${API_BASE}/api/providers/profile`, { ...config, signal: c1.signal })
+    .then((res) => {
       setProfile(res.data || {});
+      setIsAdmin(detectAdmin(res.data));
       setNewLocation(res.data?.location || "");
       setNewSocial(res.data?.social || "");
       setNewPhone(res.data?.phone || "");
       setNewAddress(res.data?.address || "");
-
-     })
+    })
     .catch((err) => {
+      if (err?.code === "ERR_CANCELED") return;
       console.error("Ошибка загрузки профиля", err);
       tError(t("profile_load_error") || "Не удалось загрузить профиль");
     });
 
   // Services
   axios
-    .get(`${API_BASE}/api/providers/services`, config)
+    .get(`${API_BASE}/api/providers/services`, { ...config, signal: c2.signal })
     .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
     .catch((err) => {
+      if (err?.code === "ERR_CANCELED") return;
       console.error("Ошибка загрузки услуг", err);
       tError(t("services_load_error") || "Не удалось загрузить услуги");
     });
 
   // Stats
   axios
-    .get(`${API_BASE}/api/providers/stats`, config)
+    .get(`${API_BASE}/api/providers/stats`, { ...config, signal: c3.signal })
     .then((res) => setStats(res.data || {}))
-    .catch(() => setStats({}));
+    .catch((err) => {
+      if (err?.code === "ERR_CANCELED") return;
+      setStats({});
+    });
+
+  return () => { c1.abort(); c2.abort(); c3.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
+
+
+  // обновлять флаг при изменениях localStorage (логин/логаут/смена роли в другой вкладке)
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  const onStorage = () => setIsAdmin(detectAdmin(profile));
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}, [profile]);
 
   useEffect(() => {
   if (!selectedService) return;
@@ -1041,6 +1084,32 @@ useEffect(() => {
 
   /** ===== Save service (create/update) ===== */
   const handleSaveService = () => {
+        const badRange = (a,b) => !!a && !!b && new Date(a).getTime() > new Date(b).getTime();
+    // generic date guards
+    if (["refused_tour","author_tour"].includes(category)) {
+      if (badRange(details.startFlightDate, details.endFlightDate)) {
+        tError(t("validation.dates_range", { defaultValue: "Дата конца не может быть раньше даты начала" }));
+        return;
+      }
+    }
+    if (category === "refused_hotel") {
+      if (badRange(details.startDate, details.endDate)) {
+        tError(t("validation.dates_range", { defaultValue: "Дата выезда не может быть раньше даты заезда" }));
+        return;
+      }
+    }
+    if (category === "refused_flight" && details.flightType === "round_trip") {
+  if (!details.returnDate) {
+    tWarn(t("fill_all_fields") || "Заполните все обязательные поля");
+    return;
+  }
+  if (new Date(details.returnDate) < new Date(details.startDate)) {
+    tError(t("validation.dates_range", { defaultValue: "Дата возврата не может быть раньше вылета" }));
+    return;
+  }
+}
+
+    
     const requiredFieldsByCategory = {
       refused_tour: ["title", "details.directionFrom", "details.directionTo", "details.netPrice"],
       author_tour: ["title", "details.directionFrom", "details.directionTo", "details.netPrice"],
@@ -1138,14 +1207,20 @@ useEffect(() => {
       details: isExtendedCategory
       ? {
           ...details,
-          ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
+                    ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
+          // NOTE: if API expects seconds, use Math.floor(__expTs/1000)
           ...(__expTs   !== undefined ? { expiration_ts: __expTs } : {}),
         }
       : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
     
         };
 
+        // normalize simple price to number
+    if (!isExtendedCategory && hasVal(price)) {
+      const pNum = parseMoneySafe(price);
+      if (Number.isFinite(pNum)) raw.price = pNum;
+    }
     const data = compactDeep(raw);
     
     const req = selectedService
@@ -1176,17 +1251,16 @@ useEffect(() => {
   };
 
   const buildDirection = (countryLabel, fromLabel, toLabel) => {
-  const left = countryLabel || "";
-  const mid  = fromLabel ? ` — ${fromLabel}` : "";
-  const right= toLabel   ? ` → ${toLabel}`   : "";
+  const left  = countryLabel || "";
+  const mid   = fromLabel ? (left ? ` — ${fromLabel}` : fromLabel) : "";
+  const right = toLabel ? ` → ${toLabel}` : "";
   return (left + mid + right).trim();
-  };
-
+};
   /** ===== Render ===== */
   return (
     <>
             {/* Верхние табы: добавляем ссылку на модерацию для админов */}
-      {isAdminRole() && (
+      {isAdmin && (
         <div className="px-4 md:px-6 mt-4">
           <div className="inline-flex items-center gap-2 rounded-full border bg-white p-1 shadow-sm">
             <NavLink
@@ -1526,15 +1600,22 @@ useEffect(() => {
                           {t("status.not_actual", { defaultValue: "неактуально" })}
                           </span>
                           )}
-                        {s.details?.netPrice != null ? (
-                          <div className="text-sm text-gray-800">
-                            {t("net_price")}: {s.details.netPrice} USD
-                          </div>
-                        ) : s.price != null ? (
-                          <div className="text-sm text-gray-800">
-                            {t("price")}: {s.price} USD
-                          </div>
-                        ) : null}
+                        {(() => {
+                            const currency = s.details?.currency || s.currency || "USD";
+                            if (hasVal(s?.details?.netPrice)) {
+                              return <div className="text-sm text-gray-800">
+                                {t("net_price")}: {formatMoney(s.details.netPrice, currency)}
+                              </div>;
+                            }
+                            if (hasVal(s?.price)) {
+                              return <div className="text-sm text-gray-800">
+                                {t("price")}: {formatMoney(s.price, currency)}
+                              </div>;
+                            }
+                            return null;
+                          })()}
+
+
                       </div>
                     </div>
                   </div>
@@ -1613,17 +1694,20 @@ useEffect(() => {
                       value={countryOptions.find(c => c.value === details.directionCountry) || null}
                       onChange={(val) => {
                         setSelectedCountry(val);
-                        setDetails((d) => ({
+                        setDetails(d => ({
                           ...d,
                           directionCountry: val?.value || "",
-                          direction: buildDirection(val?.label, d.directionFrom, d.directionTo),
+                          direction: buildDirection(
+                            val?.label,
+                            (departureCity?.label || d.directionFrom),
+                            d.directionTo
+                          ),
                         }));
                       }}
-                      placeholder={t("direction_country")}
-                      noOptionsMessage={() => t("country_not_chosen")}
+                      placeholder={tr(["direction_country","direction.country"], "Страна направления")}
+                      noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
                       className="w-1/3"
                     />
-
                     <AsyncSelect
                         cacheOptions
                         defaultOptions
@@ -1649,7 +1733,7 @@ useEffect(() => {
                                ),
                              }));
                           }}
-                        placeholder={t("direction_from")}
+                        placeholder={tr(["direction_from","direction.from"], "Город вылета")}
                         className="w-1/3"
                       />
 
@@ -1667,8 +1751,8 @@ useEffect(() => {
                            ),
                          }))
                       }
-                      placeholder={t("direction_to")}
-                      noOptionsMessage={() => t("direction_to_not_chosen")}
+                      placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
+                      noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
                       className="w-1/3"
                     />
                   
@@ -1904,12 +1988,13 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <label className="block font-medium mb-1">{t("accommodation")}</label>
+                    <label className="block font-medium mb-1">{tr("accommodation", "Размещение")}</label>
                     <input
                       type="text"
                       value={details.accommodation || ""}
                       onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
                       className="w-full border px-3 py-2 rounded"
+                      placeholder={tr("enter_accommodation", "Тип размещения")}
                     />
                   </div>
 
@@ -2014,8 +2099,8 @@ useEffect(() => {
                               direction: `${value?.label || ""} — ${departureCity?.label || ""} → ${details.directionTo || ""}`,
                             }));
                           }}
-                          placeholder={t("direction_country")}
-                          noOptionsMessage={() => t("country_not_found")}
+                          placeholder={tr(["direction_country","direction.country"], "Страна направления")}
+                          noOptionsMessage={() => tr("country_not_found", "Страна не найдена")}
                           className="w-1/3"
                         />
                         <AsyncSelect
@@ -2035,7 +2120,7 @@ useEffect(() => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
-                          placeholder={t("direction_from")}
+                          placeholder={tr(["direction_from","direction.from"], "Город вылета")}
                           className="w-1/3"
                         />
 
@@ -2049,8 +2134,8 @@ useEffect(() => {
                               direction: `${selectedCountry?.label || ""} — ${departureCity?.label || ""} → ${value?.label || ""}`,
                             }));
                           }}
-                          placeholder={t("direction_to")}
-                          noOptionsMessage={() => t("direction_to_not_found")}
+                          placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
+                          noOptionsMessage={() => tr("direction_to_not_found", "Город прибытия не найден")}
                           className="w-1/3"
                         />
                       </div>
@@ -2167,28 +2252,12 @@ useEffect(() => {
               {category === "refused_event_ticket" && profile.type === "agent" && (
                 <>
                    <Select
-                    options={[
-                      { value: "concert", label: t("event_category_concert") },
-                      { value: "exhibition", label: t("event_category_exhibition") },
-                      { value: "show", label: t("event_category_show") },
-                      { value: "masterclass", label: t("event_category_masterclass") },
-                      { value: "football", label: t("event_category_football") },
-                      { value: "fight", label: t("event_category_fight") },
-                    ]}
-                    value={
-                      [
-                        { value: "concert", label: t("event_category_concert") },
-                        { value: "exhibition", label: t("event_category_exhibition") },
-                        { value: "show", label: t("event_category_show") },
-                        { value: "masterclass", label: t("event_category_masterclass") },
-                        { value: "football", label: t("event_category_football") },
-                        { value: "fight", label: t("event_category_fight") },
-                      ].find((opt) => opt.value === details.eventCategory) || null
-                    }
-                    onChange={(selected) => setDetails({ ...details, eventCategory: selected.value })}
-                    placeholder={t("select_event_category")}
+                    options={EVENT_CATEGORY_OPTIONS(t)}
+                    value={findEventOpt(t, details.eventCategory)}
+                    onChange={(opt) => setDetails({ ...details, eventCategory: opt?.value })}
+                    placeholder={tr("select_event_category", "Категория события")}
                     className="mb-2"
-                  />
+                   />
 
                   <input
                     type="text"
@@ -2254,8 +2323,8 @@ useEffect(() => {
                     options={countryOptions}
                     value={countryOptions.find((option) => option.value === details.visaCountry) || null}
                     onChange={(selected) => setDetails({ ...details, visaCountry: selected?.value })}
-                    placeholder={t("select_country")}
-                    noOptionsMessage={() => t("country_not_chosen")}
+                    placeholder={tr("select_country", "Выберите страну")}
+                    noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
                     className="mb-2"
                   />
 
@@ -2429,8 +2498,8 @@ useEffect(() => {
                             setSelectedCountry(val);
                             setDetails(d => ({ ...d, directionCountry: val?.value || "" }));
                           }}
-                          placeholder={t("direction_country")}
-                          noOptionsMessage={() => t("country_not_chosen")}
+                          placeholder={tr(["direction_country","direction.country"], "Страна направления")}
+                          noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
                           className="w-1/3"
                         />
 
@@ -2452,7 +2521,7 @@ useEffect(() => {
                             setDepartureCity(selected);
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
-                          placeholder={t("direction_from")}
+                          placeholder={tr(["direction_from","direction.from"], "Город вылета")}
                           className="w-1/3"
                         />
 
@@ -2461,8 +2530,8 @@ useEffect(() => {
                           options={cityOptionsTo}
                           value={cityOptionsTo.find((opt) => opt.value === details.directionTo) || null}
                           onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
-                          placeholder={t("direction_to")}
-                          noOptionsMessage={() => t("direction_to_not_chosen")}
+                          placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
+                          noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
                           className="w-1/3"
                         />
                         </div>
@@ -2510,14 +2579,15 @@ useEffect(() => {
                          />
 
                       <div className="mb-4">
-                        <label className="block text-sm font-medium mb-1">{t("accommodation_category")}</label>
-                        <input
-                          type="text"
-                          value={details.accommodationCategory || ""}
-                          onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                          className="w-full border px-3 py-2 rounded mb-2"
-                          placeholder={t("enter_category")}
-                        />
+                        <label className="block font-medium mb-1">{tr("accommodation_category", "Категория размещения")}</label>
+                          <input
+                            type="text"
+                            value={details.accommodationCategory || ""}
+                            onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
+                            className="w-full border px-3 py-2 rounded mb-2"
+                            placeholder={tr("enter_category", "Категория размещения")}
+                          />
+
                         <label className="block text-sm font-medium mb-1">{t("accommodation")}</label>
                         <input
                           type="text"
@@ -2686,22 +2756,24 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("accommodation_category")}</label>
+                        <label className="block font-medium mb-1">{tr("accommodation_category", "Категория размещения")}</label>
                         <input
                           type="text"
                           value={details.accommodationCategory || ""}
                           onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
-                          className="w-full border px-3 py-2 rounded"
+                          className="w-full border px-3 py-2 rounded mb-2"
+                          placeholder={tr("enter_category", "Категория размещения")}
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block font-medium mb-1">{t("accommodation")}</label>
+                        <label className="block font-medium mb-1">{tr("accommodation", "Размещение")}</label>
                         <input
                           type="text"
                           value={details.accommodation || ""}
                           onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
                           className="w-full border px-3 py-2 rounded"
+                          placeholder={tr("enter_accommodation", "Тип размещения")}
                         />
                       </div>
 
@@ -2981,25 +3053,9 @@ useEffect(() => {
                       />
 
                       <Select
-                        options={[
-                          { value: "concert", label: t("event_category_concert") },
-                          { value: "exhibition", label: t("event_category_exhibition") },
-                          { value: "show", label: t("event_category_show") },
-                          { value: "masterclass", label: t("event_category_masterclass") },
-                          { value: "football", label: t("event_category_football") },
-                          { value: "fight", label: t("event_category_fight") },
-                        ]}
-                        value={
-                          [
-                            { value: "concert", label: t("event_category_concert") },
-                            { value: "exhibition", label: t("event_category_exhibition") },
-                            { value: "show", label: t("event_category_show") },
-                            { value: "masterclass", label: t("event_category_masterclass") },
-                            { value: "football", label: t("event_category_football") },
-                            { value: "fight", label: t("event_category_fight") },
-                          ].find((opt) => opt.value === details.eventCategory) || null
-                        }
-                        onChange={(selected) => setDetails({ ...details, eventCategory: selected.value })}
+                        options={EVENT_CATEGORY_OPTIONS(t)}
+                        value={findEventOpt(t, details.eventCategory)}
+                        onChange={(opt) => setDetails({ ...details, eventCategory: opt?.value })}
                         placeholder={t("select_event_category")}
                         className="mb-2"
                       />
