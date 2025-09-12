@@ -1467,7 +1467,7 @@ useEffect(() => {
                                         e.stopPropagation(); // чтобы не открывался редактор
                                         try {
                                           await axios.post(`${API_BASE}/api/providers/services/${s.id}/submit`, {}, config);
-                                          tSuccess(t("service_submitted", { defaultValue: "Отправлено на модерацию" }));
+                                          tSuccess(t("moderation.submitted_toast"));
                                           // Локально обновим статус
                                           setServices((prev) =>
                                             prev.map((x) => (x.id === s.id ? { ...x, status: "pending", submitted_at: new Date().toISOString() } : x))
@@ -1541,7 +1541,7 @@ useEffect(() => {
                               }}
                               className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
                             >
-                              {t("send_to_review", { defaultValue: "Отправить на модерацию" })}
+                              {t("moderation.send_to_review")}
                             </button>
                           )}
                         </div>
