@@ -14,6 +14,16 @@ import ProviderLanguages from "../components/ProviderLanguages";
 
 /** ================= Helpers ================= */
 
+// Фоллбэк-подписи на случай отсутствия ключей в i18n
+const STATUS_LABELS = {
+  draft:     "Черновик",
+  pending:   "Отправлено на модерацию",
+  published: "Одобрено модератором",
+  rejected:  "Отклонено",
+  archived:  "Снято с публикации",
+};
+
+
 // --- money helpers ---
 const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== "";
 
@@ -1442,7 +1452,7 @@ useEffect(() => {
                                           s.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
                                                                      "bg-gray-100 text-gray-700"}`}
                                     >
-                                      {t(`status.${s.status}`, { defaultValue: s.status })}
+                                      {t(`status.${s.status}`, { defaultValue: STATUS_LABELS[s.status] || s.status })}
                                     </span>
                                   )}
                                 
@@ -1505,7 +1515,7 @@ useEffect(() => {
                                 selectedService.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
                                                                          "bg-gray-100 text-gray-700"}`}
                           >
-                            {t(`status.${selectedService.status}`, { defaultValue: selectedService.status })}
+                            {t(`status.${selectedService.status}`, { defaultValue: STATUS_LABELS[selectedService.status] || selectedService.status })}
                           </span>
                       
                           {(selectedService.status === "draft" || selectedService.status === "rejected") && (
