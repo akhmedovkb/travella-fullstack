@@ -1473,7 +1473,7 @@ useEffect(() => {
                                       }}
                                       className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
                                     >
-                                      {t("send_to_review", { defaultValue: "Отправить на модерацию" })}
+                                      {t("moderation.send_to_review")}
                                     </button>
                                   )}
                                 </div>
@@ -1523,7 +1523,7 @@ useEffect(() => {
                               onClick={async () => {
                                 try {
                                   await axios.post(`${API_BASE}/api/providers/services/${selectedService.id}/submit`, {}, config);
-                                  tSuccess(t("service_submitted", { defaultValue: "Отправлено на модерацию" }));
+                                  tSuccess(t("moderation.submitted_toast"));
                                   setServices((prev) =>
                                     prev.map((x) => (x.id === selectedService.id ? { ...x, status: "pending", submitted_at: new Date().toISOString() } : x))
                                   );
