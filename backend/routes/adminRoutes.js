@@ -85,7 +85,7 @@ router.post("/services/:id/unpublish", authenticateToken, requireAdmin, async (r
             unpublished_at = NOW(),
             unpublished_by = $2
       WHERE id=$1 AND status='published'
-      RETURNING id, status`,
+      RETURNING id, status, unpublished_at, unpublished_by`,
     [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
