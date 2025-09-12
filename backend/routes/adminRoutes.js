@@ -51,7 +51,8 @@ router.post("/services/:id/approve", authenticateToken, requireAdmin, async (req
             approved_by=$2,
             published_at=NOW(),     -- в момент апрува публикуем
             rejected_at=NULL,
-            rejected_reason=NULL
+            rejected_reason=NULL,
+            updated_at=NOW()
       WHERE id=$1 AND status='pending'
       RETURNING id, status, published_at`,
     [req.params.id, adminId]
@@ -69,7 +70,8 @@ router.post("/services/:id/reject", authenticateToken, requireAdmin, async (req,
         SET status='rejected',
             rejected_at=NOW(),
             rejected_by=$2,
-            rejected_reason=$3
+            rejected_reason=$3,
+            updated_at=NOW()
       WHERE id=$1 AND status='pending'
       RETURNING id, status, rejected_at, rejected_reason`,
     [req.params.id, adminId, reason]
@@ -86,7 +88,8 @@ router.post("/services/:id/unpublish", authenticateToken, requireAdmin, async (r
         SET status='archived',
             published_at = NULL,
             unpublished_at = NOW(),
-            unpublished_by = $2
+            unpublished_by = $2,
+            updated_at=NOW()
       WHERE id=$1 AND status='published'
       RETURNING id, status, unpublished_at, unpublished_by`,
     [req.params.id, adminId]
