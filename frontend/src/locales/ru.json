@@ -455,6 +455,18 @@
     "request_sent": "Запрос отправлен"
   },
 
+  "moderation": {
+    "service_status": {
+      "draft": "Черновик",
+      "pending": "Отправлено на модерацию",
+      "published": "Одобрено модератором",
+      "rejected": "Отклонено",
+      "archived": "Снято с публикации"
+    },
+    "send_to_review": "Отправить на модерацию",
+    "submitted_toast": "Отправлено на модерацию"
+  }
+
   "mountain_tour": "Тур в горы",
   "my_requests": "Мои запросы",
 
