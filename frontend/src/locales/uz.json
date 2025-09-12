@@ -479,6 +479,18 @@
     "request_sent": "So‘rov yuborildi"
   },
 
+  "moderation": {
+    "service_status": {
+      "draft": "Qoralama",
+      "pending": "Moderator ko‘rib chiqishiga yuborildi",
+      "published": "Moderator tasdiqlagan",
+      "rejected": "Rad etildi",
+      "archived": "E’lonlardan olib tashlandi"
+    },
+    "send_to_review": "Moderatsiyaga yuborish",
+    "submitted_toast": "Moderatsiyaga yuborildi"
+  },
+
   "mountain_tour": "Tog‘ sayohati",
   "my_requests": "So‘rovlarim",
 
