@@ -24,7 +24,7 @@ function Card({ item, onApprove, onReject, onUnpublish }) {
             Поставщик: {s.provider_name} ({s.provider_type})
           </div>
           <div className="text-sm mt-1">
-            {s.price != null ? <>Netto: {fmt(d?.netPrice)} / Gross: {fmt(d?.grossPrice)}</> : null}
+            {(d?.netPrice != null || d?.grossPrice != null) ? <>Netto: {fmt(d?.netPrice)} / Gross: {fmt(d?.grossPrice)}</> : null}
           </div>
         </div>
       </div>
@@ -59,12 +59,12 @@ function Card({ item, onApprove, onReject, onUnpublish }) {
         >
           Reject
         </button>
-        <button
-          onClick={() => onUnpublish(s.id)}
-          className="px-3 py-1.5 rounded bg-gray-200 text-gray-800 text-sm hover:bg-gray-300"
-        >
-          Unpublish
-        </button>
+         {/* Unpublish уместен только для опубликованных */}
+             {item.status === 'published' && (
+               <button onClick={() => onUnpublish(s.id)} className="px-3 py-1.5 rounded bg-gray-200 text-gray-800 text-sm hover:bg-gray-300">
+                 Unpublish
+               </button>
+             )}
       </div>
     </div>
   );
