@@ -1485,7 +1485,7 @@ useEffect(() => {
 
                         {isServiceInactive(s) && (
                           <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700">
-                          {t("not_actual", { defaultValue: "неактуально" })}
+                          {t("status.not_actual", { defaultValue: "неактуально" })}
                           </span>
                           )}
                         {s.details?.netPrice != null ? (
