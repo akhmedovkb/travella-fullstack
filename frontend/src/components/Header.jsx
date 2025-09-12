@@ -81,18 +81,25 @@ export default function Header() {
         let bookingsTotal = 0;
 
         try {
-          const bs = await apiGet("/api/bookings/provider/stats", role);
-          bookingsPending = Number(bs?.pending ?? bs?.awaiting ?? bs?.new ?? 0);
-          bookingsTotal = Number(bs?.total ?? 0);
-        } catch {
-          const bl = await apiGet("/api/bookings/provider", role);
-          const list = Array.isArray(bl) ? bl : bl?.items || [];
-          bookingsPending = list.filter(
-            (x) => String(x.status).toLowerCase() === "pending"
-          ).length;
-          bookingsTotal = list.length;
-        }
-
+              // правильный эндпоинт
+              const bs = await apiGet("/api/providers/stats", role);
+            
+              // total берём из bookings_total (или total — на всякий случай)
+              bookingsTotal = Number(bs?.bookings_total ?? bs?.total ?? 0);
+            
+              // если бекенд вдруг отдаёт pending/awaiting/new — используем
+              if (bs && (bs.pending != null || bs.awaiting != null || bs.new != null)) {
+                bookingsPending = Number(bs.pending ?? bs.awaiting ?? bs.new ?? 0);
+              }
+            } catch {
+              // фоллбэк на список бронирований (тоже providers/*)
+              const bl = await apiGet("/api/providers/bookings", role);
+              const list = Array.isArray(bl) ? bl : bl?.items || [];
+              bookingsPending = list.filter(
+                (x) => String(x.status).toLowerCase() === "pending"
+              ).length;
+              bookingsTotal = list.length;
+            }
         if (!cancelled) {
           setCounts({
             requests_open: requestsNew,  // тут — новые
