@@ -134,6 +134,14 @@ app.use("/api/meta", metaRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+//секции маркетплэйса
+const marketplaceSectionsRoutes = require("./routes/marketplaceSectionsRoutes");
+app.use("/api/marketplace/sections", marketplaceSectionsRoutes);
+
+const moderationRoutes = require("./routes/moderationRoutes");
+app.use("/api/moderation", moderationRoutes);
+
+
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
