@@ -22,6 +22,7 @@
   "airline": "Airline",
   "authored_tour": "Authored tour",
   "back": "← Back",
+  "badges": { "boosted": "Boosted" },
 
   "booking": {
     "date": "Date",
