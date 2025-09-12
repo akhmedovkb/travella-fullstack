@@ -175,9 +175,10 @@ const loginProvider = async (req, res) => {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
 
-    const token = jwt.sign({ id: row.id, role: "provider" }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const isAdmin = row.is_admin === true;
+    const payload = { id: row.id, role: "provider", is_admin: isAdmin };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+
 
     res.json({
       message: "Вход успешен",
@@ -195,6 +196,8 @@ const loginProvider = async (req, res) => {
         telegram_chat_id: row.telegram_chat_id || null,
         tg_chat_id: row.telegram_chat_id || null,
         languages: normalizeLanguagesISO(row.languages ?? []),
+        role: "provider",
+        is_admin: row.is_admin === true,
       },
       token,
     });
@@ -231,6 +234,8 @@ const getProviderProfile = async (req, res) => {
       tg_chat_id: p.telegram_chat_id || null,
       avatar_url: p.photo || null,
       languages: normalizeLanguagesISO(p.languages ?? []),
+      role: "provider",
+      is_admin: p.is_admin === true,
     });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
