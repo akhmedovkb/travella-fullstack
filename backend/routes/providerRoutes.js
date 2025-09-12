@@ -185,7 +185,8 @@ router.post(
             const { rows } = await pool.query(
         `UPDATE services
            SET status='pending',
-               submitted_at = NOW()
+               submitted_at = NOW(),
+               updated_at   = NOW()
          WHERE id=$1
            AND provider_id=$2
            AND status IN ('draft','rejected')
