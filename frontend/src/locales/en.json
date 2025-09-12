@@ -90,7 +90,7 @@
       "active": "active",
       "rejected": "rejected",
       "cancelled": "cancelled",
-      "not_actual": "not actual"
+      
     },
 
     "status_by": {
@@ -718,7 +718,8 @@
     "pending": "pending",
     "rejected": "rejected",
     "active": "active",
-    "accepted": "accepted"
+    "accepted": "accepted",
+    "not_actual": "not actual"
   },
 
   "sum": "Amount",
