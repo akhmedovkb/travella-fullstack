@@ -1,6 +1,7 @@
 //frontend/src/pages/Dashboard.jsx
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { NavLink } from "react-router-dom";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
@@ -24,6 +25,23 @@ const STATUS_LABELS = {
 };
 
 const MOD_STATUS_FALLBACK = STATUS_LABELS; // backward-compat
+
+// Показывать «Модерацию» только админам
+function isAdminRole() {
+  try {
+    const raw =
+      localStorage.getItem("user") ||
+      localStorage.getItem("me") ||
+      localStorage.getItem("auth");
+    if (raw) {
+      const u = JSON.parse(raw);
+      const role = (u?.role || u?.roles)?.toString().toLowerCase?.() || "";
+      if (role.includes("admin")) return true;
+    }
+  } catch {}
+  // запасной вариант — отдельный ключ
+  return (localStorage.getItem("role") || "").toLowerCase() === "admin";
+}
 
 
 
@@ -1167,6 +1185,26 @@ useEffect(() => {
   /** ===== Render ===== */
   return (
     <>
+            {/* Верхние табы: добавляем ссылку на модерацию для админов */}
+      {isAdminRole() && (
+        <div className="px-4 md:px-6 mt-4">
+          <div className="inline-flex items-center gap-2 rounded-full border bg-white p-1 shadow-sm">
+            <NavLink
+              to="/admin/moderation"
+              className={({ isActive }) =>
+                [
+                  "px-3 py-1.5 text-sm font-medium rounded-full",
+                  isActive
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-700 hover:bg-gray-50"
+                ].join(" ")
+              }
+            >
+              {t("moderation.title", { defaultValue: "Модерация" })}
+            </NavLink>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* Левый блок: профиль */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
