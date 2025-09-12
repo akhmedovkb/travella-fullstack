@@ -16,7 +16,7 @@ function requireAdmin(req, res, next) {
 // список на модерации
 router.get("/services/pending", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name
+    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
       WHERE s.status='pending'
@@ -28,7 +28,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
 // карточка услуги (для предпросмотра в админке)
 router.get("/services/:id", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name
+    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
       WHERE s.id=$1`,
@@ -78,12 +78,15 @@ router.post("/services/:id/reject", authenticateToken, requireAdmin, async (req,
 // unpublish (снять с витрины)
 router.post("/services/:id/unpublish", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
-  const { rows } = await pool.query(
+    const { rows } = await pool.query(
     `UPDATE services
-        SET status='archived'
+        SET status='archived',
+            published_at = NULL,
+            unpublished_at = NOW(),
+            unpublished_by = $2
       WHERE id=$1 AND status='published'
       RETURNING id, status`,
-    [req.params.id]
+    [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
   res.json({ ok: true, service: rows[0] });
