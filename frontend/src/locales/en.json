@@ -463,6 +463,7 @@
     "refused_event": "Non-refundable event ticket",
     "results": "Search results",
     "reviews": "Service reviews",
+    "sections": { "top": "Top", "new": "New", "upcoming": "Upcoming" },
     "search": "Search",
     "search_filters": "Search filters",
     "search_in": "Search in {{category}}:",
