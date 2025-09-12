@@ -182,10 +182,10 @@ router.post(
   requireProvider,
   async (req, res, next) => {
     try {
-      const { query } = require("../db");
       const { id } = req.params;
 
-      const { rows } = await query(
+      
+      const { rows } = await pool.query(
         `UPDATE services
            SET status='pending',
                submitted_at = NOW()
