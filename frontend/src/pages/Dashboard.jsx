@@ -1452,8 +1452,10 @@ useEffect(() => {
                                           s.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
                                                                      "bg-gray-100 text-gray-700"}`}
                                     >
-                                      {t(`status.${s.status}`, { defaultValue: STATUS_LABELS[s.status] || s.status })}
-                                    </span>
+                                       {t(`moderation.service_status.${s.status}`, {
+                                         defaultValue: MOD_STATUS_FALLBACK[s.status] || s.status
+                                        })}
+                                      </span>
                                   )}
                                 
                                   {(s.status === "draft" || s.status === "rejected") && (
@@ -1515,7 +1517,9 @@ useEffect(() => {
                                 selectedService.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
                                                                          "bg-gray-100 text-gray-700"}`}
                           >
-                            {t(`status.${selectedService.status}`, { defaultValue: STATUS_LABELS[selectedService.status] || selectedService.status })}
+                             {t(`moderation.service_status.${selectedService.status}`, {
+                                 defaultValue: MOD_STATUS_FALLBACK[selectedService.status] || selectedService.status
+                               })}
                           </span>
                       
                           {(selectedService.status === "draft" || selectedService.status === "rejected") && (
