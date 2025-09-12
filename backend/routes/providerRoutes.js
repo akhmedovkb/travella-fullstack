@@ -185,15 +185,20 @@ router.post(
       const { id } = req.params;
 
       
-      const { rows } = await pool.query(
+            const { rows } = await pool.query(
         `UPDATE services
            SET status='pending',
                submitted_at = NOW()
-         WHERE id=$1 AND provider_id=$2
+         WHERE id=$1
+           AND provider_id=$2
+           AND status IN ('draft','rejected')
          RETURNING id, status, submitted_at`,
         [id, req.user.id]
       );
-      if (!rows.length) return res.status(404).json({ message: "Service not found" });
+      if (!rows.length) {
+        // сервис либо не ваш, либо уже в pending/published/archived
+        return res.status(409).json({ message: "Service must be in draft/rejected to submit" });
+      }
       res.json({ ok: true, service: rows[0] });
     } catch (e) { next(e); }
   }
