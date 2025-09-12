@@ -340,8 +340,10 @@ export default function ServiceCard({
   })();
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
-  const status = typeof statusRaw === "string" && statusRaw.toLowerCase() === "draft" ? null : statusRaw;
-  const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : status;
+  const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
+ // не показываем бейджи для 'draft' и 'published'
+  const statusForBadge = (statusLower === "draft" || statusLower === "published") ? null : statusRaw;
+  const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
 
   // ====== ВАЖНО: логика «кнопка Бронировать» только для гида/транспорта ======
   const serviceLooksBookable = isGuideOrTransport(svc.category || details?.category || item?.category);
