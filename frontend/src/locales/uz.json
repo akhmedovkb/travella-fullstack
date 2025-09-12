@@ -90,7 +90,8 @@
       "confirmed": "tasdiqlandi",
       "active": "faol",
       "rejected": "rad etilgan",
-      "cancelled": "bekor qilindi"
+      "cancelled": "bekor qilindi",
+      "not_actual": "nofaol"
     },
 
     "status_by": {
