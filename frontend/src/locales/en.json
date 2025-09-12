@@ -89,9 +89,8 @@
       "confirmed": "confirmed",
       "active": "active",
       "rejected": "rejected",
-      "cancelled": "cancelled",
-      
-    },
+      "cancelled": "cancelled"
+     },
 
     "status_by": {
       "rejected": {
