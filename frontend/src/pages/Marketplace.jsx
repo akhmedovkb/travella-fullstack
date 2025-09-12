@@ -508,13 +508,15 @@ export default function Marketplace() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
 
-    // ---- Секции: активная вкладка (по умолчанию Top) и данные секции
-  const [activeSection, setActiveSection] = useState("top"); // null => показываем результаты поиска
-  const [secItems, setSecItems] = useState([]);
-  const [secLoading, setSecLoading] = useState(false);
-  const [secError, setSecError] = useState(null);
-  const [secPage, setSecPage] = useState(1);
-  const [secTotal, setSecTotal] = useState(0);
+      // ===== Режимы и состояние лент секций (Top/New/Upcoming) =====
+  const [searchMode, setSearchMode] = useState(false);
+  const [sec, setSec] = useState({
+    top:      { items: [], loading: false, error: null, page: 1, total: 0 },
+    new:      { items: [], loading: false, error: null, page: 1, total: 0 },
+    upcoming: { items: [], loading: false, error: null, page: 1, total: 0 },
+  });
+  const setSecPart = (key, patch) =>
+    setSec((s) => ({ ...s, [key]: { ...s[key], ...patch } }));
 
   const filters = useMemo(
     () => ({
@@ -771,47 +773,41 @@ const search = async (opts = {}) => {
 };
 
 
+   // стартовая загрузка лент секций
   useEffect(() => {
-    search({ all: true });
+    ["top","new","upcoming"].forEach((k) => loadSection(k, 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-    // ---- Загрузка данных выбранной секции
-  const loadSection = async (nextPage = 1) => {
-    if (!activeSection) return; // если секция отключена (режим результатов поиска)
-    setSecLoading(true);
-    setSecError(null);
+
+      // универсальная загрузка секции
+  const loadSection = async (key, nextPage = 1) => {
+    setSecPart(key, { loading: true, error: null });
     try {
       const qs = new URLSearchParams({
         page: String(nextPage),
         limit: String(SECTION_LIMIT),
         ...(category ? { category } : {}),
       }).toString();
-      const res = await apiGet(`/api/marketplace/sections/${activeSection}?${qs}`);
-      const list = normalizeList(res);
-      const total =
-        (res?.total ?? res?.data?.total ?? res?.count ?? res?.total_count ?? 0) | 0;
-      const page =
-        (res?.page ?? res?.data?.page ?? nextPage) | 0;
-      setSecItems(list);
-      setSecTotal(total);
-      setSecPage(page || nextPage);
+      const res = await apiGet(`/api/marketplace/sections/${key}?${qs}`);
+      const list = normalizeList(res).filter((it) => isMarketplaceVisible(it, now));
+      const total = (res?.total ?? res?.data?.total ?? res?.count ?? res?.total_count ?? 0) | 0;
+      const page  = (res?.page ?? res?.data?.page ?? nextPage) | 0;
+      setSecPart(key, { items: list, total, page });
     } catch (e) {
-      console.error("loadSection error:", e);
-      setSecItems([]);
-      setSecTotal(0);
-      setSecError(t("common.load_error") || "Не удалось загрузить данные");
+      console.error(`loadSection ${key} error:`, e);
+      setSecPart(key, { items: [], total: 0, error: t("common.load_error") || "Не удалось загрузить данные" });
     } finally {
-      setSecLoading(false);
+      setSecPart(key, { loading: false });
     }
   };
 
-  // Подгружаем секцию при смене вкладки или категории
+  // При смене категории перегружаем ленты, если не в режиме поиска
   useEffect(() => {
-    if (activeSection) loadSection(1);
+    if (!searchMode) ["top","new","upcoming"].forEach((k) => loadSection(k, 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, category]);
-
+  }, [category]);
+ 
 
   useEffect(() => {
       (async () => {
@@ -954,41 +950,71 @@ const search = async (opts = {}) => {
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
-    // --- данные для рендера: секции тоже фильтруем по видимости/статусу
-  const isBusy  = (activeSection ? secLoading : loading);
-  const errMsg  = (activeSection ? secError   : error);
-  const listForRender = activeSection
-    ? secItems.filter((it) => {
-        const svc = it?.service || it || {};
-        const published = (svc.status ?? 'published') === 'published';
-        return published && isMarketplaceVisible(it, now);
-      })
-    : items;
-  const showEmpty = !isBusy && !errMsg && listForRender.length === 0;
+      // ====== Рендер блока секции (лента) ======
+  const renderSectionBlock = (key) => {
+    const meta = SECTIONS.find(s => s.key === key) || { labelKey: key, fallback: key };
+    const data = sec[key];
 
+    return (
+      <section key={key} className="mb-10">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">
+            {t(meta.labelKey) || meta.fallback}
+          </h2>
+          {data.total > SECTION_LIMIT && (
+            <div className="flex items-center gap-2">
+              <button
+                className="px-3 py-1.5 border rounded disabled:opacity-50"
+                onClick={() => loadSection(key, data.page - 1)}
+                disabled={data.page <= 1 || data.loading}
+                aria-label={t("pagination.prev") || "Предыдущая"}
+              >
+                «
+              </button>
+              <span className="text-sm">
+                {data.page} / {Math.max(1, Math.ceil(data.total / SECTION_LIMIT))}
+              </span>
+              <button
+                className="px-3 py-1.5 border rounded disabled:opacity-50"
+                onClick={() => loadSection(key, data.page + 1)}
+                disabled={data.page >= Math.ceil(data.total / SECTION_LIMIT) || data.loading}
+                aria-label={t("pagination.next") || "Следующая"}
+              >
+                »
+              </button>
+            </div>
+          )}
+        </div>
 
-    // ---- UI: вкладки секций
-  const renderSectionTabs = () => (
-    <div className="flex flex-wrap gap-2 mb-4">
-      {SECTIONS.map((s) => (
-        <button
-          key={s.key}
-          onClick={() => setActiveSection(s.key)}
-          className={[
-            "px-3 py-2 rounded-lg border text-sm transition",
-            activeSection === s.key
-              ? "bg-blue-600 text-white border-blue-600"
-              : "bg-white text-gray-700 border-gray-200 hover:border-gray-300",
-          ].join(" ")}
-          aria-pressed={activeSection === s.key}
-        >
-          {t(s.labelKey) || s.fallback}
-        </button>
-      ))}
-    </div>
-  );
+        {data.loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
+        {!data.loading && data.error && <div className="text-red-600">{data.error}</div>}
+        {!data.loading && !data.error && data.items.length === 0 && (
+          <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
+        )}
 
-
+        {!data.loading && !data.error && !!data.items.length && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {data.items.map((it) => {
+              const sid = getServiceId(it);
+              return (
+                <ServiceCard
+                  key={sid || JSON.stringify(it)}
+                  item={it}
+                  now={now}
+                  viewerRole={role}
+                  isFav={sid ? favIds.has(String(sid)) : false}
+                  onToggleFavorite={() => sid && toggleFavorite(sid)}
+                  onQuickRequest={(serviceId, providerId, title) =>
+                    openQuickRequest(serviceId ?? sid, providerId, title)
+                 }
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  };
   
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -1032,8 +1058,16 @@ const search = async (opts = {}) => {
           ))}
         </select>
 
-                <button
-          onClick={() => { setActiveSection(null); search(); }}
+                        <button
+          onClick={() => {
+            const wantSearch = !!(q.trim() || category);
+            setSearchMode(wantSearch);
+            if (wantSearch) {
+              search();
+            } else {
+              ["top","new","upcoming"].forEach((k) => loadSection(k, 1));
+            }
+          }}
           className="px-5 py-2 rounded-lg bg-gray-900 text-white"
           disabled={loading}
         >
@@ -1043,66 +1077,43 @@ const search = async (opts = {}) => {
 
       {/* Список */}
       <div className="bg-white rounded-xl shadow p-6 border">
-                {/* Вкладки секций над списком */}
-        {renderSectionTabs()}
-
-        {/* Источник данных зависит от режима: секция или поиск */}
-        { isBusy && (
-          <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>
+                        {searchMode ? (
+          <>
+            {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
+            {!loading && error && <div className="text-red-600">{error}</div>}
+            {!loading && !error && !items.length && (
+              <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
+            )}
+            {!loading && !error && !!items.length && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {items.map((it) => {
+                  const sid = getServiceId(it);
+                  return (
+                    <ServiceCard
+                      key={sid || JSON.stringify(it)}
+                      item={it}
+                      now={now}
+                      viewerRole={role}
+                      isFav={sid ? favIds.has(String(sid)) : false}
+                      onToggleFavorite={() => sid && toggleFavorite(sid)}
+                      onQuickRequest={(serviceId, providerId, title) =>
+                        openQuickRequest(serviceId ?? sid, providerId, title)
+                      }
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {renderSectionBlock("top")}
+            {renderSectionBlock("new")}
+            {renderSectionBlock("upcoming")}
+          </>
         )}
-                { !isBusy && errMsg && (
-          <div className="text-red-600">{errMsg}</div>
-        )}
-                { showEmpty && (
-          <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
-        )}
-                { !isBusy && !errMsg && !!listForRender.length && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {listForRender.map((it) => {
-              const sid = getServiceId(it);
-              return (
-                 <ServiceCard
-                   key={sid || JSON.stringify(it)}
-                   item={it}
-                   now={now}
-                   viewerRole={role} 
-                   isFav={sid ? favIds.has(String(sid)) : false}
-                   onToggleFavorite={() => sid && toggleFavorite(sid)}
-                   onQuickRequest={(serviceId, providerId, title) =>
-                     openQuickRequest(serviceId ?? sid, providerId, title)
-                   }
-                 />
-              );
-            })}
-                </div>
-        )}
-
-        {/* Пагинация только для секций */}
-        {activeSection && secTotal > SECTION_LIMIT && (
-          <div className="flex items-center justify-center gap-2 mt-6">
-            <button
-              className="px-3 py-2 border rounded disabled:opacity-50"
-              onClick={() => loadSection(secPage - 1)}
-              disabled={secPage <= 1 || secLoading}
-              aria-label={t("pagination.prev") || "Предыдущая"}
-            >
-              «
-            </button>
-            <span className="text-sm">
-              {secPage} / {Math.max(1, Math.ceil(secTotal / SECTION_LIMIT))}
-            </span>
-            <button
-              className="px-3 py-2 border rounded disabled:opacity-50"
-              onClick={() => loadSection(secPage + 1)}
-              disabled={secPage >= Math.ceil(secTotal / SECTION_LIMIT) || secLoading}
-              aria-label={t("pagination.next") || "Следующая"}
-            >
-              »
-            </button>
-          </div>
-        )}
-      </div> 
-      {/* Модалка быстрого запроса */}
+     </div> 
+     {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
     </div>
   );
