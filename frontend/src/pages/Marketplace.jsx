@@ -794,9 +794,9 @@ const search = async (opts = {}) => {
       const total = (res?.total ?? res?.data?.total ?? res?.count ?? res?.total_count ?? 0) | 0;
       const page  = (res?.page ?? res?.data?.page ?? nextPage) | 0;
       setSecPart(key, { items: list, total, page });
-    } catch (e) {
+        } catch (e) {
       console.error(`loadSection ${key} error:`, e);
-      setSecPart(key, { items: [], total: 0, error: t("common.load_error") || "Не удалось загрузить данные" });
+      setSecPart(key, { items: [], total: 0, error: t("common.loading_error") || "Не удалось загрузить данные" });
     } finally {
       setSecPart(key, { loading: false });
     }
@@ -950,72 +950,79 @@ const search = async (opts = {}) => {
     { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
   ];
 
-      // ====== Рендер блока секции (лента) ======
+        // ====== Рендер блока секции (как отдельная карточка) ======
   const renderSectionBlock = (key) => {
-    const meta = SECTIONS.find(s => s.key === key) || { labelKey: key, fallback: key };
+    const meta = SECTIONS.find((s) => s.key === key) || { labelKey: key, fallback: key };
     const data = sec[key];
+    const title = t(meta.labelKey) || meta.fallback;
 
     return (
-      <section key={key} className="mb-10">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">
-            {t(meta.labelKey) || meta.fallback}
-          </h2>
-          {data.total > SECTION_LIMIT && (
-            <div className="flex items-center gap-2">
-              <button
-                className="px-3 py-1.5 border rounded disabled:opacity-50"
-                onClick={() => loadSection(key, data.page - 1)}
-                disabled={data.page <= 1 || data.loading}
-                aria-label={t("pagination.prev") || "Предыдущая"}
-              >
-                «
-              </button>
-              <span className="text-sm">
-                {data.page} / {Math.max(1, Math.ceil(data.total / SECTION_LIMIT))}
-              </span>
-              <button
-                className="px-3 py-1.5 border rounded disabled:opacity-50"
-                onClick={() => loadSection(key, data.page + 1)}
-                disabled={data.page >= Math.ceil(data.total / SECTION_LIMIT) || data.loading}
-                aria-label={t("pagination.next") || "Следующая"}
-              >
-                »
-              </button>
-            </div>
-          )}
-        </div>
+      <section key={key} className="mb-8">
+        <div className="rounded-xl border bg-white shadow-sm">
+          {/* Хедер секции */}
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50 rounded-t-xl">
+            <h2 className="text-base font-semibold text-gray-800">{title}</h2>
 
-        {data.loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
-        {!data.loading && data.error && <div className="text-red-600">{data.error}</div>}
-        {!data.loading && !data.error && data.items.length === 0 && (
-          <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
-        )}
-
-        {!data.loading && !data.error && !!data.items.length && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {data.items.map((it) => {
-              const sid = getServiceId(it);
-              return (
-                <ServiceCard
-                  key={sid || JSON.stringify(it)}
-                  item={it}
-                  now={now}
-                  viewerRole={role}
-                  isFav={sid ? favIds.has(String(sid)) : false}
-                  onToggleFavorite={() => sid && toggleFavorite(sid)}
-                  onQuickRequest={(serviceId, providerId, title) =>
-                    openQuickRequest(serviceId ?? sid, providerId, title)
-                 }
-                />
-              );
-            })}
+            {data.total > SECTION_LIMIT && (
+              <div className="flex items-center gap-2">
+                <button
+                  className="px-3 py-1.5 border rounded bg-white hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => loadSection(key, data.page - 1)}
+                  disabled={data.page <= 1 || data.loading}
+                  aria-label={t("pagination.prev") || "Предыдущая"}
+                >
+                  «
+                </button>
+                <span className="text-sm text-gray-600">
+                  {data.page} / {Math.max(1, Math.ceil(data.total / SECTION_LIMIT))}
+                </span>
+                <button
+                  className="px-3 py-1.5 border rounded bg-white hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => loadSection(key, data.page + 1)}
+                  disabled={data.page >= Math.ceil(data.total / SECTION_LIMIT) || data.loading}
+                  aria-label={t("pagination.next") || "Следующая"}
+                >
+                  »
+                </button>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Контент секции */}
+          <div className="p-4">
+            {data.loading && (
+              <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>
+            )}
+            {!data.loading && data.error && <div className="text-red-600">{data.error}</div>}
+            {!data.loading && !data.error && data.items.length === 0 && (
+              <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
+            )}
+            {!data.loading && !data.error && !!data.items.length && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {data.items.map((it) => {
+                  const sid = getServiceId(it);
+                  return (
+                    <ServiceCard
+                      key={sid || JSON.stringify(it)}
+                      item={it}
+                      now={now}
+                      viewerRole={role}
+                      isFav={sid ? favIds.has(String(sid)) : false}
+                      onToggleFavorite={() => sid && toggleFavorite(sid)}
+                      onQuickRequest={(serviceId, providerId, title) =>
+                        openQuickRequest(serviceId ?? sid, providerId, title)
+                      }
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
     );
   };
-  
+ 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       
@@ -1075,44 +1082,42 @@ const search = async (opts = {}) => {
         </button>
       </div>
 
-      {/* Список */}
-      <div className="bg-white rounded-xl shadow p-6 border">
-                        {searchMode ? (
-          <>
-            {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
-            {!loading && error && <div className="text-red-600">{error}</div>}
-            {!loading && !error && !items.length && (
-              <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
-            )}
-            {!loading && !error && !!items.length && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {items.map((it) => {
-                  const sid = getServiceId(it);
-                  return (
-                    <ServiceCard
-                      key={sid || JSON.stringify(it)}
-                      item={it}
-                      now={now}
-                      viewerRole={role}
-                      isFav={sid ? favIds.has(String(sid)) : false}
-                      onToggleFavorite={() => sid && toggleFavorite(sid)}
-                      onQuickRequest={(serviceId, providerId, title) =>
-                        openQuickRequest(serviceId ?? sid, providerId, title)
-                      }
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {renderSectionBlock("top")}
-            {renderSectionBlock("new")}
-            {renderSectionBlock("upcoming")}
-          </>
-        )}
-     </div> 
+            {/* Список / секции */}
+      {searchMode ? (
+        <div className="bg-white rounded-xl shadow p-6 border">
+          {loading && <div className="text-gray-500">{t("common.loading") || "Загрузка…"}.</div>}
+          {!loading && error && <div className="text-red-600">{error}</div>}
+          {!loading && !error && !items.length && (
+            <div className="text-gray-500">{t("marketplace.no_results") || "Нет результатов"}</div>
+          )}
+          {!loading && !error && !!items.length && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {items.map((it) => {
+                const sid = getServiceId(it);
+                return (
+                  <ServiceCard
+                    key={sid || JSON.stringify(it)}
+                    item={it}
+                    now={now}
+                    viewerRole={role}
+                    isFav={sid ? favIds.has(String(sid)) : false}
+                    onToggleFavorite={() => sid && toggleFavorite(sid)}
+                    onQuickRequest={(serviceId, providerId, title) =>
+                      openQuickRequest(serviceId ?? sid, providerId, title)
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
+       </div>
+      ) : (
+        <>
+          {renderSectionBlock("top")}
+          {renderSectionBlock("new")}
+          {renderSectionBlock("upcoming")}
+        </>
+      )}
      {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
     </div>
