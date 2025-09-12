@@ -7,10 +7,13 @@ const authenticateToken = require("../middleware/authenticateToken");
 
 // простая проверка роли
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== "admin") {
-    return res.status(403).json({ message: "Admin only" });
+  if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+  // допускаем либо роль 'admin', либо флаг is_admin=true
+  if (req.user.role === "admin" || req.user.is_admin === true) {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Admin only" });
 }
 
 // список на модерации
