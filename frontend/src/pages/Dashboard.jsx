@@ -15,6 +15,24 @@ import ProviderLanguages from "../components/ProviderLanguages";
 
 /** ================= Helpers ================= */
 
+// рядом с другими константами/хелперами (выше компонента)
+const statusBadgeClass = (status) => {
+  switch (status) {
+    case "published":
+      return "bg-emerald-100 text-emerald-700";
+    case "pending":
+      return "bg-amber-100 text-amber-800";
+    case "rejected":
+      return "bg-rose-100 text-rose-700";     // ⬅ розовый для «Отклонено»
+    case "archived":
+      return "bg-slate-100 text-slate-600";
+    case "draft":
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+};
+
+
 const EVENT_CATEGORY_OPTIONS = (t) => ([
   { value: "concert",      label: t("event_category_concert") },
   { value: "exhibition",   label: t("event_category_exhibition") },
