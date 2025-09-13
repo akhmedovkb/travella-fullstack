@@ -36,11 +36,10 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
             {prov.id ? ( 
               <Link
-                to={`/provider/${prov.id}`}
-                target="_blank"
-                rel="noreferrer"
-                reloadDocument
-                className="text-blue-600 hover:underline"
+                 to={`/profile/provider/${prov.id}`}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="text-blue-600 hover:underline"
               >
                 {prov.name}
               </Link>
