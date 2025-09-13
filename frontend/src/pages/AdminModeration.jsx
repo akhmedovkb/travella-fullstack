@@ -34,7 +34,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
           <div className="text-xs text-gray-600">{s.category}</div>
           <div className="text-xs text-gray-600 mt-1">
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
-            {prov.id ? 
+            {prov.id ? ( 
               <Link
                 to={`/provider/${prov.id}`}
                 target="_blank"
