@@ -1720,7 +1720,7 @@ useEffect(() => {
                   <div className="flex gap-4 mb-2">
                     <Select
                       options={countryOptions}
-                      value={findCountryOpt(details.directionCountry)}
+                      value={selectedCountry}
                       onChange={(val) => {
                         setSelectedCountry(val);
                         setDetails(d => ({
@@ -1948,8 +1948,9 @@ useEffect(() => {
                     <label className="block font-medium mb-1">{t("direction_country")}</label>
                     <Select
                       options={countryOptions}
-                      value={findCountryOpt(details.direction)}
+                      value={selectedCountry}
                       onChange={(selected) =>
+                        setSelectedCountry(selected); 
                         setDetails({ ...details, direction: selected?.value || "" })
                       }
                       placeholder={t("direction_country")}
@@ -1967,6 +1968,7 @@ useEffect(() => {
                       {...ASYNC_MENU_PORTAL}
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
                       onChange={(selected) =>
+                        setSelectedCountry(selected);
                         setDetails({ ...details, directionTo: selected?.value || "" })
                       }
                       placeholder={t("select_city")}
@@ -2119,7 +2121,7 @@ useEffect(() => {
                        <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={findCountryOpt(details.directionCountry)}
+                          value={selectedCountry}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -2350,7 +2352,7 @@ useEffect(() => {
                 <>
                   <Select
                     options={countryOptions}
-                    value={findCountryOpt(details.visaCountry)}
+                    value={selectedCountry}
                     onChange={(selected) => setDetails({ ...details, visaCountry: selected?.value })}
                     placeholder={tr("select_country", "Выберите страну")}
                     noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
@@ -2522,7 +2524,7 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={findCountryOpt(details.directionCountry)}
+                          value={selectedCountry}
                           onChange={(val) => {
                             setSelectedCountry(val);
                             setDetails(d => ({ ...d, directionCountry: val?.code || val?.value || "" }))
@@ -2731,7 +2733,7 @@ useEffect(() => {
                         <label className="block font-medium mb-1">{t("direction_country")}</label>
                         <Select
                           options={countryOptions}
-                          value={countryOptions.find((c) => c.value === details.direction) || null}
+                          value={selectedCountry}
                           onChange={(selected) => setDetails({ ...details, direction: selected?.value || "" })}
                           placeholder={t("direction_country")}
                         />
@@ -2907,7 +2909,7 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={findCountryOpt(details.directionCountry)}
+                          value={selectedCountry}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -3155,7 +3157,7 @@ useEffect(() => {
 
                       <Select
                         options={countryOptions}
-                        value={findCountryOpt(details.visaCountry)}
+                        value={selectedCountry}
                         onChange={(selected) => setDetails({ ...details, visaCountry: selected?.value })}
                         placeholder={t("select_country")}
                         noOptionsMessage={() => t("country_not_chosen")}
