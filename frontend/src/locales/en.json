@@ -497,7 +497,36 @@
       "archived": "Archived"
     },
     "send_to_review": "Send to review",
-    "submitted_toast": "Submitted for review"
+    "submitted_toast": "Submitted for review",
+    "title": "Service moderation",
+    "no_title": "(no title)",
+    "supplier": "Supplier",
+    "direction": "Direction",
+    "start": "Start",
+    "end": "End",
+    "location": "Location",
+    "event": "Event",
+    "airline": "Airline",
+    "rejected_reason": "Reason",
+    "confirm": "Confirm",
+    "approve": "Approve",
+    "enter_reason": "Rejection reason:",
+    "reject": "Reject",
+    "unpublish": "Unpublish",
+    "approved": "Published",
+    "approve_error": "Approve error",
+    "enter_reason_short": "Enter a reason",
+    "rejected": "Rejected",
+    "reject_error": "Reject error",
+    "unpublished": "Unpublished",
+    "unpublish_error": "Unpublish error",
+    "forbidden": "Admins only",
+    "empty": "No items",
+    "tabs": {
+      "pending": "Pending",
+      "rejected": "Rejected"
+    }
+  }
   },
 
   "mountain_tour": "Mountain tour",
