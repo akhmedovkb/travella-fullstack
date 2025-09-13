@@ -710,17 +710,20 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
   try {
     const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
       params: {
-        name_startsWith: inputValue,
+        name_startsWith: inputValue,      // прямой префиксный поиск
+        q: inputValue,                    // дополнительный полнотекстовый
         featureClass: "P",
         maxRows: 10,
+        fuzzy: 0.9,                       // чуть мягче сопоставление
+        style: "FULL",                    // чтобы были альтернативные названия
         username: import.meta.env.VITE_GEONAMES_USERNAME,
-        lang: pickGeoLang(), // ← ru/uz/en
+        lang: pickGeoLang(),              // ru/uz/en – как и было
       },
       signal,
     });
     return (data.geonames || []).map((city) => ({
       value: city.name,
-      label: `${city.name}, ${city.countryName}`,
+      label: city.name,
     }));
   } catch (error) {
     if (error?.code === "ERR_CANCELED") return [];
@@ -728,6 +731,7 @@ const loadCitiesRaw = useCallback(async (inputValue, signal) => {
     return [];
   }
 }, [pickGeoLang]);
+
 
 // обёртка с дебаунсом + отменой
 const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
