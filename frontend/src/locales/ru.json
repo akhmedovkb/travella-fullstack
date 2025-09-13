@@ -468,7 +468,35 @@
       "archived": "Снято с публикации"
     },
     "send_to_review": "Отправить на модерацию",
-    "submitted_toast": "Отправлено на модерацию"
+    "submitted_toast": "Отправлено на модерацию",
+    "title": "Модерация услуг",
+    "no_title": "(без названия)",
+    "supplier": "Поставщик",
+    "direction": "Направление",
+    "start": "Старт",
+    "end": "Конец",
+    "location": "Локация",
+    "event": "Событие",
+    "airline": "Авиакомпания",
+    "rejected_reason": "Причина",
+    "confirm": "Подтвердить",
+    "approve": "Опубликовать",
+    "enter_reason": "Причина отклонения:",
+    "reject": "Отклонить",
+    "unpublish": "Снять с публикации",
+    "approved": "Опубликовано",
+    "approve_error": "Ошибка публикации",
+    "enter_reason_short": "Укажите причину",
+    "rejected": "Отклонено",
+    "reject_error": "Ошибка отклонения",
+    "unpublished": "Снято с публикации",
+    "unpublish_error": "Ошибка снятия с публикации",
+    "forbidden": "Доступ только для администратора",
+    "empty": "Нет элементов",
+    "tabs": {
+      "pending": "Ожидают",
+      "rejected": "Отклонённые"
+    }
   },
 
   "mountain_tour": "Тур в горы",
