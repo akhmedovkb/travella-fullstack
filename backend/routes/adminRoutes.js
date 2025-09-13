@@ -8,71 +8,85 @@ const authenticateToken = require("../middleware/authenticateToken");
 // простая проверка роли
 function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-
-  // допускаем либо роль 'admin', либо флаг is_admin=true
-  if (req.user.role === "admin" || req.user.is_admin === true) {
-    return next();
-  }
+  if (req.user.role === "admin" || req.user.is_admin === true) return next();
   return res.status(403).json({ message: "Admin only" });
 }
 
-// список на модерации
+/* ---------- СПИСКИ (идут первыми) ---------- */
+
+// /api/admin/services/pending
 router.get("/services/pending", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.status='pending'
-      ORDER BY s.submitted_at ASC`
+      WHERE s.status = 'pending'
+      ORDER BY s.submitted_at ASC NULLS LAST, s.updated_at DESC`
   );
   res.json(q.rows);
 });
 
-// карточка услуги (для предпросмотра в админке)
-router.get("/services/:id", authenticateToken, requireAdmin, async (req, res) => {
+// /api/admin/services/rejected
+router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.id=$1`,
+      WHERE s.status = 'rejected'
+      ORDER BY COALESCE(s.rejected_at, s.updated_at) DESC`
+  );
+  res.json(q.rows);
+});
+
+/* ---------- ДЕЙСТВИЯ и карточка (после списков; :id только цифры) ---------- */
+
+// карточка услуги для предпросмотра
+router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, res) => {
+  const q = await pool.query(
+    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1`,
     [req.params.id]
   );
   if (!q.rows.length) return res.status(404).json({ message: "Not found" });
   res.json(q.rows[0]);
 });
 
-// approve
-router.post("/services/:id/approve", authenticateToken, requireAdmin, async (req, res) => {
+// approve (в т.ч. подтверждение ранее отклонённых)
+router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
   const { rows } = await pool.query(
     `UPDATE services
-        SET status='published',
-            approved_at=NOW(),
-            approved_by=$2,
-            published_at=NOW(),     -- в момент апрува публикуем
-            rejected_at=NULL,
-            rejected_reason=NULL,
-            updated_at=NOW()
-      WHERE id=$1 AND status='pending'
+        SET status         = 'published',
+            approved_at    = NOW(),
+            approved_by    = $2,
+            published_at   = NOW(),
+            -- чистим следы отклонения, если было
+            rejected_at    = NULL,
+            rejected_by    = NULL,
+            rejected_reason= NULL,
+            updated_at     = NOW()
+      WHERE id = $1 AND status IN ('pending','rejected')
       RETURNING id, status, published_at`,
     [req.params.id, adminId]
   );
-  if (!rows.length) return res.status(400).json({ message: "Service not in pending" });
+  if (!rows.length) return res.status(400).json({ message: "Service must be pending or rejected" });
   res.json({ ok: true, service: rows[0] });
 });
 
-// reject
-router.post("/services/:id/reject", authenticateToken, requireAdmin, async (req, res) => {
+// reject (оставляем только для pending)
+router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
   const { reason = "" } = req.body || {};
   const { rows } = await pool.query(
     `UPDATE services
-        SET status='rejected',
-            rejected_at=NOW(),
-            rejected_by=$2,
-            rejected_reason=$3,
-            updated_at=NOW()
-      WHERE id=$1 AND status='pending'
+        SET status          = 'rejected',
+            rejected_at     = NOW(),
+            rejected_by     = $2,
+            rejected_reason = $3,
+            updated_at      = NOW()
+      WHERE id = $1 AND status = 'pending'
       RETURNING id, status, rejected_at, rejected_reason`,
     [req.params.id, adminId, reason]
   );
@@ -80,17 +94,17 @@ router.post("/services/:id/reject", authenticateToken, requireAdmin, async (req,
   res.json({ ok: true, service: rows[0] });
 });
 
-// unpublish (снять с витрины)
-router.post("/services/:id/unpublish", authenticateToken, requireAdmin, async (req, res) => {
+// снять с публикации
+router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
-    const { rows } = await pool.query(
+  const { rows } = await pool.query(
     `UPDATE services
-        SET status='archived',
-            published_at = NULL,
+        SET status         = 'archived',
+            published_at   = NULL,
             unpublished_at = NOW(),
             unpublished_by = $2,
-            updated_at=NOW()
-      WHERE id=$1 AND status='published'
+            updated_at     = NOW()
+      WHERE id = $1 AND status = 'published'
       RETURNING id, status, unpublished_at, unpublished_by`,
     [req.params.id, adminId]
   );
