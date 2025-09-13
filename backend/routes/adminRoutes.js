@@ -38,19 +38,6 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
   res.json(q.rows);
 });
 
-// список отклонённых (для вкладки "Отклонённые")
-router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
-  const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
-       FROM services s
-       JOIN providers p ON p.id = s.provider_id
-      WHERE s.status='rejected'
-      ORDER BY s.rejected_at DESC NULLS LAST, s.updated_at DESC`
-  );
-  res.json(q.rows);
-});
-
-
 // /api/admin/services/rejected
 router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
   const q = await pool.query(
