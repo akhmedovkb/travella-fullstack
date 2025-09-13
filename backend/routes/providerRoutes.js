@@ -194,14 +194,13 @@ router.post(
          RETURNING id, status, submitted_at`,
         [id, req.user.id]
       );
-      if (!rows.length) {
+            if (!rows.length) {
         // сервис либо не ваш, либо уже в pending/published/archived
         return res.status(409).json({ message: "Service must be in draft/rejected to submit" });
       }
-      res.json({ ok: true, service: rows[0] });
-            // TG: уведомить админов о новой услуге в очереди
+      // TG: уведомить админов о новой услуге в очереди
       try { await notifyModerationNew({ service: rows[0].id }); } catch {}
-      res.json({ ok: true, service: rows[0] });
+      return res.json({ ok: true, service: rows[0] });
     } catch (e) { next(e); }
   }
 );
