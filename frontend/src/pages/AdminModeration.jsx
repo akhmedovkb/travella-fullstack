@@ -131,18 +131,15 @@ export default function AdminModeration() {
     }
   })();
 
-    async function fetchList(which) {
-    if (which === "pending") {
-      const res = await axios.get(`${API_BASE}/api/admin/services/pending`, cfg);
-      return Array.isArray(res.data) ? res.data : res.data?.items || [];
-    }
-    // rejected: не дергаем /rejected, чтобы не попасть на /:id
-    // Берём общий список и фильтруем на клиенте.
-    const res = await axios.get(`${API_BASE}/api/admin/services`, cfg);
-    const list = Array.isArray(res.data) ? res.data : res.data?.items || [];
-    return list.filter(x => String(x.status) === "rejected");
-  }
-
+   async function fetchList(which) {
+   const url =
+     which === "pending"
+       ? `${API_BASE}/api/admin/services/pending`
+       : `${API_BASE}/api/admin/services/rejected`;
+   const res = await axios.get(url, cfg);
+   return Array.isArray(res.data) ? res.data : res.data?.items || [];
+ }
+  
   const load = async (which = tab) => {
     setLoading(true);
     try {
@@ -156,20 +153,17 @@ export default function AdminModeration() {
     }
   };
 
-    const refreshCounts = async () => {
-    try {
-      const [p, all] = await Promise.all([
-        axios.get(`${API_BASE}/api/admin/services/pending`, cfg),
-        axios.get(`${API_BASE}/api/admin/services`, cfg),
-      ]);
-      const pending = Array.isArray(p.data) ? p.data.length : (p.data?.items || []).length;
-      const allList = Array.isArray(all.data) ? all.data : all.data?.items || [];
-      const rejected = allList.filter(x => String(x.status) === "rejected").length;
-      setCounts({ pending, rejected });
-    } catch {
-      /* no-op */
-    }
-  };
+  const refreshCounts = async () => {
+   try {
+     const [p, r] = await Promise.all([
+       axios.get(`${API_BASE}/api/admin/services/pending`, cfg),
+       axios.get(`${API_BASE}/api/admin/services/rejected`, cfg),
+     ]);
+     const pending = (Array.isArray(p.data) ? p.data : p.data?.items || []).length;
+     const rejected = (Array.isArray(r.data) ? r.data : r.data?.items || []).length;
+     setCounts({ pending, rejected });
+   } catch {}
+ };
 
   useEffect(() => {
     load("pending");
