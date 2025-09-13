@@ -7,6 +7,12 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 const enabled = !!BOT_TOKEN;
+// Админские чаты (можно передать один id или список через запятую/пробел)
+const ADMIN_CHAT_IDS =
+  (process.env.ADMIN_TG_CHAT_IDS || process.env.ADMIN_TG_CHAT || "")
+    .split(/[,\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 
 /* ================== low-level helpers ================== */
 
@@ -66,6 +72,13 @@ function urlClient(path) {
   if (!SITE) return "";
   const slug = String(path || "").replace(/^\/+/, "");
   return `${SITE}/client/${slug}`;
+}
+
+function urlAdmin(path) {
+  if (!SITE) return "";
+  const slug = String(path || "").replace(/^\/+/, "");
+  // по умолчанию открываем очередь модерации
+  return `${SITE}/admin/${slug || "moderation"}`;
 }
 
 /** format dates like 12–14 Sep 2025 */
@@ -553,6 +566,11 @@ module.exports = {
   tgSend,
   linkProviderChat,
   linkClientChat,
+    // ADMIN / MODERATION:
+  notifyModerationNew,
+  notifyModerationApproved,
+  notifyModerationRejected,
+  notifyModerationUnpublished,
   // BOOKINGS:
   notifyNewRequest,
   notifyQuote,
@@ -566,3 +584,131 @@ module.exports = {
   notifyReqCancelledByRequester,
   notifyReqDeletedByProvider,
 };
+
+
+/* ================== MODERATION (ADMIN) ================== */
+async function getAdminChatIds() {
+  // 1) из ENV
+  const fromEnv = ADMIN_CHAT_IDS.map((v) => (Number(v) || v)).filter(Boolean);
+  // 2) из БД (провайдеры с админскими флагами/ролями)
+  try {
+   const q = await pool.query(`
+      SELECT DISTINCT telegram_chat_id
+        FROM providers
+       WHERE telegram_chat_id IS NOT NULL
+         AND (
+              is_admin = true
+           OR lower(coalesce(role,'')) LIKE '%admin%'
+           OR lower(coalesce(role,'')) LIKE '%moderator%'
+         )
+    `);
+    const db = q.rows.map((r) => r.telegram_chat_id).filter(Boolean);
+    return [...new Set([...fromEnv, ...db])];
+  } catch {
+    return [...new Set(fromEnv)];
+  }
+}
+
+async function _enrichService(svcOrId) {
+  if (svcOrId && typeof svcOrId === "object" && svcOrId.id) return svcOrId;
+  const id = Number(svcOrId);
+  if (!Number.isFinite(id)) return {};
+  const q = await pool.query(
+    `SELECT s.id, s.title, s.category, s.status, s.details,
+            s.provider_id,
+            p.name AS provider_name,
+            p.type AS provider_type
+       FROM services s
+  LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1
+      LIMIT 1`,
+    [id]
+  );
+  return q.rows[0] || {};
+}
+
+function _fmtMoney(x) {
+  const n = Number(x || 0);
+  return new Intl.NumberFormat().format(n);
+}
+
+function _serviceLines(s) {
+  const lines = [];
+  const d = typeof s.details === "object" ? s.details : {};
+  lines.push(`🏷️ <b>${esc(s.title || "Услуга")}</b>`);
+  if (s.category) lines.push(`📂 Категория: ${esc(s.category)}`);
+  if (s.provider_name) {
+    const t = s.provider_type ? ` (${esc(s.provider_type)})` : "";
+    lines.push(`🏢 Поставщик: <b>${esc(s.provider_name)}</b>${t}`);
+  }
+  if (d.netPrice != null || d.grossPrice != null) {
+    lines.push(`💵 Netto: <b>${_fmtMoney(d.netPrice)}</b> / Gross: <b>${_fmtMoney(d.grossPrice)}</b>`);
+  }
+  return lines;
+}
+
+async function _sendToAdmins(text) {
+  const ids = await getAdminChatIds();
+  await Promise.all(ids.map((id) => tgSend(id, text)));
+}
+
+async function notifyModerationNew({ service }) {
+  try {
+    const s = await _enrichService(service);
+    const lines = [
+      `<b>🆕 Новая услуга на модерации</b>`,
+      ..._serviceLines(s),
+      "",
+      `🔗 Открыть: ${urlAdmin("moderation")}`,
+    ];
+    await _sendToAdmins(lines.join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyModerationNew failed:", e?.message || e);
+  }
+}
+
+async function notifyModerationApproved({ service }) {
+  try {
+    const s = await _enrichService(service);
+    const lines = [
+      `<b>✅ Услуга одобрена</b>`,
+      ..._serviceLines(s),
+      "",
+      `🔗 Модерация: ${urlAdmin("moderation")}`,
+    ];
+    await _sendToAdmins(lines.join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyModerationApproved failed:", e?.message || e);
+  }
+}
+
+async function notifyModerationRejected({ service, reason }) {
+  try {
+    const s = await _enrichService(service);
+    const lines = [
+      `<b>❌ Услуга отклонена</b>`,
+      ..._serviceLines(s),
+      reason ? `📝 Причина: ${esc(reason)}` : "",
+      "",
+      `🔗 Модерация: ${urlAdmin("moderation")}`,
+    ].filter(Boolean);
+    await _sendToAdmins(lines.join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyModerationRejected failed:", e?.message || e);
+  }
+}
+
+async function notifyModerationUnpublished({ service }) {
+  try {
+    const s = await _enrichService(service);
+    const lines = [
+      `<b>📦 Услуга снята с публикации</b>`,
+      ..._serviceLines(s),
+      "",
+      `🔗 Модерация: ${urlAdmin("moderation")}`,
+    ];
+    await _sendToAdmins(lines.join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyModerationUnpublished failed:", e?.message || e);
+  }
+}
