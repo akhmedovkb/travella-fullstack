@@ -115,20 +115,21 @@ const hasVal = (v) => v !== undefined && v !== null && String(v).trim?.() !== ""
 
 function MoneyField({ label, value, onChange, placeholder }) {
   return (
-        <div className="mb-2">
-          {label ? <label className="block font-medium mb-1">{label}</label> : null}
-          <input
-            inputMode="decimal"
-            pattern="[0-9,.\s-]*"
-            min="0.01"
-            value={value ?? ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            className="w-full border px-3 py-2 rounded"
-          />
-        </div>
-      );
-    }
+    <div className="mb-2">
+      {label ? <label className="block font-medium mb-1">{label}</label> : null}
+      <input
+        inputMode="decimal"
+        pattern="[-0-9., ]*"   // ⬅ без \s
+        min="0.01"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full border px-3 py-2 rounded"
+      />
+    </div>
+  );
+}
+
 const parseMoneySafe = (v) => {
   if (!hasVal(v)) return NaN;
   let s = String(v).replace(/\s+/g, "");
