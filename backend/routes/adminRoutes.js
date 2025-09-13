@@ -8,13 +8,19 @@ const {
   notifyModerationApproved,
   notifyModerationRejected,
   notifyModerationUnpublished,
-  notifyModerationNew, // пригодится, если захотите дергать при создании pending
 } = require("../utils/telegram");
 
 // простая проверка роли
 function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-  if (req.user.role === "admin" || req.user.is_admin === true) return next();
+  const role = String(req.user.role || "").toLowerCase();
+  const isAdmin =
+    req.user.is_admin === true ||
+    role === "admin" ||
+    req.user.is_moderator === true ||
+    req.user.moderator === true ||
+    role === "moderator";
+  if (isAdmin) return next();
   return res.status(403).json({ message: "Admin only" });
 }
 
