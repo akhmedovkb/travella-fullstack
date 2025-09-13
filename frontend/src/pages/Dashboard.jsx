@@ -1672,7 +1672,7 @@ useEffect(() => {
                                       }
                                       className={`inline-block text-xs px-2 py-0.5 rounded
                                         ${s.status === "published" ? "bg-emerald-100 text-emerald-700" :
-                                          s.status === "pending"   ? "bg-amber-100 text-amber-800"   :
+                                          s.status === "pending"   ? "bg-amber-100 text-amber-800"   }`}
                                           
                                     >
                                        {t(`moderation.service_status.${s.status}`, {
