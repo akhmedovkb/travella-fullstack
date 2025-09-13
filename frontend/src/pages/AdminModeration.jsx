@@ -22,6 +22,26 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
   const d = typeof s.details === "object" ? s.details : {};
   const cover = Array.isArray(s.images) && s.images.length ? s.images[0] : null;
   const prov = providerFrom(s);
+    // Локализация типа поставщика по уже существующим ключам provider.types.*
+  const providerTypeLabel = (() => {
+    const v = prov.type;
+    if (!v) return "";
+    const arr = Array.isArray(v)
+      ? v
+      : String(v).split(/[,\s|/]+/).filter(Boolean);
+    return arr
+      .map(k => t(`provider.types.${k}`, { defaultValue: k }))
+      .join(", ");
+  })();
+
+  // Локализация категории: service.categories.* -> service.types.* -> top-level key -> raw
+  const categoryLabel = s.category
+    ? t(`service.categories.${s.category}`, {
+        defaultValue: t(`service.types.${s.category}`, {
+          defaultValue: t(s.category, { defaultValue: s.category }),
+        }),
+      })
+    : "";
 
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col">
@@ -31,9 +51,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold truncate">{s.title || t("moderation.no_title", { defaultValue: "(без названия)" })}</div>
-           <div className="text-xs text-gray-600">
-             {t(`service.categories.${s.category}`, { defaultValue: s.category })}
-           </div>
+           <div className="text-xs text-gray-600">{categoryLabel}</div>
           <div className="text-xs text-gray-600 mt-1">
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
             {prov.id ? ( 
@@ -48,7 +66,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             ) : (
               <span>{prov.name}</span>
             )}
-            {prov.type ? ` (${t(`service.providerTypes.${prov.type}`, { defaultValue: prov.type })})` : ""}
+            {providerTypeLabel ? ` (${providerTypeLabel})` : ""}
           </div>
           <div className="text-sm mt-1">
             {(d?.netPrice != null || d?.grossPrice != null) ? <>Netto: {fmt(d?.netPrice)} / Gross: {fmt(d?.grossPrice)}</> : null}
