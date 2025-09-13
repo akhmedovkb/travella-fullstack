@@ -31,7 +31,9 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold truncate">{s.title || t("moderation.no_title", { defaultValue: "(без названия)" })}</div>
-          <div className="text-xs text-gray-600">{s.category}</div>
+           <div className="text-xs text-gray-600">
+             {t(`service.categories.${s.category}`, { defaultValue: s.category })}
+           </div>
           <div className="text-xs text-gray-600 mt-1">
             {t("moderation.supplier", { defaultValue: "Поставщик" })}:{" "}
             {prov.id ? ( 
@@ -46,7 +48,7 @@ function Card({ item, tab, onApprove, onReject, onUnpublish, t }) {
             ) : (
               <span>{prov.name}</span>
             )}
-            {prov.type ? ` (${prov.type})` : ""}
+            {prov.type ? ` (${t(`service.providerTypes.${prov.type}`, { defaultValue: prov.type })})` : ""}
           </div>
           <div className="text-sm mt-1">
             {(d?.netPrice != null || d?.grossPrice != null) ? <>Netto: {fmt(d?.netPrice)} / Gross: {fmt(d?.grossPrice)}</> : null}
