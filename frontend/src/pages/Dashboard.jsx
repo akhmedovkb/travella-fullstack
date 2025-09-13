@@ -889,7 +889,7 @@ useEffect(() => {
     .catch((err) => {
       if (err?.code === "ERR_CANCELED") return;
       console.error("Ошибка загрузки профиля", err);
-      tError(t("profile_load_error") || "Не удалось загрузить профиль");
+      tError(tr(["profile_load_error"], "Не удалось загрузить профиль"));
     });
 
   // Services
@@ -1140,7 +1140,7 @@ useEffect(() => {
     const requiredFieldsByCategory = {
       refused_tour: ["title", "details.directionFrom", "details.directionTo", "details.netPrice"],
       author_tour: ["title", "details.directionFrom", "details.directionTo", "details.netPrice"],
-      refused_hotel: ["title", "details.direction", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
+      refused_hotel: ["title", "details.directionCountry", "details.directionTo", "details.startDate", "details.endDate", "details.netPrice"],
       refused_flight: ["title", "details.directionFrom", "details.directionTo", "details.startDate", "details.netPrice", "details.airline"],
       refused_event_ticket: ["title", "details.location", "details.startDate", "details.netPrice"],
       visa_support: ["title", "details.description", "details.netPrice"],
@@ -1234,6 +1234,9 @@ useEffect(() => {
       details: isExtendedCategory
       ? {
           ...details,
+             hotel: typeof details.hotel === "object"
+       ? (details.hotel?.label || details.hotel?.name || "")
+       : (details.hotel || ""),
           ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
           // NOTE: if API expects seconds, use Math.floor(__expTs/1000)
@@ -1951,7 +1954,7 @@ useEffect(() => {
                       value={selectedCountry}
                       onChange={(selected) =>
                         setSelectedCountry(selected); 
-                        setDetails({ ...details, direction: selected?.value || "" })
+                        setDetails({ ...details, directionCountry: selected?.value || "" })
                       }
                       placeholder={t("direction_country")}
                     />
@@ -2734,7 +2737,7 @@ useEffect(() => {
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
-                          onChange={(selected) => setDetails({ ...details, direction: selected?.value || "" })}
+                          onChange={(selected) => setDetails({ ...details, directionCountry: selected?.value || "" })}
                           placeholder={t("direction_country")}
                         />
                       </div>
