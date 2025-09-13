@@ -4,6 +4,12 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
+const {
+  notifyModerationApproved,
+  notifyModerationRejected,
+  notifyModerationUnpublished,
+  notifyModerationNew, // пригодится, если захотите дергать при создании pending
+} = require("../utils/telegram");
 
 // простая проверка роли
 function requireAdmin(req, res, next) {
@@ -25,6 +31,19 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
   );
   res.json(q.rows);
 });
+
+// список отклонённых (для вкладки "Отклонённые")
+router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
+  const q = await pool.query(
+    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.status='rejected'
+      ORDER BY s.rejected_at DESC NULLS LAST, s.updated_at DESC`
+  );
+  res.json(q.rows);
+});
+
 
 // /api/admin/services/rejected
 router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
@@ -72,6 +91,8 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service must be pending or rejected" });
+    // TG → администраторам
+  notifyModerationApproved({ service: rows[0].id }).catch(()=>{});
   res.json({ ok: true, service: rows[0] });
 });
 
@@ -91,6 +112,8 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
     [req.params.id, adminId, reason]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in pending" });
+    // TG → администраторам
+  notifyModerationRejected({ service: rows[0].id, reason }).catch(()=>{});
   res.json({ ok: true, service: rows[0] });
 });
 
@@ -109,6 +132,8 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
     [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
+    // TG → администраторам
+  notifyModerationUnpublished({ service: rows[0].id }).catch(()=>{});
   res.json({ ok: true, service: rows[0] });
 });
 
