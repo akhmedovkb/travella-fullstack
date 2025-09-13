@@ -75,6 +75,7 @@ function MoneyField({ label, value, onChange, placeholder }) {
           <input
             inputMode="decimal"
             pattern="[0-9,.\s-]*"
+            min="0.01"
             value={value ?? ""}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
@@ -537,8 +538,8 @@ const makeAsyncSelectI18n = (t) => ({
 const Dashboard = () => {
    const { t, i18n } = useTranslation();
 
- // RU/UZ/EN приоритет: i18n → navigator → en
- const pickGeoLang = () => {
+ // RU/UZ/EN приоритет: i18n → navigator → en (стабильная ссылка)
+ const pickGeoLang = useCallback(() => {
    const allowed = ["ru", "uz", "en"];
    const fromI18n = (i18n?.language || "").slice(0, 2).toLowerCase();
    if (allowed.includes(fromI18n)) return fromI18n;
@@ -546,7 +547,7 @@ const Dashboard = () => {
      .filter(Boolean)
      .map((l) => String(l).slice(0, 2).toLowerCase());
    return nav.find((l) => allowed.includes(l)) || "en";
- };
+ }, [i18n?.language]);
   const tr = useMemo(() => makeTr(t), [t]);
   
 
@@ -603,6 +604,12 @@ const Dashboard = () => {
   // Geography
   const [countryOptions, setCountryOptions] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState(null); // {value,label,code}
+    // Умный поиск страны по value/label/ISO2 для обратной совместимости
+   const findCountryOpt = useCallback(
+   (v) => countryOptions.find((c) => c.code === v) || null,
+   [countryOptions]
+ );
+
   const [departureCity, setDepartureCity] = useState(null);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
 
@@ -815,17 +822,17 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
     try {
       const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2,translations");
       if (!alive) return;
-           const ui = pickGeoLang();
-     // RestCountries использует ключи 'rus' и 'uzb' для переводов
-     const trKey = ui === "ru" ? "rus" : ui === "uz" ? "uzb" : null;
-     const countries = response.data.map((country) => {
-       const label =
-         (trKey && country.translations?.[trKey]?.common) ||
-         country.name?.common ||
-         country.cca2;
-       return { value: label, label, code: country.cca2 };
-     });
-      setCountryOptions(countries.sort((a, b) => a.label.localeCompare(b.label)));
+          const ui = pickGeoLang();
+      // RestCountries: ru -> 'rus', uz -> 'uzb'
+      const trKey = ui === "ru" ? "rus" : ui === "uz" ? "uzb" : null;
+      const countries = response.data.map((country) => {
+   const code  = country?.cca2;
+   const label = (trKey && country?.translations?.[trKey]?.common) || country?.name?.common || code;
+   return { value: code, label, code };
+ });
+      setCountryOptions(
+        countries.sort((a, b) => a.label.localeCompare(b.label, ui))
+      );
     } catch (e) { /* ... */ }
   })();
   return () => { alive = false; };
@@ -922,7 +929,9 @@ useEffect(() => {
   const d = selectedService.details || {};
 
   const valCountry = d.directionCountry || d.direction; // что есть
-  const co = countryOptions.find(c => c.value === valCountry);
+    const co = countryOptions.find(
+    (c) => c.value === valCountry || c.label === valCountry || c.code === valCountry
+  );
   if (co) setSelectedCountry(co);
 
   if (d.directionFrom) {
@@ -1228,7 +1237,9 @@ useEffect(() => {
           ...(__grossNum !== undefined ? { grossPrice: __grossNum } : {}),
           ...(__netNum   !== undefined ? { netPrice:  __netNum   } : {}),
           // NOTE: if API expects seconds, use Math.floor(__expTs/1000)
-          ...(__expTs   !== undefined ? { expiration_ts: __expTs } : {}),
+            ...(__expTs !== undefined
+     ? { expiration_ts: Math.floor(__expTs / 1000) } // backend expects seconds
+     : {}),
         }
       : (__grossNum !== undefined ? { grossPrice: __grossNum } : undefined),
     
@@ -1709,7 +1720,7 @@ useEffect(() => {
                   <div className="flex gap-4 mb-2">
                     <Select
                       options={countryOptions}
-                      value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                      value={findCountryOpt(details.directionCountry)}
                       onChange={(val) => {
                         setSelectedCountry(val);
                         setDetails(d => ({
@@ -1937,7 +1948,7 @@ useEffect(() => {
                     <label className="block font-medium mb-1">{t("direction_country")}</label>
                     <Select
                       options={countryOptions}
-                      value={countryOptions.find((c) => c.value === details.direction)}
+                      value={findCountryOpt(details.direction)}
                       onChange={(selected) =>
                         setDetails({ ...details, direction: selected?.value || "" })
                       }
@@ -1979,7 +1990,7 @@ useEffect(() => {
                         type="date"
                         min={todayLocalDate()}
                         value={details.startDate}
-                        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                        onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                         className="w-full border px-3 py-2 rounded"
                       />
                     </div>
@@ -2108,7 +2119,7 @@ useEffect(() => {
                        <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                          value={findCountryOpt(details.directionCountry)}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -2193,7 +2204,7 @@ useEffect(() => {
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate || ""}
-                            onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                            onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                             className="w-full border px-3 py-2 rounded"
                           />
                         </div>
@@ -2289,7 +2300,7 @@ useEffect(() => {
                     type="date"
                     min={todayLocalDate()}
                     value={details.startDate || ""}
-                    onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                    onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                     placeholder={t("event_date")}
                     className="w-full border px-3 py-2 rounded mb-2"
                   />
@@ -2339,7 +2350,7 @@ useEffect(() => {
                 <>
                   <Select
                     options={countryOptions}
-                    value={countryOptions.find((option) => option.value === details.visaCountry) || null}
+                    value={findCountryOpt(details.visaCountry)}
                     onChange={(selected) => setDetails({ ...details, visaCountry: selected?.value })}
                     placeholder={tr("select_country", "Выберите страну")}
                     noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
@@ -2511,10 +2522,10 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                          value={findCountryOpt(details.directionCountry)}
                           onChange={(val) => {
                             setSelectedCountry(val);
-                            setDetails(d => ({ ...d, directionCountry: val?.value || "" }));
+                            setDetails(d => ({ ...d, directionCountry: val?.code || val?.value || "" }))
                           }}
                           placeholder={tr(["direction_country","direction.country"], "Страна направления")}
                           noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
@@ -2757,7 +2768,7 @@ useEffect(() => {
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate}
-                            onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                            onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                             className="w-full border px-3 py-2 rounded"
                           />
                         </div>
@@ -2896,7 +2907,7 @@ useEffect(() => {
                       <div className="flex gap-4 mb-2">
                         <Select
                           options={countryOptions}
-                          value={countryOptions.find(c => c.value === details.directionCountry) || null}
+                          value={findCountryOpt(details.directionCountry)}
                           onChange={(value) => {
                             setSelectedCountry(value);
                             setDetails((prev) => ({
@@ -2985,7 +2996,7 @@ useEffect(() => {
                             type="date"
                             min={todayLocalDate()}
                             value={details.startDate || ""}
-                            onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                            onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                             className="w-full border px-3 py-2 rounded"
                           />
                         </div>
@@ -3090,7 +3101,7 @@ useEffect(() => {
                         type="date"
                         min={todayLocalDate()}
                         value={details.startDate || ""}
-                        onChange={(e) => setDetails({ ...details, startDate: e.target.value })}
+                        onChange={(e) => setDetails(d => ({ ...d, startDate: e.target.value }))}
                         placeholder={t("event_date")}
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
@@ -3144,7 +3155,7 @@ useEffect(() => {
 
                       <Select
                         options={countryOptions}
-                        value={countryOptions.find((option) => option.value === details.visaCountry) || null}
+                        value={findCountryOpt(details.visaCountry)}
                         onChange={(selected) => setDetails({ ...details, visaCountry: selected?.value })}
                         placeholder={t("select_country")}
                         noOptionsMessage={() => t("country_not_chosen")}
