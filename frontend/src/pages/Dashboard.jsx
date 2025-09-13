@@ -1956,10 +1956,16 @@ useEffect(() => {
                     <Select
                       options={countryOptions}
                       value={selectedCountry}
-                      onChange={(selected) =>
-                        setSelectedCountry(selected) 
-                        setDetails({ ...details, directionCountry: selected?.value || "" })
-                      }
+                      onChange={(selected) => {
+                        setSelectedCountry(selected);                     // храним объект страны (с code)
+                        setDetails((d) => ({                             // пишем код страны в details
+                          ...d,
+                          directionCountry: selected?.value || ""
+                        }));
+                        // полезно очистить выбранный город при смене страны:
+                        setDepartureCity(null);
+                        setDetails((d) => ({ ...d, directionTo: "" }));
+                      }}
                       placeholder={t("direction_country")}
                     />
                   </div>
@@ -1969,14 +1975,14 @@ useEffect(() => {
                     <AsyncSelect
                       cacheOptions
                       loadOptions={loadCities}
-                      noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-                      loadingMessage={ASYNC_I18N.loadingMessage}
                       defaultOptions
                       {...ASYNC_MENU_PORTAL}
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
-                      onChange={(selected) =>
-                        setDetails({ ...details, directionTo: selected?.value || "" })
-                      }
+                      onChange={(selected) => {
+                        setDetails((d) => ({ ...d, directionTo: selected?.value || "" }));
+                      }}
+                      noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                      loadingMessage={ASYNC_I18N.loadingMessage}
                       placeholder={t("select_city")}
                     />
                   </div>
