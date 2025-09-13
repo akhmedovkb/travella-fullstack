@@ -6,6 +6,38 @@ import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 
 /* --- Inline SVG иконки --- */
+// для таба - модерация услуг
+const IconModeration = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
+  </svg>
+);
+
+// детектор админ-прав (как в Dashboard.jsx)
+const YES = new Set(["1", "true", "yes", "on"]);
+function detectAdmin(profile) {
+  const p = profile || {};
+  const roles = []
+    .concat(p.role || [])
+    .concat(p.roles || [])
+    .flatMap(r => String(r).split(","))
+    .map(s => s.trim());
+  const perms = []
+    .concat(p.permissions || p.perms || [])
+    .map(String);
+
+  let is =
+    !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
+    roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+    perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()));
+
+  if (typeof window !== "undefined" && import.meta?.env?.DEV) {
+    const v = localStorage.getItem("isAdminUiHint");
+    if (v && YES.has(String(v).toLowerCase())) is = true;
+  }
+  return is;
+}
+
 const IconDashboard = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z" stroke="currentColor" strokeWidth="2" />
@@ -30,12 +62,29 @@ const IconHeart = (p) => (
 );
 
 export default function Header() {
-  const { t } = useTranslation();
-  const location = useLocation();
-
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = hasClient ? "client" : hasProvider ? "provider" : null;
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (role !== "provider") { if (alive) setIsAdmin(false); return; }
+      try {
+        const p = await apiGet("/api/providers/profile", role);
+        if (alive) setIsAdmin(detectAdmin(p));
+      } catch {
+        // dev-хинт, чтобы можно было видеть таб в dev
+        const v = localStorage.getItem("isAdminUiHint");
+        if (alive) setIsAdmin(!!(v && YES.has(String(v).toLowerCase())));
+      }
+    })();
+    return () => { alive = false; };
+  }, [role]);
+
+  const { t } = useTranslation();
+  const location = useLocation();  
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -176,31 +225,23 @@ export default function Header() {
 
         {/* Provider nav */}
         {role === "provider" && (
-          <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
-            <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-            <NavBadge
-              to="/dashboard/requests"
-              label={t("nav.requests")}
-              value={providerRequests}
-              loading={loading}
-              icon={<IconRequests />}
-            />
-            <NavBadge
-              to="/dashboard/favorites"
-              label={t("nav.favorites") || "Избранное"}
-              value={favCount}
-              loading={false}
-              icon={<IconHeart />}
-            />
-            <NavBadge
-              to="/dashboard/bookings"
-              label={t("nav.bookings")}
-              value={bookingsBadge}
-              loading={loading}
-              icon={<IconBookings />}
-            />
-          </nav>
-        )}
+            <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
+              <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+              <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+              <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
+              <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+          
+              {/* <-- здесь будет виден только админам/модераторам */}
+              {isAdmin && (
+                <NavItem
+                  to="/admin/moderation"
+                  label={t("moderation.title", "Модерация")}
+                  icon={<IconModeration />}
+                />
+              )}
+            </nav>
+          )}
+
 
         {/* Client shortcuts: cabinet + favorites */}
         {role === "client" && (
