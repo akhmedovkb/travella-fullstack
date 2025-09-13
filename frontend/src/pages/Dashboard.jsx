@@ -1971,7 +1971,6 @@ useEffect(() => {
                       {...ASYNC_MENU_PORTAL}
                       value={details.directionTo ? { label: details.directionTo, value: details.directionTo } : null}
                       onChange={(selected) =>
-                        setSelectedCountry(selected);
                         setDetails({ ...details, directionTo: selected?.value || "" })
                       }
                       placeholder={t("select_city")}
