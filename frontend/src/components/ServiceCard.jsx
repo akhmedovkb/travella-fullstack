@@ -456,14 +456,9 @@ export default function ServiceCard({
         <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="absolute inset-x-0 bottom-0 p-3">
             <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-              <div className="font-semibold line-clamp-2">{title}</div>
-              {/* Направление показываем только для отказных авиабилетов */}
-              {svc?.category === "refused_flight" && direction && (
-                <div>
-                  <span className="opacity-80">{t("common.direction") || "Направление"}: </span>
-                  <span className="font-medium">{direction}</span>
-                </div>
-              )}
+              <div className="font-semibold line-clamp-2">
+                 {direction || title}
+              </div>
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
