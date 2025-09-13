@@ -131,20 +131,16 @@ export default function AdminModeration() {
     }
   })();
 
-  async function fetchList(which) {
-    // 1) пытаемся через query-параметр
-    try {
-      const res = await axios.get(`${API_BASE}/api/admin/services`, {
-        ...cfg,
-        params: { status: which }
-      });
-      const data = Array.isArray(res.data) ? res.data : res.data?.items || [];
-      return data;
-    } catch {
-      // 2) фоллбэк на старые пути /pending /rejected
-      const res = await axios.get(`${API_BASE}/api/admin/services/${which}`, cfg);
+    async function fetchList(which) {
+    if (which === "pending") {
+      const res = await axios.get(`${API_BASE}/api/admin/services/pending`, cfg);
       return Array.isArray(res.data) ? res.data : res.data?.items || [];
     }
+    // rejected: не дергаем /rejected, чтобы не попасть на /:id
+    // Берём общий список и фильтруем на клиенте.
+    const res = await axios.get(`${API_BASE}/api/admin/services`, cfg);
+    const list = Array.isArray(res.data) ? res.data : res.data?.items || [];
+    return list.filter(x => String(x.status) === "rejected");
   }
 
   const load = async (which = tab) => {
@@ -160,21 +156,18 @@ export default function AdminModeration() {
     }
   };
 
-  const refreshCounts = async () => {
+    const refreshCounts = async () => {
     try {
-      // если есть stats — используем, иначе считаем двумя запросами
-      try {
-        const { data } = await axios.get(`${API_BASE}/api/admin/services/stats`, cfg);
-        setCounts({
-          pending: Number(data?.pending || 0),
-          rejected: Number(data?.rejected || 0),
-        });
-      } catch {
-        const [p, r] = await Promise.all([fetchList("pending"), fetchList("rejected")]);
-        setCounts({ pending: p.length, rejected: r.length });
-      }
+      const [p, all] = await Promise.all([
+        axios.get(`${API_BASE}/api/admin/services/pending`, cfg),
+        axios.get(`${API_BASE}/api/admin/services`, cfg),
+      ]);
+      const pending = Array.isArray(p.data) ? p.data.length : (p.data?.items || []).length;
+      const allList = Array.isArray(all.data) ? all.data : all.data?.items || [];
+      const rejected = allList.filter(x => String(x.status) === "rejected").length;
+      setCounts({ pending, rejected });
     } catch {
-      setCounts((c) => c);
+      /* no-op */
     }
   };
 
