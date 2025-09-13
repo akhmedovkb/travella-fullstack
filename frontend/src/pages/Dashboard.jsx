@@ -37,7 +37,7 @@ const STATUS_LABELS = {
 
 const MOD_STATUS_FALLBACK = STATUS_LABELS; // backward-compat
 
-// Показывать «Модерацию» только админам/модераторам — берём из профиля И/ИЛИ localStorage
+// Показывать «Модерацию» только админам/модераторам — из профиля / JWT / LS
 const YES = new Set(["1","true","yes","on"]);
 function detectAdmin(profile) {
   const p = profile || {};
@@ -63,6 +63,33 @@ function detectAdmin(profile) {
     }
   }
   return is;
+}
+
+
+// JWT fallback (тот же, что в Header)
+function detectAdminFromJwt() {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const base64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [])
+      .concat(claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim());
+    const perms = []
+      .concat(claims.permissions || claims.perms || [])
+      .map(String);
+    return (
+      claims.role === "admin" || claims.is_admin === true || claims.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()))
+    );
+  } catch { return false; }
 }
 
 // --- money helpers ---
@@ -563,7 +590,8 @@ const Dashboard = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [stats, setStats] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(() => detectAdmin());
+    // стартуем с JWT, чтобы таб появился сразу
+  const [isAdmin, setIsAdmin] = useState(() => detectAdminFromJwt());
   
 
   //review
@@ -921,9 +949,10 @@ useEffect(() => {
   // Profile
   axios
     .get(`${API_BASE}/api/providers/profile`, { ...config, signal: c1.signal })
-    .then((res) => {
+        .then((res) => {
       setProfile(res.data || {});
-      setIsAdmin(detectAdmin(res.data));
+      // если из профиля нет флага — оставляем JWT-детект
+      setIsAdmin(detectAdmin(res.data) || detectAdminFromJwt());
       setNewLocation(res.data?.location || "");
       setNewSocial(res.data?.social || "");
       setNewPhone(res.data?.phone || "");
