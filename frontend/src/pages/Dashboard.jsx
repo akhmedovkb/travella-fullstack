@@ -819,28 +819,67 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
       });
   };
 
-  /** ===== Load dictionaries ===== */
-  useEffect(() => {
+ 
+  // ===== Load dictionaries (countries) =====
+useEffect(() => {
   let alive = true;
+
   (async () => {
     try {
-      const response = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2,translations");
+      const ui = pickGeoLang(); // 'uz' | 'ru' | 'en'
+      let countries = [];
+
+      // 1) Пытаемся взять локализованные названия стран у GeoNames
+      try {
+        const { data } = await axios.get(
+          "https://secure.geonames.org/countryInfoJSON",
+          {
+            params: {
+              lang: ui, // uz/ru/en — GeoNames локализует списки
+              username: import.meta.env.VITE_GEONAMES_USERNAME,
+            },
+          }
+        );
+        countries = (data?.geonames || []).map((c) => ({
+          value: c.countryCode, // ISO-2
+          code:  c.countryCode,
+          label: c.countryName, // локализованное имя
+        }));
+      } catch (_) {
+        // молча сваливаемся на restcountries
+      }
+
+      // 2) Если GeoNames недоступен — фолбэк на restcountries
+      if (!countries.length) {
+        const res = await axios.get(
+          "https://restcountries.com/v3.1/all?fields=name,cca2,translations"
+        );
+        const trKey = ui === "ru" ? "rus" : null; // uzb почти нигде нет
+        countries = (res.data || []).map((country) => {
+          const code = country?.cca2;
+          const label =
+            (trKey && country?.translations?.[trKey]?.common) ||
+            country?.name?.common ||
+            code;
+          return { value: code, code, label };
+        });
+      }
+
       if (!alive) return;
-          const ui = pickGeoLang();
-      // RestCountries: ru -> 'rus', uz -> 'uzb'
-      const trKey = ui === "ru" ? "rus" : ui === "uz" ? "uzb" : null;
-      const countries = response.data.map((country) => {
-   const code  = country?.cca2;
-   const label = (trKey && country?.translations?.[trKey]?.common) || country?.name?.common || code;
-   return { value: code, label, code };
- });
       setCountryOptions(
         countries.sort((a, b) => a.label.localeCompare(b.label, ui))
       );
-    } catch (e) { /* ... */ }
+    } catch (e) {
+      // можно показать тост, если нужно
+      console.error("Не удалось загрузить список стран", e);
+    }
   })();
-  return () => { alive = false; };
+
+  return () => {
+    alive = false;
+  };
 }, [pickGeoLang]);
+
 
 
    // Arrival cities based on selected country
