@@ -1957,7 +1957,7 @@ useEffect(() => {
                       options={countryOptions}
                       value={selectedCountry}
                       onChange={(selected) =>
-                        setSelectedCountry(selected); 
+                        setSelectedCountry(selected) 
                         setDetails({ ...details, directionCountry: selected?.value || "" })
                       }
                       placeholder={t("direction_country")}
