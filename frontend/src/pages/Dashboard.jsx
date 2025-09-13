@@ -1663,13 +1663,17 @@ useEffect(() => {
                         <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
                             {/* статус + кнопка модерации */}                            
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                  {typeof s.status === "string" && (
+                                   {typeof s.status === "string" && (
                                     <span
+                                      title={
+                                        s.status === "rejected"
+                                          ? (s.rejected_reason || t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
+                                          : undefined
+                                      }
                                       className={`inline-block text-xs px-2 py-0.5 rounded
                                         ${s.status === "published" ? "bg-emerald-100 text-emerald-700" :
                                           s.status === "pending"   ? "bg-amber-100 text-amber-800"   :
-                                          s.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
-                                                                     "bg-gray-100 text-gray-700"}`}
+                                          
                                     >
                                        {t(`moderation.service_status.${s.status}`, {
                                          defaultValue: MOD_STATUS_FALLBACK[s.status] || s.status
@@ -1737,11 +1741,15 @@ useEffect(() => {
                       {selectedService?.status && (
                         <div className="mb-3 flex items-center gap-2 flex-wrap">
                           <span
+                             title={
+                              selectedService.status === "rejected"
+                                ? (selectedService.rejected_reason || t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
+                                : undefined
+                            }
                             className={`inline-block text-xs px-2 py-0.5 rounded
                               ${selectedService.status === "published" ? "bg-emerald-100 text-emerald-700" :
                                 selectedService.status === "pending"   ? "bg-amber-100 text-amber-800"   :
-                                selectedService.status === "rejected"  ? "bg-rose-100 text-rose-700"      :
-                                                                         "bg-gray-100 text-gray-700"}`}
+                                
                           >
                              {t(`moderation.service_status.${selectedService.status}`, {
                                  defaultValue: MOD_STATUS_FALLBACK[selectedService.status] || selectedService.status
