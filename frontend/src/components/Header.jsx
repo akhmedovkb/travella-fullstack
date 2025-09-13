@@ -38,6 +38,33 @@ function detectAdmin(profile) {
   return is;
 }
 
+// fallback: детектим права администратора из JWT,
+// если профиль недоступен или не содержит флага
+function detectAdminFromJwt() {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const base64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [])
+      .concat(claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim());
+    const perms = []
+      .concat(claims.permissions || claims.perms || [])
+      .map(String);
+    return (
+      claims.role === "admin" || claims.is_admin === true || claims.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()))
+    );
+  } catch { return false; }
+}
+
 const IconDashboard = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z" stroke="currentColor" strokeWidth="2" />
@@ -70,6 +97,9 @@ export default function Header() {
   useEffect(() => {
     let alive = true;
     (async () => {
+            // сначала пробуем из JWT — работает даже если профиль 404/403
+      const jwtAdmin = detectAdminFromJwt();
+      if (jwtAdmin) { if (alive) setIsAdmin(true); return; }
       if (role !== "provider") { if (alive) setIsAdmin(false); return; }
       try {
         const p = await apiGet("/api/providers/profile", role);
