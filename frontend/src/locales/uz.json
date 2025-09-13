@@ -489,7 +489,36 @@
       "archived": "E’lonlardan olib tashlandi"
     },
     "send_to_review": "Moderatsiyaga yuborish",
-    "submitted_toast": "Moderatsiyaga yuborildi"
+    "submitted_toast": "Moderatsiyaga yuborildi",
+    "title": "Xizmatlarni moderatsiya qilish",
+    "no_title": "(sarlavhasiz)",
+    "supplier": "Taʼminotchi",
+    "direction": "Yoʻnalish",
+    "start": "Boshlanish",
+    "end": "Tugash",
+    "location": "Manzil",
+    "event": "Tadbir",
+    "airline": "Aviakompaniya",
+    "rejected_reason": "Sabab",
+    "confirm": "Tasdiqlash",
+    "approve": "Tasdiqlash",
+    "enter_reason": "Rad etish sababi:",
+    "reject": "Rad etish",
+    "unpublish": "Nashrdan olish",
+    "approved": "Nashr etildi",
+    "approve_error": "Tasdiqlashda xatolik",
+    "enter_reason_short": "Sababni kiriting",
+    "rejected": "Rad etildi",
+    "reject_error": "Rad etishda xatolik",
+    "unpublished": "Nashrdan olindi",
+    "unpublish_error": "Nashrdan olishda xatolik",
+    "forbidden": "Faqat administrator uchun",
+    "empty": "Elementlar yoʻq",
+    "tabs": {
+      "pending": "Kutilmoqda",
+      "rejected": "Rad etilgan"
+    }
+  }
   },
 
   "mountain_tour": "Tog‘ sayohati",
