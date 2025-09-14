@@ -838,7 +838,7 @@
   "tourism_fee_resident": "Tourist tax (residents), UZS/night",
   "tourism_fee_nonresident": "Tourist tax (non-residents), UZS/night",
   "extra_bed_cost": "Extra bed, UZS/night",
-
+  "room_category": "Room category",
   "select.no_options": "No options",
   "select.loading": "Loading…"
 }
