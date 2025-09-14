@@ -46,7 +46,8 @@ function detectAdminFromJwt() {
   try {
     const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
     if (!tok) return false;
-    const base64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
     const json = decodeURIComponent(
       atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
     );
