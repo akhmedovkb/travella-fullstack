@@ -803,5 +803,22 @@
     "login_provider": "Ta’minotchi sifatida kirish",
     "login_required": "Davom etish uchun tizimga kiring",
     "provider_login_required": "Ta’minotchi sifatida kiring"
-  }
+  },
+
+  "rooms_and_prices": "Xona fondi va narxlar",
+  "room_category": "Xona toifasi",
+  "count_short": "Soni",
+  "price_per_night": "Tuniga narx",
+  "low_season": "Past mavsum",
+  "high_season": "Yuqori mavsum",
+  "for_residents": "Rezidentlar uchun",
+  "for_nonresidents": "Norezidentlar uchun",
+  "taxes_fees": "Soliqlar va yig‘imlar",
+  "vat_percent": "QQS, %",
+  "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/tun",
+  "tourism_fee_nonresident": "Turistik yig‘im (norezidentlar), so‘m/tun",
+  "extra_bed_cost": "Qo‘shimcha o‘rin, so‘m/tun",
+
+  "select.no_options": "Hech narsa topilmadi",
+  "select.loading": "Yuklanmoqda…"
 }
