@@ -1,8 +1,19 @@
 // frontend/src/pages/HotelDetails.jsx
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { getHotel, createInspection } from "../api/hotels";
 import { tSuccess, tError } from "../shared/toast";
+
+function pick(hotel, key, lang) {
+  // сначала translations[lang][key], потом базовое поле
+  return (
+    hotel?.translations?.[lang]?.[key] ??
+    hotel?.translations?.[lang?.slice(0, 2)]?.[key] ??
+    hotel?.[key] ??
+    ""
+  );
+}
 
 function TextRow({ label, value }) {
   if (!value) return null;
@@ -16,15 +27,18 @@ function TextRow({ label, value }) {
 
 export default function HotelDetails() {
   const { hotelId } = useParams();
+  const { i18n } = useTranslation();
+  const lang = (i18n?.language || "ru").slice(0, 2);
+
   const [hotel, setHotel] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
   // инспекция форма
   const [review, setReview] = useState("");
   const [pros, setPros] = useState("");
-  const [cons, setCons] = useState("");
+  the [cons, setCons] = useState("");
   const [features, setFeatures] = useState("");
-  const [media, setMedia] = useState([]); // dataURL изображений/видео (простая версия)
+  const [media, setMedia] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -69,6 +83,10 @@ export default function HotelDetails() {
   if (!hotel) return <div className="max-w-5xl mx-auto">Загрузка…</div>;
 
   const cover = hotel.images?.[0];
+  const name    = pick(hotel, "name", lang);
+  const country = pick(hotel, "country", lang);
+  const city    = pick(hotel, "city", lang);
+  const address = pick(hotel, "address", lang);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -78,10 +96,10 @@ export default function HotelDetails() {
             {cover ? <img src={cover} alt="" className="w-full h-full object-cover" /> : null}
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">{hotel.name}</h1>
-            <TextRow label="Страна" value={hotel.country} />
-            <TextRow label="Город" value={hotel.city} />
-            <TextRow label="Адрес" value={hotel.address} />
+            <h1 className="text-2xl font-bold">{name}</h1>
+            <TextRow label="Страна" value={country} />
+            <TextRow label="Город" value={city} />
+            <TextRow label="Адрес" value={address} />
 
             <div className="mt-2 flex gap-2">
               <Link
