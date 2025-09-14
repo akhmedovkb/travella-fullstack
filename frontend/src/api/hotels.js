@@ -4,10 +4,11 @@ import { apiGet, apiPost } from "../api";
 /** Поиск отелей (доступно всем) */
 // Поиск отелей (доступно всем)
 // бек ждёт ?query=..., но поддержим старые name/city на всякий случай
-export async function searchHotels({ query = "", name = "", city = "", page = 1, limit = 20 } = {}) {
-  const qText = String(query || [name, city].filter(Boolean).join(" ")).trim();
+export async function searchHotels({ name = "", city = "", country = "", page = 1, limit = 20 } = {}) {
   const q = new URLSearchParams({
-    query: qText,
+    name: name || "",
+    city: city || "",
+    country: country || "",
     page: String(page),
     limit: String(limit),
   });
