@@ -36,7 +36,7 @@ export default function HotelDetails() {
   // инспекция форма
   const [review, setReview] = useState("");
   const [pros, setPros] = useState("");
-  the [cons, setCons] = useState("");
+  const [cons, setCons] = useState("");
   const [features, setFeatures] = useState("");
   const [media, setMedia] = useState([]);
 
