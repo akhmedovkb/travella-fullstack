@@ -319,7 +319,6 @@ export default function Header() {
           to="/hotels"
           label={t("nav.hotels", "Отели")}
           icon={<IconHotel />}
-          end
         />
 
         {isAdmin && (
