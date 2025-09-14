@@ -79,9 +79,9 @@ async function fetchExternalHotelsCached(name = "", city = "") {
 }
 
 // ================= SEARCH =================
-// ----------------- SEARCH: сперва — БД, затем (как раньше) внешние источники -----------------
+// ----------------- SEARCH: сперва БД, затем GeoNames -----------------
 async function searchHotels(req, res) {
-  // нормализация входных параметров (?name, ?query, ?q, ?city, ?page, ?limit)
+  // нормализация входных параметров (?name|query|q, ?city, ?country)
   function normalize(q = {}) {
     const pick = (...keys) => {
       for (const k of keys) {
@@ -91,35 +91,45 @@ async function searchHotels(req, res) {
       }
       return "";
     };
-    const name  = pick("name", "query", "q");
-    const city  = pick("city", "location", "loc", "town");
-    const page  = Math.max(1, parseInt(pick("page", "p") || "1", 10));
-    const limit = Math.min(50, Math.max(1, parseInt(pick("limit", "l") || "20", 10)));
-    return { name, city, page, limit };
+    const name       = pick("name", "query", "q");
+    const city       = pick("city", "location", "loc", "town");
+    const country    = pick("country", "countryCode", "cc"); // ISO2 (если есть)
+    const page       = Math.max(1, parseInt(pick("page", "p") || "1", 10));
+    const limit      = Math.min(50, Math.max(1, parseInt(pick("limit", "l") || "20", 10)));
+    const langHeader = (req.headers["accept-language"] || "").slice(0,2).toLowerCase();
+    const lang       = ["ru","uz","en"].includes(pick("lang") || langHeader) ? (pick("lang") || langHeader) : "en";
+    return { name, city, country, page, limit, lang };
   }
 
-  const { name, city, limit } = normalize(req.query);
+  const { name, city, country, limit, lang } = normalize(req.query);
+  if ((name || "").length < 2 && (city || "").length < 2) return res.json([]);
 
-  // на фронте уже есть дебаунс и отсечка < 2, но продублируем
-  if ((name || "").length < 2 && (city || "").length < 2) {
-    return res.json([]);
-  }
+  // локальная утилита для дедупликации "имя+город" (на случай, если вашей dedup нет)
+  const dedupHotels = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const x of arr) {
+      const key = (String(x.name||"").toLowerCase() + "|" + String(x.city||"").toLowerCase());
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(x);
+    }
+    return out;
+  };
 
   try {
-    // динамический WHERE
+    // 1) Наши сохранённые отели из БД
     let idx = 1;
     const where = [];
     const params = [];
 
     if ((name || "").length >= 2) {
       where.push(`(name ILIKE $${idx} OR COALESCE(city, location, '') ILIKE $${idx})`);
-      params.push(`%${name}%`);
-      idx++;
+      params.push(`%${name}%`); idx++;
     }
     if ((city || "").length >= 2) {
       where.push(`COALESCE(city, location, '') ILIKE $${idx}`);
-      params.push(`%${city}%`);
-      idx++;
+      params.push(`%${city}%`); idx++;
     }
 
     const sql = `
@@ -131,9 +141,8 @@ async function searchHotels(req, res) {
     `;
     params.push(limit);
 
-    const { rows } = await db.query(sql, params);
-
-    const own = (rows || []).map(r => ({
+    const ownRows = await db.query(sql, params);
+    const own = (ownRows.rows || []).map(r => ({
       id: r.id,
       name: r.name,
       city: r.city || null,
@@ -144,19 +153,51 @@ async function searchHotels(req, res) {
       provider: "local",
     }));
 
-    // если своих результатов достаточно — отдаем
-    if (own.length >= 10) return res.json(own);
+    // 2) GeoNames (если есть логин)
+    let geo = [];
+    const GEO_USER = process.env.GEONAMES_USERNAME || process.env.VITE_GEONAMES_USERNAME;
+    if (GEO_USER && (name || city)) {
+      try {
+        // строим запрос: ищем только отели (featureCode=HTL)
+        const params = {
+          username: GEO_USER,
+          featureClass: "S",
+          featureCode: "HTL",
+          maxRows: Math.min(20, limit),
+          style: "FULL",
+          lang,
+        };
+        // облегчаем поиск: и name_startsWith, и q (с городом)
+        if (name) params.name_startsWith = name;
+        params.q = city ? `${name || ""} ${city}`.trim() : (name || "");
 
-    // --- при желании можно добавить внешний поиск (как у тебя было раньше) ---
-    // оставляем безопасный фолбек, если внешнего кода нет
-    const external = []; // тут можно подключить прежние источники
-    const out = typeof dedup === "function" ? dedup([...own, ...external]) : [...own, ...external];
+        if (country) params.country = country; // ISO2, если есть
+        const { data } = await axios.get("https://secure.geonames.org/searchJSON", { params, timeout: 6500 });
+
+        const arr = Array.isArray(data?.geonames) ? data.geonames : [];
+        geo = arr.map(g => ({
+          id: g.geonameId,
+          name: g.name || g.toponymName || g.asciiName,
+          city: g.adminName2 || g.adminName3 || g.adminName1 || null,
+          country: g.countryName || g.countryCode || null,
+          label: g.name || g.toponymName || g.asciiName,
+          city_local: g.adminName2 || g.adminName3 || g.adminName1 || null,
+          city_en: g.adminName2 || g.adminName3 || g.adminName1 || null,
+          provider: "geonames",
+        }));
+      } catch (e) {
+        console.warn("GeoNames search error:", e?.response?.status || e?.message || e);
+      }
+    }
+
+    const out = dedupHotels([...own, ...geo]).slice(0, limit);
     return res.json(out);
   } catch (e) {
     console.error("hotels.search error", e);
     return res.status(500).json([]);
   }
 }
+
 
 // ================= CREATE =================
 async function createHotel(req, res) {
