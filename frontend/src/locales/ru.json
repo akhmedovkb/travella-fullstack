@@ -794,5 +794,23 @@
     "login_provider": "Войти как поставщик",
     "login_required": "Войдите, чтобы продолжить",
     "provider_login_required": "Войдите как поставщик"
-  }
+  },
+
+  "rooms_and_prices": "Номерной фонд и цены",
+  "room_category": "Категория номера",
+  "count_short": "Кол-во",
+  "price_per_night": "Цена/ночь",
+  "low_season": "Низкий сезон",
+  "high_season": "Высокий сезон",
+  "for_residents": "Для резидентов",
+  "for_nonresidents": "Для нерезидентов",
+  "taxes_fees": "Налоги и сборы",
+  "vat_percent": "НДС, %",
+  "tourism_fee_resident": "Туристический сбор (резиденты), сум/ночь",
+  "tourism_fee_nonresident": "Туристический сбор (нерезиденты), сум/ночь",
+  "extra_bed_cost": "Доп. место, сум/ночь",
+
+  "select.type_more": "Введите минимум 2 символа",
+  "select.no_options": "Ничего не найдено",
+  "select.loading": "Загрузка…"
 }
