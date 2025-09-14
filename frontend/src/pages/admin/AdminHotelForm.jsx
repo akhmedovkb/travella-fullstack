@@ -6,8 +6,7 @@ import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
-const items = await searchHotels({ name: inputValue || "" });
-import { createHotel } from "../../api/hotels";
+import { createHotel, searchHotels } from "../../api/hotels";
 import { tSuccess, tError } from "../../shared/toast";
 
 /* ---------- Room types ---------- */
