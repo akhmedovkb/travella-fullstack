@@ -281,6 +281,7 @@ export default function Header() {
                   icon={<IconModeration />}
                 />
               )}
+              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} />
             </nav>
           )}
 
@@ -288,6 +289,7 @@ export default function Header() {
         {/* Client shortcuts: cabinet + favorites */}
         {role === "client" && (
           <nav className="flex items-center gap-2 text-sm">
+            
             <Link
               to="/client/dashboard"
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
@@ -307,6 +309,13 @@ export default function Header() {
                 {favCount}
               </span>
             </Link>
+            <Link
+              to="/hotels"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+            >
+              <span>{t("nav.hotels", "Отели")}</span>
+            </Link>
+
           </nav>
         )}
 
