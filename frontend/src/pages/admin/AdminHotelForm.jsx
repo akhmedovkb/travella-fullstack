@@ -1,5 +1,4 @@
 // frontend/src/pages/admin/AdminHotelForm.jsx
-
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -88,7 +87,7 @@ function useGeoLang(i18n) {
   }, [i18n?.language]);
 }
 
-/* ---------- dual label (для подсказок отелей) ---------- */
+/* ---------- dual label для подсказок отелей ---------- */
 const composeDualLabel = (local, en) => {
   if (!local && !en) return "";
   if (!local) return en;
@@ -244,7 +243,7 @@ export default function AdminHotelForm() {
     styles: { menuPortal: (base) => ({ ...base, zIndex: 9999 }) },
   };
 
-  /* ---------- Поиск названия отеля (как в Dashboard) ---------- */
+  /* ---------- Поиск названия отеля ---------- */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
     try {
@@ -378,18 +377,22 @@ export default function AdminHotelForm() {
   /* ==================== UI ==================== */
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
-      <h1 className="text-2xl font-bold mb-4">{t("admin.new_hotel_title", { defaultValue: "Новый отель" })}</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        {t("admin.new_hotel_title", { defaultValue: "Новый отель" })}
+      </h1>
 
       {/* Базовая информация */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Название отеля */}
         <div className="col-span-2">
-          <label className="block text-sm font-medium mb-1">{t("hotel_name", { defaultValue: "Название" })}</label>
+          <label className="block text-sm font-medium mb-1">
+            {t("name", { defaultValue: "Название" })}
+          </label>
           <AsyncCreatableSelect
             cacheOptions
             defaultOptions
             {...ASYNC_MENU_PORTAL}
-            loadOptions={useDebouncedLoader(loadHotelOptionsRaw, 400)}
+            loadOptions={loadHotelOptions}
             noOptionsMessage={ASYNC_I18N.noOptionsMessage}
             loadingMessage={ASYNC_I18N.loadingMessage}
             placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
@@ -402,7 +405,9 @@ export default function AdminHotelForm() {
 
         {/* Страна */}
         <div>
-          <label className="block text-sm font-medium mb-1">{t("country", { defaultValue: "Страна" })}</label>
+          <label className="block text-sm font-medium mb-1">
+            {t("country", { defaultValue: "Страна" })}
+          </label>
           <Select
             options={countryOptions}
             value={countryOpt}
@@ -418,7 +423,9 @@ export default function AdminHotelForm() {
 
         {/* Город */}
         <div>
-          <label className="block text-sm font-medium mb-1">{t("city", { defaultValue: "Город" })}</label>
+          <label className="block text-sm font-medium mb-1">
+            {t("city", { defaultValue: "Город" })}
+          </label>
           <AsyncSelect
             isDisabled={!countryOpt}
             cacheOptions
@@ -441,7 +448,9 @@ export default function AdminHotelForm() {
 
         {/* Валюта + Адрес */}
         <div>
-          <label className="block text-sm font-medium mb-1">{t("currency", { defaultValue: "Валюта" })}</label>
+          <label className="block text-sm font-medium mb-1">
+            {t("currency", { defaultValue: "Валюта" })}
+          </label>
           <select
             className="w-full border rounded px-3 py-2 bg-white"
             value={currency}
@@ -453,8 +462,14 @@ export default function AdminHotelForm() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">{t("address", { defaultValue: "Адрес" })}</label>
-          <input className="w-full border rounded px-3 py-2" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <label className="block text-sm font-medium mb-1">
+            {t("address", { defaultValue: "Адрес" })}
+          </label>
+          <input
+            className="w-full border rounded px-3 py-2"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
         </div>
       </div>
 
@@ -467,18 +482,34 @@ export default function AdminHotelForm() {
         <table className="min-w-full text-sm align-top">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-3 py-2">{t("room_category", { defaultValue: "Тип" })}</th>
-              <th className="text-left px-3 py-2">{t("count_short", { defaultValue: "Кол-во" })}</th>
-              <th className="px-3 py-2 text-center" colSpan={2}>{t("low_season", { defaultValue: "Низкий сезон" })}</th>
-              <th className="px-3 py-2 text-center" colSpan={2}>{t("high_season", { defaultValue: "Высокий сезон" })}</th>
+              <th className="text-left px-3 py-2">
+                {t("room_category", { defaultValue: "Категория" })}
+              </th>
+              <th className="text-left px-3 py-2">
+                {t("count_short", { defaultValue: "Кол-во" })}
+              </th>
+              <th className="px-3 py-2 text-center" colSpan={2}>
+                {t("low_season", { defaultValue: "Низкий сезон" })}
+              </th>
+              <th className="px-3 py-2 text-center" colSpan={2}>
+                {t("high_season", { defaultValue: "Высокий сезон" })}
+              </th>
               <th className="w-[1%] px-3 py-2"></th>
             </tr>
             <tr className="bg-gray-50">
               <th></th><th></th>
-              <th className="text-left px-3 py-1">{t("resident", { defaultValue: "Для резидентов" })}</th>
-              <th className="text-left px-3 py-1">{t("non_resident", { defaultValue: "Для нерезидентов" })}</th>
-              <th className="text-left px-3 py-1">{t("resident", { defaultValue: "Для резидентов" })}</th>
-              <th className="text-left px-3 py-1">{t("non_resident", { defaultValue: "Для нерезидентов" })}</th>
+              <th className="text-left px-3 py-1">
+                {t("for_residents", { defaultValue: "Для резидентов" })}
+              </th>
+              <th className="text-left px-3 py-1">
+                {t("for_nonresidents", { defaultValue: "Для нерезидентов" })}
+              </th>
+              <th className="text-left px-3 py-1">
+                {t("for_residents", { defaultValue: "Для резидентов" })}
+              </th>
+              <th className="text-left px-3 py-1">
+                {t("for_nonresidents", { defaultValue: "Для нерезидентов" })}
+              </th>
               <th></th>
             </tr>
           </thead>
@@ -590,7 +621,7 @@ export default function AdminHotelForm() {
       {/* Доп. место */}
       <div className="mt-4">
         <label className="block text-sm font-medium mb-1">
-          {t("extra_bed_price", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
+          {t("extra_bed_cost", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
         </label>
         <input
           type="number"
@@ -605,7 +636,7 @@ export default function AdminHotelForm() {
 
       {/* Налоги и сборы */}
       <h2 className="text-xl font-semibold mt-6 mb-2">
-        {t("taxes_and_fees", { defaultValue: "Налоги и сборы" })}
+        {t("taxes_fees", { defaultValue: "Налоги и сборы" })}
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <label className="flex items-center gap-2">
@@ -618,7 +649,7 @@ export default function AdminHotelForm() {
         </label>
         <div>
           <label className="block text-sm font-medium mb-1">
-            {t("vat_rate", { defaultValue: "Ставка НДС, %" })}
+            {t("vat_percent", { defaultValue: "НДС, %" })}
           </label>
           <input
             type="number"
@@ -633,7 +664,7 @@ export default function AdminHotelForm() {
         <div></div>
         <div>
           <label className="block text-sm font-medium mb-1">
-            {t("tourist_tax_resident", { defaultValue: "Туристический сбор (резидент), /чел/ночь" })} ({currency})
+            {t("tourism_fee_resident", { defaultValue: "Туристический сбор (резидент), /чел/ночь" })} ({currency})
           </label>
           <input
             type="number"
@@ -647,7 +678,7 @@ export default function AdminHotelForm() {
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">
-            {t("tourist_tax_nonresident", { defaultValue: "Туристический сбор (нерезидент), /чел/ночь" })} ({currency})
+            {t("tourism_fee_nonresident", { defaultValue: "Туристический сбор (нерезидент), /чел/ночь" })} ({currency})
           </label>
           <input
             type="number"
@@ -662,10 +693,14 @@ export default function AdminHotelForm() {
       </div>
 
       {/* Удобства */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">{t("amenities", { defaultValue: "Удобства" })}</h2>
-      <form onSubmit={(e) => { e.preventDefault(); const v = e.target.elements.amen.value.trim(); if (v && !amenities.includes(v)) setAmenities([...amenities, v]); e.target.reset(); }} className="flex gap-2 mb-2">
+      <h2 className="text-xl font-semibold mt-6 mb-2">
+        {t("amenities", { defaultValue: "Удобства" })}
+      </h2>
+      <form onSubmit={handleAmenityAdd} className="flex gap-2 mb-2">
         <input name="amen" className="flex-1 border rounded px-3 py-2" placeholder={t("add_amenity", { defaultValue: "Добавить удобство…" })} />
-        <button className="px-3 py-2 rounded bg-gray-800 text-white">{t("add", { defaultValue: "Добавить" })}</button>
+        <button className="px-3 py-2 rounded bg-gray-800 text-white">
+          {t("add", { defaultValue: "Добавить" })}
+        </button>
       </form>
       <div className="flex flex-wrap gap-2">
         {amenities.map((a, i) => (
@@ -677,10 +712,14 @@ export default function AdminHotelForm() {
       </div>
 
       {/* Услуги */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">{t("services", { defaultValue: "Услуги" })}</h2>
-      <form onSubmit={(e) => { e.preventDefault(); const v = e.target.elements.serv.value.trim(); if (v && !services.includes(v)) setServices([...services, v]); e.target.reset(); }} className="flex gap-2 mb-2">
+      <h2 className="text-xl font-semibold mt-6 mb-2">
+        {t("services", { defaultValue: "Услуги" })}
+      </h2>
+      <form onSubmit={handleServiceAdd} className="flex gap-2 mb-2">
         <input name="serv" className="flex-1 border rounded px-3 py-2" placeholder={t("add_service", { defaultValue: "Добавить услугу…" })} />
-        <button className="px-3 py-2 rounded bg-gray-800 text-white">{t("add", { defaultValue: "Добавить" })}</button>
+        <button className="px-3 py-2 rounded bg-gray-800 text-white">
+          {t("add", { defaultValue: "Добавить" })}
+        </button>
       </form>
       <div className="flex flex-wrap gap-2">
         {services.map((s, i) => (
@@ -692,8 +731,36 @@ export default function AdminHotelForm() {
       </div>
 
       {/* Изображения */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">{t("images", { defaultValue: "Изображения" })}</h2>
-      <input type="file" accept="image/*" multiple onChange={onImagePick} />
+      <h2 className="text-xl font-semibold mt-6 mb-2">
+        {t("images", { defaultValue: "Изображения" })}
+      </h2>
+      <div className="flex items-center gap-3">
+        <input
+          id="imagesInput"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onImagePick}
+          className="sr-only"
+        />
+        <label
+          htmlFor="imagesInput"
+          className="inline-flex items-center justify-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer"
+        >
+          {t("choose_files", { defaultValue: "Выбрать файлы" })}
+        </label>
+
+        <span className="text-sm text-gray-600">
+          {images.length > 0
+            ? `${t("file_chosen", { defaultValue: "Файлы выбраны" })}: ${images.length}`
+            : t("no_files_selected", { defaultValue: "Файлы не выбраны" })}
+        </span>
+      </div>
+      {t("images_hint") && (
+        <div className="text-xs text-gray-500 mt-1">
+          {t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })}
+        </div>
+      )}
       {images.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
           {images.map((src, i) => (
