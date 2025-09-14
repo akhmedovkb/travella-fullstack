@@ -4,32 +4,38 @@ import { useNavigate } from "react-router-dom";
 import { createHotel } from "../../api/hotels";
 import { tSuccess, tError } from "../../shared/toast";
 
-const ROOM_TYPES = [
-  { key: "single",     label: "Single" },
-  { key: "double",     label: "Double" },
-  { key: "triple",     label: "Triple" },
-  { key: "quadruple",  label: "Quadruple" },
-  { key: "suite",      label: "Suite" },
-  { key: "family",     label: "Family" },
+const DEFAULT_ROOM_TYPES = [
+  { id: "single",    name: "Single",     builtin: true },
+  { id: "double",    name: "Double",     builtin: true },
+  { id: "triple",    name: "Triple",     builtin: true },
+  { id: "quadruple", name: "Quadruple",  builtin: true },
+  { id: "suite",     name: "Suite",      builtin: true },
+  { id: "family",    name: "Family",     builtin: true },
 ];
 
-// Рекомендация по структуре фонда + цен:
-// хранить массив объектов: rooms: [{ type, count, pricePerNight }]
-// это прямо связывает пункты 4 и 5 в одной таблице.
+const slugify = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+
 export default function AdminHotelForm() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
-  const [amenities, setAmenities] = useState([]); // массив строк
-  const [services, setServices] = useState([]);   // массив строк
-  const [images, setImages] = useState([]);       // dataURL (обложка = images[0])
+  const [amenities, setAmenities] = useState([]);
+  const [services, setServices] = useState([]);
+  const [images, setImages] = useState([]);
 
-  // инвентарь: { [typeKey]: { count, pricePerNight } }
-  const [inventory, setInventory] = useState(
-    ROOM_TYPES.reduce((acc, r) => ({ ...acc, [r.key]: { count: "", pricePerNight: "" } }), {})
+  // строки таблицы номерного фонда (включая кастомные)
+  const [roomRows, setRoomRows] = useState(
+    DEFAULT_ROOM_TYPES.map((r) => ({ ...r, count: "", pricePerNight: "" }))
   );
+  const [newTypeName, setNewTypeName] = useState("");
 
   const handleAmenityAdd = (e) => {
     e.preventDefault();
@@ -60,16 +66,43 @@ export default function AdminHotelForm() {
     e.target.value = "";
   };
 
+  // --- Кастомные типы ---
+  const addCustomType = () => {
+    const title = newTypeName.trim();
+    if (!title) return;
+    const idBase = slugify(title) || `custom-${Date.now()}`;
+    let id = idBase;
+    let i = 2;
+    // гарантируем уникальность id
+    while (roomRows.some((r) => r.id === id)) id = `${idBase}-${i++}`;
+
+    setRoomRows((rows) => [
+      ...rows,
+      { id, name: title, builtin: false, count: "", pricePerNight: "" },
+    ]);
+    setNewTypeName("");
+  };
+
+  const removeRow = (id) => {
+    setRoomRows((rows) => rows.filter((r) => r.id !== id));
+  };
+
+  const updateRow = (id, patch) => {
+    setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
   const submit = async () => {
     if (!name.trim()) return tError("Введите название");
     if (!country.trim()) return tError("Укажите страну");
     if (!address.trim()) return tError("Укажите адрес");
 
-    const rooms = ROOM_TYPES
+    // Для гибкости 'type' отправляем строкой (название типа).
+    // backend сможет хранить как угодно, у нас всё равно отображается name.
+    const rooms = roomRows
       .map((r) => ({
-        type: r.key,
-        count: Number(inventory[r.key].count || 0),
-        pricePerNight: inventory[r.key].pricePerNight ? Number(inventory[r.key].pricePerNight) : null,
+        type: r.name, // ← человеко-читаемое название типа
+        count: Number(r.count || 0),
+        pricePerNight: r.pricePerNight !== "" ? Number(r.pricePerNight) : null,
       }))
       .filter((x) => x.count > 0);
 
@@ -78,7 +111,7 @@ export default function AdminHotelForm() {
       country: country.trim(),
       city: city.trim() || null,
       address: address.trim(),
-      rooms,                // ← фонд + цены каскадно
+      rooms,
       amenities,
       services,
       images,
@@ -88,7 +121,7 @@ export default function AdminHotelForm() {
       const created = await createHotel(payload);
       tSuccess("Отель сохранён");
       navigate(`/hotels/${created?.id || ""}`);
-    } catch (e) {
+    } catch {
       tError("Ошибка сохранения отеля");
     }
   };
@@ -120,6 +153,7 @@ export default function AdminHotelForm() {
 
       {/* Номерной фонд + цены */}
       <h2 className="text-xl font-semibold mt-6 mb-2">Номерной фонд и цены</h2>
+
       <div className="overflow-auto border rounded">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
@@ -127,21 +161,31 @@ export default function AdminHotelForm() {
               <th className="text-left px-3 py-2">Тип</th>
               <th className="text-left px-3 py-2">Кол-во</th>
               <th className="text-left px-3 py-2">Цена/ночь</th>
+              <th className="w-[1%] px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {ROOM_TYPES.map((rt) => (
-              <tr key={rt.key} className="border-t">
-                <td className="px-3 py-2">{rt.label}</td>
+            {roomRows.map((row) => (
+              <tr key={row.id} className="border-t">
+                <td className="px-3 py-2">
+                  {row.builtin ? (
+                    row.name
+                  ) : (
+                    <input
+                      className="border rounded px-2 py-1 w-44"
+                      value={row.name}
+                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                      placeholder="Название типа"
+                    />
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <input
                     type="number"
                     min={0}
                     className="w-28 border rounded px-2 py-1"
-                    value={inventory[rt.key].count}
-                    onChange={(e) =>
-                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], count: e.target.value } }))
-                    }
+                    value={row.count}
+                    onChange={(e) => updateRow(row.id, { count: e.target.value })}
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -151,16 +195,40 @@ export default function AdminHotelForm() {
                     step="0.01"
                     placeholder="USD"
                     className="w-36 border rounded px-2 py-1"
-                    value={inventory[rt.key].pricePerNight}
-                    onChange={(e) =>
-                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], pricePerNight: e.target.value } }))
-                    }
+                    value={row.pricePerNight}
+                    onChange={(e) => updateRow(row.id, { pricePerNight: e.target.value })}
                   />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!row.builtin && (
+                    <button
+                      type="button"
+                      className="text-gray-500 hover:text-red-600"
+                      onClick={() => removeRow(row.id)}
+                      title="Удалить тип"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Добавление собственного типа */}
+      <div className="flex items-center gap-2 mt-3">
+        <input
+          className="border rounded px-3 py-2 flex-1"
+          placeholder="Добавить свой тип номера (например, Deluxe, Superior, King…) "
+          value={newTypeName}
+          onChange={(e) => setNewTypeName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
+        />
+        <button type="button" onClick={addCustomType} className="px-3 py-2 rounded bg-gray-800 text-white">
+          Добавить тип
+        </button>
       </div>
 
       {/* Удобства */}
