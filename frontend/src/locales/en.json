@@ -824,5 +824,21 @@
     "login_provider": "Log in as provider",
     "login_required": "Log in to continue",
     "provider_login_required": "Log in as provider"
-  }
+  },
+  "rooms_and_prices": "Rooms & prices",
+  "room_category": "Room category",
+  "count_short": "Qty",
+  "price_per_night": "Price/night",
+  "low_season": "Low season",
+  "high_season": "High season",
+  "for_residents": "Residents",
+  "for_nonresidents": "Non-residents",
+  "taxes_fees": "Taxes & fees",
+  "vat_percent": "VAT, %",
+  "tourism_fee_resident": "Tourist tax (residents), UZS/night",
+  "tourism_fee_nonresident": "Tourist tax (non-residents), UZS/night",
+  "extra_bed_cost": "Extra bed, UZS/night",
+
+  "select.no_options": "No options",
+  "select.loading": "Loading…"
 }
