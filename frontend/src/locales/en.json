@@ -538,7 +538,9 @@
     "bookings": "Bookings",
     "dashboard": "Dashboard",
     "requests": "Requests",
-    "favorites": "Favorites"
+    "favorites": "Favorites",
+    "hotels": "Hotels",
+    "hotels_admin": "Hotels (admin)"
   },
 
   "net_price": "Net price",
