@@ -1,61 +1,44 @@
 // frontend/src/api/hotels.js
-import axios from "axios";
+import { apiGet, apiPost } from "../api";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
-function authHeaders() {
-  const t =
-    localStorage.getItem("token") ||
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("clientToken");
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-// Список/поиск отелей
-export async function searchHotels({ name = "", city = "", page = 1, limit = 20 }) {
-  const { data } = await axios.get(`${API_BASE}/api/hotels`, {
-    params: { name, city, page, limit },
-    headers: authHeaders(),
+/** Поиск отелей (доступно всем) */
+export async function searchHotels({ name = "", city = "", page = 1, limit = 20 } = {}) {
+  const q = new URLSearchParams({
+    name: name || "",
+    city: city || "",
+    page: String(page),
+    limit: String(limit),
   });
-  // подстраховка формата
-  return Array.isArray(data?.items) ? data : { items: data || [], total: (data || []).length };
+  return apiGet(`/api/hotels/search?${q.toString()}`);
 }
 
-// Детали отеля
+/** Получить карточку отеля (доступно всем) */
 export async function getHotel(hotelId) {
-  const { data } = await axios.get(`${API_BASE}/api/hotels/${hotelId}`, {
-    headers: authHeaders(),
-  });
-  return data;
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`);
 }
 
-// Создание (админ)
+/** Создать новый отель (требует прав провайдера/админа) */
 export async function createHotel(payload) {
-  const { data } = await axios.post(`${API_BASE}/api/admin/hotels`, payload, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-  });
-  return data;
+  // бек проверит, что это админ/модератор — на фронте просто шлём от провайдера
+  return apiPost(`/api/hotels`, payload, "provider");
 }
 
-// Инспекции
-export async function listInspections(hotelId, { sort = "top", page = 1, limit = 20 } = {}) {
-  const { data } = await axios.get(`${API_BASE}/api/hotels/${hotelId}/inspections`, {
-    params: { sort, page, limit },
-    headers: authHeaders(),
-  });
-  return Array.isArray(data?.items) ? data : { items: data || [], total: (data || []).length };
-}
-
+/** Создать инспекцию к отелю (только провайдер) */
 export async function createInspection(hotelId, payload) {
-  const { data } = await axios.post(`${API_BASE}/api/hotels/${hotelId}/inspections`, payload, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-  });
-  return data;
+  return apiPost(`/api/hotels/${encodeURIComponent(hotelId)}/inspections`, payload, "provider");
 }
 
+/** Список инспекций (доступно всем). sort: "top" | "new" */
+export async function listInspections(hotelId, { sort = "top" } = {}) {
+  const q = new URLSearchParams({ sort });
+  return apiGet(`/api/hotels/${encodeURIComponent(hotelId)}/inspections?${q.toString()}`);
+}
+
+/** Лайк инспекции (любая авторизованная сторона) */
 export async function likeInspection(inspectionId) {
-  const { data } = await axios.post(`${API_BASE}/api/hotel-inspections/${inspectionId}/like`, {}, {
-    headers: authHeaders(),
-  });
-  return data;
+  // попытаемся определить, кто залогинен, чтобы прокинуть корректный токен
+  const hasProvider = !!(localStorage.getItem("token") || localStorage.getItem("providerToken"));
+  const hasClient = !!localStorage.getItem("clientToken");
+  const role = hasProvider ? "provider" : hasClient ? true : undefined;
+  return apiPost(`/api/hotel-inspections/${encodeURIComponent(inspectionId)}/like`, {}, role);
 }
