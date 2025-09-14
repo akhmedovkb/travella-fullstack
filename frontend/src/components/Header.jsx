@@ -265,14 +265,6 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
-        {/* общий таб Отели — доступен всем ролям */}
-        <NavItem
-          to="/hotels"
-          label={t("nav.hotels", "Отели")}
-          icon={<IconHotel />}
-          end
-        />
-
         {/* Provider nav */}
         {role === "provider" && (
             <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
@@ -317,6 +309,14 @@ export default function Header() {
             </Link>
           </nav>
         )}
+
+        {/* общий таб Отели — доступен всем ролям */}
+        <NavItem
+          to="/hotels"
+          label={t("nav.hotels", "Отели")}
+          icon={<IconHotel />}
+          end
+        />
 
         {isAdmin && (
           <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
