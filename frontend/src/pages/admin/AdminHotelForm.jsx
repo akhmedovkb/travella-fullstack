@@ -4,38 +4,48 @@ import { useNavigate } from "react-router-dom";
 import { createHotel } from "../../api/hotels";
 import { tSuccess, tError } from "../../shared/toast";
 
-const DEFAULT_ROOM_TYPES = [
-  { id: "single",    name: "Single",     builtin: true },
-  { id: "double",    name: "Double",     builtin: true },
-  { id: "triple",    name: "Triple",     builtin: true },
-  { id: "quadruple", name: "Quadruple",  builtin: true },
-  { id: "suite",     name: "Suite",      builtin: true },
-  { id: "family",    name: "Family",     builtin: true },
+const ROOM_TYPES = [
+  { key: "single",     label: "Single" },
+  { key: "double",     label: "Double" },
+  { key: "triple",     label: "Triple" },
+  { key: "quadruple",  label: "Quadruple" },
+  { key: "suite",      label: "Suite" },
+  { key: "family",     label: "Family" },
 ];
 
-const slugify = (s) =>
-  String(s || "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+const LANGS = [
+  { code: "ru", label: "RU" },
+  { code: "uz", label: "UZ" },
+  { code: "en", label: "EN" },
+];
 
+// Рекомендация по структуре фонда + цен:
+// хранить массив объектов: rooms: [{ type, count, pricePerNight }]
 export default function AdminHotelForm() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
-  const [address, setAddress] = useState("");
-  const [amenities, setAmenities] = useState([]);
-  const [services, setServices] = useState([]);
-  const [images, setImages] = useState([]);
 
-  // строки таблицы номерного фонда (включая кастомные)
-  const [roomRows, setRoomRows] = useState(
-    DEFAULT_ROOM_TYPES.map((r) => ({ ...r, count: "", pricePerNight: "" }))
+  // i18n-поля
+  const [activeLang, setActiveLang] = useState("ru");
+  const [nameI18n, setNameI18n]       = useState({ ru: "", uz: "", en: "" });
+  const [countryI18n, setCountryI18n] = useState({ ru: "", uz: "", en: "" });
+  const [cityI18n, setCityI18n]       = useState({ ru: "", uz: "", en: "" });
+  const [addrI18n, setAddrI18n]       = useState({ ru: "", uz: "", en: "" });
+
+  const [amenities, setAmenities] = useState([]); // массив строк
+  const [services, setServices]   = useState([]); // массив строк
+  const [images, setImages]       = useState([]); // dataURL (обложка = images[0])
+
+  // инвентарь: { [typeKey]: { count, pricePerNight } }
+  const [inventory, setInventory] = useState(
+    ROOM_TYPES.reduce((acc, r) => ({ ...acc, [r.key]: { count: "", pricePerNight: "" } }), {})
   );
-  const [newTypeName, setNewTypeName] = useState("");
+
+  const cloneFromRU = () => {
+    setNameI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
+    setCountryI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
+    setCityI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
+    setAddrI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
+  };
 
   const handleAmenityAdd = (e) => {
     e.preventDefault();
@@ -66,94 +76,104 @@ export default function AdminHotelForm() {
     e.target.value = "";
   };
 
-  // --- Кастомные типы ---
-  const addCustomType = () => {
-    const title = newTypeName.trim();
-    if (!title) return;
-    const idBase = slugify(title) || `custom-${Date.now()}`;
-    let id = idBase;
-    let i = 2;
-    // гарантируем уникальность id
-    while (roomRows.some((r) => r.id === id)) id = `${idBase}-${i++}`;
-
-    setRoomRows((rows) => [
-      ...rows,
-      { id, name: title, builtin: false, count: "", pricePerNight: "" },
-    ]);
-    setNewTypeName("");
-  };
-
-  const removeRow = (id) => {
-    setRoomRows((rows) => rows.filter((r) => r.id !== id));
-  };
-
-  const updateRow = (id, patch) => {
-    setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  };
-
   const submit = async () => {
-    if (!name.trim()) return tError("Введите название");
-    if (!country.trim()) return tError("Укажите страну");
-    if (!address.trim()) return tError("Укажите адрес");
+    // базовым оставляем RU — это нужно для совместимости с текущим бэком
+    const base = "ru";
 
-    // Для гибкости 'type' отправляем строкой (название типа).
-    // backend сможет хранить как угодно, у нас всё равно отображается name.
-    const rooms = roomRows
+    if (!nameI18n[base].trim()) return tError("Введите название (RU)");
+    if (!countryI18n[base].trim()) return tError("Укажите страну (RU)");
+    if (!addrI18n[base].trim()) return tError("Укажите адрес (RU)");
+
+    const rooms = ROOM_TYPES
       .map((r) => ({
-        type: r.name, // ← человеко-читаемое название типа
-        count: Number(r.count || 0),
-        pricePerNight: r.pricePerNight !== "" ? Number(r.pricePerNight) : null,
+        type: r.key,
+        count: Number(inventory[r.key].count || 0),
+        pricePerNight: inventory[r.key].pricePerNight ? Number(inventory[r.key].pricePerNight) : null,
       }))
       .filter((x) => x.count > 0);
 
+    // совместимый payload: строковые поля из RU + полный набор переводов
     const payload = {
-      name: name.trim(),
-      country: country.trim(),
-      city: city.trim() || null,
-      address: address.trim(),
-      rooms,
-      amenities,
-      services,
-      images,
+      // базовые (для существующих эндпойнтов)
+      name:    nameI18n[base].trim(),
+      country: countryI18n[base].trim(),
+      city:    (cityI18n[base] || "").trim(),
+      address: addrI18n[base].trim(),
+
+      // полный набор переводов (бэк может игнорировать — не ломает)
+      translations: {
+        ru: { name: nameI18n.ru, country: countryI18n.ru, city: cityI18n.ru, address: addrI18n.ru },
+        uz: { name: nameI18n.uz, country: countryI18n.uz, city: cityI18n.uz, address: addrI18n.uz },
+        en: { name: nameI18n.en, country: countryI18n.en, city: cityI18n.en, address: addrI18n.en },
+      },
+
+      rooms, amenities, services, images,
     };
 
     try {
       const created = await createHotel(payload);
       tSuccess("Отель сохранён");
-      navigate(`/hotels/${created?.id || ""}`);
-    } catch {
+      // если бэк вернул id — переходим на карточку
+      const id = created?.id || created?._id || "";
+      if (id) navigate(`/hotels/${id}`);
+    } catch (e) {
       tError("Ошибка сохранения отеля");
     }
   };
+
+  // удобный геттер/сеттер текущего языка
+  const bind = (obj, setObj) => ({
+    value: obj[activeLang],
+    onChange: (e) => setObj((p) => ({ ...p, [activeLang]: e.target.value })),
+  });
 
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
       <h1 className="text-2xl font-bold mb-4">Новый отель</h1>
 
+      {/* Языковые табы */}
+      <div className="flex items-center gap-2 mb-3">
+        {LANGS.map(l => (
+          <button
+            key={l.code}
+            type="button"
+            onClick={() => setActiveLang(l.code)}
+            className={[
+              "px-3 py-1 rounded-full border text-sm",
+              activeLang === l.code ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800"
+            ].join(" ")}
+          >
+            {l.label}
+          </button>
+        ))}
+        <button type="button" onClick={cloneFromRU} className="ml-auto text-sm px-3 py-1 rounded bg-gray-100 hover:bg-gray-200">
+          Скопировать из RU
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <label className="block text-sm font-medium mb-1">Название</label>
-          <input className="w-full border rounded px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium mb-1">Название ({activeLang.toUpperCase()})</label>
+          <input className="w-full border rounded px-3 py-2" {...bind(nameI18n, setNameI18n)} />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Страна</label>
-          <input className="w-full border rounded px-3 py-2" value={country} onChange={(e) => setCountry(e.target.value)} />
+          <label className="block text-sm font-medium mb-1">Страна ({activeLang.toUpperCase()})</label>
+          <input className="w-full border rounded px-3 py-2" {...bind(countryI18n, setCountryI18n)} />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Город</label>
-          <input className="w-full border rounded px-3 py-2" value={city} onChange={(e) => setCity(e.target.value)} />
+          <label className="block text-sm font-medium mb-1">Город ({activeLang.toUpperCase()})</label>
+          <input className="w-full border rounded px-3 py-2" {...bind(cityI18n, setCityI18n)} />
         </div>
 
-        <div className="col-span-2">
-          <label className="block text-sm font-medium mb-1">Адрес</label>
-          <input className="w-full border rounded px-3 py-2" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium mb-1">Адрес ({activeLang.toUpperCase()})</label>
+          <input className="w-full border rounded px-3 py-2" {...bind(addrI18n, setAddrI18n)} />
         </div>
       </div>
 
       {/* Номерной фонд + цены */}
       <h2 className="text-xl font-semibold mt-6 mb-2">Номерной фонд и цены</h2>
-
       <div className="overflow-auto border rounded">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
@@ -161,31 +181,21 @@ export default function AdminHotelForm() {
               <th className="text-left px-3 py-2">Тип</th>
               <th className="text-left px-3 py-2">Кол-во</th>
               <th className="text-left px-3 py-2">Цена/ночь</th>
-              <th className="w-[1%] px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {roomRows.map((row) => (
-              <tr key={row.id} className="border-t">
-                <td className="px-3 py-2">
-                  {row.builtin ? (
-                    row.name
-                  ) : (
-                    <input
-                      className="border rounded px-2 py-1 w-44"
-                      value={row.name}
-                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                      placeholder="Название типа"
-                    />
-                  )}
-                </td>
+            {ROOM_TYPES.map((rt) => (
+              <tr key={rt.key} className="border-t">
+                <td className="px-3 py-2">{rt.label}</td>
                 <td className="px-3 py-2">
                   <input
                     type="number"
                     min={0}
                     className="w-28 border rounded px-2 py-1"
-                    value={row.count}
-                    onChange={(e) => updateRow(row.id, { count: e.target.value })}
+                    value={inventory[rt.key].count}
+                    onChange={(e) =>
+                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], count: e.target.value } }))
+                    }
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -195,40 +205,16 @@ export default function AdminHotelForm() {
                     step="0.01"
                     placeholder="USD"
                     className="w-36 border rounded px-2 py-1"
-                    value={row.pricePerNight}
-                    onChange={(e) => updateRow(row.id, { pricePerNight: e.target.value })}
+                    value={inventory[rt.key].pricePerNight}
+                    onChange={(e) =>
+                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], pricePerNight: e.target.value } }))
+                    }
                   />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {!row.builtin && (
-                    <button
-                      type="button"
-                      className="text-gray-500 hover:text-red-600"
-                      onClick={() => removeRow(row.id)}
-                      title="Удалить тип"
-                    >
-                      ✕
-                    </button>
-                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
-      {/* Добавление собственного типа */}
-      <div className="flex items-center gap-2 mt-3">
-        <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder="Добавить свой тип номера (например, Deluxe, Superior, King…) "
-          value={newTypeName}
-          onChange={(e) => setNewTypeName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
-        />
-        <button type="button" onClick={addCustomType} className="px-3 py-2 rounded bg-gray-800 text-white">
-          Добавить тип
-        </button>
       </div>
 
       {/* Удобства */}
