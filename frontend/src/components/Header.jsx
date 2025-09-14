@@ -88,6 +88,18 @@ const IconHeart = (p) => (
   </svg>
 );
 
+// для отелей
+
+const IconHotel = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
+    <path d="M7 9h4M7 12h4M7 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M14 11h5a2 2 0 0 1 2 2v7" stroke="currentColor" strokeWidth="2"/>
+    <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+
 export default function Header() {
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
@@ -253,6 +265,14 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
+        {/* общий таб Отели — доступен всем ролям */}
+        <NavItem
+          to="/hotels"
+          label={t("nav.hotels", "Отели")}
+          icon={<IconHotel />}
+          end
+        />
+
         {/* Provider nav */}
         {role === "provider" && (
             <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
@@ -296,6 +316,10 @@ export default function Header() {
               </span>
             </Link>
           </nav>
+        )}
+
+        {isAdmin && (
+          <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
         )}
       </div>
 
