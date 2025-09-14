@@ -1,4 +1,4 @@
-frontend/src/components/Header.jsx
+//frontend/src/components/Header.jsx
 
 import { useEffect, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
