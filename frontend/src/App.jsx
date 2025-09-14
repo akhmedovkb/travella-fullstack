@@ -41,7 +41,11 @@ function AdminRoute({ children }) {
   if (!tok) return <Navigate to="/login" replace />;
   try {
     const base64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(base64));
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+
     const roles = []
       .concat(claims.role || [])
       .concat(claims.roles || [])
@@ -50,15 +54,18 @@ function AdminRoute({ children }) {
     const perms = []
       .concat(claims.permissions || claims.perms || [])
       .map((x) => String(x).toLowerCase());
+
     const isAdmin =
       claims.is_admin === true || claims.moderator === true ||
       roles.some(r => ["admin","moderator","super","root"].includes(r)) ||
       perms.some(x => ["moderation","admin:moderation"].includes(x));
+
     return isAdmin ? children : <Navigate to="/marketplace" replace />;
   } catch {
     return <Navigate to="/marketplace" replace />;
   }
 }
+
 
 
 export default function App() {
