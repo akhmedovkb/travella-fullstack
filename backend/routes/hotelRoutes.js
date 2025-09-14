@@ -1,20 +1,31 @@
-// backend/routes/hotelRoutes.js
 const express = require("express");
 const router = express.Router();
 
 const {
   searchHotels,
-  createHotel,
   getHotel,
+  createHotel,
   listHotels,
 } = require("../controllers/hotelController");
 
-// поиск для автодополнения
-router.get("/search", searchHotels);
+const {
+  createInspection,
+  listInspections,
+} = require("../controllers/hotelInspectionController");
 
-// CRUD-часть
-router.post("/", createHotel);
+// поиск
+router.get("/search", searchHotels);
+router.get("/", searchHotels); // алиас
+
+// карточка / создание
 router.get("/:id", getHotel);
-router.get("/", listHotels);
+router.post("/", createHotel);
+
+// инспекции
+router.get("/:hotelId/inspections", listInspections);
+router.post("/:hotelId/inspections", createInspection);
+
+// (опционально) список без фильтра
+// router.get("/_list/all", listHotels);
 
 module.exports = router;
