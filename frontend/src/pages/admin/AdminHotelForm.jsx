@@ -1,246 +1,265 @@
 // frontend/src/pages/admin/AdminHotelForm.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import Select from "react-select";
+import AsyncSelect from "react-select/async";
+import AsyncCreatableSelect from "react-select/async-creatable";
 import { createHotel } from "../../api/hotels";
-import { apiGet } from "../../api";
-import { tSuccess, tError } from "../../shared/toast";
+import { tSuccess, tError, tWarn } from "../../shared/toast";
 
-/* ================== HELPERS ================== */
-const ROOM_TYPES = [
-  { key: "single",     label: "Single" },
-  { key: "double",     label: "Double" },
-  { key: "triple",     label: "Triple" },
-  { key: "quadruple",  label: "Quadruple" },
-  { key: "suite",      label: "Suite" },
-  { key: "family",     label: "Family" },
+/* ================= helpers ================= */
+const DEFAULT_ROOM_TYPES = [
+  { id: "single",    name: "Single",     builtin: true },
+  { id: "double",    name: "Double",     builtin: true },
+  { id: "triple",    name: "Triple",     builtin: true },
+  { id: "quadruple", name: "Quadruple",  builtin: true },
+  { id: "suite",     name: "Suite",      builtin: true },
+  { id: "family",    name: "Family",     builtin: true },
 ];
 
-const LANGS = [
-  { code: "ru", label: "RU" },
-  { code: "uz", label: "UZ" },
-  { code: "en", label: "EN" },
-];
+const slugify = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
 
-// универсальный троттлинг/дебаунс
-function useDebouncedCallback(cb, delay = 250) {
-  const ref = useRef();
-  useEffect(() => () => clearTimeout(ref.current), []);
-  return (...args) => {
-    clearTimeout(ref.current);
-    ref.current = setTimeout(() => cb(...args), delay);
-  };
-}
-
-// пробуем несколько url-ов до первого успешного
-async function tryUrls(urls, mapFn) {
-  for (const u of urls) {
-    try {
-      const res = await apiGet(u, true); // токен клиента/провайдера не критичен — true = общедоступно
-      const arr = mapFn(res);
-      if (Array.isArray(arr) && arr.length) return arr;
-    } catch {}
-  }
-  return [];
-}
-
-// localStorage cache helpers
-const LS = {
-  get(key, def = []) {
-    try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : def; } catch { return def; }
-  },
-  set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} },
-  pushUnique(key, value, max = 50) {
-    const cur = LS.get(key);
-    if (!value) return cur;
-    if (!cur.includes(value)) {
-      const next = [value, ...cur].slice(0, max);
-      LS.set(key, next);
-      return next;
-    }
-    return cur;
-  }
+// язык для GeoNames (ru/uz/en)
+const pickGeoLang = () => {
+  const allowed = ["ru", "uz", "en"];
+  const fromI18n = (typeof localStorage !== "undefined"
+    ? (localStorage.getItem("i18nextLng") || "")
+    : ""
+  ).slice(0, 2).toLowerCase();
+  if (allowed.includes(fromI18n)) return fromI18n;
+  const nav = typeof navigator !== "undefined"
+    ? (navigator.languages || [navigator.language])
+    : [];
+  const cand = nav.map(l => String(l).slice(0, 2).toLowerCase())
+                  .find(l => allowed.includes(l));
+  return cand || "en";
 };
 
-/* ================== SUGGEST INPUT ================== */
-/**
- * Универсальный инпут с выпадающими подсказками.
- * Источник — проп searchFn(q): Promise<string[]>
- * Дополнительно хранит историю в localStorage (storageKey).
- */
-function SuggestInput({
-  value,
-  onChange,
-  placeholder,
-  storageKey,
-  searchFn,
-  min = 2,
-  disabled = false,
-}) {
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState(() => LS.get(storageKey));
-  const wrapRef = useRef(null);
+// i18n-подсказки для react-select без подключения i18next
+const UI = {
+  ru: {
+    type_more: "Введите минимум 2 символа",
+    loading: "Загрузка…",
+    no_options: "Ничего не найдено",
+    hotel_placeholder: "Найдите отель или введите свой вариант…",
+    add: "Добавить",
+    country_placeholder: "Выберите страну",
+    city_placeholder: "Начните вводить город…",
+  },
+  uz: {
+    type_more: "Kamida 2 ta belgi kiriting",
+    loading: "Yuklanmoqda…",
+    no_options: "Hech narsa topilmadi",
+    hotel_placeholder: "Mehmonxonani qidiring yoki yozing…",
+    add: "Qo‘shish",
+    country_placeholder: "Mamlakatni tanlang",
+    city_placeholder: "Shaharni yozishni boshlang…",
+  },
+  en: {
+    type_more: "Type at least 2 characters",
+    loading: "Loading…",
+    no_options: "No options",
+    hotel_placeholder: "Find a hotel or type your own…",
+    add: "Add",
+    country_placeholder: "Select a country",
+    city_placeholder: "Start typing a city…",
+  },
+};
+const ui = UI[pickGeoLang()];
 
-  // закрытие по клику вне
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
+function useDebouncedLoader(asyncFn, delay = 400) {
+  const timerRef = useRef(null);
+  const ctrlRef = useRef(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (ctrlRef.current) ctrlRef.current.abort();
   }, []);
 
-  const debouncedSearch = useDebouncedCallback(async (q) => {
-    if (!q || q.trim().length < min) { setItems(LS.get(storageKey)); return; }
-    try {
-      const list = (await searchFn(q.trim())) || [];
-      // объединяем подсказки бэка и локальную историю
-      const hist = LS.get(storageKey);
-      const merged = Array.from(new Set([...list, ...hist]));
-      setItems(merged.slice(0, 50));
-    } catch {
-      setItems(LS.get(storageKey));
-    }
-  }, 220);
+  return useCallback((inputValue) => {
+    return new Promise((resolve, reject) => {
+      const text = (inputValue || "").trim();
 
-  const onInput = (e) => {
-    const v = e.target.value;
-    onChange(v);
-    setOpen(true);
-    debouncedSearch(v);
-  };
+      if (text.length < 2) {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        if (ctrlRef.current) ctrlRef.current.abort();
+        resolve([]);
+        return;
+      }
 
-  const onPick = (v) => {
-    onChange(v);
-    setOpen(false);
-    LS.pushUnique(storageKey, v);
-  };
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (ctrlRef.current) ctrlRef.current.abort();
 
-  return (
-    <div className="relative" ref={wrapRef}>
-      <input
-        className="w-full border rounded px-3 py-2"
-        value={value}
-        onChange={onInput}
-        onFocus={() => { if (items.length) setOpen(true); }}
-        placeholder={placeholder}
-        disabled={disabled}
-        autoComplete="off"
-      />
-      {open && items?.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-60 overflow-auto">
-          {items.map((it, i) => (
-            <button
-              type="button"
-              key={`${it}-${i}`}
-              className="w-full text-left px-3 py-1.5 hover:bg-gray-100"
-              onClick={() => onPick(it)}
-            >
-              {it}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+      const controller = new AbortController();
+      ctrlRef.current = controller;
+
+      timerRef.current = setTimeout(async () => {
+        try {
+          const out = await asyncFn(text, controller.signal);
+          resolve(out);
+        } catch (e) {
+          // тихо игнорируем отмену
+          if (e?.name === "AbortError" || e?.code === "ERR_CANCELED") {
+            resolve([]);
+            return;
+          }
+          reject(e);
+        }
+      }, delay);
+    });
+  }, [asyncFn, delay]);
 }
 
-/* ================== PAGE ================== */
-// Рекомендация по структуре фонда + цен:
-// хранить массив объектов: rooms: [{ type, count, pricePerNight }]
+const ASYNC_I18N = {
+  noOptionsMessage: ({ inputValue }) =>
+    (inputValue || "").trim().length < 2 ? ui.type_more : ui.no_options,
+  loadingMessage: () => ui.loading,
+};
+const ASYNC_MENU_PORTAL = {
+  menuPortalTarget: typeof document !== "undefined" ? document.body : null,
+  styles: { menuPortal: (base) => ({ ...base, zIndex: 9999 }) },
+};
+
+/* ================ component ================ */
 export default function AdminHotelForm() {
   const navigate = useNavigate();
 
-  // i18n-поля
-  const [activeLang, setActiveLang] = useState("ru");
-  const [nameI18n, setNameI18n]       = useState({ ru: "", uz: "", en: "" });
-  const [countryI18n, setCountryI18n] = useState({ ru: "", uz: "", en: "" });
-  const [cityI18n, setCityI18n]       = useState({ ru: "", uz: "", en: "" });
-  const [addrI18n, setAddrI18n]       = useState({ ru: "", uz: "", en: "" });
-
+  // базовые поля
+  const [name, setName] = useState("");
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
+  const [address, setAddress] = useState("");
   const [amenities, setAmenities] = useState([]);
-  const [services, setServices]   = useState([]);
-  const [images, setImages]       = useState([]);
+  const [services, setServices] = useState([]);
+  const [images, setImages] = useState([]);
 
-  // инвентарь: { [typeKey]: { count, pricePerNight } }
-  const [inventory, setInventory] = useState(
-    ROOM_TYPES.reduce((acc, r) => ({ ...acc, [r.key]: { count: "", pricePerNight: "" } }), {})
+  // номерной фонд
+  const [roomRows, setRoomRows] = useState(
+    DEFAULT_ROOM_TYPES.map((r) => ({ ...r, count: "", pricePerNight: "" }))
   );
+  const [newTypeName, setNewTypeName] = useState("");
 
-  const cloneFromRU = () => {
-    setNameI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
-    setCountryI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
-    setCityI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
-    setAddrI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
-  };
+  // ===== География (страна/город) =====
+  const [countryOptions, setCountryOptions] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(null); // { value: ISO2, code, label }
+  const [selectedCity, setSelectedCity] = useState(null);
 
-  /* --------- Suggest search functions ---------- */
-  const countrySearch = async (q, lang) => {
-    // возможные эндпоинты — используем первый с данными
-    const urlq = encodeURIComponent(q);
-    const urll = encodeURIComponent(lang);
-    const urls = [
-      `/api/geo/countries?q=${urlq}&lang=${urll}`,
-      `/api/common/geo/countries?q=${urlq}&lang=${urll}`,
-      `/api/geo/country/suggest?q=${urlq}&lang=${urll}`,
-      `/api/geo/country?q=${urlq}&lang=${urll}`,
-    ];
-    const map = (res) => {
-      const items = res?.items || res?.data || res;
-      if (!items) return [];
-      return items.map((x) => (typeof x === "string" ? x : x?.name || x?.title || "")).filter(Boolean);
-    };
-    const fromApi = await tryUrls(urls, map);
-    if (fromApi.length) return fromApi;
-    // fallback: локальная история
-    return LS.get(`hotels:countries:${lang}`);
-  };
-
-  const citySearch = async (q, lang, country) => {
-    const urlq = encodeURIComponent(q);
-    const urll = encodeURIComponent(lang);
-    const urlc = encodeURIComponent(country || "");
-    const urls = [
-      `/api/geo/cities?q=${urlq}&country=${urlc}&lang=${urll}`,
-      `/api/common/geo/cities?q=${urlq}&country=${urlc}&lang=${urll}`,
-      `/api/geo/city/suggest?q=${urlq}&country=${urlc}&lang=${urll}`,
-      `/api/geo/city?q=${urlq}&country=${urlc}&lang=${urll}`,
-    ];
-    const map = (res) => {
-      const items = res?.items || res?.data || res;
-      if (!items) return [];
-      return items.map((x) => (typeof x === "string" ? x : x?.name || x?.title || "")).filter(Boolean);
-    };
-    const fromApi = await tryUrls(urls, map);
-    if (fromApi.length) return fromApi;
-    return LS.get(`hotels:cities:${lang}:${country || "any"}`);
-  };
-
-  // на выбор страны пушим в кэш и чистим город, если поменяли страну
-  const setCountryLang = (lang) => (v) => {
-    setCountryI18n((p) => {
-      const prev = p[lang];
-      if (prev !== v) {
-        // сброс города при смене страны — только в активном языке
-        setCityI18n((c) => ({ ...c, [lang]: "" }));
+  // загрузка стран (GeoNames → restcountries fallback)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const username = import.meta.env.VITE_GEONAMES_USERNAME;
+        let list = [];
+        // GeoNames
+        try {
+          const { data } = await axios.get(
+            "https://secure.geonames.org/countryInfoJSON",
+            { params: { lang: pickGeoLang(), username } }
+          );
+          list = (data?.geonames || []).map((c) => ({
+            value: c.countryCode,
+            code: c.countryCode,
+            label: c.countryName,
+          }));
+        } catch {}
+        // restcountries fallback
+        if (!list.length) {
+          const { data } = await axios.get(
+            "https://restcountries.com/v3.1/all?fields=name,cca2,translations"
+          );
+          list = (data || []).map((c) => ({
+            value: c.cca2,
+            code: c.cca2,
+            label:
+              (pickGeoLang() === "ru"
+                ? c.translations?.rus?.common
+                : null) || c.name?.common || c.cca2,
+          }));
+        }
+        if (!alive) return;
+        setCountryOptions(list.sort((a, b) =>
+          a.label.localeCompare(b.label, pickGeoLang())
+        ));
+      } catch (e) {
+        console.error("Не удалось загрузить страны", e);
       }
-      // кэш подсказок
-      if (v?.trim()) LS.pushUnique(`hotels:countries:${lang}`, v.trim());
-      return { ...p, [lang]: v };
-    });
-  };
+    })();
+    return () => { alive = false; };
+  }, []);
 
-  const setCityLang = (lang) => (v) => {
-    setCityI18n((p) => {
-      if (v?.trim()) {
-        const country = (countryI18n?.[lang] || "").trim() || "any";
-        LS.pushUnique(`hotels:cities:${lang}:${country}`, v.trim());
+  // поиск городов в GeoNames (учитывает выбранную страну)
+  const loadCitiesRaw = useCallback(
+    async (inputValue, signal) => {
+      const params = {
+        name_startsWith: inputValue,
+        q: inputValue,
+        featureClass: "P",
+        maxRows: 10,
+        fuzzy: 0.9,
+        style: "FULL",
+        lang: pickGeoLang(),
+        username: import.meta.env.VITE_GEONAMES_USERNAME,
+      };
+      if (selectedCountry?.code) params.country = selectedCountry.code;
+      try {
+        const { data } = await axios.get(
+          "https://secure.geonames.org/searchJSON",
+          { params, signal }
+        );
+        return (data.geonames || []).map((c) => ({
+          value: c.name,
+          label: c.name,
+        }));
+      } catch (err) {
+        if (err?.code !== "ERR_CANCELED") {
+          console.error("Ошибка загрузки городов:", err);
+        }
+        return [];
       }
-      return { ...p, [lang]: v };
-    });
-  };
+    },
+    [selectedCountry]
+  );
+  const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
 
-  /* --------- Amenities/Services/Images ---------- */
+  // ===== Поиск отеля (как в Dashboard) =====
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const token =
+    (typeof localStorage !== "undefined" &&
+      (localStorage.getItem("token") || localStorage.getItem("providerToken"))) ||
+    "";
+  const auth = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+  const loadHotelsRaw = useCallback(
+    async (inputValue, signal) => {
+      try {
+        const res = await axios.get(`${API_BASE}/api/hotels/search`, {
+          params: { query: inputValue || "" },
+          signal,
+          ...auth,
+        });
+        return (res.data || []).map((x) => ({
+          value: x.label || x.name || x,
+          label: x.label || x.name || x,
+        }));
+      } catch (err) {
+        if (err?.code === "ERR_CANCELED") return [];
+        console.error("Ошибка загрузки отелей:", err);
+        return [];
+      }
+    },
+    [API_BASE, auth]
+  );
+  const loadHotelOptions = useDebouncedLoader(loadHotelsRaw, 400);
+
+  /* ===== Удобства/услуги/изображения ===== */
   const handleAmenityAdd = (e) => {
     e.preventDefault();
     const val = e.target.elements.amen.value.trim();
@@ -253,7 +272,8 @@ export default function AdminHotelForm() {
     if (val && !services.includes(val)) setServices((p) => [...p, val]);
     e.target.reset();
   };
-  const removeFrom = (arrSetter, idx) => arrSetter((p) => p.filter((_, i) => i !== idx));
+  const removeFrom = (arrSetter, idx) =>
+    arrSetter((p) => p.filter((_, i) => i !== idx));
 
   const onImagePick = (e) => {
     const files = Array.from(e.target.files || []);
@@ -270,120 +290,128 @@ export default function AdminHotelForm() {
     e.target.value = "";
   };
 
-  /* --------- Submit ---------- */
+  /* ===== Кастомные типы ===== */
+  const addCustomType = () => {
+    const title = newTypeName.trim();
+    if (!title) return;
+    const idBase = slugify(title) || `custom-${Date.now()}`;
+    let id = idBase, i = 2;
+    while (roomRows.some((r) => r.id === id)) id = `${idBase}-${i++}`;
+    setRoomRows((rows) => [
+      ...rows,
+      { id, name: title, builtin: false, count: "", pricePerNight: "" },
+    ]);
+    setNewTypeName("");
+  };
+  const removeRow = (id) =>
+    setRoomRows((rows) => rows.filter((r) => r.id !== id));
+  const updateRow = (id, patch) =>
+    setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  /* ===== Submit ===== */
   const submit = async () => {
-    const base = "ru"; // совместимость с текущим бэком
+    if (!name.trim())    return tError("Введите название отеля");
+    if (!country.trim()) return tError("Укажите страну");
+    if (!address.trim()) return tError("Укажите адрес");
 
-    if (!nameI18n[base].trim()) return tError("Введите название (RU)");
-    if (!countryI18n[base].trim()) return tError("Укажите страну (RU)");
-    if (!addrI18n[base].trim()) return tError("Укажите адрес (RU)");
-
-    const rooms = ROOM_TYPES
+    const rooms = roomRows
       .map((r) => ({
-        type: r.key,
-        count: Number(inventory[r.key].count || 0),
-        pricePerNight: inventory[r.key].pricePerNight ? Number(inventory[r.key].pricePerNight) : null,
+        type: r.name,
+        count: Number(r.count || 0),
+        pricePerNight:
+          r.pricePerNight !== "" ? Number(r.pricePerNight) : null,
       }))
       .filter((x) => x.count > 0);
 
     const payload = {
-      name:    nameI18n[base].trim(),
-      country: countryI18n[base].trim(),
-      city:    (cityI18n[base] || "").trim(),
-      address: addrI18n[base].trim(),
-      translations: {
-        ru: { name: nameI18n.ru, country: countryI18n.ru, city: cityI18n.ru, address: addrI18n.ru },
-        uz: { name: nameI18n.uz, country: countryI18n.uz, city: cityI18n.uz, address: addrI18n.uz },
-        en: { name: nameI18n.en, country: countryI18n.en, city: cityI18n.en, address: addrI18n.en },
-      },
-      rooms, amenities, services, images,
+      name: name.trim(),
+      country: country.trim(),           // строка для бэка
+      city: city.trim() || null,
+      address: address.trim(),
+      rooms,
+      amenities,
+      services,
+      images,
     };
 
     try {
       const created = await createHotel(payload);
       tSuccess("Отель сохранён");
-      const id = created?.id || created?._id || "";
-      if (id) navigate(`/hotels/${id}`);
+      navigate(`/hotels/${created?.id || ""}`);
     } catch {
       tError("Ошибка сохранения отеля");
     }
   };
 
-  // удобный биндер для «Название» и «Адрес» (без подсказок)
-  const bindSimple = (obj, setObj) => ({
-    value: obj[activeLang],
-    onChange: (e) => setObj((p) => ({ ...p, [activeLang]: e.target.value })),
-  });
-
-  // memo search functions, чтобы не пересоздавались
-  const countrySearchLang = useMemo(
-    () => (q) => countrySearch(q, activeLang),
-    [activeLang]
-  );
-  const citySearchLang = useMemo(
-    () => (q) => citySearch(q, activeLang, countryI18n?.[activeLang] || ""),
-    [activeLang, countryI18n]
-  );
-
+  /* ================ render ================ */
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
       <h1 className="text-2xl font-bold mb-4">Новый отель</h1>
 
-      {/* Языковые табы */}
-      <div className="flex items-center gap-2 mb-3">
-        {LANGS.map(l => (
-          <button
-            key={l.code}
-            type="button"
-            onClick={() => setActiveLang(l.code)}
-            className={[
-              "px-3 py-1 rounded-full border text-sm",
-              activeLang === l.code ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800"
-            ].join(" ")}
-          >
-            {l.label}
-          </button>
-        ))}
-        <button type="button" onClick={cloneFromRU} className="ml-auto text-sm px-3 py-1 rounded bg-gray-100 hover:bg-gray-200">
-          Скопировать из RU
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Название (без внешних подсказок, но с историей можно тоже) */}
+        {/* Название отеля (AsyncCreatableSelect) */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1">Название ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bindSimple(nameI18n, setNameI18n)} />
-        </div>
-
-        {/* Страна — с автодополнением */}
-        <div>
-          <label className="block text-sm font-medium mb-1">Страна ({activeLang.toUpperCase()})</label>
-          <SuggestInput
-            value={countryI18n[activeLang] || ""}
-            onChange={setCountryLang(activeLang)}
-            placeholder="Начните вводить страну…"
-            storageKey={`hotels:countries:${activeLang}`}
-            searchFn={countrySearchLang}
+          <label className="block text-sm font-medium mb-1">Название</label>
+          <AsyncCreatableSelect
+            cacheOptions
+            defaultOptions
+            {...ASYNC_MENU_PORTAL}
+            loadOptions={loadHotelOptions}
+            value={name ? { value: name, label: name } : null}
+            onChange={(opt) => setName(opt?.value || "")}
+            onCreateOption={(val) => setName(val || "")}
+            placeholder={ui.hotel_placeholder}
+            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+            loadingMessage={ASYNC_I18N.loadingMessage}
           />
         </div>
 
-        {/* Город — автодополнение + зависит от страны */}
+        {/* Страна (Select) */}
         <div>
-          <label className="block text-sm font-medium mb-1">Город ({activeLang.toUpperCase()})</label>
-          <SuggestInput
-            value={cityI18n[activeLang] || ""}
-            onChange={setCityLang(activeLang)}
-            placeholder="Начните вводить город…"
-            storageKey={`hotels:cities:${activeLang}:${(countryI18n?.[activeLang] || "any")}`}
-            searchFn={citySearchLang}
+          <label className="block text-sm font-medium mb-1">Страна</label>
+          <Select
+            options={countryOptions}
+            value={selectedCountry}
+            onChange={(opt) => {
+              setSelectedCountry(opt);
+              setCountry(opt?.label || "");
+              // сбрасываем город при смене страны
+              setSelectedCity(null);
+              setCity("");
+            }}
+            placeholder={ui.country_placeholder}
+            {...ASYNC_MENU_PORTAL}
           />
         </div>
 
-        {/* Адрес */}
+        {/* Город (AsyncSelect) */}
+        <div>
+          <label className="block text-sm font-medium mb-1">Город</label>
+          <AsyncSelect
+            cacheOptions
+            defaultOptions
+            {...ASYNC_MENU_PORTAL}
+            loadOptions={loadCities}
+            value={selectedCity}
+            onChange={(opt) => {
+              setSelectedCity(opt);
+              setCity(opt?.value || "");
+            }}
+            placeholder={ui.city_placeholder}
+            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+            loadingMessage={ASYNC_I18N.loadingMessage}
+            isDisabled={!selectedCountry}
+          />
+        </div>
+
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1">Адрес ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bindSimple(addrI18n, setAddrI18n)} />
+          <label className="block text-sm font-medium mb-1">Адрес</label>
+          <input
+            className="w-full border rounded px-3 py-2"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Улица, дом, ориентир"
+          />
         </div>
       </div>
 
@@ -396,21 +424,31 @@ export default function AdminHotelForm() {
               <th className="text-left px-3 py-2">Тип</th>
               <th className="text-left px-3 py-2">Кол-во</th>
               <th className="text-left px-3 py-2">Цена/ночь</th>
+              <th className="w-[1%] px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {ROOM_TYPES.map((rt) => (
-              <tr key={rt.key} className="border-t">
-                <td className="px-3 py-2">{rt.label}</td>
+            {roomRows.map((row) => (
+              <tr key={row.id} className="border-t">
+                <td className="px-3 py-2">
+                  {row.builtin ? (
+                    row.name
+                  ) : (
+                    <input
+                      className="border rounded px-2 py-1 w-44"
+                      value={row.name}
+                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                      placeholder="Название типа"
+                    />
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <input
                     type="number"
                     min={0}
                     className="w-28 border rounded px-2 py-1"
-                    value={inventory[rt.key].count}
-                    onChange={(e) =>
-                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], count: e.target.value } }))
-                    }
+                    value={row.count}
+                    onChange={(e) => updateRow(row.id, { count: e.target.value })}
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -420,16 +458,40 @@ export default function AdminHotelForm() {
                     step="0.01"
                     placeholder="USD"
                     className="w-36 border rounded px-2 py-1"
-                    value={inventory[rt.key].pricePerNight}
-                    onChange={(e) =>
-                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], pricePerNight: e.target.value } }))
-                    }
+                    value={row.pricePerNight}
+                    onChange={(e) => updateRow(row.id, { pricePerNight: e.target.value })}
                   />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {!row.builtin && (
+                    <button
+                      type="button"
+                      className="text-gray-500 hover:text-red-600"
+                      onClick={() => removeRow(row.id)}
+                      title="Удалить тип"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Добавление собственного типа */}
+      <div className="flex items-center gap-2 mt-3">
+        <input
+          className="border rounded px-3 py-2 flex-1"
+          placeholder="Добавить свой тип номера (например, Deluxe, Superior, King…) "
+          value={newTypeName}
+          onChange={(e) => setNewTypeName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
+        />
+        <button type="button" onClick={addCustomType} className="px-3 py-2 rounded bg-gray-800 text-white">
+          {ui.add}
+        </button>
       </div>
 
       {/* Удобства */}
