@@ -531,7 +531,9 @@
     "bookings": "Bronlar",
     "dashboard": "Boshqaruv",
     "requests": "So‘rovlar",
-    "favorites": "Sevimlilar"
+    "favorites": "Sevimlilar",
+    "hotels": "Mehmonxonalar",
+    "hotels_admin": "Mehmonxonalar (admin)"
   },
 
   "net_price": "Netto narx",
