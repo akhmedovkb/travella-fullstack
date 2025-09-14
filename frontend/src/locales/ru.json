@@ -812,5 +812,48 @@
   "room_category": "Категория",
   "select.type_more": "Введите минимум 2 символа",
   "select.no_options": "Ничего не найдено",
-  "select.loading": "Загрузка…"
+  "select.loading": "Загрузка…",
+
+  "admin": { "new_hotel_title": "Новый отель" },
+
+  "hotel_name": "Название",
+  "enter_hotel_name": "Введите название отеля",
+  "enter_address": "Укажите адрес",
+  "hotel_saved": "Отель сохранён",
+  "hotel_save_error": "Ошибка сохранения отеля",
+
+  "country": "Страна",
+  "city": "Город",
+  "currency": "Валюта",
+
+  "resident": "Для резидентов",
+  "non_resident": "Для нерезидентов",
+
+  "room_type_name": "Название типа",
+  "add_custom_room_type_ph": "Добавить свой тип номера (например, Deluxe…)",
+  "add_type": "Добавить тип",
+
+  "extra_bed_price": "Стоимость доп. места (за человека/ночь)",
+
+  "taxes_and_fees": "Налоги и сборы",
+  "vat_included": "Цены включают НДС",
+  "vat_rate": "Ставка НДС, %",
+
+  "tourist_tax_resident": "Туристический сбор (резидент), /чел/ночь",
+  "tourist_tax_nonresident": "Туристический сбор (нерезидент), /чел/ночь",
+
+  "amenities": "Удобства",
+  "add_amenity": "Добавить удобство…",
+  "add_service": "Добавить услугу…",
+  "add": "Добавить",
+
+  "images": "Изображения",
+
+  "select_city": "Выберите город",
+  "select_country": "Выберите страну",
+  "select": {
+    "type_more": "Введите минимум 2 символа",
+    "no_options": "Ничего не найдено",
+    "loading": "Загрузка…"
+  }
 }
