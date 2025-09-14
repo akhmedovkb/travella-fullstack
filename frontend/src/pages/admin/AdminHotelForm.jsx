@@ -1,146 +1,223 @@
-import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import Select from "react-select";
-import AsyncSelect from "react-select/async";
-import RoomInventoryEditor from "../../components/hotels/RoomInventoryEditor";
-import RoomPricingEditor from "../../components/hotels/RoomPricingEditor";
-import HotelAmenitiesServices from "../../components/hotels/HotelAmenitiesServices";
+// frontend/src/pages/admin/AdminHotelForm.jsx
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { createHotel } from "../../api/hotels";
 import { tSuccess, tError } from "../../shared/toast";
-import { AMENITIES, SERVICES } from "../../constants/hotelDicts";
 
-// возьмите из вашего кода:
-import { makeAsyncSelectI18n } from "../Dashboard"; // если не экспортируется — скопируйте локально
-// или продублируйте i18n-хелперы здесь
+const ROOM_TYPES = [
+  { key: "single",     label: "Single" },
+  { key: "double",     label: "Double" },
+  { key: "triple",     label: "Triple" },
+  { key: "quadruple",  label: "Quadruple" },
+  { key: "suite",      label: "Suite" },
+  { key: "family",     label: "Family" },
+];
 
+// Рекомендация по структуре фонда + цен:
+// хранить массив объектов: rooms: [{ type, count, pricePerNight }]
+// это прямо связывает пункты 4 и 5 в одной таблице.
 export default function AdminHotelForm() {
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const token = localStorage.getItem("token");
-  const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-
-  const [countryOptions, setCountryOptions] = useState([]);
-  const [loadCities, setLoadCities] = useState(() => async () => []);
+  const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [country, setCountry] = useState(null);
-  const [city, setCity] = useState(null);
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
-  const [images, setImages] = useState([]);
-  const [inventory, setInventory] = useState([]); // [{type,count}]
-  const [rates, setRates] = useState([]);         // [{type,currency,basePrice}]
-  const [amenities, setAmenities] = useState([]);
-  const [services, setServices] = useState([]);
+  const [amenities, setAmenities] = useState([]); // массив строк
+  const [services, setServices] = useState([]);   // массив строк
+  const [images, setImages] = useState([]);       // dataURL (обложка = images[0])
 
-  // ====== подхватим уже существующие загрузчики из Dashboard (если вынесены в утилы) ======
-  useEffect(() => {
-    // страны (можете переиспользовать ваш эффект из Dashboard)
-    axios.get("https://restcountries.com/v3.1/all?fields=name,cca2").then(res => {
-      const opts = (res.data || []).map(c => ({
-        value: c.cca2, code: c.cca2, label: c.name?.common || c.cca2
-      })).sort((a,b) => a.label.localeCompare(b.label));
-      setCountryOptions(opts);
-    });
-    // города (минимальный ассинх-лоадер)
-    setLoadCities(() => async (inputValue) => {
-      if (!inputValue || inputValue.trim().length < 2) return [];
-      const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: { q: inputValue, featureClass: "P", maxRows: 10, username: import.meta.env.VITE_GEONAMES_USERNAME }
-      });
-      return (data.geonames || []).map(g => ({ value: g.name, label: g.name }));
-    });
-  }, []);
+  // инвентарь: { [typeKey]: { count, pricePerNight } }
+  const [inventory, setInventory] = useState(
+    ROOM_TYPES.reduce((acc, r) => ({ ...acc, [r.key]: { count: "", pricePerNight: "" } }), {})
+  );
 
-  const save = async () => {
-    if (!name || !country) {
-      tError("Заполните название и страну");
-      return;
-    }
+  const handleAmenityAdd = (e) => {
+    e.preventDefault();
+    const val = e.target.elements.amen.value.trim();
+    if (val && !amenities.includes(val)) setAmenities((p) => [...p, val]);
+    e.target.reset();
+  };
+  const handleServiceAdd = (e) => {
+    e.preventDefault();
+    const val = e.target.elements.serv.value.trim();
+    if (val && !services.includes(val)) setServices((p) => [...p, val]);
+    e.target.reset();
+  };
+  const removeFrom = (arrSetter, idx) => arrSetter((p) => p.filter((_, i) => i !== idx));
+
+  const onImagePick = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const readers = files.map(
+      (f) =>
+        new Promise((res) => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result);
+          fr.readAsDataURL(f);
+        })
+    );
+    Promise.all(readers).then((list) => setImages((prev) => [...prev, ...list]));
+    e.target.value = "";
+  };
+
+  const submit = async () => {
+    if (!name.trim()) return tError("Введите название");
+    if (!country.trim()) return tError("Укажите страну");
+    if (!address.trim()) return tError("Укажите адрес");
+
+    const rooms = ROOM_TYPES
+      .map((r) => ({
+        type: r.key,
+        count: Number(inventory[r.key].count || 0),
+        pricePerNight: inventory[r.key].pricePerNight ? Number(inventory[r.key].pricePerNight) : null,
+      }))
+      .filter((x) => x.count > 0);
+
+    const payload = {
+      name: name.trim(),
+      country: country.trim(),
+      city: city.trim() || null,
+      address: address.trim(),
+      rooms,                // ← фонд + цены каскадно
+      amenities,
+      services,
+      images,
+    };
+
     try {
-      const payload = {
-        name,
-        country: country?.value,
-        address: address || (city?.label || ""),
-        city: city?.label || "",
-        images,
-        inventory,
-        rates,
-        amenities,
-        services
-      };
-      await axios.post(`${API_BASE}/api/hotels`, payload, config);
+      const created = await createHotel(payload);
       tSuccess("Отель сохранён");
-      // очистить форму
-      setName(""); setCountry(null); setCity(null); setAddress("");
-      setImages([]); setInventory([]); setRates([]); setAmenities([]); setServices([]);
+      navigate(`/hotels/${created?.id || ""}`);
     } catch (e) {
-      console.error(e);
-      tError("Не удалось сохранить отель");
+      tError("Ошибка сохранения отеля");
     }
   };
 
   return (
-    <div className="p-6 mx-auto max-w-4xl">
-      <h1 className="text-2xl font-bold mb-4">Добавить отель</h1>
+    <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
+      <h1 className="text-2xl font-bold mb-4">Новый отель</h1>
 
-      <div className="mb-3">
-        <label className="block font-medium mb-1">Название</label>
-        <input className="w-full border rounded px-3 py-2"
-               value={name} onChange={e => setName(e.target.value)} />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="block text-sm font-medium mb-1">Название</label>
+          <input className="w-full border rounded px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
         <div>
-          <label className="block font-medium mb-1">Страна</label>
-          <Select options={countryOptions} value={country} onChange={setCountry} />
+          <label className="block text-sm font-medium mb-1">Страна</label>
+          <input className="w-full border rounded px-3 py-2" value={country} onChange={(e) => setCountry(e.target.value)} />
         </div>
         <div>
-          <label className="block font-medium mb-1">Город</label>
-          <AsyncSelect cacheOptions defaultOptions loadOptions={loadCities} value={city} onChange={setCity} />
+          <label className="block text-sm font-medium mb-1">Город</label>
+          <input className="w-full border rounded px-3 py-2" value={city} onChange={(e) => setCity(e.target.value)} />
         </div>
-        <div>
-          <label className="block font-medium mb-1">Адрес</label>
-          <input className="w-full border rounded px-3 py-2"
-                 value={address} onChange={e => setAddress(e.target.value)}
-                 placeholder="Улица, дом…" />
+
+        <div className="col-span-2">
+          <label className="block text-sm font-medium mb-1">Адрес</label>
+          <input className="w-full border rounded px-3 py-2" value={address} onChange={(e) => setAddress(e.target.value)} />
         </div>
       </div>
 
-      <RoomInventoryEditor value={inventory} onChange={setInventory} className="mb-4" />
-      <div className="mt-4" />
-      <RoomPricingEditor value={rates} onChange={setRates} currency="USD" />
+      {/* Номерной фонд + цены */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Номерной фонд и цены</h2>
+      <div className="overflow-auto border rounded">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-3 py-2">Тип</th>
+              <th className="text-left px-3 py-2">Кол-во</th>
+              <th className="text-left px-3 py-2">Цена/ночь</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROOM_TYPES.map((rt) => (
+              <tr key={rt.key} className="border-t">
+                <td className="px-3 py-2">{rt.label}</td>
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-28 border rounded px-2 py-1"
+                    value={inventory[rt.key].count}
+                    onChange={(e) =>
+                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], count: e.target.value } }))
+                    }
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="USD"
+                    className="w-36 border rounded px-2 py-1"
+                    value={inventory[rt.key].pricePerNight}
+                    onChange={(e) =>
+                      setInventory((p) => ({ ...p, [rt.key]: { ...p[rt.key], pricePerNight: e.target.value } }))
+                    }
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <div className="mt-4" />
-      <HotelAmenitiesServices
-        amenities={amenities}
-        services={services}
-        onAmenities={setAmenities}
-        onServices={setServices}
-      />
+      {/* Удобства */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Удобства</h2>
+      <form onSubmit={handleAmenityAdd} className="flex gap-2 mb-2">
+        <input name="amen" className="flex-1 border rounded px-3 py-2" placeholder="Добавить удобство…" />
+        <button className="px-3 py-2 rounded bg-gray-800 text-white">Добавить</button>
+      </form>
+      <div className="flex flex-wrap gap-2">
+        {amenities.map((a, i) => (
+          <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+            {a}{" "}
+            <button className="ml-1 text-gray-500" onClick={() => removeFrom(setAmenities, i)}>×</button>
+          </span>
+        ))}
+      </div>
 
-      {/* Простейшая загрузка фоток (можно переиспользовать ImagesEditor из Dashboard) */}
-      <div className="mt-4 border rounded-lg p-4">
-        <div className="font-semibold mb-2">Фотографии</div>
-        <input type="file" multiple accept="image/*"
-               onChange={e => {
-                 const files = Array.from(e.target.files || []);
-                 Promise.all(files.map(f => {
-                   return new Promise(res => {
-                     const r = new FileReader();
-                     r.onload = () => res(r.result); r.readAsDataURL(f);
-                   });
-                 })).then(arr => setImages(prev => [...prev, ...arr]));
-               }} />
-        <div className="grid grid-cols-3 gap-2 mt-2">
+      {/* Услуги */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Услуги</h2>
+      <form onSubmit={handleServiceAdd} className="flex gap-2 mb-2">
+        <input name="serv" className="flex-1 border rounded px-3 py-2" placeholder="Добавить услугу…" />
+        <button className="px-3 py-2 rounded bg-gray-800 text-white">Добавить</button>
+      </form>
+      <div className="flex flex-wrap gap-2">
+        {services.map((s, i) => (
+          <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+            {s}{" "}
+            <button className="ml-1 text-gray-500" onClick={() => removeFrom(setServices, i)}>×</button>
+          </span>
+        ))}
+      </div>
+
+      {/* Изображения */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Изображения</h2>
+      <input type="file" accept="image/*" multiple onChange={onImagePick} />
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
           {images.map((src, i) => (
             <div key={i} className="relative">
-              <img src={src} alt="" className="h-24 w-full object-cover rounded" />
-              <button type="button" className="absolute top-1 right-1 bg-white/90 text-xs px-2 rounded"
-                      onClick={() => setImages(imgs => imgs.filter((_,idx) => idx !== i))}>×</button>
+              <img src={src} alt="" className="w-full h-28 object-cover rounded border" />
+              <button
+                type="button"
+                onClick={() => setImages((p) => p.filter((_, idx) => idx !== i))}
+                className="absolute top-1 right-1 bg-white/90 rounded px-1 text-xs"
+              >
+                ×
+              </button>
+              {i === 0 && (
+                <div className="absolute bottom-1 left-1 text-[10px] bg-white/90 px-1 rounded">Обложка</div>
+              )}
             </div>
           ))}
         </div>
-      </div>
+      )}
 
-      <div className="mt-6 flex gap-3 justify-end">
-        <button onClick={save} className="bg-orange-600 text-white px-5 py-2 rounded font-semibold">
+      <div className="mt-6 flex gap-2">
+        <button onClick={submit} className="bg-orange-600 text-white font-semibold px-4 py-2 rounded">
           Сохранить
         </button>
       </div>
