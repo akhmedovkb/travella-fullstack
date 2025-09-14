@@ -820,5 +820,48 @@
   "extra_bed_cost": "Qo‘shimcha o‘rin, so‘m/tun",
   "room_category": "Xona toifasi",
   "select.no_options": "Hech narsa topilmadi",
-  "select.loading": "Yuklanmoqda…"
+  "select.loading": "Yuklanmoqda…",
+
+  "admin": { "new_hotel_title": "Yangi mehmonxona" },
+
+  "hotel_name": "Nomi",
+  "enter_hotel_name": "Mehmonxona nomini kiriting",
+  "enter_address": "Manzilni kiriting",
+  "hotel_saved": "Mehmonxona saqlandi",
+  "hotel_save_error": "Mehmonxonani saqlab bo‘lmadi",
+
+  "country": "Mamlakat",
+  "city": "Shahar",
+  "currency": "Valyuta",
+
+  "resident": "Rezidentlar uchun",
+  "non_resident": "Norezidentlar uchun",
+
+  "room_type_name": "Toifa nomi",
+  "add_custom_room_type_ph": "O‘zingizning xona turini qo‘shing (masalan, Deluxe…)",
+  "add_type": "Tur qo‘shish",
+
+  "extra_bed_price": "Qo‘shimcha o‘rin narxi (kishi/tuniga)",
+
+  "taxes_and_fees": "Soliqlar va yig‘imlar",
+  "vat_included": "Narxlarga QQS kiritilgan",
+  "vat_rate": "QQS stavkasi, %",
+
+  "tourist_tax_resident": "Turistik yig‘im (rezident), /kishi/tun",
+  "tourist_tax_nonresident": "Turistik yig‘im (norezident), /kishi/tun",
+
+  "amenities": "Qulayliklar",
+  "add_amenity": "Qulaylik qo‘shish…",
+  "add_service": "Xizmat qo‘shish…",
+  "add": "Qo‘shish",
+
+  "images": "Rasmlar",
+
+  "select_city": "Shaharni tanlang",
+  "select_country": "Mamlakatni tanlang",
+  "select": {
+    "type_more": "Kamida 2 ta harf kiriting",
+    "no_options": "Hech narsa topilmadi",
+    "loading": "Yuklanmoqda…"
+  }
 }
