@@ -28,6 +28,8 @@ const slugify = (s) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 
+const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+
 /* ---------- AsyncSelect i18n + debounce ---------- */
 const makeAsyncSelectI18n = (t) => ({
   noOptionsMessage: ({ inputValue }) =>
@@ -40,12 +42,10 @@ const makeAsyncSelectI18n = (t) => ({
 function useDebouncedLoader(asyncFn, delay = 400) {
   const timerRef = useRef(null);
   const ctrlRef = useRef(null);
-
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (ctrlRef.current) ctrlRef.current.abort?.();
   }, []);
-
   return useCallback((inputValue) => {
     return new Promise((resolve, reject) => {
       const text = (inputValue || "").trim();
@@ -57,10 +57,8 @@ function useDebouncedLoader(asyncFn, delay = 400) {
       }
       if (timerRef.current) clearTimeout(timerRef.current);
       if (ctrlRef.current) ctrlRef.current.abort?.();
-
       const controller = new AbortController();
       ctrlRef.current = controller;
-
       timerRef.current = setTimeout(async () => {
         try {
           const out = await asyncFn(text, controller.signal);
@@ -90,7 +88,7 @@ function useGeoLang(i18n) {
   }, [i18n?.language]);
 }
 
-/* ---------- Вспом. подпись local/EN (для подсказок отелей) ---------- */
+/* ---------- dual label (для подсказок отелей) ---------- */
 const composeDualLabel = (local, en) => {
   if (!local && !en) return "";
   if (!local) return en;
@@ -106,48 +104,62 @@ export default function AdminHotelForm() {
   // Основные поля
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [amenities, setAmenities] = useState([]);
-  const [services, setServices] = useState([]);
   const [images, setImages] = useState([]);
 
-  // География для Select
-  const [countryOpt, setCountryOpt] = useState(null); // {value: ISO2, code, label}
-  const [cityOpt, setCityOpt] = useState(null);       // {value,label}
-  const [countryOptions, setCountryOptions] = useState([]);
-  const [cityDefaultOptions, setCityDefaultOptions] = useState([]); // топ-городов по стране
+  // Валюта единого прайса/сборов
+  const [currency, setCurrency] = useState("UZS");
 
-  // Номерной фонд
+  // География
+  const [countryOpt, setCountryOpt] = useState(null);
+  const [cityOpt, setCityOpt] = useState(null);
+  const [countryOptions, setCountryOptions] = useState([]);
+  const [cityDefaultOptions, setCityDefaultOptions] = useState([]);
+
+  // Удобства/услуги
+  const [amenities, setAmenities] = useState([]);
+  const [services, setServices] = useState([]);
+
+  // Номера + сезонные цены
+  const blankRow = (base) => ({
+    ...base,
+    count: "",
+    prices: {
+      low:  { resident: "", nonResident: "" },
+      high: { resident: "", nonResident: "" },
+    },
+  });
+
   const [roomRows, setRoomRows] = useState(
-    DEFAULT_ROOM_TYPES.map((r) => ({ ...r, count: "", pricePerNight: "" }))
+    DEFAULT_ROOM_TYPES.map((r) => blankRow(r))
   );
   const [newTypeName, setNewTypeName] = useState("");
 
-  /* ---------- Загрузка стран (локализовано) ---------- */
+  // Доп. место
+  const [extraBedPrice, setExtraBedPrice] = useState("");
+
+  // Налоги и сборы
+  const [vatIncluded, setVatIncluded] = useState(true);
+  const [vatRate, setVatRate] = useState(""); // %
+  const [touristResident, setTouristResident] = useState("");     // /чел/ночь
+  const [touristNonResident, setTouristNonResident] = useState(""); // /чел/ночь
+
+  /* ---------- Страны ---------- */
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const username = import.meta.env.VITE_GEONAMES_USERNAME;
         let list = [];
-
-        // 1) GeoNames (даёт переводы стран)
         if (username) {
-          const { data } = await axios.get(
-            "https://secure.geonames.org/countryInfoJSON",
-            { params: { lang: geoLang, username } }
-          );
+          const { data } = await axios.get("https://secure.geonames.org/countryInfoJSON", {
+            params: { lang: geoLang, username }
+          });
           list = (data?.geonames || []).map((c) => ({
-            value: c.countryCode,
-            code:  c.countryCode,
-            label: c.countryName,   // только локализованное имя (RU/UZ/EN)
+            value: c.countryCode, code: c.countryCode, label: c.countryName,
           }));
         }
-
-        // 2) Фолбэк (restcountries), если GeoNames недоступен
         if (!list.length) {
-          const res = await axios.get(
-            "https://restcountries.com/v3.1/all?fields=name,cca2,translations"
-          );
+          const res = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2,translations");
           list = (res.data || []).map((c) => {
             const code = c.cca2;
             const label =
@@ -157,28 +169,24 @@ export default function AdminHotelForm() {
             return { value: code, code, label };
           });
         }
-
         if (!alive) return;
         list.sort((a, b) => a.label.localeCompare(b.label, geoLang));
         setCountryOptions(list);
-
-        // Пересинхронизируем выбранную страну при смене языка
         if (countryOpt) {
           const found = list.find((x) => x.code === countryOpt.code);
           if (found) setCountryOpt(found);
         }
       } catch (e) {
-        console.error("Не удалось загрузить список стран", e);
+        console.error("countries load error", e);
       }
     })();
     return () => { alive = false; };
-  }, [geoLang]); // меняется язык — перерисовываем подписи
+  }, [geoLang]);
 
-  /* ---------- Префетч популярных городов страны ---------- */
+  /* ---------- Префетч городов для выбранной страны ---------- */
   useEffect(() => {
     const username = import.meta.env.VITE_GEONAMES_USERNAME;
     if (!username || !countryOpt?.code) { setCityDefaultOptions([]); return; }
-
     const ctrl = new AbortController();
     axios.get("https://secure.geonames.org/searchJSON", {
       params: {
@@ -197,20 +205,18 @@ export default function AdminHotelForm() {
       setCityDefaultOptions(opts);
     })
     .catch((e) => { if (e?.code !== "ERR_CANCELED") console.warn("prefetch cities error", e); });
-
     return () => ctrl.abort();
   }, [countryOpt?.code, geoLang]);
 
-  /* ---------- Поиск городов (строго в выбранной стране) ---------- */
+  /* ---------- Поиск городов (внутри страны) ---------- */
   const loadCitiesRaw = useCallback(async (inputValue, signal) => {
     if (!countryOpt?.code) return [];
     const username = import.meta.env.VITE_GEONAMES_USERNAME;
     if (!username) return [];
-
     try {
       const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
         params: {
-          country: countryOpt.code,          // фильтр по стране
+          country: countryOpt.code,
           featureClass: "P",
           name_startsWith: inputValue,
           q: inputValue,
@@ -223,13 +229,10 @@ export default function AdminHotelForm() {
         },
         signal,
       });
-      return (data?.geonames || []).map((g) => ({
-        value: g.name,
-        label: g.name,                       // показываем локальное имя
-      }));
+      return (data?.geonames || []).map((g) => ({ value: g.name, label: g.name }));
     } catch (e) {
       if (e?.code === "ERR_CANCELED") return [];
-      console.error("Ошибка загрузки городов:", e);
+      console.error("load cities error:", e);
       return [];
     }
   }, [countryOpt?.code, geoLang]);
@@ -259,7 +262,7 @@ export default function AdminHotelForm() {
       });
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return [];
-      console.error("Ошибка загрузки отелей:", err);
+      console.error("hotels search error:", err);
       return [];
     }
   }, [API_BASE]);
@@ -305,11 +308,18 @@ export default function AdminHotelForm() {
     let id = idBase;
     let i = 2;
     while (roomRows.some((r) => r.id === id)) id = `${idBase}-${i++}`;
-    setRoomRows((rows) => [...rows, { id, name: title, builtin: false, count: "", pricePerNight: "" }]);
+    setRoomRows((rows) => [...rows, blankRow({ id, name: title, builtin: false })]);
     setNewTypeName("");
   };
   const removeRow = (id) => setRoomRows((rows) => rows.filter((r) => r.id !== id));
-  const updateRow = (id, patch) => setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const updateRow = (id, patch) =>
+    setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const updatePrice = (id, season, personType, value) =>
+    setRoomRows((rows) =>
+      rows.map((r) =>
+        r.id === id ? { ...r, prices: { ...r.prices, [season]: { ...r.prices[season], [personType]: value } } } : r
+      )
+    );
 
   /* ---------- Submit ---------- */
   const submit = async () => {
@@ -321,16 +331,35 @@ export default function AdminHotelForm() {
       .map((r) => ({
         type: r.name,
         count: Number(r.count || 0),
-        pricePerNight: r.pricePerNight !== "" ? Number(r.pricePerNight) : null,
+        prices: {
+          low: {
+            resident:     numOrNull(r.prices.low.resident),
+            nonResident:  numOrNull(r.prices.low.nonResident),
+          },
+          high: {
+            resident:     numOrNull(r.prices.high.resident),
+            nonResident:  numOrNull(r.prices.high.nonResident),
+          },
+        },
       }))
       .filter((x) => x.count > 0);
 
     const payload = {
       name: name.trim(),
-      country: countryOpt?.label || "",   // локализованное имя страны
-      city: cityOpt?.label || null,       // локализованное имя города
+      country: countryOpt?.label || "",
+      city: cityOpt?.label || null,
       address: address.trim(),
+      currency,
       rooms,
+      extraBedPrice: numOrNull(extraBedPrice),
+      taxes: {
+        vatIncluded: !!vatIncluded,
+        vatRate: numOrNull(vatRate), // %
+        touristTax: {
+          residentPerNight:    numOrNull(touristResident),
+          nonResidentPerNight: numOrNull(touristNonResident),
+        },
+      },
       amenities,
       services,
       images,
@@ -340,7 +369,8 @@ export default function AdminHotelForm() {
       const created = await createHotel(payload);
       tSuccess(t("hotel_saved") || "Отель сохранён");
       navigate(`/hotels/${created?.id || ""}`);
-    } catch {
+    } catch (e) {
+      console.error(e);
       tError(t("hotel_save_error") || "Ошибка сохранения отеля");
     }
   };
@@ -350,15 +380,16 @@ export default function AdminHotelForm() {
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
       <h1 className="text-2xl font-bold mb-4">{t("admin.new_hotel_title", { defaultValue: "Новый отель" })}</h1>
 
+      {/* Базовая информация */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Название отеля с подсказками + возможность ввести своё */}
+        {/* Название отеля */}
         <div className="col-span-2">
           <label className="block text-sm font-medium mb-1">{t("hotel_name", { defaultValue: "Название" })}</label>
           <AsyncCreatableSelect
             cacheOptions
             defaultOptions
             {...ASYNC_MENU_PORTAL}
-            loadOptions={loadHotelOptions}
+            loadOptions={useDebouncedLoader(loadHotelOptionsRaw, 400)}
             noOptionsMessage={ASYNC_I18N.noOptionsMessage}
             loadingMessage={ASYNC_I18N.loadingMessage}
             placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
@@ -377,21 +408,21 @@ export default function AdminHotelForm() {
             value={countryOpt}
             onChange={(opt) => {
               setCountryOpt(opt || null);
-              setCityOpt(null);           // при смене страны сбрасываем город
-              setCityDefaultOptions([]);  // и дефолтные подсказки — обновим в эффекте
+              setCityOpt(null);
+              setCityDefaultOptions([]);
             }}
             placeholder={t("select_country", { defaultValue: "Выберите страну" })}
             isClearable
           />
         </div>
 
-        {/* Город (строго после выбора страны) */}
+        {/* Город */}
         <div>
           <label className="block text-sm font-medium mb-1">{t("city", { defaultValue: "Город" })}</label>
           <AsyncSelect
             isDisabled={!countryOpt}
             cacheOptions
-            defaultOptions={cityDefaultOptions}  // топ городов страны
+            defaultOptions={cityDefaultOptions}
             {...ASYNC_MENU_PORTAL}
             loadOptions={loadCities}
             noOptionsMessage={ASYNC_I18N.noOptionsMessage}
@@ -408,23 +439,47 @@ export default function AdminHotelForm() {
           )}
         </div>
 
-        {/* Адрес */}
-        <div className="col-span-2">
+        {/* Валюта + Адрес */}
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("currency", { defaultValue: "Валюта" })}</label>
+          <select
+            className="w-full border rounded px-3 py-2 bg-white"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+          >
+            <option value="UZS">UZS</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+        <div>
           <label className="block text-sm font-medium mb-1">{t("address", { defaultValue: "Адрес" })}</label>
           <input className="w-full border rounded px-3 py-2" value={address} onChange={(e) => setAddress(e.target.value)} />
         </div>
       </div>
 
-      {/* Номерной фонд + цены */}
-      <h2 className="text-xl font-semibold mt-6 mb-2">{t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}</h2>
+      {/* Номерной фонд + сезонные цены */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">
+        {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
+      </h2>
+
       <div className="overflow-auto border rounded">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full text-sm align-top">
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-3 py-2">{t("type", { defaultValue: "Тип" })}</th>
               <th className="text-left px-3 py-2">{t("count_short", { defaultValue: "Кол-во" })}</th>
-              <th className="text-left px-3 py-2">{t("price_per_night", { defaultValue: "Цена/ночь" })}</th>
+              <th className="px-3 py-2 text-center" colSpan={2}>{t("low_season", { defaultValue: "Низкий сезон" })}</th>
+              <th className="px-3 py-2 text-center" colSpan={2}>{t("high_season", { defaultValue: "Высокий сезон" })}</th>
               <th className="w-[1%] px-3 py-2"></th>
+            </tr>
+            <tr className="bg-gray-50">
+              <th></th><th></th>
+              <th className="text-left px-3 py-1">{t("resident", { defaultValue: "Для резидентов" })}</th>
+              <th className="text-left px-3 py-1">{t("non_resident", { defaultValue: "Для нерезидентов" })}</th>
+              <th className="text-left px-3 py-1">{t("resident", { defaultValue: "Для резидентов" })}</th>
+              <th className="text-left px-3 py-1">{t("non_resident", { defaultValue: "Для нерезидентов" })}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -446,9 +501,22 @@ export default function AdminHotelForm() {
                   <input
                     type="number"
                     min={0}
-                    className="w-28 border rounded px-2 py-1"
+                    className="w-24 border rounded px-2 py-1"
                     value={row.count}
                     onChange={(e) => updateRow(row.id, { count: e.target.value })}
+                  />
+                </td>
+
+                {/* low season */}
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="w-32 border rounded px-2 py-1"
+                    placeholder={currency}
+                    value={row.prices.low.resident}
+                    onChange={(e) => updatePrice(row.id, "low", "resident", e.target.value)}
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -456,12 +524,37 @@ export default function AdminHotelForm() {
                     type="number"
                     min={0}
                     step="0.01"
-                    placeholder="USD"
-                    className="w-36 border rounded px-2 py-1"
-                    value={row.pricePerNight}
-                    onChange={(e) => updateRow(row.id, { pricePerNight: e.target.value })}
+                    className="w-32 border rounded px-2 py-1"
+                    placeholder={currency}
+                    value={row.prices.low.nonResident}
+                    onChange={(e) => updatePrice(row.id, "low", "nonResident", e.target.value)}
                   />
                 </td>
+
+                {/* high season */}
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="w-32 border rounded px-2 py-1"
+                    placeholder={currency}
+                    value={row.prices.high.resident}
+                    onChange={(e) => updatePrice(row.id, "high", "resident", e.target.value)}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="w-32 border rounded px-2 py-1"
+                    placeholder={currency}
+                    value={row.prices.high.nonResident}
+                    onChange={(e) => updatePrice(row.id, "high", "nonResident", e.target.value)}
+                  />
+                </td>
+
                 <td className="px-3 py-2 text-right">
                   {!row.builtin && (
                     <button
@@ -494,30 +587,106 @@ export default function AdminHotelForm() {
         </button>
       </div>
 
+      {/* Доп. место */}
+      <div className="mt-4">
+        <label className="block text-sm font-medium mb-1">
+          {t("extra_bed_price", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
+        </label>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          className="w-64 border rounded px-3 py-2"
+          placeholder={currency}
+          value={extraBedPrice}
+          onChange={(e) => setExtraBedPrice(e.target.value)}
+        />
+      </div>
+
+      {/* Налоги и сборы */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">
+        {t("taxes_and_fees", { defaultValue: "Налоги и сборы" })}
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={vatIncluded}
+            onChange={(e) => setVatIncluded(e.target.checked)}
+          />
+          {t("vat_included", { defaultValue: "Цены включают НДС" })}
+        </label>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            {t("vat_rate", { defaultValue: "Ставка НДС, %" })}
+          </label>
+          <input
+            type="number"
+            min={0}
+            step="0.1"
+            className="w-full border rounded px-3 py-2"
+            placeholder="%"
+            value={vatRate}
+            onChange={(e) => setVatRate(e.target.value)}
+          />
+        </div>
+        <div></div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            {t("tourist_tax_resident", { defaultValue: "Туристический сбор (резидент), /чел/ночь" })} ({currency})
+          </label>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            className="w-full border rounded px-3 py-2"
+            placeholder={currency}
+            value={touristResident}
+            onChange={(e) => setTouristResident(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            {t("tourist_tax_nonresident", { defaultValue: "Туристический сбор (нерезидент), /чел/ночь" })} ({currency})
+          </label>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            className="w-full border rounded px-3 py-2"
+            placeholder={currency}
+            value={touristNonResident}
+            onChange={(e) => setTouristNonResident(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Удобства */}
       <h2 className="text-xl font-semibold mt-6 mb-2">{t("amenities", { defaultValue: "Удобства" })}</h2>
-      <form onSubmit={handleAmenityAdd} className="flex gap-2 mb-2">
+      <form onSubmit={(e) => { e.preventDefault(); const v = e.target.elements.amen.value.trim(); if (v && !amenities.includes(v)) setAmenities([...amenities, v]); e.target.reset(); }} className="flex gap-2 mb-2">
         <input name="amen" className="flex-1 border rounded px-3 py-2" placeholder={t("add_amenity", { defaultValue: "Добавить удобство…" })} />
         <button className="px-3 py-2 rounded bg-gray-800 text-white">{t("add", { defaultValue: "Добавить" })}</button>
       </form>
       <div className="flex flex-wrap gap-2">
         {amenities.map((a, i) => (
           <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-            {a} <button className="ml-1 text-gray-500" onClick={() => removeFrom(setAmenities, i)}>×</button>
+            {a}{" "}
+            <button className="ml-1 text-gray-500" onClick={() => setAmenities((p) => p.filter((_, idx) => idx !== i))}>×</button>
           </span>
         ))}
       </div>
 
       {/* Услуги */}
       <h2 className="text-xl font-semibold mt-6 mb-2">{t("services", { defaultValue: "Услуги" })}</h2>
-      <form onSubmit={handleServiceAdd} className="flex gap-2 mb-2">
+      <form onSubmit={(e) => { e.preventDefault(); const v = e.target.elements.serv.value.trim(); if (v && !services.includes(v)) setServices([...services, v]); e.target.reset(); }} className="flex gap-2 mb-2">
         <input name="serv" className="flex-1 border rounded px-3 py-2" placeholder={t("add_service", { defaultValue: "Добавить услугу…" })} />
         <button className="px-3 py-2 rounded bg-gray-800 text-white">{t("add", { defaultValue: "Добавить" })}</button>
       </form>
       <div className="flex flex-wrap gap-2">
         {services.map((s, i) => (
           <span key={i} className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-            {s} <button className="ml-1 text-gray-500" onClick={() => removeFrom(setServices, i)}>×</button>
+            {s}{" "}
+            <button className="ml-1 text-gray-500" onClick={() => setServices((p) => p.filter((_, idx) => idx !== i))}>×</button>
           </span>
         ))}
       </div>
