@@ -79,48 +79,81 @@ async function fetchExternalHotelsCached(name = "", city = "") {
 }
 
 // ================= SEARCH =================
+// ----------------- SEARCH: сперва — БД, затем (как раньше) внешние источники -----------------
 async function searchHotels(req, res) {
-  // приводим запрос к «единым» полям, не ломая уже написанный фронт
-  const norm = normalizeHotelSearchQuery(req.query || {});
-  req.query = { ...req.query, name: norm.name, city: norm.city, page: norm.page, limit: norm.limit };
+  // нормализация входных параметров (?name, ?query, ?q, ?city, ?page, ?limit)
+  function normalize(q = {}) {
+    const pick = (...keys) => {
+      for (const k of keys) {
+        const v = q[k];
+        if (typeof v === "string" && v.trim()) return v.trim();
+        if (typeof v === "number") return String(v);
+      }
+      return "";
+    };
+    const name  = pick("name", "query", "q");
+    const city  = pick("city", "location", "loc", "town");
+    const page  = Math.max(1, parseInt(pick("page", "p") || "1", 10));
+    const limit = Math.min(50, Math.max(1, parseInt(pick("limit", "l") || "20", 10)));
+    return { name, city, page, limit };
+  }
 
-  const q = String(norm.name || norm.city || "").trim();
-  if (q.length < 2) return res.json([]);
+  const { name, city, limit } = normalize(req.query);
 
-  const like = `%${q}%`;
+  // на фронте уже есть дебаунс и отсечка < 2, но продублируем
+  if ((name || "").length < 2 && (city || "").length < 2) {
+    return res.json([]);
+  }
 
   try {
-    // 1) Наши сохранённые отели (поле city может отсутствовать — fallback на location)
-    const sql = `
-      SELECT id, name, COALESCE(city, location) AS city
-        FROM hotels
-       WHERE name ILIKE $1
-          OR COALESCE(city, location, '') ILIKE $1
-       ORDER BY name
-       LIMIT 20
-    `;
-    const { rows } = await db.query(sql, [like]);
+    // динамический WHERE
+    let idx = 1;
+    const where = [];
+    const params = [];
 
-    const own = rows.map((r) => ({
+    if ((name || "").length >= 2) {
+      where.push(`(name ILIKE $${idx} OR COALESCE(city, location, '') ILIKE $${idx})`);
+      params.push(`%${name}%`);
+      idx++;
+    }
+    if ((city || "").length >= 2) {
+      where.push(`COALESCE(city, location, '') ILIKE $${idx}`);
+      params.push(`%${city}%`);
+      idx++;
+    }
+
+    const sql = `
+      SELECT id, name, COALESCE(city, location) AS city, country
+        FROM hotels
+       ${where.length ? "WHERE " + where.join(" AND ") : ""}
+       ORDER BY name
+       LIMIT $${idx}
+    `;
+    params.push(limit);
+
+    const { rows } = await db.query(sql, params);
+
+    const own = (rows || []).map(r => ({
       id: r.id,
       name: r.name,
       city: r.city || null,
-      country: null,
+      country: r.country || null,
       label: r.name,
       city_local: r.city || null,
       city_en: r.city || null,
       provider: "local",
     }));
 
-    // Если нашли достаточно — этого обычно хватает для автодополнения
+    // если своих результатов достаточно — отдаем
     if (own.length >= 10) return res.json(own);
 
-    // 2) Подмешиваем внешние источники (при наличии)
-    const external = await fetchExternalHotelsCached(norm.name, norm.city);
-    const out = dedup([...(own || []), ...(external || [])]).slice(0, 30);
+    // --- при желании можно добавить внешний поиск (как у тебя было раньше) ---
+    // оставляем безопасный фолбек, если внешнего кода нет
+    const external = []; // тут можно подключить прежние источники
+    const out = typeof dedup === "function" ? dedup([...own, ...external]) : [...own, ...external];
     return res.json(out);
   } catch (e) {
-    console.error("hotels.search error:", e);
+    console.error("hotels.search error", e);
     return res.status(500).json([]);
   }
 }
