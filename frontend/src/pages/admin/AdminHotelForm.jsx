@@ -1,9 +1,11 @@
 // frontend/src/pages/admin/AdminHotelForm.jsx
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createHotel } from "../../api/hotels";
+import { apiGet } from "../../api";
 import { tSuccess, tError } from "../../shared/toast";
 
+/* ================== HELPERS ================== */
 const ROOM_TYPES = [
   { key: "single",     label: "Single" },
   { key: "double",     label: "Double" },
@@ -19,6 +21,131 @@ const LANGS = [
   { code: "en", label: "EN" },
 ];
 
+// универсальный троттлинг/дебаунс
+function useDebouncedCallback(cb, delay = 250) {
+  const ref = useRef();
+  useEffect(() => () => clearTimeout(ref.current), []);
+  return (...args) => {
+    clearTimeout(ref.current);
+    ref.current = setTimeout(() => cb(...args), delay);
+  };
+}
+
+// пробуем несколько url-ов до первого успешного
+async function tryUrls(urls, mapFn) {
+  for (const u of urls) {
+    try {
+      const res = await apiGet(u, true); // токен клиента/провайдера не критичен — true = общедоступно
+      const arr = mapFn(res);
+      if (Array.isArray(arr) && arr.length) return arr;
+    } catch {}
+  }
+  return [];
+}
+
+// localStorage cache helpers
+const LS = {
+  get(key, def = []) {
+    try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : def; } catch { return def; }
+  },
+  set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} },
+  pushUnique(key, value, max = 50) {
+    const cur = LS.get(key);
+    if (!value) return cur;
+    if (!cur.includes(value)) {
+      const next = [value, ...cur].slice(0, max);
+      LS.set(key, next);
+      return next;
+    }
+    return cur;
+  }
+};
+
+/* ================== SUGGEST INPUT ================== */
+/**
+ * Универсальный инпут с выпадающими подсказками.
+ * Источник — проп searchFn(q): Promise<string[]>
+ * Дополнительно хранит историю в localStorage (storageKey).
+ */
+function SuggestInput({
+  value,
+  onChange,
+  placeholder,
+  storageKey,
+  searchFn,
+  min = 2,
+  disabled = false,
+}) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState(() => LS.get(storageKey));
+  const wrapRef = useRef(null);
+
+  // закрытие по клику вне
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, []);
+
+  const debouncedSearch = useDebouncedCallback(async (q) => {
+    if (!q || q.trim().length < min) { setItems(LS.get(storageKey)); return; }
+    try {
+      const list = (await searchFn(q.trim())) || [];
+      // объединяем подсказки бэка и локальную историю
+      const hist = LS.get(storageKey);
+      const merged = Array.from(new Set([...list, ...hist]));
+      setItems(merged.slice(0, 50));
+    } catch {
+      setItems(LS.get(storageKey));
+    }
+  }, 220);
+
+  const onInput = (e) => {
+    const v = e.target.value;
+    onChange(v);
+    setOpen(true);
+    debouncedSearch(v);
+  };
+
+  const onPick = (v) => {
+    onChange(v);
+    setOpen(false);
+    LS.pushUnique(storageKey, v);
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <input
+        className="w-full border rounded px-3 py-2"
+        value={value}
+        onChange={onInput}
+        onFocus={() => { if (items.length) setOpen(true); }}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete="off"
+      />
+      {open && items?.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border rounded shadow-lg max-h-60 overflow-auto">
+          {items.map((it, i) => (
+            <button
+              type="button"
+              key={`${it}-${i}`}
+              className="w-full text-left px-3 py-1.5 hover:bg-gray-100"
+              onClick={() => onPick(it)}
+            >
+              {it}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================== PAGE ================== */
 // Рекомендация по структуре фонда + цен:
 // хранить массив объектов: rooms: [{ type, count, pricePerNight }]
 export default function AdminHotelForm() {
@@ -31,9 +158,9 @@ export default function AdminHotelForm() {
   const [cityI18n, setCityI18n]       = useState({ ru: "", uz: "", en: "" });
   const [addrI18n, setAddrI18n]       = useState({ ru: "", uz: "", en: "" });
 
-  const [amenities, setAmenities] = useState([]); // массив строк
-  const [services, setServices]   = useState([]); // массив строк
-  const [images, setImages]       = useState([]); // dataURL (обложка = images[0])
+  const [amenities, setAmenities] = useState([]);
+  const [services, setServices]   = useState([]);
+  const [images, setImages]       = useState([]);
 
   // инвентарь: { [typeKey]: { count, pricePerNight } }
   const [inventory, setInventory] = useState(
@@ -47,6 +174,73 @@ export default function AdminHotelForm() {
     setAddrI18n((p) => ({ ...p, uz: p.uz || p.ru, en: p.en || p.ru }));
   };
 
+  /* --------- Suggest search functions ---------- */
+  const countrySearch = async (q, lang) => {
+    // возможные эндпоинты — используем первый с данными
+    const urlq = encodeURIComponent(q);
+    const urll = encodeURIComponent(lang);
+    const urls = [
+      `/api/geo/countries?q=${urlq}&lang=${urll}`,
+      `/api/common/geo/countries?q=${urlq}&lang=${urll}`,
+      `/api/geo/country/suggest?q=${urlq}&lang=${urll}`,
+      `/api/geo/country?q=${urlq}&lang=${urll}`,
+    ];
+    const map = (res) => {
+      const items = res?.items || res?.data || res;
+      if (!items) return [];
+      return items.map((x) => (typeof x === "string" ? x : x?.name || x?.title || "")).filter(Boolean);
+    };
+    const fromApi = await tryUrls(urls, map);
+    if (fromApi.length) return fromApi;
+    // fallback: локальная история
+    return LS.get(`hotels:countries:${lang}`);
+  };
+
+  const citySearch = async (q, lang, country) => {
+    const urlq = encodeURIComponent(q);
+    const urll = encodeURIComponent(lang);
+    const urlc = encodeURIComponent(country || "");
+    const urls = [
+      `/api/geo/cities?q=${urlq}&country=${urlc}&lang=${urll}`,
+      `/api/common/geo/cities?q=${urlq}&country=${urlc}&lang=${urll}`,
+      `/api/geo/city/suggest?q=${urlq}&country=${urlc}&lang=${urll}`,
+      `/api/geo/city?q=${urlq}&country=${urlc}&lang=${urll}`,
+    ];
+    const map = (res) => {
+      const items = res?.items || res?.data || res;
+      if (!items) return [];
+      return items.map((x) => (typeof x === "string" ? x : x?.name || x?.title || "")).filter(Boolean);
+    };
+    const fromApi = await tryUrls(urls, map);
+    if (fromApi.length) return fromApi;
+    return LS.get(`hotels:cities:${lang}:${country || "any"}`);
+  };
+
+  // на выбор страны пушим в кэш и чистим город, если поменяли страну
+  const setCountryLang = (lang) => (v) => {
+    setCountryI18n((p) => {
+      const prev = p[lang];
+      if (prev !== v) {
+        // сброс города при смене страны — только в активном языке
+        setCityI18n((c) => ({ ...c, [lang]: "" }));
+      }
+      // кэш подсказок
+      if (v?.trim()) LS.pushUnique(`hotels:countries:${lang}`, v.trim());
+      return { ...p, [lang]: v };
+    });
+  };
+
+  const setCityLang = (lang) => (v) => {
+    setCityI18n((p) => {
+      if (v?.trim()) {
+        const country = (countryI18n?.[lang] || "").trim() || "any";
+        LS.pushUnique(`hotels:cities:${lang}:${country}`, v.trim());
+      }
+      return { ...p, [lang]: v };
+    });
+  };
+
+  /* --------- Amenities/Services/Images ---------- */
   const handleAmenityAdd = (e) => {
     e.preventDefault();
     const val = e.target.elements.amen.value.trim();
@@ -76,9 +270,9 @@ export default function AdminHotelForm() {
     e.target.value = "";
   };
 
+  /* --------- Submit ---------- */
   const submit = async () => {
-    // базовым оставляем RU — это нужно для совместимости с текущим бэком
-    const base = "ru";
+    const base = "ru"; // совместимость с текущим бэком
 
     if (!nameI18n[base].trim()) return tError("Введите название (RU)");
     if (!countryI18n[base].trim()) return tError("Укажите страну (RU)");
@@ -92,40 +286,44 @@ export default function AdminHotelForm() {
       }))
       .filter((x) => x.count > 0);
 
-    // совместимый payload: строковые поля из RU + полный набор переводов
     const payload = {
-      // базовые (для существующих эндпойнтов)
       name:    nameI18n[base].trim(),
       country: countryI18n[base].trim(),
       city:    (cityI18n[base] || "").trim(),
       address: addrI18n[base].trim(),
-
-      // полный набор переводов (бэк может игнорировать — не ломает)
       translations: {
         ru: { name: nameI18n.ru, country: countryI18n.ru, city: cityI18n.ru, address: addrI18n.ru },
         uz: { name: nameI18n.uz, country: countryI18n.uz, city: cityI18n.uz, address: addrI18n.uz },
         en: { name: nameI18n.en, country: countryI18n.en, city: cityI18n.en, address: addrI18n.en },
       },
-
       rooms, amenities, services, images,
     };
 
     try {
       const created = await createHotel(payload);
       tSuccess("Отель сохранён");
-      // если бэк вернул id — переходим на карточку
       const id = created?.id || created?._id || "";
       if (id) navigate(`/hotels/${id}`);
-    } catch (e) {
+    } catch {
       tError("Ошибка сохранения отеля");
     }
   };
 
-  // удобный геттер/сеттер текущего языка
-  const bind = (obj, setObj) => ({
+  // удобный биндер для «Название» и «Адрес» (без подсказок)
+  const bindSimple = (obj, setObj) => ({
     value: obj[activeLang],
     onChange: (e) => setObj((p) => ({ ...p, [activeLang]: e.target.value })),
   });
+
+  // memo search functions, чтобы не пересоздавались
+  const countrySearchLang = useMemo(
+    () => (q) => countrySearch(q, activeLang),
+    [activeLang]
+  );
+  const citySearchLang = useMemo(
+    () => (q) => citySearch(q, activeLang, countryI18n?.[activeLang] || ""),
+    [activeLang, countryI18n]
+  );
 
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
@@ -152,23 +350,40 @@ export default function AdminHotelForm() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Название (без внешних подсказок, но с историей можно тоже) */}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium mb-1">Название ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bind(nameI18n, setNameI18n)} />
+          <input className="w-full border rounded px-3 py-2" {...bindSimple(nameI18n, setNameI18n)} />
         </div>
 
+        {/* Страна — с автодополнением */}
         <div>
           <label className="block text-sm font-medium mb-1">Страна ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bind(countryI18n, setCountryI18n)} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Город ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bind(cityI18n, setCityI18n)} />
+          <SuggestInput
+            value={countryI18n[activeLang] || ""}
+            onChange={setCountryLang(activeLang)}
+            placeholder="Начните вводить страну…"
+            storageKey={`hotels:countries:${activeLang}`}
+            searchFn={countrySearchLang}
+          />
         </div>
 
+        {/* Город — автодополнение + зависит от страны */}
+        <div>
+          <label className="block text-sm font-medium mb-1">Город ({activeLang.toUpperCase()})</label>
+          <SuggestInput
+            value={cityI18n[activeLang] || ""}
+            onChange={setCityLang(activeLang)}
+            placeholder="Начните вводить город…"
+            storageKey={`hotels:cities:${activeLang}:${(countryI18n?.[activeLang] || "any")}`}
+            searchFn={citySearchLang}
+          />
+        </div>
+
+        {/* Адрес */}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium mb-1">Адрес ({activeLang.toUpperCase()})</label>
-          <input className="w-full border rounded px-3 py-2" {...bind(addrI18n, setAddrI18n)} />
+          <input className="w-full border rounded px-3 py-2" {...bindSimple(addrI18n, setAddrI18n)} />
         </div>
       </div>
 
