@@ -245,22 +245,20 @@ export default function AdminHotelForm() {
 
   /* ---------- Поиск названия отеля ---------- */
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
-  const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
-    try {
-      const items = await searchHotels({ name: inputValue || "" });
-      return (items || []).map((x) => {
-        const title = x.label || x.name || String(x);
-        const cityDual = x.city_en && x.city_local
-          ? ` (${composeDualLabel(x.city_local, x.city_en)})`
-          : x.city ? ` (${x.city})` : "";
-        return { value: title, label: `${title}${cityDual}` };
-      });
-    } catch (err) {
-      if (err?.code === "ERR_CANCELED") return [];
-      console.error("hotels search error:", err);
-      return [];
-    }
-  }, [API_BASE]);
+  const loadHotelOptionsRaw = useCallback(async (inputValue /*, signal */) => {
+  const items = await searchHotels({
+    name: inputValue || "",
+    city: cityOpt?.label || "",
+    country: countryOpt?.code || "",
+  });
+  return (items || []).map((x) => {
+    const title = x.label || x.name || String(x);
+    const cityDual = x.city_en && x.city_local
+      ? ` (${composeDualLabel(x.city_local, x.city_en)})`
+      : x.city ? ` (${x.city})` : "";
+    return { value: title, label: `${title}${cityDual}` };
+  });
+}, [cityOpt?.label, countryOpt?.code]);
 
   const loadHotelOptions = useDebouncedLoader(loadHotelOptionsRaw, 400);
 
