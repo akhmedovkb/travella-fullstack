@@ -818,7 +818,7 @@
   "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/tun",
   "tourism_fee_nonresident": "Turistik yig‘im (norezidentlar), so‘m/tun",
   "extra_bed_cost": "Qo‘shimcha o‘rin, so‘m/tun",
-
+  "room_category": "Xona toifasi",
   "select.no_options": "Hech narsa topilmadi",
   "select.loading": "Yuklanmoqda…"
 }
