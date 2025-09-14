@@ -540,7 +540,9 @@
     "requests": "Requests",
     "favorites": "Favorites",
     "hotels": "Hotels",
-    "hotels_admin": "Hotels (admin)"
+    "hotels_admin": "Hotels (admin)",
+    "hotels": "Mehmonxonalar",
+    "hotels_admin": "Mehmonxonalar (admin)"
   },
 
   "net_price": "Net price",
