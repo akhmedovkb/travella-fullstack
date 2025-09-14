@@ -1,3 +1,5 @@
+//backend/routes/hotelInspectionRoutes.js
+
 const router = require("express").Router();
 const { likeInspection } = require("../controllers/hotelInspectionController");
 
