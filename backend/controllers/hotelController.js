@@ -1,138 +1,147 @@
-// controllers/hotelController.js
+// backend/controllers/hotelController.js
 const axios = require("axios");
 
-// простейший in-memory кэш, чтобы не жечь лимиты
-const cache = new Map();
-const TTL_MS = 60 * 60 * 1000; // 1 час
+// ----- простейший PG-хелпер -----
+// если у тебя уже есть общий модуль БД — подключи его вместо этого блока
+const { Pool } = require("pg");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
+});
+const db = { query: (q, p) => pool.query(q, p) };
 
-function memoKey(p) {
-  return JSON.stringify(p);
-}
-// --- кэш с провайдером ---
-function getCached(key) {
-  const hit = cache.get(key);
-  if (!hit) return null;
-  if (Date.now() > hit.expireAt) { cache.delete(key); return null; }
-  return hit; // { data, provider, expireAt }
-}
-function setCached(key, data, provider) {
-  cache.set(key, { data, provider, expireAt: Date.now() + TTL_MS });
-}
+// ----------------- ТВОИ КЭШ/УТИЛИТЫ (оставляем как у тебя) -----------------
+// ... здесь твои memKey(), cache, getCached()/setCached(), dedup() и т.п. ...
 
-function setCached(key, data) {
-  cache.set(key, { data, expireAt: Date.now() + TTL_MS });
-}
+// ----------------- SEARCH: сперва — БД, затем (как раньше) внешние источники -----------------
+async function searchHotels(req, res) {
+  const q = String(req.query.query || "").trim();
+  if (q.length < 2) return res.json([]);
 
-function dedup(arr) {
-  const seen = new Set();
-  const out = [];
-  for (const s of arr) {
-    const k = String(s).trim();
-    if (!k || seen.has(k.toLowerCase())) continue;
-    seen.add(k.toLowerCase());
-    out.push(k);
-  }
-  return out;
-}
+  const like = `%${q}%`;
 
-/* -------- Google Places (v1) -------- */
-async function searchGooglePlaces({ query, country, lang }) {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  if (!apiKey) return [];
-
-  // places:searchText с типом lodging
-  const url = "https://places.googleapis.com/v1/places:searchText";
-  const body = {
-    textQuery: query,          // что ввёл пользователь
-    includedType: "lodging",   // только отели/гостиницы
-    languageCode: (lang || "en").slice(0, 2),
-  };
-  if (country && country.length === 2) {
-    body.regionCode = country.toUpperCase(); // ISO-3166-1 alpha-2
-  }
-
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Goog-Api-Key": apiKey,
-    // Просим только название для экономии квоты/скорости
-    "X-Goog-FieldMask": "places.displayName",
-  };
-
-  const resp = await axios.post(url, body, { headers });
-  const places = resp.data?.places || [];
-  return dedup(places.map((p) => p?.displayName?.text).filter(Boolean));
-}
-
-/* -------- GeoNames (fallback) -------- */
-async function searchGeoNames({ query, country, lang }) {
-  const username = process.env.GEONAMES_USERNAME;
-  if (!username) return [];
-
-  // Ищем объекты типа hotel; если страну передали — сужаем
-  const params = {
-    q: query,
-    featureClass: "S",
-    featureCode: "HTL",
-    maxRows: 15,
-    username,
-  };
-  if (country) params.country = country.toUpperCase();
-  if (lang) params.lang = (lang || "en").slice(0, 2);
-
-  const r = await axios.get("https://secure.geonames.org/searchJSON", { params });
-  const items = Array.isArray(r.data?.geonames) ? r.data.geonames : [];
-  return dedup(items.map((g) => g.name).filter(Boolean));
-}
-
-/* -------- Контроллер маршрута /api/hotels/search -------- */
-exports.searchHotels = async (req, res) => {
   try {
-    const query = String(req.query.query || req.query.q || "").trim();
-    if (!query || query.length < 2) return res.json([]);
+    // 1) Наши сохранённые отели
+    const sql = `
+      SELECT id, name, COALESCE(city, location) AS city, country
+      FROM hotels
+      WHERE name ILIKE $1 OR COALESCE(city, location, '') ILIKE $1
+      ORDER BY name
+      LIMIT 20
+    `;
+    const { rows } = await db.query(sql, [like]);
 
-    const country = (req.query.country || "").trim();
-    const lang = (req.query.lang || "").trim();
+    const own = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      city: r.city || null,
+      country: r.country || null,
+      label: r.name,
+      city_local: r.city || null,
+      city_en: r.city || null,
+      provider: "local",
+    }));
 
-    // Можно временно форсировать провайдера: ?provider=google|geonames
-    const providerPref = (req.query.provider ||
-      process.env.HOTEL_AUTOCOMPLETE_PROVIDER ||
-      "google").toLowerCase();
+    // Если нашли в своей БД — этого обычно достаточно для автодополнения
+    if (own.length >= 10) return res.json(own);
 
-    const key = memoKey({ query, country, lang, provider: providerPref });
-    const cached = getCached(key);
-    if (cached) {
-      res.set("X-Hotel-Cache", "HIT");
-      if (cached.provider) res.set("X-Hotel-Provider", cached.provider);
-      return res.json(cached.data);
-    }
+    // 2) (опционально) добиваем результат твоим прежним объединённым поиском
+    //    ... здесь твоя логика через axios + кэш ...
+    //    предположим, она вернёт массив external[]
+    const external = []; // если не используешь, оставь пусто
 
-    let result = [];
-    let providerUsed = "unknown";
-
-    if (providerPref === "google") {
-      try {
-        result = await searchGooglePlaces({ query, country, lang });
-        if (result.length) providerUsed = "google";
-      } catch (e) {
-        console.warn("Hotels: Google failed → fallback to GeoNames.", e.response?.data || e.message);
-      }
-    }
-
-    if (!result.length) {
-      try {
-        result = await searchGeoNames({ query, country, lang });
-        if (result.length) providerUsed = "geonames";
-      } catch (e) {
-        console.warn("Hotels: GeoNames failed:", e.response?.data || e.message);
-      }
-    }
-
-    setCached(key, result, providerUsed);
-    res.set("X-Hotel-Cache", "MISS");
-    res.set("X-Hotel-Provider", providerUsed);
-    return res.json(result);
+    const out = dedup([...own, ...external]);
+    return res.json(out);
   } catch (e) {
-    console.error("Hotels search error:", e.response?.data || e.message);
-    return res.json([]);
+    console.error("hotels.search error", e);
+    return res.status(500).json([]);
   }
+}
+
+// ----------------- CREATE -----------------
+async function createHotel(req, res) {
+  try {
+    const p = req.body || {};
+    const now = new Date();
+
+    const sql = `
+      INSERT INTO hotels
+      (name, country, city, address, currency,
+       rooms, extra_bed_price, taxes, amenities, services, images,
+       created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,
+              $6,$7,$8,$9,$10,$11,
+              $12,$12)
+      RETURNING id
+    `;
+
+    const params = [
+      (p.name || "").trim(),
+      p.country || null,
+      p.city || null,
+      p.address || null,
+      p.currency || "UZS",
+      JSON.stringify(p.rooms || []),
+      p.extraBedPrice ?? null,
+      JSON.stringify(p.taxes || null),
+      Array.isArray(p.amenities) ? p.amenities : [],
+      Array.isArray(p.services) ? p.services : [],
+      JSON.stringify(p.images || []),
+      now,
+    ];
+
+    const { rows } = await db.query(sql, params);
+    return res.json({ id: rows[0].id });
+  } catch (e) {
+    console.error("hotels.create error", e);
+    return res.status(500).json({ error: "create_failed" });
+  }
+}
+
+// ----------------- GET ONE -----------------
+async function getHotel(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+
+  try {
+    const { rows } = await db.query(
+      `SELECT *
+         FROM hotels
+        WHERE id = $1`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "not_found" });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error("hotels.get error", e);
+    return res.status(500).json({ error: "read_failed" });
+  }
+}
+
+// ----------------- LIST (простая пагинация) -----------------
+async function listHotels(req, res) {
+  const page = Math.max(1, parseInt(req.query.page || "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "20", 10)));
+  const offset = (page - 1) * limit;
+
+  try {
+    const { rows } = await db.query(
+      `SELECT id, name, country, COALESCE(city, location) AS city, stars, created_at, updated_at
+         FROM hotels
+        ORDER BY id DESC
+        LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    return res.json({ items: rows, page, limit });
+  } catch (e) {
+    console.error("hotels.list error", e);
+    return res.status(500).json({ error: "list_failed" });
+  }
+}
+
+module.exports = {
+  searchHotels,
+  createHotel,
+  getHotel,
+  listHotels,
 };
