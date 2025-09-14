@@ -467,7 +467,7 @@ export default function AdminHotelForm() {
         <table className="min-w-full text-sm align-top">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-3 py-2">{t("type", { defaultValue: "Тип" })}</th>
+              <th className="text-left px-3 py-2">{t("room_category", { defaultValue: "Тип" })}</th>
               <th className="text-left px-3 py-2">{t("count_short", { defaultValue: "Кол-во" })}</th>
               <th className="px-3 py-2 text-center" colSpan={2}>{t("low_season", { defaultValue: "Низкий сезон" })}</th>
               <th className="px-3 py-2 text-center" colSpan={2}>{t("high_season", { defaultValue: "Высокий сезон" })}</th>
