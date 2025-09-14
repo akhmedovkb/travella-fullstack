@@ -6,6 +6,7 @@ import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
+const items = await searchHotels({ name: inputValue || "" });
 import { createHotel } from "../../api/hotels";
 import { tSuccess, tError } from "../../shared/toast";
 
@@ -247,11 +248,7 @@ export default function AdminHotelForm() {
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
     try {
-      const res = await axios.get(`${API_BASE}/api/hotels/search`, {
-        params: { query: inputValue || "" },
-        signal,
-      });
-      const items = Array.isArray(res.data) ? res.data : (res.data?.items || []);
+      const items = await searchHotels({ name: inputValue || "" });
       return (items || []).map((x) => {
         const title = x.label || x.name || String(x);
         const cityDual = x.city_en && x.city_local
