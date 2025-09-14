@@ -24,6 +24,10 @@ import ProviderBookings from "./pages/ProviderBookings";
 
 import Header from "./components/Header";
 
+// Отели
+import Hotels from "./pages/Hotels";
+import AdminHotelForm from "./pages/admin/AdminHotelForm";
+
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
   return token ? children : <Navigate to="/client/login" replace />;
@@ -90,6 +94,11 @@ export default function App() {
            <Route path="/profile/client/:id" element={<ClientProfile />} />
           <Route path="/admin/moderation" element={<AdminModeration />} />
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
+
+
+           {/* Отели */}
+          <Route path="/hotels" element={<Hotels />} />
+          <Route path="/admin/hotels/new" element={<AdminHotelForm />} />
         </Routes>
       </div>
     </Router>
