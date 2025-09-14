@@ -840,5 +840,47 @@
   "extra_bed_cost": "Extra bed, UZS/night",
   "room_category": "Room category",
   "select.no_options": "No options",
-  "select.loading": "Loading…"
+  "select.loading": "Loading…",
+  "admin": { "new_hotel_title": "New hotel" },
+
+  "hotel_name": "Name",
+  "enter_hotel_name": "Enter hotel name",
+  "enter_address": "Enter address",
+  "hotel_saved": "Hotel saved",
+  "hotel_save_error": "Failed to save hotel",
+
+  "country": "Country",
+  "city": "City",
+  "currency": "Currency",
+
+  "resident": "Residents",
+  "non_resident": "Non-residents",
+
+  "room_type_name": "Type name",
+  "add_custom_room_type_ph": "Add your room type (e.g., Deluxe…)",
+  "add_type": "Add type",
+
+  "extra_bed_price": "Extra bed price (per person/night)",
+
+  "taxes_and_fees": "Taxes & fees",
+  "vat_included": "Prices include VAT",
+  "vat_rate": "VAT rate, %",
+
+  "tourist_tax_resident": "Tourist tax (resident), /person/night",
+  "tourist_tax_nonresident": "Tourist tax (non-resident), /person/night",
+
+  "amenities": "Amenities",
+  "add_amenity": "Add amenity…",
+  "add_service": "Add service…",
+  "add": "Add",
+
+  "images": "Images",
+
+  "select_city": "Choose a city",
+  "select_country": "Choose a country",
+  "select": {
+    "type_more": "Enter at least 2 characters",
+    "no_options": "No options",
+    "loading": "Loading…"
+  }
 }
