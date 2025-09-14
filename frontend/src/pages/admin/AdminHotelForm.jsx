@@ -153,118 +153,91 @@ export default function AdminHotelForm() {
   const updateRow = (id, patch) => setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   /* ---------- Словари: страны ---------- */
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        // 1) пробуем GeoNames локально + по-английски и склеиваем подписи
-        const username = import.meta.env.VITE_GEONAMES_USERNAME;
-        let list = [];
-
-        if (username) {
-          const [loc, eng] = await Promise.all([
-            axios.get("https://secure.geonames.org/countryInfoJSON", {
-              params: { lang: geoLang, username },
-            }),
-            axios.get("https://secure.geonames.org/countryInfoJSON", {
-              params: { lang: "en", username },
-            }),
-          ]);
-
-          const byCodeEn = Object.fromEntries(
-            (eng.data?.geonames || []).map((c) => [c.countryCode, c.countryName])
-          );
-
-          list = (loc.data?.geonames || []).map((c) => {
-            const local = c.countryName;
-            const en = byCodeEn[c.countryCode] || local;
-            return {
-              value: c.countryCode, // ISO2
-              code: c.countryCode,
-              label: composeDualLabel(local, en),
-              local,
-              en,
-            };
-          });
-        }
-
-        // 2) fallback на restcountries (если GeoNames недоступен)
-        if (!list.length) {
-          const res = await axios.get("https://restcountries.com/v3.1/all?fields=name,cca2,translations");
-          list = (res.data || []).map((c) => {
-            const code = c.cca2;
-            // локальное имя
-            const local =
-              (geoLang === "ru" && (c.translations?.rus?.common || c.name?.common)) ||
-              (geoLang === "uz" && (c.translations?.uzb?.common || c.name?.common)) ||
-              c.name?.common;
-            const en = c.name?.common || local;
-            return {
-              value: code,
-              code,
-              label: composeDualLabel(local, en),
-              local,
-              en,
-            };
-          });
-        }
-
-        if (!alive) return;
-        setCountryOptions(list.sort((a, b) => a.label.localeCompare(b.label, geoLang)));
-        // подставить выбранный ранее, если есть
-        if (countryOpt) {
-          const found = list.find((x) => x.code === countryOpt.code);
-          if (found) setCountryOpt(found);
-        }
-      } catch (e) {
-        console.error("Не удалось загрузить список стран", e);
-      }
-    })();
-
-    return () => { alive = false; };
-  }, [geoLang]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ---------- Города (асинхронно, с локализацией + EN в подписи) ---------- */
-  const loadCitiesRaw = useCallback(async (inputValue, signal) => {
+  // СЛОВАРЬ СТРАН (RU/UZ/EN) — ТОЛЬКО ЛОКАЛЬНОЕ НАЗВАНИЕ
+useEffect(() => {
+  let alive = true;
+  (async () => {
     try {
       const username = import.meta.env.VITE_GEONAMES_USERNAME;
-      if (!username) return [];
+      let list = [];
 
-      const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
-        params: {
-          country: countryOpt?.code || undefined,
-          name_startsWith: inputValue,
-          q: inputValue,
-          featureClass: "P",
-          maxRows: 10,
-          fuzzy: 0.9,
-          style: "FULL",             // чтобы пришли alternateNames
-          lang: geoLang,             // локальный язык
-          username,
-        },
-        signal,
-      });
+      // GeoNames (лучший вариант — отдаёт переводы)
+      if (username) {
+        const { data } = await axios.get(
+          "https://secure.geonames.org/countryInfoJSON",
+          { params: { lang: geoLang, username } }
+        );
+        list = (data?.geonames || []).map((c) => ({
+          value: c.countryCode,              // ISO-2
+          code:  c.countryCode,
+          label: c.countryName,              // ← ТОЛЬКО одно имя на geoLang
+          local: c.countryName
+        }));
+      }
 
-      const list = (data?.geonames || []).map((city) => {
-        const local = city.name; // уже локализовано по lang
-        const enAlt = (city.alternateNames || []).find((a) => a.lang === "en")?.name
-          || city.toponymName || city.asciiName || local;
-        return {
-          value: local,                           // в поле "city" сохраняем локальное
-          label: composeDualLabel(local, enAlt),  // показываем local / English
-          local,
-          en: enAlt,
-        };
-      });
+      // Фолбэк (если GeoNames недоступен)
+      if (!list.length) {
+        const res = await axios.get(
+          "https://restcountries.com/v3.1/all?fields=name,cca2,translations"
+        );
+        list = (res.data || []).map((c) => {
+          const code  = c.cca2;
+          const label =
+            (geoLang === "ru" && (c.translations?.rus?.common || c.name?.common)) ||
+            (geoLang === "uz" && (c.translations?.uzb?.common || c.name?.common)) ||
+            (c.name?.common || code);
+          return { value: code, code, label, local: label };
+        });
+      }
 
-      return list;
+      if (!alive) return;
+      setCountryOptions(list.sort((a, b) => a.label.localeCompare(b.label, geoLang)));
+      if (countryOpt) {
+        const found = list.find((x) => x.code === countryOpt.code);
+        if (found) setCountryOpt(found);
+      }
     } catch (e) {
-      if (e?.code === "ERR_CANCELED") return [];
-      console.error("Ошибка загрузки городов:", e);
-      return [];
+      console.error("Не удалось загрузить список стран", e);
     }
-  }, [countryOpt?.code, geoLang]);
+  })();
+  return () => { alive = false; };
+}, [geoLang]);  // ← язык меняется — подписи тоже
+
+
+  /* ---------- Города (асинхронно, с локализацией + EN в подписи) ---------- */
+  // ГОРОДА — ТОЛЬКО В РАМКАХ ВЫБРАННОЙ СТРАНЫ, ТОЛЬКО ЛОКАЛЬНОЕ НАЗВАНИЕ
+const loadCitiesRaw = useCallback(async (inputValue, signal) => {
+  if (!countryOpt?.code) return [];            // без страны не ищем
+  try {
+    const username = import.meta.env.VITE_GEONAMES_USERNAME;
+    if (!username) return [];                  // без GeoNames города не подтянуть
+
+    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        country: countryOpt.code,              // ← фильтр по стране ОБЯЗАТЕЛЕН
+        featureClass: "P",
+        name_startsWith: inputValue,
+        q: inputValue,
+        maxRows: 20,
+        orderby: "population",
+        fuzzy: 0.9,
+        style: "FULL",
+        lang: geoLang,                         // ← RU/UZ/EN подпись
+        username,
+      },
+      signal,
+    });
+
+    return (data?.geonames || []).map((g) => ({
+      value: g.name,                           // сохраняем локальное имя
+      label: g.name,                           // показываем локальное имя
+    }));
+  } catch (e) {
+    if (e?.code === "ERR_CANCELED") return [];
+    console.error("Ошибка загрузки городов:", e);
+    return [];
+  }
+}, [countryOpt?.code, geoLang]);
 
   const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
   const ASYNC_I18N = makeAsyncSelectI18n(t);
@@ -381,13 +354,11 @@ export default function AdminHotelForm() {
             value={countryOpt}
             onChange={(opt) => {
               setCountryOpt(opt || null);
-              setCountry(opt?.local || "");
-              // очистим город при смене страны
-              setCityOpt(null);
+              setCountry(opt?.label || "");
+              setCityOpt(null);   // сменили страну — сбросить город
               setCity("");
             }}
             placeholder={t("select_country", { defaultValue: "Выберите страну" })}
-            {...ASYNC_MENU_PORTAL}
           />
         </div>
 
@@ -406,7 +377,7 @@ export default function AdminHotelForm() {
             value={cityOpt || (city ? { value: city, label: city } : null)}
             onChange={(opt) => {
               setCityOpt(opt || null);
-              setCity(opt?.local || opt?.value || "");
+              setCity(opt?.value || "");
             }}
             isClearable
           />
@@ -556,3 +527,4 @@ export default function AdminHotelForm() {
     </div>
   );
 }
+
