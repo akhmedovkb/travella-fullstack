@@ -809,7 +809,7 @@
   "tourism_fee_resident": "Туристический сбор (резиденты), сум/ночь",
   "tourism_fee_nonresident": "Туристический сбор (нерезиденты), сум/ночь",
   "extra_bed_cost": "Доп. место, сум/ночь",
-
+  "room_category": "Категория",
   "select.type_more": "Введите минимум 2 символа",
   "select.no_options": "Ничего не найдено",
   "select.loading": "Загрузка…"
