@@ -1,8 +1,8 @@
-//frontend/src/App.jsx
-
+// frontend/src/App.jsx
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
+
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -14,7 +14,7 @@ import ClientProfile from "./pages/ClientProfile";
 import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
 import HotelInspections from "./pages/HotelInspections";
-
+import AdminHotelsTable from "./pages/admin/AdminHotelsTable"; // ← ОСТАВИЛ один импорт
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -30,7 +30,6 @@ import Header from "./components/Header";
 // Отели
 import Hotels from "./pages/Hotels";
 import AdminHotelForm from "./pages/admin/AdminHotelForm";
-import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -68,8 +67,6 @@ function AdminRoute({ children }) {
   }
 }
 
-
-
 export default function App() {
   return (
     <Router>
@@ -89,7 +86,6 @@ export default function App() {
               </PrivateRoute>
             }
           />
-          {/* Новые провайдерские страницы */}
           <Route
             path="/dashboard/requests"
             element={
@@ -128,27 +124,25 @@ export default function App() {
               </ClientPrivateRoute>
             }
           />
-           <Route path="/profile/client/:id" element={<ClientProfile />} />
+          <Route path="/profile/client/:id" element={<ClientProfile />} />
           <Route path="/admin/moderation" element={<AdminModeration />} />
-          <Route path="*" element={<Navigate to="/marketplace" replace />} />
 
-
-           {/* Отели */}
+          {/* Отели (публичные) */}
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/hotels/:hotelId" element={<HotelDetails />} />
           <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
-          
-                   {/* Админ: список отелей */}
-         <Route
-           path="/admin/hotels"
-           element={
-             <PrivateRoute>
-               <AdminRoute>
-                 <AdminHotelsTable />
-               </AdminRoute>
-             </PrivateRoute>
-           }
-         />
+
+          {/* Админ: список/форма отелей */}
+          <Route
+            path="/admin/hotels"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <AdminHotelsTable />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/admin/hotels/new"
             element={
@@ -159,16 +153,19 @@ export default function App() {
               </PrivateRoute>
             }
           />
-                  <Route
-           path="/admin/hotels/:id/edit"
-           element={
-             <PrivateRoute>
-               <AdminRoute>
-                 <AdminHotelForm />
-               </AdminRoute>
-             </PrivateRoute>
-           }
-         />
+          <Route
+            path="/admin/hotels/:id/edit"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <AdminHotelForm />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+
+          {/* 404 / fallback — держим в самом конце */}
+          <Route path="*" element={<Navigate to="/marketplace" replace />} />
         </Routes>
       </div>
     </Router>
