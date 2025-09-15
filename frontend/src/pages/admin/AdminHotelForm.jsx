@@ -119,13 +119,17 @@ export default function AdminHotelForm() {
   const [amenities, setAmenities] = useState([]);
   const [services, setServices] = useState([]);
 
+    // Наборы питания: BB, HB, FB, AI, UAI
+  const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
+  const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
+
   // Номера + сезонные цены
-  const blankRow = (base) => ({
+    const blankRow = (base) => ({
     ...base,
     count: "",
     prices: {
-      low:  { resident: "", nonResident: "" },
-      high: { resident: "", nonResident: "" },
+      low:  { resident: makeMealSet(), nonResident: makeMealSet() },
+      high: { resident: makeMealSet(), nonResident: makeMealSet() },
     },
   });
 
@@ -245,12 +249,13 @@ export default function AdminHotelForm() {
   };
 
   /* ---------- Поиск названия отеля ---------- */
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
   const loadHotelOptionsRaw = useCallback(async (inputValue /*, signal */) => {
   const items = await searchHotels({
     name: inputValue || "",
     city: cityOpt?.label || "",
     country: countryOpt?.code || "",
+    limit: 50,
   });
   return (items || []).map((x) => {
     const title = x.label || x.name || String(x);
@@ -308,11 +313,24 @@ export default function AdminHotelForm() {
   const removeRow = (id) => setRoomRows((rows) => rows.filter((r) => r.id !== id));
   const updateRow = (id, patch) =>
     setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const updatePrice = (id, season, personType, value) =>
+    const updateMealPrice = (id, season, personType, meal, value) =>
     setRoomRows((rows) =>
-      rows.map((r) =>
-        r.id === id ? { ...r, prices: { ...r.prices, [season]: { ...r.prices[season], [personType]: value } } } : r
-      )
+      rows.map((r) => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          prices: {
+            ...r.prices,
+            [season]: {
+              ...r.prices[season],
+              [personType]: {
+                ...r.prices[season][personType],
+                [meal]: value,
+              },
+            },
+          },
+        };
+      })
     );
 
   /* ---------- Submit ---------- */
@@ -321,18 +339,21 @@ export default function AdminHotelForm() {
     if (!countryOpt)     return tError(t("select_country") || "Укажите страну");
     if (!address.trim()) return tError(t("enter_address") || "Укажите адрес");
 
+        const normalizeMealSet = (set) =>
+      MEAL_PLANS.reduce((acc, mp) => ({ ...acc, [mp]: numOrNull(set?.[mp]) }), {});
+
     const rooms = roomRows
       .map((r) => ({
         type: r.name,
         count: Number(r.count || 0),
         prices: {
           low: {
-            resident:     numOrNull(r.prices.low.resident),
-            nonResident:  numOrNull(r.prices.low.nonResident),
+            resident:    normalizeMealSet(r.prices.low.resident),
+            nonResident: normalizeMealSet(r.prices.low.nonResident),
           },
           high: {
-            resident:     numOrNull(r.prices.high.resident),
-            nonResident:  numOrNull(r.prices.high.nonResident),
+            resident:    normalizeMealSet(r.prices.high.resident),
+            nonResident: normalizeMealSet(r.prices.high.nonResident),
           },
         },
       }))
@@ -475,37 +496,45 @@ export default function AdminHotelForm() {
       </h2>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-full text-sm align-top">
+        <table className="min-w-[1400px] text-sm align-top">
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-3 py-2">
-                {t("room_category", { defaultValue: "Категория" })}
+                {t("room_category",{defaultValue:"Категория"})}
               </th>
               <th className="text-left px-3 py-2">
-                {t("count_short", { defaultValue: "Кол-во" })}
+                {t("count_short",{defaultValue:"Кол-во"})}
               </th>
-              <th className="px-3 py-2 text-center" colSpan={2}>
-                {t("low_season", { defaultValue: "Низкий сезон" })}
+              <th className="px-3 py-2 text-center" colSpan={10}>
+                {t("low_season",{defaultValue:"Низкий сезон"})}
               </th>
-              <th className="px-3 py-2 text-center" colSpan={2}>
-                {t("high_season", { defaultValue: "Высокий сезон" })}
+              <th className="px-3 py-2 text-center" colSpan={10}>
+                {t("high_season",{defaultValue:"Высокий сезон"})}
               </th>
               <th className="w-[1%] px-3 py-2"></th>
             </tr>
             <tr className="bg-gray-50">
               <th></th><th></th>
-              <th className="text-left px-3 py-1">
-                {t("for_residents", { defaultValue: "Для резидентов" })}
+              <th className="text-center px-3 py-1" colSpan={5}>
+                {t("for_residents",{defaultValue:"Для резидентов"})}
               </th>
-              <th className="text-left px-3 py-1">
-                {t("for_nonresidents", { defaultValue: "Для нерезидентов" })}
+              <th className="text-center px-3 py-1" colSpan={5}>
+                {t("for_nonresidents",{defaultValue:"Для нерезидентов"})}
               </th>
-              <th className="text-left px-3 py-1">
-                {t("for_residents", { defaultValue: "Для резидентов" })}
+              <th className="text-center px-3 py-1" colSpan={5}>
+                {t("for_residents",{defaultValue:"Для резидентов"})}
               </th>
-              <th className="text-left px-3 py-1">
-                {t("for_nonresidents", { defaultValue: "Для нерезидентов" })}
+              <th className="text-center px-3 py-1" colSpan={5}>
+                {t("for_nonresidents",{defaultValue:"Для нерезидентов"})}
               </th>
+              <th></th>
+            </tr>
+            <tr className="bg-gray-50 text-xs">
+              <th></th><th></th>
+              {MEAL_PLANS.map((mp) => (<th key={`low-res-${mp}`} className="px-2 py-1">{mp}</th>))}
+              {MEAL_PLANS.map((mp) => (<th key={`low-non-${mp}`} className="px-2 py-1">{mp}</th>))}
+              {MEAL_PLANS.map((mp) => (<th key={`high-res-${mp}`} className="px-2 py-1">{mp}</th>))}
+              {MEAL_PLANS.map((mp) => (<th key={`high-non-${mp}`} className="px-2 py-1">{mp}</th>))}
               <th></th>
             </tr>
           </thead>
@@ -534,54 +563,54 @@ export default function AdminHotelForm() {
                   />
                 </td>
 
-                {/* low season */}
-                <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className="w-32 border rounded px-2 py-1"
-                    placeholder={currency}
-                    value={row.prices.low.resident}
-                    onChange={(e) => updatePrice(row.id, "low", "resident", e.target.value)}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className="w-32 border rounded px-2 py-1"
-                    placeholder={currency}
-                    value={row.prices.low.nonResident}
-                    onChange={(e) => updatePrice(row.id, "low", "nonResident", e.target.value)}
-                  />
-                </td>
-
-                {/* high season */}
-                <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className="w-32 border rounded px-2 py-1"
-                    placeholder={currency}
-                    value={row.prices.high.resident}
-                    onChange={(e) => updatePrice(row.id, "high", "resident", e.target.value)}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className="w-32 border rounded px-2 py-1"
-                    placeholder={currency}
-                    value={row.prices.high.nonResident}
-                    onChange={(e) => updatePrice(row.id, "high", "nonResident", e.target.value)}
-                  />
-                </td>
-
+                                {/* low / resident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className="px-2 py-1" key={`${row.id}-low-res-${mp}`}>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className="w-24 border rounded px-2 py-1"
+                      placeholder={currency}
+                      value={row.prices.low.resident[mp] ?? ""}
+                      onChange={(e) => updateMealPrice(row.id, "low", "resident", mp, e.target.value)}
+                    />
+                  </td>
+                ))}
+                {/* low / nonresident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className="px-2 py-1" key={`${row.id}-low-non-${mp}`}>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className="w-24 border rounded px-2 py-1"
+                      placeholder={currency}
+                      value={row.prices.low.nonResident[mp] ?? ""}
+                      onChange={(e) => updateMealPrice(row.id, "low", "nonResident", mp, e.target.value)}
+                    />
+                  </td>
+                ))}
+                {/* high / resident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className="px-2 py-1" key={`${row.id}-high-res-${mp}`}>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className="w-24 border rounded px-2 py-1"
+                      placeholder={currency}
+                      value={row.prices.high.resident[mp] ?? ""}
+                      onChange={(e) => updateMealPrice(row.id, "high", "resident", mp, e.target.value)}
+                    />
+                  </td>
+                ))}
+                {/* high / nonresident */}
+                {MEAL_PLANS.map((mp) => (
+                  <td className="px-2 py-1" key={`${row.id}-high-non-${mp}`}>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className="w-24 border rounded px-2 py-1"
+                      placeholder={currency}
+                      value={row.prices.high.nonResident[mp] ?? ""}
+                      onChange={(e) => updateMealPrice(row.id, "high", "nonResident", mp, e.target.value)}
+                    />
+                  </td>
+                ))}
                 <td className="px-3 py-2 text-right">
                   {!row.builtin && (
                     <button
