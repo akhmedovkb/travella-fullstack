@@ -3,7 +3,7 @@ import axios from "axios";
 
 // Базовый URL API (может быть пустым — тогда пойдут относительные пути)
 const API_BASE = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
-const url = (path) => `${API_BASE}${path}`;
+const apiURL = (path) => `${API_BASE}${path}`;
 
 // ─────────── Авторизация ───────────
 // Храним совместимость с текущими ключами localStorage
