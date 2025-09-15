@@ -588,7 +588,7 @@ export default function AdminHotelForm() {
                   </td>
                 ))}
                 {/* high / resident */}
-                {MEAL_PLANS.map((mp) => (
+                {MEAL_PLANS.map((mp, i) => (
                  <td className={tdCls("high", i===0 ? "border-l border-gray-200" : "")} key={`${row.id}-high-res-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
