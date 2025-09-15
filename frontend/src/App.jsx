@@ -30,6 +30,7 @@ import Header from "./components/Header";
 // Отели
 import Hotels from "./pages/Hotels";
 import AdminHotelForm from "./pages/admin/AdminHotelForm";
+import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -136,6 +137,18 @@ export default function App() {
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/hotels/:hotelId" element={<HotelDetails />} />
           <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
+          
+                   {/* Админ: список отелей */}
+         <Route
+           path="/admin/hotels"
+           element={
+             <PrivateRoute>
+               <AdminRoute>
+                 <AdminHotelsTable />
+               </AdminRoute>
+             </PrivateRoute>
+           }
+         />
           <Route
             path="/admin/hotels/new"
             element={
@@ -146,7 +159,16 @@ export default function App() {
               </PrivateRoute>
             }
           />
-         <Route path="/admin/hotels/:id/edit" element={<AdminHotelForm />} />
+                  <Route
+           path="/admin/hotels/:id/edit"
+           element={
+             <PrivateRoute>
+               <AdminRoute>
+                 <AdminHotelForm />
+               </AdminRoute>
+             </PrivateRoute>
+           }
+         />
         </Routes>
       </div>
     </Router>
