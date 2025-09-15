@@ -1,6 +1,15 @@
 // frontend/src/pages/admin/AdminHotelForm.jsx
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+async function httpPut(path, body = {}, role) {
+  try {
+    const res = await axios.put(apiURL(path), body, {
+      withCredentials: true,
+      headers: { "Content-Type": "application/json", ...authHeaders(role) },
+    });
+    return res.data;
+  } catch (e) { throw normErr(e); }
+}
 import { useTranslation } from "react-i18next";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
@@ -225,6 +234,69 @@ export default function AdminHotelForm() {
   const { t, i18n } = useTranslation();
   const geoLang = useGeoLang(i18n);
   const navigate = useNavigate();
+  const { id: hotelId } = useParams();
+
+  // проставляем значения из записи отеля
+  const fillFromHotel = (h) => {
+    setName(h?.name || "");
+    setAddress(h?.address || "");
+    setCurrency(h?.currency || "UZS");
+    setImages(Array.isArray(h?.images) ? h.images : []);
+    setAmenities(Array.isArray(h?.amenities) ? h.amenities : []);
+    setServices(Array.isArray(h?.services) ? h.services : []);
+    setCountryOpt(h?.country ? { value: h.country, code: "", label: h.country } : null);
+    setCityOpt(h?.city ? { value: h.city, label: h.city } : null);
+    setExtraBedPrice(h?.extra_bed_price ?? h?.extraBedPrice ?? "");
+    const taxes = h?.taxes || {};
+    setVatIncluded(!!taxes.vatIncluded);
+    setVatRate(taxes.vatRate ?? "");
+    setTouristResident(taxes?.touristTax?.residentPerNight ?? "");
+    setTouristNonResident(taxes?.touristTax?.nonResidentPerNight ?? "");
+
+    const toMealSet = (s = {}) => ({
+      BB: s.BB ?? "", HB: s.HB ?? "", FB: s.FB ?? "", AI: s.AI ?? "", UAI: s.UAI ?? "",
+    });
+    const byType = new Map();
+    (Array.isArray(h?.rooms) ? h.rooms : []).forEach((r) => {
+      const typeName = r?.type || "";
+      const row = {
+        id: slugify(typeName) || `custom-${Date.now()}`,
+        name: typeName || "Room",
+        builtin: !!DEFAULT_ROOM_TYPES.find(d => d.name === typeName),
+        count: String(r?.count ?? ""),
+        prices: {
+          low: {
+            resident: toMealSet(r?.prices?.low?.resident),
+            nonResident: toMealSet(r?.prices?.low?.nonResident),
+          },
+          high: {
+            resident: toMealSet(r?.prices?.high?.resident),
+            nonResident: toMealSet(r?.prices?.high?.nonResident),
+          },
+        },
+      };
+      byType.set(row.id, row);
+    });
+    // сначала дефолтные, затем кастомные из БД
+    const rows = DEFAULT_ROOM_TYPES.map(d => byType.get(d.id) || blankRow(d));
+    for (const [k, v] of byType.entries()) {
+      if (!rows.find(r => r.id === k)) rows.push(v);
+    }
+    setRoomRows(rows);
+  };
+
+  // при наличии :id грузим карточку
+  useEffect(() => {
+    if (!hotelId) return;
+    (async () => {
+      try {
+        const data = await httpGet(`/api/hotels/${encodeURIComponent(hotelId)}`);
+        fillFromHotel(data);
+      } catch (e) {
+        tError(t("load_error") || "Не удалось загрузить отель");
+      }
+    })();
+  }, [hotelId]);
 
   // Основные поля
   const [name, setName] = useState("");
@@ -511,10 +583,16 @@ export default function AdminHotelForm() {
       images,
     };
 
-    try {
-      const created = await apiCreateHotel(payload);
-      tSuccess(t("hotel_saved") || "Отель сохранён");
-      navigate(`/hotels/${created?.id || ""}`);
+        try {
+      if (hotelId) {
+        await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
+        tSuccess(t("hotel_saved") || "Изменения сохранены");
+        navigate(`/admin/hotels/${hotelId}/edit`);
+      } else {
+        const created = await apiCreateHotel(payload);
+        tSuccess(t("hotel_saved") || "Отель сохранён");
+        navigate(`/admin/hotels/${created?.id || ""}/edit`);
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error(e);
