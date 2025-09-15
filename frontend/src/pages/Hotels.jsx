@@ -1,65 +1,76 @@
 // frontend/src/pages/Hotels.jsx
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import HotelCard from "../components/HotelCard";
-import { searchHotels } from "../api/hotels";
+import { searchHotels } from "../api/hotels"; // <-- используем централизованный API-клиент
 
 export default function Hotels() {
-  const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [items, setItems] = useState([]);
+  const [qName, setQName] = useState("");
+  const [qCity, setQCity] = useState("");
   const [loading, setLoading] = useState(false);
-  const [hotels, setHotels] = useState([]);
-  const [total, setTotal] = useState(0);
 
-  const runSearch = async (q = name, c = city) => {
+  const load = async () => {
     setLoading(true);
     try {
-      const res = await searchHotels({ name: q.trim(), city: c.trim() });
-      setHotels(res.items || []);
-      setTotal(res.total || 0);
-    } catch {
-      setHotels([]); setTotal(0);
+      const res = await searchHotels({
+        name: qName || "",
+        city: qCity || "",
+        limit: 200,
+      });
+      setItems(Array.isArray(res) ? res : []);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { runSearch("", ""); }, []);
+  useEffect(() => { load(); }, []); // первичная загрузка
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">{t("hotels.title", { defaultValue: "Отели" })}</h1>
+    <div className="max-w-5xl mx-auto bg-white rounded-xl border shadow-sm p-5">
+      <h1 className="text-2xl font-bold mb-4">Отели</h1>
 
-      <div className="bg-white rounded-xl p-4 shadow-sm border mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input
-            className="border rounded px-3 py-2"
-            placeholder={t("hotels.search_name", { defaultValue: "Название" })}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="border rounded px-3 py-2"
-            placeholder={t("hotels.search_city", { defaultValue: "Город" })}
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-          />
-          <button
-            onClick={() => runSearch()}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded px-4"
-          >
-            {loading ? t("common.loading", { defaultValue: "Загрузка…" }) : t("common.search", { defaultValue: "Найти" })}
-          </button>
-        </div>
-        <div className="text-xs text-gray-500 mt-2">{t("common.found", { defaultValue: "Найдено" })}: {total}</div>
+      <div className="flex gap-2 mb-3">
+        <input
+          className="border rounded px-3 py-2 flex-1"
+          placeholder="Поиск по названию"
+          value={qName}
+          onChange={(e) => setQName(e.target.value)}
+        />
+        <input
+          className="border rounded px-3 py-2 flex-1"
+          placeholder="Город"
+          value={qCity}
+          onChange={(e) => setQCity(e.target.value)}
+        />
+        <button onClick={load} className="px-3 py-2 rounded border">
+          Найти
+        </button>
       </div>
 
-      <div className="space-y-3">
-        {hotels.map((h) => <HotelCard key={h.id} hotel={h} />)}
-        {!loading && hotels.length === 0 && (
-          <div className="text-gray-500 text-sm">{t("hotels.empty", { defaultValue: "Ничего не найдено" })}</div>
-        )}
+      <div className="overflow-auto border rounded">
+        <table className="min-w-[800px] text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-3 py-2 w-[80px]">ID</th>
+              <th className="text-left px-3 py-2">Название</th>
+              <th className="text-left px-3 py-2 w-[220px]">Город</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={3} className="px-3 py-3">Загрузка…</td></tr>
+            )}
+            {!loading && items.length === 0 && (
+              <tr><td colSpan={3} className="px-3 py-3">Ничего не найдено</td></tr>
+            )}
+            {!loading && items.map((h) => (
+              <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
+                <td className="px-3 py-2">{h.id ?? "—"}</td>
+                <td className="px-3 py-2">{h.name}</td>
+                <td className="px-3 py-2">{h.city || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
