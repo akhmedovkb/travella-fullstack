@@ -1,5 +1,6 @@
 // frontend/src/api/hotels.js
 import axios from "axios";
+import { apiGet } from "../api";
 
 // Базовый URL API (может быть пустым — тогда пойдут относительные пути)
 const API_BASE = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
@@ -92,21 +93,15 @@ function normalizeErr(e) {
 // ─────────── Публичные методы API ───────────
 
 /** Поиск отелей (доступно всем) */
-export async function searchHotels({
-  name = "",
-  city = "",
-  country = "",
-  page = 1,
-  limit = 20,
-} = {}) {
-  const params = {
-    name: name || "",
-    city: city || "",
-    country: country || "",
-    page: String(page),
-    limit: String(limit),
-  };
-  return httpGet("/api/hotels/search", { params });
+export async function searchHotels({ name = "", city = "", country = "", page = 1, limit = 50 } = {}) {
+  const qs = new URLSearchParams();
+  if (name) qs.set("name", name);
+  if (city) qs.set("city", city);
+  if (country) qs.set("country", country);
+  qs.set("page", String(page));
+  qs.set("limit", String(limit));
+  // ВАЖНО: всегда бьём прямо в /api/hotels/search на API_BASE
+  return apiGet(`/api/hotels/search?${qs.toString()}`, /*withAuthOrRole*/ false);
 }
 
 /** Получить карточку отеля (доступно всем) */
