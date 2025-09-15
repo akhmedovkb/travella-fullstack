@@ -1,204 +1,222 @@
-// frontend/src/pages/HotelDetails.jsx
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { getHotel, createInspection } from "../api/hotels";
-import { tSuccess, tError } from "../shared/toast";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { apiGet } from "../api";
 
-function pick(hotel, key, lang) {
-  // сначала translations[lang][key], потом базовое поле
+function Star({ filled }) {
   return (
-    hotel?.translations?.[lang]?.[key] ??
-    hotel?.translations?.[lang?.slice(0, 2)]?.[key] ??
-    hotel?.[key] ??
-    ""
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      className={filled ? "text-amber-500" : "text-gray-300"}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z" />
+    </svg>
   );
 }
 
-function TextRow({ label, value }) {
-  if (!value) return null;
+function Stars({ value = 0, max = 7 }) {
+  const n = Math.max(0, Math.min(max, Number(value) || 0));
   return (
-    <div className="text-sm">
-      <span className="text-gray-500">{label}: </span>
-      <span className="font-medium">{value}</span>
+    <div className="flex items-center gap-1" title={`${n} ★`}>
+      {Array.from({ length: max }).map((_, i) => (
+        <Star key={i} filled={i < n} />
+      ))}
+      <span className="ml-2 text-sm text-gray-500">{n > 0 ? `${n}★` : "—"}</span>
     </div>
   );
 }
 
+function InfoRow({ label, children }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 py-2 border-b last:border-b-0">
+      <div className="text-gray-500">{label}</div>
+      <div className="text-gray-900">{children ?? "—"}</div>
+    </div>
+  );
+}
+
+function tryParseJSON(v) {
+  if (!v || typeof v !== "string") return null;
+  try {
+    const obj = JSON.parse(v);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function HotelDetails() {
   const { hotelId } = useParams();
-  const { i18n } = useTranslation();
-  const lang = (i18n?.language || "ru").slice(0, 2);
-
   const [hotel, setHotel] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-
-  // инспекция форма
-  const [review, setReview] = useState("");
-  const [pros, setPros] = useState("");
-  const [cons, setCons] = useState("");
-  const [features, setFeatures] = useState("");
-  const [media, setMedia] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
+      setLoading(true);
       try {
-        const h = await getHotel(hotelId);
-        setHotel(h);
+        const data = await apiGet(`/api/hotels/${encodeURIComponent(hotelId)}`, false);
+        if (!alive) return;
+        setHotel(data || null);
       } catch {
-        setHotel(null);
+        if (alive) setHotel(null);
+      } finally {
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, [hotelId]);
 
-  const onPickMedia = (e) => {
-    const files = Array.from(e.target.files || []);
-    const readers = files.map((f) => new Promise((res) => {
-      const fr = new FileReader();
-      fr.onload = () => res(fr.result);
-      fr.readAsDataURL(f);
-    }));
-    Promise.all(readers).then((list) => setMedia((p) => [...p, ...list]));
-    e.target.value = "";
-  };
+  const contacts = useMemo(() => {
+    if (!hotel) return {};
+    // поле может быть строкой, json-строкой, либо объектом
+    const src =
+      (typeof hotel.contact === "object" && hotel.contact) ||
+      tryParseJSON(hotel.contact) ||
+      {};
 
-  const submitInspection = async () => {
-    if (!review.trim()) return tError("Напишите отзыв");
-    try {
-      await createInspection(hotelId, {
-        review: review.trim(),
-        pros: pros.trim() || null,
-        cons: cons.trim() || null,
-        features: features.trim() || null,
-        media,
-      });
-      tSuccess("Инспекция отправлена");
-      setShowForm(false);
-      setReview(""); setPros(""); setCons(""); setFeatures(""); setMedia([]);
-    } catch {
-      tError("Ошибка отправки инспекции");
+    const result = {};
+    // если всё-таки просто текст — положим его как note
+    if (typeof hotel.contact === "string" && !Object.keys(src).length) {
+      result.note = hotel.contact;
+    } else {
+      Object.assign(result, src);
     }
-  };
+    // небольшие алиасы
+    result.phone = result.phone || result.tel || result.phoneNumber;
+    result.email = result.email || result.mail;
+    result.website = result.website || result.site || result.url;
+    return result;
+  }, [hotel]);
 
-  if (!hotel) return <div className="max-w-5xl mx-auto">Загрузка…</div>;
+  const firstImage =
+    (Array.isArray(hotel?.images) && hotel.images[0]) ||
+    // если хранится jsonb -> строка с массивом
+    (Array.isArray(tryParseJSON(hotel?.images)) && tryParseJSON(hotel.images)[0]) ||
+    null;
 
-  const cover = hotel.images?.[0];
-  const name    = pick(hotel, "name", lang);
-  const country = pick(hotel, "country", lang);
-  const city    = pick(hotel, "city", lang);
-  const address = pick(hotel, "address", lang);
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <div className="animate-pulse h-6 w-64 bg-gray-200 rounded mb-4" />
+        <div className="h-48 bg-gray-100 rounded-xl mb-6" />
+        <div className="space-y-3">
+          <div className="h-4 bg-gray-100 rounded" />
+          <div className="h-4 bg-gray-100 rounded" />
+          <div className="h-4 bg-gray-100 rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!hotel) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <div className="bg-white border rounded-xl p-6">
+          <div className="text-lg">Отель не найден</div>
+          <Link to="/hotels" className="text-orange-600 underline mt-3 inline-block">
+            ← К списку отелей
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const fullAddress = [hotel.address, hotel.city || hotel.location, hotel.country]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="bg-white rounded-xl shadow-sm border p-4">
-        <div className="flex gap-4">
-          <div className="w-48 h-36 bg-gray-100 rounded overflow-hidden">
-            {cover ? <img src={cover} alt="" className="w-full h-full object-cover" /> : null}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">{name}</h1>
-            <TextRow label="Страна" value={country} />
-            <TextRow label="Город" value={city} />
-            <TextRow label="Адрес" value={address} />
-
-            <div className="mt-2 flex gap-2">
+    <div className="max-w-5xl mx-auto p-6">
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        {/* Шапка */}
+        <div className="p-5 border-b">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold">{hotel.name}</h1>
+              <div className="text-gray-500">
+                {hotel.city || hotel.location || "—"}
+                {hotel.country ? `, ${hotel.country}` : ""}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
               <Link
                 to={`/hotels/${hotel.id}/inspections`}
-                className="px-3 py-1.5 rounded bg-blue-600 text-white"
+                className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white"
               >
                 Смотреть инспекции
               </Link>
-              <button
-                onClick={() => setShowForm((s) => !s)}
-                className="px-3 py-1.5 rounded bg-gray-900 text-white"
+              <Link
+                to={`/hotels/${hotel.id}/inspections?new=1`}
+                className="px-3 py-2 rounded bg-gray-900 hover:bg-black text-white"
               >
                 Оставить свою инспекцию
-              </button>
+              </Link>
             </div>
           </div>
         </div>
 
-        {(hotel.amenities?.length || hotel.services?.length) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            {hotel.amenities?.length ? (
-              <div>
-                <div className="font-semibold mb-2">Удобства</div>
-                <div className="flex flex-wrap gap-1">
-                  {hotel.amenities.map((a, i) => (
-                    <span key={i} className="text-[11px] px-2 py-0.5 bg-gray-100 rounded">{a}</span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {hotel.services?.length ? (
-              <div>
-                <div className="font-semibold mb-2">Услуги</div>
-                <div className="flex flex-wrap gap-1">
-                  {hotel.services.map((s, i) => (
-                    <span key={i} className="text-[11px] px-2 py-0.5 bg-gray-100 rounded">{s}</span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
-
-      {showForm && (
-        <div className="bg-white rounded-xl shadow-sm border p-4 mt-4">
-          <div className="font-semibold mb-2">Инспекция от провайдера</div>
-          <textarea
-            className="w-full border rounded px-3 py-2 mb-2"
-            placeholder="Отзыв"
-            value={review}
-            onChange={(e) => setReview(e.target.value)}
-          />
-          <input
-            className="w-full border rounded px-3 py-2 mb-2"
-            placeholder="Плюсы"
-            value={pros}
-            onChange={(e) => setPros(e.target.value)}
-          />
-          <input
-            className="w-full border rounded px-3 py-2 mb-2"
-            placeholder="Минусы"
-            value={cons}
-            onChange={(e) => setCons(e.target.value)}
-          />
-          <input
-            className="w-full border rounded px-3 py-2 mb-2"
-            placeholder="Фишки (особенности)"
-            value={features}
-            onChange={(e) => setFeatures(e.target.value)}
-          />
-
-          <div className="mb-2">
-            <label className="block text-sm font-medium mb-1">Фото/видео</label>
-            <input type="file" accept="image/*,video/*" multiple onChange={onPickMedia} />
-            {media.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                {media.map((m, i) => (
-                  <div key={i} className="relative">
-                    <img src={m} alt="" className="w-full h-28 object-cover border rounded" />
-                    <button
-                      type="button"
-                      onClick={() => setMedia((p) => p.filter((_, idx) => idx !== i))}
-                      className="absolute top-1 right-1 bg-white/90 rounded px-1 text-xs"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+        {/* Контент */}
+        <div className="p-5 grid grid-cols-1 md:grid-cols-[340px_1fr] gap-5">
+          <div>
+            {firstImage ? (
+              <img
+                src={firstImage}
+                alt={hotel.name}
+                className="w-full aspect-[4/3] object-cover rounded-lg border"
+              />
+            ) : (
+              <div className="w-full aspect-[4/3] bg-gray-100 rounded-lg border grid place-items-center text-gray-400">
+                нет фото
               </div>
             )}
+            <div className="mt-3">
+              <Stars value={hotel.stars} />
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button onClick={submitInspection} className="px-3 py-2 rounded bg-orange-600 text-white">Отправить</button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-2 rounded bg-gray-200">Отмена</button>
+          <div className="bg-white rounded-lg">
+            <InfoRow label="Адрес">
+              {fullAddress || "—"}
+            </InfoRow>
+
+            <InfoRow label="Контакт">
+              {contacts.phone || contacts.email || contacts.website || contacts.note ? (
+                <div className="space-y-1">
+                  {contacts.phone && <div>Телефон: <a href={`tel:${contacts.phone}`} className="text-blue-600 hover:underline">{contacts.phone}</a></div>}
+                  {contacts.email && <div>E-mail: <a href={`mailto:${contacts.email}`} className="text-blue-600 hover:underline">{contacts.email}</a></div>}
+                  {contacts.website && (
+                    <div>
+                      Сайт:{" "}
+                      <a
+                        href={/^https?:\/\//i.test(contacts.website) ? contacts.website : `https://${contacts.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {contacts.website}
+                      </a>
+                    </div>
+                  )}
+                  {contacts.note && <div className="text-gray-700">{contacts.note}</div>}
+                </div>
+              ) : (
+                "—"
+              )}
+            </InfoRow>
+
+            <InfoRow label="Валюта">
+              {hotel.currency || "UZS"}
+            </InfoRow>
+
+            {/* при желании можно добавить удобства / услуги */}
+            {/* <InfoRow label="Удобства">{Array.isArray(hotel.amenities) ? hotel.amenities.join(", ") : "—"}</InfoRow> */}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
