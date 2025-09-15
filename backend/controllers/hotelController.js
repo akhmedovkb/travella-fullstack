@@ -1,117 +1,69 @@
-// backend/controllers/hotelController.js
 /* eslint-disable no-console */
 const axios = require("axios");
-
-// ---------------- PG helper ----------------
 const { Pool } = require("pg");
+const monitor = require("../utils/apiMonitor"); // <── NEW
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
 });
 const db = { query: (q, p) => pool.query(q, p) };
 
-// ---------------- In-memory cache + utils ----------------
+// ───────────────── cache ─────────────────
 const cache = new Map();
-const TTL_MS = 60 * 60 * 1000; // 1 час
-
-function memoKey(p) {
-  try { return JSON.stringify(p); } catch { return String(p); }
-}
-
-function getCached(key) {
-  const hit = cache.get(key);
+const TTL_MS = 60 * 60 * 1000;
+const memoKey = (p) => { try { return JSON.stringify(p); } catch { return String(p); } };
+const getCached = (k) => {
+  const hit = cache.get(k);
   if (!hit) return null;
-  if (Date.now() > hit.expireAt) { cache.delete(key); return null; }
+  if (Date.now() > hit.expireAt) { cache.delete(k); return null; }
   return hit.data;
-}
-function setCached(key, data) {
-  cache.set(key, { data, expireAt: Date.now() + TTL_MS });
-  return data;
-}
+};
+const setCached = (k, data) => { cache.set(k, { data, expireAt: Date.now() + TTL_MS }); return data; };
 
-/** Убираем дубликаты по (name + city), регистронезависимо */
-function dedup(arr = []) {
-  const seen = new Set();
-  const out = [];
-  for (const x of arr) {
-    const k = [
-      String(x.name || x.label || "").trim().toLowerCase(),
-      String(x.city || x.city_local || x.city_en || "").trim().toLowerCase(),
-    ].join("|");
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(x);
+const first = (...vals) => {
+  for (const v of vals) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number") return String(v);
   }
-  return out;
-}
+  return "";
+};
 
-// --------------- Нормализация query (name|query|q и т.д.) ---------------
-function normalizeHotelSearchQuery(q = {}) {
-  const firstNonEmpty = (...vals) => {
-    for (const v of vals) {
-      if (typeof v === "string" && v.trim()) return v.trim();
-      if (typeof v === "number") return String(v);
-    }
-    return "";
-  };
-  const name = firstNonEmpty(q.name, q.query, q.q);
-  const city = firstNonEmpty(q.city, q.location, q.loc, q.town);
-
-  const pageRaw  = Number(firstNonEmpty(q.page, q.p)) || 1;
-  const limitRaw = Number(firstNonEmpty(q.limit, q.l)) || 20;
-  const page  = Math.max(1, pageRaw);
-  const limit = Math.min(50, Math.max(1, limitRaw));
-  return { name, city, page, limit };
-}
-
-// --------------- Опциональный внешний поиск (можно расширить) ---------------
-async function fetchExternalHotels(name = "", city = "") {
-  // При необходимости сюда можно добавить реальные источники.
-  // Оставляем пустым, чтобы ничего не ломать.
-  return [];
-}
-async function fetchExternalHotelsCached(name = "", city = "") {
-  const key = memoKey({ kind: "external_hotel_search", name, city });
-  const hit = getCached(key);
-  if (hit) return hit;
-  const data = await fetchExternalHotels(name, city);
-  return setCached(key, data);
-}
-
-// ================= SEARCH =================
+// ─────────────── SEARCH ───────────────
 async function searchHotels(req, res) {
-  const pick = (obj, ...keys) => {
-    for (const k of keys) {
-      const v = obj?.[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-      if (typeof v === "number") return String(v);
+  const name    = first(req.query.name,    req.query.query,  req.query.q);
+  const city    = first(req.query.city,    req.query.location, req.query.loc, req.query.town);
+  const country = first(req.query.country, req.query.countryCode, req.query.cc);
+  const limit   = Math.min(50, Math.max(1, parseInt(first(req.query.limit, req.query.l) || "50", 10)));
+  const langHdr = (req.headers["accept-language"] || "").slice(0, 2).toLowerCase();
+  const langReq = (first(req.query.lang) || langHdr);
+  const lang    = ["ru","uz","en"].includes(langReq) ? langReq : "en";
+
+  // Если нет осмысленного ввода — отдаём локальные записи списком
+  if ((name || "").length < 2 && (city || "").length < 2) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, name, COALESCE(city, location) AS city, country
+           FROM hotels
+          ORDER BY name
+          LIMIT $1`, [limit]
+      );
+      return res.json((rows || []).map(r => ({
+        id: r.id, name: r.name, city: r.city || null, country: r.country || null,
+        label: r.name, city_local: r.city || null, city_en: r.city || null, provider: "local",
+      })));
+    } catch {
+      return res.json([]);
     }
-    return "";
-  };
-
-  const name    = pick(req.query, "name", "query", "q");
-  const city    = pick(req.query, "city", "location", "loc", "town");
-  const country = pick(req.query, "country", "countryCode", "cc"); // ISO2
-  const limit   = Math.min(50, Math.max(1, parseInt(pick(req.query,"limit","l")||"20",10)));
-  const langHdr = (req.headers["accept-language"] || "").slice(0,2).toLowerCase();
-  const lang    = ["ru","uz","en"].includes(pick(req.query,"lang") || langHdr) ? (pick(req.query,"lang") || langHdr) : "en";
-
-  if ((name || "").length < 2 && (city || "").length < 2) return res.json([]);
-
-  const dedup = (arr) => {
-    const seen = new Set(); const out = [];
-    for (const x of arr) {
-      const key = (String(x.name||"").toLowerCase()+"|"+String(x.city||"").toLowerCase());
-      if (seen.has(key)) continue; seen.add(key); out.push(x);
-    }
-    return out;
-  };
+  }
 
   try {
-    // 1) Наши отели из БД
+    // 1) Локальная БД
     let idx=1, where=[], params=[];
     if ((name||"").length>=2){ where.push(`(name ILIKE $${idx} OR COALESCE(city,location,'') ILIKE $${idx})`); params.push(`%${name}%`); idx++; }
     if ((city||"").length>=2){ where.push(`COALESCE(city,location,'') ILIKE $${idx}`); params.push(`%${city}%`); idx++; }
+    if ((country||"").length>=2){ where.push(`COALESCE(country,'') ILIKE $${idx}`); params.push(`%${country}%`); idx++; }
+
     const ownSql = `
       SELECT id, name, COALESCE(city, location) AS city, country
         FROM hotels
@@ -132,25 +84,35 @@ async function searchHotels(req, res) {
     let geo = [];
     if (!GEO_USER) {
       console.warn("[hotels.search] GeoNames username is not set -> skip external search");
+      monitor.record("geonames", { ok: false, status: 0, message: "username_not_set" }); // <── log
     } else if (name || city) {
       const base = { username: GEO_USER, maxRows: Math.min(20, limit), style: "FULL", orderby: "relevance", lang };
       const qStr = (city ? `${name || ""} ${city}` : (name || "")).trim();
       const run = async (extra) => {
-        const { data } = await axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
-        return Array.isArray(data?.geonames) ? data.geonames : [];
+        const res = await axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
+        return res;
       };
       try {
-        // A) Только отели
-        let arr = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
-        // B) Общий поиск
-        if (!arr.length) arr = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
-        // C) Мягкий startsWith без фильтра типа
-        if (!arr.length && name) arr = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
+        let res = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
+        let arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
+        // логируем удачный вызов
+        monitor.record("geonames", { ok: true, status: res?.status || 200, message: `items=${arr.length}` });
 
-        geo = arr.map(g => ({
+        if (!arr.length) {
+          res = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
+          arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
+          monitor.record("geonames", { ok: true, status: res?.status || 200, message: `fallback.items=${arr.length}` });
+        }
+        if (!arr.length && name) {
+          res = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
+          arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
+          monitor.record("geonames", { ok: true, status: res?.status || 200, message: `startsWith.items=${arr.length}` });
+        }
+
+        geo = (arr || []).map(g => ({
           id: g.geonameId,
           name: g.name || g.toponymName || g.asciiName,
-          city: g.adminName2 || g.adminName3 || g.adminName1 || g.adminName4 || g.adminName5 || null,
+          city: g.adminName2 || g.adminName3 || g.adminName1 || null,
           country: g.countryName || g.countryCode || null,
           label: g.name || g.toponymName || g.asciiName,
           city_local: g.adminName2 || g.adminName3 || g.adminName1 || null,
@@ -158,37 +120,45 @@ async function searchHotels(req, res) {
           provider: "geonames",
         }));
       } catch (e) {
-        console.warn("[hotels.search] GeoNames error:", e?.response?.status || e?.message || e);
+        const status = e?.response?.status ?? null;
+        const msg =
+          e?.response?.data?.status?.message ||
+          e?.response?.data?.message ||
+          e?.message || "geonames_error";
+        console.warn("[hotels.search] GeoNames error:", status, msg);
+        monitor.record("geonames", { ok: false, status, message: String(msg) }); // <── log error
       }
     }
 
-    const out = dedup([...own, ...geo]).slice(0, limit);
-    return res.json(out);
+    const out = [...own, ...geo];
+    // убираем дубль по (name|city)
+    const seen = new Set(); const deduped = [];
+    for (const x of out) {
+      const k = (String(x.name||"").toLowerCase()+"|"+String(x.city||"").toLowerCase());
+      if (seen.has(k)) continue; seen.add(k); deduped.push(x);
+    }
+    return res.json(deduped.slice(0, limit));
   } catch (e) {
     console.error("hotels.search error", e);
     return res.status(500).json([]);
   }
 }
 
-
-
-// ================= CREATE =================
+// ─────────────── CREATE ───────────────
 async function createHotel(req, res) {
   try {
     const p = req.body || {};
     const now = new Date();
-
-    // --- Пытаемся вставить в «новую» расширенную схему
     try {
       const sql = `
         INSERT INTO hotels
           (name, country, city, address, currency,
-           rooms, extra_bed_price, taxes, amenities, services, images,
+           rooms,            extra_bed_price, taxes,           amenities,        services,        images,
            created_at, updated_at)
         VALUES
-          ($1,$2,$3,$4,$5,
-           $6,$7,$8,$9,$10,$11,
-           $12,$12)
+          ($1,   $2,      $3,   $4,     $5,
+           $6::jsonb,     $7::numeric,  $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb,
+           $12,       $12)
         RETURNING id
       `;
       const params = [
@@ -199,25 +169,24 @@ async function createHotel(req, res) {
         p.currency || "UZS",
         JSON.stringify(p.rooms || []),
         p.extraBedPrice ?? null,
-        JSON.stringify(p.taxes ?? null),
-        Array.isArray(p.amenities) ? p.amenities : [],
-        Array.isArray(p.services) ? p.services : [],
+        JSON.stringify(p.taxes ?? {}),
+        JSON.stringify(Array.isArray(p.amenities) ? p.amenities : []),
+        JSON.stringify(Array.isArray(p.services) ? p.services : []),
         JSON.stringify(p.images || []),
         now,
       ];
       const { rows } = await db.query(sql, params);
       return res.json({ id: rows[0].id });
     } catch (err) {
-      // --- Если колонок нет (старая схема) — мягкий fallback
+      console.warn("[hotels.create] legacy fallback:", err?.message);
       const sqlFallback = `
-        INSERT INTO hotels (name, location, stars, created_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO hotels (name, location, created_at)
+        VALUES ($1, $2, $3)
         RETURNING id
       `;
       const paramsFallback = [
         (p.name || "").trim(),
         p.city || p.address || null,
-        null,
         now,
       ];
       const { rows } = await db.query(sqlFallback, paramsFallback);
@@ -229,7 +198,7 @@ async function createHotel(req, res) {
   }
 }
 
-// ================= GET ONE =================
+// ─────────────── READ ONE / LIST ───────────────
 async function getHotel(req, res) {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
@@ -243,19 +212,14 @@ async function getHotel(req, res) {
   }
 }
 
-// ================= LIST (простая пагинация) =================
 async function listHotels(req, res) {
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "20", 10)));
   const offset = (page - 1) * limit;
 
   try {
-    // Не делаем SELECT по колонкам, которых может не быть
     const { rows } = await db.query(
-      `SELECT id,
-              name,
-              COALESCE(city, location) AS city,
-              created_at
+      `SELECT id, name, COALESCE(city, location) AS city, created_at
          FROM hotels
         ORDER BY id DESC
         LIMIT $1 OFFSET $2`,
@@ -268,9 +232,4 @@ async function listHotels(req, res) {
   }
 }
 
-module.exports = {
-  searchHotels,
-  createHotel,
-  getHotel,
-  listHotels,
-};
+module.exports = { searchHotels, createHotel, getHotel, listHotels };
