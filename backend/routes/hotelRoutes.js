@@ -1,4 +1,3 @@
-// backend/routes/hotelRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -7,45 +6,31 @@ const {
   getHotel,
   createHotel,
   listHotels,
-  updateHotel, // добавили апдейт
+  updateHotel,
 } = require("../controllers/hotelsController");
 
-const {
-  createInspection,
-  listInspections,
-} = require("../controllers/hotelInspectionController");
+const authenticateToken = require("../middleware/authenticateToken");
 
-// ── Мягкий фолбек для мидлвара авторизации провайдера ──
-// если файла нет — просто пропускаем запросы (не ломаем прод)
-let requireProviderAuth = (req, _res, next) => next();
-try {
-  // eslint-disable-next-line global-require, import/no-unresolved
-  ({ requireProviderAuth } = require("../middlewares/auth"));
-} catch (_e) {
-  console.warn("[hotelRoutes] middlewares/auth not found — running without provider auth");
+// пускаем провайдеров/админов
+function providerOrAdmin(req, res, next) {
+  authenticateToken(req, res, () => {
+    const role = req.user?.role || req.user?.type;
+    if (role === "provider" || role === "admin" || role === "moderator") return next();
+    return res.status(403).json({ error: "forbidden" });
+  });
 }
 
-/** 
- * ВАЖНО: все пути здесь относительные к префиксу, 
- * с которым вы монтируете роутер: app.use("/api/hotels", router)
- */
-
-// Поиск
+// поиск (публичный)
 router.get("/search", searchHotels);
-router.get("/", searchHotels); // алиас: без параметров вернёт список локальных по алфавиту
 
-// Доп. список без фильтра (для админов — удобно листать/редактировать)
-router.get("/_list/all", listHotels);
+// админский список (простой пагинированный)
+router.get("/_list", listHotels);
 
-// Создание/обновление (можно защитить мидлваром авторизации провайдера)
-router.post("/", requireProviderAuth, createHotel);
-router.put("/:id", requireProviderAuth, updateHotel);
-
-// Карточка отеля
+// карточка (публичная)
 router.get("/:id", getHotel);
 
-// Инспекции
-router.get("/:hotelId/inspections", listInspections);
-router.post("/:hotelId/inspections", requireProviderAuth, createInspection);
+// создание/обновление (требует провайдера/админа)
+router.post("/", providerOrAdmin, createHotel);
+router.put("/:id", providerOrAdmin, updateHotel);
 
 module.exports = router;
