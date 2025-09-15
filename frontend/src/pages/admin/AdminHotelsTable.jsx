@@ -5,8 +5,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 
 // временно, чисто для проверки
-const API_BASE = "https://travella-fullstack-production.up.railway.app";
-
+const API_BASE = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const apiURL = (p) => `${API_BASE}${p}`;
 
 function getToken() {
