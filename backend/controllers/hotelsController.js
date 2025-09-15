@@ -3,7 +3,18 @@
 /* eslint-disable no-console */
 const axios = require("axios");
 const { Pool } = require("pg");
-const monitor = require("../utils/apiMonitor"); // мониторинг GeoNames
+
+// ─── Мягкий фолбек для мониторинга (если utils/apiMonitor отсутствует) ───
+let monitor = { record: (...args) => console.log("[monitor]", ...args) };
+try {
+  // если файл есть — используем реальный
+  // ожидается интерфейс: monitor.record(source, { ok, status, message })
+  // eslint-disable-next-line global-require, import/no-unresolved
+  monitor = require("../utils/apiMonitor");
+} catch (_e) {
+  // без падения на проде/локали
+  console.warn("[hotelsController] utils/apiMonitor not found — using console fallback");
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -11,7 +22,7 @@ const pool = new Pool({
 });
 const db = { query: (q, p) => pool.query(q, p) };
 
-// ───────────────── cache ─────────────────
+// ───────────────── cache (зарезервировано под внешние вызовы) ─────────────────
 const cache = new Map();
 const TTL_MS = 60 * 60 * 1000;
 const memoKey = (p) => { try { return JSON.stringify(p); } catch { return String(p); } };
@@ -91,23 +102,23 @@ async function searchHotels(req, res) {
       const base = { username: GEO_USER, maxRows: Math.min(20, limit), style: "FULL", orderby: "relevance", lang };
       const qStr = (city ? `${name || ""} ${city}` : (name || "")).trim();
       const run = async (extra) => {
-        const res = await axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
-        return res;
+        const resGeo = await axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
+        return resGeo;
       };
       try {
-        let res = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
-        let arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
-        monitor.record("geonames", { ok: true, status: res?.status || 200, message: `items=${arr.length}` });
+        let resGeo = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
+        let arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+        monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `items=${arr.length}` });
 
         if (!arr.length) {
-          res = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
-          arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
-          monitor.record("geonames", { ok: true, status: res?.status || 200, message: `fallback.items=${arr.length}` });
+          resGeo = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
+          arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+          monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `fallback.items=${arr.length}` });
         }
         if (!arr.length && name) {
-          res = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
-          arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
-          monitor.record("geonames", { ok: true, status: res?.status || 200, message: `startsWith.items=${arr.length}` });
+          resGeo = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
+          arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+          monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `startsWith.items=${arr.length}` });
         }
 
         geo = (arr || []).map(g => ({
@@ -131,8 +142,8 @@ async function searchHotels(req, res) {
       }
     }
 
+    // merge + дедуп по (name|city)
     const out = [...own, ...geo];
-    // убираем дубль по (name|city)
     const seen = new Set(); const deduped = [];
     for (const x of out) {
       const k = (String(x.name||"").toLowerCase()+"|"+String(x.city||"").toLowerCase());
@@ -199,7 +210,7 @@ async function createHotel(req, res) {
   }
 }
 
-// ─────────────── READ ONE / LIST ───────────────
+// ─────────────── READ ONE ───────────────
 async function getHotel(req, res) {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
@@ -213,6 +224,7 @@ async function getHotel(req, res) {
   }
 }
 
+// ─────────────── LIST ───────────────
 async function listHotels(req, res) {
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "20", 10)));
