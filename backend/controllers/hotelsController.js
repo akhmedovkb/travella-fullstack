@@ -1,9 +1,9 @@
-//backend/controllers/hotelsController.js
+// backend/controllers/hotelsController.js
 
 /* eslint-disable no-console */
 const axios = require("axios");
 const { Pool } = require("pg");
-const monitor = require("../utils/apiMonitor"); // <── NEW
+const monitor = require("../utils/apiMonitor"); // мониторинг GeoNames
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -86,7 +86,7 @@ async function searchHotels(req, res) {
     let geo = [];
     if (!GEO_USER) {
       console.warn("[hotels.search] GeoNames username is not set -> skip external search");
-      monitor.record("geonames", { ok: false, status: 0, message: "username_not_set" }); // <── log
+      monitor.record("geonames", { ok: false, status: 0, message: "username_not_set" });
     } else if (name || city) {
       const base = { username: GEO_USER, maxRows: Math.min(20, limit), style: "FULL", orderby: "relevance", lang };
       const qStr = (city ? `${name || ""} ${city}` : (name || "")).trim();
@@ -97,7 +97,6 @@ async function searchHotels(req, res) {
       try {
         let res = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
         let arr = Array.isArray(res?.data?.geonames) ? res.data.geonames : [];
-        // логируем удачный вызов
         monitor.record("geonames", { ok: true, status: res?.status || 200, message: `items=${arr.length}` });
 
         if (!arr.length) {
@@ -128,7 +127,7 @@ async function searchHotels(req, res) {
           e?.response?.data?.message ||
           e?.message || "geonames_error";
         console.warn("[hotels.search] GeoNames error:", status, msg);
-        monitor.record("geonames", { ok: false, status, message: String(msg) }); // <── log error
+        monitor.record("geonames", { ok: false, status, message: String(msg) });
       }
     }
 
@@ -234,4 +233,66 @@ async function listHotels(req, res) {
   }
 }
 
-module.exports = { searchHotels, createHotel, getHotel, listHotels };
+// ─────────────── UPDATE ───────────────
+async function updateHotel(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
+
+  try {
+    const p = req.body || {};
+    const now = new Date();
+
+    try {
+      const sql = `
+        UPDATE hotels SET
+          name=$1, country=$2, city=$3, address=$4, currency=$5,
+          rooms=$6::jsonb, extra_bed_price=$7::numeric, taxes=$8::jsonb,
+          amenities=$9::jsonb, services=$10::jsonb, images=$11::jsonb,
+          updated_at=$12
+        WHERE id=$13
+        RETURNING id
+      `;
+      const params = [
+        (p.name || "").trim(),
+        p.country || null,
+        p.city || null,
+        p.address || null,
+        p.currency || "UZS",
+        JSON.stringify(p.rooms || []),
+        p.extraBedPrice ?? null,
+        JSON.stringify(p.taxes ?? {}),
+        JSON.stringify(Array.isArray(p.amenities) ? p.amenities : []),
+        JSON.stringify(Array.isArray(p.services) ? p.services : []),
+        JSON.stringify(p.images || []),
+        now,
+        id,
+      ];
+      const { rows } = await db.query(sql, params);
+      if (!rows.length) return res.status(404).json({ error: "not_found" });
+      return res.json({ id });
+    } catch (err) {
+      // legacy fallback — если нет новых колонок
+      console.warn("[hotels.update] legacy fallback:", err?.message);
+      const sqlFallback = `
+        UPDATE hotels
+           SET name=$1, location=$2, updated_at=$3
+         WHERE id=$4
+         RETURNING id
+      `;
+      const paramsFallback = [
+        (p.name || "").trim(),
+        p.city || p.address || null,
+        now,
+        id,
+      ];
+      const { rows } = await db.query(sqlFallback, paramsFallback);
+      if (!rows.length) return res.status(404).json({ error: "not_found" });
+      return res.json({ id, _fallback: true });
+    }
+  } catch (e) {
+    console.error("hotels.update error:", e);
+    return res.status(500).json({ error: "update_failed" });
+  }
+}
+
+module.exports = { searchHotels, createHotel, getHotel, listHotels, updateHotel };
