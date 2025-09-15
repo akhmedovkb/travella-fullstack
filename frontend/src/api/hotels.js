@@ -9,9 +9,10 @@ export async function searchHotels({ name = "", city = "", country = "", page = 
   if (country) qs.set("country", country);
   qs.set("page", String(page));
   qs.set("limit", String(limit));
-  // всегда бьём прямо в API_BASE
-  return apiGet(`/api/hotels/search?${qs.toString()}`, /*withAuthOrRole*/ false);
+  qs.set("ext", "0");              // ← только локальная БД
+  return apiGet(`/api/hotels/search?${qs.toString()}`, false);
 }
+
 
 /** Карточка отеля (публично) */
 export function getHotel(hotelId) {
