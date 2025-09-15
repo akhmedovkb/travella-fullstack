@@ -7,15 +7,15 @@ const { Pool } = require("pg");
 // ─── Мягкий фолбек для мониторинга (если utils/apiMonitor отсутствует) ───
 let monitor = { record: (...args) => console.log("[monitor]", ...args) };
 try {
-  // если файл есть — используем реальный
   // ожидается интерфейс: monitor.record(source, { ok, status, message })
+  // если файл есть — используем реальный
   // eslint-disable-next-line global-require, import/no-unresolved
   monitor = require("../utils/apiMonitor");
 } catch (_e) {
-  // без падения на проде/локали
   console.warn("[hotelsController] utils/apiMonitor not found — using console fallback");
 }
 
+// ─── DB ───
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
@@ -34,6 +34,7 @@ const getCached = (k) => {
 };
 const setCached = (k, data) => { cache.set(k, { data, expireAt: Date.now() + TTL_MS }); return data; };
 
+// ─── helpers ───
 const first = (...vals) => {
   for (const v of vals) {
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -43,6 +44,8 @@ const first = (...vals) => {
 };
 
 // ─────────────── SEARCH ───────────────
+// GET /api/hotels/search?name=&city=&country=&limit=&lang=&ext=0
+// ext=0|false|off|local  → только локальная таблица (без GeoNames)
 async function searchHotels(req, res) {
   const name    = first(req.query.name,    req.query.query,  req.query.q);
   const city    = first(req.query.city,    req.query.location, req.query.loc, req.query.town);
@@ -52,6 +55,16 @@ async function searchHotels(req, res) {
   const langReq = (first(req.query.lang) || langHdr);
   const lang    = ["ru","uz","en"].includes(langReq) ? langReq : "en";
 
+  // флаг внешних подсказок (по умолчанию ВКЛ)
+  const externalParam = first(
+    req.query.ext,
+    req.query.external,
+    req.query.geo,
+    req.query.geonames,
+    req.query.source
+  );
+  const useExternal = !/^(0|no|false|off|local|none)$/i.test(String(externalParam || ""));
+
   // Если нет осмысленного ввода — отдаём локальные записи списком
   if ((name || "").length < 2 && (city || "").length < 2) {
     try {
@@ -59,7 +72,8 @@ async function searchHotels(req, res) {
         `SELECT id, name, COALESCE(city, location) AS city, country
            FROM hotels
           ORDER BY name
-          LIMIT $1`, [limit]
+          LIMIT $1`,
+        [limit]
       );
       return res.json((rows || []).map(r => ({
         id: r.id, name: r.name, city: r.city || null, country: r.country || null,
@@ -72,73 +86,96 @@ async function searchHotels(req, res) {
 
   try {
     // 1) Локальная БД
-    let idx=1, where=[], params=[];
-    if ((name||"").length>=2){ where.push(`(name ILIKE $${idx} OR COALESCE(city,location,'') ILIKE $${idx})`); params.push(`%${name}%`); idx++; }
-    if ((city||"").length>=2){ where.push(`COALESCE(city,location,'') ILIKE $${idx}`); params.push(`%${city}%`); idx++; }
-    if ((country||"").length>=2){ where.push(`COALESCE(country,'') ILIKE $${idx}`); params.push(`%${country}%`); idx++; }
+    let idx = 1; const where = []; const params = [];
+    if ((name || "").length >= 2) {
+      where.push(`(name ILIKE $${idx} OR COALESCE(city,location,'') ILIKE $${idx})`);
+      params.push(`%${name}%`); idx++;
+    }
+    if ((city || "").length >= 2) {
+      where.push(`COALESCE(city,location,'') ILIKE $${idx}`);
+      params.push(`%${city}%`); idx++;
+    }
+    if ((country || "").length >= 2) {
+      where.push(`COALESCE(country,'') ILIKE $${idx}`);
+      params.push(`%${country}%`); idx++;
+    }
 
     const ownSql = `
       SELECT id, name, COALESCE(city, location) AS city, country
         FROM hotels
-       ${where.length ? "WHERE "+where.join(" AND ") : ""}
+       ${where.length ? "WHERE " + where.join(" AND ") : ""}
        ORDER BY name
        LIMIT $${idx}`;
     params.push(limit);
+
     const ownRows = await db.query(ownSql, params);
-    const own = (ownRows.rows||[]).map(r => ({
-      id: r.id, name: r.name,
-      city: r.city || null, country: r.country || null,
-      label: r.name, city_local: r.city || null, city_en: r.city || null,
+    const own = (ownRows.rows || []).map(r => ({
+      id: r.id,
+      name: r.name,
+      city: r.city || null,
+      country: r.country || null,
+      label: r.name,
+      city_local: r.city || null,
+      city_en: r.city || null,
       provider: "local",
     }));
 
-    // 2) GeoNames
+    // 2) GeoNames (если разрешено useExternal === true)
     const GEO_USER = process.env.GEONAMES_USERNAME || process.env.VITE_GEONAMES_USERNAME;
     let geo = [];
-    if (!GEO_USER) {
-      console.warn("[hotels.search] GeoNames username is not set -> skip external search");
-      monitor.record("geonames", { ok: false, status: 0, message: "username_not_set" });
-    } else if (name || city) {
-      const base = { username: GEO_USER, maxRows: Math.min(20, limit), style: "FULL", orderby: "relevance", lang };
-      const qStr = (city ? `${name || ""} ${city}` : (name || "")).trim();
-      const run = async (extra) => {
-        const resGeo = await axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
-        return resGeo;
-      };
-      try {
-        let resGeo = await run({ featureClass: "S", featureCode: "HTL", name_startsWith: name || undefined, q: qStr || undefined, country: country || undefined });
-        let arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
-        monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `items=${arr.length}` });
 
-        if (!arr.length) {
-          resGeo = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
-          arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
-          monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `fallback.items=${arr.length}` });
-        }
-        if (!arr.length && name) {
-          resGeo = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
-          arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
-          monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `startsWith.items=${arr.length}` });
-        }
+    if (useExternal && (name || city)) {
+      if (!GEO_USER) {
+        console.warn("[hotels.search] GeoNames username is not set -> skip external search");
+        monitor.record("geonames", { ok: false, status: 0, message: "username_not_set" });
+      } else {
+        const base = { username: GEO_USER, maxRows: Math.min(20, limit), style: "FULL", orderby: "relevance", lang };
+        const qStr = (city ? `${name || ""} ${city}` : (name || "")).trim();
+        const run = async (extra) =>
+          axios.get("https://secure.geonames.org/searchJSON", { params: { ...base, ...extra }, timeout: 7000 });
 
-        geo = (arr || []).map(g => ({
-          id: g.geonameId,
-          name: g.name || g.toponymName || g.asciiName,
-          city: g.adminName2 || g.adminName3 || g.adminName1 || null,
-          country: g.countryName || g.countryCode || null,
-          label: g.name || g.toponymName || g.asciiName,
-          city_local: g.adminName2 || g.adminName3 || g.adminName1 || null,
-          city_en: g.adminName2 || g.adminName3 || g.adminName1 || null,
-          provider: "geonames",
-        }));
-      } catch (e) {
-        const status = e?.response?.status ?? null;
-        const msg =
-          e?.response?.data?.status?.message ||
-          e?.response?.data?.message ||
-          e?.message || "geonames_error";
-        console.warn("[hotels.search] GeoNames error:", status, msg);
-        monitor.record("geonames", { ok: false, status, message: String(msg) });
+        try {
+          let resGeo = await run({
+            featureClass: "S",
+            featureCode: "HTL",
+            name_startsWith: name || undefined,
+            q: qStr || undefined,
+            country: country || undefined,
+          });
+          let arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+          monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `items=${arr.length}` });
+
+          if (!arr.length) {
+            resGeo = await run({ q: qStr || name, country: country || undefined, fuzzy: 1 });
+            arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+            monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `fallback.items=${arr.length}` });
+          }
+          if (!arr.length && name) {
+            resGeo = await run({ name_startsWith: name, fuzzy: 1, country: country || undefined });
+            arr = Array.isArray(resGeo?.data?.geonames) ? resGeo.data.geonames : [];
+            monitor.record("geonames", { ok: true, status: resGeo?.status || 200, message: `startsWith.items=${arr.length}` });
+          }
+
+          geo = (arr || []).map(g => ({
+            id: g.geonameId,
+            name: g.name || g.toponymName || g.asciiName,
+            city: g.adminName2 || g.adminName3 || g.adminName1 || null,
+            country: g.countryName || g.countryCode || null,
+            label: g.name || g.toponymName || g.asciiName,
+            city_local: g.adminName2 || g.adminName3 || g.adminName1 || null,
+            city_en: g.adminName2 || g.adminName3 || g.adminName1 || null,
+            provider: "geonames",
+          }));
+        } catch (e) {
+          const status = e?.response?.status ?? null;
+          const msg =
+            e?.response?.data?.status?.message ||
+            e?.response?.data?.message ||
+            e?.message ||
+            "geonames_error";
+          console.warn("[hotels.search] GeoNames error:", status, msg);
+          monitor.record("geonames", { ok: false, status, message: String(msg) });
+        }
       }
     }
 
@@ -146,8 +183,10 @@ async function searchHotels(req, res) {
     const out = [...own, ...geo];
     const seen = new Set(); const deduped = [];
     for (const x of out) {
-      const k = (String(x.name||"").toLowerCase()+"|"+String(x.city||"").toLowerCase());
-      if (seen.has(k)) continue; seen.add(k); deduped.push(x);
+      const k = (String(x.name || "").toLowerCase() + "|" + String(x.city || "").toLowerCase());
+      if (seen.has(k)) continue;
+      seen.add(k);
+      deduped.push(x);
     }
     return res.json(deduped.slice(0, limit));
   } catch (e) {
