@@ -146,7 +146,7 @@ export default function App() {
               </PrivateRoute>
             }
           />
-
+         <Route path="/admin/hotels/:id/edit" element={<AdminHotelForm />} />
         </Routes>
       </div>
     </Router>
