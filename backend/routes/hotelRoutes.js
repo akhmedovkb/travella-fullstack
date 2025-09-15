@@ -7,7 +7,7 @@ const {
   getHotel,
   createHotel,
   listHotels,
-} = require("../controllers/hotelController");
+} = require("../controllers/hotelsController");
 
 const {
   createInspection,
