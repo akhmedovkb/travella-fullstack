@@ -43,6 +43,19 @@ const first = (...vals) => {
   return "";
 };
 
+// проверяем, какие колонки реально есть в таблице
+async function tableHasColumns(table, cols = []) {
+  const q = await db.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_name = $1
+        AND column_name = ANY($2::text[])`,
+    [table, cols]
+  );
+  const set = new Set(q.rows.map((r) => r.column_name));
+  return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
+}
+
 // ─────────────── SEARCH ───────────────
 // GET /api/hotels/search?name=&city=&country=&limit=&lang=&ext=0
 // ext=0|false|off|local  → только локальная таблица (без GeoNames)
@@ -200,35 +213,38 @@ async function createHotel(req, res) {
   try {
     const p = req.body || {};
     const now = new Date();
+
     try {
-      const sql = `
-        INSERT INTO hotels
-          (name, country, city, address, currency,
-           rooms,            extra_bed_price, taxes,           amenities,        services,        images,
-           created_at, updated_at)
-        VALUES
-          ($1,   $2,      $3,   $4,     $5,
-           $6::jsonb,     $7::numeric,  $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb,
-           $12,       $12)
-        RETURNING id
-      `;
-      const params = [
-        (p.name || "").trim(),
-        p.country || null,
-        p.city || null,
-        p.address || null,
-        p.currency || "UZS",
-        JSON.stringify(p.rooms || []),
-        p.extraBedPrice ?? null,
-        JSON.stringify(p.taxes ?? {}),
-        JSON.stringify(Array.isArray(p.amenities) ? p.amenities : []),
-        JSON.stringify(Array.isArray(p.services) ? p.services : []),
-        JSON.stringify(p.images || []),
-        now,
-      ];
-      const { rows } = await db.query(sql, params);
+      // динамически учитываем только реально существующие колонки
+      const support = await tableHasColumns("hotels", [
+        "address", "currency", "rooms", "extra_bed_price", "taxes",
+        "amenities", "services", "images", "stars", "contact"
+      ]);
+
+      const cols = ["name", "country", "city"];
+      const vals = [(p.name || "").trim(), p.country || null, p.city || null];
+
+      if (support.address)         { cols.push("address");          vals.push(p.address || null); }
+      if (support.currency)        { cols.push("currency");         vals.push(p.currency || "UZS"); }
+      if (support.rooms)           { cols.push("rooms");            vals.push(JSON.stringify(p.rooms || [])); }
+      if (support.extra_bed_price) { cols.push("extra_bed_price");  vals.push(p.extraBedPrice ?? null); }
+      if (support.taxes)           { cols.push("taxes");            vals.push(JSON.stringify(p.taxes ?? {})); }
+      if (support.amenities)       { cols.push("amenities");        vals.push(JSON.stringify(Array.isArray(p.amenities) ? p.amenities : [])); }
+      if (support.services)        { cols.push("services");         vals.push(JSON.stringify(Array.isArray(p.services) ? p.services : [])); }
+      if (support.images)          { cols.push("images");           vals.push(JSON.stringify(p.images || [])); }
+      if (support.stars)           { cols.push("stars");            vals.push(p.stars ?? null); }
+      if (support.contact)         { cols.push("contact");          vals.push(p.contact ?? null); }
+
+      cols.push("created_at", "updated_at");
+      vals.push(now, now);
+
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
+      const sql = `INSERT INTO hotels (${cols.join(",")}) VALUES (${placeholders}) RETURNING id`;
+
+      const { rows } = await db.query(sql, vals);
       return res.json({ id: rows[0].id });
     } catch (err) {
+      // legacy-резерв на очень старых БД
       console.warn("[hotels.create] legacy fallback:", err?.message);
       const sqlFallback = `
         INSERT INTO hotels (name, location, created_at)
@@ -294,32 +310,34 @@ async function updateHotel(req, res) {
     const now = new Date();
 
     try {
-      const sql = `
-        UPDATE hotels SET
-          name=$1, country=$2, city=$3, address=$4, currency=$5,
-          rooms=$6::jsonb, extra_bed_price=$7::numeric, taxes=$8::jsonb,
-          amenities=$9::jsonb, services=$10::jsonb, images=$11::jsonb,
-          updated_at=$12
-        WHERE id=$13
-        RETURNING id
-      `;
-      const params = [
-        (p.name || "").trim(),
-        p.country || null,
-        p.city || null,
-        p.address || null,
-        p.currency || "UZS",
-        JSON.stringify(p.rooms || []),
-        p.extraBedPrice ?? null,
-        JSON.stringify(p.taxes ?? {}),
-        JSON.stringify(Array.isArray(p.amenities) ? p.amenities : []),
-        JSON.stringify(Array.isArray(p.services) ? p.services : []),
-        JSON.stringify(p.images || []),
-        now,
-        id,
-      ];
-      const { rows } = await db.query(sql, params);
-      if (!rows.length) return res.status(404).json({ error: "not_found" });
+      const support = await tableHasColumns("hotels", [
+        "address","currency","rooms","extra_bed_price","taxes",
+        "amenities","services","images","stars","contact"
+      ]);
+
+      const sets = ["name=$1", "country=$2", "city=$3"];
+      const params = [(p.name || "").trim(), p.country || null, p.city || null];
+      let i = params.length;
+
+      if (support.address)         { sets.push(`address=$${++i}`);         params.push(p.address || null); }
+      if (support.currency)        { sets.push(`currency=$${++i}`);        params.push(p.currency || "UZS"); }
+      if (support.rooms)           { sets.push(`rooms=$${++i}::jsonb`);    params.push(JSON.stringify(p.rooms || [])); }
+      if (support.extra_bed_price) { sets.push(`extra_bed_price=$${++i}`); params.push(p.extraBedPrice ?? null); }
+      if (support.taxes)           { sets.push(`taxes=$${++i}::jsonb`);    params.push(JSON.stringify(p.taxes ?? {})); }
+      if (support.amenities)       { sets.push(`amenities=$${++i}::jsonb`);params.push(JSON.stringify(Array.isArray(p.amenities) ? p.amenities : [])); }
+      if (support.services)        { sets.push(`services=$${++i}::jsonb`); params.push(JSON.stringify(Array.isArray(p.services) ? p.services : [])); }
+      if (support.images)          { sets.push(`images=$${++i}::jsonb`);   params.push(JSON.stringify(p.images || [])); }
+      if (support.stars)           { sets.push(`stars=$${++i}`);           params.push(p.stars ?? null); }
+      if (support.contact)         { sets.push(`contact=$${++i}`);         params.push(p.contact ?? null); }
+
+      sets.push(`updated_at=$${++i}`); params.push(now);
+
+      const whereIndex = i + 1; // следующий параметр — это id
+      params.push(id);
+
+      const sql = `UPDATE hotels SET ${sets.join(", ")} WHERE id=$${whereIndex} RETURNING id`;
+      const q = await db.query(sql, params);
+      if (!q.rows.length) return res.status(404).json({ error: "not_found" });
       return res.json({ id });
     } catch (err) {
       // legacy fallback — если нет новых колонок
