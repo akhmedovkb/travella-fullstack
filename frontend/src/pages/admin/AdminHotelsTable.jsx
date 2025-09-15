@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
-
-// временно, чисто для проверки
-const API_BASE = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
-const apiURL = (p) => `${API_BASE}${p}`;
+import { apiGet } from "../../api";
 
 function getToken() {
   return (
@@ -35,7 +31,7 @@ export default function AdminHotelsTable() {
     setLoading(true);
     try {
       // Без ввода search вернёт локальные записи (см. контроллер searchHotels)
-      const res = await httpGet("/api/hotels/search", {
+      const res = await apiGet(`/api/hotels/search?name=${encodeURIComponent(qName||"")}&city=${encodeURIComponent(qCity||"")}&limit=200`);
         params: { name: qName || "", city: qCity || "", limit: 200 },
       });
       setItems(Array.isArray(res) ? res : []);
