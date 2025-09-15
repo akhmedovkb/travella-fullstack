@@ -323,7 +323,7 @@ export default function Header() {
         />
 
         {isAdmin && (
-          <NavItem to="/admin/hotels/new" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+          <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
         )}
       </div>
 
