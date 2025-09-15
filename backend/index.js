@@ -145,6 +145,10 @@ app.use("/api/marketplace/sections", marketplaceSectionsRoutes);
 const moderationRoutes = require("./routes/moderationRoutes");
 app.use("/api/moderation", moderationRoutes);
 
+//квота GeoNames
+const monitorRoutes = require("./routes/monitorRoutes");
+app.use("/api/monitor", monitorRoutes);
+
 
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
