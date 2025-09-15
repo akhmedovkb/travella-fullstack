@@ -1,25 +1,8 @@
-//frontend/src/pages/admin/AdminHotelsTable.jsx
+// frontend/src/pages/admin/AdminHotelsTable.jsx
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
-
-function getToken() {
-  return (
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("clientToken") ||
-    null
-  );
-}
-function authHeaders() {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-async function httpGet(path, { params } = {}) {
-  const { data } = await axios.get(apiURL(path), { params, withCredentials: true, headers: authHeaders() });
-  return data;
-}
 
 export default function AdminHotelsTable() {
   const [items, setItems] = useState([]);
@@ -31,16 +14,21 @@ export default function AdminHotelsTable() {
     setLoading(true);
     try {
       // Без ввода search вернёт локальные записи (см. контроллер searchHotels)
-      const res = await apiGet(`/api/hotels/search?name=${encodeURIComponent(qName||"")}&city=${encodeURIComponent(qCity||"")}&limit=200`);
-        params: { name: qName || "", city: qCity || "", limit: 200 },
-      });
+      const res = await apiGet(
+        `/api/hotels/search?name=${encodeURIComponent(qName || "")}&city=${encodeURIComponent(
+          qCity || ""
+        )}&limit=200`
+      );
       setItems(Array.isArray(res) ? res : []);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []); // первый загруз
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="max-w-5xl mx-auto bg-white rounded-xl border shadow-sm p-5">
@@ -81,30 +69,36 @@ export default function AdminHotelsTable() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={4} className="px-3 py-3">Загрузка…</td></tr>
-            )}
-            {!loading && items.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-3">Ничего не найдено</td></tr>
-            )}
-            {!loading && items.map((h) => (
-              <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
-                <td className="px-3 py-2">{h.id ?? "—"}</td>
-                <td className="px-3 py-2">{h.name}</td>
-                <td className="px-3 py-2">{h.city || "—"}</td>
-                <td className="px-3 py-2">
-                  {h.id ? (
-                    <Link
-                      to={`/admin/hotels/${h.id}/edit`}
-                      className="px-2 py-1 rounded border hover:bg-gray-50"
-                    >
-                      Править
-                    </Link>
-                  ) : (
-                    <span className="text-gray-400">локальная подсказка</span>
-                  )}
+              <tr>
+                <td colSpan={4} className="px-3 py-3">
+                  Загрузка…
                 </td>
               </tr>
-            ))}
+            )}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-3">
+                  Ничего не найдено
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              items.map((h) => (
+                <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
+                  <td className="px-3 py-2">{h.id ?? "—"}</td>
+                  <td className="px-3 py-2">{h.name}</td>
+                  <td className="px-3 py-2">{h.city || "—"}</td>
+                  <td className="px-3 py-2">
+                    {h.id ? (
+                      <Link to={`/admin/hotels/${h.id}/edit`} className="px-2 py-1 rounded border hover:bg-gray-50">
+                        Править
+                      </Link>
+                    ) : (
+                      <span className="text-gray-400">локальная подсказка</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
