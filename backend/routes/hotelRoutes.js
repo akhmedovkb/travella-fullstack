@@ -29,4 +29,7 @@ router.post("/:hotelId/inspections", createInspection);
 // (опционально) список без фильтра
 // router.get("/_list/all", listHotels);
 
+// routes/hotels.js
+router.put("/api/hotels/:id", requireProviderAuth, hotels.updateHotel);
+
 module.exports = router;
