@@ -123,6 +123,12 @@ export default function AdminHotelForm() {
   const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
   const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
 
+   // стили для ячеек по сезону
+ const tdCls = (season, extra = "") =>
+   `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
+ const inputCls = (season) =>
+   `w-24 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
+
   // Номера + сезонные цены
     const blankRow = (base) => ({
     ...base,
@@ -505,36 +511,30 @@ export default function AdminHotelForm() {
               <th className="text-left px-3 py-2">
                 {t("count_short",{defaultValue:"Кол-во"})}
               </th>
-              <th className="px-3 py-2 text-center" colSpan={10}>
+              <th className="px-3 py-2 text-center bg-white" colSpan={10}>
                 {t("low_season",{defaultValue:"Низкий сезон"})}
               </th>
-              <th className="px-3 py-2 text-center" colSpan={10}>
+              <th className="px-3 py-2 text-center bg-gray-100 border-l border-gray-200" colSpan={10}>
                 {t("high_season",{defaultValue:"Высокий сезон"})}
               </th>
               <th className="w-[1%] px-3 py-2"></th>
             </tr>
             <tr className="bg-gray-50">
               <th></th><th></th>
-              <th className="text-center px-3 py-1" colSpan={5}>
-                {t("for_residents",{defaultValue:"Для резидентов"})}
-              </th>
-              <th className="text-center px-3 py-1" colSpan={5}>
-                {t("for_nonresidents",{defaultValue:"Для нерезидентов"})}
-              </th>
-              <th className="text-center px-3 py-1" colSpan={5}>
-                {t("for_residents",{defaultValue:"Для резидентов"})}
-              </th>
-              <th className="text-center px-3 py-1" colSpan={5}>
-                {t("for_nonresidents",{defaultValue:"Для нерезидентов"})}
-              </th>
+                    <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+                    <th className="text-center px-3 py-1 bg-white" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
+                    <th className="text-center px-3 py-1 bg-gray-100 border-l border-gray-200" colSpan={5}>{t("for_residents",{defaultValue:"Для резидентов"})}</th>
+                    <th className="text-center px-3 py-1 bg-gray-100" colSpan={5}>{t("for_nonresidents",{defaultValue:"Для нерезидентов"})}</th>
               <th></th>
             </tr>
             <tr className="bg-gray-50 text-xs">
               <th></th><th></th>
-              {MEAL_PLANS.map((mp) => (<th key={`low-res-${mp}`} className="px-2 py-1">{mp}</th>))}
-              {MEAL_PLANS.map((mp) => (<th key={`low-non-${mp}`} className="px-2 py-1">{mp}</th>))}
-              {MEAL_PLANS.map((mp) => (<th key={`high-res-${mp}`} className="px-2 py-1">{mp}</th>))}
-              {MEAL_PLANS.map((mp) => (<th key={`high-non-${mp}`} className="px-2 py-1">{mp}</th>))}
+                    {MEAL_PLANS.map((mp) => (<th key={`low-res-${mp}`} className="px-2 py-1 bg-white">{mp}</th>))}
+                    {MEAL_PLANS.map((mp) => (<th key={`low-non-${mp}`} className="px-2 py-1 bg-white">{mp}</th>))}
+                    {MEAL_PLANS.map((mp, i) => (
+                      <th key={`high-res-${mp}`} className={`px-2 py-1 bg-gray-100 ${i===0 ? "border-l border-gray-200" : ""}`}>{mp}</th>
+                    ))}
+                    {MEAL_PLANS.map((mp) => (<th key={`high-non-${mp}`} className="px-2 py-1 bg-gray-100">{mp}</th>))}
               <th></th>
             </tr>
           </thead>
@@ -565,10 +565,10 @@ export default function AdminHotelForm() {
 
                                 {/* low / resident */}
                 {MEAL_PLANS.map((mp) => (
-                  <td className="px-2 py-1" key={`${row.id}-low-res-${mp}`}>
+                  <td className={tdCls("low")} key={`${row.id}-low-res-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
-                      className="w-24 border rounded px-2 py-1"
+                      className={inputCls("low")}
                       placeholder={currency}
                       value={row.prices.low.resident[mp] ?? ""}
                       onChange={(e) => updateMealPrice(row.id, "low", "resident", mp, e.target.value)}
@@ -577,10 +577,10 @@ export default function AdminHotelForm() {
                 ))}
                 {/* low / nonresident */}
                 {MEAL_PLANS.map((mp) => (
-                  <td className="px-2 py-1" key={`${row.id}-low-non-${mp}`}>
+                  <td className={tdCls("low")} key={`${row.id}-low-non-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
-                      className="w-24 border rounded px-2 py-1"
+                      className={inputCls("low")}
                       placeholder={currency}
                       value={row.prices.low.nonResident[mp] ?? ""}
                       onChange={(e) => updateMealPrice(row.id, "low", "nonResident", mp, e.target.value)}
@@ -589,10 +589,10 @@ export default function AdminHotelForm() {
                 ))}
                 {/* high / resident */}
                 {MEAL_PLANS.map((mp) => (
-                  <td className="px-2 py-1" key={`${row.id}-high-res-${mp}`}>
+                 <td className={tdCls("high", i===0 ? "border-l border-gray-200" : "")} key={`${row.id}-high-res-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
-                      className="w-24 border rounded px-2 py-1"
+                      className={inputCls("high")}
                       placeholder={currency}
                       value={row.prices.high.resident[mp] ?? ""}
                       onChange={(e) => updateMealPrice(row.id, "high", "resident", mp, e.target.value)}
@@ -601,10 +601,10 @@ export default function AdminHotelForm() {
                 ))}
                 {/* high / nonresident */}
                 {MEAL_PLANS.map((mp) => (
-                  <td className="px-2 py-1" key={`${row.id}-high-non-${mp}`}>
+                  <td className={tdCls("high")} key={`${row.id}-high-non-${mp}`}>
                     <input
                       type="number" min={0} step="0.01"
-                      className="w-24 border rounded px-2 py-1"
+                      className={inputCls("high")}
                       placeholder={currency}
                       value={row.prices.high.nonResident[mp] ?? ""}
                       onChange={(e) => updateMealPrice(row.id, "high", "nonResident", mp, e.target.value)}
