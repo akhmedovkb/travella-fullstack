@@ -7,6 +7,7 @@ import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
 import { createHotel, searchHotels } from "../../api/hotels";
+import GeoNamesStatusBadge from "../../components/GeoNamesStatusBadge";
 import { tSuccess, tError } from "../../shared/toast";
 
 /* ---------- Room types ---------- */
@@ -371,6 +372,7 @@ export default function AdminHotelForm() {
   /* ==================== UI ==================== */
   return (
     <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
+      <div className="mb-3"><GeoNamesStatusBadge /></div>
       <h1 className="text-2xl font-bold mb-4">
         {t("admin.new_hotel_title", { defaultValue: "Новый отель" })}
       </h1>
