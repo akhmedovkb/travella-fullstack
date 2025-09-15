@@ -1,6 +1,7 @@
 // frontend/src/pages/Hotels.jsx
 import { useEffect, useState } from "react";
 import { searchHotels } from "../api/hotels"; // <-- используем централизованный API-клиент
+import { Link } from "react-router-dom";
 
 export default function Hotels() {
   const [items, setItems] = useState([]);
@@ -63,12 +64,20 @@ export default function Hotels() {
               <tr><td colSpan={3} className="px-3 py-3">Ничего не найдено</td></tr>
             )}
             {!loading && items.map((h) => (
-              <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
-                <td className="px-3 py-2">{h.id ?? "—"}</td>
-                <td className="px-3 py-2">{h.name}</td>
-                <td className="px-3 py-2">{h.city || "—"}</td>
-              </tr>
-            ))}
+                <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
+                  <td className="px-3 py-2">{h.id ?? "—"}</td>
+                  <td className="px-3 py-2">
+                    {h.id ? (
+                      <Link to={`/hotels/${h.id}`} className="text-orange-600 hover:underline">
+                        {h.name}
+                      </Link>
+                    ) : (
+                      h.name
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{h.city || "—"}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
