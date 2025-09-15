@@ -1,4 +1,4 @@
-//backend/routes/hotelRoutes.js
+// backend/routes/hotelRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -7,6 +7,7 @@ const {
   getHotel,
   createHotel,
   listHotels,
+  updateHotel, // добавили апдейт
 } = require("../controllers/hotelsController");
 
 const {
@@ -14,22 +15,37 @@ const {
   listInspections,
 } = require("../controllers/hotelInspectionController");
 
-// поиск
+// ── Мягкий фолбек для мидлвара авторизации провайдера ──
+// если файла нет — просто пропускаем запросы (не ломаем прод)
+let requireProviderAuth = (req, _res, next) => next();
+try {
+  // eslint-disable-next-line global-require, import/no-unresolved
+  ({ requireProviderAuth } = require("../middlewares/auth"));
+} catch (_e) {
+  console.warn("[hotelRoutes] middlewares/auth not found — running without provider auth");
+}
+
+/** 
+ * ВАЖНО: все пути здесь относительные к префиксу, 
+ * с которым вы монтируете роутер: app.use("/api/hotels", router)
+ */
+
+// Поиск
 router.get("/search", searchHotels);
-router.get("/", searchHotels); // алиас
+router.get("/", searchHotels); // алиас: без параметров вернёт список локальных по алфавиту
 
-// карточка / создание
+// Доп. список без фильтра (для админов — удобно листать/редактировать)
+router.get("/_list/all", listHotels);
+
+// Создание/обновление (можно защитить мидлваром авторизации провайдера)
+router.post("/", requireProviderAuth, createHotel);
+router.put("/:id", requireProviderAuth, updateHotel);
+
+// Карточка отеля
 router.get("/:id", getHotel);
-router.post("/", createHotel);
 
-// инспекции
+// Инспекции
 router.get("/:hotelId/inspections", listInspections);
-router.post("/:hotelId/inspections", createInspection);
-
-// (опционально) список без фильтра
-// router.get("/_list/all", listHotels);
-
-// routes/hotels.js
-router.put("/api/hotels/:id", requireProviderAuth, hotels.updateHotel);
+router.post("/:hotelId/inspections", requireProviderAuth, createInspection);
 
 module.exports = router;
