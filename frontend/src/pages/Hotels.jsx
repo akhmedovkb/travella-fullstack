@@ -93,40 +93,36 @@ export default function Hotels() {
       </form>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-[800px] text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left px-3 py-2 w-[80px]">ID</th>
-              <th className="text-left px-3 py-2">Название</th>
-              <th className="text-left px-3 py-2 w-[220px]">Город</th>
-              <th className="text-left px-3 py-2 w-[140px]">{labelCol}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={4} className="px-3 py-3">Загрузка…</td></tr>
-            )}
-            {!loading && items.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-3">Ничего не найдено</td></tr>
-            )}
-            {!loading && items.map((h) => (
-              <tr key={h.id || `${h.name}-${h.city}`} className="border-t">
-                <td className="px-3 py-2">{h.id ?? "—"}</td>
-                <td className="px-3 py-2">
-                  {h.id
-                    ? <Link className="text-orange-600 hover:underline" to={`/hotels/${h.id}`}>{h.name}</Link>
-                    : h.name}
-                </td>
-                <td className="px-3 py-2">{h.city || "—"}</td>
-                <td className="px-3 py-2">
-                  {tab === "new"
-                    ? fmtDate(h.created_at)
-                    : (h.score != null ? Number(h.score).toFixed(1) : "—")}
-                </td>
+        <table className="w-full table-auto border-collapse">
+            <thead>
+              <tr className="text-left text-gray-600">
+                <th className="px-4 py-3 font-semibold w-1/2">Название</th>
+                <th className="px-4 py-3 font-semibold w-1/4">Город</th>
+                <th className="px-4 py-3 font-semibold w-1/4">Оценка</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {items.length ? (
+                items.map((h) => (
+                  <tr key={h.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
+                        {h.name}
+                      </NavLink>
+                    </td>
+                    <td className="px-4 py-3">{h.city || "—"}</td>
+                    <td className="px-4 py-3">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={3}>
+                    Ничего не найдено
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
       </div>
 
       {(qName || qCity) && (
