@@ -1,56 +1,86 @@
 // frontend/src/pages/HotelInspections.jsx
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
+import { apiGet } from "../api";
 
-/* ===== Ссылка на автора (кликабельная, если есть id/URL) ===== */
+/* ---------- ВСПОМОГАТЕЛЬНЫЕ ---------- */
+function toInt(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* ---------- Кликабельный автор ---------- */
 function AuthorLink({ item }) {
-  const name =
-    item.author_name ||
-    item.authorName ||
-    item.provider_name ||
-    "провайдер";
-
-  // возможные поля с id провайдера/автора
-  const authorId =
-    item.author_provider_id ??
-    item.provider_id ??
-    item.author_id ??
-    item.providerId ??
+  const providerId =
+    toInt(item?.author_provider_id) ??
+    toInt(item?.provider_id) ??
+    toInt(item?.author_id) ??
     null;
 
-  // возможный готовый URL профиля от бэка
-  const rawUrl = item.author_profile_url || item.profile_url || null;
+  // если с бэка уже пришла готовая ссылка — используем её
+  const readyUrl = item?.author_profile_url || item?.profile_url || null;
 
-  // если есть id — используем внутренний роут профиля провайдера
-  const internalUrl = authorId ? `/profile/provider/${authorId}` : null;
-  const isExternal = rawUrl && /^https?:\/\//i.test(rawUrl);
-  const url = internalUrl || rawUrl || null;
+  const [name, setName] = useState(
+    item?.author_name ||
+      item?.authorName ||
+      item?.provider_name ||
+      "провайдер"
+  );
+
+  const url =
+    readyUrl ||
+    (providerId ? `/profile/provider/${providerId}` : null);
+
+  // Подтягиваем нормальное название, если есть id провайдера
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!providerId) return;
+      try {
+        // пробуем несколько синонимов: /providers/:id и /provider/:id
+        const tryUrls = [
+          `/api/providers/${providerId}`,
+          `/api/provider/${providerId}`,
+          `/api/companies/${providerId}`,
+          `/api/company/${providerId}`,
+        ];
+        for (const u of tryUrls) {
+          try {
+            const res = await apiGet(u);
+            const profile =
+              res?.provider || res?.company || res?.data || res?.item || res || null;
+            const label =
+              profile?.display_name ||
+              profile?.company_name ||
+              profile?.brand ||
+              profile?.name ||
+              profile?.title ||
+              null;
+            if (label && alive) {
+              setName(label);
+              break;
+            }
+          } catch {
+            /* пробуем следующий эндпоинт */
+          }
+        }
+      } catch {
+        /* игнор */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [providerId]);
 
   return (
     <div className="text-sm text-gray-500">
       Автор:{" "}
       {url ? (
-        isExternal ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-700 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {name}
-          </a>
-        ) : (
-          <Link
-            to={url}
-            className="text-blue-700 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {name}
-          </Link>
-        )
+        <Link to={url} className="text-blue-700 hover:underline" onClick={(e) => e.stopPropagation()}>
+          {name}
+        </Link>
       ) : (
         name
       )}
@@ -58,7 +88,7 @@ function AuthorLink({ item }) {
   );
 }
 
-/* ===== Карточка инспекции ===== */
+/* ---------- Карточка инспекции ---------- */
 function Card({ item, onLike }) {
   return (
     <div className="bg-white border rounded-xl p-4 shadow-sm">
@@ -107,7 +137,7 @@ function Card({ item, onLike }) {
   );
 }
 
-/* ===== Форма новой инспекции ===== */
+/* ---------- Форма новой инспекции ---------- */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [author, setAuthor] = useState("");
   const [review, setReview] = useState("");
@@ -126,7 +156,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         new Promise((res) => {
           const fr = new FileReader();
           fr.onload = () => res(fr.result);
-          fr.readAsDataURL(f); // сохраняем как dataURL
+          fr.readAsDataURL(f);
         })
     );
     const list = await Promise.all(readers);
@@ -150,8 +180,10 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         cons: cons || undefined,
         features: features || undefined,
         media,
+        // если позже добавите свой id провайдера — просто положите сюда:
+        // author_provider_id: myProviderId,
       });
-      onCreated?.(); // обновим список/уйдем со страницы
+      onCreated?.();
     } catch {
       setError("Не удалось сохранить инспекцию");
     } finally {
@@ -272,7 +304,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   );
 }
 
-/* ===== Страница инспекций ===== */
+/* ---------- Страница ---------- */
 export default function HotelInspections() {
   const { hotelId } = useParams();
   const [search] = useSearchParams();
@@ -297,23 +329,30 @@ export default function HotelInspections() {
   const load = async () => {
     try {
       const res = await listInspections(hotelId, { sort });
-      setItems(res.items || []);
+      // нормализуем media (могут быть строкой JSON в старых данных)
+      const norm = (res.items || []).map((x) => ({
+        ...x,
+        media: Array.isArray(x.media)
+          ? x.media
+          : (typeof x.media === "string" ? (JSON.parse(x.media || "[]")) : []),
+      }));
+      setItems(norm);
     } catch {
       setItems([]);
     }
   };
 
   useEffect(() => {
-    if (!isNew) load(); // eslint-disable-next-line
+    if (!isNew) load(); // eslint-disable-line react-hooks/exhaustive-deps
   }, [hotelId, sort, isNew]);
 
   const onLike = async (item) => {
     try {
       await likeInspection(item.id);
+      setItems((prev) =>
+        prev.map((x) => (x.id === item.id ? { ...x, likes: (x.likes || 0) + 1 } : x))
+      );
     } catch {}
-    setItems((prev) =>
-      prev.map((x) => (x.id === item.id ? { ...x, likes: (x.likes || 0) + 1 } : x))
-    );
   };
 
   return (
