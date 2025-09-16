@@ -346,7 +346,10 @@
     "request_already_sent": "You have already sent this request",
     "self_request_forbidden": "You cannot send a quick request to yourself!",
     "service_unknown": "Service not found",
-    "tab_load": "Failed to load tab"
+    "tab_load": "Failed to load tab",
+    "write_review": "Please write a general review",
+    "save_failed": "Failed to save the inspection",
+    "only_providers": "Only authenticated providers/agents can leave inspections. Please sign in to the provider dashboard."
     },
 
   "event_category_concert": "Concert",
@@ -407,6 +410,26 @@
   "hotel_transfer": "Hotel transfer",
   "hotel.no_options": "No options",
   "hotel.search_placeholder": "Enter hotel name",
+
+    "hotels": {
+    "inspections": {
+      "sort": { "top": "Most liked first", "new": "Newest first" },
+      "new": {
+        "title": "New inspection",
+        "author_auto_hint": "Author will be taken automatically from your provider profile.",
+        "review_label": "General review",
+        "pros": "Pros",
+        "cons": "Cons",
+        "features": "Highlights",
+        "add_photos": "Add photos",
+        "no_photos": "no photos selected",
+        "selected_n": "selected: {{count}}",
+        "save": "Save",
+        "saving": "Saving…",
+        "list_empty": "No inspections yet"
+      }
+    }
+  },
 
   "images_hint": "Up to 10 images, each ≤ 3 MB",
   "inf": "Infants (INF)",
