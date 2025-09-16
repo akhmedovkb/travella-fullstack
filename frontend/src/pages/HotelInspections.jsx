@@ -1,4 +1,5 @@
-// frontend/src/pages/HotelInspections.jsximport { useEffect, useMemo, useState } from "react";
+// frontend/src/pages/HotelInspections.jsx
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
 
