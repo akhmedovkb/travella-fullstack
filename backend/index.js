@@ -85,6 +85,11 @@ app.use("/api/providers", providerRoutes);
 const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
+const hotels = require("./controllers/hotelsController");
+app.get("/api/hotels/:id/inspections", hotels.listHotelInspections);
+app.post("/api/hotels/:id/inspections", hotels.createHotelInspection);
+app.post("/api/inspections/:id/like", hotels.likeInspection);
+
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
 
