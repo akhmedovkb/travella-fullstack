@@ -90,7 +90,7 @@ function Card({ item, onLike }) {
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [author, setAuthor] = useState("");
   const [review, setReview] = useState("");
-  the const [pros, setPros] = useState("");
+  const [pros, setPros] = useState("");
   const [cons, setCons] = useState("");
   const [features, setFeatures] = useState("");
   const [media, setMedia] = useState([]);
