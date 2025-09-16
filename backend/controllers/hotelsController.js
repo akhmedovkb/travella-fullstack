@@ -483,19 +483,37 @@ async function createHotelInspection(req, res) {
   try {
     await ensureInspectionsTable();
 
-    // берём id провайдера из тела запроса (если фронт передаёт),
-    // либо из токена (на будущее, если будет authenticateToken)
-    const user = req.user || {};
+    // --- Извлечение провайдера из токена (разные варианты имён) ---
+    const u = req.user || {};
+    const role = (u.role || u.type || "").toString().toLowerCase();
+
+    const providerIdFromToken =
+      parseIntSafe(u.provider_id) ??
+      parseIntSafe(u.providerId) ??
+      parseIntSafe(u.company_id) ??
+      parseIntSafe(u.companyId) ??
+      // на некоторых инсталляциях у провайдера id хранится как общий u.id
+      (role === "provider" ? parseIntSafe(u.id) : null);
+
+    // --- Источник из body (если фронт отправляет явно) + токен как фолбэк ---
     const authorProviderId =
       parseIntSafe(p.author_provider_id) ??
       parseIntSafe(p.provider_id) ??
+      parseIntSafe(p.providerId) ??
       parseIntSafe(p.author_id) ??
-      parseIntSafe(user.provider_id) ??
+      parseIntSafe(p.authorId) ??
+      providerIdFromToken ??
       null;
 
+    // Разрешаем создавать только при наличии провайдера
+    if (!authorProviderId) {
+      return res.status(403).json({ error: "provider_required" });
+    }
+
+    // Имя автора: из body, либо из токена (компания/провайдер/имя), иначе «провайдер»
     const nameFinal =
       first(p.author_name) ||
-      first(user.company_name, user.provider_name, user.name) ||
+      first(u.company_name, u.provider_name, u.name, u.companyName, u.display_name) ||
       "провайдер";
 
     const mediaArr = Array.isArray(p.media) ? p.media.slice(0, 12) : [];
@@ -503,8 +521,7 @@ async function createHotelInspection(req, res) {
     const { rows } = await db.query(
       `INSERT INTO inspections
          (hotel_id, author_name, author_provider_id, review, pros, cons, features, media, likes)
-       VALUES
-         ($1,       $2,          $3,                 $4,    $5,   $6,   $7,       $8::jsonb, 0)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,0)
        RETURNING id`,
       [
         hotelId,
@@ -524,7 +541,6 @@ async function createHotelInspection(req, res) {
     res.status(500).json({ error: "create_failed" });
   }
 }
-
 // POST /api/inspections/:id/like
 async function likeInspection(req, res) {
   const id = parseIntSafe(req.params.id);
