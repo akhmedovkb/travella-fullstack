@@ -383,6 +383,15 @@
   "hotel.search_placeholder": "Введите название отеля",
 
   "hotels": {
+    "title": "Отели",
+    "tabs": { "top": "Топ", "popular": "Популярные", "new": "Новые" },
+    "search_by_name": "Поиск по названию",
+    "city_placeholder": "Город",
+    "find_btn": "Найти",
+    "searching": "Поиск...",
+    "col": { "name": "Название", "city": "Город", "rating": "Оценка" },
+    "empty": "Ничего не найдено",
+    
     "inspections": {
       "sort": {
         "top": "Сначала с большим числом лайков",
