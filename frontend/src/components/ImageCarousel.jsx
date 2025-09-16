@@ -1,3 +1,5 @@
+//frontend/src/components/ImageCarousel.jsx
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export default function ImageCarousel({ images = [], className = "" }) {
