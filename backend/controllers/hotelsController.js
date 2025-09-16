@@ -408,11 +408,121 @@ async function updateHotel(req, res) {
   }
 }
 
+
+
+// === INSPECTIONS ============================================================
+
+async function ensureInspectionsTable() {
+  // создаём таблицу, если её ещё нет (работает на Railway/Postgres)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS inspections (
+      id          SERIAL PRIMARY KEY,
+      hotel_id    INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+      author_name TEXT,
+      review      TEXT,
+      pros        TEXT,
+      cons        TEXT,
+      features    TEXT,
+      media       JSONB,
+      likes       INTEGER DEFAULT 0,
+      created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    )
+  `);
+}
+
+function parseIntSafe(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// GET /api/hotels/:id/inspections?sort=top|new
+async function listHotelInspections(req, res) {
+  const hotelId = parseIntSafe(req.params.id);
+  if (!hotelId) return res.status(400).json({ items: [] });
+
+  try {
+    await ensureInspectionsTable();
+
+    const sort = String(req.query.sort || "top").toLowerCase();
+    const order =
+      sort === "new"
+        ? `created_at DESC, id DESC`
+        : `COALESCE(likes,0) DESC, created_at DESC`;
+
+    const q = await db.query(
+      `SELECT id, hotel_id, author_name, review, pros, cons, features, media, likes, created_at
+         FROM inspections
+        WHERE hotel_id = $1
+        ORDER BY ${order}
+        LIMIT 200`,
+      [hotelId]
+    );
+    res.json({ items: q.rows || [] });
+  } catch (e) {
+    console.error("listHotelInspections error", e);
+    res.status(500).json({ items: [] });
+  }
+}
+
+// POST /api/hotels/:id/inspections
+async function createHotelInspection(req, res) {
+  const hotelId = parseIntSafe(req.params.id);
+  if (!hotelId) return res.status(400).json({ error: "bad_hotel_id" });
+
+  const p = req.body || {};
+  try {
+    await ensureInspectionsTable();
+
+    const { rows } = await db.query(
+      `INSERT INTO inspections (hotel_id, author_name, review, pros, cons, features, media, likes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING id`,
+      [
+        hotelId,
+        p.author_name || null,
+        p.review || null,
+        p.pros || null,
+        p.cons || null,
+        p.features || null,
+        Array.isArray(p.media) ? JSON.stringify(p.media) : JSON.stringify([]),
+        0,
+      ]
+    );
+    res.json({ id: rows[0].id });
+  } catch (e) {
+    console.error("createHotelInspection error", e);
+    res.status(500).json({ error: "create_failed" });
+  }
+}
+
+// POST /api/inspections/:id/like
+async function likeInspection(req, res) {
+  const id = parseIntSafe(req.params.id);
+  if (!id) return res.status(400).json({ error: "bad_id" });
+  try {
+    await ensureInspectionsTable();
+    const { rows } = await db.query(
+      `UPDATE inspections SET likes = COALESCE(likes,0) + 1 WHERE id=$1 RETURNING id, likes`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "not_found" });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error("likeInspection error", e);
+    res.status(500).json({ error: "like_failed" });
+  }
+}
+
 module.exports = {
+  // было:
   searchHotels,
-  listRankedHotels,   // <-- НОВОЕ
+  listRankedHotels,
   createHotel,
   getHotel,
   listHotels,
   updateHotel,
+  // добавили:
+  listHotelInspections,
+  createHotelInspection,
+  likeInspection,
 };
