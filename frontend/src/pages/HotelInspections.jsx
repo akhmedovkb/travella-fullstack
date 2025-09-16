@@ -1,10 +1,9 @@
 // frontend/src/pages/HotelInspections.jsx
-
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
 
-/* --- ссылка на автора (кликабельная, если есть id/URL) --- */
+/* ===== Ссылка на автора (кликабельная, если есть id/URL) ===== */
 function AuthorLink({ item }) {
   const name =
     item.author_name ||
@@ -12,23 +11,45 @@ function AuthorLink({ item }) {
     item.provider_name ||
     "провайдер";
 
-  // Пытаемся построить URL профиля из доступных полей.
-  // Приоритет: готовый URL → id провайдера → id автора → id пользователя/клиента.
-  const url =
-    item.author_profile_url ||
-    item.profile_url ||
-    (item.provider_id ? `/providers/${item.provider_id}` : null) ||
-    (item.author_id ? `/providers/${item.author_id}` : null) ||
-    (item.user_id ? `/users/${item.user_id}` : null) ||
-    (item.client_id ? `/clients/${item.client_id}` : null);
+  // возможные поля с id провайдера/автора
+  const authorId =
+    item.author_provider_id ??
+    item.provider_id ??
+    item.author_id ??
+    item.providerId ??
+    null;
+
+  // возможный готовый URL профиля от бэка
+  const rawUrl = item.author_profile_url || item.profile_url || null;
+
+  // если есть id — используем внутренний роут профиля провайдера
+  const internalUrl = authorId ? `/profile/provider/${authorId}` : null;
+  const isExternal = rawUrl && /^https?:\/\//i.test(rawUrl);
+  const url = internalUrl || rawUrl || null;
 
   return (
     <div className="text-sm text-gray-500">
       Автор:{" "}
       {url ? (
-        <Link to={url} className="text-blue-700 hover:underline">
-          {name}
-        </Link>
+        isExternal ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-700 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {name}
+          </a>
+        ) : (
+          <Link
+            to={url}
+            className="text-blue-700 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {name}
+          </Link>
+        )
       ) : (
         name
       )}
@@ -36,11 +57,10 @@ function AuthorLink({ item }) {
   );
 }
 
-/* --- карточка инспекции --- */
+/* ===== Карточка инспекции ===== */
 function Card({ item, onLike }) {
   return (
     <div className="bg-white border rounded-xl p-4 shadow-sm">
-      {/* было: <div className="text-sm text-gray-500">Автор: {item.author_name || "провайдер"}</div> */}
       <AuthorLink item={item} />
 
       <div className="mt-1 whitespace-pre-wrap">{item.review}</div>
@@ -86,7 +106,7 @@ function Card({ item, onLike }) {
   );
 }
 
-/* --- форма новой инспекции --- */
+/* ===== Форма новой инспекции ===== */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [author, setAuthor] = useState("");
   const [review, setReview] = useState("");
@@ -131,7 +151,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         media,
       });
       onCreated?.(); // обновим список/уйдем со страницы
-    } catch (e) {
+    } catch {
       setError("Не удалось сохранить инспекцию");
     } finally {
       setSaving(false);
@@ -251,6 +271,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   );
 }
 
+/* ===== Страница инспекций ===== */
 export default function HotelInspections() {
   const { hotelId } = useParams();
   const [search] = useSearchParams();
@@ -280,6 +301,7 @@ export default function HotelInspections() {
       setItems([]);
     }
   };
+
   useEffect(() => {
     if (!isNew) load(); // eslint-disable-next-line
   }, [hotelId, sort, isNew]);
@@ -287,13 +309,12 @@ export default function HotelInspections() {
   const onLike = async (item) => {
     try {
       await likeInspection(item.id);
-      setItems((prev) =>
-        prev.map((x) => (x.id === item.id ? { ...x, likes: (x.likes || 0) + 1 } : x))
-      );
     } catch {}
+    setItems((prev) =>
+      prev.map((x) => (x.id === item.id ? { ...x, likes: (x.likes || 0) + 1 } : x))
+    );
   };
 
-  /* ---------- Рендер ---------- */
   return (
     <div className="max-w-5xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
