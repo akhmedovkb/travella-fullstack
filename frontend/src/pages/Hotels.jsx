@@ -120,21 +120,22 @@ export default function HotelsPage() {
   useEffect(() => { run(tab); /* eslint-disable react-hooks/exhaustive-deps */ }, [tab]);
 
   // ---------------- ui helpers ----------------
-  const TabBtn = ({ value, children }) => (
-    <button
-      type="button"
-      onClick={() => setTab(value)}
-      disabled={loading}
-      className={[
-                "px-3 py-1.5 rounded-full text-sm font-semibold",
-        loading ? "opacity-60 cursor-not-allowed" : "",
-        tab === value ? "bg-orange-100 text-orange-700" : "text-gray-600 hover:bg-gray-100"
-       ].join(" ")}
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
+  cconst TabBtn = ({ value, children }) => (
+  <button
+    type="button"
+    onClick={() => setTab(value)}
+    disabled={loading}
+    className={[
+      "px-3 py-1.5 rounded-full text-sm font-semibold",
+      loading ? "opacity-60 cursor-not-allowed" : "",
+      tab === value ? "bg-orange-100 text-orange-700" : "text-gray-600 hover:bg-gray-100",
+    ].join(" ")}
+  >
+    {children}
+  </button>
+);
+
+
 
   const onFind = async (e) => {
     e.preventDefault();
