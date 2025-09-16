@@ -1,6 +1,10 @@
 // frontend/src/api/hotels.js
 import { apiGet, apiPost, apiPut } from "../api";
 
+export async function listRanked({ type = "top", limit = 20 } = {}) {
+  return apiGet(`/api/hotels/ranked?type=${encodeURIComponent(type)}&limit=${limit}`, false);
+}
+
 /** Публичный поиск отелей */
 export async function searchHotels({ name = "", city = "", country = "", page = 1, limit = 50 } = {}) {
   const qs = new URLSearchParams();
