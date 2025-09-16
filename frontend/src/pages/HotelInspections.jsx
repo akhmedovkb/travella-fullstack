@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
 import { apiGet } from "../api";
+import { useTranslation } from "react-i18next";
 
 /* ---------- ВСПОМОГАТЕЛЬНЫЕ ---------- */
 function toInt(v) {
@@ -136,9 +137,6 @@ function Card({ item, onLike }) {
     </div>
   );
 }
-
-/* ---------- Форма новой инспекции ---------- */
-import { useTranslation } from "react-i18next";
 
 /* --- форма новой инспекции (без поля Автор; с i18n) --- */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
