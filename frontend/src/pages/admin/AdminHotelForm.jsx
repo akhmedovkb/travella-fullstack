@@ -242,6 +242,7 @@ export default function AdminHotelForm() {
     setAddress(h?.address || "");
     setCurrency(h?.currency || "UZS");
     setImages(Array.isArray(h?.images) ? h.images : []);
+    setStars(h?.stars ?? ""); // ← добавлено
     setAmenities(Array.isArray(h?.amenities) ? h.amenities : []);
     setServices(Array.isArray(h?.services) ? h.services : []);
     setCountryOpt(h?.country ? { value: h.country, code: "", label: h.country } : null);
@@ -302,6 +303,16 @@ export default function AdminHotelForm() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [images, setImages] = useState([]);
+
+    // Категория отеля (звёзды)
+  const [stars, setStars] = useState("");
+
+  // ограничитель 1..7 (или null)
+  const clampStars = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.min(7, Math.max(1, Math.trunc(n)));
+  };
 
   // Валюта единого прайса/сборов
   const [currency, setCurrency] = useState("UZS");
@@ -568,6 +579,7 @@ export default function AdminHotelForm() {
       city: cityOpt?.label || null,
       address: address.trim(),
       currency,
+      stars: clampStars(stars),
       rooms,
       extraBedPrice: numOrNull(extraBedPrice),
       taxes: {
@@ -611,23 +623,42 @@ export default function AdminHotelForm() {
       {/* Базовая информация */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Название отеля */}
-        <div className="col-span-2">
-          <label className="block text-sm font-medium mb-1">
-            {t("name", { defaultValue: "Название" })}
-          </label>
-          <AsyncCreatableSelect
-            cacheOptions
-            defaultOptions
-            {...ASYNC_MENU_PORTAL}
-            loadOptions={loadHotelOptions}
-            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
-            loadingMessage={ASYNC_I18N.loadingMessage}
-            placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
-            value={name ? { value: name, label: name } : null}
-            onChange={(opt) => setName(opt?.value || "")}
-            onCreateOption={(input) => setName(input)}
-            isClearable
-          />
+               <div className="col-span-2">
+          <div className="flex gap-3 items-start">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">
+                {t("name", { defaultValue: "Название" })}
+              </label>
+              <AsyncCreatableSelect
+                cacheOptions
+                defaultOptions
+                {...ASYNC_MENU_PORTAL}
+                loadOptions={loadHotelOptions}
+                noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                loadingMessage={ASYNC_I18N.loadingMessage}
+                placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
+                value={name ? { value: name, label: name } : null}
+                onChange={(opt) => setName(opt?.value || "")}
+                onCreateOption={(input) => setName(input)}
+                isClearable
+              />
+            </div>
+            <div className="w-28">
+              <label className="block text-sm font-medium mb-1">
+                {t("stars", { defaultValue: "Звёзды" })}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={7}
+                step={1}
+                className="w-full border rounded px-3 py-2"
+                placeholder="1–7"
+                value={stars ?? ""}
+                onChange={(e) => setStars(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Страна */}
