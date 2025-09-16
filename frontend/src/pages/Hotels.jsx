@@ -120,7 +120,7 @@ export default function HotelsPage() {
   useEffect(() => { run(tab); /* eslint-disable react-hooks/exhaustive-deps */ }, [tab]);
 
   // ---------------- ui helpers ----------------
-  cconst TabBtn = ({ value, children }) => (
+  const TabBtn = ({ value, children }) => (
   <button
     type="button"
     onClick={() => setTab(value)}
