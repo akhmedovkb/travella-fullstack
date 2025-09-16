@@ -16,9 +16,9 @@ const {
 
 const authenticateToken = require("../middleware/authenticateToken");
 
-/** Ролевой гард: пускаем только указанные роли (админ/модер — всегда ок) */
+/** Разрешить только указанным ролям (админ/модер всегда ок) */
 function allowRoles(...roles) {
-  const wanted = roles.map((r) => String(r).toLowerCase());
+  const want = roles.map((r) => String(r).toLowerCase());
   return (req, res, next) => {
     authenticateToken(req, res, () => {
       const u = req.user || {};
@@ -27,36 +27,33 @@ function allowRoles(...roles) {
           .filter(Boolean)
           .map((r) => String(r).toLowerCase())
       );
-      const ok =
-        pool.has("admin") ||
-        pool.has("moderator") ||
-        wanted.some((r) => pool.has(r));
+      const ok = pool.has("admin") || pool.has("moderator") || want.some((r) => pool.has(r));
       if (!ok) return res.status(403).json({ error: "forbidden" });
       next();
     });
   };
 }
 
-// Создавать / редактировать может провайдер/турагент/агентство (и админ/модер)
-const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier", "admin", "moderator");
-// Оставлять инспекцию — только для провайдера/турагента/агентства
+// Создание/редактирование отеля — провайдер/турагент/агентство (и админ/модер)
+const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier");
+// Создание инспекции — только провайдер/турагент/агентство
 const providerOnly = allowRoles("provider", "tour_agent", "agency", "supplier");
 
-/* ---------- ПУБЛИЧНЫЕ ---------- */
+/* ---------- Публичные ---------- */
 router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
 
-/* ---------- ИНСПЕКЦИИ ОТЕЛЕЙ ---------- */
+/* ---------- Инспекции отелей ---------- */
 // просмотр — публичный
 router.get("/:id/inspections", listHotelInspections);
-// создание — только провайдер/турагент/агентство
+// создание — только для провайдера/турагента/агентства
 router.post("/:id/inspections", providerOnly, createHotelInspection);
 
-/* ---------- КАРТОЧКА ОТЕЛЯ ---------- */
+/* ---------- Карточка отеля ---------- */
 router.get("/:id", getHotel);
 
-/* ---------- CRUD (для провайдера/админа) ---------- */
+/* ---------- CRUD отеля (для провайдера/админа) ---------- */
 router.post("/", providerOrAdmin, createHotel);
 router.put("/:id", providerOrAdmin, updateHotel);
 
