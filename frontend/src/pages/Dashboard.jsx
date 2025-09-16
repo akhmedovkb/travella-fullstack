@@ -1763,39 +1763,45 @@ useEffect(() => {
                           <span
                             title={
                               selectedService.status === "rejected"
-                                ? (selectedService.rejected_reason || t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
+                                ? (selectedService.rejected_reason ||
+                                   t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
                                 : undefined
                             }
                             className={`inline-block text-xs px-2 py-0.5 rounded ${statusBadgeClass(selectedService.status)}`}
                           >
                             {t(`moderation.service_status.${selectedService.status}`, {
-                              defaultValue: MOD_STATUS_FALLBACK[selectedService.status] || selectedService.status
+                              defaultValue: MOD_STATUS_FALLBACK[selectedService.status] || selectedService.status,
                             })}
                           </span>
                       
                           {(selectedService.status === "draft" || selectedService.status === "rejected") && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await axios.post(`${API_BASE}/api/providers/services/${selectedService.id}/submit`, {}, config);
-                                    tSuccess(t("moderation.submitted_toast"));
-                                    setServices((prev) =>
-                                      prev.map((x) => (x.id === selectedService.id
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await axios.post(
+                                    `${API_BASE}/api/providers/services/${selectedService.id}/submit`,
+                                    {},
+                                    config
+                                  );
+                                  tSuccess(t("moderation.submitted_toast"));
+                                  setServices((prev) =>
+                                    prev.map((x) =>
+                                      x.id === selectedService.id
                                         ? { ...x, status: "pending", submitted_at: new Date().toISOString() }
-                                        : x))
-                                    );
-                                    setSelectedService((prev) => (prev ? { ...prev, status: "pending" } : prev));
-                                  } catch {
-                                    tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
-                                  }
-                                }}
-                                className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                              >
-                                {t("moderation.send_to_review")}
-                              </button>
-                            )}
-                          </div>
-                        )}
+                                        : x
+                                    )
+                                  );
+                                  setSelectedService((prev) => (prev ? { ...prev, status: "pending" } : prev));
+                                } catch {
+                                  tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+                                }
+                              }}
+                              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              {t("moderation.send_to_review")}
+                            </button>
+                          )}
+                        </div>
                       )}
                       
                       {/* причина отклонения (если есть) */}
