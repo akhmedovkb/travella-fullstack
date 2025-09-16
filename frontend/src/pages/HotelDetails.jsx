@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api";
+import ImageCarousel from "../components/ImageCarousel";
 
 function Star({ filled }) {
   return (
@@ -94,11 +95,15 @@ export default function HotelDetails() {
     return result;
   }, [hotel]);
 
-  const firstImage =
-    (Array.isArray(hotel?.images) && hotel.images[0]) ||
-    // если хранится jsonb -> строка с массивом
-    (Array.isArray(tryParseJSON(hotel?.images)) && tryParseJSON(hotel.images)[0]) ||
-    null;
+    // собираем все картинки (строки, объекты или JSON-строка с массивом)
+  const images = useMemo(() => {
+    const raw = hotel?.images;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    const parsed = tryParseJSON(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return [raw]; // одиночная строка
+  }, [hotel]);
 
   if (loading) {
     return (
@@ -163,18 +168,8 @@ export default function HotelDetails() {
 
         {/* Контент */}
         <div className="p-5 grid grid-cols-1 md:grid-cols-[340px_1fr] gap-5">
-          <div>
-            {firstImage ? (
-              <img
-                src={firstImage}
-                alt={hotel.name}
-                className="w-full aspect-[4/3] object-cover rounded-lg border"
-              />
-            ) : (
-              <div className="w-full aspect-[4/3] bg-gray-100 rounded-lg border grid place-items-center text-gray-400">
-                нет фото
-              </div>
-            )}
+                    <div>
+            <ImageCarousel images={images} />
             <div className="mt-3">
               <Stars value={hotel.stars} />
             </div>
