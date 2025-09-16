@@ -346,7 +346,10 @@
     "request_already_sent": "Bu so‘rovni avval yuborgansiz",
     "self_request_forbidden": "O‘zingizga tez so‘rov yubora olmaysiz!",
     "service_unknown": "Xizmat topilmadi",
-    "tab_load": "Yorliqni yuklab bo‘lmadi"
+    "tab_load": "Yorliqni yuklab bo‘lmadi",
+    "write_review": "Umumiy fikrni yozing",
+    "save_failed": "Inspeksiyani saqlab bo‘lmadi",
+    "only_providers": "Inspeksiyani faqat tasdiqlangan provayderlar/agentlar qoldira oladi. Provayder kabinetingizga kiring."
   },
 
   "event_category_concert": "Konsert",
@@ -407,6 +410,26 @@
   "hotel_transfer": "Mehmonxona transferi",
   "hotel.no_options": "Variantlar yo‘q",
   "hotel.search_placeholder": "Mehmonxona nomini kiriting",
+
+   "hotels": {
+    "inspections": {
+      "sort": { "top": "Avval ko‘p layk to‘plaganlar", "new": "Avval yangilari" },
+      "new": {
+        "title": "Yangi inspeksiya",
+        "author_auto_hint": "Muallif ma’lumoti provayder profilingizdan avtomatik olinadi.",
+        "review_label": "Umumiy taassurot",
+        "pros": "Afzalliklari",
+        "cons": "Kamchiliklari",
+        "features": "O‘ziga xos jihatlari",
+        "add_photos": "Rasmlar qo‘shish",
+        "no_photos": "rasmlar tanlanmagan",
+        "selected_n": "tanlandi: {{count}}",
+        "save": "Saqlash",
+        "saving": "Saqlanmoqda…",
+        "list_empty": "Hali inspeksiyalar yo‘q"
+      }
+    }
+  },
 
   "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
   "inf": "Go‘daklar (INF)",
