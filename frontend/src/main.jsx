@@ -6,6 +6,7 @@ import "./i18n";
 import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import { Toaster } from "react-hot-toast";
+import '@/ui/theme.css';
 
 
 /* === mobile 100vh fix === */
