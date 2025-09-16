@@ -177,9 +177,6 @@ async function searchHotels(req, res) {
 /* ────────────────────────────────────────────────────────────────────────────
  * RANKED (ТОП/ПОПУЛЯРНЫЕ)
  * GET /api/hotels/ranked?type=top|popular&limit=20
- * Вычисляет выражение динамически из реально существующих колонок
- *  - top: rating_avg / rating / stars
- *  - popular: views / view_count / popularity / seen / hits
  * ──────────────────────────────────────────────────────────────────────────── */
 async function listRankedHotels(req, res) {
   const type  = String((req.query.type || "top")).toLowerCase();   // top | popular | new
@@ -408,8 +405,6 @@ async function updateHotel(req, res) {
   }
 }
 
-
-
 // === INSPECTIONS ============================================================
 
 async function ensureInspectionsTable() {
@@ -419,6 +414,7 @@ async function ensureInspectionsTable() {
       id          SERIAL PRIMARY KEY,
       hotel_id    INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
       author_name TEXT,
+      author_provider_id INTEGER,     -- <— добавили (nullable)
       review      TEXT,
       pros        TEXT,
       cons        TEXT,
@@ -428,6 +424,10 @@ async function ensureInspectionsTable() {
       created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
     )
   `);
+  // мягкая миграция для уже существующих БД
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS author_provider_id INTEGER`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_hotel ON inspections(hotel_id)`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author ON inspections(author_provider_id)`);
 }
 
 function parseIntSafe(v) {
@@ -450,14 +450,24 @@ async function listHotelInspections(req, res) {
         : `COALESCE(likes,0) DESC, created_at DESC`;
 
     const q = await db.query(
-      `SELECT id, hotel_id, author_name, review, pros, cons, features, media, likes, created_at
+      `SELECT id, hotel_id, author_name, author_provider_id, review, pros, cons, features, media, likes, created_at
          FROM inspections
         WHERE hotel_id = $1
         ORDER BY ${order}
         LIMIT 200`,
       [hotelId]
     );
-    res.json({ items: q.rows || [] });
+
+    const items = (q.rows || []).map((r) => ({
+      ...r,
+      media: typeof r.media === "string"
+        ? JSON.parse(r.media || "[]")
+        : (Array.isArray(r.media) ? r.media : (r.media || [])),
+      // удобный URL профиля (фронт использует при наличии)
+      author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
+    }));
+
+    res.json({ items });
   } catch (e) {
     console.error("listHotelInspections error", e);
     res.status(500).json({ items: [] });
@@ -473,21 +483,41 @@ async function createHotelInspection(req, res) {
   try {
     await ensureInspectionsTable();
 
+    // берём id провайдера из тела запроса (если фронт передаёт),
+    // либо из токена (на будущее, если будет authenticateToken)
+    const user = req.user || {};
+    const authorProviderId =
+      parseIntSafe(p.author_provider_id) ??
+      parseIntSafe(p.provider_id) ??
+      parseIntSafe(p.author_id) ??
+      parseIntSafe(user.provider_id) ??
+      null;
+
+    const nameFinal =
+      first(p.author_name) ||
+      first(user.company_name, user.provider_name, user.name) ||
+      "провайдер";
+
+    const mediaArr = Array.isArray(p.media) ? p.media.slice(0, 12) : [];
+
     const { rows } = await db.query(
-      `INSERT INTO inspections (hotel_id, author_name, review, pros, cons, features, media, likes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO inspections
+         (hotel_id, author_name, author_provider_id, review, pros, cons, features, media, likes)
+       VALUES
+         ($1,       $2,          $3,                 $4,    $5,   $6,   $7,       $8::jsonb, 0)
        RETURNING id`,
       [
         hotelId,
-        p.author_name || null,
+        nameFinal || null,
+        authorProviderId,
         p.review || null,
         p.pros || null,
         p.cons || null,
         p.features || null,
-        Array.isArray(p.media) ? JSON.stringify(p.media) : JSON.stringify([]),
-        0,
+        JSON.stringify(mediaArr),
       ]
     );
+
     res.json({ id: rows[0].id });
   } catch (e) {
     console.error("createHotelInspection error", e);
@@ -521,7 +551,7 @@ module.exports = {
   getHotel,
   listHotels,
   updateHotel,
-  // добавили:
+  // добавили / расширили:
   listHotelInspections,
   createHotelInspection,
   likeInspection,
