@@ -138,8 +138,12 @@ function Card({ item, onLike }) {
 }
 
 /* ---------- Форма новой инспекции ---------- */
-/* --- форма новой инспекции (без поля Автор) --- */
+import { useTranslation } from "react-i18next";
+
+/* --- форма новой инспекции (без поля Автор; с i18n) --- */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
+  const { t } = useTranslation();
+
   const [review, setReview] = useState("");
   const [pros, setPros] = useState("");
   const [cons, setCons] = useState("");
@@ -168,12 +172,11 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     e.preventDefault();
     setError("");
     if (!review.trim()) {
-      setError("Напишите общий отзыв");
+      setError(t("errors.write_review"));
       return;
     }
     setSaving(true);
     try {
-      // Больше НЕ отправляем author_name — сервер сам подставит из токена
       await createInspection(hotelId, {
         review: review.trim(),
         pros: pros || undefined,
@@ -185,9 +188,9 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     } catch (e) {
       const st = e?.response?.status;
       if (st === 401 || st === 403) {
-        setError("Оставлять инспекции могут только авторизованные провайдеры/турагенты. Войдите в кабинет провайдера.");
+        setError(t("errors.only_providers"));
       } else {
-        setError("Не удалось сохранить инспекцию");
+        setError(t("errors.save_failed"));
       }
     } finally {
       setSaving(false);
@@ -196,11 +199,10 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
 
   return (
     <form onSubmit={submit} className="bg-white border rounded-xl p-4 shadow-sm max-w-3xl">
-      <h2 className="text-lg font-semibold mb-3">Новая инспекция</h2>
+      <h2 className="text-lg font-semibold mb-3">{t("hotels.inspections.new.title")}</h2>
 
-      {/* Небольшая подсказка вместо поля «Автор» */}
       <div className="mb-2 text-sm text-gray-500">
-        Автор будет проставлен автоматически из вашего профиля провайдера.
+        {t("hotels.inspections.new.author_auto_hint")}
       </div>
 
       {error && (
@@ -210,7 +212,9 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       )}
 
       <div className="mt-3">
-        <label className="block text-sm text-gray-600 mb-1">Общий отзыв *</label>
+        <label className="block text-sm text-gray-600 mb-1">
+          {t("hotels.inspections.new.review_label")} *
+        </label>
         <textarea
           className="w-full border rounded px-3 py-2 min-h-[120px]"
           value={review}
@@ -220,7 +224,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
 
       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Плюсы</label>
+          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.pros")}</label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={pros}
@@ -228,7 +232,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Минусы</label>
+          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.cons")}</label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={cons}
@@ -236,7 +240,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Фишки</label>
+          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.features")}</label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={features}
@@ -246,22 +250,14 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       </div>
 
       <div className="mt-3">
-        <input
-          id="inspMedia"
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={onPickFiles}
-          className="sr-only"
-        />
-        <label
-          htmlFor="inspMedia"
-          className="inline-flex items-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer"
-        >
-          Добавить фото
+        <input id="inspMedia" type="file" multiple accept="image/*" onChange={onPickFiles} className="sr-only" />
+        <label htmlFor="inspMedia" className="inline-flex items-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer">
+          {t("hotels.inspections.new.add_photos")}
         </label>
         <span className="ml-2 text-sm text-gray-600">
-          {media.length ? `выбрано: ${media.length}` : "фото не выбраны"}
+          {media.length
+            ? t("hotels.inspections.new.selected_n", { count: media.length })
+            : t("hotels.inspections.new.no_photos")}
         </span>
 
         {!!media.length && (
@@ -286,19 +282,18 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         <button
           type="submit"
           disabled={saving}
-          className={`px-4 py-2 rounded text-white ${
-            saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"
-          }`}
+          className={`px-4 py-2 rounded text-white ${saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"}`}
         >
-          {saving ? "Сохранение…" : "Сохранить"}
+          {saving ? t("hotels.inspections.new.saving") : t("hotels.inspections.new.save")}
         </button>
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded border">
-          Отмена
+          {t("common.cancel")}
         </button>
       </div>
     </form>
   );
 }
+
 
 /* ---------- Страница ---------- */
 export default function HotelInspections() {
