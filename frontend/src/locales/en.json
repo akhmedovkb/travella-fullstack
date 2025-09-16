@@ -412,6 +412,15 @@
   "hotel.search_placeholder": "Enter hotel name",
 
     "hotels": {
+    "title": "Hotels",
+    "tabs": { "top": "Top", "popular": "Popular", "new": "New" },
+    "search_by_name": "Search by name",
+    "city_placeholder": "City",
+    "find_btn": "Search",
+    "searching": "Searching...",
+    "col": { "name": "Name", "city": "City", "rating": "Rating" },
+    "empty": "Nothing found",
+      
     "inspections": {
       "sort": { "top": "Most liked first", "new": "Newest first" },
       "new": {
