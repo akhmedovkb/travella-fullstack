@@ -1,5 +1,5 @@
 // frontend/src/pages/Hotels.jsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import axios from "axios";
 
@@ -18,22 +18,30 @@ function normalizeHotel(h) {
 }
 
 export default function HotelsPage() {
+  const abortRef = useRef(null);
   const [tab, setTab] = useState("top"); // top | popular | new | search
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // ---------------- helpers ----------------
   const limit = 10;
 
+    // один активный запрос; остальные отменяем
   const get = useCallback(async (url, params = {}) => {
-    const r = await axios.get(url, { params, timeout: 10000 });
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const r = await axios.get(url, { params, signal: ctrl.signal, timeout: 10000 });
     return Array.isArray(r.data?.items) ? r.data.items : (Array.isArray(r.data) ? r.data : []);
   }, []);
+  useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
   // фолбэк-сортировки, если нет спец-эндпоинтов
-  const sortByRatingDesc   = (arr) => [...arr].sort((a,b) => (b.rating ?? -1) - (a.rating ?? -1));
+  const toNum = (v) => (v==null ? null : Number(v));
+  const sortByRatingDesc   = (arr) => [...arr].sort((a,b) => (toNum(b.rating) ?? -1) - (toNum(a.rating) ?? -1));
   const sortByViewsDesc    = (arr) => [...arr].sort((a,b) => (b.views  ??  0) - (a.views  ??  0));
   const sortByNewestFirst  = (arr) => [...arr].sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
 
@@ -90,6 +98,7 @@ export default function HotelsPage() {
   // ---------------- actions ----------------
   const run = useCallback(async (kind) => {
     setLoading(true);
+    setError("");
     try {
       let rows = [];
       if (kind === "top")       rows = await loadTop();
@@ -97,6 +106,11 @@ export default function HotelsPage() {
       else if (kind === "new")  rows = await loadNew();
       else                      rows = await loadSearch(); // 'search'
       setItems(rows);
+        } catch (e) {
+      if (e?.name !== "CanceledError" && e?.code !== "ERR_CANCELED") {
+        setError("Не удалось загрузить данные");
+        setItems([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -110,9 +124,12 @@ export default function HotelsPage() {
     <button
       type="button"
       onClick={() => setTab(value)}
+      disabled={loading}
       className={[
-        "px-3 py-1.5 rounded-full text-sm font-semibold",
+                "px-3 py-1.5 rounded-full text-sm font-semibold",
+        loading ? "opacity-60 cursor-not-allowed" : "",
         tab === value ? "bg-orange-100 text-orange-700" : "text-gray-600 hover:bg-gray-100"
+       ].join(" ")}
       ].join(" ")}
     >
       {children}
@@ -158,11 +175,18 @@ export default function HotelsPage() {
           />
           <button
             type="submit"
-            className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-900"
+             disabled={loading}
+             className={`px-4 py-2 rounded bg-gray-800 text-white ${loading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-900"}`}
           >
-            Найти
+            {loading ? "Поиск..." : "Найти"}
           </button>
         </form>
+
+                {error && (
+          <div className="mb-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+            {error}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full table-auto border-collapse">
