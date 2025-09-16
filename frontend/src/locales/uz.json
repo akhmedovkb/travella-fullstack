@@ -412,6 +412,15 @@
   "hotel.search_placeholder": "Mehmonxona nomini kiriting",
 
    "hotels": {
+    "title": "Mehmonxonalar",
+    "tabs": { "top": "Top", "popular": "Ommabop", "new": "Yangi" },
+    "search_by_name": "Nom bo‘yicha qidirish",
+    "city_placeholder": "Shahar",
+    "find_btn": "Topish",
+    "searching": "Qidirilmoqda...",
+    "col": { "name": "Nomi", "city": "Shahar", "rating": "Baholash" },
+    "empty": "Hech narsa topilmadi",
+     
     "inspections": {
       "sort": { "top": "Avval ko‘p layk to‘plaganlar", "new": "Avval yangilari" },
       "new": {
