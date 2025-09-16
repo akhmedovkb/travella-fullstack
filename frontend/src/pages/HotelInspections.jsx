@@ -138,8 +138,8 @@ function Card({ item, onLike }) {
 }
 
 /* ---------- Форма новой инспекции ---------- */
+/* --- форма новой инспекции (без поля Автор) --- */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
-  const [author, setAuthor] = useState("");
   const [review, setReview] = useState("");
   const [pros, setPros] = useState("");
   const [cons, setCons] = useState("");
@@ -173,19 +173,22 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     }
     setSaving(true);
     try {
+      // Больше НЕ отправляем author_name — сервер сам подставит из токена
       await createInspection(hotelId, {
-        author_name: author || undefined,
         review: review.trim(),
         pros: pros || undefined,
         cons: cons || undefined,
         features: features || undefined,
         media,
-        // если позже добавите свой id провайдера — просто положите сюда:
-        // author_provider_id: myProviderId,
       });
       onCreated?.();
-    } catch {
-      setError("Не удалось сохранить инспекцию");
+    } catch (e) {
+      const st = e?.response?.status;
+      if (st === 401 || st === 403) {
+        setError("Оставлять инспекции могут только авторизованные провайдеры/турагенты. Войдите в кабинет провайдера.");
+      } else {
+        setError("Не удалось сохранить инспекцию");
+      }
     } finally {
       setSaving(false);
     }
@@ -195,23 +198,16 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     <form onSubmit={submit} className="bg-white border rounded-xl p-4 shadow-sm max-w-3xl">
       <h2 className="text-lg font-semibold mb-3">Новая инспекция</h2>
 
+      {/* Небольшая подсказка вместо поля «Автор» */}
+      <div className="mb-2 text-sm text-gray-500">
+        Автор будет проставлен автоматически из вашего профиля провайдера.
+      </div>
+
       {error && (
         <div className="mb-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">
           {error}
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">Автор</label>
-          <input
-            className="w-full border rounded px-3 py-2"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Ваше имя (необязательно)"
-          />
-        </div>
-      </div>
 
       <div className="mt-3">
         <label className="block text-sm text-gray-600 mb-1">Общий отзыв *</label>
