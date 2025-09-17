@@ -35,6 +35,8 @@ function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
   return token ? children : <Navigate to="/client/login" replace />;
 }
+// TourBuilder - Тур конструктор
+import TourBuilder from "./pages/TourBuilder";
 
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -166,6 +168,9 @@ export default function App() {
 
           {/* 404 / fallback — держим в самом конце */}
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
+
+          <Route path="/tour-builder" element={<TourBuilder />} />
+
         </Routes>
       </div>
     </Router>
