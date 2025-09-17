@@ -10,6 +10,12 @@ try {
   console.warn("[hotelsController] utils/apiMonitor not found — using console fallback");
 }
 
+// ─── optional auth middleware (для мягкой/внутренней авторизации) ───
+let authenticateToken = null;
+try {
+  authenticateToken = require("../middleware/authenticateToken");
+} catch (_) { /* опционально */ }
+
 // ─── DB ───
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -37,6 +43,47 @@ const first = (...vals) => {
   }
   return "";
 };
+
+function parseIntSafe(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// извлечь providerId пользователя (если он провайдер/агент и т.п.)
+function currentProviderIdFromUser(u = {}) {
+  const role = String(u.role || u.type || "").toLowerCase();
+  return (
+    parseIntSafe(u.provider_id) ??
+    parseIntSafe(u.providerId) ??
+    parseIntSafe(u.company_id) ??
+    parseIntSafe(u.companyId) ??
+    (role === "provider" ? parseIntSafe(u.id) : null)
+  );
+}
+
+// ключ лайка (уникальный для юзера любого типа)
+function likeUserKey(u = {}) {
+  const role = String(u.role || u.type || "").toLowerCase();
+
+  const pid =
+    parseIntSafe(u.provider_id) ??
+    parseIntSafe(u.providerId) ??
+    parseIntSafe(u.company_id) ??
+    parseIntSafe(u.companyId) ??
+    (role === "provider" ? parseIntSafe(u.id) : null);
+  if (pid) return `prov:${pid}`;
+
+  const cid =
+    parseIntSafe(u.client_id) ??
+    parseIntSafe(u.clientId) ??
+    (role === "client" ? parseIntSafe(u.id) : null);
+  if (cid) return `client:${cid}`;
+
+  const uid = parseIntSafe(u.id);
+  if (uid) return `user:${uid}`;
+
+  return null;
+}
 
 // какие колонки реально есть
 async function tableHasColumns(table, cols = []) {
@@ -183,14 +230,12 @@ async function listRankedHotels(req, res) {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "20", 10)));
 
   try {
-    // проверяем, какие колонки реально есть
     const cols = await tableHasColumns("hotels", [
       "rating_avg","rating","stars",
       "views","view_count","popularity","seen","hits",
       "city","location","country","created_at"
     ]);
 
-    // выражения для score (универсально под наличие колонок)
     const scoreTopParts = [];
     if (cols.rating_avg) scoreTopParts.push("rating_avg::numeric");
     if (cols.rating)     scoreTopParts.push("rating::numeric");
@@ -205,7 +250,6 @@ async function listRankedHotels(req, res) {
     if (cols.hits)       scorePopParts.push("hits::numeric");
     const popExpr = scorePopParts.length ? `COALESCE(${scorePopParts.join(",")}, 0)` : "0::numeric";
 
-    // для «Новые» — сортируем по created_at (если есть), иначе по id
     let selectScore = topExpr;
     let orderBy = "score DESC NULLS LAST, id DESC";
     if (type === "popular") {
@@ -233,6 +277,7 @@ async function listRankedHotels(req, res) {
     return res.status(500).json([]);
   }
 }
+
 /* ────────────────────────────────────────────────────────────────────────────
  * CREATE
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -242,7 +287,6 @@ async function createHotel(req, res) {
     const now = new Date();
 
     try {
-      // динамически учитываем только реально существующие колонки
       const support = await tableHasColumns("hotels", [
         "address","currency","rooms","extra_bed_price","taxes",
         "amenities","services","images","stars","contact","country","city","location"
@@ -251,7 +295,6 @@ async function createHotel(req, res) {
       const cols = ["name"];
       const vals = [(p.name || "").trim()];
 
-      // базовая локация
       if (support.country)  { cols.push("country");  vals.push(p.country || null); }
       if (support.city)     { cols.push("city");     vals.push(p.city || null); }
       else if (support.location && p.city) { cols.push("location"); vals.push(p.city); }
@@ -276,7 +319,6 @@ async function createHotel(req, res) {
       const { rows } = await db.query(sql, vals);
       return res.json({ id: rows[0].id });
     } catch (err) {
-      // очень старые БД
       console.warn("[hotels.create] legacy fallback:", err?.message);
       const sqlFallback = `
         INSERT INTO hotels (name, location, created_at)
@@ -293,7 +335,7 @@ async function createHotel(req, res) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * READ ONE (с auto-инкрементом просмотров, если колонка есть)
+ * READ ONE (с auto-инкрементом просмотров, если есть колонка)
  * ──────────────────────────────────────────────────────────────────────────── */
 async function getHotel(req, res) {
   const id = Number(req.params.id);
@@ -302,10 +344,9 @@ async function getHotel(req, res) {
     const { rows } = await db.query(`SELECT * FROM hotels WHERE id = $1`, [id]);
     if (!rows.length) return res.status(404).json({ error: "not_found" });
 
-    // мягкий инкремент просмотров (если есть соответствующая колонка)
     tableHasColumns("hotels", ["views","view_count","popularity","seen","hits"]).then(async (c) => {
       try {
-        if (c.views)       await db.query(`UPDATE hotels SET views = COALESCE(views,0)+1 WHERE id=$1`, [id]);
+        if (c.views)           await db.query(`UPDATE hotels SET views = COALESCE(views,0)+1 WHERE id=$1`, [id]);
         else if (c.view_count) await db.query(`UPDATE hotels SET view_count = COALESCE(view_count,0)+1 WHERE id=$1`, [id]);
         else if (c.popularity) await db.query(`UPDATE hotels SET popularity = COALESCE(popularity,0)+1 WHERE id=$1`, [id]);
         else if (c.seen)       await db.query(`UPDATE hotels SET seen = COALESCE(seen,0)+1 WHERE id=$1`, [id]);
@@ -344,68 +385,8 @@ async function listHotels(req, res) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * UPDATE (динамически по существующим колонкам)
+ * INSPECTIONS + агрегаты
  * ──────────────────────────────────────────────────────────────────────────── */
-async function updateHotel(req, res) {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
-
-  try {
-    const p = req.body || {};
-    const now = new Date();
-
-    try {
-      const support = await tableHasColumns("hotels", [
-        "address","currency","rooms","extra_bed_price","taxes",
-        "amenities","services","images","stars","contact","country","city","location"
-      ]);
-
-      const sets = ["name=$1"];
-      const params = [(p.name || "").trim()];
-      let i = params.length;
-
-      if (support.country)  { sets.push(`country=$${++i}`);  params.push(p.country || null); }
-      if (support.city)     { sets.push(`city=$${++i}`);     params.push(p.city || null); }
-      else if (support.location) { sets.push(`location=$${++i}`); params.push(p.city || p.address || null); }
-
-      if (support.address)         { sets.push(`address=$${++i}`);         params.push(p.address || null); }
-      if (support.currency)        { sets.push(`currency=$${++i}`);        params.push(p.currency || "UZS"); }
-      if (support.rooms)           { sets.push(`rooms=$${++i}::jsonb`);    params.push(JSON.stringify(p.rooms || [])); }
-      if (support.extra_bed_price) { sets.push(`extra_bed_price=$${++i}`); params.push(p.extraBedPrice ?? null); }
-      if (support.taxes)           { sets.push(`taxes=$${++i}::jsonb`);    params.push(JSON.stringify(p.taxes ?? {})); }
-      if (support.amenities)       { sets.push(`amenities=$${++i}::jsonb`);params.push(JSON.stringify(Array.isArray(p.amenities) ? p.amenities : [])); }
-      if (support.services)        { sets.push(`services=$${++i}::jsonb`); params.push(JSON.stringify(Array.isArray(p.services) ? p.services : [])); }
-      if (support.images)          { sets.push(`images=$${++i}::jsonb`);   params.push(JSON.stringify(p.images || [])); }
-      if (support.stars)           { sets.push(`stars=$${++i}`);           params.push(p.stars ?? null); }
-      if (support.contact)         { sets.push(`contact=$${++i}`);         params.push(p.contact ?? null); }
-
-      sets.push(`updated_at=$${++i}`); params.push(now);
-
-      params.push(id);
-      const sql = `UPDATE hotels SET ${sets.join(", ")} WHERE id=$${i + 1} RETURNING id`;
-      const q = await db.query(sql, params);
-      if (!q.rows.length) return res.status(404).json({ error: "not_found" });
-      return res.json({ id });
-    } catch (err) {
-      console.warn("[hotels.update] legacy fallback:", err?.message);
-      const sqlFallback = `
-        UPDATE hotels
-           SET name=$1, location=$2, updated_at=$3
-         WHERE id=$4
-         RETURNING id
-      `;
-      const paramsFallback = [(p.name || "").trim(), p.city || p.address || null, now, id];
-      const { rows } = await db.query(sqlFallback, paramsFallback);
-      if (!rows.length) return res.status(404).json({ error: "not_found" });
-      return res.json({ id, _fallback: true });
-    }
-  } catch (e) {
-    console.error("hotels.update error:", e);
-    return res.status(500).json({ error: "update_failed" });
-  }
-}
-
-// === INSPECTIONS + агрегаты =================================================
 
 // колонка hotels.attrs для агрегатов
 async function ensureHotelsAttrsColumn() {
@@ -425,7 +406,7 @@ async function ensureInspectionsTable() {
       cons        TEXT,
       features    TEXT,
       media       JSONB,
-      -- новые структурные поля:
+      -- структурные поля:
       scores      JSONB,   -- { quiet_level, family_score, ... } (0..5)
       amenities   JSONB,   -- ["crib","kids_pool", ...]
       nearby      JSONB,   -- { metro_m, supermarket_m, ... }
@@ -439,6 +420,19 @@ async function ensureInspectionsTable() {
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS nearby JSONB`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_hotel ON inspections(hotel_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author ON inspections(author_provider_id)`);
+}
+
+// таблица лайков (уникальность на (inspection_id, user_key))
+async function ensureInspectionLikesTable(dbConn) {
+  await dbConn.query(`
+    CREATE TABLE IF NOT EXISTS inspection_likes (
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      user_key      TEXT NOT NULL,
+      created_at    TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+      PRIMARY KEY (inspection_id, user_key)
+    )
+  `);
+  await dbConn.query(`CREATE INDEX IF NOT EXISTS idx_inspection_likes_inspection ON inspection_likes(inspection_id)`);
 }
 
 // пересчёт агрегатов по инспекциям → hotels.attrs.aggregated_from_inspections
@@ -479,9 +473,9 @@ async function updateHotelAggregates(hotelId) {
         jsonb_build_object(
           'scores', jsonb_strip_nulls(
             jsonb_build_object(
-              'quiet_level',   x.quiet_level,
-              'family_score',  x.family_score,
-              'infra_score',   x.infra_score,
+              'quiet_level',     x.quiet_level,
+              'family_score',    x.family_score,
+              'infra_score',     x.infra_score,
               'nightlife_score', x.nightlife_score,
               'activity_score',  x.activity_score,
               'business_score',  x.business_score,
@@ -517,11 +511,6 @@ async function updateHotelAggregates(hotelId) {
   );
 }
 
-function parseIntSafe(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 // GET /api/hotels/:id/inspections?sort=top|new
 async function listHotelInspections(req, res) {
   const hotelId = parseIntSafe(req.params.id);
@@ -530,23 +519,35 @@ async function listHotelInspections(req, res) {
   try {
     await ensureInspectionsTable();
 
+    // "мои сверху" — если знаем пользователя (например, tryAuth в роутере)
+    const me = req.user || {};
+    const meProviderId = currentProviderIdFromUser(me);
+    const meLikeKey = likeUserKey(me);
+
     const sort = String(req.query.sort || "top").toLowerCase();
-    const order =
+    const baseOrder =
       sort === "new"
         ? `created_at DESC, id DESC`
         : `COALESCE(likes,0) DESC, created_at DESC`;
 
-    const q = await db.query(
-      `SELECT id, hotel_id, author_name, author_provider_id,
-              review, pros, cons, features,
-              media, scores, amenities, nearby,
-              likes, created_at
-         FROM inspections
-        WHERE hotel_id = $1
-        ORDER BY ${order}
-        LIMIT 200`,
-      [hotelId]
-    );
+    const sql = `
+      SELECT i.id, i.hotel_id, i.author_name, i.author_provider_id,
+             i.review, i.pros, i.cons, i.features,
+             i.media, i.scores, i.amenities, i.nearby,
+             i.likes, i.created_at,
+             CASE WHEN $2::int IS NOT NULL AND i.author_provider_id = $2 THEN 0 ELSE 1 END AS me_first,
+             CASE
+               WHEN $3::text IS NOT NULL AND EXISTS (
+                 SELECT 1 FROM inspection_likes l
+                  WHERE l.inspection_id = i.id AND l.user_key = $3
+               ) THEN true ELSE false
+             END AS liked_by_me
+        FROM inspections i
+       WHERE i.hotel_id = $1
+       ORDER BY me_first ASC, ${baseOrder}
+       LIMIT 200
+    `;
+    const q = await db.query(sql, [hotelId, meProviderId, meLikeKey]);
 
     const items = (q.rows || []).map((r) => ({
       ...r,
@@ -572,29 +573,40 @@ async function createHotelInspection(req, res) {
   try {
     await ensureInspectionsTable();
 
-    // --- Извлечение провайдера из токена (разные варианты имён) ---
+    // Требуем провайдера (берём из body или токена)
+    if (!req.user && typeof authenticateToken === "function") {
+      // мягкая авторизация прямо здесь, если маршрут публичный
+      let ok = false;
+      const hdr = req.headers?.authorization || "";
+      if (hdr) {
+        await new Promise((resolve) =>
+          authenticateToken(req, res, () => { ok = true; resolve(); })
+        );
+        if (!ok) return; // middleware уже вернул 401/403
+      }
+    }
+
     const u = req.user || {};
-    const role = (u.role || u.type || "").toString().toLowerCase();
-
-    const providerIdFromToken =
-      parseIntSafe(u.provider_id) ??
-      parseIntSafe(u.providerId) ??
-      parseIntSafe(u.company_id) ??
-      parseIntSafe(u.companyId) ??
-      (role === "provider" ? parseIntSafe(u.id) : null);
-
-    // --- Источник из body (если фронт отправляет явно) + токен как фолбэк ---
     const authorProviderId =
       parseIntSafe(p.author_provider_id) ??
       parseIntSafe(p.provider_id) ??
       parseIntSafe(p.providerId) ??
       parseIntSafe(p.author_id) ??
       parseIntSafe(p.authorId) ??
-      providerIdFromToken ??
+      currentProviderIdFromUser(u) ??
       null;
 
     if (!authorProviderId) {
       return res.status(403).json({ error: "provider_required" });
+    }
+
+    // запрет второй инспекции этого провайдера на тот же отель
+    const qExist = await db.query(
+      `SELECT id FROM inspections WHERE hotel_id = $1 AND author_provider_id = $2 LIMIT 1`,
+      [hotelId, authorProviderId]
+    );
+    if (qExist.rows.length) {
+      return res.status(409).json({ error: "already_submitted" });
     }
 
     const nameFinal =
@@ -642,18 +654,63 @@ async function createHotelInspection(req, res) {
   }
 }
 
-// POST /api/inspections/:id/like
+// POST /api/inspections/:id/like  — toggle + уникальность
 async function likeInspection(req, res) {
   const id = parseIntSafe(req.params.id);
   if (!id) return res.status(400).json({ error: "bad_id" });
+
   try {
     await ensureInspectionsTable();
-    const { rows } = await db.query(
-      `UPDATE inspections SET likes = COALESCE(likes,0) + 1 WHERE id=$1 RETURNING id, likes`,
+    await ensureInspectionLikesTable(db);
+
+    // Требуем авторизацию (любой пользователь/клиент/провайдер)
+    if (!req.user && typeof authenticateToken === "function") {
+      let ok = false;
+      const hdr = req.headers?.authorization || "";
+      if (hdr) {
+        await new Promise((resolve) =>
+          authenticateToken(req, res, () => { ok = true; resolve(); })
+        );
+        if (!ok) return; // middleware уже ответил 401
+      }
+    }
+    const u = req.user || {};
+    const ukey = likeUserKey(u);
+    if (!ukey) return res.status(401).json({ error: "unauthorized" });
+
+    // toggle
+    const check = await db.query(
+      `SELECT 1 FROM inspection_likes WHERE inspection_id=$1 AND user_key=$2`,
+      [id, ukey]
+    );
+    let liked = false;
+
+    if (check.rows.length) {
+      await db.query(
+        `DELETE FROM inspection_likes WHERE inspection_id=$1 AND user_key=$2`,
+        [id, ukey]
+      );
+      liked = false;
+    } else {
+      await db.query(
+        `INSERT INTO inspection_likes (inspection_id, user_key)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [id, ukey]
+      );
+      liked = true;
+    }
+
+    // Пересчитываем общее число лайков
+    const cnt = await db.query(
+      `SELECT COUNT(*)::int AS c FROM inspection_likes WHERE inspection_id=$1`,
       [id]
     );
-    if (!rows.length) return res.status(404).json({ error: "not_found" });
-    res.json(rows[0]);
+    const likes = cnt.rows[0]?.c ?? 0;
+
+    // Денормализованное поле для бэк-компат
+    await db.query(`UPDATE inspections SET likes = $2 WHERE id = $1`, [id, likes]);
+
+    res.json({ id, likes, liked });
   } catch (e) {
     console.error("likeInspection error", e);
     res.status(500).json({ error: "like_failed" });
