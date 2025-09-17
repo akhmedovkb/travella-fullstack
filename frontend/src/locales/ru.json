@@ -262,7 +262,10 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "export_pdf": "Экспорт в PDF",
-    "print_pdf": "Печать / PDF"
+    "print_pdf": "Печать / PDF",
+    "pros": "Плюсы",
+    "cons": "Минусы",
+    "features": "Фишки"
   },
 
   "confirm_delete": "Удалить элемент?",
@@ -320,7 +323,10 @@
     "tab_load": "Не удалось загрузить вкладку",
     "write_review": "Напишите общий отзыв",
     "save_failed": "Не удалось сохранить инспекцию",
-    "only_providers": "Оставлять инспекции могут только авторизованные провайдеры/турагенты. в кабинет провайдера."
+    "only_providers": "Оставлять инспекции могут только авторизованные провайдеры/турагенты. в кабинет провайдера.",
+    "write_review": "Напишите общий отзыв",
+    "only_providers": "Только провайдер/агент может оставить инспекцию",
+    "save_failed": "Не удалось сохранить инспекцию"
   },
 
   "event_category_concert": "Концерт",
@@ -393,24 +399,69 @@
     "empty": "Ничего не найдено",
     
     "inspections": {
+      "author_fallback": "провайдер",
+      "author": "Автор",
+      "hotel_label": "Отель",
       "sort": {
         "top": "Сначала с большим числом лайков",
         "new": "Сначала новые"
       },
+      "back_to_hotel": "Назад к отелю",
+      "empty": "Инспекций пока нет",
       "new": {
         "title": "Новая инспекция",
-        "author_auto_hint": "Автор будет проставлен автоматически из вашего профиля провайдера.",
+        "author_auto_hint": "Автор и ссылка на профиль подтянутся автоматически",
         "review_label": "Общий отзыв",
         "pros": "Плюсы",
         "cons": "Минусы",
         "features": "Фишки",
+        "scores_title": "Оценки (0–5)",
+        "current_value": "Текущее: {{v}}",
+        "amenities_title": "Удобства",
+        "nearby_title": "Рядом (дистанции)",
+        "meters_placeholder": "м",
         "add_photos": "Добавить фото",
+        "selected_n_one": "выбрано: {{count}}",
+        "selected_n_few": "выбрано: {{count}}",
+        "selected_n_many": "выбрано: {{count}}",
+        "selected_n_other": "выбрано: {{count}}",
         "no_photos": "фото не выбраны",
-        "selected_n": "выбрано: {{count}}",
-        "save": "Сохранить",
         "saving": "Сохранение…",
-        "list_empty": "Инспекций пока нет"
+        "save": "Сохранить"
       }
+    },
+    "scores": {
+      "quiet_level": "Уровень тишины",
+      "family_score": "Подходит для семьи",
+      "infra_score": "Инфраструктура вокруг",
+      "nightlife_score": "Ночная жизнь",
+      "activity_score": "Активный отдых",
+      "wellness_score": "SPA/Wellness",
+      "business_score": "Для бизнеса",
+      "value_score": "Цена/качество",
+      "access_score": "Доступность/транспорт"
+    },
+    "amenities": {
+      "crib": "Детская кроватка",
+      "kids_pool": "Детский бассейн",
+      "kids_club": "Детский клуб",
+      "kitchenette": "Кухонный уголок",
+      "gym": "Спортзал",
+      "spa": "Спа",
+      "pool_indoor": "Крытый бассейн",
+      "pool_outdoor": "Открытый бассейн",
+      "parking": "Парковка",
+      "bar": "Бар",
+      "elevator": "Лифт",
+      "soundproof_rooms": "Звукоизоляция номеров",
+      "laundry": "Прачечная",
+      "late_checkin": "Поздний заезд"
+    },
+    "nearby": {
+      "metro_m": "Метро (м)",
+      "supermarket_m": "Супермаркет (м)",
+      "pharmacy_m": "Аптека (м)",
+      "park_m": "Парк (м)"
     }
   },
 
