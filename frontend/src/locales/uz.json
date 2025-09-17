@@ -423,7 +423,9 @@
 
    "hotels": {
     "title": "Mehmonxonalar",
-    "tabs": { "top": "Top", "popular": "Ommabop", "new": "Yangi" },
+    "tabs": { "top": "Top", "popular": "Ommabop", "new": "Yangi, "worst": "Eng yomonlari" },
+    "emptyHint": "Mehmonxonalarni ko‘rish uchun tabni tanlang yoki qidiring.",
+    "emptyAfterAction": "Hech narsa topilmadi. Filtrlarni o‘zgartiring yoki boshqa tabni sinab ko‘ring."
     "search_by_name": "Nom bo‘yicha qidirish",
     "city_placeholder": "Shahar",
     "find_btn": "Topish",
