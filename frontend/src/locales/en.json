@@ -355,7 +355,11 @@
     "only_providers": "Only authenticated providers/agents can leave inspections. Please sign in to the provider dashboard.",
     "write_review": "Please write a general review",
     "only_providers": "Only a provider/agent can submit an inspection",
-    "save_failed": "Failed to save the inspection"
+    "save_failed": "Failed to save the inspection",
+    "already_inspected": "You’ve already submitted an inspection for this hotel.",
+    "only_providers": "Only providers/agents can submit inspections.",
+    "save_failed": "Couldn’t save. Please try again later.",
+    "write_review": "Please write a general review"
     },
 
   "event_category_concert": "Concert",
