@@ -355,7 +355,11 @@
     "only_providers": "Inspeksiyani faqat tasdiqlangan provayderlar/agentlar qoldira oladi. Provayder kabinetingizga kiring.",
     "write_review": "Iltimos, umumiy sharh yozing",
     "only_providers": "Faqat provayder/agent sharh qoldirishi mumkin",
-    "save_failed": "Sharhni saqlab bo‘lmadi"
+    "save_failed": "Sharhni saqlab bo‘lmadi",
+    "already_inspected": "Siz bu mehmonxona bo‘yicha allaqachon inspeksiya qoldirgansiz.",
+    "only_providers": "Faqat provayder/turagentlar inspeksiya qoldirishi mumkin.",
+    "save_failed": "Saqlab bo‘lmadi. Keyinroq urinib ko‘ring.",
+    "write_review": "Umumiy sharhni yozing"
   },
 
   "event_category_concert": "Konsert",
