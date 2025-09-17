@@ -1,5 +1,5 @@
 // frontend/src/pages/HotelInspections.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getHotel, listInspections, likeInspection, createInspection } from "../api/hotels";
 import { apiGet } from "../api";
@@ -11,8 +11,47 @@ function toInt(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/* ---------- Константы (ключи для i18n) ---------- */
+const SCORE_FIELDS = [
+  { key: "quiet_level",     labelKey: "hotels.scores.quiet_level" },
+  { key: "family_score",    labelKey: "hotels.scores.family_score" },
+  { key: "infra_score",     labelKey: "hotels.scores.infra_score" },
+  { key: "nightlife_score", labelKey: "hotels.scores.nightlife_score" },
+  { key: "activity_score",  labelKey: "hotels.scores.activity_score" },
+  { key: "wellness_score",  labelKey: "hotels.scores.wellness_score" },
+  { key: "business_score",  labelKey: "hotels.scores.business_score" },
+  { key: "value_score",     labelKey: "hotels.scores.value_score" },
+  { key: "access_score",    labelKey: "hotels.scores.access_score" },
+];
+
+const AMENITIES = [
+  { key: "crib",              labelKey: "hotels.amenities.crib" },
+  { key: "kids_pool",         labelKey: "hotels.amenities.kids_pool" },
+  { key: "kids_club",         labelKey: "hotels.amenities.kids_club" },
+  { key: "kitchenette",       labelKey: "hotels.amenities.kitchenette" },
+  { key: "gym",               labelKey: "hotels.amenities.gym" },
+  { key: "spa",               labelKey: "hotels.amenities.spa" },
+  { key: "pool_indoor",       labelKey: "hotels.amenities.pool_indoor" },
+  { key: "pool_outdoor",      labelKey: "hotels.amenities.pool_outdoor" },
+  { key: "parking",           labelKey: "hotels.amenities.parking" },
+  { key: "bar",               labelKey: "hotels.amenities.bar" },
+  { key: "elevator",          labelKey: "hotels.amenities.elevator" },
+  { key: "soundproof_rooms",  labelKey: "hotels.amenities.soundproof_rooms" },
+  { key: "laundry",           labelKey: "hotels.amenities.laundry" },
+  { key: "late_checkin",      labelKey: "hotels.amenities.late_checkin" },
+];
+
+const NEARBY_FIELDS = [
+  { key: "metro_m",       labelKey: "hotels.nearby.metro_m" },
+  { key: "supermarket_m", labelKey: "hotels.nearby.supermarket_m" },
+  { key: "pharmacy_m",    labelKey: "hotels.nearby.pharmacy_m" },
+  { key: "park_m",        labelKey: "hotels.nearby.park_m" },
+];
+
 /* ---------- Кликабельный автор ---------- */
 function AuthorLink({ item }) {
+  const { t } = useTranslation();
+
   const providerId =
     toInt(item?.author_provider_id) ??
     toInt(item?.provider_id) ??
@@ -26,7 +65,7 @@ function AuthorLink({ item }) {
     item?.author_name ||
       item?.authorName ||
       item?.provider_name ||
-      "провайдер"
+      t("hotels.inspections.author_fallback", "провайдер")
   );
 
   const url =
@@ -39,7 +78,6 @@ function AuthorLink({ item }) {
     (async () => {
       if (!providerId) return;
       try {
-        // пробуем несколько синонимов: /providers/:id и /provider/:id
         const tryUrls = [
           `/api/providers/${providerId}`,
           `/api/provider/${providerId}`,
@@ -77,7 +115,7 @@ function AuthorLink({ item }) {
 
   return (
     <div className="text-sm text-gray-500">
-      Автор:{" "}
+      {t("hotels.inspections.author", "Автор")}:{" "}
       {url ? (
         <Link to={url} className="text-blue-700 hover:underline" onClick={(e) => e.stopPropagation()}>
           {name}
@@ -91,6 +129,7 @@ function AuthorLink({ item }) {
 
 /* ---------- Карточка инспекции ---------- */
 function Card({ item, onLike }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border rounded-xl p-4 shadow-sm">
       <AuthorLink item={item} />
@@ -100,19 +139,19 @@ function Card({ item, onLike }) {
       <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         {item.pros && (
           <div>
-            <div className="font-semibold">Плюсы</div>
+            <div className="font-semibold">{t("common.pros", "Плюсы")}</div>
             <div>{item.pros}</div>
           </div>
         )}
         {item.cons && (
           <div>
-            <div className="font-semibold">Минусы</div>
+            <div className="font-semibold">{t("common.cons", "Минусы")}</div>
             <div>{item.cons}</div>
           </div>
         )}
         {item.features && (
           <div>
-            <div className="font-semibold">Фишки</div>
+            <div className="font-semibold">{t("common.features", "Фишки")}</div>
             <div>{item.features}</div>
           </div>
         )}
@@ -138,7 +177,7 @@ function Card({ item, onLike }) {
   );
 }
 
-/* --- форма новой инспекции (без поля Автор; с i18n) --- */
+/* --- форма новой инспекции (без поля Автор) --- */
 function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const { t } = useTranslation();
 
@@ -147,8 +186,17 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [cons, setCons] = useState("");
   const [features, setFeatures] = useState("");
   const [media, setMedia] = useState([]);
+
+  // Новые поля (шаблон оценки)
+  const [scores, setScores] = useState({});
+  const [amenities, setAmenities] = useState([]);
+  const [nearby, setNearby] = useState({});
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const toggleAmenity = (k) =>
+    setAmenities((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
 
   const onPickFiles = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -170,7 +218,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     e.preventDefault();
     setError("");
     if (!review.trim()) {
-      setError(t("errors.write_review"));
+      setError(t("errors.write_review", "Напишите общий отзыв"));
       return;
     }
     setSaving(true);
@@ -181,14 +229,18 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         cons: cons || undefined,
         features: features || undefined,
         media,
+        // новое:
+        scores,
+        amenities,
+        nearby,
       });
       onCreated?.();
     } catch (e) {
       const st = e?.response?.status;
       if (st === 401 || st === 403) {
-        setError(t("errors.only_providers"));
+        setError(t("errors.only_providers", "Только провайдер/агент может оставить инспекцию"));
       } else {
-        setError(t("errors.save_failed"));
+        setError(t("errors.save_failed", "Не удалось сохранить инспекцию"));
       }
     } finally {
       setSaving(false);
@@ -197,10 +249,10 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
 
   return (
     <form onSubmit={submit} className="bg-white border rounded-xl p-4 shadow-sm max-w-3xl">
-      <h2 className="text-lg font-semibold mb-3">{t("hotels.inspections.new.title")}</h2>
+      <h2 className="text-lg font-semibold mb-3">{t("hotels.inspections.new.title", "Новая инспекция")}</h2>
 
       <div className="mb-2 text-sm text-gray-500">
-        {t("hotels.inspections.new.author_auto_hint")}
+        {t("hotels.inspections.new.author_auto_hint", "Автор и ссылка на профиль подтянутся автоматически")}
       </div>
 
       {error && (
@@ -211,7 +263,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
 
       <div className="mt-3">
         <label className="block text-sm text-gray-600 mb-1">
-          {t("hotels.inspections.new.review_label")} *
+          {t("hotels.inspections.new.review_label", "Общий отзыв")} *
         </label>
         <textarea
           className="w-full border rounded px-3 py-2 min-h-[120px]"
@@ -222,7 +274,9 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
 
       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.pros")}</label>
+          <label className="block text-sm text-gray-600 mb-1">
+            {t("hotels.inspections.new.pros", "Плюсы")}
+          </label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={pros}
@@ -230,7 +284,9 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.cons")}</label>
+          <label className="block text-sm text-gray-600 mb-1">
+            {t("hotels.inspections.new.cons", "Минусы")}
+          </label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={cons}
@@ -238,7 +294,9 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-600 mb-1">{t("hotels.inspections.new.features")}</label>
+          <label className="block text-sm text-gray-600 mb-1">
+            {t("hotels.inspections.new.features", "Фишки")}
+          </label>
           <textarea
             className="w-full border rounded px-3 py-2 min-h-[90px]"
             value={features}
@@ -247,15 +305,89 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         </div>
       </div>
 
-      <div className="mt-3">
+      {/* === Шаблон оценки (0..5) === */}
+      <div className="mt-4">
+        <div className="text-base font-semibold mb-2">
+          {t("hotels.inspections.new.scores_title", "Оценки (0–5)")}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {SCORE_FIELDS.map((f) => (
+            <label key={f.key} className="block">
+              <div className="text-sm text-gray-600 mb-1">{t(f.labelKey)}</div>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                step="0.5"
+                value={scores[f.key] ?? 0}
+                onChange={(e) => setScores((s) => ({ ...s, [f.key]: Number(e.target.value) }))}
+                className="w-full"
+              />
+              <div className="text-xs text-gray-500">
+                {t("hotels.inspections.new.current_value", { defaultValue: "Текущее: {{v}}", v: scores[f.key] ?? 0 })}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* === Удобства === */}
+      <div className="mt-4">
+        <div className="text-base font-semibold mb-2">
+          {t("hotels.inspections.new.amenities_title", "Удобства")}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {AMENITIES.map((a) => (
+            <label key={a.key} className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={amenities.includes(a.key)}
+                onChange={() => toggleAmenity(a.key)}
+              />
+              <span>{t(a.labelKey)}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* === Объекты рядом === */}
+      <div className="mt-4">
+        <div className="text-base font-semibold mb-2">
+          {t("hotels.inspections.new.nearby_title", "Рядом (дистанции)")}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {NEARBY_FIELDS.map((n) => (
+            <label key={n.key} className="block">
+              <div className="text-sm text-gray-600 mb-1">{t(n.labelKey)}</div>
+              <input
+                type="number"
+                min="0"
+                step="10"
+                value={nearby[n.key] ?? ""}
+                onChange={(e) =>
+                  setNearby((v) => ({ ...v, [n.key]: e.target.value === "" ? null : Number(e.target.value) }))
+                }
+                className="w-full border rounded px-3 py-2"
+                placeholder={t("hotels.inspections.new.meters_placeholder", "м")}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Фото */}
+      <div className="mt-4">
         <input id="inspMedia" type="file" multiple accept="image/*" onChange={onPickFiles} className="sr-only" />
-        <label htmlFor="inspMedia" className="inline-flex items-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer">
-          {t("hotels.inspections.new.add_photos")}
+        <label
+          htmlFor="inspMedia"
+          className="inline-flex items-center px-3 py-2 rounded bg-gray-800 text-white cursor-pointer"
+        >
+          {t("hotels.inspections.new.add_photos", "Добавить фото")}
         </label>
         <span className="ml-2 text-sm text-gray-600">
           {media.length
-            ? t("hotels.inspections.new.selected_n", { count: media.length })
-            : t("hotels.inspections.new.no_photos")}
+            ? t("hotels.inspections.new.selected_n", { count: media.length, defaultValue: "выбрано: {{count}}" })
+            : t("hotels.inspections.new.no_photos", "фото не выбраны")}
         </span>
 
         {!!media.length && (
@@ -280,21 +412,25 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
         <button
           type="submit"
           disabled={saving}
-          className={`px-4 py-2 rounded text-white ${saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"}`}
+          className={`px-4 py-2 rounded text-white ${
+            saving ? "bg-gray-400" : "bg-orange-600 hover:bg-orange-700"
+          }`}
         >
-          {saving ? t("hotels.inspections.new.saving") : t("hotels.inspections.new.save")}
+          {saving
+            ? t("hotels.inspections.new.saving", "Сохранение…")
+            : t("hotels.inspections.new.save", "Сохранить")}
         </button>
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded border">
-          {t("common.cancel")}
+          {t("common.cancel", "Отмена")}
         </button>
       </div>
     </form>
   );
 }
 
-
 /* ---------- Страница ---------- */
 export default function HotelInspections() {
+  const { t } = useTranslation();
   const { hotelId } = useParams();
   const [search] = useSearchParams();
   const navigate = useNavigate();
@@ -323,7 +459,9 @@ export default function HotelInspections() {
         ...x,
         media: Array.isArray(x.media)
           ? x.media
-          : (typeof x.media === "string" ? (JSON.parse(x.media || "[]")) : []),
+          : typeof x.media === "string"
+          ? JSON.parse(x.media || "[]")
+          : [],
       }));
       setItems(norm);
     } catch {
@@ -348,7 +486,7 @@ export default function HotelInspections() {
     <div className="max-w-5xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="text-xs text-gray-500">Отель</div>
+          <div className="text-xs text-gray-500">{t("hotels.inspections.hotel_label", "Отель")}</div>
           <div className="text-xl font-semibold">{hotel?.name || "…"}</div>
         </div>
 
@@ -359,12 +497,16 @@ export default function HotelInspections() {
               value={sort}
               onChange={(e) => setSort(e.target.value)}
             >
-              <option value="top">Сначала с большим числом лайков</option>
-              <option value="new">Сначала новые</option>
+              <option value="top">
+                {t("hotels.inspections.sort.topOption", "Сначала с большим числом лайков")}
+              </option>
+              <option value="new">
+                {t("hotels.inspections.sort.newOption", "Сначала новые")}
+              </option>
             </select>
           )}
           <Link to={`/hotels/${hotelId}`} className="text-sm text-blue-700 hover:underline">
-            Назад к отелю
+            {t("hotels.inspections.back_to_hotel", "Назад к отелю")}
           </Link>
         </div>
       </div>
@@ -381,7 +523,9 @@ export default function HotelInspections() {
             <Card key={it.id} item={it} onLike={onLike} />
           ))}
           {items.length === 0 && (
-            <div className="text-gray-500 text-sm">Инспекций пока нет</div>
+            <div className="text-gray-500 text-sm">
+              {t("hotels.inspections.empty", "Инспекций пока нет")}
+            </div>
           )}
         </div>
       )}
