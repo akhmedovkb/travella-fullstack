@@ -167,9 +167,9 @@ export default function App() {
           />
 
           {/* 404 / fallback — держим в самом конце */}
-          <Route path="*" element={<Navigate to="/marketplace" replace />} />
-
           <Route path="/tour-builder" element={<TourBuilder />} />
+          
+          <Route path="*" element={<Navigate to="/marketplace" replace />} />
 
         </Routes>
       </div>
