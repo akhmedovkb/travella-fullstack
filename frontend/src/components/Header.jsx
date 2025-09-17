@@ -1,4 +1,4 @@
-//frontend/src/components/Header.jsx
+// frontend/src/components/Header.jsx
 
 import { useEffect, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
@@ -92,7 +92,6 @@ const IconHeart = (p) => (
 );
 
 // для отелей
-
 const IconHotel = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
@@ -101,7 +100,6 @@ const IconHotel = (p) => (
     <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
-
 
 export default function Header() {
   const hasClient = !!localStorage.getItem("clientToken");
@@ -112,7 +110,7 @@ export default function Header() {
   useEffect(() => {
     let alive = true;
     (async () => {
-            // сначала пробуем из JWT — работает даже если профиль 404/403
+      // сначала пробуем из JWT — работает даже если профиль 404/403
       const jwtAdmin = detectAdminFromJwt();
       if (jwtAdmin) { if (alive) setIsAdmin(true); return; }
       if (role !== "provider") { if (alive) setIsAdmin(false); return; }
@@ -129,32 +127,31 @@ export default function Header() {
   }, [role]);
 
   const { t } = useTranslation();
-  const location = useLocation();  
+  const location = useLocation();
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0); // для ручного перезапроса счётчиков
 
-   // провайдерское избранное – считаем элементы
-   useEffect(() => {
-     if (role !== "provider") return;
-     let alive = true;
-     const load = async () => {
-       try {
-         const list = await apiProviderFavorites();
-         if (alive) setFavCount(Array.isArray(list) ? list.length : 0);
-       } catch {
-         if (alive) setFavCount(0);
-       }
-     };
-     load();
-     // обновлять бейдж при изменениях
-     const onChanged = () => load();
-     window.addEventListener("provider:favorites:changed", onChanged);
-     return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
-   }, [role]);
-
+  // провайдерское избранное – считаем элементы
+  useEffect(() => {
+    if (role !== "provider") return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const list = await apiProviderFavorites();
+        if (alive) setFavCount(Array.isArray(list) ? list.length : 0);
+      } catch {
+        if (alive) setFavCount(0);
+      }
+    };
+    load();
+    // обновлять бейдж при изменениях
+    const onChanged = () => load();
+    window.addEventListener("provider:favorites:changed", onChanged);
+    return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
+  }, [role]);
 
   /* Provider counters (requests / bookings) — без /api/notifications/counts */
   useEffect(() => {
@@ -169,35 +166,28 @@ export default function Header() {
         const rs = await apiGet("/api/requests/provider/stats", role);
         const requestsNew = Number(rs?.new || 0);
 
-        // 2) бронирования: сначала пытаемся взять готовые счётчики,
-        // если нет — считаем из списка (pending/total)
+        // 2) бронирования
         let bookingsPending = 0;
         let bookingsTotal = 0;
 
         try {
-              // правильный эндпоинт
-              const bs = await apiGet("/api/providers/stats", role);
-            
-              // total берём из bookings_total (или total — на всякий случай)
-              bookingsTotal = Number(bs?.bookings_total ?? bs?.total ?? 0);
-            
-              // если бекенд вдруг отдаёт pending/awaiting/new — используем
-              if (bs && (bs.pending != null || bs.awaiting != null || bs.new != null)) {
-                bookingsPending = Number(bs.pending ?? bs.awaiting ?? bs.new ?? 0);
-              }
-            } catch {
-              // фоллбэк на список бронирований (тоже providers/*)
-              const bl = await apiGet("/api/providers/bookings", role);
-              const list = Array.isArray(bl) ? bl : bl?.items || [];
-              bookingsPending = list.filter(
-                (x) => String(x.status).toLowerCase() === "pending"
-              ).length;
-              bookingsTotal = list.length;
-            }
+          const bs = await apiGet("/api/providers/stats", role);
+          bookingsTotal = Number(bs?.bookings_total ?? bs?.total ?? 0);
+          if (bs && (bs.pending != null || bs.awaiting != null || bs.new != null)) {
+            bookingsPending = Number(bs.pending ?? bs.awaiting ?? bs.new ?? 0);
+          }
+        } catch {
+          const bl = await apiGet("/api/providers/bookings", role);
+          const list = Array.isArray(bl) ? bl : bl?.items || [];
+          bookingsPending = list.filter(
+            (x) => String(x.status).toLowerCase() === "pending"
+          ).length;
+          bookingsTotal = list.length;
+        }
         if (!cancelled) {
           setCounts({
-            requests_open: requestsNew,  // тут — новые
-            requests_accepted: 0,        // чтобы сумма в бейдже = новые
+            requests_open: requestsNew,
+            requests_accepted: 0,
             bookings_pending: bookingsPending,
             bookings_total: bookingsTotal,
           });
@@ -268,33 +258,34 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
-        <NavLink to="/tour-builder" className="...">Конструктор тура</NavLink>
+        {/* Конструктор тура — доступен всем ролям */}
+        <NavItem
+          to="/tour-builder"
+          label={t("nav.tour_builder", "Конструктор тура")}
+        />
 
         {/* Provider nav */}
         {role === "provider" && (
-            <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
-              <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-              <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
-              <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
-              <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-          
-              {/* <-- здесь будет виден только админам/модераторам */}
-              {isAdmin && (
-                <NavItem
-                  to="/admin/moderation"
-                  label={t("moderation.title", "Модерация")}
-                  icon={<IconModeration />}
-                />
-              )}
-              
-            </nav>
-          )}
+          <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
+            <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+            <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
+            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
 
+            {/* <-- здесь будет виден только админам/модераторам */}
+            {isAdmin && (
+              <NavItem
+                to="/admin/moderation"
+                label={t("moderation.title", "Модерация")}
+                icon={<IconModeration />}
+              />
+            )}
+          </nav>
+        )}
 
         {/* Client shortcuts: cabinet + favorites */}
         {role === "client" && (
           <nav className="flex items-center gap-2 text-sm">
-            
             <Link
               to="/client/dashboard"
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
@@ -314,7 +305,7 @@ export default function Header() {
                 {favCount}
               </span>
             </Link>
-           </nav>
+          </nav>
         )}
 
         {/* общий таб Отели — доступен всем ролям */}
