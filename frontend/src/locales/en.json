@@ -428,21 +428,67 @@
     "empty": "Nothing found",
       
     "inspections": {
-      "sort": { "top": "Most liked first", "new": "Newest first" },
+      "author_fallback": "provider",
+      "author": "Author",
+      "hotel_label": "Hotel",
+      "sort": {
+        "topOption": "Most likes first",
+        "newOption": "Newest first"
+      },
+      "back_to_hotel": "Back to hotel",
+      "empty": "No inspections yet",
       "new": {
         "title": "New inspection",
-        "author_auto_hint": "Author will be taken automatically from your provider profile.",
+        "author_auto_hint": "Author and profile link will be auto-filled",
         "review_label": "General review",
         "pros": "Pros",
         "cons": "Cons",
         "features": "Highlights",
+        "scores_title": "Scores (0–5)",
+        "current_value": "Current: {{v}}",
+        "amenities_title": "Amenities",
+        "nearby_title": "Nearby (distances)",
+        "meters_placeholder": "m",
         "add_photos": "Add photos",
+        "selected_n_one": "selected: {{count}}",
+        "selected_n_other": "selected: {{count}}",
         "no_photos": "no photos selected",
-        "selected_n": "selected: {{count}}",
-        "save": "Save",
         "saving": "Saving…",
-        "list_empty": "No inspections yet"
+        "save": "Save"
       }
+    },
+    "scores": {
+      "quiet_level": "Quietness level",
+      "family_score": "Family-friendly",
+      "infra_score": "Infrastructure around",
+      "nightlife_score": "Nightlife",
+      "activity_score": "Active leisure",
+      "wellness_score": "SPA/Wellness",
+      "business_score": "Business-friendly",
+      "value_score": "Value for money",
+      "access_score": "Accessibility/Transport"
+    },
+    "amenities": {
+      "crib": "Baby crib",
+      "kids_pool": "Kids pool",
+      "kids_club": "Kids club",
+      "kitchenette": "Kitchenette",
+      "gym": "Gym",
+      "spa": "Spa",
+      "pool_indoor": "Indoor pool",
+      "pool_outdoor": "Outdoor pool",
+      "parking": "Parking",
+      "bar": "Bar",
+      "elevator": "Elevator",
+      "soundproof_rooms": "Soundproof rooms",
+      "laundry": "Laundry",
+      "late_checkin": "Late check-in"
+    },
+    "nearby": {
+      "metro_m": "Metro (m)",
+      "supermarket_m": "Supermarket (m)",
+      "pharmacy_m": "Pharmacy (m)",
+      "park_m": "Park (m)"
     }
   },
 
