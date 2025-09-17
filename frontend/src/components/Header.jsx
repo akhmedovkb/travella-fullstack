@@ -268,6 +268,8 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
+        <NavLink to="/tour-builder" className="...">Конструктор тура</NavLink>
+
         {/* Provider nav */}
         {role === "provider" && (
             <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
