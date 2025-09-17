@@ -289,7 +289,10 @@
     "email": "Email",
     "website": "Website",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "pros": "Pros",
+    "cons": "Cons",
+    "features": "Highlights"
   },
 
   "confirm_delete": "Delete this item?",
