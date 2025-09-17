@@ -48,21 +48,25 @@ function allowRoles(...roles) {
 
 // Создание/редактирование отеля — провайдер/турагент/агентство/поставщик (админ/модер тоже ок)
 const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier");
+
 // Создание инспекции — только для провайдера/турагента/агентства/поставщика
 const providerOnly = allowRoles("provider", "tour_agent", "agency", "supplier");
+
+// Лайк — авторизованный toggle (уникальность на пользователя)
+// Разрешаем: провайдер/агент/агентство/поставщик/клиент/юзер
+const canLike = allowRoles("provider", "tour_agent", "agency", "supplier", "client", "user");
 
 /* ==================== Публичные ==================== */
 router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
 
-/* --- лайки инспекций --- */
-// Делаем отдельную ручку под /api/hotels/... (дубль к существующей /api/inspections/:id/like)
-// Тут требуем токен, чтобы лайк был уникальным на пользователя и работал toggle.
-router.post("/inspections/:id/like", authenticateToken, likeInspection);
+/* --- лайки инспекций (авторизация обязательна) --- */
+// ставим выше, чтобы не конфликтовало с "/:id/inspections"
+router.post("/inspections/:id/like", canLike, likeInspection);
 
 /* --- инспекции отелей --- */
-// просмотр — публичный, но с tryAuth (если есть токен, свои инспекции поднимутся выше)
+// просмотр — публичный, но с tryAuth (если есть токен, «мои» поднимутся выше и будет liked_by_me)
 router.get("/:id/inspections", tryAuth, listHotelInspections);
 // создание — только для провайдера/турагента/агентства/поставщика
 router.post("/:id/inspections", providerOnly, createHotelInspection);
