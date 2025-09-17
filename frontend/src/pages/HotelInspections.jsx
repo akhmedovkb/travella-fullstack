@@ -236,11 +236,14 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
       });
       onCreated?.();
     } catch (e) {
-      const st = e?.response?.status;
+     const st = e?.response?.status;
+      const code = e?.response?.data?.error;
       if (st === 401 || st === 403) {
-        setError(t("errors.only_providers", "Только провайдер/агент может оставить инспекцию"));
+        setError(t("errors.only_providers")); // было
+      } else if (st === 409 && code === "already_inspected") {
+        setError(t("errors.already_inspected")); // добавь ключи i18n RU/UZ/EN
       } else {
-        setError(t("errors.save_failed", "Не удалось сохранить инспекцию"));
+        setError(t("errors.save_failed"));
       }
     } finally {
       setSaving(false);
