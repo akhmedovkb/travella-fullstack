@@ -289,7 +289,10 @@
     "email": "Email",
     "website": "Sayt",
     "save": "Saqlash",
-    "cancel": "Bekor qilish"
+    "cancel": "Bekor qilish",
+    "pros": "Afzalliklari",
+    "cons": "Kamchiliklari",
+    "features": "Xususiyatlari"
   },
 
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
@@ -349,7 +352,10 @@
     "tab_load": "Yorliqni yuklab bo‘lmadi",
     "write_review": "Umumiy fikrni yozing",
     "save_failed": "Inspeksiyani saqlab bo‘lmadi",
-    "only_providers": "Inspeksiyani faqat tasdiqlangan provayderlar/agentlar qoldira oladi. Provayder kabinetingizga kiring."
+    "only_providers": "Inspeksiyani faqat tasdiqlangan provayderlar/agentlar qoldira oladi. Provayder kabinetingizga kiring.",
+    "write_review": "Iltimos, umumiy sharh yozing",
+    "only_providers": "Faqat provayder/agent sharh qoldirishi mumkin",
+    "save_failed": "Sharhni saqlab bo‘lmadi"
   },
 
   "event_category_concert": "Konsert",
@@ -422,6 +428,9 @@
     "empty": "Hech narsa topilmadi",
      
     "inspections": {
+      "author_fallback": "provayder",
+      "author": "Muallif",
+      "hotel_label": "Mehmonxona",
       "sort": { "top": "Avval ko‘p layk to‘plaganlar", "new": "Avval yangilari" },
       "new": {
         "title": "Yangi inspeksiya",
@@ -437,6 +446,63 @@
         "saving": "Saqlanmoqda…",
         "list_empty": "Hali inspeksiyalar yo‘q"
       }
+    },
+    "back_to_hotel": "Mehmonxonaga qaytish",
+      "empty": "Hozircha inspektsiyalar yo‘q",
+      "new": {
+        "title": "Yangi inspektsiya",
+        "author_auto_hint": "Muallif va profil havolasi avtomatik olinadi",
+        "review_label": "Umumiy sharh",
+        "pros": "Afzalliklari",
+        "cons": "Kamchiliklari",
+        "features": "Xususiyatlari",
+        "scores_title": "Baholar (0–5)",
+        "current_value": "Joriy: {{v}}",
+        "amenities_title": "Qulayliklar",
+        "nearby_title": "Yaqin joylar (masofa)",
+        "meters_placeholder": "m",
+        "add_photos": "Rasm qo‘shish",
+        "selected_n_one": "tanlandi: {{count}}",
+        "selected_n_few": "tanlandi: {{count}}",
+        "selected_n_many": "tanlandi: {{count}}",
+        "selected_n_other": "tanlandi: {{count}}",
+        "no_photos": "Rasm tanlanmagan",
+        "saving": "Saqlanmoqda…",
+        "save": "Saqlash"
+      },
+    
+    "scores": {
+      "quiet_level": "Tinchlik darajasi",
+      "family_score": "Oila uchun qulay",
+      "infra_score": "Infratuzilma",
+      "nightlife_score": "Kechki hayot",
+      "activity_score": "Faollik uchun",
+      "wellness_score": "Spa/Wellness",
+      "business_score": "Biznes uchun",
+      "value_score": "Narx/qiymat",
+      "access_score": "Kiruvchanlik/transport"
+    },
+    "amenities": {
+      "crib": "Bolalar beshigi",
+      "kids_pool": "Bolalar hovuzi",
+      "kids_club": "Bolalar klubi",
+      "kitchenette": "Oshxona burchagi",
+      "gym": "Sport zali",
+      "spa": "Spa",
+      "pool_indoor": "Ichki hovuz",
+      "pool_outdoor": "Tashqi hovuz",
+      "parking": "Avtoturargoh",
+      "bar": "Bar",
+      "elevator": "Lift",
+      "soundproof_rooms": "Shovqinsiz xonalar",
+      "laundry": "Kir yuvish xizmati",
+      "late_checkin": "Kech check-in"
+    },
+    "nearby": {
+      "metro_m": "Metro (m)",
+      "supermarket_m": "Supermarket (m)",
+      "pharmacy_m": "Dorixona (m)",
+      "park_m": "Bog‘ (m)"
     }
   },
 
