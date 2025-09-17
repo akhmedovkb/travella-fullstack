@@ -423,7 +423,9 @@
 
     "hotels": {
     "title": "Hotels",
-    "tabs": { "top": "Top", "popular": "Popular", "new": "New" },
+    "tabs": { "top": "Top", "popular": "Popular", "new": "New", "worst": "Worst" },
+    "emptyHint": "Pick a tab or run a search to show hotels.",
+    "emptyAfterAction": "No results. Adjust filters or try another tab.",
     "search_by_name": "Search by name",
     "city_placeholder": "City",
     "find_btn": "Search",
