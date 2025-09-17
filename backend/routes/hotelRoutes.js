@@ -18,6 +18,13 @@ const {
 
 const authenticateToken = require("../middleware/authenticateToken");
 
+/** Мягкая авторизация: если есть Authorization — парсим токен; если нет — не блокируем запрос */
+function tryAuth(req, res, next) {
+  const hdr = req.headers?.authorization || "";
+  if (!hdr) return next();
+  authenticateToken(req, res, () => next());
+}
+
 /** Разрешить только указанным ролям (админ/модер всегда ок) */
 function allowRoles(...roles) {
   const want = roles.map((r) => String(r).toLowerCase());
@@ -41,8 +48,7 @@ function allowRoles(...roles) {
 
 // Создание/редактирование отеля — провайдер/турагент/агентство/поставщик (админ/модер тоже ок)
 const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier");
-
-// Создание инспекции — только провайдер/турагент/агентство/поставщик
+// Создание инспекции — только для провайдера/турагента/агентства/поставщика
 const providerOnly = allowRoles("provider", "tour_agent", "agency", "supplier");
 
 /* ==================== Публичные ==================== */
@@ -50,12 +56,14 @@ router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
 
-/* --- лайки инспекций (публично; токен не обязателен) --- */
-router.post("/inspections/:id/like", likeInspection);
+/* --- лайки инспекций --- */
+// Делаем отдельную ручку под /api/hotels/... (дубль к существующей /api/inspections/:id/like)
+// Тут требуем токен, чтобы лайк был уникальным на пользователя и работал toggle.
+router.post("/inspections/:id/like", authenticateToken, likeInspection);
 
 /* --- инспекции отелей --- */
-// просмотр — публичный
-router.get("/:id/inspections", listHotelInspections);
+// просмотр — публичный, но с tryAuth (если есть токен, свои инспекции поднимутся выше)
+router.get("/:id/inspections", tryAuth, listHotelInspections);
 // создание — только для провайдера/турагента/агентства/поставщика
 router.post("/:id/inspections", providerOnly, createHotelInspection);
 
