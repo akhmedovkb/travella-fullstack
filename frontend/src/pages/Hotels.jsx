@@ -21,12 +21,14 @@ export default function HotelsPage() {
   const { t } = useTranslation();
   const abortRef = useRef(null);
 
-  const [tab, setTab] = useState("top"); // top | popular | new | search
+  // ВАЖНО: по умолчанию ничего не грузим, поэтому tab = null
+  const [tab, setTab] = useState(null); // 'top' | 'popular' | 'new' | 'worst' | 'search' | null
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showResults, setShowResults] = useState(false); // управляет первичным показом таблицы
 
   const limit = 10;
 
@@ -40,32 +42,41 @@ export default function HotelsPage() {
   }, []);
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
-  const toNum = (v) => (v==null ? null : Number(v));
-  const sortByRatingDesc   = (arr) => [...arr].sort((a,b) => (toNum(b.rating) ?? -1) - (toNum(a.rating) ?? -1));
-  const sortByViewsDesc    = (arr) => [...arr].sort((a,b) => (b.views  ??  0) - (a.views  ??  0));
-  const sortByNewestFirst  = (arr) => [...arr].sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+  const toNum = (v) => (v == null ? null : Number(v));
+  const sortByRatingDesc  = (arr) => [...arr].sort((a, b) => (toNum(b.rating) ?? -1) - (toNum(a.rating) ?? -1));
+  const sortByRatingAsc   = (arr) => [...arr].sort((a, b) => (toNum(a.rating) ??  1) - (toNum(b.rating) ??  1)); // для "Худшие"
+  const sortByViewsDesc   = (arr) => [...arr].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+  const sortByNewestFirst = (arr) => [...arr].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
-  // -------- loaders (исправлены эндпоинты) --------
+  // -------- loaders (исправленные эндпоинты + фоллбэки) --------
   const loadRanked = useCallback(async (type) => {
-    // основной корректный эндпоинт
     try {
+      // основной корректный эндпоинт
       const rows = await get(`${API_BASE}/api/hotels/ranked`, { type, limit });
-      return rows.map(normalizeHotel);
+      let norm = rows.map(normalizeHotel);
+
+      // если бэк не поддерживает "worst" сортировку — подстрахуемся
+      if (type === "worst") norm = sortByRatingAsc(norm);
+      return norm;
     } catch {
-      // фолбэк: _list + сортировка на клиенте
+      // фоллбэк: _list + сортировка на клиенте
       try {
         const rows = await get(`${API_BASE}/api/hotels/_list`, { limit: 50 });
         const norm = rows.map(normalizeHotel);
-        if (type === "top")      return sortByRatingDesc(norm).slice(0, limit);
-        if (type === "popular")  return sortByViewsDesc(norm).slice(0, limit);
+        if (type === "top")     return sortByRatingDesc(norm).slice(0, limit);
+        if (type === "popular") return sortByViewsDesc(norm).slice(0, limit);
+        if (type === "worst")   return sortByRatingAsc(norm).slice(0, limit);
         return sortByNewestFirst(norm).slice(0, limit); // new
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     }
   }, [get]);
 
-  const loadTop      = useCallback(() => loadRanked("top"),      [loadRanked]);
-  const loadPopular  = useCallback(() => loadRanked("popular"),  [loadRanked]);
-  const loadNew      = useCallback(() => loadRanked("new"),      [loadRanked]);
+  const loadTop      = useCallback(() => loadRanked("top"),     [loadRanked]);
+  const loadPopular  = useCallback(() => loadRanked("popular"), [loadRanked]);
+  const loadNew      = useCallback(() => loadRanked("new"),     [loadRanked]);
+  const loadWorst    = useCallback(() => loadRanked("worst"),   [loadRanked]);
 
   const loadSearch = useCallback(async () => {
     const params = { name: name || undefined, city: city || undefined, limit: 50, ext: 0 };
@@ -77,7 +88,7 @@ export default function HotelsPage() {
     }
   }, [get, name, city]);
 
-  // -------- actions --------
+  // -------- единая точка запуска --------
   const run = useCallback(async (kind) => {
     setLoading(true);
     setError("");
@@ -86,6 +97,7 @@ export default function HotelsPage() {
       if (kind === "top")        rows = await loadTop();
       else if (kind === "popular") rows = await loadPopular();
       else if (kind === "new")   rows = await loadNew();
+      else if (kind === "worst") rows = await loadWorst();
       else                       rows = await loadSearch(); // 'search'
       setItems(rows);
     } catch (e) {
@@ -96,9 +108,15 @@ export default function HotelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadTop, loadPopular, loadNew, loadSearch, t]);
+  }, [loadTop, loadPopular, loadNew, loadWorst, loadSearch, t]);
 
-  useEffect(() => { run(tab); /* eslint-disable react-hooks/exhaustive-deps */ }, [tab]);
+  // НЕ автоподгружаем при монтировании.
+  // Загружаем только если пользователь нажал на таб (не 'search').
+  useEffect(() => {
+    if (!tab || tab === "search") return;
+    setShowResults(true);
+    void run(tab);
+  }, [tab, run]);
 
   // -------- ui helpers --------
   const TabBtn = ({ value, children }) => (
@@ -119,6 +137,7 @@ export default function HotelsPage() {
   const onFind = async (e) => {
     e.preventDefault();
     setTab("search");      // поиск — отдельный режим
+    setShowResults(true);
     await run("search");
   };
 
@@ -136,6 +155,7 @@ export default function HotelsPage() {
             <TabBtn value="top">{t("hotels.tabs.top", { defaultValue: "Топ" })}</TabBtn>
             <TabBtn value="popular">{t("hotels.tabs.popular", { defaultValue: "Популярные" })}</TabBtn>
             <TabBtn value="new">{t("hotels.tabs.new", { defaultValue: "Новые" })}</TabBtn>
+            <TabBtn value="worst">{t("hotels.tabs.worst", { defaultValue: "Худшие" })}</TabBtn>
           </div>
         </div>
 
@@ -144,14 +164,14 @@ export default function HotelsPage() {
           <input
             type="text"
             value={name}
-            onChange={(e)=>setName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
             placeholder={t("hotels.search_by_name", { defaultValue: "Поиск по названию" })}
             className="flex-1 border rounded px-3 py-2"
           />
           <input
             type="text"
             value={city}
-            onChange={(e)=>setCity(e.target.value)}
+            onChange={(e) => setCity(e.target.value)}
             placeholder={t("hotels.city_placeholder", { defaultValue: "Город" })}
             className="w-64 border rounded px-3 py-2"
           />
@@ -170,44 +190,53 @@ export default function HotelsPage() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto border-collapse">
-            <thead>
-              <tr className="text-left text-gray-600">
-                <th className="px-4 py-3 font-semibold w-1/2">{t("hotels.col.name", { defaultValue: "Название" })}</th>
-                <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.city", { defaultValue: "Город" })}</th>
-                <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.rating", { defaultValue: "Оценка" })}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {loading ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
-                    {t("common.loading", { defaultValue: "Загрузка…" })}
-                  </td>
+        {/* Таблица показывается только после действия пользователя */}
+        {showResults ? (
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto border-collapse">
+              <thead>
+                <tr className="text-left text-gray-600">
+                  <th className="px-4 py-3 font-semibold w-1/2">{t("hotels.col.name", { defaultValue: "Название" })}</th>
+                  <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.city", { defaultValue: "Город" })}</th>
+                  <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.rating", { defaultValue: "Оценка" })}</th>
                 </tr>
-              ) : rows.length ? (
-                rows.map((h) => (
-                  <tr key={h.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
-                        {h.name}
-                      </NavLink>
+              </thead>
+              <tbody className="divide-y">
+                {loading ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
+                      {t("common.loading", { defaultValue: "Загрузка…" })}
                     </td>
-                    <td className="px-4 py-3">{h.city || "—"}</td>
-                    <td className="px-4 py-3">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
-                    {t("hotels.empty", { defaultValue: "Ничего не найдено" })}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : rows.length ? (
+                  rows.map((h) => (
+                    <tr key={h.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
+                          {h.name}
+                        </NavLink>
+                      </td>
+                      <td className="px-4 py-3">{h.city || "—"}</td>
+                      <td className="px-4 py-3">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
+                      {t("hotels.empty", { defaultValue: "Ничего не найдено" })}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-gray-500 text-sm py-8">
+            {t("hotels.empty_hint", {
+              defaultValue: "Выберите вкладку или выполните поиск, чтобы увидеть список отелей.",
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
