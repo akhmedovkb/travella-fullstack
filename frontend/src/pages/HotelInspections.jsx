@@ -214,41 +214,66 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
     e.target.value = "";
   };
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (!review.trim()) {
-      setError(t("errors.write_review", "Напишите общий отзыв"));
-      return;
+  const clamp = (v, lo, hi) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(hi, Math.max(lo, n));
+};
+
+const normalizeScores = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj || {})
+      .map(([k, v]) => [k, clamp(v, 0, 5)])
+      .filter(([, v]) => v !== undefined)
+  );
+
+const normalizeNearby = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj || {})
+      .map(([k, v]) => [k, Math.max(0, parseInt(v, 10) || 0)])
+      .filter(([, v]) => Number.isFinite(v))
+  );
+
+const nonEmpty = (v) =>
+  Array.isArray(v) ? (v.length ? v : undefined)
+  : v && typeof v === "object" ? (Object.keys(v).length ? v : undefined)
+  : v ?? undefined;
+
+const submit = async (e) => {
+  e.preventDefault();
+  setError("");
+  if (!review.trim()) {
+    setError(t("errors.write_review", "Напишите общий отзыв"));
+    return;
+  }
+  setSaving(true);
+  try {
+    await createInspection(hotelId, {
+      review: review.trim(),
+      pros: nonEmpty(pros),
+      cons: nonEmpty(cons),
+      features: nonEmpty(features),
+      media, // тут норм ок — массив может быть пустым, но можно: nonEmpty(media)
+      scores: nonEmpty(normalizeScores(scores)),
+      amenities: nonEmpty(amenities),
+      nearby: nonEmpty(normalizeNearby(nearby)),
+    });
+    onCreated?.();
+  } catch (e) {
+    const st = e?.response?.status;
+    const code = e?.response?.data?.error;
+    if (st === 401 || st === 403) {
+      setError(t("errors.only_providers"));
+    } else if (st === 409 && code === "already_inspected") {
+      setError(t("errors.already_inspected"));
+    } else {
+      setError(t("errors.save_failed"));
     }
-    setSaving(true);
-    try {
-      await createInspection(hotelId, {
-        review: review.trim(),
-        pros: pros || undefined,
-        cons: cons || undefined,
-        features: features || undefined,
-        media,
-        // новое:
-        scores,
-        amenities,
-        nearby,
-      });
-      onCreated?.();
-    } catch (e) {
-     const st = e?.response?.status;
-      const code = e?.response?.data?.error;
-      if (st === 401 || st === 403) {
-        setError(t("errors.only_providers")); // было
-      } else if (st === 409 && code === "already_inspected") {
-        setError(t("errors.already_inspected")); // добавь ключи i18n RU/UZ/EN
-      } else {
-        setError(t("errors.save_failed"));
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   return (
     <form onSubmit={submit} className="bg-white border rounded-xl p-4 shadow-sm max-w-3xl">
