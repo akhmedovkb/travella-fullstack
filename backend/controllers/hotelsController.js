@@ -405,29 +405,116 @@ async function updateHotel(req, res) {
   }
 }
 
-// === INSPECTIONS ============================================================
+// === INSPECTIONS + агрегаты =================================================
 
+// колонка hotels.attrs для агрегатов
+async function ensureHotelsAttrsColumn() {
+  await db.query(`ALTER TABLE hotels ADD COLUMN IF NOT EXISTS attrs JSONB DEFAULT '{}'::jsonb`);
+}
+
+// таблица инспекций + мягкие миграции
 async function ensureInspectionsTable() {
-  // создаём таблицу, если её ещё нет (работает на Railway/Postgres)
   await db.query(`
     CREATE TABLE IF NOT EXISTS inspections (
       id          SERIAL PRIMARY KEY,
       hotel_id    INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
       author_name TEXT,
-      author_provider_id INTEGER,     -- <— добавили (nullable)
+      author_provider_id INTEGER,
       review      TEXT,
       pros        TEXT,
       cons        TEXT,
       features    TEXT,
       media       JSONB,
+      -- новые структурные поля:
+      scores      JSONB,   -- { quiet_level, family_score, ... } (0..5)
+      amenities   JSONB,   -- ["crib","kids_pool", ...]
+      nearby      JSONB,   -- { metro_m, supermarket_m, ... }
       likes       INTEGER DEFAULT 0,
       created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
     )
   `);
-  // мягкая миграция для уже существующих БД
   await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS author_provider_id INTEGER`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scores JSONB`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS amenities JSONB`);
+  await db.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS nearby JSONB`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_hotel ON inspections(hotel_id)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_inspections_author ON inspections(author_provider_id)`);
+}
+
+// пересчёт агрегатов по инспекциям → hotels.attrs.aggregated_from_inspections
+async function updateHotelAggregates(hotelId) {
+  await ensureHotelsAttrsColumn();
+
+  const { rows } = await db.query(`
+    WITH x AS (
+      SELECT
+        COUNT(*)                                     AS n,
+        AVG( (scores->>'quiet_level')::numeric )     AS quiet_level,
+        AVG( (scores->>'family_score')::numeric )    AS family_score,
+        AVG( (scores->>'infra_score')::numeric )     AS infra_score,
+        AVG( (scores->>'nightlife_score')::numeric ) AS nightlife_score,
+        AVG( (scores->>'activity_score')::numeric )  AS activity_score,
+        AVG( (scores->>'business_score')::numeric )  AS business_score,
+        AVG( (scores->>'wellness_score')::numeric )  AS wellness_score,
+        AVG( (scores->>'value_score')::numeric )     AS value_score,
+        AVG( (scores->>'access_score')::numeric )    AS access_score,
+        MIN( (nearby->>'metro_m')::numeric )         AS metro_m,
+        MIN( (nearby->>'supermarket_m')::numeric )   AS supermarket_m,
+        MIN( (nearby->>'pharmacy_m')::numeric )      AS pharmacy_m,
+        MIN( (nearby->>'park_m')::numeric )          AS park_m
+      FROM inspections
+      WHERE hotel_id = $1
+    ),
+    am AS (
+      SELECT jsonb_agg(DISTINCT a) AS amenities
+      FROM (
+        SELECT jsonb_array_elements(amenities) AS a
+        FROM inspections
+        WHERE hotel_id = $1 AND amenities IS NOT NULL
+      ) z
+    )
+    SELECT
+      x.n,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'scores', jsonb_strip_nulls(
+            jsonb_build_object(
+              'quiet_level',   x.quiet_level,
+              'family_score',  x.family_score,
+              'infra_score',   x.infra_score,
+              'nightlife_score', x.nightlife_score,
+              'activity_score',  x.activity_score,
+              'business_score',  x.business_score,
+              'wellness_score',  x.wellness_score,
+              'value_score',     x.value_score,
+              'access_score',    x.access_score
+            )
+          ),
+          'nearby', jsonb_strip_nulls(
+            jsonb_build_object(
+              'metro_m',       x.metro_m,
+              'supermarket_m', x.supermarket_m,
+              'pharmacy_m',    x.pharmacy_m,
+              'park_m',        x.park_m
+            )
+          ),
+          'amenities', COALESCE(am.amenities, '[]'::jsonb)
+        )
+      ) AS attrs
+    FROM x, am
+  `, [hotelId]);
+
+  const row = rows[0];
+  const attrs = row?.attrs || {};
+  const n = Number(row?.n || 0);
+
+  await db.query(
+    `UPDATE hotels
+       SET attrs = COALESCE(attrs,'{}'::jsonb) || jsonb_build_object('aggregated_from_inspections', $2),
+           updated_at = NOW()
+     WHERE id=$1`,
+    [hotelId, { n, ...attrs }]
+  );
 }
 
 function parseIntSafe(v) {
@@ -450,7 +537,10 @@ async function listHotelInspections(req, res) {
         : `COALESCE(likes,0) DESC, created_at DESC`;
 
     const q = await db.query(
-      `SELECT id, hotel_id, author_name, author_provider_id, review, pros, cons, features, media, likes, created_at
+      `SELECT id, hotel_id, author_name, author_provider_id,
+              review, pros, cons, features,
+              media, scores, amenities, nearby,
+              likes, created_at
          FROM inspections
         WHERE hotel_id = $1
         ORDER BY ${order}
@@ -463,7 +553,6 @@ async function listHotelInspections(req, res) {
       media: typeof r.media === "string"
         ? JSON.parse(r.media || "[]")
         : (Array.isArray(r.media) ? r.media : (r.media || [])),
-      // удобный URL профиля (фронт использует при наличии)
       author_profile_url: r.author_provider_id ? `/profile/provider/${r.author_provider_id}` : null,
     }));
 
@@ -492,7 +581,6 @@ async function createHotelInspection(req, res) {
       parseIntSafe(u.providerId) ??
       parseIntSafe(u.company_id) ??
       parseIntSafe(u.companyId) ??
-      // на некоторых инсталляциях у провайдера id хранится как общий u.id
       (role === "provider" ? parseIntSafe(u.id) : null);
 
     // --- Источник из body (если фронт отправляет явно) + токен как фолбэк ---
@@ -505,23 +593,29 @@ async function createHotelInspection(req, res) {
       providerIdFromToken ??
       null;
 
-    // Разрешаем создавать только при наличии провайдера
     if (!authorProviderId) {
       return res.status(403).json({ error: "provider_required" });
     }
 
-    // Имя автора: из body, либо из токена (компания/провайдер/имя), иначе «провайдер»
     const nameFinal =
       first(p.author_name) ||
       first(u.company_name, u.provider_name, u.name, u.companyName, u.display_name) ||
       "провайдер";
 
-    const mediaArr = Array.isArray(p.media) ? p.media.slice(0, 12) : [];
+    const mediaArr  = Array.isArray(p.media) ? p.media.slice(0, 12) : [];
+    const scores    = (p.scores && typeof p.scores === "object") ? p.scores : null;
+    const amenities = Array.isArray(p.amenities) ? p.amenities : null;
+    const nearby    = (p.nearby && typeof p.nearby === "object") ? p.nearby : null;
 
     const { rows } = await db.query(
       `INSERT INTO inspections
-         (hotel_id, author_name, author_provider_id, review, pros, cons, features, media, likes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,0)
+         (hotel_id, author_name, author_provider_id,
+          review, pros, cons, features,
+          media, scores, amenities, nearby, likes)
+       VALUES
+         ($1, $2, $3,
+          $4, $5, $6, $7,
+          $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, 0)
        RETURNING id`,
       [
         hotelId,
@@ -532,8 +626,14 @@ async function createHotelInspection(req, res) {
         p.cons || null,
         p.features || null,
         JSON.stringify(mediaArr),
+        scores ? JSON.stringify(scores) : null,
+        amenities ? JSON.stringify(amenities) : null,
+        nearby ? JSON.stringify(nearby) : null,
       ]
     );
+
+    // пересчёт агрегатов для отеля
+    await updateHotelAggregates(hotelId);
 
     res.json({ id: rows[0].id });
   } catch (e) {
@@ -541,6 +641,7 @@ async function createHotelInspection(req, res) {
     res.status(500).json({ error: "create_failed" });
   }
 }
+
 // POST /api/inspections/:id/like
 async function likeInspection(req, res) {
   const id = parseIntSafe(req.params.id);
@@ -560,14 +661,13 @@ async function likeInspection(req, res) {
 }
 
 module.exports = {
-  // было:
   searchHotels,
   listRankedHotels,
   createHotel,
   getHotel,
   listHotels,
   updateHotel,
-  // добавили / расширили:
+  // инспекции + лайки
   listHotelInspections,
   createHotelInspection,
   likeInspection,
