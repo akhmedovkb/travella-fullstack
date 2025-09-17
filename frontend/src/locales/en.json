@@ -352,7 +352,10 @@
     "tab_load": "Failed to load tab",
     "write_review": "Please write a general review",
     "save_failed": "Failed to save the inspection",
-    "only_providers": "Only authenticated providers/agents can leave inspections. Please sign in to the provider dashboard."
+    "only_providers": "Only authenticated providers/agents can leave inspections. Please sign in to the provider dashboard.",
+    "write_review": "Please write a general review",
+    "only_providers": "Only a provider/agent can submit an inspection",
+    "save_failed": "Failed to save the inspection"
     },
 
   "event_category_concert": "Concert",
