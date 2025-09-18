@@ -10,27 +10,28 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
-// ⬇️ добавили локали date-fns для DayPicker
+// date-fns locales (для DayPicker)
 import { ru as dfnsRu, enUS as dfnsEn, uz as dfnsUz } from "date-fns/locale";
 
-// --- Leaflet marker icons fix (для Vite) ---
+// Leaflet marker icons (Vite fix)
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl });
 
-// --- Конфиг ---
+// -------- CONFIG --------
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const GEONAMES_USER = import.meta.env.VITE_GEONAMES_USERNAME || "";
 
-// --- Константы / утилы ---
+// -------- UI helpers --------
+// ЕДИНЫЙ класс для всех number-инпутов (ровная высота/фокус)
+const INPUT_S =
+  "h-9 px-3 py-1.5 border rounded focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400";
 
-// getLocalizedName помощник:
+// -------- utils --------
 const getLocalizedName = (g, lang) => {
   const alts = Array.isArray(g.alternateNames) ? g.alternateNames : [];
-  const match =
-    alts.find(a => a.lang?.toLowerCase() === lang?.toLowerCase()) ||
-    null;
+  const match = alts.find(a => a.lang?.toLowerCase() === lang?.toLowerCase()) || null;
   const base = match?.name || g.name || g.toponymName || "";
   const admin = g.adminName1 ? `, ${g.adminName1}` : "";
   const country = g.countryName ? `, ${g.countryName}` : "";
@@ -70,15 +71,14 @@ const daysBetween = (a, b) => {
 };
 
 export default function TourBuilder() {
-  // ⬇️ берём текущий язык и t
   const { i18n, t } = useTranslation();
 
-  // ⬇️ вычисляем локаль date-fns для DayPicker
+  // локаль календаря
   const lang = (i18n.language || "ru").toLowerCase();
   const langBase = lang.startsWith("ru") ? "ru" : lang.startsWith("uz") ? "uz" : "en";
   const dfnsLocale = langBase === "ru" ? dfnsRu : langBase === "uz" ? dfnsUz : dfnsEn;
 
-  // ===== БАЗОВАЯ ФОРМА =====
+  // ===== базовые поля =====
   const [arrivalTimeDay1, setArrivalTimeDay1] = useState("");
   const [cities, setCities] = useState([]);
   const [rooming, setRooming] = useState(ROOMING_TYPES.reduce((a, k) => ((a[k] = 0), a), {}));
@@ -86,7 +86,7 @@ export default function TourBuilder() {
   const [transportNeeded, setTransportNeeded] = useState(true);
   const [monuments, setMonuments] = useState([]);
 
-  // ===== ДАТЫ ТУРА =====
+  // ===== даты тура =====
   const [range, setRange] = useState({ from: undefined, to: undefined });
   const dayCount = daysBetween(range.from, range.to);
 
@@ -98,12 +98,10 @@ export default function TourBuilder() {
     }));
   }, [range.from, range.to, dayCount]);
 
-  // ===== СЕГМЕНТЫ (между городами) =====
+  // ===== сегменты =====
   const segments = useMemo(() => {
     const res = [];
-    for (let i = 0; i < cities.length - 1; i++) {
-      res.push({ idx: i, from: cities[i], to: cities[i + 1] });
-    }
+    for (let i = 0; i < cities.length - 1; i++) res.push({ idx: i, from: cities[i], to: cities[i + 1] });
     return res;
   }, [cities]);
 
@@ -119,7 +117,7 @@ export default function TourBuilder() {
   const onSegmentExtrasChange = (idx, vals) =>
     setSegmentExtras((p) => ({ ...p, [idx]: vals || [] }));
 
-  // ===== НОЧИ / ОТЕЛИ =====
+  // ===== ночёвки / отели =====
   const [nights, setNights] = useState([]);
   useEffect(() => {
     if (!range.from || !range.to) { setNights([]); return; }
@@ -137,7 +135,7 @@ export default function TourBuilder() {
   const setNightField = (date, key, val) =>
     setNights((prev) => prev.map(n => n.date === date ? { ...n, [key]: key === "net" ? toNum(val, 0) : val } : n));
 
-  // ===== API helpers =====
+  // ===== api helpers =====
   const fetchJSON = async (url, params = {}) => {
     const base = API_BASE || window.frontend?.API_BASE || "";
     const u = new URL(url, base);
@@ -166,7 +164,7 @@ export default function TourBuilder() {
     }
   }, []);
 
-  // ===== Поставщики: гиды / транспорт (по доступности на даты) =====
+  // ===== доступные провайдеры =====
   const [suggestGuides, setSuggestGuides] = useState([]);
   const [suggestTransports, setSuggestTransports] = useState([]);
   const [guideId, setGuideId] = useState(null);
@@ -185,19 +183,16 @@ export default function TourBuilder() {
   const loadAvailable = useCallback(async (kind) => {
     if (!range.from || !range.to) return [];
     const start = fmtDate(range.from), end = fmtDate(range.to);
-
     try {
       const a = await fetchJSON(`/api/${kind}s/available`, { start, end, limit: 50 });
       const items = (Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : []).map(x => normalizeProvider(x, kind));
       return items;
-    } catch { /* fallthrough */ }
-
+    } catch {}
     try {
       const a = await fetchJSON(`/api/providers/search`, { type: kind, start_date: start, end_date: end, limit: 50 });
       const items = (Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : []).map(x => normalizeProvider(x, kind));
       return items;
-    } catch { /* ignore */ }
-
+    } catch {}
     return [];
   }, [range.from, range.to]);
 
@@ -216,7 +211,7 @@ export default function TourBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to, guideNeeded, transportNeeded]);
 
-  // ===== Поиск городов (GeoNames) =====
+  // ===== города (GeoNames) =====
   const loadCityOptions = useCallback(async (input, cb) => {
     const q = (input || "").trim();
     if (!q || !GEONAMES_USER) {
@@ -232,7 +227,6 @@ export default function TourBuilder() {
       }
       return cb(injected);
     }
-
     const langRaw = (typeof window !== "undefined" && window.i18next?.language) || (typeof navigator !== "undefined" && navigator.language) || "ru";
     const lang = /^uz/i.test(langRaw) ? "uz" : /^en/i.test(langRaw) ? "en" : "ru";
 
@@ -273,7 +267,6 @@ export default function TourBuilder() {
           });
         }
       }
-
       cb([...injected, ...fromApi]);
     } catch {
       const injected = [];
@@ -290,7 +283,7 @@ export default function TourBuilder() {
     }
   }, [cities, t]);
 
-  // ===== DnD городов =====
+  // ===== DnD =====
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const src = result.source.index, dst = result.destination.index;
@@ -318,7 +311,7 @@ export default function TourBuilder() {
   const [chd, setChd] = useState(0);
   const [inf, setInf] = useState(0);
 
-  // ===== Прайсинг =====
+  // ===== прайсинг =====
   const [currency, setCurrency] = useState("USD");
   const [markupPct, setMarkupPct] = useState(0);
   const [vatPct, setVatPct] = useState(0);
@@ -355,7 +348,7 @@ export default function TourBuilder() {
   const payingPax = useMemo(() => Math.max(1, toNum(adt, 0) + toNum(chd, 0)), [adt, chd]);
   const pricePerPax = useMemo(() => grandTotal / payingPax, [grandTotal, payingPax]);
 
-  // ===== Генерация программы =====
+  // ===== генерация программы =====
   const [programJSON, setProgramJSON] = useState(null);
   const [programText, setProgramText] = useState("");
 
@@ -423,7 +416,7 @@ export default function TourBuilder() {
     return program;
   };
 
-  // ===== Черновики =====
+  // ===== черновики =====
   const LS_KEY = "tourbuilder_draft_v1";
 
   const applyProgram = (p) => {
@@ -493,7 +486,7 @@ export default function TourBuilder() {
     alert(t("tb.no_drafts", { defaultValue: "Черновиков не найдено" }));
   };
 
-  // ===== Экспорт в печать / PDF =====
+  // ===== экспорт в печать/PDF =====
   const exportPdf = () => {
     const payload = generateProgram();
     const html = `
@@ -600,12 +593,11 @@ export default function TourBuilder() {
     setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 150);
   };
 
-  // ===== Render =====
+  // ===== render =====
   return (
     <div className="p-6">
-      {/* контейнер шире */}
       <div className="max-w-7xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
-        {/* шапка */}
+        {/* header */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-bold">
             {t("tourBuilder.title", { defaultValue: "Конструктор тура" })}
@@ -623,9 +615,8 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* верхний блок: календарь (2 колонки) + форма справа */}
+        {/* календарь + правая колонка */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Календарь */}
           <div className="lg:col-span-2 min-w-0">
             <label className="block text-sm font-medium mb-1">
               {t("tourBuilder.dates", { defaultValue: "Даты тура" })}
@@ -638,7 +629,6 @@ export default function TourBuilder() {
               numberOfMonths={2}
               disabled={{ before: new Date() }}
               className="text-sm"
-              // ⬇️ локализация календаря
               locale={dfnsLocale}
             />
             <p className="text-sm text-gray-600 mt-2">
@@ -648,7 +638,6 @@ export default function TourBuilder() {
             </p>
           </div>
 
-          {/* Правая колонка */}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -675,15 +664,18 @@ export default function TourBuilder() {
 
             <div>
               <div className="text-sm font-medium mb-1">{t("tb.pax", { defaultValue: "Гости (PAX)" })}</div>
-              <div className="grid grid-cols-3 gap-2">
-                <label className="text-sm">ADT
-                  <input type="number" min={0} value={adt} onChange={(e)=>setAdt(e.target.value)} className="mt-1 w-full border rounded px-2 py-1"/>
+              <div className="grid grid-cols-3 gap-3">
+                <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="sm:w-14">ADT</span>
+                  <input type="number" min={0} value={adt} onChange={(e)=>setAdt(e.target.value)} className={INPUT_S}/>
                 </label>
-                <label className="text-sm">CHD
-                  <input type="number" min={0} value={chd} onChange={(e)=>setChd(e.target.value)} className="mt-1 w-full border rounded px-2 py-1"/>
+                <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="sm:w-14">CHD</span>
+                  <input type="number" min={0} value={chd} onChange={(e)=>setChd(e.target.value)} className={INPUT_S}/>
                 </label>
-                <label className="text-sm">INF
-                  <input type="number" min={0} value={inf} onChange={(e)=>setInf(e.target.value)} className="mt-1 w-full border rounded px-2 py-1"/>
+                <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="sm:w-14">INF</span>
+                  <input type="number" min={0} value={inf} onChange={(e)=>setInf(e.target.value)} className={INPUT_S}/>
                 </label>
               </div>
             </div>
@@ -704,7 +696,7 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* Города (multiselect + DnD) */}
+        {/* города + dnd */}
         <div>
           <label className="block text-sm font-medium mb-1">
             {t("tourBuilder.cities", { defaultValue: "Города (multiselect)" })}
@@ -754,16 +746,13 @@ export default function TourBuilder() {
           )}
         </div>
 
-        {/* ROOMING */}
+        {/* rooming */}
         <div>
           <label className="block text-sm font-medium mb-2">
             {t("tourBuilder.rooming", { defaultValue: "Rooming (number of rooms)" })}
           </label>
-        
-          {/* авто-колонки одинаковой ширины, красиво переносятся */}
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
             {ROOMING_TYPES.map((k) => (
-              // каждая карточка — мини-табличка с 2 колонками: label + input
               <label
                 key={k}
                 className="grid grid-cols-[120px_1fr] items-center gap-2 rounded border px-3 py-2 bg-white"
@@ -774,14 +763,14 @@ export default function TourBuilder() {
                   min={0}
                   value={rooming[k]}
                   onChange={(e) => onRoomingChange(k, e.target.value)}
-                  className="w-24 md:w-28 border rounded px-2 py-1 text-sm"
+                  className={`${INPUT_S} w-24 md:w-28`}
                 />
               </label>
             ))}
           </div>
         </div>
 
-        {/* КАРТА */}
+        {/* карта */}
         <div>
           <h2 className="text-lg font-semibold mb-2">
             {t("tourBuilder.map", { defaultValue: "Карта" })}
@@ -822,7 +811,7 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* СЕГМЕНТЫ */}
+        {/* сегменты */}
         {!!segments.length && (
           <div>
             <h2 className="text-lg font-semibold mb-2">
@@ -879,10 +868,9 @@ export default function TourBuilder() {
           </div>
         )}
 
-        {/* РЕКОМЕНДАЦИИ ПОСТАВЩИКОВ */}
+        {/* рекомендации провайдеров */}
         {(range.from && range.to) && (
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Guides */}
             <div className="border rounded p-3">
               <h3 className="font-semibold mb-2">
                 {t("tb.guides_suggest", { defaultValue: "Гиды, доступные на выбранные даты" })}
@@ -929,7 +917,6 @@ export default function TourBuilder() {
               )}
             </div>
 
-            {/* Transport */}
             <div className="border rounded p-3">
               <h3 className="font-semibold mb-2">
                 {t("tb.transports_suggest", { defaultValue: "Транспорт, доступный на выбранные даты" })}
@@ -978,7 +965,7 @@ export default function TourBuilder() {
           </div>
         )}
 
-        {/* НОЧЁВКИ / ОТЕЛИ */}
+        {/* ночёвки/отели */}
         {!!nights.length && (
           <div>
             <h2 className="text-lg font-semibold mb-2">
@@ -988,8 +975,6 @@ export default function TourBuilder() {
               {nights.map((n) => (
                 <div key={n.date} className="grid md:grid-cols-6 gap-2 items-center border rounded p-2">
                   <div className="text-xs text-gray-500 md:col-span-1">{n.date}</div>
-
-                  {/* Hotel Autocomplete */}
                   <div className="md:col-span-3">
                     <AsyncSelect
                       cacheOptions
@@ -1012,14 +997,14 @@ export default function TourBuilder() {
 
                   <input
                     type="number" min={0}
-                    className="border rounded px-2 py-1 md:col-span-1"
+                    className={`${INPUT_S} md:col-span-1`}
                     placeholder={t("tb.net", { defaultValue: "Нетто" })}
                     value={n.net}
                     onChange={(e) => setNightField(n.date, "net", e.target.value)}
                   />
                   <input
                     type="text"
-                    className="border rounded px-2 py-1 md:col-span-1"
+                    className="border rounded px-2 py-1 md:col-span-1 h-9"
                     placeholder={t("tb.notes", { defaultValue: "Заметка" })}
                     value={n.notes}
                     onChange={(e) => setNightField(n.date, "notes", e.target.value)}
@@ -1030,7 +1015,7 @@ export default function TourBuilder() {
           </div>
         )}
 
-        {/* ПРАЙСИНГ */}
+        {/* прайсинг */}
         <div className="border rounded p-3">
           <h2 className="text-lg font-semibold mb-3">
             {t("tb.pricing", { defaultValue: "Ценообразование" })}
@@ -1039,7 +1024,7 @@ export default function TourBuilder() {
           <div className="grid md:grid-cols-4 gap-3">
             <div>
               <label className="block text-sm font-medium mb-1">{t("tb.currency", { defaultValue: "Валюта" })}</label>
-              <select className="border rounded px-2 py-2 w-full" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <select className="border rounded px-2 py-2 w-full h-9" value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 <option value="USD">USD</option>
                 <option value="UZS">UZS</option>
                 <option value="EUR">EUR</option>
@@ -1047,15 +1032,15 @@ export default function TourBuilder() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("tb.markup", { defaultValue: "Наценка, %" })}</label>
-              <input type="number" min={0} className="border rounded px-2 py-2 w-full" value={markupPct} onChange={(e) => setMarkupPct(e.target.value)} />
+              <input type="number" min={0} className={INPUT_S + " w-full"} value={markupPct} onChange={(e) => setMarkupPct(e.target.value)} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">VAT, %</label>
-              <input type="number" min={0} className="border rounded px-2 py-2 w-full" value={vatPct} onChange={(e) => setVatPct(e.target.value)} />
+              <input type="number" min={0} className={INPUT_S + " w-full"} value={vatPct} onChange={(e) => setVatPct(e.target.value)} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("tb.tourist_fee", { defaultValue: "Туристический сбор / ночь" })}</label>
-              <input type="number" min={0} className="border rounded px-2 py-2 w-full" value={touristFeePerNight} onChange={(e) => setTouristFeePerNight(e.target.value)} />
+              <input type="number" min={0} className={INPUT_S + " w-full"} value={touristFeePerNight} onChange={(e) => setTouristFeePerNight(e.target.value)} />
             </div>
           </div>
 
@@ -1085,7 +1070,7 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* Действия */}
+        {/* actions */}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={generateProgram} className="px-4 py-2 rounded border">
             {t("tourBuilder.generate", { defaultValue: "Сформировать программу" })}
@@ -1098,7 +1083,7 @@ export default function TourBuilder() {
           </button>
         </div>
 
-        {/* Результат */}
+        {/* результат */}
         {programJSON && (
           <div className="grid md:grid-cols-2 gap-6">
             <div>
