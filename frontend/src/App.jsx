@@ -35,8 +35,12 @@ function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
   return token ? children : <Navigate to="/client/login" replace />;
 }
+
 // TourBuilder - Тур конструктор
 import TourBuilder from "./pages/TourBuilder";
+
+//Entry fees form
+import AdminEntryFees from "./pages/AdminEntryFees";
 
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -145,6 +149,19 @@ export default function App() {
               </PrivateRoute>
             }
           />
+
+          {/* Админ: база входных билетов */}
+           <Route
+             path="/admin/entry-fees"
+             element={
+               <PrivateRoute>
+                 <AdminRoute>
+                   <AdminEntryFees />
+                 </AdminRoute>
+               </PrivateRoute>
+             }
+           />
+
           <Route
             path="/admin/hotels/new"
             element={
