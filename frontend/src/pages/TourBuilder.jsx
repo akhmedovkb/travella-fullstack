@@ -751,19 +751,16 @@ export default function TourBuilder() {
           <label className="block text-sm font-medium mb-2">
             {t("tourBuilder.rooming", { defaultValue: "Rooming (number of rooms)" })}
           </label>
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))] [grid-auto-flow:dense]">
             {ROOMING_TYPES.map((k) => (
-              <label
-                key={k}
-                className="grid grid-cols-[120px_1fr] items-center gap-2 rounded border px-3 py-2 bg-white"
-              >
+              <label className="grid grid-cols-[120px_1fr] items-center gap-2 rounded border px-3 py-2 bg-white">
                 <span className="text-sm text-gray-700 whitespace-nowrap">{k}</span>
                 <input
                   type="number"
                   min={0}
                   value={rooming[k]}
                   onChange={(e) => onRoomingChange(k, e.target.value)}
-                  className={`${INPUT_S} w-24 md:w-28`}
+                  className="h-9 w-full border rounded px-2 text-sm"   // ← w-full вместо фиксированной ширины
                 />
               </label>
             ))}
