@@ -1,6 +1,7 @@
 // frontend/src/pages/TourBuilder.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AsyncSelect, { components as RS } from "react-select/async";
+import AsyncSelect from "react-select/async";
+import { components as RS } from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useTranslation } from "react-i18next";
 import { DayPicker } from "react-day-picker";
