@@ -9,6 +9,7 @@ import "leaflet/dist/leaflet.css";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // --- Leaflet marker icons fix for Vite bundling ---
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -37,8 +38,8 @@ const EXTRAS_OPTIONS = [
 const MONUMENTS_PRESET = [
   { value: "registan", label: "Registan" },
   { value: "khiva_itchan_kala", label: "Itchan Kala (Khiva)" },
-  { value: "bukhara_ark", label: "Ark (Bukhara)" },
-];
+  { value: "bukhara_ark", label: "Ark (Bukhara)"" }
+].map(x=>x); // keep shape
 
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0,10) : "");
@@ -46,13 +47,15 @@ const addDays = (d, n) => new Date(new Date(d).getTime() + n*86400000);
 const daysBetween = (a, b) => {
   if (!a || !b) return 0;
   const d1 = new Date(fmtDate(a)), d2 = new Date(fmtDate(b));
-  return Math.max(0, Math.round((d2 - d1) / 86400000) + 1); // включительно, чтобы считать Дни
+  return Math.max(0, Math.round((d2 - d1) / 86400000) + 1);
 };
 
 export default function TourBuilder() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // ====== БАЗОВАЯ ФОРМА ======
+  /** ===================== БАЗОВАЯ ФОРМА ===================== */
   const [arrivalTimeDay1, setArrivalTimeDay1] = useState("");
   const [cities, setCities] = useState([]); // [{value,label,lat,lng,countryName}]
   const [rooming, setRooming] = useState(ROOMING_TYPES.reduce((a,k)=>((a[k]=0),a),{}));
@@ -60,11 +63,10 @@ export default function TourBuilder() {
   const [transportNeeded, setTransportNeeded] = useState(true);
   const [monuments, setMonuments] = useState([]);
 
-  // ====== ДАТЫ ТУРА ======
-  const [range, setRange] = useState({ from: undefined, to: undefined }); // DayPicker range
+  /** ===================== ДАТЫ ТУРА ===================== */
+  const [range, setRange] = useState({ from: undefined, to: undefined });
   const dayCount = daysBetween(range.from, range.to);
 
-  // список дней с датами
   const days = useMemo(() => {
     if (!range.from || !range.to) return [];
     const n = dayCount;
@@ -74,7 +76,7 @@ export default function TourBuilder() {
     }));
   }, [range.from, range.to, dayCount]);
 
-  // ====== СЕГМЕНТЫ ПО ГОРОДАМ ======
+  /** ===================== СЕГМЕНТЫ ПО ГОРОДАМ ===================== */
   const segments = useMemo(() => {
     const res = [];
     for (let i = 0; i < cities.length - 1; i++) res.push({ idx: i, from: cities[i], to: cities[i + 1] });
@@ -86,7 +88,6 @@ export default function TourBuilder() {
     return first ? [first.lat, first.lng] : DEFAULT_CENTER;
   }, [cities]);
 
-  // пер-сегментные данные
   const [segmentTimes, setSegmentTimes] = useState({});   // idx -> {dep, arr}
   const [segmentExtras, setSegmentExtras] = useState({}); // idx -> [{value,label}]
   const onSegmentTimeChange = (idx, field, value) =>
@@ -94,35 +95,28 @@ export default function TourBuilder() {
   const onSegmentExtrasChange = (idx, vals) =>
     setSegmentExtras((p) => ({ ...p, [idx]: vals || [] }));
 
-  // ====== ГОСТИНИЦЫ ПО НОЧАМ (ручной ввод) ======
-  // одна ночь = дата и цена/название. Обычно ночь = день i → ночь между day i и day i+1
+  /** ===================== НОЧИ / ОТЕЛИ ===================== */
   const [nights, setNights] = useState([]); // [{date, hotel, net, notes}]
   useEffect(() => {
-    // синхронизировать массив ночей под выбранный диапазон
     if (!range.from || !range.to) { setNights([]); return; }
     const totalNights = Math.max(0, dayCount - 1);
     const base = [];
     for (let i=0; i<totalNights; i++) {
-      const date = fmtDate(addDays(range.from, i)); // дата ночёвки (после дня i+1)
+      const date = fmtDate(addDays(range.from, i));
       const existing = nights.find(n => n.date === date);
       base.push(existing || { date, hotel: "", net: 0, notes: "" });
     }
     setNights(base);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to, dayCount]);
-
   const setNightField = (date, key, val) =>
     setNights((prev) => prev.map(n => n.date === date ? { ...n, [key]: key === "net" ? toNum(val,0) : val } : n));
 
-  // ====== ПРОВАЙДЕРЫ: автоподбор по датам ======
-  const [suggestGuides, setSuggestGuides] = useState([]);       // [{id,name,price_per_day,currency}]
-  const [suggestTransports, setSuggestTransports] = useState([]); // idem
-
-  // выбранные провайдеры на тур целиком (можно переопределять на день)
+  /** ===================== ПРОВАЙДЕРЫ (автоподбор) ===================== */
+  const [suggestGuides, setSuggestGuides] = useState([]);
+  const [suggestTransports, setSuggestTransports] = useState([]);
   const [guideId, setGuideId] = useState(null);
   const [transportId, setTransportId] = useState(null);
-
-  // переопределения по дням: {date: id}
   const [guidePerDay, setGuidePerDay] = useState({});
   const [transportPerDay, setTransportPerDay] = useState({});
 
@@ -134,37 +128,36 @@ export default function TourBuilder() {
     currency: x.currency ?? "USD",
   });
 
-  const fetchJSON = async (url, params = {}) => {
+  const fetchJSON = async (url, params = {}, method = "GET", body) => {
     const u = new URL(url, API_BASE || window.frontend?.API_BASE || "");
-    Object.entries(params).forEach(([k,v]) => (v!=null && v!=="") && u.searchParams.set(k, v));
-    const r = await fetch(u.toString(), { credentials: "include" });
+    if (method === "GET") Object.entries(params).forEach(([k,v]) => (v!=null && v!=="") && u.searchParams.set(k, v));
+    const r = await fetch(u.toString(), {
+      method,
+      credentials: "include",
+      headers: method !== "GET" ? { "Content-Type": "application/json" } : undefined,
+      body: method !== "GET" ? JSON.stringify(body ?? params) : undefined,
+    });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
+    return await r.json().catch(()=> ({}));
   };
 
   const loadAvailable = useCallback(async (kind) => {
     if (!range.from || !range.to) return [];
     const start = fmtDate(range.from), end = fmtDate(range.to);
-
-    // 1) основной: /api/{kind}s/available
     try {
       const a = await fetchJSON(`/api/${kind}s/available`, { start, end, limit: 50 });
-      const items = (Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : []).map((x) => normalizeProvider(x, kind));
-      return items;
+      const arr = Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : [];
+      return arr.map((x) => normalizeProvider(x, kind));
     } catch {}
-
-    // 2) фолбэк: /api/providers/search?type=guide|transport
     try {
       const a = await fetchJSON(`/api/providers/search`, { type: kind, start_date: start, end_date: end, limit: 50 });
-      const items = (Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : []).map((x) => normalizeProvider(x, kind));
-      return items;
+      const arr = Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : [];
+      return arr.map((x) => normalizeProvider(x, kind));
     } catch {}
-
     return [];
   }, [range.from, range.to]);
 
   useEffect(() => {
-    // при выборе диапазона подгружаем рекомендации
     (async () => {
       if (!range.from || !range.to) { setSuggestGuides([]); setSuggestTransports([]); return; }
       const [g, t] = await Promise.all([
@@ -173,64 +166,17 @@ export default function TourBuilder() {
       ]);
       setSuggestGuides(g || []);
       setSuggestTransports(t || []);
-      // если ничего не выбрано — можно автоподставить первого
       if (g?.length && !guideId) setGuideId(g[0].id);
       if (t?.length && !transportId) setTransportId(t[0].id);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to, guideNeeded, transportNeeded]);
 
-  // ====== ГОРОДА поиск ======
-  const loadCityOptions = useCallback(async (input, cb) => {
-    const q = (input || "").trim();
-    if (!q || !GEONAMES_USER) return cb([]);
-    try {
-      const url = `https://secure.geonames.org/searchJSON?name_startsWith=${encodeURIComponent(
-        q
-      )}&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}&lang=ru`;
-      const r = await fetch(url);
-      const data = await r.json();
-      const options = (data?.geonames || []).map((g) => ({
-        value: String(g.geonameId),
-        label: `${g.name}${g.adminName1 ? ", " + g.adminName1 : ""}${g.countryName ? ", " + g.countryName : ""}`,
-        lat: Number(g.lat),
-        lng: Number(g.lng),
-        countryName: g.countryName,
-      }));
-      cb(options);
-    } catch {
-      cb([]);
-    }
-  }, []);
-
-  // DnD reorder
-  const onDragEnd = (result) => {
-    if (!result.destination) return;
-    const src = result.source.index, dst = result.destination.index;
-    setCities((prev) => {
-      const copy = [...prev];
-      const [moved] = copy.splice(src, 1);
-      copy.splice(dst, 0, moved);
-      return copy;
-    });
-  };
-
-  const onMarkerDrag = (index, e) => {
-    const { lat, lng } = e.target.getLatLng();
-    setCities((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], lat, lng };
-      return copy;
-    });
-  };
-
-  const onRoomingChange = (key, val) => setRooming((p) => ({ ...p, [key]: Math.max(0, toNum(val, 0)) }));
-
-  // ====== ЦЕНООБРАЗОВАНИЕ ======
+  /** ===================== ПРАЙСИНГ ===================== */
   const [currency, setCurrency] = useState("USD");
-  const [markupPct, setMarkupPct] = useState(0);         // наценка %
-  const [vatPct, setVatPct] = useState(0);               // НДС %
-  const [touristFeePerNight, setTouristFeePerNight] = useState(0); // с/ночь/чел — если нужно
+  const [markupPct, setMarkupPct] = useState(0);
+  const [vatPct, setVatPct] = useState(0);
+  const [touristFeePerNight, setTouristFeePerNight] = useState(0);
 
   const providerById = useMemo(() => {
     const map = new Map();
@@ -241,7 +187,6 @@ export default function TourBuilder() {
   const selectedGuide = providerById.get(guideId) || null;
   const selectedTransport = providerById.get(transportId) || null;
 
-  // стоимость провайдеров по дням (с переопределением)
   const providersCostNet = useMemo(() => {
     let guideNet = 0, transportNet = 0;
     days.forEach(d => {
@@ -263,11 +208,11 @@ export default function TourBuilder() {
   const touristFees = useMemo(() => toNum(touristFeePerNight,0) * Math.max(0, nights.length), [touristFeePerNight, nights.length]);
   const grandTotal = useMemo(() => grossBeforeVat + vatAmount + touristFees, [grossBeforeVat, vatAmount, touristFees]);
 
-  // ====== СФОРМИРОВАТЬ ПРОГРАММУ ======
+  /** ===================== ПРОГРАММА ===================== */
   const [programJSON, setProgramJSON] = useState(null);
   const [programText, setProgramText] = useState("");
 
-  const generateProgram = () => {
+  const buildProgram = () => {
     const program = {
       dates: { start: fmtDate(range.from), end: fmtDate(range.to), days: days.map(d => d.date) },
       arrivalTimeDay1,
@@ -301,7 +246,7 @@ export default function TourBuilder() {
     };
 
     const lines = [];
-    lines.push(`Dates: ${fmtDate(range.from)} — ${fmtDate(range.to)} (${dayCount || 0} d)`);
+    lines.push(`Dates: ${fmtDate(range.from)} — ${fmtDate(range.to)} (${days.length} d)`);
     lines.push(`Day 1 arrival: ${arrivalTimeDay1 || "-"}`);
     lines.push(`Guide: ${guideNeeded ? (selectedGuide ? selectedGuide.name : "yes") : "no"}; Transport: ${transportNeeded ? (selectedTransport ? selectedTransport.name : "yes") : "no"}`);
     const rm = ROOMING_TYPES.map((k) => `${k}:${rooming[k] || 0}`).filter((s) => !/:\s*0$/.test(s)).join(", ");
@@ -322,15 +267,262 @@ export default function TourBuilder() {
     }
     lines.push(`Totals [${currency}]: NET=${netTotal.toFixed(2)}, +markup ${markupPct||0}% → ${grossBeforeVat.toFixed(2)}, VAT ${vatPct||0}% = ${vatAmount.toFixed(2)}, tourist fees=${touristFees.toFixed(2)}, GRAND=${grandTotal.toFixed(2)}`);
 
-    setProgramJSON(program);
-    setProgramText(lines.join("\n"));
+    return { program, text: lines.join("\n") };
   };
 
-  // ====== RENDER ======
+  const generateProgram = () => {
+    const { program, text } = buildProgram();
+    setProgramJSON(program);
+    setProgramText(text);
+  };
+
+  /** ===================== ЧЕРНОВИКИ: SAVE / PREVIEW ===================== */
+  const [draftId, setDraftId] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(""); // info text after save
+
+  const saveDraft = async () => {
+    // гарантируем, что есть актуальная программа
+    const { program, text } = buildProgram();
+    setProgramJSON(program);
+    setProgramText(text);
+
+    try {
+      // основной сценарий: POST /api/tours/draft  { id?, data }
+      const res = await fetchJSON("/api/tours/draft", {}, "POST", {
+        id: draftId || undefined,
+        data: program,
+      });
+      const id = res?.id ?? res?.draft_id ?? res?.data?.id ?? res?._id;
+      if (id) {
+        setDraftId(id);
+        setSaveStatus("Черновик сохранён на сервере");
+        return;
+      }
+      throw new Error("No id in response");
+    } catch (e) {
+      // фолбэк: храним локально
+      const localId = draftId || `local-${Math.random().toString(36).slice(2,10)}`;
+      localStorage.setItem(`tourDraft:${localId}`, JSON.stringify(program));
+      setDraftId(localId);
+      setSaveStatus("Сохранено локально (offline fallback)");
+    }
+  };
+
+  const previewUrl = useMemo(() => {
+    if (!draftId) return "";
+    const base = window.location.origin;
+    return `${base}/tour-builder?draft=${encodeURIComponent(draftId)}`;
+  }, [draftId]);
+
+  // --- режим просмотра по ?draft= ---
+  const qs = new URLSearchParams(location.search);
+  const draftParam = qs.get("draft");
+  const previewMode = !!draftParam;
+
+  const loadDraftFromServer = useCallback(async (id) => {
+    // пробуем GET несколькими способами
+    try {
+      const r = await fetchJSON(`/api/tours/draft/${encodeURIComponent(id)}`);
+      return r?.data || r;
+    } catch {}
+    try {
+      const r = await fetchJSON(`/api/tours/draft`, { id });
+      return r?.data || r;
+    } catch {}
+    try {
+      const r = await fetchJSON(`/api/tours/drafts/${encodeURIComponent(id)}`);
+      return r?.data || r;
+    } catch {}
+    return null;
+  }, []);
+
+  const parseLocalDraft = (id) => {
+    try {
+      const raw = localStorage.getItem(`tourDraft:${id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  };
+
+  const programToText = (p) => {
+    if (!p) return "";
+    const lines = [];
+    lines.push(`Dates: ${p?.dates?.start || ""} — ${p?.dates?.end || ""} (${(p?.dates?.days||[]).length} d)`);
+    lines.push(`Day 1 arrival: ${p?.arrivalTimeDay1 || "-"}`);
+    const guideName = p?.providers?.guide?.name || (p?.need?.guide ? "yes" : "no");
+    const trName = p?.providers?.transport?.name || (p?.need?.transport ? "yes" : "no");
+    lines.push(`Guide: ${guideName}; Transport: ${trName}`);
+    if (p?.rooming) {
+      const rm = Object.entries(p.rooming).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(", ");
+      if (rm) lines.push(`Rooming: ${rm}`);
+    }
+    if (Array.isArray(p?.monuments) && p.monuments.length) lines.push(`Monuments: ${p.monuments.join(", ")}`);
+    if (Array.isArray(p?.cities) && p.cities.length) lines.push(`Cities: ${p.cities.map(c=>c.name).join(" → ")}`);
+    if (Array.isArray(p?.segments) && p.segments.length) {
+      lines.push("Segments:");
+      p.segments.forEach((s, i) => {
+        const ex = Array.isArray(s.extras) && s.extras.length ? ` [${s.extras.join(", ")}]` : "";
+        lines.push(`  ${i+1}) ${s.from?.name} (${s.time?.dep || "—"}) → ${s.to?.name} (${s.time?.arr || "—"})${ex}`);
+      });
+    }
+    if (Array.isArray(p?.hotels) && p.hotels.length) {
+      lines.push("Hotels:");
+      p.hotels.forEach((n, i) => lines.push(`  N${i+1} ${n.date}: ${n.hotel || "(hotel)"} — ${n.net || 0} ${p?.pricing?.currency || "USD"}`));
+    }
+    const pr = p?.pricing || {};
+    lines.push(`Totals [${pr.currency || "USD"}]: NET=${(pr.netTotal||0).toFixed?.(2) ?? pr.netTotal}, +markup ${pr.markupPct||0}% → ${(pr.grossBeforeVat||0).toFixed?.(2) ?? pr.grossBeforeVat}, VAT ${pr.vatPct||0}% = ${(pr.vatAmount||0).toFixed?.(2) ?? pr.vatAmount}, tourist fees=${(pr.touristFees||0).toFixed?.(2) ?? pr.touristFees}, GRAND ${(pr.grandTotal||0).toFixed?.(2) ?? pr.grandTotal}`);
+    return lines.join("\n");
+  };
+
+  const fillFormFromProgram = (p) => {
+    try {
+      if (!p) return;
+      // dates
+      if (p.dates?.start && p.dates?.end) {
+        setRange({ from: new Date(p.dates.start), to: new Date(p.dates.end) });
+      }
+      setArrivalTimeDay1(p.arrivalTimeDay1 || "");
+      setGuideNeeded(!!p?.need?.guide);
+      setTransportNeeded(!!p?.need?.transport);
+
+      // rooming
+      if (p.rooming) setRooming({ ...ROOMING_TYPES.reduce((a,k)=>((a[k]=0),a),{}), ...p.rooming });
+
+      // monuments
+      if (Array.isArray(p.monuments)) {
+        setMonuments(p.monuments.map((m) => ({ value: String(m).toLowerCase().replace(/\s+/g,"_"), label: m })));
+      }
+
+      // cities
+      if (Array.isArray(p.cities)) {
+        setCities(p.cities.map((c) => ({
+          value: c.id || c.name,
+          label: c.name,
+          lat: c.lat, lng: c.lng,
+          countryName: c.country
+        })));
+      }
+
+      // segments (times, extras)
+      const times = {}, extras = {};
+      (p.segments || []).forEach((s, i) => {
+        times[i] = { dep: s?.time?.dep || "", arr: s?.time?.arr || "" };
+        extras[i] = (Array.isArray(s?.extras) ? s.extras : []).map((x) => ({ value: x, label: x }));
+      });
+      setSegmentTimes(times);
+      setSegmentExtras(extras);
+
+      // hotels
+      setNights(Array.isArray(p.hotels) ? p.hotels.map((n)=>({ date:n.date, hotel:n.hotel||"", net:toNum(n.net,0), notes:n.notes||"" })) : []);
+
+      // providers
+      if (p.providers?.guide) setGuideId(p.providers.guide.id ?? null);
+      if (p.providers?.transport) setTransportId(p.providers.transport.id ?? null);
+      setGuidePerDay(p.providers?.overrides?.guidePerDay || {});
+      setTransportPerDay(p.providers?.overrides?.transportPerDay || {});
+
+      // pricing
+      if (p.pricing) {
+        setCurrency(p.pricing.currency || "USD");
+        setMarkupPct(p.pricing.markupPct ?? 0);
+        setVatPct(p.pricing.vatPct ?? 0);
+        setTouristFeePerNight(p.pricing.touristFees ?? 0);
+      }
+
+      setProgramJSON(p);
+      setProgramText(programToText(p));
+    } catch {
+      // ignore
+    }
+  };
+
+  // загрузка черновика по ?draft=
+  useEffect(() => {
+    (async () => {
+      if (!previewMode) return;
+      setDraftId(draftParam);
+
+      let p = null;
+      if (draftParam?.startsWith("local-")) {
+        p = parseLocalDraft(draftParam);
+      } else {
+        p = await loadDraftFromServer(draftParam);
+        // если и сервера нет — попробуем локалку
+        if (!p) p = parseLocalDraft(draftParam);
+      }
+
+      if (p) {
+        setProgramJSON(p);
+        setProgramText(programToText(p));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode, draftParam]);
+
+  /** ===================== UI ===================== */
+  if (previewMode) {
+    // Режим просмотра черновика
+    return (
+      <div className="p-6">
+        <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">{t("tb.preview_title", { defaultValue: "Предпросмотр тура" })}</h1>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                onClick={() => window.print()}
+              >
+                {t("print_pdf", { defaultValue: "Печать / PDF" })}
+              </button>
+              <button
+                className="px-3 py-2 rounded bg-gray-800 text-white hover:bg-gray-900"
+                onClick={() => {
+                  // загрузим черновик в форму для редактирования
+                  fillFormFromProgram(programJSON);
+                  navigate("/tour-builder", { replace: true });
+                }}
+              >
+                {t("edit", { defaultValue: "Редактировать" })}
+              </button>
+            </div>
+          </div>
+
+          {programJSON ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-semibold mb-2">{t("tourBuilder.programText", { defaultValue: "Текстовая программа" })}</h3>
+                <pre className="text-sm bg-gray-50 p-3 rounded border whitespace-pre-wrap">{programText}</pre>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">JSON</h3>
+                <pre className="text-sm bg-gray-50 p-3 rounded border overflow-x-auto">{JSON.stringify(programJSON, null, 2)}</pre>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500">{t("tb.preview_load_fail", { defaultValue: "Не удалось загрузить черновик." })}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // === РЕЖИМ КОНСТРУКТОРА ===
   return (
     <div className="p-6">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
-        <h1 className="text-2xl font-bold">{t("tourBuilder.title", { defaultValue: "Конструктор тура" })}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{t("tourBuilder.title", { defaultValue: "Конструктор тура" })}</h1>
+          <div className="flex items-center gap-2">
+            {!!previewUrl && (
+              <a href={previewUrl} className="px-3 py-2 rounded bg-gray-100 hover:bg-gray-200" target="_blank" rel="noreferrer">
+                {t("tb.open_preview", { defaultValue: "Открыть предпросмотр" })}
+              </a>
+            )}
+            <button onClick={saveDraft} className="px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700">
+              {t("tb.save_draft", { defaultValue: "Сохранить черновик" })}
+            </button>
+          </div>
+        </div>
+        {saveStatus && <div className="text-xs text-gray-600">{saveStatus}</div>}
 
         {/* ===== ДАТЫ ТУРА ===== */}
         <div className="grid md:grid-cols-2 gap-6">
@@ -389,7 +581,7 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* ===== ГОРОДА / ПОРЯДОК ===== */}
+        {/* ===== ГОРОДА ===== */}
         <div>
           <label className="block text-sm font-medium mb-1">
             {t("tourBuilder.cities", { defaultValue: "Города (multiselect)" })}
@@ -397,17 +589,44 @@ export default function TourBuilder() {
           <AsyncSelect
             cacheOptions defaultOptions isMulti classNamePrefix="select"
             placeholder={t("tourBuilder.cities_ph", { defaultValue: "Начните вводить город..." })}
-            loadOptions={loadCityOptions}
+            loadOptions={async (input, cb) => {
+              const q = (input || "").trim();
+              if (!q || !GEONAMES_USER) return cb([]);
+              try {
+                const url = `https://secure.geonames.org/searchJSON?name_startsWith=${encodeURIComponent(
+                  q
+                )}&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}&lang=ru`;
+                const r = await fetch(url);
+                const data = await r.json();
+                const options = (data?.geonames || []).map((g) => ({
+                  value: String(g.geonameId),
+                  label: `${g.name}${g.adminName1 ? ", " + g.adminName1 : ""}${g.countryName ? ", " + g.countryName : ""}`,
+                  lat: Number(g.lat),
+                  lng: Number(g.lng),
+                  countryName: g.countryName,
+                }));
+                cb(options);
+              } catch { cb([]); }
+            }}
             onChange={(vals)=>setCities(vals || [])}
             value={cities}
           />
-          {/* порядок городов можно менять drag-n-drop */}
+
           {!!cities.length && (
             <div className="mt-3">
               <p className="text-sm text-gray-500 mb-2">
                 {t("tourBuilder.dragToReorder", { defaultValue: "Перетащите для изменения порядка" })}
               </p>
-              <DragDropContext onDragEnd={onDragEnd}>
+              <DragDropContext onDragEnd={(result) => {
+                if (!result.destination) return;
+                const src = result.source.index, dst = result.destination.index;
+                setCities((prev) => {
+                  const copy = [...prev];
+                  const [moved] = copy.splice(src, 1);
+                  copy.splice(dst, 0, moved);
+                  return copy;
+                });
+              }}>
                 <Droppable droppableId="citiesList">
                   {(provided)=>(
                     <ul ref={provided.innerRef} {...provided.droppableProps} className="divide-y rounded border">
@@ -443,7 +662,7 @@ export default function TourBuilder() {
               <div key={k} className="flex items-center gap-2">
                 <span className="w-24 text-sm text-gray-600">{k}</span>
                 <input type="number" min={0} value={rooming[k]}
-                       onChange={(e)=>onRoomingChange(k, e.target.value)}
+                       onChange={(e)=>setRooming((p)=>({ ...p, [k]: Math.max(0, toNum(e.target.value, 0)) }))}
                        className="w-28 border rounded px-2 py-1"/>
               </div>
             ))}
@@ -461,7 +680,14 @@ export default function TourBuilder() {
               />
               {cities.map((c, idx) => Number.isFinite(c.lat)&&Number.isFinite(c.lng) ? (
                 <Marker key={c.value} position={[c.lat, c.lng]} draggable
-                        eventHandlers={{ dragend: (e)=>onMarkerDrag(idx, e) }}>
+                        eventHandlers={{ dragend: (e)=>{
+                          const { lat, lng } = e.target.getLatLng();
+                          setCities((prev) => {
+                            const copy = [...prev];
+                            copy[idx] = { ...copy[idx], lat, lng };
+                            return copy;
+                          });
+                        } }}>
                   <Popup>
                     <div className="text-sm">
                       <div className="font-semibold">{c.label}</div>
@@ -479,7 +705,7 @@ export default function TourBuilder() {
           </div>
         </div>
 
-        {/* ===== СЕГМЕНТЫ (время + допы) ===== */}
+        {/* ===== СЕГМЕНТЫ ===== */}
         {!!segments.length && (
           <div>
             <h2 className="text-lg font-semibold mb-2">
@@ -521,109 +747,35 @@ export default function TourBuilder() {
           </div>
         )}
 
-        {/* ===== АВТОПРЕДЛОЖЕНИЯ ПРОВАЙДЕРОВ ===== */}
+        {/* ===== РЕКОМЕНДАЦИИ ПРОВАЙДЕРОВ ===== */}
         {(range.from && range.to) && (
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Guides */}
-            <div className="border rounded p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold">{t("tb.guides_suggest", { defaultValue: "Гиды, доступные на выбранные даты" })}</h3>
-              </div>
-              {suggestGuides.length ? (
-                <div className="space-y-2">
-                  {suggestGuides.map((g) => (
-                    <label key={g.id} className="flex items-center justify-between gap-3 p-2 rounded border hover:bg-gray-50">
-                      <div className="flex-1">
-                        <div className="font-medium">{g.name}</div>
-                        <div className="text-xs text-gray-600">~ {g.price_per_day || 0} {g.currency || currency} / day</div>
-                      </div>
-                      <input
-                        type="radio"
-                        name="guide"
-                        checked={guideId === g.id}
-                        onChange={()=>setGuideId(g.id)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500">{t("tb.no_guides", { defaultValue: "Нет подходящих гидов" })}</div>
-              )}
-
-              {/* overrides per day */}
-              {!!days.length && (
-                <div className="mt-3">
-                  <div className="text-sm font-medium mb-1">{t("tb.override_by_day", { defaultValue: "Переопределить по дням" })}</div>
-                  <div className="space-y-2 max-h-64 overflow-auto">
-                    {days.map(d => (
-                      <div key={d.date} className="flex items-center gap-2">
-                        <div className="w-28 text-xs text-gray-500">{d.idx}. {d.date}</div>
-                        <select
-                          value={guidePerDay[d.date] ?? ""}
-                          onChange={(e)=>setGuidePerDay((p)=>({ ...p, [d.date]: e.target.value || undefined }))}
-                          className="border rounded px-2 py-1 text-sm flex-1"
-                        >
-                          <option value="">{t("tb.use_default", { defaultValue: "Как по умолчанию" })}</option>
-                          {suggestGuides.map((g)=> <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Transport */}
-            <div className="border rounded p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold">{t("tb.transports_suggest", { defaultValue: "Транспорт, доступный на выбранные даты" })}</h3>
-              </div>
-              {suggestTransports.length ? (
-                <div className="space-y-2">
-                  {suggestTransports.map((g) => (
-                    <label key={g.id} className="flex items-center justify-between gap-3 p-2 rounded border hover:bg-gray-50">
-                      <div className="flex-1">
-                        <div className="font-medium">{g.name}</div>
-                        <div className="text-xs text-gray-600">~ {g.price_per_day || 0} {g.currency || currency} / day</div>
-                      </div>
-                      <input
-                        type="radio"
-                        name="transport"
-                        checked={transportId === g.id}
-                        onChange={()=>setTransportId(g.id)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500">{t("tb.no_transports", { defaultValue: "Нет подходящего транспорта" })}</div>
-              )}
-
-              {!!days.length && (
-                <div className="mt-3">
-                  <div className="text-sm font-medium mb-1">{t("tb.override_by_day", { defaultValue: "Переопределить по дням" })}</div>
-                  <div className="space-y-2 max-h-64 overflow-auto">
-                    {days.map(d => (
-                      <div key={d.date} className="flex items-center gap-2">
-                        <div className="w-28 text-xs text-gray-500">{d.idx}. {d.date}</div>
-                        <select
-                          value={transportPerDay[d.date] ?? ""}
-                          onChange={(e)=>setTransportPerDay((p)=>({ ...p, [d.date]: e.target.value || undefined }))}
-                          className="border rounded px-2 py-1 text-sm flex-1"
-                        >
-                          <option value="">{t("tb.use_default", { defaultValue: "Как по умолчанию" })}</option>
-                          {suggestTransports.map((g)=> <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <ProvidersBlock
+              title={t("tb.guides_suggest", { defaultValue: "Гиды, доступные на выбранные даты" })}
+              list={suggestGuides}
+              selectedId={guideId}
+              setSelectedId={setGuideId}
+              days={days}
+              overrides={guidePerDay}
+              setOverrides={setGuidePerDay}
+              currency={currency}
+              emptyText={t("tb.no_guides", { defaultValue: "Нет подходящих гидов" })}
+            />
+            <ProvidersBlock
+              title={t("tb.transports_suggest", { defaultValue: "Транспорт, доступный на выбранные даты" })}
+              list={suggestTransports}
+              selectedId={transportId}
+              setSelectedId={setTransportId}
+              days={days}
+              overrides={transportPerDay}
+              setOverrides={setTransportPerDay}
+              currency={currency}
+              emptyText={t("tb.no_transports", { defaultValue: "Нет подходящего транспорта" })}
+            />
           </div>
         )}
 
-        {/* ===== НОЧИ (HOTELS) ===== */}
+        {/* ===== НОЧЁВКИ ===== */}
         {!!nights.length && (
           <div>
             <h2 className="text-lg font-semibold mb-2">{t("tb.hotels_nights", { defaultValue: "Ночёвки (отели добавляются вручную)" })}</h2>
@@ -674,53 +826,4 @@ export default function TourBuilder() {
               <input type="number" min={0} className="border rounded px-2 py-2 w-full" value={vatPct} onChange={(e)=>setVatPct(e.target.value)}/>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">{t("tb.tourist_fee", { defaultValue: "Туристический сбор / ночь" })}</label>
-              <input type="number" min={0} className="border rounded px-2 py-2 w-full" value={touristFeePerNight} onChange={(e)=>setTouristFeePerNight(e.target.value)}/>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4 mt-4 text-sm">
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.hotels_cost", { defaultValue: "Отели (нетто)" })}</div>
-              <div>{hotelsNet.toFixed(2)} {currency}</div>
-            </div>
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.providers_cost", { defaultValue: "Гид/Транспорт (нетто)" })}</div>
-              <div className="flex justify-between"><span>{t("tourBuilder.guide", { defaultValue: "Гид" })}</span><span>{providersCostNet.guideNet.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between"><span>{t("tourBuilder.transport", { defaultValue: "Транспорт" })}</span><span>{providersCostNet.transportNet.toFixed(2)} {currency}</span></div>
-            </div>
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.total", { defaultValue: "Суммарно" })}</div>
-              <div className="flex justify-between"><span>NET</span><span>{netTotal.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between"><span>+ Markup</span><span>{grossBeforeVat.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between"><span>+ VAT</span><span>{vatAmount.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between"><span>+ Tourist fees</span><span>{touristFees.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>GRAND</span><span>{grandTotal.toFixed(2)} {currency}</span></div>
-            </div>
-          </div>
-        </div>
-
-        {/* ===== СФОРМИРОВАТЬ ПРОГРАММУ ===== */}
-        <div className="flex justify-end">
-          <button type="button" onClick={generateProgram} className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-900">
-            {t("tourBuilder.generate", { defaultValue: "Сформировать программу" })}
-          </button>
-        </div>
-
-        {/* Результат */}
-        {programJSON && (
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-semibold mb-2">{t("tourBuilder.programText", { defaultValue: "Текстовая программа" })}</h3>
-              <pre className="text-sm bg-gray-50 p-3 rounded border whitespace-pre-wrap">{programText}</pre>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-2">JSON</h3>
-              <pre className="text-sm bg-gray-50 p-3 rounded border overflow-x-auto">{JSON.stringify(programJSON, null, 2)}</pre>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+              <label className="block text-sm font-medium mb-1">{t("tb.tourist_fee", { defaultValue: "Туристический сбор / ночь"
