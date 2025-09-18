@@ -1,5 +1,4 @@
-//backend/routes/providerRoutes.js
-
+// backend/routes/providerRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -35,29 +34,38 @@ function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
   }
-  // Совместимо со старыми токенами: если role есть — проверяем, если нет — пропускаем.
+  // Совместимо со старыми токенами
   if (req.user.role && req.user.role !== "provider") {
     return res.status(403).json({ message: "Только для провайдера" });
   }
   next();
 }
 
-// --- PUBLIC SEARCH / AVAILABLE ---------------------------------------------
+/* ========================================================================== */
+/* ========== PUBLIC SEARCH / AVAILABLE (с фильтром по языку) =============== */
+/* ========================================================================== */
 
 /** Нормализуем query */
-function _parseProviderQuery(qs = {}) {
-  const type  = String(qs.type || "").trim();                     // guide | transport | ...
+function parseProviderQuery(qs = {}) {
+  const type  = String(qs.type || "").trim();                     // guide | transport | agent | ...
   const city  = String(qs.city || qs.location || "").trim();      // Samarkand / Tashkent ...
   const q     = String(qs.q || "").trim();
   const date  = String(qs.date || "").trim();                     // YYYY-MM-DD
   const start = String(qs.start || "").trim();                    // YYYY-MM-DD
   const end   = String(qs.end || "").trim();                      // YYYY-MM-DD
   const limit = Math.min(Math.max(parseInt(qs.limit, 10) || 30, 1), 100);
-  return { type, city, q, date, start, end, limit };
+
+  // lang может быть "en" или "en,ru"
+  const langRaw = String(qs.lang || "").trim().toLowerCase();
+  const langs = langRaw
+    ? Array.from(new Set(langRaw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)))
+    : [];
+
+  return { type, city, q, date, start, end, limit, langs };
 }
 
-/** Общая часть WHERE для фильтров type/city/q */
-function _buildBaseWhere({ type, city, q }, vals) {
+/** Общая часть WHERE для фильтров type/city/q/langs */
+function buildBaseWhere({ type, city, q, langs }, vals) {
   const where = [];
 
   if (type) {
@@ -66,7 +74,7 @@ function _buildBaseWhere({ type, city, q }, vals) {
   }
 
   if (city) {
-    // location: text[]  → ищем по любому элементу массива
+    // location: text[]  → проверяем любой элемент массива
     vals.push(`%${city}%`);
     where.push(`EXISTS (SELECT 1 FROM unnest(p.location) loc WHERE loc ILIKE $${vals.length})`);
   }
@@ -77,31 +85,34 @@ function _buildBaseWhere({ type, city, q }, vals) {
     where.push(`(p.name ILIKE $${idx} OR p.email ILIKE $${idx} OR p.phone ILIKE $${idx})`);
   }
 
+  // фильтр по языку (providers.languages: jsonb массив ISO-639-1)
+  if (langs && langs.length) {
+    if (langs.length === 1) {
+      vals.push(JSON.stringify([langs[0]])); // '["en"]'
+      where.push(`COALESCE(p.languages,'[]'::jsonb) @> $${vals.length}::jsonb`);
+    } else {
+      // для нескольких языков: хотя бы одно совпадение
+      const ors = [];
+      langs.forEach(l => {
+        vals.push(JSON.stringify([l]));
+        ors.push(`COALESCE(p.languages,'[]'::jsonb) @> $${vals.length}::jsonb`);
+      });
+      where.push(`(${ors.join(" OR ")})`);
+    }
+  }
+
   return where;
-}
-
-
-/**
- * Нормализуем query: type, city|location, q, date, limit
- */
-function _parseProviderQuery(qs = {}) {
-  const type = (qs.type || "").trim();                       // guide | transport | agent | ...
-  const city = (qs.city || qs.location || "").trim();        // Samarkand / Tashkent ...
-  const q = (qs.q || "").trim();
-  const date = (qs.date || "").trim();                       // YYYY-MM-DD
-  const limit = Math.min(Math.max(parseInt(qs.limit || 30, 10) || 30, 1), 100);
-  return { type, city, q, date, limit };
 }
 
 /**
  * GET /api/providers/search
- * Простой поиск без учёта занятости на дату
+ * Простой поиск (без учёта занятости). Поддерживает lang.
  */
 router.get("/search", async (req, res) => {
   try {
-    const { type, city, q, limit } = _parseProviderQuery(req.query);
+    const { type, city, q, limit, langs } = parseProviderQuery(req.query);
     const vals = [];
-    const where = _buildBaseWhere({ type, city, q }, vals);
+    const where = buildBaseWhere({ type, city, q, langs }, vals);
 
     const sql = `
       SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
@@ -120,20 +131,19 @@ router.get("/search", async (req, res) => {
 
 /**
  * GET /api/providers/available
- * Фильтруем по type/city/q и исключаем занятых по:
+ * Фильтруем по type/city/q/langs и исключаем занятых по:
  * - bookings + booking_dates (status IN confirmed, active)
  * - provider_blocked_dates
- * Поддержка date ИЛИ (start,end) диапазона. Если ни одно не задано — как /search.
- * Если есть вспомогательная provider_busy — можно дополнительно учесть, но не требуется.
+ * Поддержка date ИЛИ (start,end). Если ничего не задано — эквивалент /search.
  */
 router.get("/available", async (req, res) => {
   try {
-    const { type, city, q, date, start, end, limit } = _parseProviderQuery(req.query);
+    const { type, city, q, date, start, end, limit, langs } = parseProviderQuery(req.query);
 
-    // нет даты — ведём себя как /search (но без router.handle)
+    // нет даты — ведём себя как /search
     if (!date && !(start && end)) {
       const vals = [];
-      const where = _buildBaseWhere({ type, city, q }, vals);
+      const where = buildBaseWhere({ type, city, q, langs }, vals);
       const sql = `
         SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
         FROM providers p
@@ -145,7 +155,7 @@ router.get("/available", async (req, res) => {
     }
 
     const vals = [];
-    const where = _buildBaseWhere({ type, city, q }, vals);
+    const where = buildBaseWhere({ type, city, q, langs }, vals);
 
     // Условие занятости: одиночная дата или интервал
     let busySql;
@@ -169,7 +179,6 @@ router.get("/available", async (req, res) => {
             AND d.date = $${dIdx}::date
         )`;
     } else {
-      // диапазон обязателен (в эту ветку мы попали по условию выше)
       vals.push(start);
       const sIdx = vals.length;
       vals.push(end);
@@ -208,26 +217,38 @@ router.get("/available", async (req, res) => {
   }
 });
 
-// Auth
+/* ========================================================================== */
+/* ============================ AUTH / PROFILE =============================== */
+/* ========================================================================== */
+
 router.post("/register", registerProvider);
 router.post("/login", loginProvider);
 
-// Profile
 router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/password", authenticateToken, requireProvider, changeProviderPassword);
 
-// Stats
+/* ========================================================================== */
+/* =============================== STATS ==================================== */
+/* ========================================================================== */
+
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 
-// Services CRUD
+/* ========================================================================== */
+/* ============================= SERVICES CRUD ============================== */
+/* ========================================================================== */
+
 router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
-// --- Календарь (важно держать ДО публичного /:providerId/calendar) ---
+/* ========================================================================== */
+/* =============================== CALENDAR ================================= */
+/* ========================================================================== */
+
+// важно держать ДО публичного /:providerId/calendar
 router.get("/booked-dates",  authenticateToken, requireProvider, getBookedDates);
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
@@ -260,8 +281,6 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
       [providerId]
     );
 
-
-    // формат фронту: плоский массив объектов; фронт сам сгруппирует по date
     res.json(q.rows);
   } catch (e) {
     console.error("providers/booked-details error:", e);
@@ -269,9 +288,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
   }
 });
 
-
-// Единый приватный эндпоинт календаря провайдера
-// Единый приватный эндпоинт календаря провайдера (даты + детали для тултипа)
+// Единый приватный эндпоинт календаря (даты + детали)
 router.get("/calendar", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -319,9 +336,9 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
     ]);
 
     res.json({
-      booked: booked.rows,         // [{ date }]
-      blocked: blocked.rows,       // [{ date }]
-      bookedDetails: details.rows, // [{ date, name, phone, telegram, role, profile_id, profile_url }]
+      booked: booked.rows,
+      blocked: blocked.rows,
+      bookedDetails: details.rows,
     });
   } catch (e) {
     console.error("providers/calendar error:", e);
@@ -329,16 +346,21 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
   }
 });
 
-
 // Публичный календарь (для клиентов)
 router.get("/:providerId(\\d+)/calendar", getCalendarPublic);
 
-// Favorites
+/* ========================================================================== */
+/* =============================== FAVORITES ================================ */
+/* ========================================================================== */
+
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
 
-// отправить на модерацию
+/* ========================================================================== */
+/* =========================== MODERATION SUBMIT ============================ */
+/* ========================================================================== */
+
 router.post(
   "/services/:id/submit",
   authenticateToken,
@@ -347,8 +369,7 @@ router.post(
     try {
       const { id } = req.params;
 
-      
-            const { rows } = await pool.query(
+      const { rows } = await pool.query(
         `UPDATE services
            SET status='pending',
                submitted_at = NOW(),
@@ -359,11 +380,10 @@ router.post(
          RETURNING id, status, submitted_at`,
         [id, req.user.id]
       );
-            if (!rows.length) {
-        // сервис либо не ваш, либо уже в pending/published/archived
+
+      if (!rows.length) {
         return res.status(409).json({ message: "Service must be in draft/rejected to submit" });
       }
-      // TG: уведомить админов о новой услуге в очереди
       try { await notifyModerationNew({ service: rows[0].id }); } catch {}
       return res.json({ ok: true, service: rows[0] });
     } catch (e) { next(e); }
