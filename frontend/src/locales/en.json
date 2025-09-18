@@ -305,7 +305,7 @@
 
   "country_not_chosen": "No countries found",
   "cover": "Cover",
-
+  "days": "days",
   "delete": "Delete",
   "delete_error": "Delete error",
   "departure_date": "Departure date",
@@ -666,6 +666,7 @@
 
   "phone": "Phone",
   "photo": "Photo",
+  "pick_dates": "Select start and end dates",
   "price": "Price",
 
   "profile": { "password_changed": "Password updated", "saved": "Profile saved" },
@@ -852,6 +853,39 @@
     "my_requests": "My requests"
   },
 
+  "tb": {
+  "load_draft": "Load draft",
+  "save_draft": "Save draft",
+  "draft_saved": "Draft saved",
+  "draft_saved_locally": "Draft saved locally",
+  "draft_loaded": "Draft loaded",
+  "draft_loaded_local": "Draft loaded from browser",
+  "no_drafts": "No drafts found",
+
+  "pax": "Guests (PAX)",
+  "loop_route": "close the loop",
+  "loop": "repeat",
+  "override_by_day": "Override by day",
+  "use_default": "Use default",
+
+  "guides_suggest": "Guides available for selected dates",
+  "no_guides": "No suitable guides",
+  "transports_suggest": "Transport available for selected dates",
+  "no_transports": "No suitable transport",
+
+  "hotels_nights": "Overnights (add hotels manually)",
+  "net": "Net",
+  "notes": "Note",
+
+  "pricing": "Pricing",
+  "currency": "Currency",
+  "markup": "Markup, %",
+  "tourist_fee": "Tourist fee / night",
+  "hotels_cost": "Hotels (net)",
+  "providers_cost": "Guide/Transport (net)",
+  "total": "Total"
+},
+
   "telegram": {
     "enable_title": "Telegram notifications",
     "enable_text": "Click the button below to link Telegram and receive notifications about requests and bookings.",
@@ -866,6 +900,30 @@
     "favoriteError": "Failed to update favorites",
     "removedFromFav": "Removed from favorites"
   },
+
+  "tourBuilder": {
+  "title": "Tour Builder",
+  "dates": "Tour dates",
+  "arrivalDay1": "Arrival time (Day 1)",
+  "monuments": "Monuments entry fees",
+  "monuments_ph": "Select sites",
+  "guide": "Guide",
+  "transport": "Transport",
+  "cities": "Cities (multiselect)",
+  "cities_ph": "Start typing a city...",
+  "dragToReorder": "Drag to reorder",
+  "rooming": "Rooming (number of rooms)",
+  "map": "Map",
+  "segments": "Route segments",
+  "dep": "Departure time",
+  "arr": "Arrival time",
+  "extras": "Extras",
+  "extras_ph": "Meals, master class…",
+  "markerHint": "Drag the marker to refine the point",
+  "generate": "Generate program",
+  "programText": "Program text"
+},
+
 
   "transfer": "Transfer",
   "transfer_options": {
