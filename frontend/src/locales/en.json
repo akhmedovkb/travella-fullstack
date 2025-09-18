@@ -863,9 +863,9 @@
   "draft_loaded_local": "Draft loaded from browser",
   "no_drafts": "No drafts found",
   "tariff_for": "Tariffs for:",
-   residents": "Residents",
-   nonresidents": "Non-residents",
-   entry_fees_net": "Entry fees (net)",
+  "residents": "Residents",
+  "nonresidents": "Non-residents",
+  "entry_fees_net": "Entry fees (net)",
 
   "pax": "Guests (PAX)",
   "loop_route": "close the loop",
