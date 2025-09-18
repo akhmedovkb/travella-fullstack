@@ -1,801 +1,492 @@
 // frontend/src/pages/TourBuilder.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AsyncSelect from "react-select/async";
-import { components as RS } from "react-select";
-import CreatableSelect from "react-select/creatable";
-import { useTranslation } from "react-i18next";
+import { components as SelectComponents } from "react-select";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { ru as dfnsRu, enUS as dfnsEn, uz as dfnsUz } from "date-fns/locale";
 
-/* =================== CONFIG =================== */
+// -------- CONFIG --------
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-/* =================== UTILS =================== */
+// -------- small utils --------
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
-const pad2 = (n) => String(n).padStart(2, "0");
-const toYMD = (d) =>
-  d ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` : "";
+const toYMD = (d) => (d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10) : "");
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const sameDay = (a, b) => toYMD(a) === toYMD(b);
 
-const addDays = (d, n) => {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  x.setDate(x.getDate() + n);
-  return x;
-};
-const daysBetween = (a, b) => {
-  if (!a || !b) return 0;
-  const a0 = new Date(a.getFullYear(), a.getMonth(), a.getDate());
-  const b0 = new Date(b.getFullYear(), b.getMonth(), b.getDate());
-  return Math.max(0, Math.round((b0 - a0) / 86400000) + 1); // включительно
-};
-
-const entryAuthHeaders = () => {
-  const tok =
-    localStorage.getItem("token") ||
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("clientToken");
-  return tok ? { Authorization: `Bearer ${tok}` } : {};
-};
-
+// entry-fees helpers
+const HOLIDAYS = []; // например ["2025-01-01"]
 const dkey = (d) => new Date(d).toISOString().slice(0, 10);
-const HOLIDAYS = []; // заполняй при необходимости
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
 const dayKind = (d) => (isHoliday(d) ? "hd" : isWeekend(d) ? "we" : "wk");
 
-/* =================== API HELPERS =================== */
+// -------- transport/guide/hotel fetching --------
 const fetchJSON = async (path, params = {}) => {
-  const base = API_BASE || window.frontend?.API_BASE || "";
-  const u = new URL(path, base);
+  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
   });
-  const r = await fetch(u.toString(), {
-    credentials: "include",
-    headers: { ...entryAuthHeaders() },
-  });
+  const r = await fetch(u.toString(), { credentials: "include" });
   if (!r.ok) throw new Error("HTTP " + r.status);
   return await r.json();
 };
-const safeItems = (x) =>
-  Array.isArray(x?.items) ? x.items : Array.isArray(x) ? x : [];
 
-/* --- cities (можешь заменить на свой источник) --- */
-async function searchCities(q) {
-  try {
-    const d = await fetchJSON("/api/cities/search", { q, limit: 20 });
-    return safeItems(d).map((c) => ({
-      value: String(c.id ?? c.city_id ?? c._id ?? Math.random()),
-      label: c.name_ru || c.name_en || c.title || c.name,
-      cityId: c.id ?? c.city_id ?? c._id,
-      country: c.country || c.country_name,
-    }));
-  } catch {}
-  if (!q) return [];
-  return [{ value: `fake_${q}`, label: q, cityId: `fake_${q}`, country: "" }];
-}
-
-/* --- providers: guide & transport из таблицы providers --- */
-const providerToOption = (p) => ({
-  value: String(p.id ?? p.provider_id ?? p._id ?? Math.random()),
-  label: p.name || p.title || p.company || "—",
-  raw: p,
-  // цена дня
-  price: toNum(p.price_per_day ?? p.day_price ?? p.price ?? p.rate_day ?? 0, 0),
-  currency: p.currency || "USD",
-  // чуть метаданных для превью
-  meta: {
-    type: p.type || p.kind, // guide|transport
-    languages: p.languages || p.langs || p.language,
-    vehicle: p.vehicle || p.car_class || p.transport,
-    rating: p.rating,
-    phone: p.phone || p.mobile,
-    city: p.city || p.base_city,
-    profile_url: p.profile_url || p.url || p.link,
-    photo: p.photo || p.avatar,
-  },
+const normalizeProvider = (row, kind) => ({
+  id: row.id ?? row._id ?? String(Math.random()),
+  name: row.name || "—",
+  kind,
+  phone: row.phone || "",
+  email: row.email || "",
+  location: row.location || row.city || "",
+  price_per_day: toNum(row.price_per_day ?? row.price ?? row.rate_day ?? 0, 0),
+  currency: row.currency || "USD",
 });
 
-async function providersAvailable(type, dateYmd, cityId, q = "") {
-  // 1) основной: /api/providers/available
-  try {
-    const d = await fetchJSON("/api/providers/available", {
-      type,
-      date: dateYmd,
-      city_id: cityId,
-      q,
-      limit: 50,
-    });
-    return safeItems(d).map(providerToOption);
-  } catch {}
-  // 2) fallback: /api/providers/search?type=...&start_date=&end_date=&city_id=
-  try {
-    const d = await fetchJSON("/api/providers/search", {
-      type,
-      start_date: dateYmd,
-      end_date: dateYmd,
-      city_id: cityId,
-      q,
-      limit: 50,
-    });
-    return safeItems(d).map(providerToOption);
-  } catch {}
+async function fetchProvidersSmart({ kind, city, date, q = "", limit = 30 }) {
+  const tries = [
+    { url: "/api/providers/search", params: { type: kind, location: city, date, q, limit } },
+    { url: `/api/${kind}s/available`, params: { city, date, limit } },
+    { url: "/api/providers", params: { type: kind, location: city, q, limit } },
+  ];
+  for (const t of tries) {
+    try {
+      const j = await fetchJSON(t.url, t.params);
+      const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
+      if (arr.length) return arr.map((x) => normalizeProvider(x, kind));
+    } catch (e) {
+      // console.warn("providers fetch failed:", t.url, e);
+    }
+  }
   return [];
 }
 
-/* --- hotels & entry-fees --- */
-async function searchHotels(dateYmd, cityId, q = "") {
-  try {
-    const d = await fetchJSON("/api/hotels/available", {
-      date: dateYmd,
-      city_id: cityId,
-      q,
-      limit: 50,
-    });
-    return safeItems(d).map((h) => ({
-      value: String(h.id ?? h.hotel_id ?? h._id ?? Math.random()),
-      label: `${h.name || h.title || "Hotel"}${h.city ? " — " + h.city : ""}`,
-      raw: h,
-      price: toNum(h.net ?? h.price ?? h.price_per_night ?? 0, 0),
-      currency: h.currency || "USD",
-    }));
-  } catch {}
-  return [];
-}
-async function searchEntryFees(q = "", cityId) {
-  try {
-    const d = await fetchJSON("/api/entry-fees", { q, city_id: cityId, limit: 50 });
-    return safeItems(d).map((x) => ({
-      value: x.id,
-      label: `${x.name_ru || x.name_en || x.name_uz || "—"}${
-        x.city ? " — " + x.city : ""
-      } (${x.currency || "UZS"})`,
-      raw: x,
-    }));
-  } catch {}
+const normalizeHotel = (row) => ({
+  id: row.id ?? row._id ?? row.hotel_id ?? String(Math.random()),
+  name: row.name || row.title || "Hotel",
+  city: row.city || row.location || "",
+  price: toNum(row.price ?? row.net ?? row.price_per_night ?? 0, 0), // за ночь (нетто)
+  currency: row.currency || "USD",
+});
+
+async function fetchHotelsSmart({ city, date, q = "", limit = 30 }) {
+  const tries = [
+    { url: "/api/hotels/search", params: { city, date, name: q, limit } },
+    { url: "/api/hotels", params: { city, q, limit } },
+  ];
+  for (const t of tries) {
+    try {
+      const j = await fetchJSON(t.url, t.params);
+      const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
+      if (arr.length) return arr.map((x) => normalizeHotel(x));
+    } catch (e) {}
+  }
   return [];
 }
 
-/* --- memoized wrappers --- */
-const memoizeAsync = (fn) => {
-  const cache = new Map();
-  return async (...args) => {
-    const key = JSON.stringify(args);
-    if (cache.has(key)) return cache.get(key);
-    const p = fn(...args).catch((e) => {
-      cache.delete(key);
-      throw e;
-    });
-    cache.set(key, p);
-    return p;
-  };
-};
-const mSearchCities = memoizeAsync(searchCities);
-const mProvidersAvailable = memoizeAsync(providersAvailable);
-const mSearchHotels = memoizeAsync(searchHotels);
-const mSearchEntryFees = memoizeAsync(searchEntryFees);
-
-/* =================== HOVER PREVIEW (миникарточка) =================== */
-function useHoverCard() {
-  const [state, setState] = useState(null); // {x,y,content}
-  const hide = () => setState(null);
-  const show = (content, evt) => {
-    const x = evt.clientX + 12;
-    const y = evt.clientY + 12;
-    setState({ x, y, content });
-  };
-  const Card = state ? (
-    <div
-      style={{
-        position: "fixed",
-        left: state.x,
-        top: state.y,
-        zIndex: 9999,
-        maxWidth: 320,
-      }}
-      className="pointer-events-none bg-white border shadow-lg rounded-lg p-3 text-sm"
-    >
-      {state.content}
-    </div>
-  ) : null;
-  return { Card, show, hide };
+// Entry fees directory
+async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
+  try {
+    const j = await fetchJSON("/api/entry-fees", { q, city, limit });
+    return Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
+  } catch {
+    return [];
+  }
 }
 
-function ProviderOption({ data, innerProps, ...rest }) {
-  // data.meta подготовлено в providerToOption
-  const meta = data.meta || {};
-  const preview = (
-    <div>
-      <div className="font-medium">{data.label}</div>
-      <div className="text-xs text-gray-600">
-        {meta.type ? `Тип: ${meta.type}` : ""}
-        {meta.city ? ` • База: ${meta.city}` : ""}
-      </div>
-      {(meta.languages || meta.vehicle) && (
-        <div className="text-xs mt-1">
-          {meta.languages ? `Языки: ${Array.isArray(meta.languages) ? meta.languages.join(", ") : meta.languages}` : ""}
-          {meta.languages && meta.vehicle ? " • " : ""}
-          {meta.vehicle ? `Т/с: ${meta.vehicle}` : ""}
-        </div>
-      )}
-      {(meta.rating || meta.phone) && (
-        <div className="text-xs mt-1">
-          {meta.rating ? `Рейтинг: ${meta.rating}` : ""}
-          {meta.rating && meta.phone ? " • " : ""}
-          {meta.phone ? `Тел: ${meta.phone}` : ""}
-        </div>
-      )}
-      {typeof data.price === "number" && (
-        <div className="mt-1 text-[13px]"><b>{data.price}</b> {data.currency || "USD"} / день</div>
-      )}
-      {meta.profile_url && (
-        <div className="mt-2">
-          <a href={meta.profile_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-            Открыть профиль
-          </a>
-        </div>
-      )}
-    </div>
-  );
-
-  // используем глобальный hover-card через контекст-поднятие (передадим show/hide через innerProps)
-  const { onMouseEnter, onMouseLeave, ...restEvents } = innerProps;
-  const show = rest.selectProps._hoverShow;
-  const hide = rest.selectProps._hoverHide;
+// -------- custom option with tooltip --------
+const ProviderOption = (props) => {
+  const p = props.data?.raw;
+  const tip = [
+    p?.name,
+    p?.location ? `Город: ${p.location}` : "",
+    p?.phone ? `Тел.: ${p.phone}` : "",
+    p?.email ? `E-mail: ${p.email}` : "",
+    typeof p?.price_per_day === "number" && p?.price_per_day > 0
+      ? `Цена/день: ${p.price_per_day} ${p.currency || "USD"}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return (
-    <RS.Option
-      {...rest}
-      innerProps={{
-        ...restEvents,
-        onMouseEnter: (e) => {
-          show && show(preview, e);
-          onMouseEnter && onMouseEnter(e);
-        },
-        onMouseLeave: (e) => {
-          hide && hide();
-          onMouseLeave && onMouseLeave(e);
-        },
-      }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="truncate">{data.label}</div>
-        <div className="flex items-center gap-2 text-xs shrink-0">
-          {typeof data.price === "number" && (
-            <span className="px-1.5 py-0.5 rounded bg-gray-100 border">
-              {data.price} {data.currency || "USD"}
-            </span>
-          )}
-          <span className="text-blue-600">ℹ</span>
-        </div>
-      </div>
-    </RS.Option>
+    <div title={tip}>
+      <SelectComponents.Option {...props} />
+    </div>
   );
-}
+};
 
-/* =================== COMPONENT =================== */
+const HotelOption = (props) => {
+  const h = props.data?.raw;
+  const tip = [
+    h?.name,
+    h?.city ? `Город: ${h.city}` : "",
+    typeof h?.price === "number" && h?.price > 0 ? `Цена/ночь: ${h.price} ${h.currency || "USD"}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return (
+    <div title={tip}>
+      <SelectComponents.Option {...props} />
+    </div>
+  );
+};
+
+// =========================================================
+
 export default function TourBuilder() {
-  const { i18n, t } = useTranslation();
-  const lang = (i18n.language || "ru").toLowerCase();
-  const langBase = lang.startsWith("ru") ? "ru" : lang.startsWith("uz") ? "uz" : "en";
-  const dfnsLocale = langBase === "ru" ? dfnsRu : langBase === "uz" ? dfnsUz : dfnsEn;
-
-  /* ====== Даты тура ====== */
+  // даты тура
   const [range, setRange] = useState({ from: undefined, to: undefined });
-  const dayCount = daysBetween(range.from, range.to);
 
-  /* ====== PAX / резидент ====== */
+  // pax
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
-  const [inf, setInf] = useState(0);
-  const [residentType, setResidentType] = useState("nrs");
+  const payingPax = useMemo(() => Math.max(1, toNum(adt, 0) + toNum(chd, 0)), [adt, chd]);
 
-  /* ====== Валюта/наценки ====== */
-  const [currency, setCurrency] = useState("USD");
-  const [markupPct, setMarkupPct] = useState(0);
-  const [vatPct, setVatPct] = useState(0);
-  const [touristFeePerNight, setTouristFeePerNight] = useState(0);
+  // резидентство для entry fees
+  const [residentType, setResidentType] = useState("nrs"); // "nrs" | "res"
 
-  /* ====== Дни ====== */
-  const [daysData, setDaysData] = useState([]);
+  // список дней
+  const days = useMemo(() => {
+    if (!range.from || !range.to) return [];
+    const res = [];
+    let d = new Date(range.from);
+    while (d <= range.to) {
+      res.push(new Date(d));
+      d = addDays(d, 1);
+    }
+    return res;
+  }, [range.from, range.to]);
+
+  // состояние по каждому дню
+  // { [dateKey]: { city, guide, transport, hotel, entrySelected[] } }
+  const [byDay, setByDay] = useState({});
+  useEffect(() => {
+    // инициализируем записи для видимых дней
+    setByDay((prev) => {
+      const copy = { ...prev };
+      days.forEach((d, i) => {
+        const k = toYMD(d);
+        if (!copy[k]) copy[k] = { city: "", guide: null, transport: null, hotel: null, entrySelected: [] };
+      });
+      // подчистим удалённые дни
+      Object.keys(copy).forEach((k) => {
+        if (!days.find((d) => toYMD(d) === k)) delete copy[k];
+      });
+      return copy;
+    });
+  }, [days]);
+
+  // ===== entry fees state (общий поиск) =====
+  const [entryQ, setEntryQ] = useState("");
+  const [entryOptions, setEntryOptions] = useState([]);
 
   useEffect(() => {
-    if (!range.from || !range.to) {
-      setDaysData([]);
-      return;
-    }
-    const total = dayCount;
-    const next = [];
-    for (let i = 0; i < total; i++) {
-      const date = addDays(range.from, i);
-      const prev = daysData[i];
-      next.push(
-        prev && toYMD(new Date(prev.date)) === toYMD(date)
-          ? prev
-          : {
-              id: `D${i + 1}`,
-              date,
-              city: null,
-              transportEnabled: true,
-              transportOption: null,
-              transportSurcharge: 0,
-              guideEnabled: true,
-              guideOption: null,
-              guideSurcharge: 0,
-              mealBreakfast: false,
-              mealLunch: false,
-              mealDinner: false,
-              mealPricePerPax: 0,
-              entrySelected: [],
-              hotelEnabled: true,
-              hotelOption: null,
-              hotelNet: 0,
-              hotelNotes: "",
-            }
+    const t = setTimeout(async () => {
+      const items = await fetchEntryFees({ q: entryQ, limit: 50 });
+      setEntryOptions(
+        items.map((x) => ({
+          value: x.id,
+          label: `${x.name_ru || x.name_en || x.name_uz || "—"}${x.city ? " — " + x.city : ""} (${x.currency || "UZS"})`,
+          raw: x,
+        }))
       );
-    }
-    setDaysData(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.from, range.to, dayCount]);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [entryQ]);
 
-  /* ====== loaders ====== */
-  const loadCityOptions = useCallback(async (input, cb) => {
-    const q = (input || "").trim();
-    cb(q ? await mSearchCities(q) : []);
-  }, []);
+  // ===== loaders for a specific day =====
+  const makeGuideLoader = (dateKey) =>
+    async (input, cb) => {
+      const day = byDay[dateKey] || {};
+      const rows = await fetchProvidersSmart({
+        kind: "guide",
+        city: day.city || "",
+        date: dateKey,
+        q: input?.trim() || "",
+      });
+      cb(
+        rows.map((p) => ({
+          value: p.id,
+          label: p.name,
+          raw: p,
+        }))
+      );
+    };
 
-  const loadProviderOptionsFor = (day, type) => async (input, cb) => {
-    const q = (input || "").trim();
-    const cityId = day?.city?.cityId || day?.city?.value || "";
-    const date = toYMD(day.date);
-    const opts = await mProvidersAvailable(type, date, cityId, q);
-    cb(opts);
-  };
+  const makeTransportLoader = (dateKey) =>
+    async (input, cb) => {
+      const day = byDay[dateKey] || {};
+      const rows = await fetchProvidersSmart({
+        kind: "transport",
+        city: day.city || "",
+        date: dateKey,
+        q: input?.trim() || "",
+      });
+      cb(
+        rows.map((p) => ({
+          value: p.id,
+          label: p.name,
+          raw: p,
+        }))
+      );
+    };
 
-  const loadHotelOptionsFor = (day) => async (input, cb) => {
-    const q = (input || "").trim();
-    const cityId = day?.city?.cityId || day?.city?.value || "";
-    const date = toYMD(day.date);
-    cb(await mSearchHotels(date, cityId, q));
-  };
+  const makeHotelLoader = (dateKey) =>
+    async (input, cb) => {
+      const day = byDay[dateKey] || {};
+      const rows = await fetchHotelsSmart({
+        city: day.city || "",
+        date: dateKey,
+        q: input?.trim() || "",
+      });
+      cb(
+        rows.map((h) => ({
+          value: h.id,
+          label: `${h.name}${h.city ? " — " + h.city : ""}`,
+          raw: h,
+        }))
+      );
+    };
 
-  const loadEntryOptionsFor = (day) => async (input, cb) => {
-    const q = (input || "").trim();
-    const cityId = day?.city?.cityId || day?.city?.value || "";
-    cb(await mSearchEntryFees(q, cityId));
-  };
-
-  const patchDay = (idx, patch) =>
-    setDaysData((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
-
-  /* ====== расчёты ====== */
-  const providersNet = useMemo(() => {
-    let guide = 0;
-    let transport = 0;
-    daysData.forEach((d) => {
-      if (d.guideEnabled && d.guideOption) guide += toNum(d.guideOption.price, 0) + toNum(d.guideSurcharge, 0);
-      if (d.transportEnabled && d.transportOption)
-        transport += toNum(d.transportOption.price, 0) + toNum(d.transportSurcharge, 0);
-    });
-    return { guide, transport, total: guide + transport };
-  }, [daysData]);
-
-  const mealsNet = useMemo(() => {
-    const pax = Math.max(0, toNum(adt, 0) + toNum(chd, 0));
-    let sum = 0;
-    daysData.forEach((d) => {
-      const count = (d.mealBreakfast ? 1 : 0) + (d.mealLunch ? 1 : 0) + (d.mealDinner ? 1 : 0);
-      sum += count * toNum(d.mealPricePerPax, 0) * pax;
-    });
-    return sum;
-  }, [daysData, adt, chd]);
-
-  const entryCell = (raw, kind, paxType) => {
-    const key = `${kind}_${residentType}_${paxType}`;
-    const v = Number(raw?.[key] ?? 0);
+  // ===== prices =====
+  const entryCell = (siteRaw, kind, pax) => {
+    const key = `${kind}_${residentType}_${pax}`; // wk|we|hd + nrs/res + adult|child
+    const v = Number(siteRaw?.[key] ?? 0);
     return Number.isFinite(v) ? v : 0;
   };
-  const entryFeesNet = useMemo(() => {
+
+  const calcEntryForDay = (dateKey) => {
+    const d = new Date(dateKey);
+    const kind = dayKind(d);
+    const day = byDay[dateKey] || {};
+    const sel = day.entrySelected || [];
     let sum = 0;
-    const ad = toNum(adt, 0);
-    const ch = toNum(chd, 0);
-    daysData.forEach((d) => {
-      if (!d.entrySelected?.length) return;
-      const kind = dayKind(d.date);
-      d.entrySelected.forEach((opt) => {
-        const raw = opt.raw || {};
-        sum += ad * entryCell(raw, kind, "adult");
-        sum += ch * entryCell(raw, kind, "child");
-      });
-    });
+    for (const opt of sel) {
+      const s = opt.raw;
+      sum += toNum(adt, 0) * entryCell(s, kind, "adult");
+      sum += toNum(chd, 0) * entryCell(s, kind, "child");
+    }
     return sum;
-  }, [daysData, adt, chd, residentType]);
+  };
 
-  const hotelsNet = useMemo(
-    () => daysData.reduce((acc, d) => acc + (d.hotelEnabled ? toNum(d.hotelNet, 0) : 0), 0),
-    [daysData]
-  );
+  const calcGuideForDay = (dateKey) => toNum(byDay[dateKey]?.guide?.price_per_day, 0);
+  const calcTransportForDay = (dateKey) => toNum(byDay[dateKey]?.transport?.price_per_day, 0);
+  const calcHotelForDay = (dateKey) => toNum(byDay[dateKey]?.hotel?.price, 0);
 
-  const netTotal = useMemo(
-    () => providersNet.total + mealsNet + entryFeesNet + hotelsNet,
-    [providersNet.total, mealsNet, entryFeesNet, hotelsNet]
-  );
-  const grossBeforeVat = useMemo(() => netTotal * (1 + toNum(markupPct, 0) / 100), [netTotal, markupPct]);
-  const vatAmount = useMemo(() => grossBeforeVat * (toNum(vatPct, 0) / 100), [grossBeforeVat, vatPct]);
-  const touristFees = useMemo(() => {
-    const nights = daysData.filter((d) => d.hotelEnabled).length;
-    return toNum(touristFeePerNight, 0) * Math.max(0, nights);
-  }, [touristFeePerNight, daysData]);
-  const grandTotal = useMemo(() => grossBeforeVat + vatAmount + touristFees, [grossBeforeVat, vatAmount, touristFees]);
-  const payingPax = useMemo(() => Math.max(1, toNum(adt, 0) + toNum(chd, 0)), [adt, chd]);
-  const pricePerPax = useMemo(() => grandTotal / payingPax, [grandTotal, payingPax]);
+  const totals = useMemo(() => {
+    let guide = 0,
+      transport = 0,
+      hotel = 0,
+      entries = 0;
+    Object.keys(byDay).forEach((k) => {
+      guide += calcGuideForDay(k);
+      transport += calcTransportForDay(k);
+      hotel += calcHotelForDay(k);
+      entries += calcEntryForDay(k);
+    });
+    const net = guide + transport + hotel + entries;
+    return { guide, transport, hotel, entries, net, perPax: net / payingPax };
+  }, [byDay, adt, chd, residentType, payingPax]);
 
-  /* ====== hover-card контент (один на страницу) ====== */
-  const { Card: HoverCard, show: hoverShow, hide: hoverHide } = useHoverCard();
-
-  /* =================== RENDER =================== */
+  // ===== render =====
   return (
     <div className="p-6">
-      {HoverCard}
-      <div className="max-w-7xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold">{t("tourBuilder.title", { defaultValue: "Конструктор тура" })}</h1>
-          <div className="flex gap-2 flex-wrap">
-            <button className="px-3 py-2 rounded border" onClick={() => setDaysData([])}>
-              {t("common.clear", { defaultValue: "Очистить" })}
-            </button>
-          </div>
-        </div>
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
+        <h1 className="text-2xl font-bold">Конструктор тура</h1>
 
-        {/* Даты тура */}
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("tourBuilder.dates", { defaultValue: "Даты тура" })}
-          </label>
-          <div className="grid md:grid-cols-[1fr_auto] gap-4">
+        {/* даты + pax + resident */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Даты тура</label>
             <DayPicker
               mode="range"
               selected={range}
               onSelect={setRange}
-              ISOWeek
               numberOfMonths={2}
               disabled={{ before: new Date() }}
               className="text-sm"
-              locale={dfnsLocale}
             />
-            <div className="text-sm space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                <label className="flex items-center gap-2">
+            <p className="text-sm text-gray-600 mt-2">
+              {range.from && range.to ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${days.length} дн.` : "Выберите даты начала и конца"}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm font-medium mb-1">PAX</div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-sm flex items-center gap-2">
                   <span className="w-10">ADT</span>
-                  <input className="border rounded px-2 py-1 h-9 w-full" type="number" min={0} value={adt} onChange={(e) => setAdt(e.target.value)} />
+                  <input type="number" min={0} value={adt} onChange={(e) => setAdt(e.target.value)} className="h-9 w-full border rounded px-2 text-sm" />
                 </label>
-                <label className="flex items-center gap-2">
+                <label className="text-sm flex items-center gap-2">
                   <span className="w-10">CHD</span>
-                  <input className="border rounded px-2 py-1 h-9 w-full" type="number" min={0} value={chd} onChange={(e) => setChd(e.target.value)} />
-                </label>
-                <label className="flex items-center gap-2">
-                  <span className="w-10">INF</span>
-                  <input className="border rounded px-2 py-1 h-9 w-full" type="number" min={0} value={inf} onChange={(e) => setInf(e.target.value)} />
+                  <input type="number" min={0} value={chd} onChange={(e) => setChd(e.target.value)} className="h-9 w-full border rounded px-2 text-sm" />
                 </label>
               </div>
+            </div>
 
-              <div className="flex items-center gap-4">
-                <span className="text-gray-700">{t("tb.tariff_for", { defaultValue: "Тарифы для:" })}</span>
-                <label className="inline-flex items-center gap-1">
-                  <input type="radio" name="resident_type" value="nrs" checked={residentType === "nrs"} onChange={() => setResidentType("nrs")} />
-                  <span>{t("tb.nonresidents", { defaultValue: "Нерезиденты" })}</span>
-                </label>
-                <label className="inline-flex items-center gap-1">
-                  <input type="radio" name="resident_type" value="res" checked={residentType === "res"} onChange={() => setResidentType("res")} />
-                  <span>{t("tb.residents", { defaultValue: "Резиденты" })}</span>
-                </label>
-              </div>
-
-              <p className="text-gray-500">
-                {range.from && range.to
-                  ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${dayCount} ${t("days", { defaultValue: "дн." })}`
-                  : t("pick_dates", { defaultValue: "Выберите даты начала и конца" })}
-              </p>
+            <div>
+              <div className="text-sm font-medium mb-1">Тарифы для</div>
+              <label className="inline-flex items-center gap-2 mr-4">
+                <input type="radio" checked={residentType === "nrs"} onChange={() => setResidentType("nrs")} />
+                <span>Нерезиденты</span>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="radio" checked={residentType === "res"} onChange={() => setResidentType("res")} />
+                <span>Резиденты</span>
+              </label>
             </div>
           </div>
         </div>
 
-        {/* Дни */}
-        <div className="space-y-4">
-          {daysData.map((d, idx) => (
-            <div key={d.id} className="rounded-xl border shadow-sm">
-              {/* header day */}
-              <div className="px-4 py-3 border-b flex items-center gap-3 flex-wrap">
-                <div className="text-lg font-semibold min-w-[52px]">D{idx + 1}</div>
-
-                <div className="min-w-[220px] flex-1">
-                  <AsyncSelect
-                    cacheOptions
-                    defaultOptions
-                    classNamePrefix="select"
-                    placeholder={t("city", { defaultValue: "Город" })}
-                    loadOptions={loadCityOptions}
-                    value={d.city}
-                    onChange={(opt) =>
-                      patchDay(idx, {
-                        city: opt,
-                        transportOption: null,
-                        guideOption: null,
-                        hotelOption: null,
-                      })
-                    }
+        {/* дни */}
+        <div className="space-y-6">
+          {days.map((d, i) => {
+            const k = toYMD(d);
+            const st = byDay[k] || {};
+            return (
+              <div key={k} className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="font-semibold">D{i + 1}</div>
+                  <input
+                    className="border rounded px-3 py-2 min-w-[220px] flex-1"
+                    placeholder="Город (например, Tashkent)"
+                    value={st.city || ""}
+                    onChange={(e) => setByDay((p) => ({ ...p, [k]: { ...p[k], city: e.target.value } }))}
                   />
+                  <div className="text-sm text-gray-500">{k}</div>
                 </div>
 
-                <input
-                  type="date"
-                  className="border rounded px-2 py-1 h-9"
-                  value={toYMD(d.date)}
-                  onChange={(e) => patchDay(idx, { date: new Date(e.target.value) })}
-                />
-
-                <button className="ml-auto text-red-600 hover:underline" onClick={() => setDaysData((prev) => prev.filter((_, i) => i !== idx))}>
-                  {t("common.remove_day", { defaultValue: "Удалить день" })}
-                </button>
-              </div>
-
-              {/* body */}
-              <div className="grid lg:grid-cols-2 gap-4 p-4">
-                {/* Транспорт (providers) */}
-                <div className="border rounded">
-                  <div className="px-3 py-2 border-b flex items-center gap-2">
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={d.transportEnabled} onChange={(e) => patchDay(idx, { transportEnabled: e.target.checked })} />
-                      <span className="font-medium">{t("tourBuilder.transport", { defaultValue: "Транспорт" })}</span>
-                    </label>
-                  </div>
-                  <div className="p-3 space-y-2">
+                <div className="grid md:grid-cols-2 gap-3">
+                  {/* Гид */}
+                  <div className="border rounded p-2">
+                    <label className="block text-sm font-medium mb-1">Гид</label>
                     <AsyncSelect
-                      isDisabled={!d.transportEnabled}
                       cacheOptions
                       defaultOptions
-                      classNamePrefix="select"
-                      placeholder={t("select_transport", { defaultValue: "Выберите транспорт" })}
-                      loadOptions={loadProviderOptionsFor(d, "transport")}
-                      value={d.transportOption}
-                      onChange={(opt) => patchDay(idx, { transportOption: opt })}
+                      loadOptions={makeGuideLoader(k)}
                       components={{ Option: ProviderOption }}
-                      _hoverShow={hoverShow}
-                      _hoverHide={hoverHide}
+                      placeholder="Выберите гида"
+                      noOptionsMessage={() => "Провайдеров не найдено"}
+                      value={
+                        st.guide
+                          ? { value: st.guide.id, label: st.guide.name, raw: st.guide }
+                          : null
+                      }
+                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
                     />
-                    <label className="text-sm flex items-center gap-2">
-                      <span className="whitespace-nowrap">{t("surcharge_day", { defaultValue: "Доплата (нетто/день)" })}</span>
-                      <input
-                        className="border rounded px-2 py-1 h-9 w-32"
-                        type="number"
-                        min={0}
-                        value={d.transportSurcharge}
-                        onChange={(e) => patchDay(idx, { transportSurcharge: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Гид (providers) */}
-                <div className="border rounded">
-                  <div className="px-3 py-2 border-b flex items-center gap-2">
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={d.guideEnabled} onChange={(e) => patchDay(idx, { guideEnabled: e.target.checked })} />
-                      <span className="font-medium">{t("tourBuilder.guide", { defaultValue: "Гид" })}</span>
-                    </label>
-                  </div>
-                  <div className="p-3 space-y-2">
-                    <AsyncSelect
-                      isDisabled={!d.guideEnabled}
-                      cacheOptions
-                      defaultOptions
-                      classNamePrefix="select"
-                      placeholder={t("select_guide", { defaultValue: "Выберите гида" })}
-                      loadOptions={loadProviderOptionsFor(d, "guide")}
-                      value={d.guideOption}
-                      onChange={(opt) => patchDay(idx, { guideOption: opt })}
-                      components={{ Option: ProviderOption }}
-                      _hoverShow={hoverShow}
-                      _hoverHide={hoverHide}
-                    />
-                    <label className="text-sm flex items-center gap-2">
-                      <span className="whitespace-nowrap">{t("surcharge_day", { defaultValue: "Доплата (нетто/день)" })}</span>
-                      <input
-                        className="border rounded px-2 py-1 h-9 w-32"
-                        type="number"
-                        min={0}
-                        value={d.guideSurcharge}
-                        onChange={(e) => patchDay(idx, { guideSurcharge: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Питание */}
-                <div className="border rounded">
-                  <div className="px-3 py-2 border-b font-medium">{t("tourBuilder.meals", { defaultValue: "Питание" })}</div>
-                  <div className="p-3 space-y-2">
-                    <div className="flex items-center gap-6 text-sm">
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" checked={d.mealBreakfast} onChange={(e) => patchDay(idx, { mealBreakfast: e.target.checked })} />
-                        <span>{t("breakfast", { defaultValue: "Завтрак" })}</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" checked={d.mealLunch} onChange={(e) => patchDay(idx, { mealLunch: e.target.checked })} />
-                        <span>{t("lunch", { defaultValue: "Обед" })}</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" checked={d.mealDinner} onChange={(e) => patchDay(idx, { mealDinner: e.target.checked })} />
-                        <span>{t("dinner", { defaultValue: "Ужин" })}</span>
-                      </label>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)} {st.guide?.currency || "USD"}
                     </div>
-                    <label className="text-sm flex items-center gap-2">
-                      <span className="whitespace-nowrap">{t("price_per_meal_pax", { defaultValue: "Нетто на 1 pax за приём" })}</span>
-                      <input
-                        className="border rounded px-2 py-1 h-9 w-32"
-                        type="number"
-                        min={0}
-                        value={d.mealPricePerPax}
-                        onChange={(e) => patchDay(idx, { mealPricePerPax: e.target.value })}
-                      />
-                    </label>
                   </div>
-                </div>
 
-                {/* Entry fees */}
-                <div className="border rounded">
-                  <div className="px-3 py-2 border-b font-medium">
-                    {t("tourBuilder.monuments", { defaultValue: "Входные билеты (объекты)" })}
+                  {/* Транспорт */}
+                  <div className="border rounded p-2">
+                    <label className="block text-sm font-medium mb-1">Транспорт</label>
+                    <AsyncSelect
+                      cacheOptions
+                      defaultOptions
+                      loadOptions={makeTransportLoader(k)}
+                      components={{ Option: ProviderOption }}
+                      placeholder="Выберите транспорт"
+                      noOptionsMessage={() => "Провайдеров не найдено"}
+                      value={
+                        st.transport
+                          ? { value: st.transport.id, label: st.transport.name, raw: st.transport }
+                          : null
+                      }
+                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)} {st.transport?.currency || "USD"}
+                    </div>
                   </div>
-                  <div className="p-3 space-y-2">
+
+                  {/* Отель */}
+                  <div className="border rounded p-2">
+                    <label className="block text-sm font-medium mb-1">Отель (за ночь, нетто)</label>
+                    <AsyncSelect
+                      cacheOptions
+                      defaultOptions
+                      loadOptions={makeHotelLoader(k)}
+                      components={{ Option: HotelOption }}
+                      placeholder="Выберите отель"
+                      noOptionsMessage={() => "Нет вариантов"}
+                      value={
+                        st.hotel
+                          ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel }
+                          : null
+                      }
+                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))}
+                    />
+                    <div className="text-xs text-gray-600 mt-1">
+                      Цена/ночь: {toNum(st.hotel?.price, 0).toFixed(2)} {st.hotel?.currency || "USD"}
+                    </div>
+                  </div>
+
+                  {/* Entry fees (объекты) */}
+                  <div className="border rounded p-2">
+                    <label className="block text-sm font-medium mb-1">Входные билеты (объекты)</label>
+                    <input
+                      className="w-full border rounded px-3 py-2 mb-2"
+                      placeholder="Начните вводить объект/город…"
+                      value={entryQ}
+                      onChange={(e) => setEntryQ(e.target.value)}
+                    />
                     <AsyncSelect
                       isMulti
                       cacheOptions
-                      defaultOptions
-                      classNamePrefix="select"
-                      placeholder={t("tourBuilder.monuments_ph", { defaultValue: "Начните вводить объект/город…" })}
-                      loadOptions={loadEntryOptionsFor(d)}
-                      value={d.entrySelected}
-                      onChange={(vals) => patchDay(idx, { entrySelected: vals || [] })}
-                      noOptionsMessage={() => t("common.nothing_found", { defaultValue: "Ничего не найдено" })}
+                      defaultOptions={entryOptions}
+                      loadOptions={(input, cb) => cb(entryOptions)}
+                      value={st.entrySelected || []}
+                      onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
+                      placeholder="Выберите объекты"
+                      noOptionsMessage={() => "Ничего не найдено"}
                     />
-                    <div className="text-xs text-gray-500">
-                      {t("entry_calc_hint", {
-                        defaultValue:
-                          "Цены считаются за человека на выбранный день с учётом ADT/CHD и статуса резидент/нерезидент.",
-                      })}
+
+                    <div className="text-xs text-gray-600 mt-1">
+                      На этот день: {calcEntryForDay(k).toFixed(2)} (учтены ADT/CHD и статус резидента)
                     </div>
                   </div>
                 </div>
 
-                {/* Отель */}
-                <div className="border rounded lg:col-span-2">
-                  <div className="px-3 py-2 border-b flex items-center gap-2">
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={d.hotelEnabled} onChange={(e) => patchDay(idx, { hotelEnabled: e.target.checked })} />
-                      <span className="font-medium">{t("hotel", { defaultValue: "Отель" })}</span>
-                    </label>
-                    <span className="text-xs text-gray-500">
-                      {t("hotel_note", { defaultValue: "Подтягивается по городу и дате. Цена — за ночь (нетто)." })}
-                    </span>
-                  </div>
-                  <div className="p-3 grid md:grid-cols-3 gap-3">
-                    <div className="md:col-span-2">
-                      <AsyncSelect
-                        isDisabled={!d.hotelEnabled}
-                        cacheOptions
-                        defaultOptions
-                        classNamePrefix="select"
-                        placeholder={t("select_hotel", { defaultValue: "Выберите отель" })}
-                        loadOptions={loadHotelOptionsFor(d)}
-                        value={d.hotelOption}
-                        onChange={(opt) =>
-                          patchDay(idx, {
-                            hotelOption: opt,
-                            hotelNet: opt?.price ?? d.hotelNet,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm whitespace-nowrap">{t("tb.net", { defaultValue: "Нетто" })}</span>
-                      <input
-                        className="border rounded px-2 py-1 h-9 w-full"
-                        type="number"
-                        min={0}
-                        value={d.hotelNet}
-                        onChange={(e) => patchDay(idx, { hotelNet: e.target.value })}
-                        disabled={!d.hotelEnabled}
-                      />
-                    </div>
-                    <input
-                      className="border rounded px-2 py-1 h-9 md:col-span-3"
-                      type="text"
-                      placeholder={t("tb.notes", { defaultValue: "Заметка" })}
-                      value={d.hotelNotes}
-                      onChange={(e) => patchDay(idx, { hotelNotes: e.target.value })}
-                      disabled={!d.hotelEnabled}
-                    />
-                  </div>
+                <div className="text-sm text-gray-700">
+                  Итого по дню: Гид {calcGuideForDay(k).toFixed(2)} + Транспорт {calcTransportForDay(k).toFixed(2)} + Отель{" "}
+                  {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} ={" "}
+                  <b>
+                    {(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} USD
+                  </b>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Ценообразование */}
-        <div className="border rounded p-3">
-          <h2 className="text-lg font-semibold mb-3">{t("tb.pricing", { defaultValue: "Ценообразование" })}</h2>
-          <div className="grid md:grid-cols-5 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("tb.currency", { defaultValue: "Валюта" })}</label>
-              <select className="border rounded px-2 py-2 w-full h-9" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                <option value="USD">USD</option>
-                <option value="UZS">UZS</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("tb.markup", { defaultValue: "Наценка, %" })}</label>
-              <input type="number" min={0} className="border rounded px-2 py-1 h-9 w-full" value={markupPct} onChange={(e) => setMarkupPct(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">VAT, %</label>
-              <input type="number" min={0} className="border rounded px-2 py-1 h-9 w-full" value={vatPct} onChange={(e) => setVatPct(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {t("tb.tourist_fee", { defaultValue: "Туристический сбор / ночь" })}
-              </label>
-              <input
-                type="number"
-                min={0}
-                className="border rounded px-2 py-1 h-9 w-full"
-                value={touristFeePerNight}
-                onChange={(e) => setTouristFeePerNight(e.target.value)}
-              />
-            </div>
+        {/* суммирование */}
+        <div className="grid md:grid-cols-5 gap-3 text-sm">
+          <div className="bg-gray-50 rounded p-3 border">
+            <div className="font-medium mb-1">Гид (нетто)</div>
+            <div>{totals.guide.toFixed(2)} USD</div>
           </div>
-
-          <div className="grid md:grid-cols-5 gap-4 mt-4 text-sm">
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.pax", { defaultValue: "Гости (PAX)" })}</div>
-              <div>ADT: {adt} • CHD: {chd} • INF: {inf}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.providers_cost", { defaultValue: "Гид/Транспорт (нетто)" })}</div>
-              <div className="flex justify-between"><span>{t("tourBuilder.guide", { defaultValue: "Гид" })}</span><span>{providersNet.guide.toFixed(2)} {currency}</span></div>
-              <div className="flex justify-between"><span>{t("tourBuilder.transport", { defaultValue: "Транспорт" })}</span><span>{providersNet.transport.toFixed(2)} {currency}</span></div>
-            </div>
-
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("meals_net", { defaultValue: "Питание (нетто)" })}</div>
-              <div>{mealsNet.toFixed(2)} {currency}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.entry_fees_net", { defaultValue: "Entry fees (нетто)" })}</div>
-              <div>{entryFeesNet.toFixed(2)} {currency}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded p-3 border">
-              <div className="font-medium mb-2">{t("tb.hotels_cost", { defaultValue: "Отели (нетто)" })}</div>
-              <div>{hotelsNet.toFixed(2)} {currency}</div>
-            </div>
-
-            <div className="bg-gray-50 rounded p-3 border md:col-span-5">
-              <div className="font-medium mb-2">{t("tb.total", { defaultValue: "Суммарно" })}</div>
-              <div className="flex flex-wrap gap-x-10 gap-y-1">
-                <div>NET: <b>{netTotal.toFixed(2)} {currency}</b></div>
-                <div>+ Markup ⇒ <b>{grossBeforeVat.toFixed(2)} {currency}</b></div>
-                <div>+ VAT: <b>{vatAmount.toFixed(2)} {currency}</b></div>
-                <div>+ Tourist fees: <b>{touristFees.toFixed(2)} {currency}</b></div>
-                <div className="ml-auto">GRAND: <b>{grandTotal.toFixed(2)} {currency}</b></div>
-                <div>/ pax: <b>{pricePerPax.toFixed(2)} {currency}</b></div>
-              </div>
-            </div>
+          <div className="bg-gray-50 rounded p-3 border">
+            <div className="font-medium mb-1">Транспорт (нетто)</div>
+            <div>{totals.transport.toFixed(2)} USD</div>
+          </div>
+          <div className="bg-gray-50 rounded p-3 border">
+            <div className="font-medium mb-1">Отели (нетто)</div>
+            <div>{totals.hotel.toFixed(2)} USD</div>
+          </div>
+          <div className="bg-gray-50 rounded p-3 border">
+            <div className="font-medium mb-1">Entry fees (нетто)</div>
+            <div>{totals.entries.toFixed(2)} USD</div>
+          </div>
+          <div className="bg-gray-50 rounded p-3 border">
+            <div className="font-semibold">ИТОГО</div>
+            <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} USD</span></div>
+            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} USD</span></div>
           </div>
         </div>
       </div>
