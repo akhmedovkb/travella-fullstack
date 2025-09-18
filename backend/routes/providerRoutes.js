@@ -42,6 +42,109 @@ function requireProvider(req, res, next) {
   next();
 }
 
+// --- PUBLIC SEARCH / AVAILABLE ---------------------------------------------
+
+/**
+ * Нормализуем query: type, city|location, q, date, limit
+ */
+function _parseProviderQuery(qs = {}) {
+  const type = (qs.type || "").trim();                       // guide | transport | agent | ...
+  const city = (qs.city || qs.location || "").trim();        // Samarkand / Tashkent ...
+  const q = (qs.q || "").trim();
+  const date = (qs.date || "").trim();                       // YYYY-MM-DD
+  const limit = Math.min(Math.max(parseInt(qs.limit || 30, 10) || 30, 1), 100);
+  return { type, city, q, date, limit };
+}
+
+/**
+ * GET /api/providers/search
+ * Простой поиск без учёта занятости на дату
+ */
+router.get("/search", async (req, res) => {
+  try {
+    const { type, city, q, limit } = _parseProviderQuery(req.query);
+    const where = [];
+    const vals = [];
+
+    if (type) { vals.push(type); where.push(`p.type = $${vals.length}`); }
+    if (city) { vals.push(city); where.push(`p.location ILIKE $${vals.length}`); }
+    if (q) {
+      vals.push(`%${q}%`);
+      where.push(`(p.name ILIKE $${vals.length} OR p.email ILIKE $${vals.length} OR p.phone ILIKE $${vals.length})`);
+    }
+
+    const sql = `
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email
+      FROM providers p
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY p.name ASC
+      LIMIT $${vals.push(limit)};`;
+
+    const { rows } = await pool.query(sql, vals);
+    return res.json({ items: rows });
+  } catch (e) {
+    console.error("GET /api/providers/search error:", e);
+    return res.status(500).json({ error: "Failed to search providers" });
+  }
+});
+
+/**
+ * GET /api/providers/available
+ * То же, но исключаем занятых на указанную дату (таблица provider_busy).
+ * Если таблицы нет — делаем graceful fallback к обычному поиску.
+ */
+router.get("/available", async (req, res) => {
+  const qParsed = _parseProviderQuery(req.query);
+  const { type, city, q, date, limit } = qParsed;
+
+  // Если даты нет — эквивалент обычного поиска
+  if (!date) return router.handle({ ...req, url: "/search", method: "GET" }, res);
+
+  try {
+    const where = [];
+    const vals = [];
+
+    if (type) { vals.push(type); where.push(`p.type = $${vals.length}`); }
+    if (city) { vals.push(city); where.push(`p.location ILIKE $${vals.length}`); }
+    if (q) {
+      vals.push(`%${q}%`);
+      where.push(`(p.name ILIKE $${vals.length} OR p.email ILIKE $${vals.length} OR p.phone ILIKE $${vals.length})`);
+    }
+
+    // исключаем занятых на дату
+    vals.push(date);
+    const availability = `
+      AND NOT EXISTS (
+        SELECT 1 FROM provider_busy b
+        WHERE b.provider_id = p.id AND b.date = $${vals.length}
+      )
+    `;
+
+    const sql = `
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email
+      FROM providers p
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ${availability}
+      ORDER BY p.name ASC
+      LIMIT $${vals.push(limit)};`;
+
+    const { rows } = await pool.query(sql, vals);
+    return res.json({ items: rows });
+  } catch (e) {
+    // Если relation "provider_busy" не существует — тихо откатываемся к /search
+    if (String(e.message || "").includes("relation") && String(e.message || "").includes("provider_busy")) {
+      try {
+        // Fallback к поиску без учёта занятости
+        const url = `/search?type=${encodeURIComponent(type)}&city=${encodeURIComponent(city)}&q=${encodeURIComponent(q)}&limit=${limit}`;
+        return router.handle({ ...req, url, method: "GET" }, res);
+      } catch (e2) {
+        console.error("Fallback to /search failed:", e2);
+      }
+    }
+    console.error("GET /api/providers/available error:", e);
+    return res.status(500).json({ error: "Failed to get available providers" });
+  }
+});
 
 // Auth
 router.post("/register", registerProvider);
