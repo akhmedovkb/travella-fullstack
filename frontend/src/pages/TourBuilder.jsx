@@ -667,15 +667,15 @@ export default function TourBuilder() {
               <div className="grid grid-cols-3 gap-3">
                 <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
                   <span className="sm:w-14">ADT</span>
-                  <input type="number" min={0} value={adt} onChange={(e)=>setAdt(e.target.value)} className={INPUT_S}/>
+                  <input type="number" min={0} value={adt} onChange={(e)=>setAdt(e.target.value)} className="h-9 w-full border rounded px-2 text-sm"/>
                 </label>
                 <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
                   <span className="sm:w-14">CHD</span>
-                  <input type="number" min={0} value={chd} onChange={(e)=>setChd(e.target.value)} className={INPUT_S}/>
+                  <input type="number" min={0} value={chd} onChange={(e)=>setChd(e.target.value)} className="h-9 w-full border rounded px-2 text-sm"/>
                 </label>
                 <label className="text-sm flex flex-col sm:flex-row sm:items-center gap-2">
                   <span className="sm:w-14">INF</span>
-                  <input type="number" min={0} value={inf} onChange={(e)=>setInf(e.target.value)} className={INPUT_S}/>
+                  <input type="number" min={0} value={inf} onChange={(e)=>setInf(e.target.value)} className="h-9 w-full border rounded px-2 text-sm"/>
                 </label>
               </div>
             </div>
