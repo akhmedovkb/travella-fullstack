@@ -272,8 +272,7 @@ export default function Header() {
         {isAdmin && (
           <>
             <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
-            {/* дублируем пункт вне провайдерской группы на случай других ролей */}
-            <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+            
           </>
         )}
       </div>
