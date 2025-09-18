@@ -210,3 +210,13 @@ app.listen(PORT, () => {
   console.log("[CORS] allowed:", Array.from(WHITELIST));
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
+
+/** ===================== EntryFees ===================== */
+// публичные
+const entryFeesRoutes = require("./routes/entryFeesRoutes");
+app.use("/api/entry-fees", entryFeesRoutes);
+
+// админ-CRUD
+const entryFeesAdminRoutes = require("./routes/entryFeesAdminRoutes");
+app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
+
