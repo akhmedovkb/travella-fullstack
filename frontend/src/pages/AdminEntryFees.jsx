@@ -1,7 +1,12 @@
 // frontend/src/pages/AdminEntryFees.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "../shared/toast";
+import { showToast } from "../shared/toast";
+const toast = {
+  success: (m) => showToast({ type: "success", message: m }),
+  error:   (m) => showToast({ type: "error",   message: m }),
+  info:    (m) => showToast({ type: "info",    message: m }),
+};
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const authHeaders = () => {
