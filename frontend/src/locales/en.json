@@ -292,7 +292,8 @@
     "cancel": "Cancel",
     "pros": "Pros",
     "cons": "Cons",
-    "features": "Highlights"
+    "features": "Highlights",
+    "nothing_found": "Nothing found"
   },
 
   "confirm_delete": "Delete this item?",
@@ -861,6 +862,10 @@
   "draft_loaded": "Draft loaded",
   "draft_loaded_local": "Draft loaded from browser",
   "no_drafts": "No drafts found",
+  "tariff_for": "Tariffs for:",
+   residents": "Residents",
+   nonresidents": "Non-residents",
+   entry_fees_net": "Entry fees (net)",
 
   "pax": "Guests (PAX)",
   "loop_route": "close the loop",
@@ -921,7 +926,9 @@
   "extras_ph": "Meals, master class…",
   "markerHint": "Drag the marker to refine the point",
   "generate": "Generate program",
-  "programText": "Program text"
+  "programText": "Program text",
+  "monuments": "Monuments entry fees",
+  "monuments_ph": "Start typing a site or city…"
 },
 
 
