@@ -305,7 +305,7 @@
 
   "country_not_chosen": "Mamlakatlar topilmadi",
   "cover": "Muqova",
-
+  "days": "kun.",
   "delete": "O‘chirish",
   "delete_error": "O‘chirishda xatolik",
   "departure_date": "Jo‘nash sanasi",
@@ -625,6 +625,8 @@
     "requests": "So‘rovlar",
     "favorites": "Sevimlilar",
     "hotels": "Mehmonxonalar",
+    "hotels_admin": "Mehmonxonalar (admin)",
+    "hotels": "Mehmonxonalar",
     "hotels_admin": "Mehmonxonalar (admin)"
   },
 
@@ -661,6 +663,7 @@
 
   "phone": "Telefon",
   "photo": "Rasm",
+  "pick_dates": "Boshlanish va tugash sanalarini tanlang",
   "price": "Narx",
 
   "profile": { "password_changed": "Parol yangilandi", "saved": "Profil saqlandi" },
@@ -846,6 +849,39 @@
     "my_requests": "So‘rovlarim"
   },
 
+  "tb": {
+  "load_draft": "Qoralamani yuklash",
+  "save_draft": "Qoralamani saqlash",
+  "draft_saved": "Qoralama saqlandi",
+  "draft_saved_locally": "Qoralama brauzerda saqlandi",
+  "draft_loaded": "Qoralama yuklandi",
+  "draft_loaded_local": "Qoralama brauzerdan yuklandi",
+  "no_drafts": "Qoralamalar topilmadi",
+
+  "pax": "Mehmonlar (PAX)",
+  "loop_route": "marshrutni yopish",
+  "loop": "takror",
+  "override_by_day": "Kunlar bo‘yicha o‘zgartirish",
+  "use_default": "Standart bo‘yicha",
+
+  "guides_suggest": "Tanlangan sanalarda mavjud gidlar",
+  "no_guides": "Mos gidlar yo‘q",
+  "transports_suggest": "Tanlangan sanalarda mavjud transport",
+  "no_transports": "Mos transport yo‘q",
+
+  "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
+  "net": "Netto",
+  "notes": "Izoh",
+
+  "pricing": "Narxlash",
+  "currency": "Valyuta",
+  "markup": "Ustama, %",
+  "tourist_fee": "Turist to‘lovi / tun",
+  "hotels_cost": "Mehmonxonalar (netto)",
+  "providers_cost": "Gid/Transport (netto)",
+  "total": "Jami"
+},
+
   "telegram": {
     "enable_title": "Telegram bildirishnomalari",
     "enable_text": "Quyidagi tugmani bosing, Telegramni ulab, so'rovlar va bronlar haqida bildirishnomalar oling.",
@@ -860,6 +896,29 @@
     "favoriteError": "Sevimlilarni o‘zgartirib bo‘lmadi",
     "removedFromFav": "Sevimlilardan olib tashlandi"
   },
+
+  "tourBuilder": {
+  "title": "Sayohat konstruktori",
+  "dates": "Tashrif sanalari",
+  "arrivalDay1": "1-kun kelish vaqti",
+  "monuments": "Yodgorliklarga kirish to‘lovlari",
+  "monuments_ph": "Obyektlarni tanlang",
+  "guide": "Gid",
+  "transport": "Transport",
+  "cities": "Shaharlar (multiselect)",
+  "cities_ph": "Shahar nomini yozing...",
+  "dragToReorder": "Tartibni o‘zgartirish uchun sudrab o‘tkazing",
+  "rooming": "Joylashtirish (xonalar soni)",
+  "map": "Xarita",
+  "segments": "Marshrut segmentlari",
+  "dep": "Jo‘nash vaqti",
+  "arr": "Kelish vaqti",
+  "extras": "Qo‘shimcha elementlar",
+  "extras_ph": "Oziq-ovqat, master-klass…",
+  "markerHint": "Nuqtani aniqlashtirish uchun markerni torting",
+  "generate": "Dastur yaratish",
+  "programText": "Matnli dastur"
+},
 
   "transfer": "Transfer",
   "transfer_options": { "group": "Guruhli", "individual": "Individual", "none": "Yo‘q", "select": "Transferni tanlang" },
