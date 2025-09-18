@@ -21,6 +21,21 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const GEONAMES_USER = import.meta.env.VITE_GEONAMES_USERNAME || "";
 
 // --- Константы / утилы ---
+
+// getLocalizedName помощник:
+const getLocalizedName = (g, lang) => {
+  // GeoNames часто отдаёт alternateNames с локализованными вариантами
+  // Ищем нужный язык, затем fallback на name/toponymName
+  const alts = Array.isArray(g.alternateNames) ? g.alternateNames : [];
+  const match =
+    alts.find(a => a.lang?.toLowerCase() === lang?.toLowerCase()) ||
+    null;
+  const base = match?.name || g.name || g.toponymName || "";
+  const admin = g.adminName1 ? `, ${g.adminName1}` : "";
+  const country = g.countryName ? `, ${g.countryName}` : "";
+  return `${base}${admin}${country}`;
+};
+
 const DEFAULT_CENTER = [41.3111, 69.2797]; // Tashkent
 const DEFAULT_ZOOM = 5;
 
@@ -196,27 +211,85 @@ export default function TourBuilder() {
   }, [range.from, range.to, guideNeeded, transportNeeded]);
 
   // ===== Поиск городов (GeoNames) =====
-  const loadCityOptions = useCallback(async (input, cb) => {
-    const q = (input || "").trim();
-    if (!q || !GEONAMES_USER) return cb([]);
-    try {
-      const url = `https://secure.geonames.org/searchJSON?name_startsWith=${encodeURIComponent(
-        q
-      )}&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}&lang=ru`;
-      const r = await fetch(url);
-      const data = await r.json();
-      const options = (data?.geonames || []).map((g) => ({
+  
+const loadCityOptions = useCallback(async (input, cb) => {
+  const q = (input || "").trim();
+  if (!q || !GEONAMES_USER) {
+    // даже если пустой запрос — показываем "замкнуть маршрут" (см. ниже)
+    const injected = [];
+    if (cities.length > 0) {
+      const first = cities[0];
+      injected.push({
+        value: `${first.value}__loop_${cities.length}`, // уникально для multi
+        label: `↩︎ ${first.label}`,                     // та же подпись
+        lat: first.lat, lng: first.lng, countryName: first.countryName,
+        _loopOf: first.value,
+      });
+    }
+    return cb(injected);
+  }
+
+  // язык из i18next (ru | uz | en), с безопасным fallback
+  const langRaw = (typeof window !== "undefined" && window.i18next?.language) || (typeof navigator !== "undefined" && navigator.language) || "ru";
+  const lang = /^uz/i.test(langRaw) ? "uz" : /^en/i.test(langRaw) ? "en" : "ru";
+
+  try {
+    const url =
+      `https://secure.geonames.org/searchJSON` +
+      `?name_startsWith=${encodeURIComponent(q)}` +
+      `&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}` +
+      `&lang=${lang}`;
+
+    const r = await fetch(url);
+    const data = await r.json();
+    const seen = new Set();
+    const fromApi = (data?.geonames || []).map((g) => {
+      const label = getLocalizedName(g, lang);
+      const key = `${label}__${g.lat}_${g.lng}`;
+      if (seen.has(key)) return null; // немного дедупа
+      seen.add(key);
+      return {
         value: String(g.geonameId),
-        label: `${g.name}${g.adminName1 ? ", " + g.adminName1 : ""}${g.countryName ? ", " + g.countryName : ""}`,
+        label,
         lat: Number(g.lat),
         lng: Number(g.lng),
         countryName: g.countryName,
-      }));
-      cb(options);
-    } catch {
-      cb([]);
+      };
+    }).filter(Boolean);
+
+    // ВСТАВЛЯЕМ "замкнуть маршрут" первым, если уже есть первый город
+    const injected = [];
+    if (cities.length > 0) {
+      const first = cities[0];
+      // показываем только если ввод похоже на имя первого города
+      const looksLikeFirst = first.label.toLowerCase().includes(q.toLowerCase());
+      if (looksLikeFirst) {
+        injected.push({
+          value: `${first.value}__loop_${Date.now()}`, // уникальный value
+          label: `↩︎ ${first.label} (${t("tb.loop_route", { defaultValue: "замкнуть маршрут" })})`,
+          lat: first.lat, lng: first.lng, countryName: first.countryName,
+          _loopOf: first.value,
+        });
+      }
     }
-  }, []);
+
+    cb([...injected, ...fromApi]);
+  } catch {
+    // даже при ошибке API даём возможность замкнуть маршрут
+    const injected = [];
+    if (cities.length > 0) {
+      const first = cities[0];
+      injected.push({
+        value: `${first.value}__loop_${Date.now()}`,
+        label: `↩︎ ${first.label}`,
+        lat: first.lat, lng: first.lng, countryName: first.countryName,
+        _loopOf: first.value,
+      });
+    }
+    cb(injected);
+  }
+}, [cities, t]);
+
 
   // ===== DnD городов =====
   const onDragEnd = (result) => {
