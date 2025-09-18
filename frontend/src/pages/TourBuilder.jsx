@@ -521,7 +521,13 @@ useEffect(() => {
     lines.push(`Guide: ${guideNeeded ? (selectedGuide ? selectedGuide.name : "yes") : "no"}; Transport: ${transportNeeded ? (selectedTransport ? selectedTransport.name : "yes") : "no"}`);
     const rm = ROOMING_TYPES.map((k) => `${k}:${rooming[k] || 0}`).filter((s) => !/:\s*0$/.test(s)).join(", ");
     if (rm) lines.push(`Rooming: ${rm}`);
-    if (monuments?.length) lines.push(`Monuments: ${(monuments || []).map((m) => m.label).join(", ")}`);
+    if (entrySelected?.length) {
+  lines.push(
+    `Monuments: ${entrySelected
+      .map(o => o.raw?.name_ru || o.raw?.name_en || o.label)
+      .join(", ")}`
+  );
+}
     if (cities.length) lines.push(`Cities: ${cities.map((c) => c.label).join(" → ")}`);
     if (segments.length) {
       lines.push("Segments:");
