@@ -1,5 +1,4 @@
 // frontend/src/components/Header.jsx
-
 import { useEffect, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
@@ -8,14 +7,12 @@ import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 
 /* --- Inline SVG иконки --- */
-// для таба - модерация услуг
 const IconModeration = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
   </svg>
 );
 
-// детектор админ-прав (как в Dashboard.jsx)
 const YES = new Set(["1", "true", "yes", "on"]);
 function detectAdmin(profile) {
   const p = profile || {};
@@ -40,8 +37,6 @@ function detectAdmin(profile) {
   return is;
 }
 
-// fallback: детектим права администратора из JWT,
-// если профиль недоступен или не содержит флага
 function detectAdminFromJwt() {
   try {
     const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -90,14 +85,21 @@ const IconHeart = (p) => (
     <path d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
   </svg>
 );
-
-// для отелей
 const IconHotel = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
     <path d="M7 9h4M7 12h4M7 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
     <path d="M14 11h5a2 2 0 0 1 2 2v7" stroke="currentColor" strokeWidth="2"/>
     <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+/* NEW: иконка “Entry fees” */
+const IconTicket = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M4 7h16v10H4z" stroke="currentColor" strokeWidth="2"/>
+    <path d="M9 7v10M15 7v10" stroke="currentColor" strokeWidth="2" strokeDasharray="2 3"/>
+    <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
   </svg>
 );
 
@@ -110,7 +112,6 @@ export default function Header() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      // сначала пробуем из JWT — работает даже если профиль 404/403
       const jwtAdmin = detectAdminFromJwt();
       if (jwtAdmin) { if (alive) setIsAdmin(true); return; }
       if (role !== "provider") { if (alive) setIsAdmin(false); return; }
@@ -118,7 +119,6 @@ export default function Header() {
         const p = await apiGet("/api/providers/profile", role);
         if (alive) setIsAdmin(detectAdmin(p));
       } catch {
-        // dev-хинт, чтобы можно было видеть таб в dev
         const v = localStorage.getItem("isAdminUiHint");
         if (alive) setIsAdmin(!!(v && YES.has(String(v).toLowerCase())));
       }
@@ -132,9 +132,8 @@ export default function Header() {
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [favCount, setFavCount] = useState(0);
-  const [refreshTick, setRefreshTick] = useState(0); // для ручного перезапроса счётчиков
+  const [refreshTick, setRefreshTick] = useState(0);
 
-  // провайдерское избранное – считаем элементы
   useEffect(() => {
     if (role !== "provider") return;
     let alive = true;
@@ -147,26 +146,20 @@ export default function Header() {
       }
     };
     load();
-    // обновлять бейдж при изменениях
     const onChanged = () => load();
     window.addEventListener("provider:favorites:changed", onChanged);
     return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
   }, [role]);
 
-  /* Provider counters (requests / bookings) — без /api/notifications/counts */
   useEffect(() => {
     if (role !== "provider") return;
-
     let cancelled = false;
-
     const fetchCounts = async () => {
       setLoading(true);
       try {
-        // 1) заявки провайдера: показываем именно "new"
         const rs = await apiGet("/api/requests/provider/stats", role);
         const requestsNew = Number(rs?.new || 0);
 
-        // 2) бронирования
         let bookingsPending = 0;
         let bookingsTotal = 0;
 
@@ -179,9 +172,7 @@ export default function Header() {
         } catch {
           const bl = await apiGet("/api/providers/bookings", role);
           const list = Array.isArray(bl) ? bl : bl?.items || [];
-          bookingsPending = list.filter(
-            (x) => String(x.status).toLowerCase() === "pending"
-          ).length;
+          bookingsPending = list.filter((x) => String(x.status).toLowerCase() === "pending").length;
           bookingsTotal = list.length;
         }
         if (!cancelled) {
@@ -198,16 +189,11 @@ export default function Header() {
         if (!cancelled) setLoading(false);
       }
     };
-
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+    return () => { cancelled = true; clearInterval(id); };
   }, [role, refreshTick]);
 
-  // дергаем обновление по событиям от списка заявок
   useEffect(() => {
     const bump = () => setRefreshTick((x) => x + 1);
     window.addEventListener("provider:counts:refresh", bump);
@@ -218,29 +204,20 @@ export default function Header() {
     };
   }, []);
 
-  /* Client wishlist counter */
   useEffect(() => {
     if (role !== "client") return;
-
     const fetchFavs = async () => {
       try {
         const res = await apiGet("/api/wishlist", true);
         const list = Array.isArray(res) ? res : res?.items || [];
         setFavCount(list.length);
-      } catch {
-        setFavCount(0);
-      }
+      } catch { setFavCount(0); }
     };
-
     fetchFavs();
-
     const onFavChanged = () => fetchFavs();
     window.addEventListener("wishlist:changed", onFavChanged);
-
-    // на смену роутов (как было)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchFavs(location.pathname + location.search);
-
     return () => window.removeEventListener("wishlist:changed", onFavChanged);
   }, [role, location]);
 
@@ -258,65 +235,46 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
-        {/* Конструктор тура — доступен всем ролям */}
-        <NavItem
-          to="/tour-builder"
-          label={t("nav.tour_builder", "Конструктор тура")}
-        />
+        <NavItem to="/tour-builder" label={t("nav.tour_builder", "Конструктор тура")} />
 
-        {/* Provider nav */}
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
             <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
             <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
             <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
             <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-
-            {/* <-- здесь будет виден только админам/модераторам */}
             {isAdmin && (
-              <NavItem
-                to="/admin/moderation"
-                label={t("moderation.title", "Модерация")}
-                icon={<IconModeration />}
-              />
+              <>
+                <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                {/* NEW: форма базы входных билетов */}
+                <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+              </>
             )}
           </nav>
         )}
 
-        {/* Client shortcuts: cabinet + favorites */}
         {role === "client" && (
           <nav className="flex items-center gap-2 text-sm">
-            <Link
-              to="/client/dashboard"
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-            >
+            <Link to="/client/dashboard" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100">
               <IconDashboard />
               <span>{t("client.header.cabinet", "Кабинет")}</span>
             </Link>
-
-            <Link
-              to="/client/dashboard?tab=favorites"
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-              title={t("client.header.favorites", "Избранное")}
-            >
+            <Link to="/client/dashboard?tab=favorites" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100" title={t("client.header.favorites", "Избранное")}>
               <IconHeart />
               <span>{t("client.header.favorites", "Избранное")}</span>
-              <span className="min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center bg-orange-500 text-white">
-                {favCount}
-              </span>
+              <span className="min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center bg-orange-500 text-white">{favCount}</span>
             </Link>
           </nav>
         )}
 
-        {/* общий таб Отели — доступен всем ролям */}
-        <NavItem
-          to="/hotels"
-          label={t("nav.hotels", "Отели")}
-          icon={<IconHotel />}
-        />
+        <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
 
         {isAdmin && (
-          <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+          <>
+            <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+            {/* дублируем пункт вне провайдерской группы на случай других ролей */}
+            <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+          </>
         )}
       </div>
 
@@ -361,12 +319,7 @@ function NavBadge({ to, label, value, loading, icon }) {
     >
       {icon}
       <span>{label}</span>
-      <span
-        className={[
-          "min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center transition-transform",
-          show ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600",
-        ].join(" ")}
-      >
+      <span className={["min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center transition-transform", show ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600"].join(" ")}>
         {loading ? "…" : show ? value : 0}
       </span>
     </NavLink>
