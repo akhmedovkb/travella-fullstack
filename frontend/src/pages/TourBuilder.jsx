@@ -927,7 +927,7 @@ useEffect(() => {
                   min={0}
                   value={rooming[k]}
                   onChange={(e) => onRoomingChange(k, e.target.value)}
-                  className="h-9 w-full border rounded px-2 text-sm"   // ← w-full вместо фиксированной ширины
+                  className="h-9 w-full border rounded px-2 text-sm"   
                 />
               </label>
             ))}
