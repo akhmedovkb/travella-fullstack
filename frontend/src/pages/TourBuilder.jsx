@@ -1,5 +1,5 @@
 // frontend/src/pages/TourBuilder.jsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { DayPicker } from "react-day-picker";
@@ -10,7 +10,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 // -------- small utils --------
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
-const toYMD = (d) => (d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10) : "");
+const toYMD = (d) =>
+  d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10) : "";
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const sameDay = (a, b) => toYMD(a) === toYMD(b);
 
@@ -20,6 +21,18 @@ const dkey = (d) => new Date(d).toISOString().slice(0, 10);
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
 const dayKind = (d) => (isHoliday(d) ? "hd" : isWeekend(d) ? "we" : "wk");
+
+// -------- Speaking language (ISO-639-1) --------
+const LANG_OPTIONS = [
+  { value: "", label: "— any —" },
+  { value: "en", label: "English" },
+  { value: "ru", label: "Русский" },
+  { value: "uz", label: "Oʻzbekcha" },
+  // при необходимости добавляй:
+  // { value: "de", label: "Deutsch" },
+  // { value: "fr", label: "Français" },
+  // { value: "tr", label: "Türkçe" },
+];
 
 // -------- transport/guide/hotel fetching --------
 const fetchJSON = async (path, params = {}) => {
@@ -43,10 +56,13 @@ const normalizeProvider = (row, kind) => ({
   currency: row.currency || "USD",
 });
 
-async function fetchProvidersSmart({ kind, city, date, q = "", limit = 30 }) {
+async function fetchProvidersSmart({ kind, city, date, q = "", limit = 30, lang = "" }) {
+  // 1) пробуем умный эндпоинт с учётом занятости
   const tries = [
-    { url: "/api/providers/search", params: { type: kind, location: city, date, q, limit } },
-    { url: `/api/${kind}s/available`, params: { city, date, limit } },
+    { url: "/api/providers/available", params: { type: kind, location: city, city, date, q, limit, ...(lang ? { lang } : {}) } },
+    // 2) обычный поиск (без занятости, но с языком)
+    { url: "/api/providers/search", params: { type: kind, location: city, city, date, q, limit, ...(lang ? { lang } : {}) } },
+    // 3) совсем общий бэкап
     { url: "/api/providers", params: { type: kind, location: city, q, limit } },
   ];
   for (const t of tries) {
@@ -55,7 +71,7 @@ async function fetchProvidersSmart({ kind, city, date, q = "", limit = 30 }) {
       const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
       if (arr.length) return arr.map((x) => normalizeProvider(x, kind));
     } catch (e) {
-      // console.warn("providers fetch failed:", t.url, e);
+      // тихий фолбэк
     }
   }
   return [];
@@ -147,6 +163,9 @@ export default function TourBuilder() {
   // резидентство для entry fees
   const [residentType, setResidentType] = useState("nrs"); // "nrs" | "res"
 
+  // Speaking language (используем для гидов)
+  const [speakingLang, setSpeakingLang] = useState(""); // "", "en", "ru", "uz", ...
+
   // список дней
   const days = useMemo(() => {
     if (!range.from || !range.to) return [];
@@ -197,58 +216,58 @@ export default function TourBuilder() {
   }, [entryQ]);
 
   // ===== loaders for a specific day =====
-  const makeGuideLoader = (dateKey) =>
-    async (input, cb) => {
-      const day = byDay[dateKey] || {};
-      const rows = await fetchProvidersSmart({
-        kind: "guide",
-        city: day.city || "",
-        date: dateKey,
-        q: input?.trim() || "",
-      });
-      cb(
-        rows.map((p) => ({
-          value: p.id,
-          label: p.name,
-          raw: p,
-        }))
-      );
-    };
+  const makeGuideLoader = (dateKey) => async (input, cb) => {
+    const day = byDay[dateKey] || {};
+    const rows = await fetchProvidersSmart({
+      kind: "guide",
+      city: day.city || "",
+      date: dateKey,
+      q: input?.trim() || "",
+      // фильтрация по выбранному языку
+      lang: speakingLang || "",
+    });
+    cb(
+      rows.map((p) => ({
+        value: p.id,
+        label: p.name,
+        raw: p,
+      }))
+    );
+  };
 
-  const makeTransportLoader = (dateKey) =>
-    async (input, cb) => {
-      const day = byDay[dateKey] || {};
-      const rows = await fetchProvidersSmart({
-        kind: "transport",
-        city: day.city || "",
-        date: dateKey,
-        q: input?.trim() || "",
-      });
-      cb(
-        rows.map((p) => ({
-          value: p.id,
-          label: p.name,
-          raw: p,
-        }))
-      );
-    };
+  const makeTransportLoader = (dateKey) => async (input, cb) => {
+    const day = byDay[dateKey] || {};
+    const rows = await fetchProvidersSmart({
+      kind: "transport",
+      city: day.city || "",
+      date: dateKey,
+      q: input?.trim() || "",
+      // язык НЕ фильтруем для транспорта
+    });
+    cb(
+      rows.map((p) => ({
+        value: p.id,
+        label: p.name,
+        raw: p,
+      }))
+    );
+  };
 
-  const makeHotelLoader = (dateKey) =>
-    async (input, cb) => {
-      const day = byDay[dateKey] || {};
-      const rows = await fetchHotelsSmart({
-        city: day.city || "",
-        date: dateKey,
-        q: input?.trim() || "",
-      });
-      cb(
-        rows.map((h) => ({
-          value: h.id,
-          label: `${h.name}${h.city ? " — " + h.city : ""}`,
-          raw: h,
-        }))
-      );
-    };
+  const makeHotelLoader = (dateKey) => async (input, cb) => {
+    const day = byDay[dateKey] || {};
+    const rows = await fetchHotelsSmart({
+      city: day.city || "",
+      date: dateKey,
+      q: input?.trim() || "",
+    });
+    cb(
+      rows.map((h) => ({
+        value: h.id,
+        label: `${h.name}${h.city ? " — " + h.city : ""}`,
+        raw: h,
+      }))
+    );
+  };
 
   // ===== prices =====
   const entryCell = (siteRaw, kind, pax) => {
@@ -287,7 +306,7 @@ export default function TourBuilder() {
       entries += calcEntryForDay(k);
     });
     const net = guide + transport + hotel + entries;
-    return { guide, transport, hotel, entries, net, perPax: net / payingPax };
+    return { guide, transport, hotel, entries, net, perPax: net / Math.max(1, payingPax) };
   }, [byDay, adt, chd, residentType, payingPax]);
 
   // ===== render =====
@@ -296,7 +315,7 @@ export default function TourBuilder() {
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
         <h1 className="text-2xl font-bold">Конструктор тура</h1>
 
-        {/* даты + pax + resident */}
+        {/* даты + pax + resident + speaking language */}
         <div className="grid gap-4 md:grid-cols-3">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium mb-1">Даты тура</label>
@@ -309,7 +328,9 @@ export default function TourBuilder() {
               className="text-sm"
             />
             <p className="text-sm text-gray-600 mt-2">
-              {range.from && range.to ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${days.length} дн.` : "Выберите даты начала и конца"}
+              {range.from && range.to
+                ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${days.length} дн.`
+                : "Выберите даты начала и конца"}
             </p>
           </div>
 
@@ -319,11 +340,23 @@ export default function TourBuilder() {
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-sm flex items-center gap-2">
                   <span className="w-10">ADT</span>
-                  <input type="number" min={0} value={adt} onChange={(e) => setAdt(e.target.value)} className="h-9 w-full border rounded px-2 text-sm" />
+                  <input
+                    type="number"
+                    min={0}
+                    value={adt}
+                    onChange={(e) => setAdt(e.target.value)}
+                    className="h-9 w-full border rounded px-2 text-sm"
+                  />
                 </label>
                 <label className="text-sm flex items-center gap-2">
                   <span className="w-10">CHD</span>
-                  <input type="number" min={0} value={chd} onChange={(e) => setChd(e.target.value)} className="h-9 w-full border rounded px-2 text-sm" />
+                  <input
+                    type="number"
+                    min={0}
+                    value={chd}
+                    onChange={(e) => setChd(e.target.value)}
+                    className="h-9 w-full border rounded px-2 text-sm"
+                  />
                 </label>
               </div>
             </div>
@@ -331,13 +364,37 @@ export default function TourBuilder() {
             <div>
               <div className="text-sm font-medium mb-1">Тарифы для</div>
               <label className="inline-flex items-center gap-2 mr-4">
-                <input type="radio" checked={residentType === "nrs"} onChange={() => setResidentType("nrs")} />
+                <input
+                  type="radio"
+                  checked={residentType === "nrs"}
+                  onChange={() => setResidentType("nrs")}
+                />
                 <span>Нерезиденты</span>
               </label>
               <label className="inline-flex items-center gap-2">
-                <input type="radio" checked={residentType === "res"} onChange={() => setResidentType("res")} />
+                <input
+                  type="radio"
+                  checked={residentType === "res"}
+                  onChange={() => setResidentType("res")}
+                />
                 <span>Резиденты</span>
               </label>
+            </div>
+
+            {/* Speaking language */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Speaking language</label>
+              <select
+                value={speakingLang}
+                onChange={(e) => setSpeakingLang(e.target.value)}
+                className="border rounded px-2 py-2 w-full h-9"
+              >
+                {LANG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -355,7 +412,9 @@ export default function TourBuilder() {
                     className="border rounded px-3 py-2 min-w-[220px] flex-1"
                     placeholder="Город (например, Tashkent)"
                     value={st.city || ""}
-                    onChange={(e) => setByDay((p) => ({ ...p, [k]: { ...p[k], city: e.target.value } }))}
+                    onChange={(e) =>
+                      setByDay((p) => ({ ...p, [k]: { ...p[k], city: e.target.value } }))
+                    }
                   />
                   <div className="text-sm text-gray-500">{k}</div>
                 </div>
@@ -376,10 +435,13 @@ export default function TourBuilder() {
                           ? { value: st.guide.id, label: st.guide.name, raw: st.guide }
                           : null
                       }
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
+                      onChange={(opt) =>
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))
+                      }
                     />
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)} {st.guide?.currency || "USD"}
+                      Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)}{" "}
+                      {st.guide?.currency || "USD"}
                     </div>
                   </div>
 
@@ -398,10 +460,13 @@ export default function TourBuilder() {
                           ? { value: st.transport.id, label: st.transport.name, raw: st.transport }
                           : null
                       }
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
+                      onChange={(opt) =>
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))
+                      }
                     />
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)} {st.transport?.currency || "USD"}
+                      Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)}{" "}
+                      {st.transport?.currency || "USD"}
                     </div>
                   </div>
 
@@ -417,10 +482,16 @@ export default function TourBuilder() {
                       noOptionsMessage={() => "Нет вариантов"}
                       value={
                         st.hotel
-                          ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel }
+                          ? {
+                              value: st.hotel.id,
+                              label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`,
+                              raw: st.hotel,
+                            }
                           : null
                       }
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))}
+                      onChange={(opt) =>
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))
+                      }
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/ночь: {toNum(st.hotel?.price, 0).toFixed(2)} {st.hotel?.currency || "USD"}
@@ -442,7 +513,9 @@ export default function TourBuilder() {
                       defaultOptions={entryOptions}
                       loadOptions={(input, cb) => cb(entryOptions)}
                       value={st.entrySelected || []}
-                      onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
+                      onChange={(vals) =>
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))
+                      }
                       placeholder="Выберите объекты"
                       noOptionsMessage={() => "Ничего не найдено"}
                     />
@@ -454,10 +527,17 @@ export default function TourBuilder() {
                 </div>
 
                 <div className="text-sm text-gray-700">
-                  Итого по дню: Гид {calcGuideForDay(k).toFixed(2)} + Транспорт {calcTransportForDay(k).toFixed(2)} + Отель{" "}
-                  {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} ={" "}
+                  Итого по дню: Гид {calcGuideForDay(k).toFixed(2)} + Транспорт{" "}
+                  {calcTransportForDay(k).toFixed(2)} + Отель {calcHotelForDay(k).toFixed(2)} + Entry{" "}
+                  {calcEntryForDay(k).toFixed(2)} ={" "}
                   <b>
-                    {(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} USD
+                    {(
+                      calcGuideForDay(k) +
+                      calcTransportForDay(k) +
+                      calcHotelForDay(k) +
+                      calcEntryForDay(k)
+                    ).toFixed(2)}{" "}
+                    USD
                   </b>
                 </div>
               </div>
@@ -485,8 +565,14 @@ export default function TourBuilder() {
           </div>
           <div className="bg-gray-50 rounded p-3 border">
             <div className="font-semibold">ИТОГО</div>
-            <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} USD</span></div>
-            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} USD</span></div>
+            <div className="flex justify-between">
+              <span>NET</span>
+              <span>{totals.net.toFixed(2)} USD</span>
+            </div>
+            <div className="flex justify-between mt-1">
+              <span>/ pax</span>
+              <span>{totals.perPax.toFixed(2)} USD</span>
+            </div>
           </div>
         </div>
       </div>
