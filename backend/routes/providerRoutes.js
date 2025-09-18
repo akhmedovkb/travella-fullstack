@@ -44,6 +44,43 @@ function requireProvider(req, res, next) {
 
 // --- PUBLIC SEARCH / AVAILABLE ---------------------------------------------
 
+/** Нормализуем query */
+function _parseProviderQuery(qs = {}) {
+  const type  = String(qs.type || "").trim();                     // guide | transport | ...
+  const city  = String(qs.city || qs.location || "").trim();      // Samarkand / Tashkent ...
+  const q     = String(qs.q || "").trim();
+  const date  = String(qs.date || "").trim();                     // YYYY-MM-DD
+  const start = String(qs.start || "").trim();                    // YYYY-MM-DD
+  const end   = String(qs.end || "").trim();                      // YYYY-MM-DD
+  const limit = Math.min(Math.max(parseInt(qs.limit, 10) || 30, 1), 100);
+  return { type, city, q, date, start, end, limit };
+}
+
+/** Общая часть WHERE для фильтров type/city/q */
+function _buildBaseWhere({ type, city, q }, vals) {
+  const where = [];
+
+  if (type) {
+    vals.push(type);
+    where.push(`p.type = $${vals.length}`);
+  }
+
+  if (city) {
+    // location: text[]  → ищем по любому элементу массива
+    vals.push(`%${city}%`);
+    where.push(`EXISTS (SELECT 1 FROM unnest(p.location) loc WHERE loc ILIKE $${vals.length})`);
+  }
+
+  if (q) {
+    vals.push(`%${q}%`);
+    const idx = vals.length;
+    where.push(`(p.name ILIKE $${idx} OR p.email ILIKE $${idx} OR p.phone ILIKE $${idx})`);
+  }
+
+  return where;
+}
+
+
 /**
  * Нормализуем query: type, city|location, q, date, limit
  */
@@ -63,18 +100,11 @@ function _parseProviderQuery(qs = {}) {
 router.get("/search", async (req, res) => {
   try {
     const { type, city, q, limit } = _parseProviderQuery(req.query);
-    const where = [];
     const vals = [];
-
-    if (type) { vals.push(type); where.push(`p.type = $${vals.length}`); }
-    if (city) { vals.push(city); where.push(`p.location ILIKE $${vals.length}`); }
-    if (q) {
-      vals.push(`%${q}%`);
-      where.push(`(p.name ILIKE $${vals.length} OR p.email ILIKE $${vals.length} OR p.phone ILIKE $${vals.length})`);
-    }
+    const where = _buildBaseWhere({ type, city, q }, vals);
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY p.name ASC
@@ -90,57 +120,89 @@ router.get("/search", async (req, res) => {
 
 /**
  * GET /api/providers/available
- * То же, но исключаем занятых на указанную дату (таблица provider_busy).
- * Если таблицы нет — делаем graceful fallback к обычному поиску.
+ * Фильтруем по type/city/q и исключаем занятых по:
+ * - bookings + booking_dates (status IN confirmed, active)
+ * - provider_blocked_dates
+ * Поддержка date ИЛИ (start,end) диапазона. Если ни одно не задано — как /search.
+ * Если есть вспомогательная provider_busy — можно дополнительно учесть, но не требуется.
  */
 router.get("/available", async (req, res) => {
-  const qParsed = _parseProviderQuery(req.query);
-  const { type, city, q, date, limit } = qParsed;
-
-  // Если даты нет — эквивалент обычного поиска
-  if (!date) return router.handle({ ...req, url: "/search", method: "GET" }, res);
-
   try {
-    const where = [];
-    const vals = [];
+    const { type, city, q, date, start, end, limit } = _parseProviderQuery(req.query);
 
-    if (type) { vals.push(type); where.push(`p.type = $${vals.length}`); }
-    if (city) { vals.push(city); where.push(`p.location ILIKE $${vals.length}`); }
-    if (q) {
-      vals.push(`%${q}%`);
-      where.push(`(p.name ILIKE $${vals.length} OR p.email ILIKE $${vals.length} OR p.phone ILIKE $${vals.length})`);
+    // нет даты — ведём себя как /search (но без router.handle)
+    if (!date && !(start && end)) {
+      const vals = [];
+      const where = _buildBaseWhere({ type, city, q }, vals);
+      const sql = `
+        SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
+        FROM providers p
+        ${where.length ? "WHERE " + where.join(" AND ") : ""}
+        ORDER BY p.name ASC
+        LIMIT $${vals.push(limit)};`;
+      const { rows } = await pool.query(sql, vals);
+      return res.json({ items: rows });
     }
 
-    // исключаем занятых на дату
-    vals.push(date);
-    const availability = `
-      AND NOT EXISTS (
-        SELECT 1 FROM provider_busy b
-        WHERE b.provider_id = p.id AND b.date = $${vals.length}
-      )
-    `;
+    const vals = [];
+    const where = _buildBaseWhere({ type, city, q }, vals);
+
+    // Условие занятости: одиночная дата или интервал
+    let busySql;
+    if (date) {
+      vals.push(date);
+      const dIdx = vals.length;
+
+      busySql = `
+        AND NOT EXISTS (                -- активные/подтверждённые брони на дату
+          SELECT 1
+          FROM bookings b
+          JOIN booking_dates bd ON bd.booking_id = b.id
+          WHERE b.provider_id = p.id
+            AND b.status IN ('confirmed','active')
+            AND bd.date = $${dIdx}::date
+        )
+        AND NOT EXISTS (                -- ручные блокировки на дату
+          SELECT 1
+          FROM provider_blocked_dates d
+          WHERE d.provider_id = p.id
+            AND d.date = $${dIdx}::date
+        )`;
+    } else {
+      // диапазон обязателен (в эту ветку мы попали по условию выше)
+      vals.push(start);
+      const sIdx = vals.length;
+      vals.push(end);
+      const eIdx = vals.length;
+
+      busySql = `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM bookings b
+          JOIN booking_dates bd ON bd.booking_id = b.id
+          WHERE b.provider_id = p.id
+            AND b.status IN ('confirmed','active')
+            AND bd.date BETWEEN $${sIdx}::date AND $${eIdx}::date
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM provider_blocked_dates d
+          WHERE d.provider_id = p.id
+            AND d.date BETWEEN $${sIdx}::date AND $${eIdx}::date
+        )`;
+    }
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ${availability}
+      ${busySql}
       ORDER BY p.name ASC
       LIMIT $${vals.push(limit)};`;
 
     const { rows } = await pool.query(sql, vals);
     return res.json({ items: rows });
   } catch (e) {
-    // Если relation "provider_busy" не существует — тихо откатываемся к /search
-    if (String(e.message || "").includes("relation") && String(e.message || "").includes("provider_busy")) {
-      try {
-        // Fallback к поиску без учёта занятости
-        const url = `/search?type=${encodeURIComponent(type)}&city=${encodeURIComponent(city)}&q=${encodeURIComponent(q)}&limit=${limit}`;
-        return router.handle({ ...req, url, method: "GET" }, res);
-      } catch (e2) {
-        console.error("Fallback to /search failed:", e2);
-      }
-    }
     console.error("GET /api/providers/available error:", e);
     return res.status(500).json({ error: "Failed to get available providers" });
   }
