@@ -860,8 +860,6 @@ useEffect(() => {
                   </label>
                 </div>
               </div>
-
-            </div>
           </div>
         </div>
 
