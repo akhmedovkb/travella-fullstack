@@ -2,6 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const authHeaders = () => {
+  const tok =
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("clientToken"); // на всякий
+  return tok ? { Authorization: `Bearer ${tok}` } : {};
+};
 
 const num = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
@@ -36,7 +43,7 @@ export default function AdminEntryFees() {
       u.searchParams.set("q", q);
       u.searchParams.set("page", page);
       u.searchParams.set("limit", limit);
-      const r = await fetch(u, { credentials: "include" });
+      const r = await fetch(u, { credentials: "include", headers: { ...authHeaders() } });
       if (!r.ok) throw new Error();
       const d = await r.json();
       setItems(d.items || []);
@@ -57,7 +64,9 @@ export default function AdminEntryFees() {
   const onDelete = async (row) => {
     if (!confirm(`Удалить "${row.name_ru}"?`)) return;
     await fetch(new URL(`/api/admin/entry-fees/${row.id}`, API_BASE), {
-      method: "DELETE", credentials: "include"
+            method: "DELETE",
+      credentials: "include",
+      headers: { ...authHeaders() },
     });
     fetchList();
   };
@@ -76,7 +85,7 @@ export default function AdminEntryFees() {
 
     const r = await fetch(new URL(url, API_BASE), {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
       body: JSON.stringify(body),
     });
