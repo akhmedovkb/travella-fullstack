@@ -28,6 +28,29 @@ const GEONAMES_USER = import.meta.env.VITE_GEONAMES_USERNAME || "";
 const INPUT_S =
   "h-9 px-3 py-1.5 border rounded focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400";
 
+//для коррекции Переопредетеля по дням
+
+const toYMDLocal = (d) => {
+  if (!d) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const addDaysLocal = (d, n) => {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() + n);
+  return x;
+};
+
+const daysBetweenLocal = (a, b) => {
+  if (!a || !b) return 0;
+  const a0 = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const b0 = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.max(0, Math.round((b0 - a0) / 86400000) + 1); // включительно
+};
+
 // -------- utils --------
 const getLocalizedName = (g, lang) => {
   const alts = Array.isArray(g.alternateNames) ? g.alternateNames : [];
@@ -62,13 +85,9 @@ const MONUMENTS_PRESET = [
 ];
 
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
-const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
-const addDays = (d, n) => new Date(new Date(d).getTime() + n * 86400000);
-const daysBetween = (a, b) => {
-  if (!a || !b) return 0;
-  const d1 = new Date(fmtDate(a)), d2 = new Date(fmtDate(b));
-  return Math.max(0, Math.round((d2 - d1) / 86400000) + 1);
-};
+const fmtDate = toYMDLocal;
+const addDays = addDaysLocal;
+const daysBetween = daysBetweenLocal;
 
 export default function TourBuilder() {
   const { i18n, t } = useTranslation();
