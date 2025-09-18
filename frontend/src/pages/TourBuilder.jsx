@@ -10,6 +10,9 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
+// ⬇️ добавили локали date-fns для DayPicker
+import { ru as dfnsRu, enUS as dfnsEn, uz as dfnsUz } from "date-fns/locale";
+
 // --- Leaflet marker icons fix (для Vite) ---
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
@@ -24,8 +27,6 @@ const GEONAMES_USER = import.meta.env.VITE_GEONAMES_USERNAME || "";
 
 // getLocalizedName помощник:
 const getLocalizedName = (g, lang) => {
-  // GeoNames часто отдаёт alternateNames с локализованными вариантами
-  // Ищем нужный язык, затем fallback на name/toponymName
   const alts = Array.isArray(g.alternateNames) ? g.alternateNames : [];
   const match =
     alts.find(a => a.lang?.toLowerCase() === lang?.toLowerCase()) ||
@@ -69,7 +70,13 @@ const daysBetween = (a, b) => {
 };
 
 export default function TourBuilder() {
-  const { t } = useTranslation();
+  // ⬇️ берём текущий язык и t
+  const { i18n, t } = useTranslation();
+
+  // ⬇️ вычисляем локаль date-fns для DayPicker
+  const lang = (i18n.language || "ru").toLowerCase();
+  const langBase = lang.startsWith("ru") ? "ru" : lang.startsWith("uz") ? "uz" : "en";
+  const dfnsLocale = langBase === "ru" ? dfnsRu : langBase === "uz" ? dfnsUz : dfnsEn;
 
   // ===== БАЗОВАЯ ФОРМА =====
   const [arrivalTimeDay1, setArrivalTimeDay1] = useState("");
@@ -113,7 +120,6 @@ export default function TourBuilder() {
     setSegmentExtras((p) => ({ ...p, [idx]: vals || [] }));
 
   // ===== НОЧИ / ОТЕЛИ =====
-  // ночь: {date, hotel, hotelId, net, notes}
   const [nights, setNights] = useState([]);
   useEffect(() => {
     if (!range.from || !range.to) { setNights([]); return; }
@@ -211,85 +217,78 @@ export default function TourBuilder() {
   }, [range.from, range.to, guideNeeded, transportNeeded]);
 
   // ===== Поиск городов (GeoNames) =====
-  
-const loadCityOptions = useCallback(async (input, cb) => {
-  const q = (input || "").trim();
-  if (!q || !GEONAMES_USER) {
-    // даже если пустой запрос — показываем "замкнуть маршрут" (см. ниже)
-    const injected = [];
-    if (cities.length > 0) {
-      const first = cities[0];
-      injected.push({
-        value: `${first.value}__loop_${cities.length}`, // уникально для multi
-        label: `↩︎ ${first.label}`,                     // та же подпись
-        lat: first.lat, lng: first.lng, countryName: first.countryName,
-        _loopOf: first.value,
-      });
-    }
-    return cb(injected);
-  }
-
-  // язык из i18next (ru | uz | en), с безопасным fallback
-  const langRaw = (typeof window !== "undefined" && window.i18next?.language) || (typeof navigator !== "undefined" && navigator.language) || "ru";
-  const lang = /^uz/i.test(langRaw) ? "uz" : /^en/i.test(langRaw) ? "en" : "ru";
-
-  try {
-    const url =
-      `https://secure.geonames.org/searchJSON` +
-      `?name_startsWith=${encodeURIComponent(q)}` +
-      `&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}` +
-      `&lang=${lang}`;
-
-    const r = await fetch(url);
-    const data = await r.json();
-    const seen = new Set();
-    const fromApi = (data?.geonames || []).map((g) => {
-      const label = getLocalizedName(g, lang);
-      const key = `${label}__${g.lat}_${g.lng}`;
-      if (seen.has(key)) return null; // немного дедупа
-      seen.add(key);
-      return {
-        value: String(g.geonameId),
-        label,
-        lat: Number(g.lat),
-        lng: Number(g.lng),
-        countryName: g.countryName,
-      };
-    }).filter(Boolean);
-
-    // ВСТАВЛЯЕМ "замкнуть маршрут" первым, если уже есть первый город
-    const injected = [];
-    if (cities.length > 0) {
-      const first = cities[0];
-      // показываем только если ввод похоже на имя первого города
-      const looksLikeFirst = first.label.toLowerCase().includes(q.toLowerCase());
-      if (looksLikeFirst) {
+  const loadCityOptions = useCallback(async (input, cb) => {
+    const q = (input || "").trim();
+    if (!q || !GEONAMES_USER) {
+      const injected = [];
+      if (cities.length > 0) {
+        const first = cities[0];
         injected.push({
-          value: `${first.value}__loop_${Date.now()}`, // уникальный value
-          label: `↩︎ ${first.label} (${t("tb.loop_route", { defaultValue: "замкнуть маршрут" })})`,
+          value: `${first.value}__loop_${cities.length}`,
+          label: `↩︎ ${first.label}`,
           lat: first.lat, lng: first.lng, countryName: first.countryName,
           _loopOf: first.value,
         });
       }
+      return cb(injected);
     }
 
-    cb([...injected, ...fromApi]);
-  } catch {
-    // даже при ошибке API даём возможность замкнуть маршрут
-    const injected = [];
-    if (cities.length > 0) {
-      const first = cities[0];
-      injected.push({
-        value: `${first.value}__loop_${Date.now()}`,
-        label: `↩︎ ${first.label}`,
-        lat: first.lat, lng: first.lng, countryName: first.countryName,
-        _loopOf: first.value,
-      });
-    }
-    cb(injected);
-  }
-}, [cities, t]);
+    const langRaw = (typeof window !== "undefined" && window.i18next?.language) || (typeof navigator !== "undefined" && navigator.language) || "ru";
+    const lang = /^uz/i.test(langRaw) ? "uz" : /^en/i.test(langRaw) ? "en" : "ru";
 
+    try {
+      const url =
+        `https://secure.geonames.org/searchJSON` +
+        `?name_startsWith=${encodeURIComponent(q)}` +
+        `&maxRows=10&featureClass=P&orderby=relevance&username=${GEONAMES_USER}` +
+        `&lang=${lang}`;
+
+      const r = await fetch(url);
+      const data = await r.json();
+      const seen = new Set();
+      const fromApi = (data?.geonames || []).map((g) => {
+        const label = getLocalizedName(g, lang);
+        const key = `${label}__${g.lat}_${g.lng}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return {
+          value: String(g.geonameId),
+          label,
+          lat: Number(g.lat),
+          lng: Number(g.lng),
+          countryName: g.countryName,
+        };
+      }).filter(Boolean);
+
+      const injected = [];
+      if (cities.length > 0) {
+        const first = cities[0];
+        const looksLikeFirst = first.label.toLowerCase().includes(q.toLowerCase());
+        if (looksLikeFirst) {
+          injected.push({
+            value: `${first.value}__loop_${Date.now()}`,
+            label: `↩︎ ${first.label} (${t("tb.loop_route", { defaultValue: "замкнуть маршрут" })})`,
+            lat: first.lat, lng: first.lng, countryName: first.countryName,
+            _loopOf: first.value,
+          });
+        }
+      }
+
+      cb([...injected, ...fromApi]);
+    } catch {
+      const injected = [];
+      if (cities.length > 0) {
+        const first = cities[0];
+        injected.push({
+          value: `${first.value}__loop_${Date.now()}`,
+          label: `↩︎ ${first.label}`,
+          lat: first.lat, lng: first.lng, countryName: first.countryName,
+          _loopOf: first.value,
+        });
+      }
+      cb(injected);
+    }
+  }, [cities, t]);
 
   // ===== DnD городов =====
   const onDragEnd = (result) => {
@@ -639,6 +638,8 @@ const loadCityOptions = useCallback(async (input, cb) => {
               numberOfMonths={2}
               disabled={{ before: new Date() }}
               className="text-sm"
+              // ⬇️ локализация календаря
+              locale={dfnsLocale}
             />
             <p className="text-sm text-gray-600 mt-2">
               {range.from && range.to
