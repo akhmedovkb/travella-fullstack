@@ -292,7 +292,8 @@
     "cancel": "Bekor qilish",
     "pros": "Afzalliklari",
     "cons": "Kamchiliklari",
-    "features": "Xususiyatlari"
+    "features": "Xususiyatlari",
+    "nothing_found": "Hech narsa topilmadi"
   },
 
   "confirm_delete": "Ushbu element o‘chirilsinmi?",
@@ -872,6 +873,10 @@
   "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
   "net": "Netto",
   "notes": "Izoh",
+  "tariff_for": "Tariflar:",
+  "residents": "Rezidentlar",
+  "nonresidents": "Norezidentlar",
+  "entry_fees_net": "Kirish chiptalari (netto)"
 
   "pricing": "Narxlash",
   "currency": "Valyuta",
@@ -910,6 +915,8 @@
   "dragToReorder": "Tartibni o‘zgartirish uchun sudrab o‘tkazing",
   "rooming": "Joylashtirish (xonalar soni)",
   "map": "Xarita",
+  "monuments": "Kirish chiptalari (ob'ektlar)",
+  "monuments_ph": "Ob'ekt yoki shahar nomini yozing…"
   "segments": "Marshrut segmentlari",
   "dep": "Jo‘nash vaqti",
   "arr": "Kelish vaqti",
