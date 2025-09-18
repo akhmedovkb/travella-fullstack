@@ -51,6 +51,42 @@ const daysBetweenLocal = (a, b) => {
   return Math.max(0, Math.round((b0 - a0) / 86400000) + 1); // включительно
 };
 
+//
+
+/* ===== Entry fees helpers (самодостаточно) ===== */
+const entryAuthHeaders = () => {
+  const tok =
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("clientToken");
+  return tok ? { Authorization: `Bearer ${tok}` } : {};
+};
+
+// При желании отметь праздничные даты "YYYY-MM-DD"
+const HOLIDAYS = []; // например: ["2025-01-01","2025-03-08"]
+
+const dkey = (d) => new Date(d).toISOString().slice(0, 10);
+const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
+const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
+const dayKind = (d) => (isHoliday(d) ? "hd" : isWeekend(d) ? "we" : "wk");
+
+/** /api/entry-fees — публичный справочник для турбилдера */
+async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
+  const base = API_BASE || window.frontend?.API_BASE || "";
+  const u = new URL("/api/entry-fees", base);
+  if (q) u.searchParams.set("q", q);
+  if (city) u.searchParams.set("city", city);
+  u.searchParams.set("limit", String(limit));
+  const r = await fetch(u.toString(), {
+    credentials: "include",
+    headers: { ...entryAuthHeaders() },
+  });
+  if (!r.ok) throw new Error("entry-fees fetch failed");
+  const d = await r.json();
+  return Array.isArray(d?.items) ? d.items : [];
+}
+
+
 // -------- utils --------
 const getLocalizedName = (g, lang) => {
   const alts = Array.isArray(g.alternateNames) ? g.alternateNames : [];
@@ -117,6 +153,13 @@ export default function TourBuilder() {
     }));
   }, [range.from, range.to, dayCount]);
 
+
+// ===== entry fees =====
+const [entryQ, setEntryQ] = useState("");
+const [entryOptions, setEntryOptions] = useState([]);   // варианты из API
+const [entrySelected, setEntrySelected] = useState([]); // выбранные объекты (react-select опции)
+const [residentType, setResidentType] = useState("nrs"); // "res" | "nrs"
+
   // ===== сегменты =====
   const segments = useMemo(() => {
     const res = [];
@@ -128,6 +171,51 @@ export default function TourBuilder() {
     const first = cities.find(c => Number.isFinite(c.lat) && Number.isFinite(c.lng));
     return first ? [first.lat, first.lng] : DEFAULT_CENTER;
   }, [cities]);
+
+ // Entry fees
+
+ function entryCell(siteRaw, kind /* wk|we|hd */, pax /* adult|child */) {
+  const key = `${kind}_${residentType}_${pax}`; // напр. "we_nrs_adult"
+  const v = Number(siteRaw?.[key] ?? 0);
+  return Number.isFinite(v) ? v : 0;
+}
+
+// ===== PAX =====
+  const [adt, setAdt] = useState(2);
+  const [chd, setChd] = useState(0);
+  const [inf, setInf] = useState(0);
+
+const tourDates = useMemo(() => {
+  if (!range.from || !range.to) return [];
+  const arr = [];
+  const d = new Date(range.from);
+  const end = new Date(range.to);
+  while (d <= end) {
+    arr.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return arr;
+}, [range.from, range.to]);
+
+
+const entryFeesNet = useMemo(() => {
+  if (!entrySelected.length || !tourDates.length) return 0;
+  const ad = toNum(adt, 0);
+  const ch = toNum(chd, 0);
+  let sum = 0;
+  for (const day of tourDates) {
+    const kind = dayKind(day); // wk | we | hd
+    for (const opt of entrySelected) {
+      const s = opt.raw;
+      sum += ad * entryCell(s, kind, "adult");
+      sum += ch * entryCell(s, kind, "child");
+      // INF считаем бесплатно; добавишь senior при необходимости
+    }
+  }
+  return sum;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [entrySelected, tourDates, residentType, adt, chd]);
+
 
   const [segmentTimes, setSegmentTimes] = useState({});
   const [segmentExtras, setSegmentExtras] = useState({});
@@ -230,6 +318,27 @@ export default function TourBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to, guideNeeded, transportNeeded]);
 
+// ===== Entry fees =====
+useEffect(() => {
+  // небольшой debounce
+  const t = setTimeout(async () => {
+    try {
+      const items = await fetchEntryFees({ q: entryQ, limit: 50 });
+      setEntryOptions(
+        items.map((x) => ({
+          value: x.id,
+          label: `${x.name_ru || x.name_en || x.name_uz || "—"}${x.city ? " — " + x.city : ""} (${x.currency || "UZS"})`,
+          raw: x,
+        }))
+      );
+    } catch {
+      setEntryOptions([]);
+    }
+  }, 250);
+  return () => clearTimeout(t);
+}, [entryQ]);
+
+
   // ===== города (GeoNames) =====
   const loadCityOptions = useCallback(async (input, cb) => {
     const q = (input || "").trim();
@@ -325,11 +434,6 @@ export default function TourBuilder() {
 
   const onRoomingChange = (key, val) => setRooming((p) => ({ ...p, [key]: Math.max(0, toNum(val, 0)) }));
 
-  // ===== PAX =====
-  const [adt, setAdt] = useState(2);
-  const [chd, setChd] = useState(0);
-  const [inf, setInf] = useState(0);
-
   // ===== прайсинг =====
   const [currency, setCurrency] = useState("USD");
   const [markupPct, setMarkupPct] = useState(0);
@@ -359,7 +463,10 @@ export default function TourBuilder() {
   }, [days, guidePerDay, transportPerDay, guideId, transportId, providerById, guideNeeded, transportNeeded]);
 
   const hotelsNet = useMemo(() => nights.reduce((s, n) => s + toNum(n.net, 0), 0), [nights]);
-  const netTotal = useMemo(() => hotelsNet + providersCostNet.total, [hotelsNet, providersCostNet.total]);
+  const netTotal = useMemo(
+  () => hotelsNet + providersCostNet.total + entryFeesNet,
+  [hotelsNet, providersCostNet.total, entryFeesNet]
+);
   const grossBeforeVat = useMemo(() => netTotal * (1 + toNum(markupPct, 0) / 100), [netTotal, markupPct]);
   const vatAmount = useMemo(() => grossBeforeVat * (toNum(vatPct, 0) / 100), [grossBeforeVat, vatPct]);
   const touristFees = useMemo(() => toNum(touristFeePerNight, 0) * Math.max(0, nights.length), [touristFeePerNight, nights.length]);
@@ -377,7 +484,7 @@ export default function TourBuilder() {
       arrivalTimeDay1,
       need: { guide: guideNeeded, transport: transportNeeded },
       rooming,
-      monuments: (monuments || []).map((m) => m.label),
+      monuments: (entrySelected || []).map(o => o.raw?.name_ru || o.raw?.name_en || o.label),
       pax: { adt: toNum(adt, 0), chd: toNum(chd, 0), inf: toNum(inf, 0) },
       cities: cities.map((c) => ({ id: c.value, name: c.label, lat: c.lat, lng: c.lng, country: c.countryName })),
       segments: segments.map((s) => ({
@@ -699,18 +806,55 @@ export default function TourBuilder() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                {t("tourBuilder.monuments", { defaultValue: "Monuments entry fees" })}
-              </label>
-              <CreatableSelect
-                isMulti
-                value={monuments}
-                onChange={(vals)=>setMonuments(vals || [])}
-                options={MONUMENTS_PRESET}
-                classNamePrefix="select"
-                placeholder={t("tourBuilder.monuments_ph", { defaultValue: "Выберите объекты" })}
-              />
+            <div>              
+                <label className="block text-sm font-medium mb-1">
+                  {t("tourBuilder.monuments", { defaultValue: "Monuments entry fees" })}
+                </label>
+              
+                <input
+                  className="w-full border rounded px-3 py-2 mb-2"
+                  placeholder={t("tourBuilder.monuments_ph", { defaultValue: "Начните вводить объект/город…" })}
+                  value={entryQ}
+                  onChange={(e) => setEntryQ(e.target.value)}
+                />
+              
+                <AsyncSelect
+                  isMulti
+                  cacheOptions
+                  defaultOptions={entryOptions}
+                  loadOptions={(input, cb) => cb(entryOptions)}
+                  value={entrySelected}
+                  onChange={(vals) => setEntrySelected(vals || [])}
+                  classNamePrefix="select"
+                  placeholder={t("tourBuilder.monuments_ph", { defaultValue: "Выберите объекты" })}
+                  noOptionsMessage={() => t("common.nothing_found", { defaultValue: "Ничего не найдено" })}
+                />
+              
+                <div className="flex items-center gap-3 text-sm mt-2">
+                  <span className="text-gray-600">{t("tb.tariff_for", { defaultValue: "Тарифы для:" })}</span>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="resident_type"
+                      value="nrs"
+                      checked={residentType === "nrs"}
+                      onChange={() => setResidentType("nrs")}
+                    />
+                    <span>{t("tb.nonresidents", { defaultValue: "Нерезиденты" })}</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="resident_type"
+                      value="res"
+                      checked={residentType === "res"}
+                      onChange={() => setResidentType("res")}
+                    />
+                    <span>{t("tb.residents", { defaultValue: "Резиденты" })}</span>
+                  </label>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1037,7 +1181,7 @@ export default function TourBuilder() {
             {t("tb.pricing", { defaultValue: "Ценообразование" })}
           </h2>
 
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid md:grid-cols-5 gap-3">
             <div>
               <label className="block text-sm font-medium mb-1">{t("tb.currency", { defaultValue: "Валюта" })}</label>
               <select className="border rounded px-2 py-2 w-full h-9" value={currency} onChange={(e) => setCurrency(e.target.value)}>
@@ -1060,7 +1204,7 @@ export default function TourBuilder() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-4 mt-4 text-sm">
+          <div className="grid md:grid-cols-5 gap-4 mt-4 text-sm">
             <div className="bg-gray-50 rounded p-3 border">
               <div className="font-medium mb-2">{t("tb.pax", { defaultValue: "Гости (PAX)" })}</div>
               <div>ADT: {adt} • CHD: {chd} • INF: {inf}</div>
@@ -1073,6 +1217,10 @@ export default function TourBuilder() {
               <div className="font-medium mb-2">{t("tb.providers_cost", { defaultValue: "Гид/Транспорт (нетто)" })}</div>
               <div className="flex justify-between"><span>{t("tourBuilder.guide", { defaultValue: "Гид" })}</span><span>{providersCostNet.guideNet.toFixed(2)} {currency}</span></div>
               <div className="flex justify-between"><span>{t("tourBuilder.transport", { defaultValue: "Транспорт" })}</span><span>{providersCostNet.transportNet.toFixed(2)} {currency}</span></div>
+            </div>
+            <div className="bg-gray-50 rounded p-3 border">
+              <div className="font-medium mb-2">{t("tb.entry_fees_net", { defaultValue: "Entry fees (нетто)" })}</div>
+              <div>{entryFeesNet.toFixed(2)} {currency}</div>
             </div>
             <div className="bg-gray-50 rounded p-3 border">
               <div className="font-medium mb-2">{t("tb.total", { defaultValue: "Суммарно" })}</div>
