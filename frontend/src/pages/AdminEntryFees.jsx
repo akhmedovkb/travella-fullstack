@@ -1,11 +1,11 @@
 // frontend/src/pages/AdminEntryFees.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { showToast } from "../shared/toast";
+
 const toast = {
-  success: (m) => showToast({ type: "success", message: m }),
-  error:   (m) => showToast({ type: "error",   message: m }),
-  info:    (m) => showToast({ type: "info",    message: m }),
+  success: (msg) => (window?.toast?.success ? window.toast.success(msg) : alert(msg)),
+  error:   (msg) => (window?.toast?.error   ? window.toast.error(msg)   : alert(msg)),
+  info:    (msg) => (window?.toast?.info    ? window.toast.info(msg)    : alert(msg)),
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
