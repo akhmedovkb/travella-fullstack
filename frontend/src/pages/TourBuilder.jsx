@@ -106,15 +106,22 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 // --- красивый tooltip внутри опции ---
 const ProviderOption = (props) => {
   const p = props.data?.raw || {};
+  const url = p?.id ? `/profile/provider/${p.id}` : null;
+
+  // Открытие в новой вкладке без передачи события наверх
+  const openProfile = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
 
-      {/* ТУЛТИП */}
       <div
         className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:block z-[10000]"
-        // важно: чтобы react-select не перехватил mousedown и не заблокировал клик по ссылке
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()} // не даём селекту закрыть меню
         onClick={(e) => e.stopPropagation()}
       >
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5">
@@ -127,17 +134,20 @@ const ProviderOption = (props) => {
           {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
           {p.phone && <div><b>Тел.:</b> {p.phone}</div>}
           {p.email && <div><b>Email:</b> {p.email}</div>}
-
           {p.price_per_day > 0 && (
             <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
           )}
 
-          {p.id && (
+          {url && (
             <div className="mt-2">
+              {/* важно: click/mousedown не уходят в react-select */}
               <a
-                href={`/profile/provider/${p.id}`}
+                href={url}
                 target="_blank"
                 rel="noreferrer"
+                tabIndex={0}
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                onClick={openProfile}
                 className="text-blue-600 hover:underline"
               >
                 Открыть профиль →
@@ -149,6 +159,7 @@ const ProviderOption = (props) => {
     </div>
   );
 };
+
 
 
 
