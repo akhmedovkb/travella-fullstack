@@ -113,14 +113,21 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 /* ---------------- custom options with tooltips ---------------- */
 // --- красивый tooltip внутри опции ---
 const ProviderOption = (props) => {
-  const p = props.data?.raw || {};
-  const url = p?.id ? `/profile/provider/${p.id}` : null;
-
-  const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+ const p = props.data?.raw || {};
+    const url = p?.id ? `/profile/provider/${p.id}` : null;
+  // для ссылок, которые ДОЛЖНЫ открываться (tel/mailto/tg):
+  const stopBubble = (e) => { e.stopPropagation(); };
+  // для элементов, где мы сами откроем окно (кнопка "Открыть профиль"):
+  const stopAll = (e) => { e.stopPropagation(); e.preventDefault(); };
     // нормализуем телеграм-ссылку
   const tgRaw = (p.telegram || "").trim();
   const tgHref = tgRaw ? (tgRaw.startsWith("@") ? `https://t.me/${tgRaw.slice(1)}` : (tgRaw.includes("t.me") ? tgRaw : null)) : null;
-  const openProfile = (e) => { stop(e); if (url) window.open(url, "_blank", "noopener,noreferrer"); };
+  const tgRaw  = (p.telegram || "").trim();
+  const tgUser = tgRaw.replace(/^@/, "");             // без @
+  const tgHref = tgRaw
+    ? (tgRaw.includes("t.me") ? tgRaw : `https://t.me/${tgUser}`)
+    : null;
+  const openProfile = (e) => { stopAll(e); if (url) window.open(url, "_blank", "noopener,noreferrer"); };
 
   const tel = (p.phone || "").replace(/[^\d+]/g, "");
 
@@ -149,8 +156,8 @@ const ProviderOption = (props) => {
           {p.phone && (
             <div>
               <b>Тел.:</b>{" "}
-              <a href={tel ? `tel:${tel}` : undefined}
-                 onMouseDown={stop} onClick={stop}
+               <a href={tel ? `tel:${tel}` : undefined}
+                 onMouseDown={stopBubble} onClick={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.phone}
               </a>
@@ -160,19 +167,22 @@ const ProviderOption = (props) => {
           {tgRaw && (
             <div>
               <b>Telegram:</b>{" "}
-              {tgHref ? (
-                <a href={`https://t.me/${p.telegram.replace(/^@/, '')}`} target="_blank" rel="noreferrer"
-                   onMouseDown={stop} onClick={stop} className="text-blue-600 hover:underline">
-                  @{p.telegram.replace(/^@/, '')}
+               {tgHref ? (
+                <a href={tgHref} target="_blank" rel="noreferrer"
+                   onMouseDown={stopBubble} onClick={stopBubble}
+                   className="text-blue-600 hover:underline">
+                  @{tgUser}
                 </a>
-              ) : (<span>{tgRaw}</span>)}
+              ) : (
+                <span>{tgRaw}</span>
+              )}
             </div>
           )}
           {p.email && (
             <div>
               <b>Email:</b>{" "}
               <a href={`mailto:${p.email}`}
-                 onMouseDown={stop} onClick={stop}
+                 onMouseDown={stopBubble} onClick={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.email}
               </a>
@@ -188,7 +198,7 @@ const ProviderOption = (props) => {
           {url && (
             <div className="mt-2">
               <a href={url} target="_blank" rel="noreferrer"
-                 onMouseDown={stop} onClick={openProfile}
+                 onMouseDown={stopAll} onClick={openProfile}
                  className="text-blue-600 hover:underline">
                 Открыть профиль →
               </a>
