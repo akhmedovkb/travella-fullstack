@@ -6,6 +6,9 @@ input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0
 /* тултип показывать при hover на опции */
 .rs-option-wrap:hover .rs-tip { display: block; }
 
+/* новая строка — держим тултип при фокусе внутри */
+.rs-option-wrap:focus-within .rs-tip { display: block; }
+
 /* у меню — overflow видимый, высокий z-index (портал лучше оставить) */
 .rs__menu, .rs__menu-list { overflow: visible !important; }
 
