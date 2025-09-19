@@ -107,19 +107,39 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 const ProviderOption = (props) => {
   const p = props.data?.raw || {};
   return (
-    <div className="rs-option-wrap relative">
+    <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
-      <div className="rs-tip pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden md:block">
+
+      {/* ТУЛТИП */}
+      <div
+        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:block z-[10000]"
+        // важно: чтобы react-select не перехватил mousedown и не заблокировал клик по ссылке
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5">
           <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
-          {p.location && <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(', ') : p.location}</div>}
-          {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(', ')}</div> : null}
+          {p.location && (
+            <div>
+              <b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}
+            </div>
+          )}
+          {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
           {p.phone && <div><b>Тел.:</b> {p.phone}</div>}
           {p.email && <div><b>Email:</b> {p.email}</div>}
-          {p.price_per_day > 0 && <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || 'USD'}</div>}
+
+          {p.price_per_day > 0 && (
+            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
+          )}
+
           {p.id && (
             <div className="mt-2">
-              <a href={`/profile/provider/${p.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+              <a
+                href={`/profile/provider/${p.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 hover:underline"
+              >
                 Открыть профиль →
               </a>
             </div>
@@ -129,6 +149,7 @@ const ProviderOption = (props) => {
     </div>
   );
 };
+
 
 
 
