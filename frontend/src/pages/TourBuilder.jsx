@@ -14,12 +14,12 @@ const toYMD = (d) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;       // ЛОКАЛЬНОЕ YYYY-MM-DD
+  return `${y}-${m}-${day}`;
 };
 
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
-const dkey = (d) => toYMD(new Date(d));  // тоже локально
+const dkey = (d) => toYMD(new Date(d));
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const HOLIDAYS = [];
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
@@ -27,16 +27,15 @@ const dayKind = (d) => (isHoliday(d) ? "hd" : isWeekend(d) ? "we" : "wk");
 
 /* ---------------- ISO-639-1 languages (name + code) ---------------- */
 const LANGS = [
-  ["English","en"],["Русский","ru"],["Oʻzbekcha","uz"],
-  ["Deutsch","de"],["Français","fr"],["Español","es"],["Italiano","it"],
-  ["中文 (Chinese)","zh"],["العربية (Arabic)","ar"],["Türkçe","tr"],
-  ["한국어 (Korean)","ko"],["日本語 (Japanese)","ja"],["Português","pt"],
-  ["हिन्दी (Hindi)","hi"],["فارسی (Persian)","fa"],["Bahasa Indonesia","id"],
-  ["Українська","uk"],["Polski","pl"],["Čeština","cs"],["Română","ro"],
-  ["Ελληνικά","el"],["עברית","he"],["বাংলা","bn"],["ქართული","ka"],
-  ["Азәрбајҹан (Azerbaijani)","az"],["Հայերեն","hy"],["Қазақша","kk"],
-  ["Кыргызча","ky"],["Қарақалпақ","kaa"],["Монгол","mn"],
-  // … список можно расширять сколько угодно (ISO-639-1)
+  ["English", "en"], ["Русский", "ru"], ["Oʻzbekcha", "uz"],
+  ["Deutsch", "de"], ["Français", "fr"], ["Español", "es"], ["Italiano", "it"],
+  ["中文 (Chinese)", "zh"], ["العربية (Arabic)", "ar"], ["Türkçe", "tr"],
+  ["한국어 (Korean)", "ko"], ["日本語 (Japanese)", "ja"], ["Português", "pt"],
+  ["हिन्दी (Hindi)", "hi"], ["فارسی (Persian)", "fa"], ["Bahasa Indonesia", "id"],
+  ["Українська", "uk"], ["Polski", "pl"], ["Čeština", "cs"], ["Română", "ro"],
+  ["Ελληνικά", "el"], ["עברית", "he"], ["বাংলা", "bn"], ["ქართული", "ka"],
+  ["Азәрбајҹан (Azerbaijani)", "az"], ["Հայերեն", "hy"], ["Қазақша", "kk"],
+  ["Кыргызча", "ky"], ["Қарақалпақ", "kaa"], ["Монгол", "mn"],
 ];
 
 /* ---------------- fetch helpers ---------------- */
@@ -66,7 +65,7 @@ const normalizeProvider = (row, kind) => ({
 async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
   const tries = [
     { url: "/api/providers/available", params: { type: kind, location: city, date, language, q, limit } },
-    { url: "/api/providers/search",    params: { type: kind, location: city, language, q, limit } },
+    { url: "/api/providers/search", params: { type: kind, location: city, language, q, limit } },
   ];
   for (const t of tries) {
     try {
@@ -89,7 +88,7 @@ const normalizeHotel = (row) => ({
 async function fetchHotelsSmart({ city, date, q = "", limit = 30 }) {
   const tries = [
     { url: "/api/hotels/search", params: { city, date, name: q, limit } },
-    { url: "/api/hotels",        params: { city, q, limit } },
+    { url: "/api/hotels", params: { city, q, limit } },
   ];
   for (const t of tries) {
     try {
@@ -111,22 +110,24 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 }
 
 /* ---------------- custom options with tooltips ---------------- */
-// --- красивый tooltip внутри опции ---
 const ProviderOption = (props) => {
- const p = props.data?.raw || {};
-    const url = p?.id ? `/profile/provider/${p.id}` : null;
-  // Гасим всплытие только на нажатии (mousedown/pointerdown)
-  // чтобы react-select не закрыл меню, но сам клик выполнился браузером.
-  const stopBubble = (e) => { e.stopPropagation(); };
-  // Для "Открыть профиль" мы сами откроем окно, поэтому отменяем default.
-  const stopAll = (e) => { e.stopPropagation(); e.preventDefault(); };
-    // нормализуем телеграм-ссылку
-  const tgRaw  = (p.telegram || "").trim();
-  const tgUser = tgRaw.replace(/^@/, "");             // без @
-  const tgHref = tgRaw
-    ? (tgRaw.includes("t.me") ? tgRaw : `https://t.me/${tgUser}`)
-    : null;
-  const openProfile = (e) => { stopAll(e); if (url) window.open(url, "_blank", "noopener,noreferrer"); };
+  const p = props.data?.raw || {};
+  const url = p?.id ? `/profile/provider/${p.id}` : null;
+
+  // Не даём react-select закрывать меню на mousedown,
+  // но сам переход запускаем вручную на click.
+  const swallowDown = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const openHref = (href) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!href) return;
+    if (/^https?:/i.test(href)) window.open(href, "_blank", "noopener,noreferrer");
+    else window.location.href = href; // tel:, mailto:
+  };
+
+  const tgRaw = (p.telegram || "").trim();
+  const tgUser = tgRaw.replace(/^@/, "");
+  const tgHref = tgRaw ? (tgRaw.includes("t.me") ? tgRaw : `https://t.me/${tgUser}`) : null;
 
   const tel = (p.phone || "").replace(/[^\d+]/g, "");
 
@@ -134,15 +135,14 @@ const ProviderOption = (props) => {
     <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
 
-            {/* ТУЛТИП: ближе к опции + не исчезает при фокусе внутри */}
+      {/* Тултип: держится при hover и при фокусе внутри */}
       <div
         className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block group-focus-within:block z-[10000]"
         tabIndex={0}
-        onMouseDown={stopBubble}
-        onPointerDown={stopBubble}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* hover-мостик: перекрывает промежуток между опцией и тултипом,
-            чтобы не терялась зона hover при переносе курсора */}
+        {/* мостик, чтобы не терять hover при переносе курсора */}
         <div className="absolute -left-2 top-0 bottom-0 w-2" />
 
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text">
@@ -152,25 +152,34 @@ const ProviderOption = (props) => {
           )}
           {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
 
-          {/* кликабельные контакты */}
           {p.phone && (
             <div>
               <b>Тел.:</b>{" "}
-               <a href={tel ? `tel:${tel}` : undefined}
-                 onMouseDown={stopBubble} onPointerDown={stopBubble}
-                 className="text-blue-600 hover:underline">
+              <a
+                href={tel ? `tel:${tel}` : undefined}
+                onMouseDown={swallowDown}
+                onPointerDown={swallowDown}
+                onClick={openHref(tel ? `tel:${tel}` : "")}
+                className="text-blue-600 hover:underline"
+              >
                 {p.phone}
               </a>
-             </div>
-            )}
-          {/* Telegram (до Email) */}
+            </div>
+          )}
+
           {tgRaw && (
             <div>
               <b>Telegram:</b>{" "}
-               {tgHref ? (
-                <a href={tgHref} target="_blank" rel="noopener noreferrer"
-                   onMouseDown={stopBubble} onPointerDown={stopBubble}
-                   className="text-blue-600 hover:underline">
+              {tgHref ? (
+                <a
+                  href={tgHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onMouseDown={swallowDown}
+                  onPointerDown={swallowDown}
+                  onClick={openHref(tgHref)}
+                  className="text-blue-600 hover:underline"
+                >
                   @{tgUser}
                 </a>
               ) : (
@@ -178,12 +187,17 @@ const ProviderOption = (props) => {
               )}
             </div>
           )}
+
           {p.email && (
             <div>
               <b>Email:</b>{" "}
-              <a href={`mailto:${p.email}`}
-                 onMouseDown={stopBubble} onPointerDown={stopBubble}
-                 className="text-blue-600 hover:underline">
+              <a
+                href={`mailto:${p.email}`}
+                onMouseDown={swallowDown}
+                onPointerDown={swallowDown}
+                onClick={openHref(`mailto:${p.email}`)}
+                className="text-blue-600 hover:underline"
+              >
                 {p.email}
               </a>
             </div>
@@ -197,9 +211,15 @@ const ProviderOption = (props) => {
 
           {url && (
             <div className="mt-2">
-              <a href={url} target="_blank" rel="noreferrer"
-                 onMouseDown={stopAll} onClick={openProfile}
-                 className="text-blue-600 hover:underline">
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                onMouseDown={swallowDown}
+                onPointerDown={swallowDown}
+                onClick={openHref(url)}
+                className="text-blue-600 hover:underline"
+              >
                 Открыть профиль →
               </a>
             </div>
@@ -231,10 +251,9 @@ export default function TourBuilder() {
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
-  const payingPax = useMemo(() => Math.max(1, toNum(adt, 0) + toNum(chd, 0)), [adt, chd]);
 
-  const [residentType, setResidentType] = useState("nrs"); // nrs|res
-  const [lang, setLang] = useState("en");                  // speaking language
+  const [residentType, setResidentType] = useState("nrs"); // nrs | res
+  const [lang, setLang] = useState("en");
 
   const days = useMemo(() => {
     if (!range.from || !range.to) return [];
@@ -244,12 +263,8 @@ export default function TourBuilder() {
     return res;
   }, [range.from, range.to]);
 
-    // границы тура в локальном YYYY-MM-DD (для фильтрации на бэке по интервалу)
-  const tourStart = useMemo(
-    () => (range.from && range.to ? toYMD(range.from) : null),
-    [range.from, range.to]
-  );
-  const tourEnd = useMemo(() => (range.from && range.to ? toYMD(range.to) : null), [range.from, range.to]);
+  const tourStart = useMemo(() => (range.from && range.to ? toYMD(range.from) : null), [range.from, range.to]);
+  const tourEnd   = useMemo(() => (range.from && range.to ? toYMD(range.to)   : null), [range.from, range.to]);
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -266,10 +281,8 @@ export default function TourBuilder() {
     });
   }, [days]);
 
-  // кэш предварительно загруженных опций на день
   const [prefetchedGuides, setPrefetchedGuides] = useState({});
   const [prefetchedTransports, setPrefetchedTransports] = useState({});
-
 
   /* ----- entry fees global search ----- */
   const [entryQ, setEntryQ] = useState("");
@@ -288,94 +301,64 @@ export default function TourBuilder() {
     return () => clearTimeout(t);
   }, [entryQ]);
 
-  /* ----- loaders per day (guide / transport / hotel) ----- */
+  /* ----- loaders per day ----- */
   const makeGuideLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-        const params = {
+    const params = {
       kind: "guide",
       city: day.city || "",
       language: lang,
       q: input?.trim() || "",
       limit: 50,
     };
-    if (tourStart && tourEnd) {
-      params.start = tourStart;
-      params.end = tourEnd;
-    } else {
-      params.date = dateKey;
-    }
+    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; }
+    else { params.date = dateKey; }
     const rows = await fetchProvidersSmart(params);
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
   const makeTransportLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-        const params = {
+    const params = {
       kind: "transport",
       city: day.city || "",
-      language: lang, // если когда-нибудь добавим языки водителей
+      language: lang,
       q: input?.trim() || "",
       limit: 50,
     };
-    if (tourStart && tourEnd) {
-      params.start = tourStart;
-      params.end = tourEnd;
-    } else {
-      params.date = dateKey;
-    }
+    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; }
+    else { params.date = dateKey; }
     const rows = await fetchProvidersSmart(params);
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
   const prefetchGuides = async (dateKey) => {
-  const day = byDay[dateKey] || {};
-    const params = {
-    kind: "guide",
-    city: day.city || "",
-    language: lang,
-    q: "",
-    limit: 50,
+    const day = byDay[dateKey] || {};
+    const params = { kind: "guide", city: day.city || "", language: lang, q: "", limit: 50 };
+    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; } else { params.date = dateKey; }
+    const rows = await fetchProvidersSmart(params);
+    const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+    setPrefetchedGuides((m) => ({ ...m, [dateKey]: opts }));
   };
-  if (tourStart && tourEnd) {
-    params.start = tourStart; params.end = tourEnd;
-  } else {
-    params.date = dateKey;
-  }
-  const rows = await fetchProvidersSmart(params);
-  const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
-  setPrefetchedGuides((m) => ({ ...m, [dateKey]: opts }));
-};
 
-const prefetchTransports = async (dateKey) => {
-  const day = byDay[dateKey] || {};
-    const params = {
-    kind: "transport",
-    city: day.city || "",
-    language: lang,
-    q: "",
-    limit: 50,
+  const prefetchTransports = async (dateKey) => {
+    const day = byDay[dateKey] || {};
+    const params = { kind: "transport", city: day.city || "", language: lang, q: "", limit: 50 };
+    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; } else { params.date = dateKey; }
+    const rows = await fetchProvidersSmart(params);
+    const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+    setPrefetchedTransports((m) => ({ ...m, [dateKey]: opts }));
   };
-  if (tourStart && tourEnd) {
-    params.start = tourStart; params.end = tourEnd;
-  } else {
-    params.date = dateKey;
-  }
-  const rows = await fetchProvidersSmart(params);
-  const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
-  setPrefetchedTransports((m) => ({ ...m, [dateKey]: opts }));
-};
-  
-// как только меняются город/язык/даты — подтягиваем список на день
-useEffect(() => {
-  Object.keys(byDay).forEach((k) => {
-    if (byDay[k]?.city) {
-      prefetchGuides(k);
-      prefetchTransports(k);
-    }
-  });
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [byDay, lang, tourStart, tourEnd]);
 
+  useEffect(() => {
+    Object.keys(byDay).forEach((k) => {
+      if (byDay[k]?.city) {
+        prefetchGuides(k);
+        prefetchTransports(k);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byDay, lang, tourStart, tourEnd]);
 
   const makeHotelLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
@@ -421,7 +404,8 @@ useEffect(() => {
       entries += calcEntryForDay(k);
     });
     const net = guide + transport + hotel + entries;
-    return { guide, transport, hotel, entries, net, perPax: net / Math.max(1, toNum(adt,0)+toNum(chd,0)) };
+    const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+    return { guide, transport, hotel, entries, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType]);
 
   /* ---------------- render ---------------- */
@@ -442,7 +426,9 @@ useEffect(() => {
               className="text-sm"
             />
             <p className="text-sm text-gray-600 mt-2">
-              {range.from && range.to ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${Math.max(1, (range.to - range.from) / 86400000 + 1)} дн.` : "Выберите даты начала и конца"}
+              {range.from && range.to
+                ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${Math.max(1, (range.to - range.from) / 86400000 + 1)} дн.`
+                : "Выберите даты начала и конца"}
             </p>
           </div>
 
@@ -523,9 +509,9 @@ useEffect(() => {
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: base => ({ ...base, zIndex: 9999 }),
-                        menu: base => ({ ...base, overflow: 'visible' }),      // важно!
-                        menuList: base => ({ ...base, overflow: 'visible' }),  // важно!
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        menu: (base) => ({ ...base, overflow: "visible" }),
+                        menuList: (base) => ({ ...base, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -549,9 +535,9 @@ useEffect(() => {
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: base => ({ ...base, zIndex: 9999 }),
-                        menu: base => ({ ...base, overflow: 'visible' }),      // важно!
-                        menuList: base => ({ ...base, overflow: 'visible' }),  // важно!
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        menu: (base) => ({ ...base, overflow: "visible" }),
+                        menuList: (base) => ({ ...base, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -574,9 +560,9 @@ useEffect(() => {
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: base => ({ ...base, zIndex: 9999 }),
-                        menu: base => ({ ...base, overflow: 'visible' }),      // важно!
-                        menuList: base => ({ ...base, overflow: 'visible' }),  // важно!
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        menu: (base) => ({ ...base, overflow: "visible" }),
+                        menuList: (base) => ({ ...base, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -605,9 +591,9 @@ useEffect(() => {
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: base => ({ ...base, zIndex: 9999 }),
-                        menu: base => ({ ...base, overflow: 'visible' }),      // важно!
-                        menuList: base => ({ ...base, overflow: 'visible' }),  // важно!
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        menu: (base) => ({ ...base, overflow: "visible" }),
+                        menuList: (base) => ({ ...base, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
