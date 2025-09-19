@@ -9,10 +9,17 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 /* ---------------- utils ---------------- */
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
-const toYMD = (d) => (d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10) : "");
+const toYMD = (d) => {
+  if (!d) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;       // ЛОКАЛЬНОЕ YYYY-MM-DD
+};
+
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
-const dkey = (d) => new Date(d).toISOString().slice(0, 10);
+const dkey = (d) => toYMD(new Date(d));  // тоже локально
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const HOLIDAYS = [];
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
