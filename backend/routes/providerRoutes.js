@@ -97,7 +97,7 @@ router.get("/search", async (req, res) => {
     const where = buildBaseWhere({ type, city, q, language }, vals);
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY p.name ASC
@@ -121,7 +121,7 @@ router.get("/available", async (req, res) => {
       const vals = [];
       const where = buildBaseWhere({ type, city, q, language }, vals);
       const sql = `
-        SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
+        SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
         FROM providers p
         ${where.length ? "WHERE " + where.join(" AND ") : ""}
         ORDER BY p.name ASC
@@ -178,7 +178,7 @@ router.get("/available", async (req, res) => {
     }
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages
+      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ${busyClause}
