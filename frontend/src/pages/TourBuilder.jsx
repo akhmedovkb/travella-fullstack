@@ -115,9 +115,10 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 const ProviderOption = (props) => {
  const p = props.data?.raw || {};
     const url = p?.id ? `/profile/provider/${p.id}` : null;
-  // для ссылок, которые ДОЛЖНЫ открываться (tel/mailto/tg):
+  // Не даём событиям всплывать до react-select (чтобы меню не закрывалось),
+  // но НЕ отменяем default, иначе ссылки не откроются.
   const stopBubble = (e) => { e.stopPropagation(); };
-  // для элементов, где мы сами откроем окно (кнопка "Открыть профиль"):
+  // Для "Открыть профиль" мы сами откроем окно, поэтому отменяем default.
   const stopAll = (e) => { e.stopPropagation(); e.preventDefault(); };
     // нормализуем телеграм-ссылку
   const tgRaw  = (p.telegram || "").trim();
@@ -134,16 +135,16 @@ const ProviderOption = (props) => {
       <SelectComponents.Option {...props} />
 
       {/* ТУЛТИП: сдвинули ближе (ml-2) */}
-      <div
+            <div
         className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block z-[10000]"
-        onMouseDown={stop}
-        onClick={stop}
+        onMouseDown={stopBubble}
+        onClick={stopBubble}
       >
         {/* hover-мостик: перекрывает промежуток между опцией и тултипом,
             чтобы не терялась зона hover при переносе курсора */}
         <div className="absolute -left-2 top-0 bottom-0 w-2" />
 
-        <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5">
+        <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text">
           <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
           {p.location && (
             <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>
@@ -166,7 +167,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Telegram:</b>{" "}
                {tgHref ? (
-                <a href={tgHref} target="_blank" rel="noreferrer"
+                <a href={tgHref} target="_blank" rel="noopener noreferrer"
                    onMouseDown={stopBubble} onClick={stopBubble}
                    className="text-blue-600 hover:underline">
                   @{tgUser}
