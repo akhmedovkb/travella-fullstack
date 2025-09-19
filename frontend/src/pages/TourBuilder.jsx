@@ -134,11 +134,14 @@ const ProviderOption = (props) => {
     <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
 
-      {/* ТУЛТИП: сдвинули ближе (ml-2) */}
-            <div
-        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block z-[10000]"
+            {/* ТУЛТИП: ближе к опции + не исчезает при фокусе внутри */}
+      <div
+        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block group-focus-within:block z-[10000]"
+        tabIndex={-1}
         onMouseDown={stopBubble}
+        onMouseUp={stopBubble}
         onClick={stopBubble}
+        onTouchStart={stopBubble}
       >
         {/* hover-мостик: перекрывает промежуток между опцией и тултипом,
             чтобы не терялась зона hover при переносе курсора */}
@@ -156,7 +159,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Тел.:</b>{" "}
                <a href={tel ? `tel:${tel}` : undefined}
-                 onMouseDown={stopBubble} onClick={stopBubble}
+                 onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.phone}
               </a>
@@ -168,7 +171,7 @@ const ProviderOption = (props) => {
               <b>Telegram:</b>{" "}
                {tgHref ? (
                 <a href={tgHref} target="_blank" rel="noopener noreferrer"
-                   onMouseDown={stopBubble} onClick={stopBubble}
+                   onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
                    className="text-blue-600 hover:underline">
                   @{tgUser}
                 </a>
@@ -181,7 +184,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Email:</b>{" "}
               <a href={`mailto:${p.email}`}
-                 onMouseDown={stopBubble} onClick={stopBubble}
+                 onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.email}
               </a>
