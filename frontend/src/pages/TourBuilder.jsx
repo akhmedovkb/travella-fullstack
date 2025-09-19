@@ -161,7 +161,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Telegram:</b>{" "}
               {tgHref ? (
-                <<a href={`https://t.me/${p.telegram.replace(/^@/, '')}`} target="_blank" rel="noreferrer"
+                <a href={`https://t.me/${p.telegram.replace(/^@/, '')}`} target="_blank" rel="noreferrer"
                    onMouseDown={stop} onClick={stop} className="text-blue-600 hover:underline">
                   @{p.telegram.replace(/^@/, '')}
                 </a>
