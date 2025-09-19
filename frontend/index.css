@@ -2,3 +2,13 @@
 input[type="number"]{-moz-appearance:textfield;appearance:textfield;line-height:1.25}
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* Чтобы тултип не обрезался */
+.rs__menu, .rs__menu-list { overflow: visible !important; }
+
+/* Показать тултип при hover опции */
+.rs-option-wrap:hover .rs-tip { display: block; }
+
+/* Чуть шире меню, чтобы было место для тултипа, необязательно */
+.rs__menu { z-index: 9999; }
+
