@@ -115,8 +115,8 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 const ProviderOption = (props) => {
  const p = props.data?.raw || {};
     const url = p?.id ? `/profile/provider/${p.id}` : null;
-  // Не даём событиям всплывать до react-select (чтобы меню не закрывалось),
-  // но НЕ отменяем default, иначе ссылки не откроются.
+  // Гасим всплытие только на нажатии (mousedown/pointerdown)
+  // чтобы react-select не закрыл меню, но сам клик выполнился браузером.
   const stopBubble = (e) => { e.stopPropagation(); };
   // Для "Открыть профиль" мы сами откроем окно, поэтому отменяем default.
   const stopAll = (e) => { e.stopPropagation(); e.preventDefault(); };
@@ -137,11 +137,9 @@ const ProviderOption = (props) => {
             {/* ТУЛТИП: ближе к опции + не исчезает при фокусе внутри */}
       <div
         className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block group-focus-within:block z-[10000]"
-        tabIndex={-1}
+        tabIndex={0}
         onMouseDown={stopBubble}
-        onMouseUp={stopBubble}
-        onClick={stopBubble}
-        onTouchStart={stopBubble}
+        onPointerDown={stopBubble}
       >
         {/* hover-мостик: перекрывает промежуток между опцией и тултипом,
             чтобы не терялась зона hover при переносе курсора */}
@@ -159,7 +157,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Тел.:</b>{" "}
                <a href={tel ? `tel:${tel}` : undefined}
-                 onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
+                 onMouseDown={stopBubble} onPointerDown={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.phone}
               </a>
@@ -171,7 +169,7 @@ const ProviderOption = (props) => {
               <b>Telegram:</b>{" "}
                {tgHref ? (
                 <a href={tgHref} target="_blank" rel="noopener noreferrer"
-                   onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
+                   onMouseDown={stopBubble} onPointerDown={stopBubble}
                    className="text-blue-600 hover:underline">
                   @{tgUser}
                 </a>
@@ -184,7 +182,7 @@ const ProviderOption = (props) => {
             <div>
               <b>Email:</b>{" "}
               <a href={`mailto:${p.email}`}
-                 onMouseDown={stopBubble} onMouseUp={stopBubble} onClick={stopBubble}
+                 onMouseDown={stopBubble} onPointerDown={stopBubble}
                  className="text-blue-600 hover:underline">
                 {p.email}
               </a>
