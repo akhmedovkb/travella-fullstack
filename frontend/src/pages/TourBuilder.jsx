@@ -218,6 +218,13 @@ export default function TourBuilder() {
     return res;
   }, [range.from, range.to]);
 
+    // границы тура в локальном YYYY-MM-DD (для фильтрации на бэке по интервалу)
+  const tourStart = useMemo(
+    () => (range.from && range.to ? toYMD(range.from) : null),
+    [range.from, range.to]
+  );
+  const tourEnd = useMemo(() => (range.from && range.to ? toYMD(range.to) : null), [range.from, range.to]);
+
   const [byDay, setByDay] = useState({});
   useEffect(() => {
     setByDay((prev) => {
@@ -258,52 +265,76 @@ export default function TourBuilder() {
   /* ----- loaders per day (guide / transport / hotel) ----- */
   const makeGuideLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-    const rows = await fetchProvidersSmart({
+        const params = {
       kind: "guide",
       city: day.city || "",
-      date: dateKey,
       language: lang,
       q: input?.trim() || "",
-    });
+      limit: 50,
+    };
+    if (tourStart && tourEnd) {
+      params.start = tourStart;
+      params.end = tourEnd;
+    } else {
+      params.date = dateKey;
+    }
+    const rows = await fetchProvidersSmart(params);
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
   const makeTransportLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-    const rows = await fetchProvidersSmart({
+        const params = {
       kind: "transport",
       city: day.city || "",
-      date: dateKey,
-      language: lang, // на будущее: если будешь хранить языки у водителей
+      language: lang, // если когда-нибудь добавим языки водителей
       q: input?.trim() || "",
-    });
+      limit: 50,
+    };
+    if (tourStart && tourEnd) {
+      params.start = tourStart;
+      params.end = tourEnd;
+    } else {
+      params.date = dateKey;
+    }
+    const rows = await fetchProvidersSmart(params);
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
   const prefetchGuides = async (dateKey) => {
   const day = byDay[dateKey] || {};
-  const rows = await fetchProvidersSmart({
+    const params = {
     kind: "guide",
     city: day.city || "",
-    date: dateKey,
     language: lang,
     q: "",
     limit: 50,
-  });
+  };
+  if (tourStart && tourEnd) {
+    params.start = tourStart; params.end = tourEnd;
+  } else {
+    params.date = dateKey;
+  }
+  const rows = await fetchProvidersSmart(params);
   const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
   setPrefetchedGuides((m) => ({ ...m, [dateKey]: opts }));
 };
 
 const prefetchTransports = async (dateKey) => {
   const day = byDay[dateKey] || {};
-  const rows = await fetchProvidersSmart({
+    const params = {
     kind: "transport",
     city: day.city || "",
-    date: dateKey,
     language: lang,
     q: "",
     limit: 50,
-  });
+  };
+  if (tourStart && tourEnd) {
+    params.start = tourStart; params.end = tourEnd;
+  } else {
+    params.date = dateKey;
+  }
+  const rows = await fetchProvidersSmart(params);
   const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
   setPrefetchedTransports((m) => ({ ...m, [dateKey]: opts }));
 };
@@ -317,7 +348,7 @@ useEffect(() => {
     }
   });
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [byDay, lang]);
+}, [byDay, lang, tourStart, tourEnd]);
 
 
   const makeHotelLoader = (dateKey) => async (input, cb) => {
