@@ -3,12 +3,12 @@ input[type="number"]{-moz-appearance:textfield;appearance:textfield;line-height:
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
-/* новая строка — держим тултип при фокусе внутри */
-.rs-option-wrap:focus-within .rs-tip { display: block; }
+/* показывать при hover ИЛИ когда сам тултип под курсором/в фокусе */
+.rs-option-wrap:hover .rs-tip,
+.rs-option-wrap:focus-within .rs-tip,
+.rs-tip:hover { display: block; }
 
-/* у меню — overflow видимый, высокий z-index (портал лучше оставить) */
+/* меню не обрезает тултип */
 .rs__menu, .rs__menu-list { overflow: visible !important; }
-
-/* Чуть шире меню, чтобы было место для тултипа, необязательно */
 .rs__menu { z-index: 9999; }
 
