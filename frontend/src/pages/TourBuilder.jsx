@@ -60,6 +60,7 @@ const normalizeProvider = (row, kind) => ({
   price_per_day: toNum(row.price_per_day ?? row.price ?? row.rate_day ?? 0, 0),
   currency: row.currency || "USD",
   languages: row.languages || [],
+  telegram: row.telegram || row.social || row.telegram_handle || "",
 });
 
 async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
@@ -116,6 +117,9 @@ const ProviderOption = (props) => {
   const url = p?.id ? `/profile/provider/${p.id}` : null;
 
   const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+    // нормализуем телеграм-ссылку
+  const tgRaw = (p.telegram || "").trim();
+  const tgHref = tgRaw ? (tgRaw.startsWith("@") ? `https://t.me/${tgRaw.slice(1)}` : (tgRaw.includes("t.me") ? tgRaw : null)) : null;
   const openProfile = (e) => { stop(e); if (url) window.open(url, "_blank", "noopener,noreferrer"); };
 
   const tel = (p.phone || "").replace(/[^\d+]/g, "");
@@ -150,6 +154,15 @@ const ProviderOption = (props) => {
                  className="text-blue-600 hover:underline">
                 {p.phone}
               </a>
+             </div>
+            )}
+          {/* Telegram (до Email) */}
+          {tgRaw && (
+            <div>
+              <b>Telegram:</b>{" "}
+              {tgHref ? (
+                <a href={tgHref} onMouseDown={stop} onClick={stop} className="text-blue-600 hover:underline">{tgRaw}</a>
+              ) : (<span>{tgRaw}</span>)}
             </div>
           )}
           {p.email && (
