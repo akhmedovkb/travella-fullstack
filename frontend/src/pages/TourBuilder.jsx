@@ -120,8 +120,6 @@ const ProviderOption = (props) => {
   // для элементов, где мы сами откроем окно (кнопка "Открыть профиль"):
   const stopAll = (e) => { e.stopPropagation(); e.preventDefault(); };
     // нормализуем телеграм-ссылку
-  const tgRaw = (p.telegram || "").trim();
-  const tgHref = tgRaw ? (tgRaw.startsWith("@") ? `https://t.me/${tgRaw.slice(1)}` : (tgRaw.includes("t.me") ? tgRaw : null)) : null;
   const tgRaw  = (p.telegram || "").trim();
   const tgUser = tgRaw.replace(/^@/, "");             // без @
   const tgHref = tgRaw
