@@ -103,25 +103,42 @@ async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
 }
 
 /* ---------------- custom options with tooltips ---------------- */
+// --- красивый tooltip внутри опции ---
 const ProviderOption = (props) => {
-  const p = props.data?.raw;
-  const tip = [
-    p?.name,
-    p?.location ? `Город: ${p.location}` : "",
-    p?.phone ? `Тел.: ${p.phone}` : "",
-    p?.email ? `E-mail: ${p.email}` : "",
-    (p?.languages?.length ? `Языки: ${p.languages.join(", ")}` : ""),
-    typeof p?.price_per_day === "number" && p?.price_per_day > 0
-      ? `Цена/день: ${p.price_per_day} ${p.currency || "USD"}`
-      : "",
-  ].filter(Boolean).join("\n");
-
+  const p = props.data?.raw || {};
   return (
-    <div title={tip}>
+    <div className="relative group">
       <SelectComponents.Option {...props} />
+      {/* tooltip */}
+      <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:block z-50">
+        <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5">
+          <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
+          {p.location && <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
+          {(p.languages?.length) ? (
+            <div><b>Языки:</b> {p.languages.join(", ")}</div>
+          ) : null}
+          {p.phone && <div><b>Тел.:</b> {p.phone}</div>}
+          {p.email && <div><b>Email:</b> {p.email}</div>}
+          {p.price_per_day > 0 && (
+            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
+          )}
+          {p.id && (
+            <div className="mt-2">
+              <a
+                href={`/profile/provider/${p.id}`}
+                target="_blank" rel="noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Открыть профиль →
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
+
 
 const HotelOption = (props) => {
   const h = props.data?.raw;
@@ -172,6 +189,11 @@ export default function TourBuilder() {
     });
   }, [days]);
 
+  // кэш предварительно загруженных опций на день
+  const [prefetchedGuides, setPrefetchedGuides] = useState({});
+  const [prefetchedTransports, setPrefetchedTransports] = useState({});
+
+
   /* ----- entry fees global search ----- */
   const [entryQ, setEntryQ] = useState("");
   const [entryOptions, setEntryOptions] = useState([]);
@@ -213,6 +235,46 @@ export default function TourBuilder() {
     });
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
+
+  const prefetchGuides = async (dateKey) => {
+  const day = byDay[dateKey] || {};
+  const rows = await fetchProvidersSmart({
+    kind: "guide",
+    city: day.city || "",
+    date: dateKey,
+    language: lang,
+    q: "",
+    limit: 50,
+  });
+  const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  setPrefetchedGuides((m) => ({ ...m, [dateKey]: opts }));
+};
+
+const prefetchTransports = async (dateKey) => {
+  const day = byDay[dateKey] || {};
+  const rows = await fetchProvidersSmart({
+    kind: "transport",
+    city: day.city || "",
+    date: dateKey,
+    language: lang,
+    q: "",
+    limit: 50,
+  });
+  const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  setPrefetchedTransports((m) => ({ ...m, [dateKey]: opts }));
+};
+  
+// как только меняются город/язык/даты — подтягиваем список на день
+useEffect(() => {
+  Object.keys(byDay).forEach((k) => {
+    if (byDay[k]?.city) {
+      prefetchGuides(k);
+      prefetchTransports(k);
+    }
+  });
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [byDay, lang]);
+
 
   const makeHotelLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
@@ -349,13 +411,16 @@ export default function TourBuilder() {
                     <label className="block text-sm font-medium mb-1">Гид</label>
                     <AsyncSelect
                       cacheOptions
-                      defaultOptions
+                      defaultOptions={prefetchedGuides[k] || true}
                       loadOptions={makeGuideLoader(k)}
+                      onMenuOpen={() => { if (!prefetchedGuides[k]) prefetchGuides(k); }}
                       components={{ Option: ProviderOption }}
                       placeholder="Выберите гида"
                       noOptionsMessage={() => "Провайдеров не найдено"}
                       value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
+                      menuPortalTarget={document.body}
+                      styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)} {st.guide?.currency || "USD"}
@@ -367,13 +432,16 @@ export default function TourBuilder() {
                     <label className="block text-sm font-medium mb-1">Транспорт</label>
                     <AsyncSelect
                       cacheOptions
-                      defaultOptions
+                      defaultOptions={prefetchedTransports[k] || true}
                       loadOptions={makeTransportLoader(k)}
+                      onMenuOpen={() => { if (!prefetchedTransports[k]) prefetchTransports(k); }}
                       components={{ Option: ProviderOption }}
                       placeholder="Выберите транспорт"
                       noOptionsMessage={() => "Провайдеров не найдено"}
                       value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
+                      menuPortalTarget={document.body}
+                      styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)} {st.transport?.currency || "USD"}
@@ -392,6 +460,8 @@ export default function TourBuilder() {
                       noOptionsMessage={() => "Нет вариантов"}
                       value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))}
+                      menuPortalTarget={document.body}
+                      styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/ночь: {toNum(st.hotel?.price, 0).toFixed(2)} {st.hotel?.currency || "USD"}
@@ -416,6 +486,8 @@ export default function TourBuilder() {
                       onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
                       placeholder="Выберите объекты"
                       noOptionsMessage={() => "Ничего не найдено"}
+                      menuPortalTarget={document.body}
+                      styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
                       На этот день: {calcEntryForDay(k).toFixed(2)} (учтены ADT/CHD и статус резидента)
