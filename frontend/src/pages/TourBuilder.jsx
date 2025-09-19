@@ -108,48 +108,65 @@ const ProviderOption = (props) => {
   const p = props.data?.raw || {};
   const url = p?.id ? `/profile/provider/${p.id}` : null;
 
-  // Открытие в новой вкладке без передачи события наверх
-  const openProfile = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-  };
+  const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+  const openProfile = (e) => { stop(e); if (url) window.open(url, "_blank", "noopener,noreferrer"); };
+
+  const tel = (p.phone || "").replace(/[^\d+]/g, "");
 
   return (
     <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
 
+      {/* ТУЛТИП: сдвинули ближе (ml-2) */}
       <div
-        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:block z-[10000]"
-        onMouseDown={(e) => e.stopPropagation()} // не даём селекту закрыть меню
-        onClick={(e) => e.stopPropagation()}
+        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block z-[10000]"
+        onMouseDown={stop}
+        onClick={stop}
       >
+        {/* hover-мостик: перекрывает промежуток между опцией и тултипом,
+            чтобы не терялась зона hover при переносе курсора */}
+        <div className="absolute -left-2 top-0 bottom-0 w-2" />
+
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5">
           <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
           {p.location && (
-            <div>
-              <b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}
-            </div>
+            <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>
           )}
           {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
-          {p.phone && <div><b>Тел.:</b> {p.phone}</div>}
-          {p.email && <div><b>Email:</b> {p.email}</div>}
-          {p.price_per_day > 0 && (
-            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
+
+          {/* кликабельные контакты */}
+          {p.phone && (
+            <div>
+              <b>Тел.:</b>{" "}
+              <a href={tel ? `tel:${tel}` : undefined}
+                 onMouseDown={stop} onClick={stop}
+                 className="text-blue-600 hover:underline">
+                {p.phone}
+              </a>
+            </div>
+          )}
+          {p.email && (
+            <div>
+              <b>Email:</b>{" "}
+              <a href={`mailto:${p.email}`}
+                 onMouseDown={stop} onClick={stop}
+                 className="text-blue-600 hover:underline">
+                {p.email}
+              </a>
+            </div>
+          )}
+
+          {Number(p.price_per_day) > 0 && (
+            <div className="mt-1">
+              <b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}
+            </div>
           )}
 
           {url && (
             <div className="mt-2">
-              {/* важно: click/mousedown не уходят в react-select */}
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                tabIndex={0}
-                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                onClick={openProfile}
-                className="text-blue-600 hover:underline"
-              >
+              <a href={url} target="_blank" rel="noreferrer"
+                 onMouseDown={stop} onClick={openProfile}
+                 className="text-blue-600 hover:underline">
                 Открыть профиль →
               </a>
             </div>
@@ -159,10 +176,6 @@ const ProviderOption = (props) => {
     </div>
   );
 };
-
-
-
-
 
 const HotelOption = (props) => {
   const h = props.data?.raw;
