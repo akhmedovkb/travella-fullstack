@@ -65,7 +65,7 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     where.push(`LOWER(p.type) = LOWER($${vals.length})`);
   }
 
-  if (city) {
+    if (city) {
     vals.push(city);
     const iEq = vals.length;
     vals.push(`%${city}%`);
@@ -73,40 +73,28 @@ function buildBaseWhere({ type, city, q, language }, vals) {
 
     where.push(`
       (
-        -- location: одиночная строка
+        -- location как одиночная строка
         (pg_typeof(p.location)::text = 'text'
           AND (LOWER(p.location::text) = LOWER($${iEq}) OR p.location::text ILIKE $${iLike}))
-        OR
-        -- location: text[]
-        (pg_typeof(p.location)::text = 'text[]'
-          AND EXISTS (
-            SELECT 1
-            FROM unnest(p.location::text[]) loc
-            WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
-          ))
-        OR
-        
-        -- location: jsonb-массив или text[]
-            EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(
-                     CASE
-                       -- уже jsonb и это массив
-                       WHEN pg_typeof(p.location)::text = 'jsonb'
-                            AND jsonb_typeof(p.location::jsonb) = 'array'
-                         THEN p.location::jsonb
-                       -- text[] → jsonb-массив строк
-                       WHEN pg_typeof(p.location)::text = 'text[]'
-                         THEN to_jsonb(p.location::text[])
-                       ELSE NULL::jsonb
-                     END
-                   ) loc(val)
-              WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
-            )
 
+        OR
+
+        -- location как массив (jsonb[] или text[]) — без прямых кастов к jsonb
+        EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+                 CASE
+                   WHEN jsonb_typeof(to_jsonb(p.location)) = 'array'
+                     THEN to_jsonb(p.location)
+                   ELSE NULL::jsonb
+                 END
+               ) AS loc(val)
+          WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
+        )
       )
     `);
   }
+
 
   if (q) {
     vals.push(`%${q}%`);
@@ -114,41 +102,34 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
-  if (language) {
+    if (language) {
     vals.push(language);
     const iLang = vals.length;
 
     where.push(`
       (
-        
-        -- languages: jsonb-массив или text[]
-            EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(
-                     CASE
-                       WHEN pg_typeof(p.languages)::text = 'jsonb'
-                            AND jsonb_typeof(p.languages::jsonb) = 'array'
-                         THEN p.languages::jsonb
-                       WHEN pg_typeof(p.languages)::text = 'text[]'
-                         THEN to_jsonb(p.languages::text[])
-                       ELSE NULL::jsonb
-                     END
-                   ) lang(code)
-              WHERE LOWER(lang.code) = LOWER($${iLang})
-            )
+        -- одиночная строка
+        (pg_typeof(p.languages)::text = 'text'
+          AND LOWER(p.languages::text) = LOWER($${iLang}))
 
         OR
-        -- languages: text[]
-        (pg_typeof(p.languages)::text = 'text[]' AND EXISTS (
-          SELECT 1 FROM unnest(p.languages::text[]) l(code)
-          WHERE LOWER(l.code) = LOWER($${iLang})
-        ))
-        OR
-        -- languages: одиночная строка
-        (pg_typeof(p.languages)::text = 'text' AND LOWER(p.languages::text) = LOWER($${iLang}))
+
+        -- массив (jsonb[] или text[]) — через to_jsonb, без ::jsonb
+        EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+                 CASE
+                   WHEN jsonb_typeof(to_jsonb(p.languages)) = 'array'
+                     THEN to_jsonb(p.languages)
+                   ELSE NULL::jsonb
+                 END
+               ) AS lang(code)
+          WHERE LOWER(lang.code) = LOWER($${iLang})
+        )
       )
     `);
   }
+
 
   return where;
 }
