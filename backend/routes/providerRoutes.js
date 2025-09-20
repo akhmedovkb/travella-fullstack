@@ -29,17 +29,27 @@ const {
 
 const { notifyModerationNew } = require("../utils/telegram");
 
-// ⬇️ NEW: резолвер синонима -> slug
+// NEW: резолвер названия города -> slug (учитывает кириллицу/латиницу/синонимы)
 const { resolveCitySlugs } = require("../utils/cities");
 async function resolveCitySlug(city) {
   try {
     if (!city) return null;
-    const slugs = await resolveCitySlugs(pool, [city]); // можно и строку — утилита сама приведёт
+    const slugs = await resolveCitySlugs(pool, [city]); // утилита сама приведёт что угодно к массиву
     return slugs[0] || null;
   } catch (e) {
     console.warn("resolveCitySlug failed, skipping city filter:", e?.message || e);
     return null;
   }
+}
+
+function requireProvider(req, res, next) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ message: "Требуется авторизация" });
+  }
+  if (req.user.role && req.user.role !== "provider") {
+    return res.status(403).json({ message: "Только для провайдера" });
+  }
+  next();
 }
 
 /* -------------------- PUBLIC SEARCH / AVAILABLE -------------------- */
@@ -57,8 +67,8 @@ function parseQuery(qs = {}) {
 }
 
 /**
- * Базовый WHERE без города (город теперь фильтруем строго по slug в city_slugs)
- * Поддержка p.languages: text | text[] | jsonb[]
+ * Базовый WHERE без города (город фильтруем строго по slug через p.city_slugs).
+ * Поддержка p.languages: text | text[] | jsonb[].
  */
 function buildBaseWhereWithoutCity({ type, q, language }, vals) {
   const where = [];
@@ -106,13 +116,13 @@ router.get("/search", async (req, res) => {
   try {
     const { type, city, q, language, limit } = parseQuery(req.query);
 
-    // ⬇️ NEW: резолвим один раз
+    // резолвим город в единый slug
     const citySlug = city ? await resolveCitySlug(city) : null;
 
     const vals = [];
     const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
 
-    // ⬇️ NEW: строгий матч по slug в массиве city_slugs
+    // строгий матч по slug в массиве p.city_slugs
     if (citySlug) {
       vals.push(citySlug);
       where.push(`$${vals.length} = ANY(p.city_slugs)`);
@@ -138,7 +148,7 @@ router.get("/available", async (req, res) => {
   try {
     const { type, city, q, language, date, start, end, limit } = parseQuery(req.query);
 
-    // ⬇️ NEW: единый slug
+    // единый slug
     const citySlug = city ? await resolveCitySlug(city) : null;
 
     // без даты — как /search
@@ -167,7 +177,7 @@ router.get("/available", async (req, res) => {
       where.push(`$${vals.length} = ANY(p.city_slugs)`);
     }
 
-    let busyClause;
+    let busyClause = "";
     if (date) {
       vals.push(date);
       const i = vals.length;
@@ -243,7 +253,7 @@ router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
 
-router.get("/booked-dates",  authenticateToken, requireProvider, getBookedDates);
+router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
 
@@ -251,25 +261,27 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
   try {
     const providerId = req.user.id;
     const q = await pool.query(
-      `SELECT
-         bd.date::text AS date,
-         COALESCE(rp.name, c.name)   AS name,
-         COALESCE(rp.phone, c.phone) AS phone,
-         CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
-         CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END   AS role,
-         COALESCE(rp.id, c.id) AS "profileId",
-         CASE
-           WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
-           ELSE '/profile/client/'   || c.id
-         END AS "profileUrl"
-       FROM booking_dates bd
-       JOIN bookings b   ON b.id = bd.booking_id
-       LEFT JOIN clients   c  ON c.id = b.client_id
-       LEFT JOIN providers rp ON rp.id = b.requester_provider_id
-       WHERE b.provider_id = $1
-         AND b.status IN ('confirmed','active')
-         AND bd.date >= CURRENT_DATE
-       ORDER BY bd.date, name`,
+      `
+        SELECT
+           bd.date::text AS date,
+           COALESCE(rp.name, c.name)   AS name,
+           COALESCE(rp.phone, c.phone) AS phone,
+           CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
+           CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END   AS role,
+           COALESCE(rp.id, c.id) AS "profileId",
+           CASE
+             WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
+             ELSE '/profile/client/'   || c.id
+           END AS "profileUrl"
+        FROM booking_dates bd
+        JOIN bookings b   ON b.id = bd.booking_id
+        LEFT JOIN clients   c  ON c.id = b.client_id
+        LEFT JOIN providers rp ON rp.id = b.requester_provider_id
+        WHERE b.provider_id = $1
+          AND b.status IN ('confirmed','active')
+          AND bd.date >= CURRENT_DATE
+        ORDER BY bd.date, name
+      `,
       [providerId]
     );
     res.json(q.rows);
@@ -284,42 +296,48 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
     const providerId = req.user.id;
     const [booked, blocked, details] = await Promise.all([
       pool.query(
-        `SELECT DISTINCT bd.date::text AS date
-           FROM booking_dates bd
-           JOIN bookings b ON b.id = bd.booking_id
+        `
+          SELECT DISTINCT bd.date::text AS date
+          FROM booking_dates bd
+          JOIN bookings b ON b.id = bd.booking_id
           WHERE b.provider_id = $1
             AND b.status IN ('confirmed','active')
             AND bd.date >= CURRENT_DATE
-          ORDER BY 1`,
+          ORDER BY 1
+        `,
         [providerId]
       ),
       pool.query(
-        `SELECT date::text AS date
-           FROM provider_blocked_dates
+        `
+          SELECT date::text AS date
+          FROM provider_blocked_dates
           WHERE provider_id = $1
-          ORDER BY 1`,
+          ORDER BY 1
+        `,
         [providerId]
       ),
       pool.query(
-        `SELECT
-           bd.date::text AS date,
-           COALESCE(rp.name, c.name)   AS name,
-           COALESCE(rp.phone, c.phone) AS phone,
-           CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
-           CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END   AS role,
-           COALESCE(rp.id, c.id) AS "profileId",
-           CASE
-             WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
-             ELSE '/profile/client/' || c.id
-           END AS "profileUrl"
-         FROM booking_dates bd
-         JOIN bookings b   ON b.id = bd.booking_id
-         LEFT JOIN clients   c  ON c.id = b.client_id
-         LEFT JOIN providers rp ON rp.id = b.requester_provider_id
-         WHERE b.provider_id = $1
-           AND b.status IN ('confirmed','active')
-           AND bd.date >= CURRENT_DATE
-         ORDER BY bd.date, name`,
+        `
+          SELECT
+             bd.date::text AS date,
+             COALESCE(rp.name, c.name)   AS name,
+             COALESCE(rp.phone, c.phone) AS phone,
+             CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
+             CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END   AS role,
+             COALESCE(rp.id, c.id) AS "profileId",
+             CASE
+               WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
+               ELSE '/profile/client/' || c.id
+             END AS "profileUrl"
+          FROM booking_dates bd
+          JOIN bookings b   ON b.id = bd.booking_id
+          LEFT JOIN clients   c  ON c.id = b.client_id
+          LEFT JOIN providers rp ON rp.id = b.requester_provider_id
+          WHERE b.provider_id = $1
+            AND b.status IN ('confirmed','active')
+            AND bd.date >= CURRENT_DATE
+          ORDER BY bd.date, name
+        `,
         [providerId]
       ),
     ]);
@@ -338,35 +356,42 @@ router.get("/:providerId(\\d+)/calendar", getCalendarPublic);
 
 /* -------------------- FAVORITES -------------------- */
 
-router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
-router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
+router.get("/favorites", authenticateToken, requireProvider, listProviderFavorites);
+router.post("/favorites/toggle", authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
 
 /* -------------------- SUBMIT SERVICE TO MODERATION -------------------- */
 
-router.post("/services/:id/submit",
+router.post(
+  "/services/:id/submit",
   authenticateToken,
   requireProvider,
   async (req, res, next) => {
     try {
       const { id } = req.params;
       const { rows } = await pool.query(
-        `UPDATE services
-           SET status='pending',
-               submitted_at = NOW(),
-               updated_at   = NOW()
-         WHERE id=$1
-           AND provider_id=$2
-           AND status IN ('draft','rejected')
-         RETURNING id, status, submitted_at`,
+        `
+          UPDATE services
+             SET status='pending',
+                 submitted_at = NOW(),
+                 updated_at   = NOW()
+           WHERE id=$1
+             AND provider_id=$2
+             AND status IN ('draft','rejected')
+           RETURNING id, status, submitted_at
+        `,
         [id, req.user.id]
       );
       if (!rows.length) {
         return res.status(409).json({ message: "Service must be in draft/rejected to submit" });
       }
-      try { await notifyModerationNew({ service: rows[0].id }); } catch {}
+      try {
+        await notifyModerationNew({ service: rows[0].id });
+      } catch {}
       return res.json({ ok: true, service: rows[0] });
-    } catch (e) { next(e); }
+    } catch (e) {
+      next(e);
+    }
   }
 );
 
