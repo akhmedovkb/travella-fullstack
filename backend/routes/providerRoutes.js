@@ -54,58 +54,95 @@ function parseQuery(qs = {}) {
   return { type, city, q, language, date, start, end, limit };
 }
 
+/**
+ * Универсальный конструктор WHERE:
+ * - p.location: поддержка text | text[] | jsonb-массив
+ * - p.languages: поддержка jsonb-массив | text[] | text
+ */
 function buildBaseWhere({ type, city, q, language }, vals) {
   const where = [];
 
+  // тип провайдера
   if (type) {
     vals.push(type);
     where.push(`LOWER(p.type) = LOWER($${vals.length})`);
   }
 
+  // город
   if (city) {
-  vals.push(city);
-  const iEq = vals.length;
-  vals.push(`%${city}%`);
-  const iLike = vals.length;
+    vals.push(city);
+    const iEq = vals.length;
+    vals.push(`%${city}%`);
+    const iLike = vals.length;
 
-  where.push(`
-    EXISTS (
-      SELECT 1
-      FROM unnest(COALESCE(p.location, ARRAY[]::text[])) loc
-      WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
-    )
-  `);
-}
+    where.push(`
+      (
+        -- location как одиночная строка (text)
+        (pg_typeof(p.location)::text = 'text'
+          AND (LOWER(p.location::text) = LOWER($${iEq}) OR p.location::text ILIKE $${iLike}))
 
+        OR
+
+        -- location как массив строк (text[])
+        (pg_typeof(p.location)::text = 'text[]'
+          AND EXISTS (
+            SELECT 1
+            FROM unnest(p.location::text[]) loc
+            WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
+          ))
+
+        OR
+
+        -- location как jsonb-массив строк: ["Samarkand", ...]
+        (pg_typeof(p.location)::text = 'jsonb'
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(p.location) loc(val)
+            WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
+          ))
+      )
+    `);
+  }
+
+  // свободный текст: имя/почта/телефон
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
     where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
+  // язык
   if (language) {
-  const lang = String(language).toLowerCase();
-  vals.push(lang);
-  const iEq = vals.length;
-  vals.push(`%${language}%`);
-  const iLike = vals.length;
+    vals.push(language);
+    const iLang = vals.length;
 
-  where.push(`
-    (
-      -- если языки не заполнены или пустой массив — не фильтруем
-      p.languages IS NULL
-      OR p.languages = '[]'::jsonb
+    where.push(`
+      (
+        -- jsonb-массив: ["en","ru"] или ["English","Русский"]
+        EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            CASE WHEN pg_typeof(p.languages)::text = 'jsonb' THEN p.languages ELSE '[]'::jsonb END
+          ) lang(code)
+          WHERE LOWER(lang.code) = LOWER($${iLang})
+        )
 
-      -- нормальный случай: jsonb-массив строк ["en","ru"] или ["English","Русский"]
-      OR EXISTS (
-        SELECT 1
-        FROM jsonb_array_elements_text(p.languages) AS lang(code)
-        WHERE lower(lang.code) = $${iEq} OR lang.code ILIKE $${iLike}
+        OR
+
+        -- text[] массив: {'en','ru'}
+        EXISTS (
+          SELECT 1
+          FROM unnest(CASE WHEN pg_typeof(p.languages)::text = 'text[]' THEN p.languages::text[] ELSE ARRAY[]::text[] END) l(code)
+          WHERE LOWER(l.code) = LOWER($${iLang})
+        )
+
+        OR
+
+        -- одиночная строка: 'en'
+        (pg_typeof(p.languages)::text = 'text' AND LOWER(p.languages::text) = LOWER($${iLang}))
       )
-    )
-  `);
-}
-
+    `);
+  }
 
   return where;
 }
@@ -136,13 +173,6 @@ router.get("/search", async (req, res) => {
 
 /** GET /api/providers/available
  *  Возвращает провайдеров, СВОБОДНЫХ на конкретную дату или диапазон.
- *  Параметры:
- *   - type=guide|transport
- *   - location|city=Samarkand
- *   - date=YYYY-MM-DD ИЛИ start=YYYY-MM-DD&end=YYYY-MM-DD
- *   - language=en (опц)
- *   - q=строка (опц)
- *   - limit=число (опц)
  */
 router.get("/available", async (req, res) => {
   try {
@@ -170,7 +200,6 @@ router.get("/available", async (req, res) => {
     if (date) {
       vals.push(date);
       const i = vals.length;
-      // Свободен, если НЕТ брони на этот день и НЕТ ручной блокировки на этот день
       busyClause = `
         AND NOT EXISTS (
           SELECT 1
