@@ -29,6 +29,7 @@ const {
 
 const { notifyModerationNew } = require("../utils/telegram");
 
+// ⬇️ NEW: резолвер синонима -> slug
 const { resolveCitySlugs } = require("../utils/cities");
 async function resolveCitySlug(city) {
   try {
@@ -39,24 +40,6 @@ async function resolveCitySlug(city) {
     console.warn("resolveCitySlug failed, skipping city filter:", e?.message || e);
     return null;
   }
-}
-
-// ⬇️ NEW: резолвер синонима -> slug
-const { resolveCitySlugs } = require("../utils/cities");
-async function resolveCitySlug(city) {
-  if (!city) return null;
-  const slugs = await resolveCitySlugs(pool, [city]);
-  return slugs[0] || null;
-}
-
-function requireProvider(req, res, next) {
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ message: "Требуется авторизация" });
-  }
-  if (req.user.role && req.user.role !== "provider") {
-    return res.status(403).json({ message: "Только для провайдера" });
-  }
-  next();
 }
 
 /* -------------------- PUBLIC SEARCH / AVAILABLE -------------------- */
