@@ -63,21 +63,28 @@ const normalizeProvider = (row, kind) => ({
 });
 
 async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
-  // 1) строго проверяем доступность на конкретную дату
-  const tries = [
-    { url: "/api/providers/available", params: { type: kind, location: city, date, language, q, limit } },
-    // 2) fallback — общий поиск по городу (если бек не отдал available)
-    { url: "/api/providers/search",    params: { type: kind, location: city, language, q, limit } },
-  ];
-  for (const t of tries) {
+  // Пробуем строго /available
+  try {
+    const j = await fetchJSON("/api/providers/available", {
+      type: kind, location: city, date, language, q, limit,
+    });
+    const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
+    // Возвращаем как есть (даже если пусто) — это и есть «нет свободных»
+    return arr.map((x) => normalizeProvider(x, kind));
+  } catch (_) {
+    // Фоллбек только при сетевой/HTTP ошибке
     try {
-      const j = await fetchJSON(t.url, t.params);
+      const j = await fetchJSON("/api/providers/search", {
+        type: kind, location: city, language, q, limit,
+      });
       const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
-      if (arr.length) return arr.map((x) => normalizeProvider(x, kind));
-    } catch (_) {}
+      return arr.map((x) => normalizeProvider(x, kind));
+    } catch {
+      return [];
+    }
   }
-  return [];
 }
+
 
 const normalizeHotel = (row) => ({
   id: row.id ?? row._id ?? row.hotel_id ?? String(Math.random()),
