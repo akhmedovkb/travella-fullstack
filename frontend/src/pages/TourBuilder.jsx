@@ -276,19 +276,20 @@ export default function TourBuilder() {
   };
 
   /* ----- loaders per day (guide / transport / hotel) ----- */
-  const makeGuideLoader = (dateKey) => async (input, cb) => {
-    const day = byDay[dateKey] || {};
-    if (!dateKey || !day.city) { cb([]); return; }            // фильтр: нужен город и день
-    const rows = await fetchProvidersSmart({
-      kind: "guide",
-      city: day.city,
-      date: dateKey,
-      language: lang,
-      q: (input || "").trim(),
-      limit: 50,
-    });
-    cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
-  };
+  const makeGuideLoader = (dateKey) => async (input) => {
+  const day = byDay[dateKey] || {};
+  if (!dateKey || !day.city) return [];
+  const rows = await fetchProvidersSmart({
+    kind: "guide",
+    city: day.city,
+    date: dateKey,
+    language: lang,
+    q: (input || "").trim(),
+    limit: 50,
+  });
+  return rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+};
+
 
   const makeTransportLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
@@ -441,9 +442,10 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Гид</label>
                     <AsyncSelect
+                      key={`guide:${k}:${st.city}:${lang}`}
                       isDisabled={!cityChosen}
-                      cacheOptions
-                      defaultOptions={true}
+                      cacheOptions={false}
+                      defaultOptions
                       loadOptions={makeGuideLoader(k)}
                       components={{ Option: ProviderOption }}
                       placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
@@ -467,9 +469,10 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Транспорт</label>
                     <AsyncSelect
+                      key={`transport:${k}:${st.city}:${lang}`}
                       isDisabled={!cityChosen}
-                      cacheOptions
-                      defaultOptions={true}
+                      cacheOptions={false}
+                      defaultOptions
                       loadOptions={makeTransportLoader(k)}
                       components={{ Option: ProviderOption }}
                       placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
