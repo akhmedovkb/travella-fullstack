@@ -26,7 +26,16 @@ const {
   toggleProviderFavorite,
   removeProviderFavorite,
 } = require("../controllers/providerController");
+
 const { notifyModerationNew } = require("../utils/telegram");
+
+// ⬇️ NEW: резолвер синонима -> slug
+const { resolveCitySlugs } = require("../utils/cities");
+async function resolveCitySlug(city) {
+  if (!city) return null;
+  const slugs = await resolveCitySlugs(pool, [city]);
+  return slugs[0] || null;
+}
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -53,11 +62,10 @@ function parseQuery(qs = {}) {
 }
 
 /**
- * WHERE для поиска:
- *  - поддержка p.location: text | text[] | jsonb[]
- *  - поддержка p.languages: text | text[] | jsonb[]
+ * Базовый WHERE без города (город теперь фильтруем строго по slug в city_slugs)
+ * Поддержка p.languages: text | text[] | jsonb[]
  */
-function buildBaseWhere({ type, city, q, language }, vals) {
+function buildBaseWhereWithoutCity({ type, q, language }, vals) {
   const where = [];
 
   if (type) {
@@ -65,56 +73,21 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     where.push(`LOWER(p.type) = LOWER($${vals.length})`);
   }
 
-    if (city) {
-    vals.push(city);
-    const iEq = vals.length;
-    vals.push(`%${city}%`);
-    const iLike = vals.length;
-
-    where.push(`
-      (
-        -- location как одиночная строка
-        (pg_typeof(p.location)::text = 'text'
-          AND (LOWER(p.location::text) = LOWER($${iEq}) OR p.location::text ILIKE $${iLike}))
-
-        OR
-
-        -- location как массив (jsonb[] или text[]) — без прямых кастов к jsonb
-        EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements_text(
-                 CASE
-                   WHEN jsonb_typeof(to_jsonb(p.location)) = 'array'
-                     THEN to_jsonb(p.location)
-                   ELSE NULL::jsonb
-                 END
-               ) AS loc(val)
-          WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
-        )
-      )
-    `);
-  }
-
-
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
     where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
-    if (language) {
+  if (language) {
     vals.push(language);
     const iLang = vals.length;
-
+    // универсально: одиночная строка, text[], jsonb[]
     where.push(`
       (
-        -- одиночная строка
         (pg_typeof(p.languages)::text = 'text'
           AND LOWER(p.languages::text) = LOWER($${iLang}))
-
         OR
-
-        -- массив (jsonb[] или text[]) — через to_jsonb, без ::jsonb
         EXISTS (
           SELECT 1
           FROM jsonb_array_elements_text(
@@ -130,7 +103,6 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     `);
   }
 
-
   return where;
 }
 
@@ -138,11 +110,21 @@ function buildBaseWhere({ type, city, q, language }, vals) {
 router.get("/search", async (req, res) => {
   try {
     const { type, city, q, language, limit } = parseQuery(req.query);
+
+    // ⬇️ NEW: резолвим один раз
+    const citySlug = city ? await resolveCitySlug(city) : null;
+
     const vals = [];
-    const where = buildBaseWhere({ type, city, q, language }, vals);
+    const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
+
+    // ⬇️ NEW: строгий матч по slug в массиве city_slugs
+    if (citySlug) {
+      vals.push(citySlug);
+      where.push(`$${vals.length} = ANY(p.city_slugs)`);
+    }
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
+      SELECT p.id, p.name, p.type, p.location, p.city_slugs, p.phone, p.email, p.photo, p.languages, p.social AS telegram
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY p.name ASC
@@ -161,12 +143,19 @@ router.get("/available", async (req, res) => {
   try {
     const { type, city, q, language, date, start, end, limit } = parseQuery(req.query);
 
+    // ⬇️ NEW: единый slug
+    const citySlug = city ? await resolveCitySlug(city) : null;
+
     // без даты — как /search
     if (!date && !(start && end)) {
       const vals = [];
-      const where = buildBaseWhere({ type, city, q, language }, vals);
+      const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
+      if (citySlug) {
+        vals.push(citySlug);
+        where.push(`$${vals.length} = ANY(p.city_slugs)`);
+      }
       const sql = `
-        SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
+        SELECT p.id, p.name, p.type, p.location, p.city_slugs, p.phone, p.email, p.photo, p.languages, p.social AS telegram
         FROM providers p
         ${where.length ? "WHERE " + where.join(" AND ") : ""}
         ORDER BY p.name ASC
@@ -177,7 +166,11 @@ router.get("/available", async (req, res) => {
     }
 
     const vals = [];
-    const where = buildBaseWhere({ type, city, q, language }, vals);
+    const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
+    if (citySlug) {
+      vals.push(citySlug);
+      where.push(`$${vals.length} = ANY(p.city_slugs)`);
+    }
 
     let busyClause;
     if (date) {
@@ -223,7 +216,7 @@ router.get("/available", async (req, res) => {
     }
 
     const sql = `
-      SELECT p.id, p.name, p.type, p.location, p.phone, p.email, p.photo, p.languages, p.social AS telegram
+      SELECT p.id, p.name, p.type, p.location, p.city_slugs, p.phone, p.email, p.photo, p.languages, p.social AS telegram
       FROM providers p
       ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ${busyClause}
