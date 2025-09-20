@@ -43,13 +43,13 @@ function requireProvider(req, res, next) {
 /* -------------------- PUBLIC SEARCH / AVAILABLE -------------------- */
 
 function parseQuery(qs = {}) {
-  const type = String(qs.type || "").trim();                 // guide | transport | agent | ...
-  const city = String(qs.city || qs.location || "").trim();  // Samarkand / Tashkent ...
-  const q     = String(qs.q || "").trim();
-  const language = String(qs.language || qs.lang || "").trim().toLowerCase(); // 'en','ru',...
-  const date  = String(qs.date || "").trim();                // YYYY-MM-DD
-  const start = String(qs.start || "").trim();               // YYYY-MM-DD
-  const end   = String(qs.end || "").trim();                 // YYYY-MM-DD
+  const type = String(qs.type || "").trim();                      // guide | transport | agent | ...
+  const city = String(qs.city || qs.location || "").trim();       // Samarkand / Tashkent ...
+  const q = String(qs.q || "").trim();
+  const language = String(qs.language || qs.lang || "").trim();   // 'en','ru',...
+  const date = String(qs.date || "").trim();                      // YYYY-MM-DD
+  const start = String(qs.start || "").trim();                    // YYYY-MM-DD
+  const end = String(qs.end || "").trim();                        // YYYY-MM-DD
   const limit = Math.min(Math.max(parseInt(qs.limit, 10) || 30, 1), 100);
   return { type, city, q, language, date, start, end, limit };
 }
@@ -59,23 +59,25 @@ function buildBaseWhere({ type, city, q, language }, vals) {
 
   if (type) {
     vals.push(type);
-    where.push(`p.type = $${vals.length}`);
+    where.push(`LOWER(p.type) = LOWER($${vals.length})`);
   }
 
   if (city) {
-    // location = text[] — ищем по любому элементу
+    // p.location — text[]; ищем по любому элементу массива (ILIKE)
     vals.push(`%${city}%`);
-    where.push(`EXISTS (SELECT 1 FROM unnest(p.location) loc WHERE loc ILIKE $${vals.length})`);
+    where.push(
+      `EXISTS (SELECT 1 FROM unnest(p.location) loc WHERE loc ILIKE $${vals.length})`
+    );
   }
 
   if (q) {
     vals.push(`%${q}%`);
-    const idx = vals.length;
-    where.push(`(p.name ILIKE $${idx} OR p.email ILIKE $${idx} OR p.phone ILIKE $${idx})`);
+    const i = vals.length;
+    where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
   if (language) {
-    // languages = jsonb array of text, например ["en","ru"]
+    // p.languages — jsonb-массив строк, например ["en","ru"]
     vals.push(language);
     where.push(`
       EXISTS (
@@ -89,7 +91,9 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   return where;
 }
 
-/** GET /api/providers/search */
+/** GET /api/providers/search
+ *  Публичный поиск провайдеров по типу/городу/языку/строке q.
+ */
 router.get("/search", async (req, res) => {
   try {
     const { type, city, q, language, limit } = parseQuery(req.query);
@@ -111,12 +115,21 @@ router.get("/search", async (req, res) => {
   }
 });
 
-/** GET /api/providers/available */
+/** GET /api/providers/available
+ *  Возвращает провайдеров, СВОБОДНЫХ на конкретную дату или диапазон.
+ *  Параметры:
+ *   - type=guide|transport
+ *   - location|city=Samarkand
+ *   - date=YYYY-MM-DD ИЛИ start=YYYY-MM-DD&end=YYYY-MM-DD
+ *   - language=en (опц)
+ *   - q=строка (опц)
+ *   - limit=число (опц)
+ */
 router.get("/available", async (req, res) => {
   try {
     const { type, city, q, language, date, start, end, limit } = parseQuery(req.query);
 
-    // если даты нет — как обычный /search
+    // без даты — поведение как у /search
     if (!date && !(start && end)) {
       const vals = [];
       const where = buildBaseWhere({ type, city, q, language }, vals);
@@ -138,6 +151,7 @@ router.get("/available", async (req, res) => {
     if (date) {
       vals.push(date);
       const i = vals.length;
+      // Свободен, если НЕТ брони на этот день и НЕТ ручной блокировки на этот день
       busyClause = `
         AND NOT EXISTS (
           SELECT 1
@@ -214,6 +228,7 @@ router.get("/booked-dates",  authenticateToken, requireProvider, getBookedDates)
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
 
+// Детализация забронированных дат в будущем
 router.get("/booked-details", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -246,6 +261,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
   }
 });
 
+// Сводка календаря (публичный — ниже)
 router.get("/calendar", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -301,11 +317,16 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
   }
 });
 
+// публичный календарь конкретного провайдера
 router.get("/:providerId(\\d+)/calendar", getCalendarPublic);
+
+/* -------------------- FAVORITES -------------------- */
 
 router.get   ("/favorites",            authenticateToken, requireProvider, listProviderFavorites);
 router.post  ("/favorites/toggle",     authenticateToken, requireProvider, toggleProviderFavorite);
 router.delete("/favorites/:serviceId", authenticateToken, requireProvider, removeProviderFavorite);
+
+/* -------------------- SUBMIT SERVICE TO MODERATION -------------------- */
 
 router.post("/services/:id/submit",
   authenticateToken,
@@ -332,6 +353,8 @@ router.post("/services/:id/submit",
     } catch (e) { next(e); }
   }
 );
+
+/* -------------------- PUBLIC PROVIDER CARD -------------------- */
 
 router.get("/:id(\\d+)", getProviderPublicById);
 
