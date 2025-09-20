@@ -442,24 +442,24 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Гид</label>
                     <AsyncSelect
-                      key={`guide:${k}:${st.city}:${lang}`}
-                      isDisabled={!cityChosen}
-                      cacheOptions={false}
-                      defaultOptions
-                      loadOptions={makeGuideLoader(k)}
-                      components={{ Option: ProviderOption }}
-                      placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
-                      noOptionsMessage={() => cityChosen ? "Нет доступных провайдеров" : "Укажите город"}
-                      value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
-                      classNamePrefix="rs"
-                      menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        menu: (b) => ({ ...b, overflow: "visible" }),
-                        menuList: (b) => ({ ...b, overflow: "visible" }),
-                      }}
-                    />
+                        key={`guide-${k}-${st.city}-${lang}`}        // ⬅️ форс-ремаунт при смене условий
+                        isDisabled={!cityChosen}
+                        cacheOptions={false}                         // ⬅️ убираем кеш для надежности
+                        defaultOptions={true}
+                        loadOptions={makeGuideLoader(k)}
+                        components={{ Option: ProviderOption }}
+                        placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
+                        noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
+                        value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
+                        onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
+                        classNamePrefix="rs"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                          menu: (b) => ({ ...b, overflow: "visible" }),
+                          menuList: (b) => ({ ...b, overflow: "visible" }),
+                        }}
+                      />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)} {st.guide?.currency || "USD"}
                     </div>
@@ -469,24 +469,24 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Транспорт</label>
                     <AsyncSelect
-                      key={`transport:${k}:${st.city}:${lang}`}
-                      isDisabled={!cityChosen}
-                      cacheOptions={false}
-                      defaultOptions
-                      loadOptions={makeTransportLoader(k)}
-                      components={{ Option: ProviderOption }}
-                      placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
-                      noOptionsMessage={() => cityChosen ? "Нет доступных провайдеров" : "Укажите город"}
-                      value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
-                      classNamePrefix="rs"
-                      menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        menu: (b) => ({ ...b, overflow: "visible" }),
-                        menuList: (b) => ({ ...b, overflow: "visible" }),
-                      }}
-                    />
+                        key={`transport-${k}-${st.city}-${lang}`}   // ⬅️ важный ключ
+                        isDisabled={!cityChosen}
+                        cacheOptions={false}                         // ⬅️ отключаем кеш
+                        defaultOptions={true}
+                        loadOptions={makeTransportLoader(k)}
+                        components={{ Option: ProviderOption }}
+                        placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
+                        noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
+                        value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
+                        onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
+                        classNamePrefix="rs"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                          menu: (b) => ({ ...b, overflow: "visible" }),
+                          menuList: (b) => ({ ...b, overflow: "visible" }),
+                        }}
+                      />
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)} {st.transport?.currency || "USD"}
                     </div>
