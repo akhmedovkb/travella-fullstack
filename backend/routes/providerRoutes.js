@@ -85,17 +85,25 @@ function buildBaseWhere({ type, city, q, language }, vals) {
             WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
           ))
         OR
-        -- location: jsonb-массив (безопасный вызов через CASE → jsonb | NULL)
-        EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements_text(
-                 CASE
-                   WHEN pg_typeof(p.location)::text = 'jsonb' THEN p.location::jsonb
-                   ELSE NULL::jsonb
-                 END
-               ) loc(val)
-          WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
-        )
+        
+        -- location: jsonb-массив или text[]
+            EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(
+                     CASE
+                       -- уже jsonb и это массив
+                       WHEN pg_typeof(p.location)::text = 'jsonb'
+                            AND jsonb_typeof(p.location::jsonb) = 'array'
+                         THEN p.location::jsonb
+                       -- text[] → jsonb-массив строк
+                       WHEN pg_typeof(p.location)::text = 'text[]'
+                         THEN to_jsonb(p.location::text[])
+                       ELSE NULL::jsonb
+                     END
+                   ) loc(val)
+              WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
+            )
+
       )
     `);
   }
@@ -112,17 +120,23 @@ function buildBaseWhere({ type, city, q, language }, vals) {
 
     where.push(`
       (
-        -- languages: jsonb-массив (через безопасный CASE)
-        EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements_text(
-                 CASE
-                   WHEN pg_typeof(p.languages)::text = 'jsonb' THEN p.languages::jsonb
-                   ELSE NULL::jsonb
-                 END
-               ) lang(code)
-          WHERE LOWER(lang.code) = LOWER($${iLang})
-        )
+        
+        -- languages: jsonb-массив или text[]
+            EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(
+                     CASE
+                       WHEN pg_typeof(p.languages)::text = 'jsonb'
+                            AND jsonb_typeof(p.languages::jsonb) = 'array'
+                         THEN p.languages::jsonb
+                       WHEN pg_typeof(p.languages)::text = 'text[]'
+                         THEN to_jsonb(p.languages::text[])
+                       ELSE NULL::jsonb
+                     END
+                   ) lang(code)
+              WHERE LOWER(lang.code) = LOWER($${iLang})
+            )
+
         OR
         -- languages: text[]
         (pg_typeof(p.languages)::text = 'text[]' AND EXISTS (
