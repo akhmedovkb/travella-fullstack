@@ -82,7 +82,6 @@ function buildBaseWhere({ type, city, q, language }, vals) {
           AND (LOWER(p.location::text) = LOWER($${iEq}) OR p.location::text ILIKE $${iLike}))
 
         OR
-
         -- location как массив строк (text[])
         (pg_typeof(p.location)::text = 'text[]'
           AND EXISTS (
@@ -92,7 +91,6 @@ function buildBaseWhere({ type, city, q, language }, vals) {
           ))
 
         OR
-
         -- location как jsonb-массив строк: ["Samarkand", ...]
         (pg_typeof(p.location)::text = 'jsonb'
           AND EXISTS (
@@ -111,7 +109,7 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
-  // язык
+  // язык — три независимых ветки по фактическому типу колонки
   if (language) {
     vals.push(language);
     const iLang = vals.length;
@@ -119,22 +117,20 @@ function buildBaseWhere({ type, city, q, language }, vals) {
     where.push(`
       (
         -- jsonb-массив: ["en","ru"] или ["English","Русский"]
-        EXISTS (
+        (pg_typeof(p.languages)::text = 'jsonb' AND EXISTS (
           SELECT 1
-          FROM jsonb_array_elements_text(
-            CASE WHEN pg_typeof(p.languages)::text = 'jsonb' THEN p.languages ELSE '[]'::jsonb END
-          ) lang(code)
+          FROM jsonb_array_elements_text(p.languages) lang(code)
           WHERE LOWER(lang.code) = LOWER($${iLang})
-        )
+        ))
 
         OR
 
         -- text[] массив: {'en','ru'}
-        EXISTS (
+        (pg_typeof(p.languages)::text = 'text[]' AND EXISTS (
           SELECT 1
-          FROM unnest(CASE WHEN pg_typeof(p.languages)::text = 'text[]' THEN p.languages::text[] ELSE ARRAY[]::text[] END) l(code)
+          FROM unnest(p.languages::text[]) l(code)
           WHERE LOWER(l.code) = LOWER($${iLang})
-        )
+        ))
 
         OR
 
@@ -147,9 +143,7 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   return where;
 }
 
-/** GET /api/providers/search
- *  Публичный поиск провайдеров по типу/городу/языку/строке q.
- */
+/** GET /api/providers/search */
 router.get("/search", async (req, res) => {
   try {
     const { type, city, q, language, limit } = parseQuery(req.query);
@@ -171,14 +165,12 @@ router.get("/search", async (req, res) => {
   }
 });
 
-/** GET /api/providers/available
- *  Возвращает провайдеров, СВОБОДНЫХ на конкретную дату или диапазон.
- */
+/** GET /api/providers/available */
 router.get("/available", async (req, res) => {
   try {
     const { type, city, q, language, date, start, end, limit } = parseQuery(req.query);
 
-    // без даты — поведение как у /search
+    // без даты — как /search
     if (!date && !(start && end)) {
       const vals = [];
       const where = buildBaseWhere({ type, city, q, language }, vals);
@@ -354,7 +346,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
         [providerId]
       ),
     ]);
-    res.json({
+  res.json({
       booked: booked.rows,
       blocked: blocked.rows,
       bookedDetails: details.rows,
