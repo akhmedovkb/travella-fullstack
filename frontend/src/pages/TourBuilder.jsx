@@ -16,26 +16,26 @@ const toYMD = (d) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
-
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
+/* ---------------- Day kind (на будущее для entry) ---------------- */
 const dkey = (d) => toYMD(new Date(d));
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const HOLIDAYS = [];
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
 const dayKind = (d) => (isHoliday(d) ? "hd" : isWeekend(d) ? "we" : "wk");
 
-/* ---------------- ISO-639-1 languages (name + code) ---------------- */
+/* ---------------- ISO-639-1 ---------------- */
 const LANGS = [
-  ["English", "en"], ["Русский", "ru"], ["Oʻzbekcha", "uz"],
-  ["Deutsch", "de"], ["Français", "fr"], ["Español", "es"], ["Italiano", "it"],
-  ["中文 (Chinese)", "zh"], ["العربية (Arabic)", "ar"], ["Türkçe", "tr"],
-  ["한국어 (Korean)", "ko"], ["日本語 (Japanese)", "ja"], ["Português", "pt"],
-  ["हिन्दी (Hindi)", "hi"], ["فارسی (Persian)", "fa"], ["Bahasa Indonesia", "id"],
-  ["Українська", "uk"], ["Polski", "pl"], ["Čeština", "cs"], ["Română", "ro"],
-  ["Ελληνικά", "el"], ["עברית", "he"], ["বাংলা", "bn"], ["ქართული", "ka"],
-  ["Азәрбајҹан (Azerbaijani)", "az"], ["Հայերեն", "hy"], ["Қазақша", "kk"],
-  ["Кыргызча", "ky"], ["Қарақалпақ", "kaa"], ["Монгол", "mn"],
+  ["English","en"],["Русский","ru"],["Oʻzbekcha","uz"],
+  ["Deutsch","de"],["Français","fr"],["Español","es"],["Italiano","it"],
+  ["中文 (Chinese)","zh"],["العربية (Arabic)","ar"],["Türkçe","tr"],
+  ["한국어 (Korean)","ko"],["日本語 (Japanese)","ja"],["Português","pt"],
+  ["हिन्दी (Hindi)","hi"],["فارسی (Persian)","fa"],["Bahasa Indonesia","id"],
+  ["Українська","uk"],["Polski","pl"],["Češtина","cs"],["Română","ro"],
+  ["Ελληνικά","el"],["עברית","he"],["বাংলা","bn"],["ქართული","ka"],
+  ["Азәрбајҹан","az"],["Հայերեն","hy"],["Қазақша","kk"],["Кыргызча","ky"],
+  ["Қарақалпақ","kaa"],["Монгол","mn"],
 ];
 
 /* ---------------- fetch helpers ---------------- */
@@ -63,9 +63,11 @@ const normalizeProvider = (row, kind) => ({
 });
 
 async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
+  // 1) строго проверяем доступность на конкретную дату
   const tries = [
     { url: "/api/providers/available", params: { type: kind, location: city, date, language, q, limit } },
-    { url: "/api/providers/search", params: { type: kind, location: city, language, q, limit } },
+    // 2) fallback — общий поиск по городу (если бек не отдал available)
+    { url: "/api/providers/search",    params: { type: kind, location: city, language, q, limit } },
   ];
   for (const t of tries) {
     try {
@@ -88,7 +90,7 @@ const normalizeHotel = (row) => ({
 async function fetchHotelsSmart({ city, date, q = "", limit = 30 }) {
   const tries = [
     { url: "/api/hotels/search", params: { city, date, name: q, limit } },
-    { url: "/api/hotels", params: { city, q, limit } },
+    { url: "/api/hotels",        params: { city, q, limit } },
   ];
   for (const t of tries) {
     try {
@@ -100,56 +102,49 @@ async function fetchHotelsSmart({ city, date, q = "", limit = 30 }) {
   return [];
 }
 
-async function fetchEntryFees({ q = "", city = "", limit = 50 } = {}) {
+async function fetchEntryFees({ q = "", city = "", date = "", limit = 50 } = {}) {
   try {
-    const j = await fetchJSON("/api/entry-fees", { q, city, limit });
+    const j = await fetchJSON("/api/entry-fees", { q, city, date, limit });
     return Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
   } catch {
     return [];
   }
 }
 
-/* ---------------- custom options with tooltips ---------------- */
+/* ---------------- custom option + tooltip ---------------- */
 const ProviderOption = (props) => {
   const p = props.data?.raw || {};
   const url = p?.id ? `/profile/provider/${p.id}` : null;
 
-  // Не даём react-select закрывать меню на mousedown,
-  // но сам переход запускаем вручную на click.
+  // Не даем react-select закрыть меню, но клики выполняем вручную
   const swallowDown = (e) => { e.preventDefault(); e.stopPropagation(); };
   const openHref = (href) => (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (!href) return;
     if (/^https?:/i.test(href)) window.open(href, "_blank", "noopener,noreferrer");
     else window.location.href = href; // tel:, mailto:
   };
 
-  const tgRaw = (p.telegram || "").trim();
-  const tgUser = tgRaw.replace(/^@/, "");
+  const tgRaw  = (p.telegram || "").trim();
+  const tgUser = tgRaw.replace(/^@/,"");
   const tgHref = tgRaw ? (tgRaw.includes("t.me") ? tgRaw : `https://t.me/${tgUser}`) : null;
-
   const tel = (p.phone || "").replace(/[^\d+]/g, "");
 
   return (
     <div className="rs-option-wrap relative group">
       <SelectComponents.Option {...props} />
 
-      {/* Тултип: держится при hover и при фокусе внутри */}
       <div
         className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block group-focus-within:block z-[10000]"
         tabIndex={0}
         onMouseDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* мостик, чтобы не терять hover при переносе курсора */}
         <div className="absolute -left-2 top-0 bottom-0 w-2" />
 
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text">
           <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
-          {p.location && (
-            <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>
-          )}
+          {p.location && <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
           {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
 
           {p.phone && (
@@ -161,9 +156,7 @@ const ProviderOption = (props) => {
                 onPointerDown={swallowDown}
                 onClick={openHref(tel ? `tel:${tel}` : "")}
                 className="text-blue-600 hover:underline"
-              >
-                {p.phone}
-              </a>
+              >{p.phone}</a>
             </div>
           )}
 
@@ -179,12 +172,8 @@ const ProviderOption = (props) => {
                   onPointerDown={swallowDown}
                   onClick={openHref(tgHref)}
                   className="text-blue-600 hover:underline"
-                >
-                  @{tgUser}
-                </a>
-              ) : (
-                <span>{tgRaw}</span>
-              )}
+                >@{tgUser}</a>
+              ) : <span>{tgRaw}</span>}
             </div>
           )}
 
@@ -197,16 +186,12 @@ const ProviderOption = (props) => {
                 onPointerDown={swallowDown}
                 onClick={openHref(`mailto:${p.email}`)}
                 className="text-blue-600 hover:underline"
-              >
-                {p.email}
-              </a>
+              >{p.email}</a>
             </div>
           )}
 
           {Number(p.price_per_day) > 0 && (
-            <div className="mt-1">
-              <b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}
-            </div>
+            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
           )}
 
           {url && (
@@ -219,9 +204,7 @@ const ProviderOption = (props) => {
                 onPointerDown={swallowDown}
                 onClick={openHref(url)}
                 className="text-blue-600 hover:underline"
-              >
-                Открыть профиль →
-              </a>
+              >Открыть профиль →</a>
             </div>
           )}
         </div>
@@ -251,8 +234,7 @@ export default function TourBuilder() {
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
-
-  const [residentType, setResidentType] = useState("nrs"); // nrs | res
+  const [residentType, setResidentType] = useState("nrs");
   const [lang, setLang] = useState("en");
 
   const days = useMemo(() => {
@@ -262,9 +244,6 @@ export default function TourBuilder() {
     while (d <= range.to) { res.push(new Date(d)); d = addDays(d, 1); }
     return res;
   }, [range.from, range.to]);
-
-  const tourStart = useMemo(() => (range.from && range.to ? toYMD(range.from) : null), [range.from, range.to]);
-  const tourEnd   = useMemo(() => (range.from && range.to ? toYMD(range.to)   : null), [range.from, range.to]);
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -281,98 +260,64 @@ export default function TourBuilder() {
     });
   }, [days]);
 
-  const [prefetchedGuides, setPrefetchedGuides] = useState({});
-  const [prefetchedTransports, setPrefetchedTransports] = useState({});
+  /* ----- Entry fees: поиск теперь ПО-ДНЯМ (city+date) ----- */
+  const [entryQMap, setEntryQMap] = useState({});            // {dateKey: query}
+  const [entryOptionsMap, setEntryOptionsMap] = useState({}); // {dateKey: options[]}
 
-  /* ----- entry fees global search ----- */
-  const [entryQ, setEntryQ] = useState("");
-  const [entryOptions, setEntryOptions] = useState([]);
-  useEffect(() => {
-    const t = setTimeout(async () => {
-      const items = await fetchEntryFees({ q: entryQ, limit: 50 });
-      setEntryOptions(
-        items.map((x) => ({
-          value: x.id,
-          label: `${x.name_ru || x.name_en || x.name_uz || "—"}${x.city ? " — " + x.city : ""} (${x.currency || "UZS"})`,
-          raw: x,
-        }))
-      );
-    }, 250);
-    return () => clearTimeout(t);
-  }, [entryQ]);
+  const loadEntryOptionsForDay = async (dateKey, city, q) => {
+    if (!city || !dateKey) { setEntryOptionsMap((m) => ({ ...m, [dateKey]: [] })); return; }
+    const items = await fetchEntryFees({ q: q || "", city, date: dateKey, limit: 50 });
+    const opts = items.map((x) => ({
+      value: x.id,
+      label: `${x.name_ru || x.name_en || x.name_uz || "—"}${x.city ? " — " + x.city : ""} (${x.currency || "UZS"})`,
+      raw: x,
+    }));
+    setEntryOptionsMap((m) => ({ ...m, [dateKey]: opts }));
+  };
 
-  /* ----- loaders per day ----- */
+  /* ----- loaders per day (guide / transport / hotel) ----- */
   const makeGuideLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-    const params = {
+    if (!dateKey || !day.city) { cb([]); return; }            // фильтр: нужен город и день
+    const rows = await fetchProvidersSmart({
       kind: "guide",
-      city: day.city || "",
+      city: day.city,
+      date: dateKey,
       language: lang,
-      q: input?.trim() || "",
+      q: (input || "").trim(),
       limit: 50,
-    };
-    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; }
-    else { params.date = dateKey; }
-    const rows = await fetchProvidersSmart(params);
+    });
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
   const makeTransportLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
-    const params = {
+    if (!dateKey || !day.city) { cb([]); return; }
+    const rows = await fetchProvidersSmart({
       kind: "transport",
-      city: day.city || "",
+      city: day.city,
+      date: dateKey,
       language: lang,
-      q: input?.trim() || "",
+      q: (input || "").trim(),
       limit: 50,
-    };
-    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; }
-    else { params.date = dateKey; }
-    const rows = await fetchProvidersSmart(params);
+    });
     cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
   };
 
-  const prefetchGuides = async (dateKey) => {
-    const day = byDay[dateKey] || {};
-    const params = { kind: "guide", city: day.city || "", language: lang, q: "", limit: 50 };
-    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; } else { params.date = dateKey; }
-    const rows = await fetchProvidersSmart(params);
-    const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
-    setPrefetchedGuides((m) => ({ ...m, [dateKey]: opts }));
-  };
-
-  const prefetchTransports = async (dateKey) => {
-    const day = byDay[dateKey] || {};
-    const params = { kind: "transport", city: day.city || "", language: lang, q: "", limit: 50 };
-    if (tourStart && tourEnd) { params.start = tourStart; params.end = tourEnd; } else { params.date = dateKey; }
-    const rows = await fetchProvidersSmart(params);
-    const opts = rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
-    setPrefetchedTransports((m) => ({ ...m, [dateKey]: opts }));
-  };
-
-  useEffect(() => {
-    Object.keys(byDay).forEach((k) => {
-      if (byDay[k]?.city) {
-        prefetchGuides(k);
-        prefetchTransports(k);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byDay, lang, tourStart, tourEnd]);
-
   const makeHotelLoader = (dateKey) => async (input, cb) => {
     const day = byDay[dateKey] || {};
+    if (!dateKey || !day.city) { cb([]); return; }
     const rows = await fetchHotelsSmart({
-      city: day.city || "",
+      city: day.city,
       date: dateKey,
-      q: input?.trim() || "",
+      q: (input || "").trim(),
     });
     cb(rows.map((h) => ({ value: h.id, label: `${h.name}${h.city ? " — " + h.city : ""}`, raw: h })));
   };
 
-  /* ----- prices / totals ----- */
+  /* ----- totals (entry fees по видам дня) ----- */
   const entryCell = (siteRaw, kind, pax) => {
-    const key = `${kind}_${residentType}_${pax}`; // wk|we|hd + nrs/res + adult|child
+    const key = `${kind}_${residentType}_${pax}`;
     const v = Number(siteRaw?.[key] ?? 0);
     return Number.isFinite(v) ? v : 0;
   };
@@ -426,9 +371,7 @@ export default function TourBuilder() {
               className="text-sm"
             />
             <p className="text-sm text-gray-600 mt-2">
-              {range.from && range.to
-                ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${Math.max(1, (range.to - range.from) / 86400000 + 1)} дн.`
-                : "Выберите даты начала и конца"}
+              {range.from && range.to ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${Math.max(1, (range.to - range.from) / 86400000 + 1)} дн.` : "Выберите даты начала и конца"}
             </p>
           </div>
 
@@ -461,14 +404,8 @@ export default function TourBuilder() {
 
             <div>
               <div className="text-sm font-medium mb-1">Speaking language</div>
-              <select
-                className="w-full h-9 border rounded px-2 text-sm"
-                value={lang}
-                onChange={(e) => setLang(e.target.value)}
-              >
-                {LANGS.map(([name, code]) => (
-                  <option key={code} value={code}>{name}</option>
-                ))}
+              <select className="w-full h-9 border rounded px-2 text-sm" value={lang} onChange={(e) => setLang(e.target.value)}>
+                {LANGS.map(([name, code]) => <option key={code} value={code}>{name}</option>)}
               </select>
             </div>
           </div>
@@ -479,6 +416,7 @@ export default function TourBuilder() {
           {days.map((d, i) => {
             const k = toYMD(d);
             const st = byDay[k] || {};
+            const cityChosen = Boolean(st.city);
             return (
               <div key={k} className="border rounded-lg p-3 space-y-3">
                 <div className="flex items-center gap-3">
@@ -487,7 +425,13 @@ export default function TourBuilder() {
                     className="border rounded px-3 py-2 min-w-[220px] flex-1"
                     placeholder="Город (например, Tashkent)"
                     value={st.city || ""}
-                    onChange={(e) => setByDay((p) => ({ ...p, [k]: { ...p[k], city: e.target.value } }))}
+                    onChange={(e) => {
+                      const city = e.target.value;
+                      setByDay((p) => ({ ...p, [k]: { ...p[k], city, guide: null, transport: null, hotel: null, entrySelected: [] } }));
+                      // обновим опции билетов под новый city
+                      setEntryQMap((m) => ({ ...m, [k]: "" }));
+                      loadEntryOptionsForDay(k, city, "");
+                    }}
                   />
                   <div className="text-sm text-gray-500">{k}</div>
                 </div>
@@ -497,21 +441,21 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Гид</label>
                     <AsyncSelect
+                      isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={prefetchedGuides[k] || true}
+                      defaultOptions={false}
                       loadOptions={makeGuideLoader(k)}
-                      onMenuOpen={() => { if (!prefetchedGuides[k]) prefetchGuides(k); }}
                       components={{ Option: ProviderOption }}
-                      placeholder="Выберите гида"
-                      noOptionsMessage={() => "Провайдеров не найдено"}
+                      placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
+                      noOptionsMessage={() => cityChosen ? "Нет доступных провайдеров" : "Укажите город"}
                       value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        menu: (base) => ({ ...base, overflow: "visible" }),
-                        menuList: (base) => ({ ...base, overflow: "visible" }),
+                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        menu: (b) => ({ ...b, overflow: "visible" }),
+                        menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -523,21 +467,21 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Транспорт</label>
                     <AsyncSelect
+                      isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={prefetchedTransports[k] || true}
+                      defaultOptions={false}
                       loadOptions={makeTransportLoader(k)}
-                      onMenuOpen={() => { if (!prefetchedTransports[k]) prefetchTransports(k); }}
                       components={{ Option: ProviderOption }}
-                      placeholder="Выберите транспорт"
-                      noOptionsMessage={() => "Провайдеров не найдено"}
+                      placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
+                      noOptionsMessage={() => cityChosen ? "Нет доступных провайдеров" : "Укажите город"}
                       value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        menu: (base) => ({ ...base, overflow: "visible" }),
-                        menuList: (base) => ({ ...base, overflow: "visible" }),
+                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        menu: (b) => ({ ...b, overflow: "visible" }),
+                        menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -549,20 +493,21 @@ export default function TourBuilder() {
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Отель (за ночь, нетто)</label>
                     <AsyncSelect
+                      isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions
+                      defaultOptions={false}
                       loadOptions={makeHotelLoader(k)}
                       components={{ Option: HotelOption }}
-                      placeholder="Выберите отель"
-                      noOptionsMessage={() => "Нет вариантов"}
+                      placeholder={cityChosen ? "Выберите отель" : "Сначала укажите город"}
+                      noOptionsMessage={() => cityChosen ? "Нет вариантов" : "Укажите город"}
                       value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
                       onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        menu: (base) => ({ ...base, overflow: "visible" }),
-                        menuList: (base) => ({ ...base, overflow: "visible" }),
+                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        menu: (b) => ({ ...b, overflow: "visible" }),
+                        menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -575,25 +520,31 @@ export default function TourBuilder() {
                     <label className="block text-sm font-medium mb-1">Входные билеты (объекты)</label>
                     <input
                       className="w-full border rounded px-3 py-2 mb-2"
-                      placeholder="Начните вводить объект/город…"
-                      value={entryQ}
-                      onChange={(e) => setEntryQ(e.target.value)}
+                      placeholder={cityChosen ? "Начните вводить объект…" : "Сначала укажите город"}
+                      value={entryQMap[k] || ""}
+                      disabled={!cityChosen}
+                      onChange={async (e) => {
+                        const q = e.target.value;
+                        setEntryQMap((m) => ({ ...m, [k]: q }));
+                        await loadEntryOptionsForDay(k, st.city, q);
+                      }}
                     />
                     <AsyncSelect
                       isMulti
+                      isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={entryOptions}
-                      loadOptions={(input, cb) => cb(entryOptions)}
+                      defaultOptions={entryOptionsMap[k] || []}
+                      loadOptions={(input, cb) => cb(entryOptionsMap[k] || [])}
                       value={st.entrySelected || []}
                       onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
-                      placeholder="Выберите объекты"
-                      noOptionsMessage={() => "Ничего не найдено"}
+                      placeholder={cityChosen ? "Выберите объекты" : "Укажите город"}
+                      noOptionsMessage={() => (cityChosen ? "Ничего не найдено" : "Укажите город")}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        menu: (base) => ({ ...base, overflow: "visible" }),
-                        menuList: (base) => ({ ...base, overflow: "visible" }),
+                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                        menu: (b) => ({ ...b, overflow: "visible" }),
+                        menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
                     <div className="text-xs text-gray-600 mt-1">
@@ -611,22 +562,10 @@ export default function TourBuilder() {
         </div>
 
         <div className="grid md:grid-cols-5 gap-3 text-sm">
-          <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-medium mb-1">Гид (нетто)</div>
-            <div>{totals.guide.toFixed(2)} USD</div>
-          </div>
-          <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-medium mb-1">Транспорт (нетто)</div>
-            <div>{totals.transport.toFixed(2)} USD</div>
-          </div>
-          <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-medium mb-1">Отели (нетто)</div>
-            <div>{totals.hotel.toFixed(2)} USD</div>
-          </div>
-          <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-medium mb-1">Entry fees (нетто)</div>
-            <div>{totals.entries.toFixed(2)} USD</div>
-          </div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Гид (нетто)</div><div>{totals.guide.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Транспорт (нетто)</div><div>{totals.transport.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Отели (нетто)</div><div>{totals.hotel.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Entry fees (нетто)</div><div>{totals.entries.toFixed(2)} USD</div></div>
           <div className="bg-gray-50 rounded p-3 border">
             <div className="font-semibold">ИТОГО</div>
             <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} USD</span></div>
