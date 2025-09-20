@@ -16,12 +16,10 @@ const {
   updateService,
   deleteService,
   updateServiceImagesOnly,
-  // календарь
   getBookedDates,
   getBlockedDates,
   saveBlockedDates,
   getCalendarPublic,
-  // прочее
   getProviderPublicById,
   getProviderStats,
   listProviderFavorites,
@@ -43,32 +41,30 @@ function requireProvider(req, res, next) {
 /* -------------------- PUBLIC SEARCH / AVAILABLE -------------------- */
 
 function parseQuery(qs = {}) {
-  const type = String(qs.type || "").trim();                      // guide | transport | agent | ...
-  const city = String(qs.city || qs.location || "").trim();       // Samarkand / Tashkent ...
+  const type = String(qs.type || "").trim();
+  const city = String(qs.city || qs.location || "").trim();
   const q = String(qs.q || "").trim();
-  const language = String(qs.language || qs.lang || "").trim();   // 'en','ru',...
-  const date = String(qs.date || "").trim();                      // YYYY-MM-DD
-  const start = String(qs.start || "").trim();                    // YYYY-MM-DD
-  const end = String(qs.end || "").trim();                        // YYYY-MM-DD
+  const language = String(qs.language || qs.lang || "").trim();
+  const date = String(qs.date || "").trim();
+  const start = String(qs.start || "").trim();
+  const end = String(qs.end || "").trim();
   const limit = Math.min(Math.max(parseInt(qs.limit, 10) || 30, 1), 100);
   return { type, city, q, language, date, start, end, limit };
 }
 
 /**
- * Универсальный конструктор WHERE:
- * - p.location: поддержка text | text[] | jsonb-массив
- * - p.languages: поддержка jsonb-массив | text[] | text
+ * WHERE для поиска:
+ *  - поддержка p.location: text | text[] | jsonb[]
+ *  - поддержка p.languages: text | text[] | jsonb[]
  */
 function buildBaseWhere({ type, city, q, language }, vals) {
   const where = [];
 
-  // тип провайдера
   if (type) {
     vals.push(type);
     where.push(`LOWER(p.type) = LOWER($${vals.length})`);
   }
 
-  // город
   if (city) {
     vals.push(city);
     const iEq = vals.length;
@@ -77,64 +73,64 @@ function buildBaseWhere({ type, city, q, language }, vals) {
 
     where.push(`
       (
-        -- location как одиночная строка (text)
+        -- location: одиночная строка
         (pg_typeof(p.location)::text = 'text'
           AND (LOWER(p.location::text) = LOWER($${iEq}) OR p.location::text ILIKE $${iLike}))
-
         OR
-        -- location как массив строк (text[])
+        -- location: text[]
         (pg_typeof(p.location)::text = 'text[]'
           AND EXISTS (
             SELECT 1
             FROM unnest(p.location::text[]) loc
             WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
           ))
-
         OR
-        -- location как jsonb-массив строк: ["Samarkand", ...]
-        (pg_typeof(p.location)::text = 'jsonb'
-          AND EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(p.location) loc(val)
-            WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
-          ))
+        -- location: jsonb-массив (безопасный вызов через CASE → jsonb | NULL)
+        EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+                 CASE
+                   WHEN pg_typeof(p.location)::text = 'jsonb' THEN p.location::jsonb
+                   ELSE NULL::jsonb
+                 END
+               ) loc(val)
+          WHERE LOWER(loc.val) = LOWER($${iEq}) OR loc.val ILIKE $${iLike}
+        )
       )
     `);
   }
 
-  // свободный текст: имя/почта/телефон
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
     where.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
 
-  // язык — три независимых ветки по фактическому типу колонки
   if (language) {
     vals.push(language);
     const iLang = vals.length;
 
     where.push(`
       (
-        -- jsonb-массив: ["en","ru"] или ["English","Русский"]
-        (pg_typeof(p.languages)::text = 'jsonb' AND EXISTS (
+        -- languages: jsonb-массив (через безопасный CASE)
+        EXISTS (
           SELECT 1
-          FROM jsonb_array_elements_text(p.languages) lang(code)
+          FROM jsonb_array_elements_text(
+                 CASE
+                   WHEN pg_typeof(p.languages)::text = 'jsonb' THEN p.languages::jsonb
+                   ELSE NULL::jsonb
+                 END
+               ) lang(code)
           WHERE LOWER(lang.code) = LOWER($${iLang})
-        ))
-
+        )
         OR
-
-        -- text[] массив: {'en','ru'}
+        -- languages: text[]
         (pg_typeof(p.languages)::text = 'text[]' AND EXISTS (
-          SELECT 1
-          FROM unnest(p.languages::text[]) l(code)
+          SELECT 1 FROM unnest(p.languages::text[]) l(code)
           WHERE LOWER(l.code) = LOWER($${iLang})
         ))
-
         OR
-
-        -- одиночная строка: 'en'
+        -- languages: одиночная строка
         (pg_typeof(p.languages)::text = 'text' AND LOWER(p.languages::text) = LOWER($${iLang}))
       )
     `);
@@ -268,7 +264,6 @@ router.get("/booked-dates",  authenticateToken, requireProvider, getBookedDates)
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
 router.post("/blocked-dates", authenticateToken, requireProvider, saveBlockedDates);
 
-// Детализация забронированных дат в будущем
 router.get("/booked-details", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -301,7 +296,6 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
   }
 });
 
-// Сводка календаря (публичный — ниже)
 router.get("/calendar", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
@@ -346,7 +340,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
         [providerId]
       ),
     ]);
-  res.json({
+    res.json({
       booked: booked.rows,
       blocked: blocked.rows,
       bookedDetails: details.rows,
@@ -357,7 +351,6 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
   }
 });
 
-// публичный календарь конкретного провайдера
 router.get("/:providerId(\\d+)/calendar", getCalendarPublic);
 
 /* -------------------- FAVORITES -------------------- */
@@ -393,8 +386,6 @@ router.post("/services/:id/submit",
     } catch (e) { next(e); }
   }
 );
-
-/* -------------------- PUBLIC PROVIDER CARD -------------------- */
 
 router.get("/:id(\\d+)", getProviderPublicById);
 
