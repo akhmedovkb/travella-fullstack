@@ -3,66 +3,75 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
-// GET /api/entry-fees?q=&city=&limit=
+// GET /api/entry-fees?q=&city=&date=&limit=
 router.get("/", async (req, res) => {
   try {
-    const q = String(req.query.q || "").trim();
-    const city = String(req.query.city || "").trim();
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const {
+      q = "",
+      city = "",
+      date = "",   // сейчас не используется в SQL: фронт сам считает вид дня (wk/we/hd)
+      limit = 50,
+    } = req.query;
 
-    const vals = [];
-    const where = [];
+    const qLike = `%${String(q).trim()}%`;
+    const cityLike = `%${String(city).trim()}%`;
+    const lim = Math.max(1, Math.min(200, Number(limit) || 50));
 
-    if (q) {
-      vals.push(`%${q}%`);
-      const i = vals.length;
-      where.push(`(
-        COALESCE(ef.name_ru, ef.name_en, ef.name_uz) ILIKE $${i}
-        OR ef.city ILIKE $${i}
-      )`);
-    }
-    if (city) {
-      vals.push(`%${city}%`);
-      where.push(`ef.city ILIKE $${vals.length}`);
-    }
-
+    // ВАЖНО: никаких ef.weekday_prices — только плоские колонки.
+    // Если у вас некоторые колоноки отсутствуют — ниже есть мигра SQL.
     const sql = `
-      SELECT ef.id,
-             ef.city,
-             ef.currency,
-             ef.name_ru, ef.name_en, ef.name_uz,
-             ef.weekday_prices, ef.weekend_prices, ef.holiday_prices,
-             ef.nrs_adult, ef.nrs_child, ef.res_adult, ef.res_child
-      FROM entry_fees ef
-      ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY ef.city NULLS LAST, COALESCE(ef.name_ru, ef.name_en, ef.name_uz)
-      LIMIT $${vals.push(limit)};
+      SELECT
+        id,
+        COALESCE(name_ru, '') AS name_ru,
+        COALESCE(name_en, '') AS name_en,
+        COALESCE(name_uz, '') AS name_uz,
+        COALESCE(city, '')    AS city,
+        COALESCE(currency, 'UZS') AS currency,
+
+        -- рабочие дни (weekday)
+        COALESCE(wk_res_adult,   0)::numeric    AS wk_res_adult,
+        COALESCE(wk_res_child,   0)::numeric    AS wk_res_child,
+        COALESCE(wk_res_senior,  0)::numeric    AS wk_res_senior,
+        COALESCE(wk_nrs_adult,   0)::numeric    AS wk_nrs_adult,
+        COALESCE(wk_nrs_child,   0)::numeric    AS wk_nrs_child,
+        COALESCE(wk_nrs_senior,  0)::numeric    AS wk_nrs_senior,
+
+        -- выходные (weekend)
+        COALESCE(we_res_adult,   0)::numeric    AS we_res_adult,
+        COALESCE(we_res_child,   0)::numeric    AS we_res_child,
+        COALESCE(we_res_senior,  0)::numeric    AS we_res_senior,
+        COALESCE(we_nrs_adult,   0)::numeric    AS we_nrs_adult,
+        COALESCE(we_nrs_child,   0)::numeric    AS we_nrs_child,
+        COALESCE(we_nrs_senior,  0)::numeric    AS we_nrs_senior,
+
+        -- праздники (holiday)
+        COALESCE(hd_res_adult,   0)::numeric    AS hd_res_adult,
+        COALESCE(hd_res_child,   0)::numeric    AS hd_res_child,
+        COALESCE(hd_res_senior,  0)::numeric    AS hd_res_senior,
+        COALESCE(hd_nrs_adult,   0)::numeric    AS hd_nrs_adult,
+        COALESCE(hd_nrs_child,   0)::numeric    AS hd_nrs_child,
+        COALESCE(hd_nrs_senior,  0)::numeric    AS hd_nrs_senior
+      FROM entry_sites es
+      WHERE
+        ($1 = '' OR es.city ILIKE $2) AND
+        ($3 = '' OR es.name_ru ILIKE $4 OR es.name_en ILIKE $4 OR es.name_uz ILIKE $4)
+      ORDER BY es.popularity DESC NULLS LAST, es.name_en, es.name_ru, es.name_uz
+      LIMIT $5
     `;
-    const { rows } = await pool.query(sql, vals);
 
-    // фронту удобнее единый объект с ключами вида wk_nrs_adult и т.п.
-    const items = rows.map((r) => {
-      const out = {
-        id: r.id,
-        city: r.city,
-        currency: r.currency || "UZS",
-        name_ru: r.name_ru,
-        name_en: r.name_en,
-        name_uz: r.name_uz,
-      };
-      // подстрахуемся: если есть агрегированные поля — добавим
-      if (r.nrs_adult != null) out["wk_nrs_adult"] = Number(r.nrs_adult) || 0;
-      if (r.nrs_child != null) out["wk_nrs_child"] = Number(r.nrs_child) || 0;
-      if (r.res_adult != null) out["wk_res_adult"] = Number(r.res_adult) || 0;
-      if (r.res_child != null) out["wk_res_child"] = Number(r.res_child) || 0;
+    const params = [
+      String(city).trim(),
+      cityLike,
+      String(q).trim(),
+      qLike,
+      lim,
+    ];
 
-      return out;
-    });
-
-    res.json({ items });
+    const { rows } = await pool.query(sql, params);
+    return res.json({ items: rows });
   } catch (e) {
     console.error("GET /api/entry-fees error:", e);
-    res.status(500).json({ error: "failed" });
+    return res.status(500).json({ error: "failed" });
   }
 });
 
