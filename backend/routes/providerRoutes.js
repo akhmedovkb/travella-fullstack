@@ -84,32 +84,28 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   }
 
   if (language) {
-  vals.push(language);
-  const iLang = vals.length;
+  const lang = String(language).toLowerCase();
+  vals.push(lang);
+  const iEq = vals.length;
+  vals.push(`%${language}%`);
+  const iLike = vals.length;
+
   where.push(`
     (
-      -- jsonb-массив ["en","ru"]
-      EXISTS (
+      -- если языки не заполнены или пустой массив — не фильтруем
+      p.languages IS NULL
+      OR p.languages = '[]'::jsonb
+
+      -- нормальный случай: jsonb-массив строк ["en","ru"] или ["English","Русский"]
+      OR EXISTS (
         SELECT 1
-        FROM jsonb_array_elements_text(COALESCE(p.languages, '[]'::jsonb)) lang(code)
-        WHERE lower(lang.code) = lower($${iLang})
+        FROM jsonb_array_elements_text(p.languages) AS lang(code)
+        WHERE lower(lang.code) = $${iEq} OR lang.code ILIKE $${iLike}
       )
-      OR
-      -- text[] массив
-      EXISTS (
-        SELECT 1
-        FROM unnest(CASE
-          WHEN pg_typeof(p.languages)::text = 'text[]' THEN p.languages::text[]
-          ELSE ARRAY[]::text[]
-        END) ltxt(code)
-        WHERE lower(ltxt.code) = lower($${iLang})
-      )
-      OR
-      -- одиночная строка
-      lower(CASE WHEN pg_typeof(p.languages)::text = 'text' THEN p.languages::text ELSE '' END) = lower($${iLang})
     )
   `);
 }
+
 
   return where;
 }
