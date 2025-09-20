@@ -287,34 +287,30 @@ export default function TourBuilder() {
     q: (input || "").trim(),
     limit: 50,
   });
-  return rows.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
 };
 
+const makeTransportLoader = (dateKey) => async (input) => {
+  const day = byDay[dateKey] || {};
+  if (!dateKey || !day.city) return [];
+  const rows = await fetchProvidersSmart({
+    kind: "transport",
+    city: day.city,
+    date: dateKey,
+    language: lang,
+    q: (input || "").trim(),
+    limit: 50,
+  });
+  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
+};
 
-  const makeTransportLoader = (dateKey) => async (input, cb) => {
-    const day = byDay[dateKey] || {};
-    if (!dateKey || !day.city) { cb([]); return; }
-    const rows = await fetchProvidersSmart({
-      kind: "transport",
-      city: day.city,
-      date: dateKey,
-      language: lang,
-      q: (input || "").trim(),
-      limit: 50,
-    });
-    cb(rows.map((p) => ({ value: p.id, label: p.name, raw: p })));
-  };
+const makeHotelLoader = (dateKey) => async (input) => {
+  const day = byDay[dateKey] || {};
+  if (!dateKey || !day.city) return [];
+  const rows = await fetchHotelsSmart({ city: day.city, date: dateKey, q: (input || "").trim() });
+  return rows.map(h => ({ value: h.id, label: `${h.name}${h.city ? " — " + h.city : ""}`, raw: h }));
+};
 
-  const makeHotelLoader = (dateKey) => async (input, cb) => {
-    const day = byDay[dateKey] || {};
-    if (!dateKey || !day.city) { cb([]); return; }
-    const rows = await fetchHotelsSmart({
-      city: day.city,
-      date: dateKey,
-      q: (input || "").trim(),
-    });
-    cb(rows.map((h) => ({ value: h.id, label: `${h.name}${h.city ? " — " + h.city : ""}`, raw: h })));
-  };
 
   /* ----- totals (entry fees по видам дня) ----- */
   const entryCell = (siteRaw, kind, pax) => {
@@ -445,8 +441,9 @@ export default function TourBuilder() {
                         key={`guide-${k}-${st.city}-${lang}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ убираем кеш для надежности
-                        defaultOptions={true}
+                        defaultOptions
                         loadOptions={makeGuideLoader(k)}
+                        filterOption={() => true}
                         components={{ Option: ProviderOption }}
                         placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
@@ -472,8 +469,9 @@ export default function TourBuilder() {
                         key={`transport-${k}-${st.city}-${lang}`}   // ⬅️ важный ключ
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ отключаем кеш
-                        defaultOptions={true}
+                        defaultOptions
                         loadOptions={makeTransportLoader(k)}
+                        filterOption={() => true}
                         components={{ Option: ProviderOption }}
                         placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
