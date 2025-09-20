@@ -29,6 +29,18 @@ const {
 
 const { notifyModerationNew } = require("../utils/telegram");
 
+const { resolveCitySlugs } = require("../utils/cities");
+async function resolveCitySlug(city) {
+  try {
+    if (!city) return null;
+    const slugs = await resolveCitySlugs(pool, [city]); // можно и строку — утилита сама приведёт
+    return slugs[0] || null;
+  } catch (e) {
+    console.warn("resolveCitySlug failed, skipping city filter:", e?.message || e);
+    return null;
+  }
+}
+
 // ⬇️ NEW: резолвер синонима -> slug
 const { resolveCitySlugs } = require("../utils/cities");
 async function resolveCitySlug(city) {
