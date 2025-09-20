@@ -63,21 +63,20 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   }
 
   if (city) {
-  // 1) точное совпадение по любому элементу массива (быстро и предсказуемо)
   vals.push(city);
   const iEq = vals.length;
-  // 2) fallback по частичному совпадению (если в БД хранятся сложные значения)
   vals.push(`%${city}%`);
   const iLike = vals.length;
 
   where.push(`
     EXISTS (
       SELECT 1
-      FROM unnest(p.location) loc
+      FROM unnest(COALESCE(p.location, ARRAY[]::text[])) loc
       WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
     )
   `);
 }
+
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
