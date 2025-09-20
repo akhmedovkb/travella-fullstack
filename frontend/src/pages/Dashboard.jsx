@@ -120,7 +120,7 @@ function MoneyField({ label, value, onChange, placeholder }) {
       <input
         inputMode="decimal"
         pattern="[-0-9., ]*"   // ⬅ без \s
-        min="0.01"
+        min="0"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -465,6 +465,7 @@ function ImagesEditor({
                     className="bg-white/90 border rounded px-2 py-0.5 text-xs shadow hidden group-hover:block"
                     onClick={() => onMakeCover(idx)}
                     title={t("make_cover", { defaultValue: "Сделать обложкой" })}
+                    aria-label={t("make_cover", { defaultValue: "Сделать обложкой" })}
                   >
                     ★
                   </button>
@@ -473,6 +474,7 @@ function ImagesEditor({
                   type="button"
                   className="bg-white/90 border rounded px-2 py-0.5 text-xs shadow hidden group-hover:block"
                   onClick={() => onRemove(idx)}
+                  aria-label={t("delete", { defaultValue: "Удалить" })}
                 >
                   {t("delete", { defaultValue: "Удалить" })}
                 </button>
@@ -700,13 +702,24 @@ const Dashboard = () => {
     // visa
     description: "",
     visaCountry: "",
+    // transport
+    seats: "",
   };
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
 
   // === Provider Inbox / Bookings ===
 
   const token = (typeof localStorage !== "undefined" && localStorage.getItem("token")) || "";
-  const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
+  const api = useMemo(() => {
+    const instance = axios.create({ baseURL: API_BASE });
+    instance.interceptors.request.use((cfg) => {
+      const tok = localStorage.getItem("token");
+      if (tok) cfg.headers.Authorization = `Bearer ${tok}`;
+      return cfg;
+    });
+    return instance;
+  }, [API_BASE]);
 
   /** ===== Utils ===== */
     
@@ -725,8 +738,8 @@ const Dashboard = () => {
   // raw-функция (принимает AbortSignal)
 const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
   try {
-    const res = await axios.get(
-      `${API_BASE}/api/hotels/search`,
+    const res = await api.get(
+      `/api/hotels/search`,
       { params: { query: inputValue || "" }, signal }
     );
     return (res.data || []).map((x) => ({
@@ -811,7 +824,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
       }
     }
   
-    if (processed.length) setImages((prev) => [...prev, ...processed]);
+    if (processed.length) setImages((prev) => [...prev, ...processed].slice(0, 10));
     e.target.value = "";
   };
 
@@ -836,7 +849,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
       const copy = [...prev];
       const [cover] = copy.splice(idx, 1);
       copy.unshift(cover);
-      return copy;
+      return copy.slice(0, 10);
     });
   };
 
@@ -850,7 +863,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
   const handleConfirmDelete = () => {
     if (!serviceToDelete) return;
     axios
-      .delete(`${API_BASE}/api/providers/services/${serviceToDelete}`, config)
+      .delete(`/api/providers/services/${serviceToDelete}`)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== serviceToDelete));
         if (selectedService?.id === serviceToDelete) setSelectedService(null);
@@ -966,8 +979,8 @@ useEffect(() => {
   const c1 = new AbortController(), c2 = new AbortController(), c3 = new AbortController();
 
   // Profile
-  axios
-    .get(`${API_BASE}/api/providers/profile`, { ...config, signal: c1.signal })
+      api
+     .get(`/api/providers/profile`, { signal: c1.signal })
         .then((res) => {
       setProfile(res.data || {});
       // если из профиля нет флага — оставляем JWT-детект
@@ -984,8 +997,8 @@ useEffect(() => {
     });
 
   // Services
-  axios
-    .get(`${API_BASE}/api/providers/services`, { ...config, signal: c2.signal })
+     api
+    .get(`/api/providers/services`, { signal: c2.signal })
     .then((res) => setServices(Array.isArray(res.data) ? res.data : []))
     .catch((err) => {
       if (err?.code === "ERR_CANCELED") return;
@@ -994,8 +1007,8 @@ useEffect(() => {
     });
 
   // Stats
-  axios
-    .get(`${API_BASE}/api/providers/stats`, { ...config, signal: c3.signal })
+    api
+    .get(`/api/providers/stats`, { signal: c3.signal })
     .then((res) => setStats(res.data || {}))
     .catch((err) => {
       if (err?.code === "ERR_CANCELED") return;
@@ -1072,7 +1085,7 @@ useEffect(() => {
       return;
     }
 
-    axios.put(`${API_BASE}/api/providers/profile`, updated, config)
+    api.put(`/api/providers/profile`, updated)
   .then((res) => {
     const p = res?.data?.provider;
     if (p) {
@@ -1101,8 +1114,8 @@ useEffect(() => {
          tWarn(t("password_too_short") || "Минимум 6 символов");
          return;
        }
-       axios
-         .put(`${API_BASE}/api/providers/password`, { oldPassword, newPassword }, config)
+         api
+         .put(`/api/providers/password`, { oldPassword, newPassword })
          .then(() => {
            setOldPassword("");
            setNewPassword("");
@@ -1141,7 +1154,10 @@ useEffect(() => {
         service.category
       )
     ) {
-            const d = (service && service.details && typeof service.details === "object") ? service.details : {};
+    const d = (service && service.details && typeof service.details === "object") ? service.details : {};
+    const expIso = d?.expiration_ts
+     ? new Date((Number(d.expiration_ts) || 0) * 1000).toISOString().slice(0,16)
+     : (d?.expiration || "");
       const hotelStr =
         typeof d.hotel === "object"
           ? (d.hotel?.label || d.hotel?.name || "")
@@ -1166,7 +1182,7 @@ useEffect(() => {
         changeable: d.changeable || false,
         visaIncluded: d.visaIncluded || false,
         netPrice: d.netPrice ?? "",
-        expiration: d.expiration || "",
+        expiration: expIso,
         isActive: d.isActive ?? true,
         flightType: d.flightType || "one_way",
         oneWay: d.oneWay ?? (d.flightType !== "round_trip"),
@@ -1191,7 +1207,7 @@ useEffect(() => {
         typeof sd.hotel === "object"
           ? (sd.hotel?.label || sd.hotel?.name || "")
           : (sd.hotel || "");
-      setDetails({ ...DEFAULT_DETAILS, ...sd, hotel: hotelStr2 });
+      setDetails({ ...DEFAULT_DETAILS, ...sd, hotel: hotelStr2, seats: sd.seats ?? ""  });
       setAvailability(
         Array.isArray(service.availability)
           ? service.availability.map(toDate)
@@ -1344,15 +1360,19 @@ useEffect(() => {
       const pNum = parseMoneySafe(price);
       if (Number.isFinite(pNum)) raw.price = pNum;
     }
+        
+        // Приводим seats к числу и включаем в details для простых категорий
+    const seatsNum = hasVal(details?.seats) ? parseInt(details.seats, 10) : undefined;
+    if (Number.isFinite(seatsNum)) {
+      if (!raw.details) raw.details = {};
+      raw.details.seats = seatsNum;
+    }
+    
     const data = compactDeep(raw);
     
     const req = selectedService
-      ? axios.put(
-          `${API_BASE}/api/providers/services/${selectedService.id}`,
-          data,
-          config
-        )
-      : axios.post(`${API_BASE}/api/providers/services`, data, config);
+       ? api.put(`/api/providers/services/${selectedService.id}`, data)
+       : api.post(`/api/providers/services`, data);
 
     req
       .then((res) => {
@@ -1643,6 +1663,27 @@ useEffect(() => {
        
         {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
+                    {/* Delete confirm modal */}
+          {deleteConfirmOpen && (
+            <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/40">
+              <div className="w-full max-w-sm rounded-lg bg-white p-4 shadow-lg">
+                <h4 className="mb-2 text-lg font-semibold">
+                  {t("confirm_delete_title", { defaultValue: "Удалить услугу?" })}
+                </h4>
+                <p className="mb-4 text-sm text-gray-600">
+                  {t("confirm_delete_desc", { defaultValue: "Действие нельзя отменить." })}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setDeleteConfirmOpen(false)} className="rounded border px-3 py-1.5">
+                    {t("cancel")}
+                  </button>
+                  <button onClick={handleConfirmDelete} className="rounded bg-red-600 px-3 py-1.5 text-white">
+                    {t("delete")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="mb-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">{t("services")}</h2>
@@ -1681,20 +1722,14 @@ useEffect(() => {
                         <div className="font-bold text-lg">{s.title}</div>
                         <div className="text-sm text-gray-600">{t(`category.${s.category}`)}</div>
                             {/* статус + кнопка модерации */}                            
-                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  <div className="mt-1 flex items-center gap-2 flex-wrap">
                                    {typeof s.status === "string" && (
                                     <span
-                                      title={
-                                        s.status === "rejected"
-                                          ? (s.rejected_reason || t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
-                                          : undefined
-                                      }
-                                      className={`inline-block text-xs px-2 py-0.5 rounded
-                                        ${s.status === "published" ? "bg-emerald-100 text-emerald-700" :
-                                          s.status === "pending"   ? "bg-amber-100 text-amber-800" :
-                                                                     "bg-rose-100 text-rose-700"}`}
-                                          
-                                    >
+                                      title={s.status === "rejected"
+                                        ? (s.rejected_reason || t("rejected_reason_empty", { defaultValue: "Причина не указана" }))
+                                        : undefined}
+                                      className={`inline-block text-xs px-2 py-0.5 rounded ${statusBadgeClass(s.status)}`}
+                                   >
                                        {t(`moderation.service_status.${s.status}`, {
                                          defaultValue: MOD_STATUS_FALLBACK[s.status] || s.status
                                         })}
@@ -1706,11 +1741,11 @@ useEffect(() => {
                                       onClick={async (e) => {
                                         e.stopPropagation(); // чтобы не открывался редактор
                                         try {
-                                          await axios.post(`${API_BASE}/api/providers/services/${s.id}/submit`, {}, config);
+                                          await api.post(`/api/providers/services/${s.id}/submit`, {});
                                           tSuccess(t("moderation.submitted_toast"));
                                           // Локально обновим статус
                                           setServices((prev) =>
-                                            prev.map((x) => (x.id === s.id ? { ...x, status: "pending", submitted_at: new Date().toISOString() } : x))
+                                            prev.map((x) => (x.id === s.id ? { ...x, status: "pending", rejected_reason: undefined, submitted_at: new Date().toISOString() } : x))
                                           );
                                         } catch (err) {
                                           tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
@@ -1778,11 +1813,7 @@ useEffect(() => {
                             <button
                               onClick={async () => {
                                 try {
-                                  await axios.post(
-                                    `${API_BASE}/api/providers/services/${selectedService.id}/submit`,
-                                    {},
-                                    config
-                                  );
+                                  await api.post(`/api/providers/services/${selectedService.id}/submit`, {});
                                   tSuccess(t("moderation.submitted_toast"));
                                   setServices((prev) =>
                                     prev.map((x) =>
@@ -1791,7 +1822,7 @@ useEffect(() => {
                                         : x
                                     )
                                   );
-                                  setSelectedService((prev) => (prev ? { ...prev, status: "pending" } : prev));
+                                  setSelectedService((prev) => (prev ? { ...prev, status: "pending", rejected_reason: undefined } : prev));
                                 } catch {
                                   tError(t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
                                 }
@@ -2536,6 +2567,27 @@ useEffect(() => {
                         placeholder={t("gross_price")}
                       />
                     </div>
+                    {/* только для транспортников */}
+                    {profile.type === "transport" && (
+                        <div className="mb-2">
+                          <label className="block font-medium mb-1">
+                            {t("seats") || "Количество мест"}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={details.seats ?? ""}
+                            onChange={(e) =>
+                              setDetails((d) => ({ ...d, seats: e.target.value }))
+                            }
+                            placeholder={t("seats_placeholder") || "например, 12"}
+                            className="w-full border px-3 py-2 rounded"
+                          />
+                        </div>
+                      )}
+
+
                   </>
                 )}
 
@@ -3346,7 +3398,25 @@ useEffect(() => {
                         onChange={(v) => setDetails({ ...details, grossPrice: v })}
                         placeholder={t("gross_price")}
                       />
-    </>
+                      {profile.type === "transport" && (
+                        <div className="mb-2">
+                          <label className="block font-medium mb-1">
+                            {t("seats") || "Количество мест"}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={details.seats ?? ""}
+                            onChange={(e) =>
+                              setDetails((d) => ({ ...d, seats: e.target.value }))
+                            }
+                            placeholder={t("seats_placeholder") || "например, 12"}
+                            className="w-full border px-3 py-2 rounded"
+                          />
+                        </div>
+                      )}
+                   </>
                   )}
 
                   {/* Блок изображений */}
