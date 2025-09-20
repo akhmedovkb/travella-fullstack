@@ -63,13 +63,21 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   }
 
   if (city) {
-    // p.location — text[]; ищем по любому элементу массива (ILIKE)
-    vals.push(`%${city}%`);
-    where.push(
-      `EXISTS (SELECT 1 FROM unnest(p.location) loc WHERE loc ILIKE $${vals.length})`
-    );
-  }
+  // 1) точное совпадение по любому элементу массива (быстро и предсказуемо)
+  vals.push(city);
+  const iEq = vals.length;
+  // 2) fallback по частичному совпадению (если в БД хранятся сложные значения)
+  vals.push(`%${city}%`);
+  const iLike = vals.length;
 
+  where.push(`
+    EXISTS (
+      SELECT 1
+      FROM unnest(p.location) loc
+      WHERE LOWER(loc) = LOWER($${iEq}) OR loc ILIKE $${iLike}
+    )
+  `);
+}
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
@@ -77,16 +85,32 @@ function buildBaseWhere({ type, city, q, language }, vals) {
   }
 
   if (language) {
-    // p.languages — jsonb-массив строк, например ["en","ru"]
-    vals.push(language);
-    where.push(`
+  vals.push(language);
+  const iLang = vals.length;
+  where.push(`
+    (
+      -- jsonb-массив ["en","ru"]
       EXISTS (
         SELECT 1
         FROM jsonb_array_elements_text(COALESCE(p.languages, '[]'::jsonb)) lang(code)
-        WHERE lower(lang.code) = lower($${vals.length})
+        WHERE lower(lang.code) = lower($${iLang})
       )
-    `);
-  }
+      OR
+      -- text[] массив
+      EXISTS (
+        SELECT 1
+        FROM unnest(CASE
+          WHEN pg_typeof(p.languages)::text = 'text[]' THEN p.languages::text[]
+          ELSE ARRAY[]::text[]
+        END) ltxt(code)
+        WHERE lower(ltxt.code) = lower($${iLang})
+      )
+      OR
+      -- одиночная строка
+      lower(CASE WHEN pg_typeof(p.languages)::text = 'text' THEN p.languages::text ELSE '' END) = lower($${iLang})
+    )
+  `);
+}
 
   return where;
 }
