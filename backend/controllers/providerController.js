@@ -83,32 +83,29 @@ const sanitizeImages = (images) =>
     .slice(0, 20);
 
 function normalizeServicePayload(body) {
-  const { title, description, price, category, images, availability, details } =
-    body || {};
-
-  const imagesArr = sanitizeImages(images);
-  const availabilityArr = Array.isArray(availability)
-    ? availability
-    : toArray(availability);
+  const { title, description, price, category, images, availability, details } = body || {};
+  // ... как у вас ...
 
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
-      try {
-        detailsObj = JSON.parse(details);
-      } catch {
-        detailsObj = { value: String(details) };
-      }
+      try { detailsObj = JSON.parse(details); } catch { detailsObj = { value: String(details) }; }
     } else if (typeof details === "object") {
       detailsObj = details;
     }
   }
 
-  const titleStr = title != null ? String(title).trim() : null;
-  const descStr = description != null ? String(description).trim() : null;
-  const catStr = category != null ? String(category).trim() : null;
-  const priceNum = price != null && price !== "" ? Number(price) : null;
+  // ⬇️ аккуратно нормализуем seats, если прислали
+  if (detailsObj && Object.prototype.hasOwnProperty.call(detailsObj, "seats")) {
+    const n = Number(detailsObj.seats);
+    if (Number.isFinite(n) && n > 0) {
+      detailsObj.seats = Math.trunc(n);
+    } else {
+      delete detailsObj.seats; // не валидное — просто выбросим
+    }
+  }
 
+  // ...остальное без изменений...
   return {
     title: titleStr,
     descriptionStr: descStr,
