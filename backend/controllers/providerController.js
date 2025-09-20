@@ -3,6 +3,8 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { resolveCitySlugs } = require("../utils/cities");
+
 
 // ---------- Helpers ----------
 
@@ -198,6 +200,7 @@ const loginProvider = async (req, res) => {
         languages: normalizeLanguagesISO(row.languages ?? []),
         role: "provider",
         is_admin: row.is_admin === true,
+        city_slugs: row.city_slugs || [],
       },
       token,
     });
@@ -236,6 +239,7 @@ const getProviderProfile = async (req, res) => {
       languages: normalizeLanguagesISO(p.languages ?? []),
       role: "provider",
       is_admin: p.is_admin === true,
+      city_slugs: p.city_slugs || [],
     });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
@@ -249,7 +253,7 @@ const updateProviderProfile = async (req, res) => {
 
     // читаем текущее состояние
     const oldQ = await pool.query(
-      `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id
+      `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id, city_slugs
          FROM providers
         WHERE id = $1`,
       [id]
@@ -274,6 +278,7 @@ const updateProviderProfile = async (req, res) => {
     const canon = (v) => (normalizeTelegramUsername(v) || "").replace(/^@/, "").toLowerCase();
     const tgChanged = hasSocial && canon(newSocialNorm) !== canon(old.social);
 
+    // базовые поля
     const updated = {
       name: req.body.name ?? old.name,
       location: toTextArray(req.body.location, old.location),
@@ -285,40 +290,54 @@ const updateProviderProfile = async (req, res) => {
       languages: normalizeLanguagesISO(req.body.languages, old.languages), // jsonb
     };
 
-    await pool.query(
+    // city_slugs: можно прислать готовые (city_slugs), а можно — только location
+    let incomingSlugs = Array.isArray(req.body.city_slugs)
+      ? req.body.city_slugs.filter(Boolean).map(String)
+      : null;
+
+    if (!incomingSlugs) {
+      // строим из location
+      incomingSlugs = await resolveCitySlugs(pool, updated.location);
+    }
+
+    // формируем UPDATE динамически (как у тебя)
+    const fields = [
+      `name = $1`,
+      `location = $2`,
+      `phone = $3`,
+      `social = $4`,
+      `photo = $5`,
+      `certificate = $6`,
+      `address = $7`,
+      `languages = $8::jsonb`,
+      `city_slugs = $9::text[]`,
+      `telegram_chat_id = CASE WHEN $11::bool THEN NULL ELSE telegram_chat_id END`,
+      `updated_at = NOW()`,
+    ];
+    const values = [
+      updated.name,
+      updated.location,
+      updated.phone,
+      updated.social,
+      updated.photo,
+      updated.certificate,
+      updated.address,
+      JSON.stringify(updated.languages ?? []),
+      incomingSlugs || [],        // $9
+      id,                         // $10 — подставим ниже
+      tgChanged,                  // $11
+    ];
+
+    // обратим внимание: id — это $10, поэтому в запросе используем $10
+    const upd = await pool.query(
       `UPDATE providers
-          SET name=$1,
-              location=$2,
-              phone=$3,
-              social=$4,
-              photo=$5,
-              certificate=$6,
-              address=$7,
-              languages=$8::jsonb,
-              telegram_chat_id = CASE WHEN $10::bool THEN NULL ELSE telegram_chat_id END,
-              updated_at=NOW()
-        WHERE id=$9`,
-      [
-        updated.name,
-        updated.location,
-        updated.phone,
-        updated.social,
-        updated.photo,
-        updated.certificate,
-        updated.address,
-        JSON.stringify(updated.languages ?? []),
-        id,
-        tgChanged,
-      ]
+          SET ${fields.join(", ")}
+        WHERE id = $10
+        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs`,
+      values
     );
 
-    const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
-         FROM providers
-        WHERE id = $1`,
-      [id]
-    );
-    const p = r.rows[0] || null;
+    const p = upd.rows[0] || null;
 
     res.json({
       message: "Профиль обновлён успешно",
@@ -338,6 +357,7 @@ const updateProviderProfile = async (req, res) => {
             tg_chat_id: p.telegram_chat_id || null,
             avatar_url: p.photo || null,
             languages: normalizeLanguagesISO(p.languages ?? []),
+            city_slugs: p.city_slugs || [],
           }
         : null,
     });
@@ -346,6 +366,7 @@ const updateProviderProfile = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 const changeProviderPassword = async (req, res) => {
   try {
@@ -570,6 +591,7 @@ const getProviderPublicById = async (req, res) => {
       photo: row.photo,
       address: row.address,
       languages: normalizeLanguagesISO(row.languages ?? []),
+      city_slugs: row.city_slugs || [],
     });
   } catch (err) {
     console.error("❌ Ошибка getProviderPublicById:", err);
