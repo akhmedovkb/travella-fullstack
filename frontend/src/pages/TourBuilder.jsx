@@ -443,7 +443,7 @@ export default function TourBuilder() {
                     <AsyncSelect
                       isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={false}
+                      defaultOptions={true}
                       loadOptions={makeGuideLoader(k)}
                       components={{ Option: ProviderOption }}
                       placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
@@ -469,7 +469,7 @@ export default function TourBuilder() {
                     <AsyncSelect
                       isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={false}
+                      defaultOptions={true}
                       loadOptions={makeTransportLoader(k)}
                       components={{ Option: ProviderOption }}
                       placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
@@ -495,7 +495,7 @@ export default function TourBuilder() {
                     <AsyncSelect
                       isDisabled={!cityChosen}
                       cacheOptions
-                      defaultOptions={false}
+                      defaultOptions={true}
                       loadOptions={makeHotelLoader(k)}
                       components={{ Option: HotelOption }}
                       placeholder={cityChosen ? "Выберите отель" : "Сначала укажите город"}
