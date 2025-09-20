@@ -733,8 +733,7 @@ const Dashboard = () => {
   const toDate = (v) => (v ? (v instanceof Date ? v : new Date(v)) : undefined);
 
   /** ===== API helpers ===== */
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
+  
   // raw-функция (принимает AbortSignal)
 const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
   try {
@@ -752,7 +751,7 @@ const loadHotelOptionsRaw = useCallback(async (inputValue, signal) => {
   tError(extractApiErrorText(err) || t("hotels_load_error") || "Не удалось загрузить отели");
   return [];
 }
-}, [API_BASE, t]);
+}, [api, t]);
 
 // обёртка с дебаунсом + отменой
 const loadHotelOptions = useDebouncedLoader(loadHotelOptionsRaw, 400);
@@ -862,7 +861,7 @@ const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
 
   const handleConfirmDelete = () => {
     if (!serviceToDelete) return;
-    axios
+      api
       .delete(`/api/providers/services/${serviceToDelete}`)
       .then(() => {
         setServices((prev) => prev.filter((s) => s.id !== serviceToDelete));
