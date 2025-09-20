@@ -1,3 +1,5 @@
+//backend/utils/cities.js
+
 const pool = require("../db");
 
 function toLc(s) { return String(s || "").trim().toLowerCase(); }
