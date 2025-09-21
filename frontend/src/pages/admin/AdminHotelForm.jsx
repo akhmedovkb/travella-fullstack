@@ -331,6 +331,33 @@ export default function AdminHotelForm() {
   const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
   const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
 
+  // --- валидатор строк с ценами ---
+const isFilled = (v) => !(v === "" || v === null || v === undefined);
+
+const rowHasAnyPrice = (row) => {
+  if (!row?.prices) return false;
+  const seasons = ["low", "high"];
+  const persons = ["resident", "nonResident"];
+  for (const season of seasons) {
+    for (const person of persons) {
+      for (const mp of MEAL_PLANS) {
+        if (isFilled(row?.prices?.[season]?.[person]?.[mp])) return true;
+      }
+    }
+  }
+  return false;
+};
+
+// id строк с ценами, но без указания количества
+const invalidRowIds = useMemo(
+  () =>
+    roomRows
+      .filter((r) => Number(r.count || 0) === 0 && rowHasAnyPrice(r))
+      .map((r) => r.id),
+  [roomRows]
+);
+
+
   // стили для ячеек по сезону (LR белый, HR бледно-серый)
   const tdCls = (season, extra = "") =>
     `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
@@ -775,7 +802,10 @@ export default function AdminHotelForm() {
           </thead>
           <tbody>
             {roomRows.map((row) => (
-              <tr key={row.id} className="border-t">
+              <tr
+                id={`row-${row.id}`}
+                className={`border-t ${invalidRowIds.includes(row.id) ? "bg-red-50/40" : ""}`}
+              >
                 <td className="px-3 py-2">
                   {row.builtin ? (
                     row.name
@@ -796,6 +826,10 @@ export default function AdminHotelForm() {
                     value={row.count}
                     onChange={(e) => updateRow(row.id, { count: e.target.value })}
                   />
+                  {invalidRowIds.includes(row.id) && (
+                  <div className="text-xs text-red-600 mt-1">
+                    Укажите количество комнат, иначе цены не сохранятся
+                  </div>
                 </td>
 
                 {/* low / resident */}
