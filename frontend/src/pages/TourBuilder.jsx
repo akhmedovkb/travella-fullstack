@@ -4,7 +4,7 @@ import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import pickProviderService from "../utils/pickProviderService";
+import { pickProviderService } from "../utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
