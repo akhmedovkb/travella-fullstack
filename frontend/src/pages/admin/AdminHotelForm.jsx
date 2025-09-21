@@ -330,24 +330,7 @@ export default function AdminHotelForm() {
   // Наборы питания: BB, HB, FB, AI, UAI
   const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
   const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
-
   
-// id строк с ценами, но без указания количества
-const invalidRowIds = useMemo(
-  () =>
-    roomRows
-      .filter((r) => Number(r.count || 0) === 0 && rowHasAnyPrice(r))
-      .map((r) => r.id),
-  [roomRows]
-);
-
-
-  // стили для ячеек по сезону (LR белый, HR бледно-серый)
-  const tdCls = (season, extra = "") =>
-    `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
-  const inputCls = (season) =>
-    `w-28 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
-
   // Номера + сезонные цены
   const blankRow = (base) => ({
     ...base,
@@ -379,6 +362,22 @@ const rowHasAnyPrice = (row) => {
   }
   return false;
 };
+  
+// id строк с ценами, но без указания количества
+const invalidRowIds = useMemo(
+  () =>
+    roomRows
+      .filter((r) => Number(r.count || 0) === 0 && rowHasAnyPrice(r))
+      .map((r) => r.id),
+  [roomRows]
+);
+
+
+  // стили для ячеек по сезону (LR белый, HR бледно-серый)
+  const tdCls = (season, extra = "") =>
+    `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
+  const inputCls = (season) =>
+    `w-28 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
 
   // Доп. место
   const [extraBedPrice, setExtraBedPrice] = useState("");
