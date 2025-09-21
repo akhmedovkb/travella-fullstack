@@ -24,14 +24,21 @@ const TRANSPORT_ALLOWED = [
 ];
 
 const fetchJSON = async (url, opts = {}) => {
+  const tok =
+    (typeof localStorage !== "undefined" && (localStorage.getItem("token") || localStorage.getItem("providerToken"))) || "";
   const r = await fetch(url, {
     ...opts,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    credentials: "include", // cookie, если используются
+    headers: {
+      "Content-Type": "application/json",
+      ...(tok ? { Authorization: `Bearer ${tok}` } : {}), // ⬅️ Bearer, если есть
+      ...(opts.headers || {}),
+    },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.status === 204 ? null : r.json();
 };
+
 
 export default function ProviderServicesCard({ providerId, providerType = "guide", currencyDefault = "USD" }) {
   const [list, setList] = useState([]);
