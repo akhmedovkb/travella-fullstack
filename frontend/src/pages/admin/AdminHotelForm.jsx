@@ -838,6 +838,7 @@ const invalidRowIds = useMemo(
                   <div className="text-xs text-red-600 mt-1">
                     Укажите количество комнат, иначе цены не сохранятся
                   </div>
+                </div>
                 </td>
 
                 {/* low / resident */}
