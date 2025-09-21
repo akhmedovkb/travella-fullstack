@@ -5,7 +5,6 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
 
-
 // ---------- Helpers ----------
 
 // ISO-639-1: приводим любые названия/коды к массиву кодов ["ru","en","uz"]
@@ -63,6 +62,16 @@ const EXT_CATS = new Set([
 ]);
 const isExtendedCategory = (cat) => EXT_CATS.has(String(cat || ""));
 
+// Транспортные категории — только здесь допускаем details.seats
+const TRANSPORT_CATS = new Set([
+  "city_tour_transport",
+  "mountain_tour_transport",
+  "one_way_transfer",
+  "dinner_transfer",
+  "border_transfer",
+]);
+const isTransportCategory = (cat) => TRANSPORT_CATS.has(String(cat || ""));
+
 function toArray(val) {
   if (!val) return [];
   if (Array.isArray(val)) return val;
@@ -82,34 +91,89 @@ const sanitizeImages = (images) =>
     .filter(Boolean)
     .slice(0, 20);
 
-function normalizeServicePayload(body) {
-  const { title, description, price, category, images, availability, details } = body || {};
-  // ... как у вас ...
+// Нормализатор чисел «как с фронта»: "1 200,50" -> 1200.5
+function parseMoneySafe(v) {
+  if (v === null || v === undefined) return NaN;
+  let s = String(v).trim();
+  if (!s) return NaN;
+  s = s.replace(/\s+/g, "");
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  if (hasComma && hasDot) s = s.replace(/\./g, "");
+  s = s.replace(/,/g, ".");
+  s = s.replace(/\.(?=.*\.)/g, "");
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Главное: единая и безопасная нормализация входа сервиса
+function normalizeServicePayload(body = {}) {
+  const { title, description, price, category, images, availability, details } = body;
+
+  const titleStr = String(title ?? "").trim();
+  const descStr = typeof description === "string" ? description : "";
+  const catStr = String(category ?? "").trim();
+
+  let priceNum = null;
+  if (price !== undefined && price !== null && String(price).trim() !== "") {
+    const p = parseMoneySafe(price);
+    priceNum = Number.isFinite(p) ? p : null;
+  }
+
+  const imagesArr = sanitizeImages(images);
+  const availabilityArr = toArray(availability);
 
   let detailsObj = null;
   if (details) {
     if (typeof details === "string") {
-      try { detailsObj = JSON.parse(details); } catch { detailsObj = { value: String(details) }; }
+      try {
+        detailsObj = JSON.parse(details);
+      } catch {
+        detailsObj = { value: String(details) };
+      }
     } else if (typeof details === "object") {
-      detailsObj = details;
+      detailsObj = { ...details };
     }
   }
 
-  // ⬇️ аккуратно нормализуем seats, если прислали
+  // seats — только у транспорта
   if (detailsObj && Object.prototype.hasOwnProperty.call(detailsObj, "seats")) {
-    const n = Number(detailsObj.seats);
-    if (Number.isFinite(n) && n > 0) {
-      detailsObj.seats = Math.trunc(n);
+    if (isTransportCategory(catStr)) {
+      const n = Number(detailsObj.seats);
+      if (Number.isFinite(n) && n > 0) {
+        detailsObj.seats = Math.trunc(n);
+      } else {
+        delete detailsObj.seats;
+      }
     } else {
-      delete detailsObj.seats; // не валидное — просто выбросим
+      delete detailsObj.seats;
     }
   }
 
-  // ...остальное без изменений...
+  // Нормализуем цены в details (если пришли строками)
+  if (detailsObj) {
+    for (const k of ["netPrice", "grossPrice"]) {
+      if (detailsObj[k] !== undefined && detailsObj[k] !== null && String(detailsObj[k]).trim() !== "") {
+        const n = parseMoneySafe(detailsObj[k]);
+        if (Number.isFinite(n)) detailsObj[k] = n;
+      }
+    }
+    // expiration_ts допускаем в секундах/миллисекундах/ISO
+    if (detailsObj.expiration_ts !== undefined) {
+      let ts = Number(detailsObj.expiration_ts);
+      if (Number.isFinite(ts)) {
+        if (ts < 1e12) ts = Math.floor(ts) * 1000; // секунды -> мс
+        detailsObj.expiration_ts = Math.floor(ts / 1000); // в БД храним секунды
+      } else {
+        delete detailsObj.expiration_ts;
+      }
+    }
+  }
+
   return {
     title: titleStr,
     descriptionStr: descStr,
-    priceNum: Number.isFinite(priceNum) ? priceNum : null,
+    priceNum,
     category: catStr,
     imagesArr,
     availabilityArr,
@@ -178,7 +242,6 @@ const loginProvider = async (req, res) => {
     const payload = { id: row.id, role: "provider", is_admin: isAdmin };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-
     res.json({
       message: "Вход успешен",
       provider: {
@@ -212,7 +275,7 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, is_admin, city_slugs
        FROM providers WHERE id = $1`,
       [id]
     );
@@ -297,7 +360,7 @@ const updateProviderProfile = async (req, res) => {
       incomingSlugs = await resolveCitySlugs(pool, updated.location);
     }
 
-    // формируем UPDATE динамически (как у тебя)
+    // формируем UPDATE динамически
     const fields = [
       `name = $1`,
       `location = $2`,
@@ -325,12 +388,11 @@ const updateProviderProfile = async (req, res) => {
       tgChanged,                  // $11
     ];
 
-    // обратим внимание: id — это $10, поэтому в запросе используем $10
     const upd = await pool.query(
       `UPDATE providers
           SET ${fields.join(", ")}
         WHERE id = $10
-        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs`,
+        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs, is_admin`,
       values
     );
 
@@ -355,6 +417,7 @@ const updateProviderProfile = async (req, res) => {
             avatar_url: p.photo || null,
             languages: normalizeLanguagesISO(p.languages ?? []),
             city_slugs: p.city_slugs || [],
+            is_admin: p.is_admin === true,
           }
         : null,
     });
@@ -363,7 +426,6 @@ const updateProviderProfile = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
 
 const changeProviderPassword = async (req, res) => {
   try {
@@ -453,7 +515,6 @@ const updateService = async (req, res) => {
 
     // 2) Правила редактирования по статусу
     if (currentStatus === "pending") {
-      // На модерации редактировать запрещаем (чтобы модерация имела смысл)
       return res.status(409).json({
         message: "Услуга на модерации. Дождитесь решения или снимите с модерации.",
         code: "SERVICE_PENDING",
@@ -461,7 +522,6 @@ const updateService = async (req, res) => {
     }
 
     if (currentStatus === "published" || currentStatus === "rejected") {
-      // Любые правки по опубликованной/отклонённой — это новый черновик
       await pool.query(
         `UPDATE services
             SET status='draft',
@@ -518,14 +578,12 @@ const updateService = async (req, res) => {
       return res.status(404).json({ message: "Услуга не найдена" });
     }
 
-    // В rows[0] уже будет статус (включая 'draft', если мы его демотировали выше)
     return res.json(upd.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка обновления услуги:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
-
 
 const deleteService = async (req, res) => {
   try {
@@ -570,7 +628,7 @@ const getProviderPublicById = async (req, res) => {
   try {
     const id = Number(req.params.id);
     const r = await pool.query(
-      `SELECT id, name, type, location, phone, social, photo, address, languages
+      `SELECT id, name, type, location, phone, social, photo, address, languages, city_slugs
          FROM providers
         WHERE id=$1`,
       [id]
