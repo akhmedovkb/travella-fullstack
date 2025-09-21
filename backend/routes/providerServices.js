@@ -1,4 +1,4 @@
-// server/routes/providerServices.js
+// backend/routes/providerServices.js
 const express = require('express');
 const router = express.Router();
 const db = require('../db'); // ваш pool из pg
