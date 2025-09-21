@@ -18,6 +18,29 @@ const toYMD = (d) => {
 };
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
+/* ---------------- categories / labels (для выпадашек услуг) ---------------- */
+const CATEGORY_LABELS = {
+  // guide
+  city_tour_guide: "Тур по городу",
+  mountain_tour_guide: "Тур в горы",
+  meet: "Встреча",
+  seeoff: "Провод",
+  translation: "Перевод",
+  // transport
+  city_tour_transport: "Тур по городу",
+  mountain_tour_transport: "Тур в горы",
+  one_way_transfer: "Трансфер в одну сторону",
+  dinner_transfer: "Трансфер на ужин",
+  border_transfer: "Междугородний/погран. трансфер",
+};
++const GUIDE_ALLOWED = new Set([
++  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
++]);
++const TRANSPORT_ALLOWED = new Set([
++  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
++]);
++
+
 /* ---------------- Day kind (на будущее для entry) ---------------- */
 const dkey = (d) => toYMD(new Date(d));
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
@@ -62,6 +85,22 @@ const normalizeProvider = (row, kind) => ({
   telegram: row.telegram || row.social || row.telegram_handle || "",
 });
 
+const normalizeService = (row) => {
+  const details = row?.details || {};
+  const price =
+    Number(details.grossPrice) || Number(row?.price) || 0;
+  const currency = details.currency || row?.currency || "USD";
+  return {
+    id: row?.id ?? row?._id ?? String(Math.random()),
+    title: row?.title || CATEGORY_LABELS[row?.category] || "Услуга",
+    category: row?.category || "",
+    price: toNum(price, 0),
+    currency,
+    raw: row,
+  };
+};
+
+
 async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
   // Пробуем строго /available
   try {
@@ -82,6 +121,16 @@ async function fetchProvidersSmart({ kind, city, date, language, q = "", limit =
     } catch {
       return [];
     }
+  }
+}
+
+async function fetchProviderServices(providerId) {
+  try {
+    const j = await fetchJSON(`/api/providers/${providerId}/services`);
+    const arr = Array.isArray(j) ? j : Array.isArray(j?.items) ? j.items : [];
+    return arr.map(normalizeService);
+  } catch {
+    return [];
   }
 }
 
@@ -258,7 +307,12 @@ export default function TourBuilder() {
       const copy = { ...prev };
       days.forEach((d) => {
         const k = toYMD(d);
-        if (!copy[k]) copy[k] = { city: "", guide: null, transport: null, hotel: null, entrySelected: [] };
+                if (!copy[k]) copy[k] = {
+          city: "",
+          guide: null, transport: null, hotel: null,
+          guideService: null, transportService: null,   // ⬅️ выбранные услуги
+          entrySelected: [],
+        };
       });
       Object.keys(copy).forEach((k) => {
         if (!days.find((d) => toYMD(d) === k)) delete copy[k];
@@ -266,6 +320,19 @@ export default function TourBuilder() {
       return copy;
     });
   }, [days]);
+
+    /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
+  const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
+  const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
+  const ensureServicesLoaded = async (provider) => {
+    const pid = provider?.id;
+    if (!pid || servicesCache[pid] || servicesLoading[pid]) return;
+    setServicesLoading((m) => ({ ...m, [pid]: true }));
+    const list = await fetchProviderServices(pid);
+    setServicesCache((m) => ({ ...m, [pid]: list }));
+    setServicesLoading((m) => ({ ...m, [pid]: false }));
+  };
+
 
   /* ----- Entry fees: поиск теперь ПО-ДНЯМ (city+date) ----- */
   const [entryQMap, setEntryQMap] = useState({});            // {dateKey: query}
@@ -340,8 +407,15 @@ const makeHotelLoader = (dateKey) => async (input) => {
     return sum;
   };
 
-  const calcGuideForDay = (dateKey) => toNum(byDay[dateKey]?.guide?.price_per_day, 0);
-  const calcTransportForDay = (dateKey) => toNum(byDay[dateKey]?.transport?.price_per_day, 0);
+    const calcGuideForDay = (dateKey) => {
+    const st = byDay[dateKey] || {};
+    // приоритет: выбранная услуга гида -> ставка провайдера
+    return toNum(st?.guideService?.price, toNum(st?.guide?.price_per_day, 0));
+  };
+  const calcTransportForDay = (dateKey) => {
+    const st = byDay[dateKey] || {};
+    return toNum(st?.transportService?.price, toNum(st?.transport?.price_per_day, 0));
+  };
   const calcHotelForDay = (dateKey) => toNum(byDay[dateKey]?.hotel?.price, 0);
 
   const totals = useMemo(() => {
@@ -455,7 +529,11 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
-                        onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], guide: opt?.raw || null } }))}
+                        onChange={async (opt) => {
+                          const guide = opt?.raw || null;
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
+                          await ensureServicesLoaded(guide);
+                        }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
                         styles={{
@@ -464,8 +542,31 @@ const makeHotelLoader = (dateKey) => async (input) => {
                           menuList: (b) => ({ ...b, overflow: "visible" }),
                         }}
                       />
+                                        {/* выпадашка услуг гида */}
+                    <select
+                      className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
+                      disabled={!st.guide}
+                      value={st.guideService?.id || ""}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        const list = servicesCache[st.guide?.id] || [];
+                        const allowed = list.filter(s => GUIDE_ALLOWED.has(s.category) && s.price > 0);
+                        const chosen = allowed.find(s => String(s.id) === selId) || null;
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
+                      }}
+                    >
+                      <option value="">Выберите услугу гида…</option>
+                      {(servicesCache[st.guide?.id] || [])
+                        .filter(s => GUIDE_ALLOWED.has(s.category) && s.price > 0)
+                        .sort((a,b) => a.price - b.price)
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {(s.title || CATEGORY_LABELS[s.category] || "Услуга")} — {s.price.toFixed(2)} {s.currency}
+                          </option>
+                        ))}
+                    </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {toNum(st.guide?.price_per_day, 0).toFixed(2)} {st.guide?.currency || "USD"}
+                      Цена/день: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "USD")}
                     </div>
                   </div>
 
@@ -483,7 +584,11 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
-                        onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], transport: opt?.raw || null } }))}
+                        onChange={async (opt) => {
+                          const transport = opt?.raw || null;
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
+                          await ensureServicesLoaded(transport);
+                          }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
                         styles={{
@@ -492,8 +597,31 @@ const makeHotelLoader = (dateKey) => async (input) => {
                           menuList: (b) => ({ ...b, overflow: "visible" }),
                         }}
                       />
+                                        {/* выпадашка услуг транспорта */}
+                    <select
+                      className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
+                      disabled={!st.transport}
+                      value={st.transportService?.id || ""}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        const list = servicesCache[st.transport?.id] || [];
+                        const allowed = list.filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0);
+                        const chosen = allowed.find(s => String(s.id) === selId) || null;
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
+                      }}
+                    >
+                      <option value="">Выберите услугу транспорта…</option>
+                      {(servicesCache[st.transport?.id] || [])
+                        .filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0)
+                        .sort((a,b) => a.price - b.price)
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {(s.title || CATEGORY_LABELS[s.category] || "Услуга")} — {s.price.toFixed(2)} {s.currency}
+                          </option>
+                        ))}
+                    </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {toNum(st.transport?.price_per_day, 0).toFixed(2)} {st.transport?.currency || "USD"}
+                      Цена/день: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "USD")}
                     </div>
                   </div>
 
