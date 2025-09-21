@@ -830,15 +830,15 @@ const invalidRowIds = useMemo(
                   <input
                     type="number"
                     min={0}
-                    className="w-24 border rounded px-2 py-1"
+                    className={`w-24 border rounded px-2 py-1 ${invalidRowIds.includes(row.id) ? "border-red-400" : ""}`}
                     value={row.count}
                     onChange={(e) => updateRow(row.id, { count: e.target.value })}
                   />
                   {invalidRowIds.includes(row.id) && (
-                  <div className="text-xs text-red-600 mt-1">
-                    Укажите количество комнат, иначе цены не сохранятся
-                  </div>
-                </div>
+                    <div className="text-xs text-red-600 mt-1">
+                      Укажите количество комнат, иначе цены не сохранятся
+                    </div>
+                  )}
                 </td>
 
                 {/* low / resident */}
