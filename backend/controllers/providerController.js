@@ -399,7 +399,7 @@ const updateProviderProfile = async (req, res) => {
       `languages = $8::jsonb`,
       `city_slugs = $9::text[]`,
       `car_fleet = $10::jsonb`,
-      `telegram_chat_id = CASE WHEN $11::bool THEN NULL ELSE telegram_chat_id END`,
+      `telegram_chat_id = CASE WHEN $12::bool THEN NULL ELSE telegram_chat_id END`,
       `updated_at = NOW()`,
     ];
     const values = [
@@ -413,8 +413,8 @@ const updateProviderProfile = async (req, res) => {
       JSON.stringify(updated.languages ?? []),
       incomingSlugs || [],        // $9
       JSON.stringify(nextFleet || []), // $10
-      id,                               // $11 — подставим ниже в WHERE
-      tgChanged,                        // $12
+      id,                              // $11 — WHERE id = $11
+      tgChanged,                       // $12 — для CASE WHEN $12::bool
     ];
 
     const upd = await pool.query(
