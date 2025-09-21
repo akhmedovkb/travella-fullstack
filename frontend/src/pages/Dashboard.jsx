@@ -12,6 +12,7 @@ import ProviderReviews from "../components/ProviderReviews";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
+import ProviderServicesCard from "../components/ProviderServicesCard";
 
 /** ================= Helpers ================= */
 
@@ -1662,6 +1663,17 @@ useEffect(() => {
        
         {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
+          
+          {/* === Прайс-лист для TourBuilder (guide/transport) === */}
+          {(profile.type === "guide" || profile.type === "transport") && profile?.id && (
+            <div className="mb-6">
+              <ProviderServicesCard
+                providerId={profile.id}
+                providerType={profile.type}              // 'guide' или 'transport'
+                currencyDefault={profile.currency || 'USD'}
+              />
+            </div>
+          )}
                     {/* Delete confirm modal */}
           {deleteConfirmOpen && (
             <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/40">
