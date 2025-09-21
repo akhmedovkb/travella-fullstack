@@ -4,6 +4,7 @@ import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { pickProviderService } from "@/utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -40,6 +41,10 @@ const GUIDE_ALLOWED = new Set([
 const TRANSPORT_ALLOWED = new Set([
   "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
 ]);
+
+// массивы для утилиты подбора
+const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","meet","seeoff","translation"];
+const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
 
 
 /* ---------------- Day kind (на будущее для entry) ---------------- */
@@ -363,6 +368,46 @@ export default function TourBuilder() {
     setServicesLoading((m) => ({ ...m, [pid]: false }));
   };
 
+    // вспомогательная: выбрать услугу по rules и вернуть НОРМАЛИЗОВАННЫЙ объект из кеша
+  const pickFromCache = (providerId, categoriesArr, citySlug, pax) => {
+    const list = servicesCache[providerId] || [];
+    if (!list.length) return null;
+    // pickProviderService ожидает "сырые" услуги с details; мы сохранили их в .raw
+    const rawPool = list.map((x) => x.raw || x);
+    const picked = pickProviderService(rawPool, {
+      citySlug,
+      pax,
+      categories: categoriesArr,
+    });
+    if (!picked) return null;
+    const normalized = list.find((s) => String(s.id) === String(picked.id));
+    return normalized || null;
+  };
+
+  // автоподбор по конкретному дню
+  const autoPickForDay = (dateKey) => {
+    setByDay((prev) => {
+      const st = prev[dateKey] || {};
+      const citySlug = st.city || "";
+      const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+      let next = { ...st };
+
+      if (st.guide && servicesCache[st.guide.id]) {
+        const chosen = pickFromCache(st.guide.id, GUIDE_ALLOWED_ARR, citySlug, pax);
+        if (chosen && (!st.guideService || String(st.guideService.id) !== String(chosen.id))) {
+          next.guideService = chosen;
+        }
+      }
+      if (st.transport && servicesCache[st.transport.id]) {
+        const chosenT = pickFromCache(st.transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
+        if (chosenT && (!st.transportService || String(st.transportService.id) !== String(chosenT.id))) {
+          next.transportService = chosenT;
+        }
+      }
+      if (next === st) return prev; // без изменений
+      return { ...prev, [dateKey]: next };
+    });
+  };
 
   /* ----- Entry fees: поиск теперь ПО-ДНЯМ (city+date) ----- */
   const [entryQMap, setEntryQMap] = useState({});            // {dateKey: query}
@@ -539,6 +584,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       // обновим опции билетов под новый city
                       setEntryQMap((m) => ({ ...m, [k]: "" }));
                       loadEntryOptionsForDay(k, city, "");
+                      // при смене города сбросили поставщиков; автоподбор произойдёт после выбора
                     }}
                   />
                   <div className="text-sm text-gray-500">{k}</div>
@@ -563,6 +609,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                           const guide = opt?.raw || null;
                           setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
                           await ensureServicesLoaded(guide);
+                          // автоподбор услуги гида под текущие город/PAX
+                          if (guide) autoPickForDay(k)
                         }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
@@ -624,6 +672,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                           const transport = opt?.raw || null;
                           setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
                           await ensureServicesLoaded(transport);
+                          // автоподбор услуги транспорта под текущие город/PAX
+                          if (transport) autoPickForDay(k);
                           }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
@@ -737,6 +787,15 @@ const makeHotelLoader = (dateKey) => async (input) => {
             );
           })}
         </div>
+              {/* глобальные эффекты автоподбора на смену PAX и загрузку услуг */}
+      <EffectAutoPick
+        days={days}
+        byDay={byDay}
+        adt={adt}
+        chd={chd}
+        servicesCache={servicesCache}
+        onRecalc={autoPickForDay}
+      />
 
         <div className="grid md:grid-cols-5 gap-3 text-sm">
           <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Гид (нетто)</div><div>{totals.guide.toFixed(2)} USD</div></div>
@@ -753,3 +812,25 @@ const makeHotelLoader = (dateKey) => async (input) => {
     </div>
   );
 }
+
+
+/* --- выносим небольшой эффект, чтобы не засорять основной компонент --- */
+function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
+  useEffect(() => {
+    const pax = Math.max(1, Number(adt) + Number(chd));
+    // при изменении PAX или при появлении услуг в кешах — пробегаемся по дням
+    for (const d of days) {
+      const k = toYMD(d);
+      const st = byDay[k] || {};
+      if (!st.city) continue;
+      // пересчитываем только если для выбранного провайдера уже подгружены услуги
+      const readyGuide = st.guide && servicesCache[st.guide.id];
+      const readyTransport = st.transport && servicesCache[st.transport.id];
+      if (readyGuide || readyTransport) onRecalc(k);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adt, chd, servicesCache, days.map((d) => toYMD(d)).join("|")]);
+  return null;
+}
+
+
