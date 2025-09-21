@@ -54,7 +54,8 @@ async function listProviderServices(req, res) {
       return res.status(400).json({ message: "Bad providerId" });
 
     const q = await pool.query(
-      `SELECT id, provider_id, category, title, price, currency, is_active, details
+           `SELECT id, provider_id, category, title, price, currency, is_active,
+              COALESCE(details, '{}'::jsonb) AS details
          FROM provider_services
         WHERE provider_id = $1
         ORDER BY id DESC`,
