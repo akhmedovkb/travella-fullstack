@@ -576,6 +576,14 @@ const invalidRowIds = useMemo(
 
   /* ---------- Submit ---------- */
   const submit = async () => {
+    // Страж: есть цены, но не указано "Кол-во"
+    if (invalidRowIds.length > 0) {
+      tError("Есть строки с ценами, но без количества. Заполните «Кол-во» или очистите цены.");
+      // проскроллим к первой проблемной строке
+      const el = document.getElementById(`row-${invalidRowIds[0]}`);
+      if (el?.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (!name.trim())    return tError(t("enter_hotel_name") || "Введите название");
     if (!countryOpt)     return tError(t("select_country") || "Укажите страну");
     if (!address.trim()) return tError(t("enter_address") || "Укажите адрес");
