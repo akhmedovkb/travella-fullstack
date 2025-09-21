@@ -91,6 +91,26 @@ const sanitizeImages = (images) =>
     .filter(Boolean)
     .slice(0, 20);
 
+
+// ---------------- Cars in provider profile (no new table) ----------------
+function normalizeCarFleet(input) {
+  // ожидаем массив объектов: [{model, seats, images?, is_active?}, ...]
+  const arr = Array.isArray(input) ? input : [];
+  const out = [];
+  for (const it of arr) {
+    if (!it || typeof it !== "object") continue;
+    const model = String(it.model || "").trim();
+    const seatsNum = Number(it.seats);
+    const seats = Number.isInteger(seatsNum) && seatsNum > 0 ? seatsNum : null;
+    if (!model || !seats) continue;
+    const images = sanitizeImages(it.images);
+    const is_active = it.is_active === false ? false : true;
+    out.push({ model, seats, images, is_active });
+    if (out.length >= 10) break; // ограничим до 10 машин на профиль
+  }
+  return out;
+}
+
 // Нормализатор чисел «как с фронта»: "1 200,50" -> 1200.5
 function parseMoneySafe(v) {
   if (v === null || v === undefined) return NaN;
@@ -261,6 +281,7 @@ const loginProvider = async (req, res) => {
         role: "provider",
         is_admin: row.is_admin === true,
         city_slugs: row.city_slugs || [],
+        car_fleet: Array.isArray(row.car_fleet) ? row.car_fleet : [],
       },
       token,
     });
@@ -275,7 +296,7 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, is_admin, city_slugs
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, is_admin, city_slugs, car_fleet
        FROM providers WHERE id = $1`,
       [id]
     );
@@ -300,6 +321,7 @@ const getProviderProfile = async (req, res) => {
       role: "provider",
       is_admin: p.is_admin === true,
       city_slugs: p.city_slugs || [],
+      car_fleet: Array.isArray(p.car_fleet) ? p.car_fleet : [],
     });
   } catch (err) {
     console.error("❌ Ошибка получения профиля:", err);
@@ -313,7 +335,7 @@ const updateProviderProfile = async (req, res) => {
 
     // читаем текущее состояние
     const oldQ = await pool.query(
-      `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id, city_slugs
+      `SELECT name, location, phone, social, photo, certificate, address, languages, telegram_chat_id, city_slugs, car_fleet
          FROM providers
         WHERE id = $1`,
       [id]
@@ -350,6 +372,11 @@ const updateProviderProfile = async (req, res) => {
       languages: normalizeLanguagesISO(req.body.languages, old.languages), // jsonb
     };
 
+        // car_fleet (массив авто) — опционально; если не прислали, оставляем как было
+    const hasFleet = Object.prototype.hasOwnProperty.call(req.body || {}, "car_fleet");
+    const nextFleet = hasFleet ? normalizeCarFleet(req.body.car_fleet) : (old.car_fleet || []);
+
+
     // city_slugs: можно прислать готовые (city_slugs), а можно — только location
     let incomingSlugs = Array.isArray(req.body.city_slugs)
       ? req.body.city_slugs.filter(Boolean).map(String)
@@ -371,6 +398,7 @@ const updateProviderProfile = async (req, res) => {
       `address = $7`,
       `languages = $8::jsonb`,
       `city_slugs = $9::text[]`,
+      `car_fleet = $10::jsonb`,
       `telegram_chat_id = CASE WHEN $11::bool THEN NULL ELSE telegram_chat_id END`,
       `updated_at = NOW()`,
     ];
@@ -384,15 +412,16 @@ const updateProviderProfile = async (req, res) => {
       updated.address,
       JSON.stringify(updated.languages ?? []),
       incomingSlugs || [],        // $9
-      id,                         // $10 — подставим ниже
-      tgChanged,                  // $11
+      JSON.stringify(nextFleet || []), // $10
+      id,                               // $11 — подставим ниже в WHERE
+      tgChanged,                        // $12
     ];
 
     const upd = await pool.query(
       `UPDATE providers
           SET ${fields.join(", ")}
-        WHERE id = $10
-        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs, is_admin`,
+        WHERE id = $11
+        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs, car_fleet, is_admin`,
       values
     );
 
@@ -417,6 +446,7 @@ const updateProviderProfile = async (req, res) => {
             avatar_url: p.photo || null,
             languages: normalizeLanguagesISO(p.languages ?? []),
             city_slugs: p.city_slugs || [],
+            car_fleet: Array.isArray(p.car_fleet) ? p.car_fleet : [],
             is_admin: p.is_admin === true,
           }
         : null,
