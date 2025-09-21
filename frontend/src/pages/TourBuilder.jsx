@@ -4,7 +4,7 @@ import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { pickProviderService } from "@/utils/pickProviderService";
+import { pickProviderService } from "../utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -41,6 +41,13 @@ const GUIDE_ALLOWED = new Set([
 const TRANSPORT_ALLOWED = new Set([
   "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
 ]);
+
+// helper: вместимость
+const serviceSeats = (s) =>
+  Number(s?.raw?.details?.seats ?? s?.details?.seats ?? 0);
+const fitsPax = (s, pax) =>
+  GUIDE_ALLOWED.has(s.category) ? true :
+  TRANSPORT_ALLOWED.has(s.category) ? serviceSeats(s) >= pax : true;
 
 // массивы для утилиты подбора
 const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","meet","seeoff","translation"];
@@ -376,11 +383,14 @@ export default function TourBuilder() {
   const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
   const ensureServicesLoaded = async (provider) => {
     const pid = provider?.id;
-    if (!pid || servicesCache[pid] || servicesLoading[pid]) return;
+        if (!pid) return [];
+    if (servicesCache[pid]) return servicesCache[pid];
+    if (servicesLoading[pid]) return [];
     setServicesLoading((m) => ({ ...m, [pid]: true }));
     const list = await fetchProviderServices(pid);
     setServicesCache((m) => ({ ...m, [pid]: list }));
     setServicesLoading((m) => ({ ...m, [pid]: false }));
+    return list;
   };
 
     // вспомогательная: выбрать услугу по rules и вернуть НОРМАЛИЗОВАННЫЙ объект из кеша
@@ -530,6 +540,26 @@ const makeHotelLoader = (dateKey) => async (input) => {
     return { guide, transport, hotel, entries, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType]);
 
+    // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
+  useEffect(() => {
+    const pax = Math.max(1, toNum(adt) + toNum(chd));
+    setByDay((prev) => {
+      const copy = { ...prev };
+      Object.keys(copy).forEach((k) => {
+        const st = copy[k] || {};
+        if (st.transportService && !fitsPax(st.transportService, pax)) {
+          copy[k] = { ...st, transportService: null };
+        }
+        if (st.guideService && TRANSPORT_ALLOWED.has(st.guideService.category) &&
+            !fitsPax(st.guideService, pax)) {
+          copy[k] = { ...copy[k], guideService: null };
+        }
+      });
+      return copy;
+    });
+  }, [adt, chd]);
+
+
   /* ---------------- render ---------------- */
   return (
     <div className="p-6">
@@ -631,8 +661,18 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                         onChange={async (opt) => {
                           const guide = opt?.raw || null;
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
-                          await ensureServicesLoaded(guide);
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
+                        const list = await ensureServicesLoaded(guide);
+                        const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        // пробуем сразу подобрать лучшую (в т.ч. гид+транспорт)
+                        const picked = pickProviderService(list, {
+                          role: "guide",
+                          pax,
+                          city: (byDay[k]?.city || "").trim(),
+                        });
+                        if (picked) {
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: picked } }));
+                        }
                           // автоподбор услуги гида под текущие город/PAX
                           if (guide) autoPickForDay(k)
                         }}
@@ -652,19 +692,28 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.guide?.id] || [];
-                                                const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+                        const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
                         // если нет отдельного транспорта — показываем и “гид+транспорт”
+                        const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        // показываем обычные услуги гида + гид+транспорт, но только если вместимость >= PAX
                         const allowed = list
-                          .filter(s => (GUIDE_ALLOWED.has(s.category) || (!st.transport && TRANSPORT_ALLOWED.has(s.category))))
-                          .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, pax));
+                          .filter(s =>
+                            s.price > 0 &&
+                            (GUIDE_ALLOWED.has(s.category) ||
+                             (TRANSPORT_ALLOWED.has(s.category) && fitsPax(s, pax)))
+                          );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
                       }}
                     >
                       <option value="">Выберите услугу гида…</option>
-                                            {(servicesCache[st.guide?.id] || [])
-                        .filter(s => (GUIDE_ALLOWED.has(s.category) || (!st.transport && TRANSPORT_ALLOWED.has(s.category))))
-                        .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, Math.max(1, toNum(adt,0)+toNum(chd,0))))
+                      {(servicesCache[st.guide?.id] || [])
+                        .filter(s => {
+                          const pax = Math.max(1, toNum(adt) + toNum(chd));
+                          if (GUIDE_ALLOWED.has(s.category)) return s.price > 0;
+                          if (TRANSPORT_ALLOWED.has(s.category)) return s.price > 0 && fitsPax(s, pax);
+                          return false;
+                        })
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
@@ -699,10 +748,17 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
                           const transport = opt?.raw || null;
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
-                          await ensureServicesLoaded(transport);
-                          // автоподбор услуги транспорта под текущие город/PAX
-                          if (transport) autoPickForDay(k);
+                        setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
+                        const list = await ensureServicesLoaded(transport);
+                        const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        const picked = pickProviderService(list, {
+                          role: "transport",
+                          pax,
+                          city: (byDay[k]?.city || "").trim(),
+                        });
+                        if (picked) {
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
+                        }
                           }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
@@ -720,18 +776,17 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.transport?.id] || [];
-                                                const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
-                        const allowed = list
-                          .filter(s => TRANSPORT_ALLOWED.has(s.category))
-                          .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, pax));
+                        const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        const allowed = list.filter(
+                          s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0 && fitsPax(s, pax)
+                        );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
                       }}
                     >
                       <option value="">Выберите услугу транспорта…</option>
                       {(servicesCache[st.transport?.id] || [])
-                        .filter(s => TRANSPORT_ALLOWED.has(s.category))
-                        .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, Math.max(1, toNum(adt,0)+toNum(chd,0)))))
+                        .filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0 && fitsPax(s, Math.max(1, toNum(adt) + toNum(chd))))
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
