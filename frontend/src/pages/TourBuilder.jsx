@@ -136,12 +136,16 @@ async function fetchProvidersSmart({ kind, city, date, language, q = "", limit =
 async function fetchProviderServices(providerId) {
   if (!providerId) return [];
 
-  // 1) самый очевидный вариант (если ты его добавишь на бэке)
-  let j = await fetchJSONLoose(`/api/providers/${providerId}/services`);
+  // 1) пробуем публичный список (без токена)
+  let j = await fetchJSONLoose(`/api/providers/${providerId}/services/public`);
   if (j && !Array.isArray(j)) j = j.items;            // items[] или []
   if (Array.isArray(j) && j.length) return j.map(normalizeService);
 
-  // 2) частая схема — общий список с фильтром по провайдеру
+    // 2) приватный (если фронт под токеном) — как запасной вариант
+  j = await fetchJSONLoose(`/api/providers/${providerId}/services`);
+  if (Array.isArray(j) && j.length) return j.map(normalizeService);
+
+  // 3) частая схема — общий список с фильтром по провайдеру
   for (const q of [
     { url: "/api/services", params: { provider_id: providerId } },
     { url: "/api/services", params: { provider: providerId } },
@@ -152,7 +156,7 @@ async function fetchProviderServices(providerId) {
     if (arr.length) return arr.map(normalizeService);
   }
 
-  // 3) иногда услуги лежат прямо в объекте провайдера (profile.services)
+  // 4) иногда услуги лежат прямо в объекте провайдера (profile.services)
   const p = await fetchJSONLoose(`/api/providers/${providerId}`);
   const embedded = p?.services || p?.profile?.services || [];
   if (Array.isArray(embedded) && embedded.length) return embedded.map(normalizeService);
