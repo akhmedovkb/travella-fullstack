@@ -73,6 +73,14 @@ const fetchJSON = async (path, params = {}) => {
   return await r.json();
 };
 
+const fetchJSONLoose = async (path, params = {}) => {
+  try {
+    return await fetchJSON(path, params);
+  } catch {
+    return null;               // не падаем на 404/500 — просто идём к следующему варианту
+  }
+};
+
 const normalizeProvider = (row, kind) => ({
   id: row.id ?? row._id ?? String(Math.random()),
   name: row.name || "—",
@@ -126,13 +134,30 @@ async function fetchProvidersSmart({ kind, city, date, language, q = "", limit =
 }
 
 async function fetchProviderServices(providerId) {
-  try {
-    const j = await fetchJSON(`/api/providers/${providerId}/services`);
-    const arr = Array.isArray(j) ? j : Array.isArray(j?.items) ? j.items : [];
-    return arr.map(normalizeService);
-  } catch {
-    return [];
+  if (!providerId) return [];
+
+  // 1) самый очевидный вариант (если ты его добавишь на бэке)
+  let j = await fetchJSONLoose(`/api/providers/${providerId}/services`);
+  if (j && !Array.isArray(j)) j = j.items;            // items[] или []
+  if (Array.isArray(j) && j.length) return j.map(normalizeService);
+
+  // 2) частая схема — общий список с фильтром по провайдеру
+  for (const q of [
+    { url: "/api/services", params: { provider_id: providerId } },
+    { url: "/api/services", params: { provider: providerId } },
+    { url: "/api/provider-services", params: { provider_id: providerId } },
+  ]) {
+    const r = await fetchJSONLoose(q.url, q.params);
+    const arr = Array.isArray(r?.items) ? r.items : (Array.isArray(r) ? r : []);
+    if (arr.length) return arr.map(normalizeService);
   }
+
+  // 3) иногда услуги лежат прямо в объекте провайдера (profile.services)
+  const p = await fetchJSONLoose(`/api/providers/${providerId}`);
+  const embedded = p?.services || p?.profile?.services || [];
+  if (Array.isArray(embedded) && embedded.length) return embedded.map(normalizeService);
+
+  return [];
 }
 
 
@@ -570,6 +595,12 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       Цена/день: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "USD")}
                     </div>
                   </div>
+                  {/* если услуг нет: */}
+                  {st.guide && (servicesCache[st.guide.id]?.length === 0) && (
+                    <div className="text-xs text-amber-600 mt-1">
+                      Для этого гида услуги не найдены. Заполните их в Dashboard → Services.
+                    </div>
+                  )}
 
                   {/* Transport */}
                   <div className="border rounded p-2">
@@ -625,7 +656,12 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       Цена/день: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "USD")}
                     </div>
                   </div>
-
+                  {/* если услуг нет: */}
+                  {st.transport && (servicesCache[st.transport.id]?.length === 0) && (
+                    <div className="text-xs text-amber-600 mt-1">
+                      Для этого транспортника услуги не найдены. Заполните их в Dashboard → Services.
+                    </div>
+                  )}
                   {/* Hotel */}
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">Отель (за ночь, нетто)</label>
