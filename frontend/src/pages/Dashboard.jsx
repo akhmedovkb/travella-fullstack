@@ -257,6 +257,11 @@ function resizeImageFile(file, targetW = 1600, targetH = 1000, quality = 0.86, m
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
+            // guard: файлы не-изображения
+      if (!String(file.type || "").startsWith("image/")) {
+        reject(new Error("Not an image"));
+        return;
+      }
       const img = new Image();
       img.onload = () => {
         const srcW = img.width, srcH = img.height;
@@ -606,7 +611,8 @@ const Dashboard = () => {
   const [newPhoto, setNewPhoto] = useState(null);
   const [newCertificate, setNewCertificate] = useState(null);
   const [newAddress, setNewAddress] = useState("");
-  const [newLocation, setNewLocation] = useState("");
+    // РЕГИОНЫ ДЕЯТЕЛЬНОСТИ (мультиселект городов)
+  const [regions, setRegions] = useState([]); // [{value,label}, ...] только EN
   const [newSocial, setNewSocial] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [oldPassword, setOldPassword] = useState("");
@@ -614,6 +620,17 @@ const Dashboard = () => {
   const [stats, setStats] = useState(null);
     // стартуем с JWT, чтобы таб появился сразу
   const [isAdmin, setIsAdmin] = useState(() => detectAdminFromJwt());
+
+    // АВТОПАРК (в профиле гида/транспортника)
+  const emptyCar = useMemo(() => ({ model: "", seats: "", images: [], is_active: true }), []);
+  const [carFleet, setCarFleet] = useState([]); // [{model,seats,images,is_active}]
+  const addCar = () => setCarFleet((v) => [...v, { ...emptyCar }]);
+  const removeCar = (idx) =>
+    setCarFleet((v) => v.filter((_, i) => i !== idx));
+  const updateCar = (idx, patch) =>
+    setCarFleet((v) => v.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const updateCarImage = (idx, imgs) => updateCar(idx, { images: imgs });
+
   
 
   //review
@@ -985,10 +1002,13 @@ useEffect(() => {
       setProfile(res.data || {});
       // если из профиля нет флага — оставляем JWT-детект
       setIsAdmin(detectAdmin(res.data) || detectAdminFromJwt());
-      setNewLocation(res.data?.location || "");
+            // профиль → регионы (массив строк) -> value/label
+      const loc = Array.isArray(res.data?.location) ? res.data.location : (res.data?.location ? [res.data.location] : []);
+      setRegions(loc.map((c) => ({ value: c, label: c })));
       setNewSocial(res.data?.social || "");
       setNewPhone(res.data?.phone || "");
       setNewAddress(res.data?.address || "");
+      setCarFleet(Array.isArray(res.data?.car_fleet) ? res.data.car_fleet : []);    
     })
     .catch((err) => {
       if (err?.code === "ERR_CANCELED") return;
@@ -1073,12 +1093,27 @@ useEffect(() => {
 
   const handleSaveProfile = () => {
     const updated = {};
-    if (newLocation !== profile.location) updated.location = newLocation;
+        // location как массив строк
+    const nextLocations = regions.map((r) => r.value).filter(Boolean);
+    // сравнение массивов по значению
+    const sameLocations =
+      Array.isArray(profile.location) &&
+      profile.location.length === nextLocations.length &&
+      profile.location.every((x, i) => x === nextLocations[i]);
+    if (!sameLocations) updated.location = nextLocations;
     if (newSocial !== profile.social) updated.social = newSocial;
     if (newPhone !== profile.phone) updated.phone = newPhone;
     if (newAddress !== profile.address) updated.address = newAddress;
     if (newPhoto) updated.photo = newPhoto;
-    if (newCertificate) updated.certificate = newCertificate;
+        // car_fleet
+    updated.car_fleet = (carFleet || [])
+      .map((c) => ({
+        model: String(c.model || "").trim(),
+        seats: Number.parseInt(c.seats, 10) || null,
+        images: Array.isArray(c.images) ? c.images.slice(0, 10) : [],
+        is_active: c.is_active !== false,
+      }))
+      .filter((c) => c.model && c.seats);
 
     if (Object.keys(updated).length === 0) {
       tInfo(t("no_changes") || "Изменений нет");
@@ -1090,7 +1125,10 @@ useEffect(() => {
     const p = res?.data?.provider;
     if (p) {
       setProfile(p);
-      } else {
+            // синхронизируем UI
+      setRegions(Array.isArray(p.location) ? p.location.map((c) => ({ value: c, label: c })) : []);
+      setCarFleet(Array.isArray(p.car_fleet) ? p.car_fleet : []);
+    } else {
       setProfile((prev) => ({ ...prev, ...updated }));
     }
     setNewPhoto(null);
@@ -1520,17 +1558,96 @@ useEffect(() => {
                 <div className="border px-3 py-2 rounded bg-gray-100">{t(profile.type)}</div>
               </div>
               <div>
-                <label className="block font-medium">{t("location")}</label>
+                                <label className="block font-medium">
+                  {t("location")}{" "}
+                  <span className="text-xs text-gray-500">(вводите название города только на английском)</span>
+                </label>
                 {isEditing ? (
-                  <input
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    className="border px-3 py-2 rounded w-full"
+                  <AsyncCreatableSelect
+                    isMulti
+                    cacheOptions
+                    defaultOptions
+                    {...ASYNC_MENU_PORTAL}
+                    loadOptions={loadCities}
+                    noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+                    loadingMessage={ASYNC_I18N.loadingMessage}
+                    placeholder="Start typing city name (EN)…"
+                    value={regions}
+                    onChange={(vals) => setRegions(vals || [])}
                   />
                 ) : (
-                  <div className="border px-3 py-2 rounded bg-gray-100">{profile.location}</div>
+                  <div className="border px-3 py-2 rounded bg-gray-100">
+                    {Array.isArray(profile.location) ? profile.location.join(", ") : (profile.location || t("not_specified"))}
+                  </div>
                 )}
               </div>
+                            {(profile.type === "guide" || profile.type === "transport") && (
+                <div className="mt-3">
+                  <label className="block font-medium mb-2">{t("car_fleet") || "Автопарк"}</label>
+                  {isEditing ? (
+                    <>
+                      <div className="space-y-3">
+                        {carFleet.map((car, idx) => (
+                          <div key={idx} className="border rounded p-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <input className="border rounded px-3 py-2" placeholder="Модель (например, Chevrolet Lacetti)"
+                                     value={car.model} onChange={(e)=>updateCar(idx,{model:e.target.value})}/>
+                              <input className="border rounded px-3 py-2" type="number" min={1} placeholder="Вместимость, мест"
+                                     value={car.seats} onChange={(e)=>updateCar(idx,{seats:e.target.value})}/>
+                            </div>
+                            <div className="mt-2 flex items-center gap-3">
+                              <label className="inline-block bg-orange-500 text-white px-3 py-1.5 rounded cursor-pointer text-sm">
+                                {t("choose_files",{defaultValue:"Выбрать файлы"})}
+                                <input type="file" accept="image/*" multiple className="hidden"
+                                  onChange={async (e)=> {
+                                   const files = Array.from(e.target.files||[]);
+                                    const out = [];
+                                    for (const f of files.slice(0,10)) {
+                                      try { out.push(await resizeImageFile(f,1200,800,0.85,"image/jpeg")); } catch {}
+                                    }
+                                    updateCarImage(idx, [...(car.images||[]), ...out].slice(0,10));
+                                    e.target.value = "";
+                                  }}/>
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm">
+                                <input type="checkbox" checked={car.is_active!==false}
+                                       onChange={(e)=>updateCar(idx,{is_active:e.target.checked})}/>
+                                <span>{t("is_active")}</span>
+                              </label>
+                              <button type="button" onClick={()=>removeCar(idx)} className="ml-auto text-red-600 text-sm">
+                                {t("delete")}
+                              </button>
+                            </div>
+                            {car.images?.length ? (
+                              <div className="mt-2 grid grid-cols-4 gap-2">
+                                {car.images.map((src,i)=>(
+                                  <div key={i} className="relative">
+                                    <img src={src} alt="" className="w-full h-20 object-cover rounded border"/>
+                                  </div>
+                                ))}
+                              </div>
+                            ): null}
+                          </div>
+                        ))}
+                      </div>
+                      <button type="button" onClick={addCar} className="mt-2 rounded border px-3 py-1.5 text-sm">
+                        + {t("add") || "Добавить авто"}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      {(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c,i)=>(
+                        <div key={i} className="border rounded p-2 flex items-center gap-3">
+                          <div className="font-medium">{c.model}</div>
+                          <div className="text-sm text-gray-600">• {c.seats} мест</div>
+                          {c.images?.[0] ? <img src={c.images[0]} alt="" className="ml-auto w-12 h-12 object-cover rounded"/> : null}
+                        </div>
+                     ))}
+                      {!profile?.car_fleet?.length && <div className="text-gray-500">{t("not_specified")}</div>}
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block font-medium">{t("social")}</label>
                          {isEditing ? (
