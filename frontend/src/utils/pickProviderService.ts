@@ -1,4 +1,4 @@
-// Типы упрощённые под текущий API
+// frontend/src/utils/pickProviderService.ts - Типы упрощённые под текущий API
 export type ProviderService = {
   id: number;
   category: string;
