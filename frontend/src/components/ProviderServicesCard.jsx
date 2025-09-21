@@ -152,6 +152,19 @@ export default function ProviderServicesCard({
     await load();
   };
 
+    // удалить услугу
+  const deleteService = async (row) => {
+    const name =
+      (CATEGORY_LABELS[row.category] || row.category) +
+      (row.title ? ` — ${row.title}` : "");
+    if (!window.confirm(`Удалить услугу «${name}»?`)) return;
+    await fetchJSON(
+      `${API_BASE}/api/providers/${providerId}/services/${row.id}`,
+      { method: "DELETE" }
+    );
+    await load();
+  };
+
   // Обновление вместимости (только для транспорта), мёржим/чистим details.seats
   const updateSeats = async (row, v) => {
     const n = Number(v);
@@ -276,7 +289,7 @@ export default function ProviderServicesCard({
               <th className="py-2 pr-3">Цена</th>
               <th className="py-2 pr-3">Валюта</th>
               <th className="py-2 pr-3">Статус</th>
-              <th className="py-2 pr-3"></th>
+              <th className="py-2 pr-3">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -340,12 +353,22 @@ export default function ProviderServicesCard({
                       {row.is_active ? "Активна" : "Выключена"}
                     </td>
                     <td className="py-2 pr-3">
-                      <button
-                        className="px-3 py-1 border rounded"
-                        onClick={() => toggleActive(row)}
-                      >
-                        {row.is_active ? "Disable" : "Enable"}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          className="px-3 py-1 border rounded"
+                          onClick={() => toggleActive(row)}
+                          title={row.is_active ? "Выключить" : "Включить"}
+                        >
+                          {row.is_active ? "Disable" : "Enable"}
+                        </button>
+                        <button
+                          className="px-3 py-1 border rounded text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => deleteService(row)}
+                          title="Удалить"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
