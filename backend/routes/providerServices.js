@@ -233,3 +233,48 @@ router.delete('/api/providers/:pid/services/:sid', authenticateToken, async (req
 });
 
 module.exports = router;
+
+/* ========================= BULK INSERT (same table) ========================= */
+router.post('/api/providers/:pid/services/bulk', authenticateToken, async (req, res) => {
+  const pid = Number(req.params.pid);
+  if (!req.user || !req.user.id) return res.status(401).json({ error: 'unauthorized' });
+  if (req.user.is_admin !== true && pid !== Number(req.user.id)) return res.status(403).json({ error: 'forbidden' });
+
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: 'items[] required' });
+
+  const TRANSPORT = new Set(['city_tour_transport','mountain_tour_transport','one_way_transfer','dinner_transfer','border_transfer']);
+  const norm = (it) => {
+    const category = String(it.category || '').trim();
+    if (!category) return null;
+    const title = it.title ? String(it.title).trim() : null;
+    const price = Number(it.price) || 0;
+    const currency = (it.currency || 'USD').toUpperCase();
+    let details = {};
+    if (it.details && typeof it.details === 'object') details = { ...it.details };
+    if ('seats' in details) {
+      const n = Number(details.seats);
+      if (!(TRANSPORT.has(category) && Number.isInteger(n) && n > 0)) delete details.seats;
+    }
+    return { category, title, price, currency, details };
+  };
+
+  const values = [];
+  const rows = [];
+  let i = 1;
+  for (const it of items) {
+    const n = norm(it);
+    if (!n) continue;
+    rows.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, TRUE, $${i++}::jsonb)`);
+    values.push(pid, n.category, n.title, n.price, n.currency, JSON.stringify(n.details || {}));
+  }
+  if (!rows.length) return res.status(400).json({ error: 'no valid items' });
+
+  const sql = `
+    INSERT INTO provider_services (provider_id, category, title, price, currency, is_active, details)
+    VALUES ${rows.join(',')}
+    RETURNING id, provider_id, category, title, price, currency, is_active, details
+  `;
+  const r = await db.query(sql, values);
+  res.status(201).json({ items: r.rows });
+});
