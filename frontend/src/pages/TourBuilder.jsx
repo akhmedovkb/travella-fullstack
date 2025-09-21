@@ -45,7 +45,22 @@ const TRANSPORT_ALLOWED = new Set([
 // массивы для утилиты подбора
 const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","meet","seeoff","translation"];
 const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
-
+/* helpers для фильтрации услуг под PAX и город */
+const svcSeats = (s) =>
+  toNum(s?.raw?.details?.seats ?? s?.details?.seats ?? NaN, NaN);
+const svcCity = (s) =>
+  (s?.raw?.details?.city_slug ?? s?.details?.city_slug ?? "").toString().trim().toLowerCase();
+const fitsPax = (s, pax) => {
+  const n = svcSeats(s);
+  // Для транспортных услуг вместимость ОБЯЗАТЕЛЬНА, для чисто гидских — игнорируем
+  if (TRANSPORT_ALLOWED.has(s?.category)) return Number.isFinite(n) && n >= pax;
+  return true;
+};
+const fitsCity = (s, citySlug) => {
+  const cs = (citySlug || "").toString().trim().toLowerCase();
+  const v = svcCity(s);
+  return !v || !cs ? true : v === cs;
+};
 
 /* ---------------- Day kind (на будущее для entry) ---------------- */
 const dkey = (d) => toYMD(new Date(d));
@@ -392,16 +407,25 @@ export default function TourBuilder() {
       const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
       let next = { ...st };
 
-      if (st.guide && servicesCache[st.guide.id]) {
-        const chosen = pickFromCache(st.guide.id, GUIDE_ALLOWED_ARR, citySlug, pax);
+            if (st.guide && servicesCache[st.guide.id]) {
+        // если транспорт не выбран — допускаем услуги “гид+транспорт”
+        const cats = st.transport ? GUIDE_ALLOWED_ARR : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
+        const chosen = pickFromCache(st.guide.id, cats, citySlug, pax);
         if (chosen && (!st.guideService || String(st.guideService.id) !== String(chosen.id))) {
           next.guideService = chosen;
+        }
+            // если выбранная ранее услуга не подходит под pax/город — очищаем
+        if (next.guideService && (!fitsPax(next.guideService, pax) || !fitsCity(next.guideService, citySlug))) {
+          next.guideService = null;
         }
       }
       if (st.transport && servicesCache[st.transport.id]) {
         const chosenT = pickFromCache(st.transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
         if (chosenT && (!st.transportService || String(st.transportService.id) !== String(chosenT.id))) {
           next.transportService = chosenT;
+        }
+                if (next.transportService && (!fitsPax(next.transportService, pax) || !fitsCity(next.transportService, citySlug))) {
+          next.transportService = null;
         }
       }
       if (next === st) return prev; // без изменений
@@ -628,14 +652,19 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.guide?.id] || [];
-                        const allowed = list.filter(s => GUIDE_ALLOWED.has(s.category) && s.price > 0);
+                                                const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+                        // если нет отдельного транспорта — показываем и “гид+транспорт”
+                        const allowed = list
+                          .filter(s => (GUIDE_ALLOWED.has(s.category) || (!st.transport && TRANSPORT_ALLOWED.has(s.category))))
+                          .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, pax));
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
                       }}
                     >
                       <option value="">Выберите услугу гида…</option>
-                      {(servicesCache[st.guide?.id] || [])
-                        .filter(s => GUIDE_ALLOWED.has(s.category) && s.price > 0)
+                                            {(servicesCache[st.guide?.id] || [])
+                        .filter(s => (GUIDE_ALLOWED.has(s.category) || (!st.transport && TRANSPORT_ALLOWED.has(s.category))))
+                        .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, Math.max(1, toNum(adt,0)+toNum(chd,0))))
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
@@ -691,14 +720,18 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.transport?.id] || [];
-                        const allowed = list.filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0);
+                                                const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+                        const allowed = list
+                          .filter(s => TRANSPORT_ALLOWED.has(s.category))
+                          .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, pax));
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
                       }}
                     >
                       <option value="">Выберите услугу транспорта…</option>
                       {(servicesCache[st.transport?.id] || [])
-                        .filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0)
+                        .filter(s => TRANSPORT_ALLOWED.has(s.category))
+                        .filter(s => s.price > 0 && fitsCity(s, st.city) && fitsPax(s, Math.max(1, toNum(adt,0)+toNum(chd,0)))))
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
