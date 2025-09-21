@@ -42,13 +42,6 @@ const TRANSPORT_ALLOWED = new Set([
   "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
 ]);
 
-// helper: вместимость
-const serviceSeats = (s) =>
-  Number(s?.raw?.details?.seats ?? s?.details?.seats ?? 0);
-const fitsPax = (s, pax) =>
-  GUIDE_ALLOWED.has(s.category) ? true :
-  TRANSPORT_ALLOWED.has(s.category) ? serviceSeats(s) >= pax : true;
-
 // массивы для утилиты подбора
 const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","meet","seeoff","translation"];
 const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
@@ -661,20 +654,17 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                         onChange={async (opt) => {
                           const guide = opt?.raw || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
-                        const list = await ensureServicesLoaded(guide);
-                        const pax = Math.max(1, toNum(adt) + toNum(chd));
-                        // пробуем сразу подобрать лучшую (в т.ч. гид+транспорт)
-                        const picked = pickProviderService(list, {
-                          role: "guide",
-                          pax,
-                          city: (byDay[k]?.city || "").trim(),
-                        });
-                        if (picked) {
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: picked } }));
-                        }
-                          // автоподбор услуги гида под текущие город/PAX
-                          if (guide) autoPickForDay(k)
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
+                          const list = await ensureServicesLoaded(guide);
+                          const pax = Math.max(1, toNum(adt) + toNum(chd));
+                          const citySlug = (byDay[k]?.city || "").trim();
+                          const cats = (byDay[k]?.transport)
+                            ? GUIDE_ALLOWED_ARR
+                            : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
+                          const picked = pickFromCache(guide.id, cats, citySlug, pax);
+                          if (picked) {
+                            setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: picked } }));
+                          }
                         }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
@@ -692,15 +682,13 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.guide?.id] || [];
-                        const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
-                        // если нет отдельного транспорта — показываем и “гид+транспорт”
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
                         // показываем обычные услуги гида + гид+транспорт, но только если вместимость >= PAX
                         const allowed = list
                           .filter(s =>
                             s.price > 0 &&
                             (GUIDE_ALLOWED.has(s.category) ||
-                             (TRANSPORT_ALLOWED.has(s.category) && fitsPax(s, pax)))
+                             (!st.transport && TRANSPORT_ALLOWED.has(s.category) && fitsPax(s, pax)))
                           );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
@@ -711,7 +699,10 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         .filter(s => {
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           if (GUIDE_ALLOWED.has(s.category)) return s.price > 0;
-                          if (TRANSPORT_ALLOWED.has(s.category)) return s.price > 0 && fitsPax(s, pax);
+                          if (TRANSPORT_ALLOWED.has(s.category)) {
+                            // «гид+транспорт» показываем только если НЕ выбран отдельный транспорт
+                            return !st.transport && s.price > 0 && fitsPax(s, pax);
+                          }
                           return false;
                         })
                         .sort((a,b) => a.price - b.price)
@@ -747,18 +738,14 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
-                          const transport = opt?.raw || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
-                        const list = await ensureServicesLoaded(transport);
-                        const pax = Math.max(1, toNum(adt) + toNum(chd));
-                        const picked = pickProviderService(list, {
-                          role: "transport",
-                          pax,
-                          city: (byDay[k]?.city || "").trim(),
-                        });
-                        if (picked) {
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
-                        }
+                          setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
+                          const list = await ensureServicesLoaded(transport);
+                          const pax = Math.max(1, toNum(adt) + toNum(chd));
+                          const citySlug = (byDay[k]?.city || "").trim();
+                          const picked = pickFromCache(transport?.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
+                          if (picked) {
+                            setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
+                          }
                           }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
