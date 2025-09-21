@@ -8,12 +8,21 @@ const CATEGORY_LABELS = {
   meet: "Встреча (гид)",
   seeoff: "Провод (гид)",
   translation: "Перевод (гид)",
-  // transport
+  // transport (для перевозчиков)
   city_tour_transport: "Тур по городу (транспорт)",
   mountain_tour_transport: "Тур в горы (транспорт)",
   one_way_transfer: "Трансфер в одну сторону",
   dinner_transfer: "Трансфер на ужин",
   border_transfer: "Междугородний/погран. трансфер",
+};
+
+// подписи для гида с авто («гид+транспорт»)
+const GUIDE_TRANSPORT_LABELS = {
+  city_tour_transport: "Тур по городу (гид+транспорт)",
+  mountain_tour_transport: "Тур в горы (гид+транспорт)",
+  one_way_transfer: "Трансфер в одну сторону (гид+транспорт)",
+  dinner_transfer: "Трансфер на ужин (гид+транспорт)",
+  border_transfer: "Междугородний/погран. трансфер (гид+транспорт)",
 };
 
 const GUIDE_ALLOWED = [
@@ -76,6 +85,15 @@ export default function ProviderServicesCard({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
+  // профиль нужен, чтобы понять есть ли авто у гида
+  const [profile, setProfile] = useState(null);
+  const hasFleet = useMemo(
+    () =>
+      Array.isArray(profile?.car_fleet) &&
+      profile.car_fleet.some((c) => c && c.is_active !== false),
+    [profile]
+  );
+
   // add form
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -86,20 +104,64 @@ export default function ProviderServicesCard({
   // bulk
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  // подгружаем профиль один раз (для определения hasFleet)
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await fetchJSON(`/api/providers/profile`);
+        setProfile(me || {});
+      } catch {
+        // молча
+      }
+    })();
+  }, []);
+
+  const labelForCategory = useMemo(() => {
+    const isGuide = providerType === "guide";
+    return (cat) => {
+      if (isGuide && isTransportCategory(cat)) {
+        return GUIDE_TRANSPORT_LABELS[cat] || CATEGORY_LABELS[cat] || cat;
+      }
+      return CATEGORY_LABELS[cat] || cat;
+    };
+  }, [providerType]);
+
   const categories = useMemo(() => {
     const base = [{ label: "— выберите категорию —", value: "" }];
+
     const guide = [
       { label: "ГИД", value: "_sep1", disabled: true },
       ...GUIDE_ALLOWED.map((v) => ({ value: v, label: CATEGORY_LABELS[v] })),
     ];
-    const transport = [
-      { label: "ТРАНСПОРТ", value: "_sep2", disabled: true },
-      ...TRANSPORT_ALLOWED.map((v) => ({ value: v, label: CATEGORY_LABELS[v] })),
-    ];
-    if (providerType === "guide") return [...base, ...guide, ...transport];
-    if (providerType === "transport") return [...base, ...transport];
-    return [...base, ...guide, ...transport];
-  }, [providerType]);
+
+    // если гид БЕЗ авто — не показываем транспортные опции вообще
+    const guideTransport =
+      providerType === "guide" && hasFleet
+        ? [
+            { label: "ГИД+ТРАНСПОРТ", value: "_sep2", disabled: true },
+            ...TRANSPORT_ALLOWED.map((v) => ({
+              value: v,
+              label: GUIDE_TRANSPORT_LABELS[v] || CATEGORY_LABELS[v],
+            })),
+          ]
+        : [];
+
+    const transportSection =
+      providerType === "transport"
+        ? [
+            { label: "ТРАНСПОРТ", value: "_sep3", disabled: true },
+            ...TRANSPORT_ALLOWED.map((v) => ({
+              value: v,
+              label: CATEGORY_LABELS[v],
+            })),
+          ]
+        : [];
+
+    if (providerType === "guide") return [...base, ...guide, ...guideTransport];
+    if (providerType === "transport") return [...base, ...transportSection];
+    // на всякий случай для других: всё
+    return [...base, ...guide, ...guideTransport, ...transportSection];
+  }, [providerType, hasFleet]);
 
   useEffect(() => setCurrency(currencyDefault || "USD"), [currencyDefault]);
 
@@ -154,7 +216,7 @@ export default function ProviderServicesCard({
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-      setRows((m) => m.map((r) => (r.id === id ? updated : r)));
+    setRows((m) => m.map((r) => (r.id === id ? updated : r)));
     } catch (e) {
       alert("Не удалось сохранить: " + e.message);
       load();
@@ -381,7 +443,7 @@ export default function ProviderServicesCard({
                   return (
                     <tr key={r.id} className="odd:bg-white even:bg-gray-50">
                       <td className="p-2 align-middle">
-                        {CATEGORY_LABELS[r.category] || r.category}
+                        {labelForCategory(r.category)}
                       </td>
 
                       <td className="p-2">
