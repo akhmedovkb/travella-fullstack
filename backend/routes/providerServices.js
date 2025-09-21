@@ -1,69 +1,215 @@
-// backend/routes/providerServices.js
+// backend/routes/providerServices.js - файл для услуг поставщика для tourbuilder
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db'); // ваш pool из pg
+const authenticateToken = require('../middleware/authenticateToken');
 
-// список услуг провайдера
-router.get('/api/providers/:pid/services', async (req, res) => {
-  const { pid } = req.params;
-  const { only_active } = req.query;
-  const q = `
-    SELECT id, provider_id, category, title, price, currency, is_active
-    FROM provider_services
-    WHERE provider_id = $1
-      ${only_active ? 'AND is_active = TRUE' : ''}
-    ORDER BY category, price NULLS LAST, id
-  `;
-  const { rows } = await db.query(q, [pid]);
-  res.json(rows);
-});
+// Транспортные категории — только в них допускаем details.seats
+const TRANSPORT_CATS = new Set([
+  'city_tour_transport',
+  'mountain_tour_transport',
+  'one_way_transfer',
+  'dinner_transfer',
+  'border_transfer',
+]);
 
-// создать услугу
-router.post('/api/providers/:pid/services', async (req, res) => {
-  const { pid } = req.params;
-  const { category, title, price, currency = 'USD', is_active = true } = req.body || {};
-  if (!category) return res.status(400).json({ error: 'category required' });
+function isTransportCategory(cat) {
+  return TRANSPORT_CATS.has(String(cat || ''));
+}
 
-  const q = `
-    INSERT INTO provider_services (provider_id, category, title, price, currency, is_active)
-    VALUES ($1,$2,$3,$4,$5,$6)
-    RETURNING id, provider_id, category, title, price, currency, is_active
-  `;
-  const { rows } = await db.query(q, [pid, category, title || null, price || 0, currency, !!is_active]);
-  res.status(201).json(rows[0]);
-});
+function toNumberInt(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.trunc(v) : NaN;
+}
 
-// правка / включение-выключение
-router.patch('/api/providers/:pid/services/:sid', async (req, res) => {
-  const { pid, sid } = req.params;
-  const fields = ['category','title','price','currency','is_active'];
-  const set = [];
-  const vals = [];
-  fields.forEach((f) => {
-    if (req.body.hasOwnProperty(f)) {
-      set.push(`${f} = $${set.length + 1}`);
-      vals.push(req.body[f]);
+// Нормализация details c учётом категории
+function normalizeDetails(details, category) {
+  let d = {};
+  if (details && typeof details === 'object' && !Array.isArray(details)) {
+    d = { ...details };
+  }
+
+  // seats — допускаем только у транспорта, и только целое > 0
+  if ('seats' in d) {
+    if (isTransportCategory(category)) {
+      const n = toNumberInt(d.seats);
+      if (Number.isFinite(n) && n > 0) d.seats = n;
+      else delete d.seats;
+    } else {
+      delete d.seats;
     }
-  });
-  if (!set.length) return res.status(400).json({ error: 'no fields' });
+  }
 
-  const q = `
-    UPDATE provider_services
-       SET ${set.join(', ')}, updated_at = now()
-     WHERE id = $${set.length + 1} AND provider_id = $${set.length + 2}
-     RETURNING id, provider_id, category, title, price, currency, is_active
-  `;
-  vals.push(sid, pid);
-  const { rows } = await db.query(q, vals);
-  if (!rows.length) return res.sendStatus(404);
-  res.json(rows[0]);
+  return d;
+}
+
+function ensureSelfOrAdmin(req, res) {
+  const pid = Number(req.params.pid);
+  if (!req.user || !req.user.id) {
+    res.status(401).json({ error: 'unauthorized' });
+    return false;
+  }
+  if (req.user.is_admin === true) return true;
+  if (pid !== Number(req.user.id)) {
+    res.status(403).json({ error: 'forbidden' });
+    return false;
+  }
+  return true;
+}
+
+/* ========================= LIST ========================= */
+router.get('/api/providers/:pid/services', authenticateToken, async (req, res) => {
+  if (!ensureSelfOrAdmin(req, res)) return;
+  try {
+    const { pid } = req.params;
+    const onlyActive = String(req.query.only_active || '').toLowerCase();
+    const onlyActiveSQL = (onlyActive === '1' || onlyActive === 'true') ? 'AND is_active = TRUE' : '';
+
+    const q = `
+      SELECT id, provider_id, category, title, price, currency, is_active, COALESCE(details, '{}'::jsonb) AS details
+      FROM provider_services
+      WHERE provider_id = $1
+        ${onlyActiveSQL}
+      ORDER BY category, price NULLS LAST, id
+    `;
+    const { rows } = await db.query(q, [pid]);
+    res.json(rows);
+  } catch (e) {
+    console.error('GET provider services error:', e);
+    res.status(500).json({ error: 'internal error' });
+  }
 });
 
-// (опционально) удалить
-router.delete('/api/providers/:pid/services/:sid', async (req, res) => {
-  const { pid, sid } = req.params;
-  await db.query(`DELETE FROM provider_services WHERE id = $1 AND provider_id = $2`, [sid, pid]);
-  res.sendStatus(204);
+/* ========================= CREATE ========================= */
+router.post('/api/providers/:pid/services', authenticateToken, async (req, res) => {
+  if (!ensureSelfOrAdmin(req, res)) return;
+  try {
+    const { pid } = req.params;
+    const {
+      category,
+      title,
+      price,
+      currency = 'USD',
+      is_active = true,
+      details = undefined, // может прийти { seats: N }
+    } = req.body || {};
+
+    if (!category) return res.status(400).json({ error: 'category required' });
+
+    const priceNum = Number(price) || 0;
+    const detailsNorm = normalizeDetails(details, category);
+
+    const q = `
+      INSERT INTO provider_services (provider_id, category, title, price, currency, is_active, details)
+      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
+      RETURNING id, provider_id, category, title, price, currency, is_active, COALESCE(details, '{}'::jsonb) AS details
+    `;
+    const { rows } = await db.query(q, [
+      pid,
+      category,
+      title || null,
+      priceNum,
+      currency,
+      !!is_active,
+      JSON.stringify(detailsNorm),
+    ]);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error('POST provider service error:', e);
+    res.status(500).json({ error: 'internal error' });
+  }
+});
+
+/* ========================= PATCH (partial) ========================= */
+router.patch('/api/providers/:pid/services/:sid', authenticateToken, async (req, res) => {
+  if (!ensureSelfOrAdmin(req, res)) return;
+  try {
+    const { pid, sid } = req.params;
+
+    // Сначала узнаем текущую категорию/детали (нам нужно знать категорию для нормализации seats)
+    const curQ = await db.query(
+      `SELECT category, COALESCE(details, '{}'::jsonb) AS details
+         FROM provider_services
+        WHERE id=$1 AND provider_id=$2`,
+      [sid, pid]
+    );
+    if (!curQ.rowCount) return res.sendStatus(404);
+
+    const current = curQ.rows[0];
+    const nextCategory = req.body.hasOwnProperty('category')
+      ? String(req.body.category || '')
+      : current.category;
+
+    const set = [];
+    const vals = [];
+    let idx = 1;
+
+    // category
+    if (req.body.hasOwnProperty('category')) {
+      set.push(`category = $${idx++}`);
+      vals.push(nextCategory);
+    }
+    // title
+    if (req.body.hasOwnProperty('title')) {
+      set.push(`title = $${idx++}`);
+      vals.push(req.body.title || null);
+    }
+    // price
+    if (req.body.hasOwnProperty('price')) {
+      set.push(`price = $${idx++}`);
+      vals.push(Number(req.body.price) || 0);
+    }
+    // currency
+    if (req.body.hasOwnProperty('currency')) {
+      set.push(`currency = $${idx++}`);
+      vals.push(req.body.currency || 'USD');
+    }
+    // is_active
+    if (req.body.hasOwnProperty('is_active')) {
+      set.push(`is_active = $${idx++}`);
+      vals.push(!!req.body.is_active);
+    }
+    // details (целиком перезаписываем нормализованным объектом)
+    if (req.body.hasOwnProperty('details')) {
+      const normalized = normalizeDetails(req.body.details, nextCategory);
+      set.push(`details = $${idx++}::jsonb`);
+      vals.push(JSON.stringify(normalized));
+    }
+
+    if (!set.length) return res.status(400).json({ error: 'no fields' });
+
+    const q = `
+      UPDATE provider_services
+         SET ${set.join(', ')}, updated_at = now()
+       WHERE id = $${idx++} AND provider_id = $${idx++}
+       RETURNING id, provider_id, category, title, price, currency, is_active, COALESCE(details, '{}'::jsonb) AS details
+    `;
+    vals.push(sid, pid);
+
+    const { rows } = await db.query(q, vals);
+    if (!rows.length) return res.sendStatus(404);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('PATCH provider service error:', e);
+    res.status(500).json({ error: 'internal error' });
+  }
+});
+
+/* ========================= DELETE ========================= */
+router.delete('/api/providers/:pid/services/:sid', authenticateToken, async (req, res) => {
+  if (!ensureSelfOrAdmin(req, res)) return;
+  try {
+    const { pid, sid } = req.params;
+    await db.query(
+      `DELETE FROM provider_services WHERE id = $1 AND provider_id = $2`,
+      [sid, pid]
+    );
+    res.sendStatus(204);
+  } catch (e) {
+    console.error('DELETE provider service error:', e);
+    res.status(500).json({ error: 'internal error' });
+  }
 });
 
 module.exports = router;
