@@ -740,13 +740,15 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         onChange={async (opt) => {
                           const transport = opt?.raw || null;            // <-- объявляем переменную
                           setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
-                          const list = await ensureServicesLoaded(transport);
-                          const pax = Math.max(1, toNum(adt) + toNum(chd));
-                          const citySlug = (byDay[k]?.city || "").trim();
-                          const picked = pickFromCache(transport?.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
-                          if (picked) {
-                            setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
-                          }
+                          if (transport) {
+                            await ensureServicesLoaded(transport); // прогреем кеш
+                            const pax = Math.max(1, toNum(adt) + toNum(chd));
+                            const citySlug = (byDay[k]?.city || "").trim();
+                            const picked = pickFromCache(transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
+                            if (picked) {
+                              setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
+                            }
+                          } 
                         }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
