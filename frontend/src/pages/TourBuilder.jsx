@@ -33,13 +33,14 @@ const CATEGORY_LABELS = {
   dinner_transfer: "Трансфер на ужин",
   border_transfer: "Междугородний/погран. трансфер",
 };
-+const GUIDE_ALLOWED = new Set([
-+  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
-+]);
-+const TRANSPORT_ALLOWED = new Set([
-+  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
-+]);
-+
+
+const GUIDE_ALLOWED = new Set([
+  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
+]);
+const TRANSPORT_ALLOWED = new Set([
+  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
+]);
+
 
 /* ---------------- Day kind (на будущее для entry) ---------------- */
 const dkey = (d) => toYMD(new Date(d));
