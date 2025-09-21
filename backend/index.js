@@ -220,3 +220,7 @@ app.use("/api/entry-fees", entryFeesRoutes);
 const entryFeesAdminRoutes = require("./routes/entryFeesAdminRoutes");
 app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
 
+/** ===================== Provider Services ===================== */
+const providerServices = require('./routes/providerServices');
+app.use(providerServices);
+
