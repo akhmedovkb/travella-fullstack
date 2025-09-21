@@ -81,6 +81,26 @@ router.get('/api/providers/:pid/services', authenticateToken, async (req, res) =
   }
 });
 
+/* ========================= PUBLIC LIST (без токена) ========================= */
+router.get('/api/providers/:pid/services/public', async (req, res) => {
+  try {
+    const { pid } = req.params;
+    const q = `
+      SELECT id, provider_id, category, title, price, currency, is_active,
+             COALESCE(details, '{}'::jsonb) AS details
+      FROM provider_services
+      WHERE provider_id = $1
+        AND is_active = TRUE
+      ORDER BY category, price NULLS LAST, id
+    `;
+    const { rows } = await db.query(q, [pid]);
+    res.json(rows);
+  } catch (e) {
+    console.error('GET provider services PUBLIC error:', e);
+    res.status(500).json({ error: 'internal error' });
+  }
+});
+
 /* ========================= CREATE ========================= */
 router.post('/api/providers/:pid/services', authenticateToken, async (req, res) => {
   if (!ensureSelfOrAdmin(req, res)) return;
