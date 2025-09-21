@@ -738,6 +738,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
+                          const transport = opt?.raw || null;
                           setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
                           const list = await ensureServicesLoaded(transport);
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
