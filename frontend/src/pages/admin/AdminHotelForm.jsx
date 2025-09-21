@@ -331,23 +331,7 @@ export default function AdminHotelForm() {
   const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
   const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
 
-  // --- валидатор строк с ценами ---
-const isFilled = (v) => !(v === "" || v === null || v === undefined);
-
-const rowHasAnyPrice = (row) => {
-  if (!row?.prices) return false;
-  const seasons = ["low", "high"];
-  const persons = ["resident", "nonResident"];
-  for (const season of seasons) {
-    for (const person of persons) {
-      for (const mp of MEAL_PLANS) {
-        if (isFilled(row?.prices?.[season]?.[person]?.[mp])) return true;
-      }
-    }
-  }
-  return false;
-};
-
+  
 // id строк с ценами, но без указания количества
 const invalidRowIds = useMemo(
   () =>
@@ -378,6 +362,23 @@ const invalidRowIds = useMemo(
     DEFAULT_ROOM_TYPES.map((r) => blankRow(r))
   );
   const [newTypeName, setNewTypeName] = useState("");
+
+  // --- валидатор строк с ценами ---
+const isFilled = (v) => !(v === "" || v === null || v === undefined);
+
+const rowHasAnyPrice = (row) => {
+  if (!row?.prices) return false;
+  const seasons = ["low", "high"];
+  const persons = ["resident", "nonResident"];
+  for (const season of seasons) {
+    for (const person of persons) {
+      for (const mp of MEAL_PLANS) {
+        if (isFilled(row?.prices?.[season]?.[person]?.[mp])) return true;
+      }
+    }
+  }
+  return false;
+};
 
   // Доп. место
   const [extraBedPrice, setExtraBedPrice] = useState("");
