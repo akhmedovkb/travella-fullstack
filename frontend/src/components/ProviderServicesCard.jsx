@@ -255,6 +255,7 @@ export default function ProviderServicesCard({
         title: `Тур по городу ${TitleCaseCity(slug)} (гид)`,
         price: 0,
         currency: currencyDefault || "USD",
+        details: { city_slug: slug },
       }));
 
       const transportItems = [];
@@ -270,7 +271,10 @@ export default function ProviderServicesCard({
             )} (гид+транспорт ${seatsOk ? `${n}-местный ` : ""}${model})`,
             price: 0,
             currency: currencyDefault || "USD",
-            details: seatsOk ? { seats: n } : {},
+                        details: {
+              ...(seatsOk ? { seats: n } : {}),
+              city_slug: slug,
+            },
           });
         }
       }
