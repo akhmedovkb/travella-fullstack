@@ -23,6 +23,7 @@ const GUIDE_ALLOWED = [
   "seeoff",
   "translation",
 ];
+
 const TRANSPORT_ALLOWED = [
   "city_tour_transport",
   "mountain_tour_transport",
@@ -63,9 +64,9 @@ export default function ProviderServicesCard({
     category: "",
     title: "",
     price: "",
+    seats: "",
     currency: currencyDefault,
     is_active: true,
-    seats: "", // ⬅️ новое поле формы
   });
   const [saving, setSaving] = useState(false);
 
@@ -112,16 +113,16 @@ export default function ProviderServicesCard({
           price: Number(form.price) || 0,
           currency: form.currency || currencyDefault,
           is_active: !!form.is_active,
-          ...(detailsPayload ? { details: detailsPayload } : {}), // ⬅️ seats уезжает в details.seats
+          ...(detailsPayload ? { details: detailsPayload } : {}),
         }),
       });
       setForm({
         category: "",
         title: "",
         price: "",
+        seats: "",
         currency: currencyDefault,
         is_active: true,
-        seats: "",
       });
       await load();
     } finally {
@@ -151,13 +152,12 @@ export default function ProviderServicesCard({
     await load();
   };
 
-  // ⬇️ обновление вместимости (только для транспорта)
+  // Обновление вместимости (только для транспорта), мёржим/чистим details.seats
   const updateSeats = async (row, v) => {
     const n = Number(v);
-    const seats =
-      Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined; // undefined => удалить поле
+    const valid = Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
     const nextDetails = { ...(row.details || {}) };
-    if (seats) nextDetails.seats = seats;
+    if (valid) nextDetails.seats = valid;
     else delete nextDetails.seats;
 
     await fetchJSON(
@@ -183,9 +183,15 @@ export default function ProviderServicesCard({
           <select
             className="w-full border rounded h-9 px-2"
             value={form.category}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, category: e.target.value }))
-            }
+            onChange={(e) => {
+              const cat = e.target.value;
+              setForm((f) => ({
+                ...f,
+                category: cat,
+                // если категория не транспорт — очищаем seats
+                seats: isTransportCategory(cat) ? f.seats : "",
+              }));
+            }}
           >
             <option value="">— выберите категорию —</option>
             {allowedCats.map((c) => (
