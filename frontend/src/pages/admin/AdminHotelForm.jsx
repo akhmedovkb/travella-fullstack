@@ -335,7 +335,7 @@ export default function AdminHotelForm() {
   const tdCls = (season, extra = "") =>
     `px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"} ${extra}`;
   const inputCls = (season) =>
-    `w-24 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
+    `w-28 border rounded px-2 py-1 ${season === "high" ? "bg-gray-50" : "bg-white"}`;
 
   // Номера + сезонные цены
   const blankRow = (base) => ({
@@ -614,7 +614,7 @@ export default function AdminHotelForm() {
 
   /* ==================== UI ==================== */
   return (
-    <div className="max-w-3xl mx-auto bg-white rounded-xl border shadow-sm p-5">
+    <div className="mx-auto max-w-screen-2xl bg-white rounded-xl border shadow-sm p-6 lg:p-8">
       <div className="mb-3"><GeoNamesStatusBadge /></div>
       <h1 className="text-2xl font-bold mb-4">
         {t("admin.new_hotel_title", { defaultValue: "Новый отель" })}
@@ -737,7 +737,7 @@ export default function AdminHotelForm() {
       </h2>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-[1400px] text-sm align-top">
+        <table className="w-full min-w-[1200px] text-sm align-top">
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-3 py-2">
