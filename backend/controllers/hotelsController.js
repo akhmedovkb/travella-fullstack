@@ -837,6 +837,8 @@ module.exports = {
   getHotel,
   listHotels,
   updateHotel,
+  getHotelBrief,
+  listHotelsByCity,
   // инспекции + лайки
   listHotelInspections,
   createHotelInspection,
