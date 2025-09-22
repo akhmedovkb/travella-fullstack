@@ -1,3 +1,5 @@
+//backend/routes/hotelSeasons.js
+
 import express from 'express';
 import { sql } from '../db.js'; // используйте свой helper для pg
 import { authProviderOrAdmin } from '../middlewares/auth.js';
