@@ -3,6 +3,43 @@ const axios = require("axios");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
+// /api/hotels/:id/brief
+exports.getHotelBrief = async (req, res) => {
+  const { id } = req.params;
+  const q = `
+    SELECT id, name, stars, city, country, currency, rooms
+    FROM hotels
+    WHERE id = $1
+  `;
+  const { rows } = await db.query(q, [id]);
+  if (!rows.length) return res.status(404).json({ error: "Not found" });
+  const h = rows[0];
+  // rooms уже содержит prices.low / prices.high / resident/nonResident / BB/HB/FB/AI/UAI
+  res.json({
+    id: h.id,
+    name: h.name,
+    stars: h.stars,
+    city: h.city,
+    country: h.country,
+    currency: h.currency,
+    rooms: h.rooms || [],
+  });
+};
+
+// /api/hotels/by-city?city=Samarkand
+exports.listHotelsByCity = async (req, res) => {
+  const city = (req.query.city || "").trim();
+  if (!city) return res.status(400).json({ error: "city required" });
+  const q = `
+    SELECT id, name, stars, city, country, currency
+    FROM hotels
+    WHERE LOWER(city) = LOWER($1)
+    ORDER BY name ASC
+  `;
+  const { rows } = await db.query(q, [city]);
+  res.json(rows);
+};
+
 // ─── мониторинг (фолбек в консоль) ───
 let monitor = { record: (...args) => console.log("[monitor]", ...args) };
 try {
