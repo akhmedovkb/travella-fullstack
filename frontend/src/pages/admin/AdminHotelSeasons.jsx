@@ -210,7 +210,7 @@ export default function AdminHotelSeasons() {
   if (loading) return <div className="p-6 text-sm text-gray-500">Загрузка…</div>;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Сезоны отеля</h1>
