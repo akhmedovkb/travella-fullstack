@@ -57,7 +57,7 @@ export default function AdminHotelsTable() {
 
   return (
     <div className="p-6">
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold">Отели (админ)</h1>
           <Link
