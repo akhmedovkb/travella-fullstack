@@ -1,3 +1,5 @@
+//backend/controllers/hotelsController.js
+
 /* eslint-disable no-console */
 const axios = require("axios");
 const crypto = require("crypto");
