@@ -848,7 +848,39 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       placeholder={cityChosen ? "Выберите отель" : "Сначала укажите город"}
                       noOptionsMessage={() => cityChosen ? "Нет вариантов" : "Укажите город"}
                       value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
-                      onChange={(opt) => setByDay((p) => ({ ...p, [k]: { ...p[k], hotel: opt?.raw || null } }))}
+                      onChange={async (opt) => {
+                         const hotel = opt?.raw || null;
+                         // сбрасываем прежние данные отеля
+                         setByDay((p) => ({
+                           ...p,
+                           [k]: { 
+                             ...p[k],
+                             hotel,
+                             hotelBrief: null,
+                             hotelSeasons: [],
+                             hotelRoomsTotal: 0,
+                             hotelLoading: !!hotel
+                           }
+                         }));
+                         if (!hotel) return;
+                         try {
+                           const [brief, seasons] = await Promise.all([
+                             fetchHotelBrief(hotel.id).catch(() => null),
+                             fetchHotelSeasons(hotel.id).catch(() => []),
+                           ]);
+                           setByDay((p) => ({
+                             ...p,
+                             [k]: { 
+                               ...p[k],
+                               hotelBrief: brief,
+                               hotelSeasons: Array.isArray(seasons) ? seasons : [],
+                               hotelLoading: false
+                             }
+                           }));
+                         } catch {
+                           setByDay((p) => ({ ...p, [k]: { ...p[k], hotelLoading: false } }));
+                         }
+                       }}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
@@ -859,6 +891,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                     />
 
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
+                    {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">Загружаем фонд и сезоны…</div>}
                       {st.hotel && st.hotelBrief && (
                         <HotelRoomPicker
                           hotelBrief={st.hotelBrief}
