@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const { Pool } = require("pg");
 
 // /api/hotels/:id/brief
-async function getHotelBrief(req, res) => {
+async function getHotelBrief(req, res) {
   const { id } = req.params;
   const q = `
     SELECT id, name, stars, city, country, currency, rooms
@@ -29,7 +29,7 @@ async function getHotelBrief(req, res) => {
 };
 
 // /api/hotels/by-city?city=Samarkand
-async function listHotelsByCity(req, res) => {
+async function listHotelsByCity(req, res) {
   const city = (req.query.city || "").trim();
   if (!city) return res.status(400).json({ error: "city required" });
   const q = `
