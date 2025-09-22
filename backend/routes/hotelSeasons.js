@@ -1,62 +1,62 @@
-//backend/routes/hotelSeasons.js
+// routes/hotelSeasons.js
+const express = require('express');
+const router = express.Router({ mergeParams: true });
+const db = require('../db'); // ваш pg helper/pool
 
-import express from 'express';
-import { sql } from '../db.js'; // используйте свой helper для pg
-import { authProviderOrAdmin } from '../middlewares/auth.js';
-
-const r = express.Router({ mergeParams: true });
-
-// Все сезоны отеля
-r.get('/', async (req, res, next) => {
+// список сезонов отеля
+router.get('/', async (req, res, next) => {
   try {
     const { id: hotelId } = req.params;
-    const rows = await sql`
-      SELECT id, hotel_id, label, start_date, end_date
-      FROM hotel_seasons
-      WHERE hotel_id = ${hotelId}
-      ORDER BY start_date ASC
-    `;
+    const { rows } = await db.query(
+      `SELECT id, hotel_id, label, start_date, end_date
+       FROM hotel_seasons
+       WHERE hotel_id=$1
+       ORDER BY start_date ASC`,
+      [hotelId]
+    );
     res.json(rows);
   } catch (e) { next(e); }
 });
 
-// Создать
-r.post('/', authProviderOrAdmin, async (req, res, next) => {
+// создать сезон
+router.post('/', async (req, res, next) => {
   try {
     const { id: hotelId } = req.params;
     const { label, start_date, end_date } = req.body;
-    const row = await sql`
-      INSERT INTO hotel_seasons (hotel_id, label, start_date, end_date)
-      VALUES (${hotelId}, ${label}, ${start_date}, ${end_date})
-      RETURNING id, hotel_id, label, start_date, end_date
-    `;
-    res.json(row[0]);
+    const { rows } = await db.query(
+      `INSERT INTO hotel_seasons (hotel_id, label, start_date, end_date)
+       VALUES ($1,$2,$3,$4)
+       RETURNING id, hotel_id, label, start_date, end_date`,
+      [hotelId, label, start_date, end_date]
+    );
+    res.json(rows[0]);
   } catch (e) { next(e); }
 });
 
-// Обновить
-r.put('/:seasonId', authProviderOrAdmin, async (req, res, next) => {
+// обновить
+router.put('/:seasonId', async (req, res, next) => {
   try {
     const { id: hotelId, seasonId } = req.params;
     const { label, start_date, end_date } = req.body;
-    const row = await sql`
-      UPDATE hotel_seasons
-      SET label=${label}, start_date=${start_date}, end_date=${end_date}, updated_at=now()
-      WHERE id=${seasonId} AND hotel_id=${hotelId}
-      RETURNING id, hotel_id, label, start_date, end_date
-    `;
-    if (!row.length) return res.status(404).json({ error: 'Not found' });
-    res.json(row[0]);
+    const { rows } = await db.query(
+      `UPDATE hotel_seasons
+       SET label=$1, start_date=$2, end_date=$3, updated_at=now()
+       WHERE id=$4 AND hotel_id=$5
+       RETURNING id, hotel_id, label, start_date, end_date`,
+      [label, start_date, end_date, seasonId, hotelId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
   } catch (e) { next(e); }
 });
 
-// Удалить
-r.delete('/:seasonId', authProviderOrAdmin, async (req, res, next) => {
+// удалить
+router.delete('/:seasonId', async (req, res, next) => {
   try {
     const { id: hotelId, seasonId } = req.params;
-    await sql`DELETE FROM hotel_seasons WHERE id=${seasonId} AND hotel_id=${hotelId}`;
+    await db.query(`DELETE FROM hotel_seasons WHERE id=$1 AND hotel_id=$2`, [seasonId, hotelId]);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
-export default r;
+module.exports = router;
