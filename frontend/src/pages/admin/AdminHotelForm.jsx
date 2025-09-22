@@ -1,6 +1,8 @@
 // frontend/src/pages/admin/AdminHotelForm.jsx
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+
 async function httpPut(path, body = {}, role) {
   try {
     const res = await axios.put(apiURL(path), body, {
@@ -651,9 +653,23 @@ const invalidRowIds = useMemo(
   return (
     <div className="mx-auto max-w-screen-2xl bg-white rounded-xl border shadow-sm p-6 lg:p-8">
       <div className="mb-3"><GeoNamesStatusBadge /></div>
-      <h1 className="text-2xl font-bold mb-4">
-        {t("admin.new_hotel_title", { defaultValue: "Новый отель" })}
-      </h1>
+      {/* ── ШАПКА С КНОПКОЙ СЕЗОНОВ ── */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">
+          {hotelId
+            ? t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })
+            : t("admin.new_hotel_title",  { defaultValue: "Новый отель" })}
+        </h1>
+
+        {hotelId && (
+          <Link
+            to={`/admin/hotels/${encodeURIComponent(hotelId)}/seasons`}
+            className="inline-flex items-center px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+          >
+            Управлять сезонами
+          </Link>
+        )}
+      </div>
 
       {/* Базовая информация */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
