@@ -10,6 +10,8 @@ const {
   createHotel,
   listHotels,
   updateHotel,
+  getHotelBrief,          
+  listHotelsByCity,       
   // инспекции
   listHotelInspections,
   createHotelInspection,
@@ -61,6 +63,9 @@ router.get("/search", searchHotels);
 router.get("/ranked", listRankedHotels);
 router.get("/_list", listHotels);
 
+/* ===  список по городу для каскада === */
+router.get("/by-city", listHotelsByCity);   // /api/hotels/by-city?city=Samarkand
+
 /* --- лайки инспекций (авторизация обязательна) --- */
 // ставим выше, чтобы не конфликтовало с "/:id/inspections"
 router.post("/inspections/:id/like", canLike, likeInspection);
@@ -70,6 +75,9 @@ router.post("/inspections/:id/like", canLike, likeInspection);
 router.get("/:id/inspections", tryAuth, listHotelInspections);
 // создание — только для провайдера/турагента/агентства/поставщика
 router.post("/:id/inspections", providerOnly, createHotelInspection);
+
+/* === "бриф" отеля для конструктора === */
+router.get("/:id/brief", getHotelBrief);   // /api/hotels/:id/brief
 
 /* --- карточка отеля --- */
 router.get("/:id", getHotel);
