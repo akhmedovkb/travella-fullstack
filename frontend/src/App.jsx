@@ -15,6 +15,7 @@ import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
 import HotelInspections from "./pages/HotelInspections";
 import AdminHotelsTable from "./pages/admin/AdminHotelsTable"; // ← ОСТАВИЛ один импорт
+import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -187,6 +188,17 @@ export default function App() {
           <Route path="/tour-builder" element={<TourBuilder />} />
           
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
+
+          <Route
+            path="/admin/hotels/:id/seasons"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <AdminHotelSeasons />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
 
         </Routes>
       </div>
