@@ -1,3 +1,5 @@
+//backend/utils/seasons.js
+
 export function detectSeason(dateISO, seasons, defaultSeason = 'low') {
   // dateISO: 'YYYY-MM-DD'
   const d = new Date(dateISO + 'T00:00:00Z');
