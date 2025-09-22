@@ -5,8 +5,6 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const app = express();
-import hotelSeasonsRouter from './routes/hotelSeasons.js';
-
 
 /** ===================== CORS (унифицированный) ===================== */
 /**
@@ -227,6 +225,7 @@ const providerServices = require('./routes/providerServices');
 app.use(providerServices);
 
 /** ===================== HotelsSeasons ===================== */
+const hotelSeasonsRouter = require('./routes/hotelSeasons');
 app.use('/api/hotels/:id/seasons', hotelSeasonsRouter);
 
 
