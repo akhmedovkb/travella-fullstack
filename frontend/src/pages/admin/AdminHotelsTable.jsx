@@ -1,25 +1,23 @@
 // frontend/src/pages/admin/AdminHotelsTable.jsx
-
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
-import { Link } from "react-router-dom";
 
 function normalizeHotel(h) {
   return {
-    id:         h.id ?? h.hotel_id ?? h._id ?? null,
-    name:       h.name ?? h.title ?? "",
-    city:       h.city ?? h.location ?? h.town ?? "",
+    id:   h.id ?? h.hotel_id ?? h._id ?? null,
+    name: h.name ?? h.title ?? "",
+    city: h.city ?? h.location ?? h.town ?? "",
   };
 }
 
 export default function AdminHotelsTable() {
-  const [items, setItems]   = useState([]);
-  const [qName, setQName]   = useState("");
-  const [qCity, setQCity]   = useState("");
+  const [items, setItems] = useState([]);
+  const [qName, setQName] = useState("");
+  const [qCity, setQCity] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-  const reqIdRef = useRef(0); // защита от «гонок» ответов
+  const [error, setError] = useState("");
+  const reqIdRef = useRef(0);
 
   const url = useMemo(() => {
     const p = new URLSearchParams({
@@ -35,11 +33,11 @@ export default function AdminHotelsTable() {
     setLoading(true);
     setError("");
     try {
-      const res  = await apiGet(url);
+      const res = await apiGet(url);
       const data = Array.isArray(res) ? res : (Array.isArray(res?.items) ? res.items : []);
       const rows = data.map(normalizeHotel);
       if (reqIdRef.current === myReq) setItems(rows);
-    } catch (e) {
+    } catch (_e) {
       if (reqIdRef.current === myReq) {
         setItems([]);
         setError("Не удалось загрузить список отелей");
@@ -49,7 +47,8 @@ export default function AdminHotelsTable() {
     }
   }, [url]);
 
-  useEffect(() => { load(); }, []); // первичная загрузка
+  // первичная и реактивная загрузка при изменении url
+  useEffect(() => { load(); }, [load]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -105,7 +104,7 @@ export default function AdminHotelsTable() {
                 <th className="px-4 py-3 font-semibold w-[90px]">ID</th>
                 <th className="px-4 py-3 font-semibold">Название</th>
                 <th className="px-4 py-3 font-semibold w-1/3">Город</th>
-                <th className="px-4 py-3 font-semibold w-[160px]">Действия</th>
+                <th className="px-4 py-3 font-semibold w-[220px]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -125,18 +124,20 @@ export default function AdminHotelsTable() {
                     <td className="px-4 py-3">{h.city || "—"}</td>
                     <td className="px-4 py-3">
                       {h.id ? (
-                        <Link
-                          to={`/admin/hotels/${h.id}/edit`}
-                          className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
-                        >
-                          Править
-                        </Link>
-                        <Link
-                          to={`/admin/hotels/${row.id}/seasons`}
-                          className="px-2 py-1 border rounded text-sm hover:bg-gray-50"
-                        >
-                          Сезоны
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/admin/hotels/${h.id}/edit`}
+                            className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                          >
+                            Править
+                          </Link>
+                          <Link
+                            to={`/admin/hotels/${h.id}/seasons`}
+                            className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                          >
+                            Сезоны
+                          </Link>
+                        </div>
                       ) : (
                         <span className="text-gray-400">локальная подсказка</span>
                       )}
