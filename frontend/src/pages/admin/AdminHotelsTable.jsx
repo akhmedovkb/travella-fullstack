@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
+import { Link } from "react-router-dom";
 
 function normalizeHotel(h) {
   return {
@@ -129,6 +130,12 @@ export default function AdminHotelsTable() {
                           className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
                         >
                           Править
+                        </Link>
+                        <Link
+                          to={`/admin/hotels/${row.id}/seasons`}
+                          className="px-2 py-1 border rounded text-sm hover:bg-gray-50"
+                        >
+                          Сезоны
                         </Link>
                       ) : (
                         <span className="text-gray-400">локальная подсказка</span>
