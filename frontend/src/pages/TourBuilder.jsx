@@ -101,6 +101,40 @@ const fetchJSONLoose = async (path, params = {}) => {
   }
 };
 
+// --- Hotels (каскад по городу + бриф + сезоны) ---
+async function fetchHotelsByCity(city) {
+  if (!city) return [];
+  const rows = await fetchJSON("/api/hotels/by-city", { city });
+  // приведение к options для react-select
+  return (Array.isArray(rows) ? rows : []).map(h => ({
+    value: h.id,
+    label: `${h.name}${h.city ? " — " + h.city : ""}`,
+    raw: h,
+  }));
+}
+
+async function fetchHotelBrief(hotelId) {
+  return await fetchJSON(`/api/hotels/${hotelId}/brief`);
+}
+
+async function fetchHotelSeasons(hotelId) {
+  // [{ id, label:'low'|'high', start_date:'YYYY-MM-DD', end_date:'YYYY-MM-DD' }, ...]
+  return await fetchJSON(`/api/hotels/${hotelId}/seasons`);
+}
+
+// Определить сезон на конкретную дату (если попали в high-интервал — high, иначе low)
+function resolveSeasonLabel(ymd, seasons) {
+  if (!Array.isArray(seasons) || seasons.length === 0) return "low";
+  for (const s of seasons) {
+    if (!s?.start_date || !s?.end_date) continue;
+    if (ymd >= s.start_date && ymd <= s.end_date) {
+      return (s.label === "high" ? "high" : "low");
+    }
+  }
+  return "low";
+}
+
+
 const normalizeProvider = (row, kind) => ({
   id: row.id ?? row._id ?? String(Math.random()),
   name: row.name || "—",
@@ -483,8 +517,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
 const makeHotelLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
-  const rows = await fetchHotelsSmart({ city: day.city, date: dateKey, q: (input || "").trim() });
-  return rows.map(h => ({ value: h.id, label: `${h.name}${h.city ? " — " + h.city : ""}`, raw: h }));
+  const all = await fetchHotelsByCity(day.city); // <- здесь каскад по городу
+  const q = (input || "").trim().toLowerCase();
+  if (!q) return all;
+  return all.filter(o => o.label.toLowerCase().includes(q));
 };
 
 
@@ -518,7 +554,13 @@ const makeHotelLoader = (dateKey) => async (input) => {
     const st = byDay[dateKey] || {};
     return toNum(st?.transportService?.price, toNum(st?.transport?.price_per_day, 0));
   };
-  const calcHotelForDay = (dateKey) => toNum(byDay[dateKey]?.hotel?.price, 0);
+  
+  const calcHotelForDay = (dateKey) => {
+  const st = byDay[dateKey] || {};
+  // если выбрали номера — берём сумму из пикера; иначе fallback на простое поле price
+  return toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0));
+};
+
 
   const totals = useMemo(() => {
     let guide = 0, transport = 0, hotel = 0, entries = 0;
@@ -815,6 +857,21 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
+
+                    {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
+                      {st.hotel && st.hotelBrief && (
+                        <HotelRoomPicker
+                          hotelBrief={st.hotelBrief}
+                          seasons={st.hotelSeasons || []}
+                          // для конструктора «по дню» ночёвка ровно одна: передаем текущую дату
+                          nightDates={[k]}                              // ['YYYY-MM-DD']
+                          residentFlag={residentType === "res"}        // true/false
+                          onTotalChange={(sum) =>
+                            setByDay((p) => ({ ...p, [k]: { ...p[k], hotelRoomsTotal: sum } }))
+                          }
+                        />
+                      )}
+
                     <div className="text-xs text-gray-600 mt-1">
                       Цена/ночь: {toNum(st.hotel?.price, 0).toFixed(2)} {st.hotel?.currency || "USD"}
                     </div>
@@ -909,6 +966,92 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adt, chd, servicesCache, days.map((d) => toYMD(d)).join("|")]);
   return null;
+}
+
+function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, onTotalChange }) {
+  const MEALS = ["BB","HB","FB","AI","UAI"];
+  const [meal, setMeal] = useState("BB");
+  // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
+  const [qty, setQty] = useState({});
+
+  useEffect(() => {
+    // обнуляем при смене отеля
+    setQty({});
+    setMeal("BB");
+  }, [hotelBrief?.id]);
+
+  // список типов из брифа
+  const roomTypes = useMemo(() => {
+    const arr = Array.isArray(hotelBrief?.rooms) ? hotelBrief.rooms : [];
+    // уникальные имена типов (в брифе они приходят как { type, count, prices:{low/high...} })
+    const names = Array.from(new Set(arr.map(r => r.type).filter(Boolean)));
+    return names;
+  }, [hotelBrief]);
+
+  // быстрый доступ к объекту по type
+  const mapByType = useMemo(() => {
+    const m = new Map();
+    (hotelBrief?.rooms || []).forEach(r => m.set(r.type, r));
+    return m;
+  }, [hotelBrief]);
+
+  // пересчёт тотала при каждом изменении
+  useEffect(() => {
+    let sum = 0;
+    const personKey = residentFlag ? "resident" : "nonResident";
+    for (const ymd of (nightDates || [])) {
+      const season = resolveSeasonLabel(ymd, seasons); // 'low' | 'high'
+      for (const [type, n] of Object.entries(qty)) {
+        const count = Number(n) || 0;
+        if (!count) continue;
+        const row = mapByType.get(type);
+        const price = Number(
+          row?.prices?.[season]?.[personKey]?.[meal] ?? 0
+        );
+        sum += count * price;
+      }
+    }
+    onTotalChange?.(sum);
+  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, onTotalChange]);
+
+  return (
+    <div className="mt-3 border rounded p-2">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="text-sm font-medium">Номера и питание</div>
+        <select className="h-8 border rounded px-2 text-sm" value={meal} onChange={(e) => setMeal(e.target.value)}>
+          {MEALS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <div className="text-xs text-gray-500">({residentFlag ? "Резиденты" : "Нерезиденты"})</div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
+        {roomTypes.map((type) => {
+          const max = Number(mapByType.get(type)?.count ?? 0);
+          return (
+            <label key={type} className="flex items-center justify-between border rounded px-2 py-1">
+              <span className="text-sm">{type}{max ? ` (≤ ${max})` : ""}</span>
+              <input
+                type="number"
+                min={0}
+                max={Math.max(0, max)}
+                className="h-8 w-20 border rounded px-2 text-sm"
+                value={qty[type] ?? 0}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(Number(e.target.value || 0), Math.max(0, max)));
+                  setQty((p) => ({ ...p, [type]: v }));
+                }}
+              />
+            </label>
+          );
+        })}
+        {!roomTypes.length && (
+          <div className="text-xs text-amber-600">
+            Для отеля не найден номерной фонд. Заполните на странице админ-формы отеля.
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 
