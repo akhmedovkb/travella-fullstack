@@ -7,7 +7,6 @@ const API = (p) => (import.meta.env.VITE_API_BASE_URL || "") + p;
 
 const iso = (d) => {
   if (!d) return "";
-  // допускаем Date или 'YYYY-MM-DD'
   const x = typeof d === "string" ? new Date(d + "T00:00:00Z") : new Date(d);
   if (Number.isNaN(x.getTime())) return "";
   return x.toISOString().slice(0, 10);
@@ -26,11 +25,10 @@ function validateSeasons(rows) {
     }))
     .filter((r) => r.start && r.end);
 
-  // пустые поля
+  // пустые поля и порядок
   rows.forEach((r) => {
-    if (!r.start_date || !r.end_date) {
-      errors.push({ id: r.id, field: !r.start_date ? "start_date" : "end_date", msg: "Обязательное поле" });
-    }
+    if (!r.start_date) errors.push({ id: r.id, field: "start_date", msg: "Обязательное поле" });
+    if (!r.end_date) errors.push({ id: r.id, field: "end_date", msg: "Обязательное поле" });
     if (r.start_date && r.end_date && r.start_date > r.end_date) {
       errors.push({ id: r.id, field: "start_date", msg: "Начало позже конца" });
       errors.push({ id: r.id, field: "end_date", msg: "Конец раньше начала" });
@@ -77,6 +75,7 @@ export default function AdminHotelSeasons() {
       );
     } catch (e) {
       setServerMsg("Не удалось загрузить данные");
+      // eslint-disable-next-line no-console
       console.error(e);
     } finally {
       setLoading(false);
@@ -108,9 +107,9 @@ export default function AdminHotelSeasons() {
       },
     ]);
   };
+
   const removeRow = async (row) => {
     if (!confirm("Удалить сезон?")) return;
-    // новый — просто выпиливаем
     if (String(row.id).startsWith("new-")) {
       setRows((rs) => rs.filter((x) => x.id !== row.id));
       return;
@@ -120,6 +119,7 @@ export default function AdminHotelSeasons() {
       await axios.delete(API(`/api/hotels/${hotelId}/seasons/${row.id}`));
       setRows((rs) => rs.filter((x) => x.id !== row.id));
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error(e);
       alert("Не удалось удалить");
     } finally {
@@ -129,12 +129,13 @@ export default function AdminHotelSeasons() {
 
   const saveRow = async (row) => {
     setServerMsg("");
+    // базовая валидация самого ряда
     const localErrors = validateSeasons([row]);
     if (localErrors.length) {
       setServerMsg("Заполните корректно даты");
       return;
     }
-    // проверим на пересечение со всеми
+    // проверка на пересечения со всем набором
     const tmp = rows.map((r) => (r.id === row.id ? row : r));
     const errs = validateSeasons(tmp);
     if (errs.length) {
@@ -151,7 +152,11 @@ export default function AdminHotelSeasons() {
         });
         const created = res.data;
         setRows((rs) =>
-          rs.map((x) => (x.id === row.id ? { ...created, start_date: iso(created.start_date), end_date: iso(created.end_date) } : x))
+          rs.map((x) =>
+            x.id === row.id
+              ? { id: created.id, label: created.label || row.label, start_date: iso(created.start_date), end_date: iso(created.end_date) }
+              : x
+          )
         );
       } else {
         const res = await axios.put(API(`/api/hotels/${hotelId}/seasons/${row.id}`), {
@@ -161,11 +166,16 @@ export default function AdminHotelSeasons() {
         });
         const updated = res.data;
         setRows((rs) =>
-          rs.map((x) => (x.id === row.id ? { ...updated, start_date: iso(updated.start_date), end_date: iso(updated.end_date) } : x))
+          rs.map((x) =>
+            x.id === row.id
+              ? { id: updated.id, label: updated.label || row.label, start_date: iso(updated.start_date), end_date: iso(updated.end_date) }
+              : x
+          )
         );
       }
       setServerMsg("Сохранено ✅");
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error(e);
       const code = e?.response?.data?.error || "save_failed";
       if (code === "overlap" || code === "overlap_in_payload") setServerMsg("На сервере обнаружено пересечение интервалов");
@@ -178,7 +188,6 @@ export default function AdminHotelSeasons() {
 
   const bulkReplace = async () => {
     if (!confirm("Полностью заменить сезоны текущим списком?")) return;
-    // в bulk тоже прогоняем валидацию
     const errs = validateSeasons(rows);
     if (errs.length) {
       setServerMsg("Исправьте ошибки перед заменой");
@@ -198,6 +207,7 @@ export default function AdminHotelSeasons() {
       setRows(items.map((x) => ({ id: x.id, label: x.label || "low", start_date: iso(x.start_date), end_date: iso(x.end_date) })));
       setServerMsg("Заменено ✅");
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error(e);
       const code = e?.response?.data?.error || "bulk_failed";
       if (code === "overlap_in_payload") setServerMsg("Пересечения в отправленном наборе");
@@ -210,7 +220,7 @@ export default function AdminHotelSeasons() {
   if (loading) return <div className="p-6 text-sm text-gray-500">Загрузка…</div>;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-screen-xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Сезоны отеля</h1>
@@ -225,21 +235,36 @@ export default function AdminHotelSeasons() {
             )}
           </div>
         </div>
-        <Link className="text-blue-600 hover:underline text-sm" to={`/admin/hotels/${hotelId}`}>← карточка отеля</Link>
+        <Link className="text-blue-600 hover:underline text-sm" to={`/admin/hotels/${hotelId}/edit`}>
+          ← карточка отеля
+        </Link>
       </div>
 
       {serverMsg && <div className="mb-3 text-sm">{serverMsg}</div>}
 
       <div className="rounded border overflow-hidden">
-        <div className="grid grid-cols-[1fr,160px,160px,140px] bg-gray-50 px-3 py-2 text-sm font-medium">
+        {/* HEADER */}
+        <div
+          className="
+            grid grid-cols-[minmax(260px,1fr),200px,200px,240px]
+            gap-2 bg-gray-50 px-3 py-2 text-sm font-medium
+          "
+        >
           <div>Тег сезона</div>
           <div>Начало</div>
           <div>Конец</div>
           <div className="text-right">Действия</div>
         </div>
 
+        {/* ROWS */}
         {rows.map((r) => (
-          <div key={r.id} className="grid grid-cols-[1fr,160px,160px,140px] items-center px-3 py-2 border-t text-sm">
+          <div
+            key={r.id}
+            className="
+              grid grid-cols-[minmax(260px,1fr),200px,200px,240px]
+              gap-2 items-center px-3 py-2 border-t text-sm
+            "
+          >
             <div>
               <select
                 className="border rounded h-9 px-2 w-full"
@@ -272,9 +297,11 @@ export default function AdminHotelSeasons() {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {errors.some((e) => e.id === r.id) && (
-                <span title={errTextFor(r.id)} className="text-xs text-red-600 mr-2">есть ошибки</span>
+                <span title={errTextFor(r.id)} className="text-xs text-red-600 mr-2">
+                  есть ошибки
+                </span>
               )}
               <button
                 className="h-9 px-3 border rounded hover:bg-gray-50 disabled:opacity-50"
@@ -294,17 +321,11 @@ export default function AdminHotelSeasons() {
           </div>
         ))}
 
-        {!rows.length && (
-          <div className="px-3 py-6 text-sm text-gray-500 border-t">Сезонов пока нет</div>
-        )}
+        {!rows.length && <div className="px-3 py-6 text-sm text-gray-500 border-t">Сезонов пока нет</div>}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          className="h-9 px-3 border rounded hover:bg-gray-50"
-          onClick={addRow}
-          disabled={saving}
-        >
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button className="h-9 px-3 border rounded hover:bg-gray-50" onClick={addRow} disabled={saving}>
           + Добавить сезон
         </button>
         <button
