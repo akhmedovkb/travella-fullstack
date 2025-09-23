@@ -650,7 +650,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
             </div>
 
             <div>
-              <div className="text-sm font-medium mb-1">Тарифы для</div>
+              <div className="text-sm font-medium mb-1">{t('tb.tariff_for')}</div>
               <label className="inline-flex items-center gap-2 mr-4">
                 <input type="radio" checked={residentType === "nrs"} onChange={() => setResidentType("nrs")} />
                 <span>{t('tb.nonresidents')}</span>
@@ -755,7 +755,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
                       }}
                     >
-                      <option value="">Выберите услугу гида…</option>
+                      <option value="">{t('tb.pick_guide_service_ph')}</option>
                       {(servicesCache[st.guide?.id] || [])
                         .filter(s => {
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
@@ -835,7 +835,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
                       }}
                     >
-                      <option value="">Выберите услугу транспорта…</option>
+                      <option value="">{t('tb.pick_transport_service_ph')}</option>
                       {(servicesCache[st.transport?.id] || [])
                         .filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0 && fitsPax(s, Math.max(1, toNum(adt) + toNum(chd))))
                         .sort((a,b) => a.price - b.price)
@@ -967,9 +967,9 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         menuList: (b) => ({ ...b, overflow: "visible" }),
                       }}
                     />
-                    <div className="text-xs text-gray-600 mt-1">
-                      На этот день: {calcEntryForDay(k).toFixed(2)} (учтены ADT/CHD и статус резидента)
-                    </div>
+                   <div className="text-xs text-gray-600 mt-1">
+                     {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
+                   </div>
                   </div>
                 </div>
 
