@@ -838,6 +838,48 @@
     "my_requests": "Мои запросы"
   },
 
+  "tb": {
+    "title": "Конструктор тура",
+    "dates": "Даты тура",
+    "pick_dates": "Выберите даты начала и конца",
+    "dates_span": "{{from}} — {{to}} • {{days}} дн.",
+    "tariffs_for": "Тарифы для",
+    "residents": "Резиденты",
+    "nonresidents": "Нерезиденты",
+    "speaking_lang": "Speaking language",
+    "city_ph": "Город (например, Tashkent)",
+    "pick_city_first": "Сначала укажите город",
+    "guide": "Гид",
+    "pick_guide": "Выберите гида",
+    "no_providers": "Нет доступных провайдеров",
+    "no_services_for_guide": "Для этого гида услуги не найдены. Заполните их в Dashboard → Services.",
+    "transport": "Транспорт",
+    "pick_transport": "Выберите транспорт",
+    "no_services_for_transport": "Для этого перевозчика услуги не найдены. Заполните их в Dashboard → Services.",
+    "hotel": "Отель (за ночь, нетто)",
+    "hotel_short": "Отель",
+    "pick_hotel": "Выберите отель",
+    "no_hotels": "Нет вариантов",
+    "loading_hotel": "Загружаем фонд и сезоны…",
+    "entry_fees": "Входные билеты (объекты)",
+    "entry_ph": "Начните вводить объект…",
+    "pick_sites": "Выберите объекты",
+    "nothing_found": "Ничего не найдено",
+    "entry_for_day": "На этот день",
+    "entry_hint_suffix": "учтены ADT/CHD и статус резидента",
+    "price_per_day": "Цена/день",
+    "price_per_night": "Цена/ночь",
+    "day_total": "Итого по дню",
+    "rooms_and_meals": "Номера и питание",
+    "totals": {
+      "guide": "Гид (нетто)",
+      "transport": "Транспорт (нетто)",
+      "hotels": "Отели (нетто)",
+      "entry": "Entry fees (нетто)",
+      "total": "ИТОГО"
+    }
+  },
+
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "title": "Название",
 
