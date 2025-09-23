@@ -936,7 +936,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
 
                     <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "USD"}
-                    </div>>
+                    </div>
                   </div>
 
                   {/* Entry fees */}
