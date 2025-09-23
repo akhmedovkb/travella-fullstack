@@ -851,6 +851,48 @@
   },
 
   "tb": {
+    "title": "Tur konstruktori",
+    "dates": "Sanalar",
+    "pick_dates": "Kalendar orqali sanalarni tanlang",
+    "dates_span": "{{from}} → {{to}} ({{days}} kun)",
+    "city_ph": "Shahar (slug yoki nomi)",
+    "speaking_lang": "Afzal muloqot tili",
+    "residents": "Rezidentlar",
+    "nonresidents": "Norezidentlar",
+    "pick_city_first": "Avval shaharni tanlang",
+
+    "guide": "Gid",
+    "pick_guide": "Gidni tanlang",
+    "no_providers": "Provayderlar topilmadi",
+    "no_services_for_guide": "Bu gid uchun mos xizmatlar topilmadi",
+
+    "transport": "Transport",
+    "pick_transport": "Transport provayderini tanlang",
+    "no_services_for_transport": "Bu tashuvchi uchun mos xizmatlar topilmadi",
+
+    "hotel": "Mehmonxona",
+    "hotel_short": "Mehmonxona",
+    "pick_hotel": "Mehmonxonani tanlang",
+    "no_hotels": "Mehmonxonalar topilmadi",
+    "loading_hotel": "Mehmonxona ma’lumotlari yuklanmoqda…",
+
+    "entry_fees": "Kirish chiptalari",
+    "entry_ph": "Obyektlarni qidiring: muzeylar, bog‘lar…",
+    "pick_sites": "Joylarni tanlang",
+    "nothing_found": "Hech narsa topilmadi",
+
+    "price_per_day": "Kuniga narx",
+    "price_per_night": "Tuniga narx",
+    "rooms_and_meals": "Xonalar va ovqatlanish",
+    "day_total": "Kun bo‘yicha jami",
+
+    "totals": {
+      "guide": "Gid",
+      "transport": "Transport",
+      "hotels": "Mehmonxonalar",
+      "entry": "Chipta/kirish",
+      "total": "Jami"
+    },
   "load_draft": "Qoralamani yuklash",
   "save_draft": "Qoralamani saqlash",
   "draft_saved": "Qoralama saqlandi",
