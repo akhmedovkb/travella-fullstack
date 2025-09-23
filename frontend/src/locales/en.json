@@ -827,6 +827,15 @@
   },
 
   "tb": {
+     "tariff_for": "Tariffs for:",
+    "residents": "Residents",
+    "nonresidents": "Non-residents",
+    "pick_transport_service_ph": "Select a transport service...",
+    "pick_guide_service_ph": "Select a guide service...",
+    "calc_day_hint": "For this day: {{amount}} (ADT/CHD and residency included)",
+    "pick_places": "Pick places",
+    "entry_ph": "Search sites, museums, parks…",
+    "speaking_lang": "Preferred speaking language",
     "title": "Tour builder",
     "dates": "Dates",
     "pick_dates": "Pick the dates on the calendar",
