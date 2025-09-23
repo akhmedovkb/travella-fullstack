@@ -1043,7 +1043,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           </div>
           {Number(usdRate) <= 0 && (
             <div className="text-xs text-amber-600 mt-2">
-              Введите корректный курс, чтобы увидеть суммы в USD
+              {t('tb.usd_enter_valid_rate')}
             </div>
           )}
         </div>
