@@ -3,13 +3,30 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 
-const API = (p) => (import.meta.env.VITE_API_BASE_URL || "") + p;
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const api = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,
+});
 
+// ---- auth helpers ----
+function getToken() {
+  return (
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("token") ||
+    null
+  );
+}
+function authHeaders() {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+// ---- utils ----
 const iso = (d) => {
   if (!d) return "";
   const x = typeof d === "string" ? new Date(d + "T00:00:00Z") : new Date(d);
-  if (Number.isNaN(x.getTime())) return "";
-  return x.toISOString().slice(0, 10);
+  return Number.isNaN(x.getTime()) ? "" : x.toISOString().slice(0, 10);
 };
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const overlaps = (a, b) => !(a.end < b.start || b.end < a.start);
@@ -26,21 +43,36 @@ function validateSeasons(rows) {
     .filter((r) => r.start && r.end);
 
   rows.forEach((r) => {
-    if (!r.start_date) errors.push({ id: r.id, field: "start_date", msg: "Обязательное поле" });
-    if (!r.end_date) errors.push({ id: r.id, field: "end_date", msg: "Обязательное поле" });
+    if (!r.start_date || !r.end_date) {
+      errors.push({
+        id: r.id,
+        field: !r.start_date ? "start_date" : "end_date",
+        msg: "Обязательное поле",
+      });
+    }
     if (r.start_date && r.end_date && r.start_date > r.end_date) {
       errors.push({ id: r.id, field: "start_date", msg: "Начало позже конца" });
       errors.push({ id: r.id, field: "end_date", msg: "Конец раньше начала" });
     }
   });
 
-  const sorted = [...items].sort((a, b) => cmp(a.start, b.start) || cmp(a.end, b.end));
+  const sorted = [...items].sort(
+    (a, b) => cmp(a.start, b.start) || cmp(a.end, b.end)
+  );
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const cur = sorted[i];
     if (overlaps(prev, cur)) {
-      errors.push({ id: prev.id, field: "start_date", msg: "Пересечение с соседним интервалом" });
-      errors.push({ id: cur.id, field: "start_date", msg: "Пересечение с соседним интервалом" });
+      errors.push({
+        id: prev.id,
+        field: "start_date",
+        msg: "Пересечение с соседним интервалом",
+      });
+      errors.push({
+        id: cur.id,
+        field: "start_date",
+        msg: "Пересечение с соседним интервалом",
+      });
     }
   }
   return errors;
@@ -50,7 +82,7 @@ export default function AdminHotelSeasons() {
   const { id: hotelId } = useParams();
   const [loading, setLoading] = useState(true);
   const [hotel, setHotel] = useState(null);
-  const [rows, setRows] = useState([]); // [{id,label,start_date,end_date}]
+  const [rows, setRows] = useState([]); // {id,label,start_date,end_date}
   const [saving, setSaving] = useState(false);
   const [serverMsg, setServerMsg] = useState("");
 
@@ -59,8 +91,8 @@ export default function AdminHotelSeasons() {
     setServerMsg("");
     try {
       const [h, s] = await Promise.all([
-        axios.get(API(`/api/hotels/${hotelId}/brief`)).then((r) => r.data),
-        axios.get(API(`/api/hotels/${hotelId}/seasons`)).then((r) => r.data),
+        api.get(`/api/hotels/${hotelId}/brief`).then((r) => r.data),
+        api.get(`/api/hotels/${hotelId}/seasons`).then((r) => r.data),
       ]);
       setHotel(h);
       setRows(
@@ -72,8 +104,8 @@ export default function AdminHotelSeasons() {
         }))
       );
     } catch (e) {
-      setServerMsg("Не удалось загрузить данные");
       console.error(e);
+      setServerMsg("Не удалось загрузить данные");
     } finally {
       setLoading(false);
     }
@@ -93,7 +125,10 @@ export default function AdminHotelSeasons() {
 
   const addRow = () => {
     const tmpId = "new-" + Math.random().toString(36).slice(2, 7);
-    setRows((r) => [...r, { id: tmpId, label: "low", start_date: "", end_date: "" }]);
+    setRows((r) => [
+      ...r,
+      { id: tmpId, label: "low", start_date: "", end_date: "" },
+    ]);
   };
 
   const removeRow = async (row) => {
@@ -104,11 +139,14 @@ export default function AdminHotelSeasons() {
     }
     try {
       setSaving(true);
-      await axios.delete(API(`/api/hotels/${hotelId}/seasons/${row.id}`));
+      await api.delete(`/api/hotels/${hotelId}/seasons/${row.id}`, {
+        headers: authHeaders(),
+      });
       setRows((rs) => rs.filter((x) => x.id !== row.id));
     } catch (e) {
       console.error(e);
-      alert("Не удалось удалить");
+      if (e?.response?.status === 401) alert("Нужна авторизация");
+      else alert("Не удалось удалить");
     } finally {
       setSaving(false);
     }
@@ -130,30 +168,46 @@ export default function AdminHotelSeasons() {
     try {
       setSaving(true);
       if (String(row.id).startsWith("new-")) {
-        const res = await axios.post(API(`/api/hotels/${hotelId}/seasons`), {
-          label: row.label,
-          start_date: row.start_date,
-          end_date: row.end_date,
-        });
+        const res = await api.post(
+          `/api/hotels/${hotelId}/seasons`,
+          {
+            label: row.label,
+            start_date: row.start_date,
+            end_date: row.end_date,
+          },
+          { headers: authHeaders() }
+        );
         const created = res.data;
         setRows((rs) =>
           rs.map((x) =>
             x.id === row.id
-              ? { id: created.id, label: created.label || row.label, start_date: iso(created.start_date), end_date: iso(created.end_date) }
+              ? {
+                  ...created,
+                  start_date: iso(created.start_date),
+                  end_date: iso(created.end_date),
+                }
               : x
           )
         );
       } else {
-        const res = await axios.put(API(`/api/hotels/${hotelId}/seasons/${row.id}`), {
-          label: row.label,
-          start_date: row.start_date,
-          end_date: row.end_date,
-        });
+        const res = await api.put(
+          `/api/hotels/${hotelId}/seasons/${row.id}`,
+          {
+            label: row.label,
+            start_date: row.start_date,
+            end_date: row.end_date,
+          },
+          { headers: authHeaders() }
+        );
         const updated = res.data;
         setRows((rs) =>
           rs.map((x) =>
             x.id === row.id
-              ? { id: updated.id, label: updated.label || row.label, start_date: iso(updated.start_date), end_date: iso(updated.end_date) }
+              ? {
+                  ...updated,
+                  start_date: iso(updated.start_date),
+                  end_date: iso(updated.end_date),
+                }
               : x
           )
         );
@@ -161,10 +215,15 @@ export default function AdminHotelSeasons() {
       setServerMsg("Сохранено ✅");
     } catch (e) {
       console.error(e);
-      const code = e?.response?.data?.error || "save_failed";
-      if (code === "overlap" || code === "overlap_in_payload") setServerMsg("На сервере обнаружено пересечение интервалов");
-      else if (code === "bad_dates" || code === "start_after_end") setServerMsg("Проверь даты");
-      else setServerMsg("Ошибка сохранения");
+      if (e?.response?.status === 401) setServerMsg("Нужна авторизация");
+      else {
+        const code = e?.response?.data?.error || "save_failed";
+        if (code === "overlap" || code === "overlap_in_payload")
+          setServerMsg("На сервере обнаружено пересечение интервалов");
+        else if (code === "bad_dates" || code === "start_after_end")
+          setServerMsg("Проверь даты");
+        else setServerMsg("Ошибка сохранения");
+      }
     } finally {
       setSaving(false);
     }
@@ -179,16 +238,37 @@ export default function AdminHotelSeasons() {
     }
     try {
       setSaving(true);
-      const payload = { items: rows.map((r) => ({ label: r.label || "low", start_date: r.start_date, end_date: r.end_date })) };
-      const res = await axios.put(API(`/api/hotels/${hotelId}/seasons/bulk`), payload);
+      const payload = {
+        items: rows.map((r) => ({
+          label: r.label || "low",
+          start_date: r.start_date,
+          end_date: r.end_date,
+        })),
+      };
+      const res = await api.put(
+        `/api/hotels/${hotelId}/seasons/bulk`,
+        payload,
+        { headers: authHeaders() }
+      );
       const items = res.data?.items || [];
-      setRows(items.map((x) => ({ id: x.id, label: x.label || "low", start_date: iso(x.start_date), end_date: iso(x.end_date) })));
+      setRows(
+        items.map((x) => ({
+          id: x.id,
+          label: x.label || "low",
+          start_date: iso(x.start_date),
+          end_date: iso(x.end_date),
+        }))
+      );
       setServerMsg("Заменено ✅");
     } catch (e) {
       console.error(e);
-      const code = e?.response?.data?.error || "bulk_failed";
-      if (code === "overlap_in_payload") setServerMsg("Пересечения в отправленном наборе");
-      else setServerMsg("Ошибка сохранения");
+      if (e?.response?.status === 401) setServerMsg("Нужна авторизация");
+      else {
+        const code = e?.response?.data?.error || "bulk_failed";
+        if (code === "overlap_in_payload")
+          setServerMsg("Пересечения в отправленном наборе");
+        else setServerMsg("Ошибка сохранения");
+      }
     } finally {
       setSaving(false);
     }
@@ -197,7 +277,7 @@ export default function AdminHotelSeasons() {
   if (loading) return <div className="p-6 text-sm text-gray-500">Загрузка…</div>;
 
   return (
-    <div className="p-6 max-w-screen-xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Сезоны отеля</h1>
@@ -212,41 +292,43 @@ export default function AdminHotelSeasons() {
             )}
           </div>
         </div>
-        <Link className="text-blue-600 hover:underline text-sm" to={`/admin/hotels/${hotelId}/edit`}>
+        <Link
+          className="text-blue-600 hover:underline text-sm"
+          to={`/admin/hotels/${hotelId}/edit`}
+        >
           ← карточка отеля
         </Link>
       </div>
 
-      {serverMsg && <div className="mb-3 text-sm">{serverMsg}</div>}
+      {serverMsg && (
+        <div className="mb-3 text-sm text-gray-800">{serverMsg}</div>
+      )}
 
       <div className="rounded border overflow-hidden">
-        {/* HEADER — только на >= sm */}
-        <div className="hidden sm:grid bg-gray-50 px-3 py-2 text-sm font-medium
-                        sm:grid-cols-[minmax(260px,1fr),200px,200px,240px] gap-2">
+        {/* чуть шире, чтобы элементы не наезжали */}
+        <div className="grid grid-cols-[1fr,180px,180px,200px] bg-gray-50 px-3 py-2 text-sm font-medium">
           <div>Тег сезона</div>
           <div>Начало</div>
           <div>Конец</div>
           <div className="text-right">Действия</div>
         </div>
 
-        {/* ROWS */}
         {rows.map((r) => (
           <div
             key={r.id}
-            className="
-              grid gap-3 px-3 py-3 border-t text-sm
-              grid-cols-1
-              sm:grid-cols-[minmax(260px,1fr),200px,200px,240px]
-              sm:gap-2 sm:items-center
-            "
+            className="grid grid-cols-[1fr,180px,180px,200px] items-center gap-2 px-3 py-2 border-t text-sm"
           >
-            {/* label (моб. подпись) */}
-            <div className="sm:hidden text-xs text-gray-500">Тег сезона</div>
             <div>
               <select
                 className="border rounded h-9 px-2 w-full"
                 value={r.label || "low"}
-                onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x)))}
+                onChange={(e) =>
+                  setRows((rs) =>
+                    rs.map((x) =>
+                      x.id === r.id ? { ...x, label: e.target.value } : x
+                    )
+                  )
+                }
               >
                 <option value="low">low</option>
                 <option value="high">high</option>
@@ -256,30 +338,46 @@ export default function AdminHotelSeasons() {
               </select>
             </div>
 
-            <div className="sm:hidden text-xs text-gray-500">Начало</div>
             <div>
               <input
                 type="date"
-                className={`border rounded h-9 px-2 w-full ${mark(r.id, "start_date") ? "border-red-500" : ""}`}
+                className={`border rounded h-9 px-2 w-full ${
+                  mark(r.id, "start_date") ? "border-red-500" : ""
+                }`}
                 value={r.start_date || ""}
-                onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, start_date: e.target.value } : x)))}
+                onChange={(e) =>
+                  setRows((rs) =>
+                    rs.map((x) =>
+                      x.id === r.id ? { ...x, start_date: e.target.value } : x
+                    )
+                  )
+                }
               />
             </div>
 
-            <div className="sm:hidden text-xs text-gray-500">Конец</div>
             <div>
               <input
                 type="date"
-                className={`border rounded h-9 px-2 w-full ${mark(r.id, "end_date") ? "border-red-500" : ""}`}
+                className={`border rounded h-9 px-2 w-full ${
+                  mark(r.id, "end_date") ? "border-red-500" : ""
+                }`}
                 value={r.end_date || ""}
-                onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, end_date: e.target.value } : x)))}
+                onChange={(e) =>
+                  setRows((rs) =>
+                    rs.map((x) =>
+                      x.id === r.id ? { ...x, end_date: e.target.value } : x
+                    )
+                  )
+                }
               />
             </div>
 
-            {/* actions: занимает одну колонку на десктопе и целую строку на мобилке */}
-            <div className="flex flex-wrap items-center justify-end gap-2 sm:col-auto col-auto">
+            <div className="flex items-center justify-end gap-2">
               {errors.some((e) => e.id === r.id) && (
-                <span title={errTextFor(r.id)} className="text-xs text-red-600 sm:mr-2">
+                <span
+                  title={errTextFor(r.id)}
+                  className="text-xs text-red-600 mr-2"
+                >
                   есть ошибки
                 </span>
               )}
@@ -301,11 +399,19 @@ export default function AdminHotelSeasons() {
           </div>
         ))}
 
-        {!rows.length && <div className="px-3 py-6 text-sm text-gray-500 border-t">Сезонов пока нет</div>}
+        {!rows.length && (
+          <div className="px-3 py-6 text-sm text-gray-500 border-t">
+            Сезонов пока нет
+          </div>
+        )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button className="h-9 px-3 border rounded hover:bg-gray-50" onClick={addRow} disabled={saving}>
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          className="h-9 px-3 border rounded hover:bg-gray-50"
+          onClick={addRow}
+          disabled={saving}
+        >
           + Добавить сезон
         </button>
         <button
