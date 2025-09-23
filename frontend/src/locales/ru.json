@@ -796,6 +796,7 @@
   },
 
   "tb": {
+    "usd_enter_valid_rate": "Введите корректный курс, чтобы увидеть суммы в USD",
     "tariff_for": "Тарифы для",
     "pick_guide_service_ph": "Выберите услугу гида…",
     "pick_transport_service_ph": "Выберите услугу транспорта…",
