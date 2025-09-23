@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
+import { useTranslation } from "react-i18next";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
@@ -370,6 +371,7 @@ const HotelOption = (props) => {
 /* =========================== PAGE =========================== */
 
 export default function TourBuilder() {
+  const { t, i18n } = useTranslation();
   const [range, setRange] = useState({ from: undefined, to: undefined });
 
   const [adt, setAdt] = useState(2);
@@ -612,11 +614,11 @@ const makeHotelLoader = (dateKey) => async (input) => {
   return (
     <div className="p-6">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
-        <h1 className="text-2xl font-bold">Конструктор тура</h1>
+        <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-1">Даты тура</label>
+            <label className="block text-sm font-medium mb-1">{t('tb.dates')}</label>
             <DayPicker
               mode="range"
               selected={range}
@@ -626,7 +628,9 @@ const makeHotelLoader = (dateKey) => async (input) => {
               className="text-sm"
             />
             <p className="text-sm text-gray-600 mt-2">
-              {range.from && range.to ? `${toYMD(range.from)} — ${toYMD(range.to)} • ${Math.max(1, (range.to - range.from) / 86400000 + 1)} дн.` : "Выберите даты начала и конца"}
+              {range.from && range.to
+                ? t('tb.dates_span', { from: toYMD(range.from), to: toYMD(range.to), days: Math.max(1, (range.to - range.from) / 86400000 + 1) })
+                : t('tb.pick_dates')}
             </p>
           </div>
 
@@ -649,16 +653,16 @@ const makeHotelLoader = (dateKey) => async (input) => {
               <div className="text-sm font-medium mb-1">Тарифы для</div>
               <label className="inline-flex items-center gap-2 mr-4">
                 <input type="radio" checked={residentType === "nrs"} onChange={() => setResidentType("nrs")} />
-                <span>Нерезиденты</span>
+                <span>{t('tb.nonresidents')}</span>
               </label>
               <label className="inline-flex items-center gap-2">
                 <input type="radio" checked={residentType === "res"} onChange={() => setResidentType("res")} />
-                <span>Резиденты</span>
+                <span>{t('tb.residents')}</span>
               </label>
             </div>
 
             <div>
-              <div className="text-sm font-medium mb-1">Speaking language</div>
+              <div className="text-sm font-medium mb-1">{t('tb.speaking_lang')}</div>
               <select className="w-full h-9 border rounded px-2 text-sm" value={lang} onChange={(e) => setLang(e.target.value)}>
                 {LANGS.map(([name, code]) => <option key={code} value={code}>{name}</option>)}
               </select>
@@ -678,7 +682,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                   <div className="font-semibold">D{i + 1}</div>
                   <input
                     className="border rounded px-3 py-2 min-w-[220px] flex-1"
-                    placeholder="Город (например, Tashkent)"
+                    placeholder={t('tb.city_ph')}
                     value={st.city || ""}
                     onChange={(e) => {
                       const city = (e.target.value || "").trim();
@@ -697,7 +701,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                 <div className="grid md:grid-cols-2 gap-3">
                   {/* Guide */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">Гид</label>
+                    <label className="block text-sm font-medium mb-1">{t('tb.guide')}</label>
                     <AsyncSelect
                         key={`guide-${k}-${st.city}-${lang}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
@@ -706,8 +710,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         loadOptions={makeGuideLoader(k)}
                         filterOption={() => true}
                         components={{ Option: ProviderOption }}
-                        placeholder={cityChosen ? "Выберите гида" : "Сначала укажите город"}
-                        noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
+                        placeholder={cityChosen ? t('tb.pick_guide') : t('tb.pick_city_first')}
+                        noOptionsMessage={() => (cityChosen ? t('tb.no_providers') : t('tb.pick_city_first'))}
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                         onChange={async (opt) => {
                           const guide = opt?.raw || null;
@@ -770,19 +774,19 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "USD")}
+                      {t('tb.price_per_day')}: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "USD")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
                   {st.guide && (servicesCache[st.guide.id]?.length === 0) && (
                     <div className="text-xs text-amber-600 mt-1">
-                      Для этого гида услуги не найдены. Заполните их в Dashboard → Services.
+                      {t('tb.no_services_for_guide')}
                     </div>
                   )}
 
                   {/* Transport */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">Транспорт</label>
+                    <label className="block text-sm font-medium mb-1">{t('tb.transport')}</label>
                     <AsyncSelect
                         key={`transport-${k}-${st.city}-${lang}`}   // ⬅️ важный ключ
                         isDisabled={!cityChosen}
@@ -791,8 +795,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         loadOptions={makeTransportLoader(k)}
                         filterOption={() => true}
                         components={{ Option: ProviderOption }}
-                        placeholder={cityChosen ? "Выберите транспорт" : "Сначала укажите город"}
-                        noOptionsMessage={() => (cityChosen ? "Нет доступных провайдеров" : "Укажите город")}
+                        placeholder={cityChosen ? t('tb.pick_transport') : t('tb.pick_city_first')}
+                        noOptionsMessage={() => (cityChosen ? t('tb.no_providers') : t('tb.pick_city_first'))}
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
                           const transport = opt?.raw || null;            // <-- объявляем переменную
@@ -842,18 +846,18 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/день: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "USD")}
+                     {t('tb.price_per_day')}: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "USD")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
                   {st.transport && (servicesCache[st.transport.id]?.length === 0) && (
                     <div className="text-xs text-amber-600 mt-1">
-                      Для этого транспортника услуги не найдены. Заполните их в Dashboard → Services.
+                      {t('tb.no_services_for_transport')}s.
                     </div>
                   )}
                   {/* Hotel */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">Отель (за ночь, нетто)</label>
+                    <label className="block text-sm font-medium mb-1">{t('tb.hotel')}</label>
                     <AsyncSelect
                       isDisabled={!cityChosen}
                       cacheOptions
@@ -866,8 +870,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       defaultOptions={hotelOptionsMap[k] || []}
                       loadOptions={(input, cb) => cb(hotelOptionsMap[k] || [])}
                       components={{ Option: HotelOption }}
-                      placeholder={cityChosen ? "Выберите отель" : "Сначала укажите город"}
-                      noOptionsMessage={() => cityChosen ? "Нет вариантов" : "Укажите город"}
+                      placeholder={cityChosen ? t('tb.pick_hotel') : t('tb.pick_city_first')}
+                      noOptionsMessage={() => cityChosen ? t('tb.no_hotels') : t('tb.pick_city_first')}
                       value={
                         st.hotel
                           ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel }
@@ -916,7 +920,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                     />
 
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
-                    {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">Загружаем фонд и сезоны…</div>}
+                    {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">{t('tb.loading_hotel')}</div>}
                       {st.hotel && st.hotelBrief && (
                         <HotelRoomPicker
                           hotelBrief={st.hotelBrief}
@@ -931,20 +935,16 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       )}
 
                     <div className="text-xs text-gray-600 mt-1">
-                      Цена/ночь: {
-                        toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)
-                      } {
-                        st.hotel?.currency || st.hotelBrief?.currency || "USD"
-                      }
+                      {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "USD"}
                     </div>>
                   </div>
 
                   {/* Entry fees */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">Входные билеты (объекты)</label>
+                    <label className="block text-sm font-medium mb-1">{t('tb.entry_fees')}</label>
                     <input
                       className="w-full border rounded px-3 py-2 mb-2"
-                      placeholder={cityChosen ? "Начните вводить объект…" : "Сначала укажите город"}
+                      placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
                       value={entryQMap[k] || ""}
                       disabled={!cityChosen}
                       onChange={async (e) => {
@@ -961,8 +961,8 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       loadOptions={(input, cb) => cb(entryOptionsMap[k] || [])}
                       value={st.entrySelected || []}
                       onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
-                      placeholder={cityChosen ? "Выберите объекты" : "Укажите город"}
-                      noOptionsMessage={() => (cityChosen ? "Ничего не найдено" : "Укажите город")}
+                      placeholder={cityChosen ? t('tb.pick_sites') : t('tb.pick_city_first')}
+                      noOptionsMessage={() => (cityChosen ? t('tb.nothing_found') : t('tb.pick_city_first'))}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
                       styles={{
@@ -978,7 +978,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                 </div>
 
                 <div className="text-sm text-gray-700">
-                  Итого по дню: Гид {calcGuideForDay(k).toFixed(2)} + Транспорт {calcTransportForDay(k).toFixed(2)} + Отель {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} = <b>{(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} USD</b>
+                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} = <b>{(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} USD</b>
                 </div>
               </div>
             );
@@ -995,12 +995,12 @@ const makeHotelLoader = (dateKey) => async (input) => {
       />
 
         <div className="grid md:grid-cols-5 gap-3 text-sm">
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Гид (нетто)</div><div>{totals.guide.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Транспорт (нетто)</div><div>{totals.transport.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Отели (нетто)</div><div>{totals.hotel.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">Entry fees (нетто)</div><div>{totals.entries.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} USD</div></div>
           <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-semibold">ИТОГО</div>
+            <div className="font-semibold">{t('tb.totals.total')}</div>
             <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} USD</span></div>
             <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} USD</span></div>
           </div>
@@ -1079,11 +1079,11 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, onTota
   return (
     <div className="mt-3 border rounded p-2">
       <div className="flex items-center gap-3 mb-2">
-        <div className="text-sm font-medium">Номера и питание</div>
+        <div className="text-sm font-medium">{t('tb.rooms_and_meals')}</div>
         <select className="h-8 border rounded px-2 text-sm" value={meal} onChange={(e) => setMeal(e.target.value)}>
           {MEALS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
-        <div className="text-xs text-gray-500">({residentFlag ? "Резиденты" : "Нерезиденты"})</div>
+        <div className="text-xs text-gray-500">({residentFlag ? t('tb.residents') : t('tb.nonresidents')})</div>
       </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
