@@ -474,6 +474,19 @@ export default function TourBuilder() {
   const [entryQMap, setEntryQMap] = useState({});            // {dateKey: query}
   const [entryOptionsMap, setEntryOptionsMap] = useState({}); // {dateKey: options[]}
 
+    /* ----- Hotels: предзагрузка списка по городу (per day) ----- */
+  const [hotelOptionsMap, setHotelOptionsMap] = useState({}); // {dateKey: options[]}
+  const loadHotelOptionsForDay = async (dateKey, city) => {
+    const cityNorm = (city || "").trim();
+    if (!cityNorm || !dateKey) {
+      setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
+      return;
+    }
+    const items = await fetchHotelsByCity(cityNorm); // → [{value,label,raw}]
+    // fetchHotelsByCity уже приводит к options, можно класть как есть
+    setHotelOptionsMap((m) => ({ ...m, [dateKey]: items }));
+  };
+
   const loadEntryOptionsForDay = async (dateKey, city, q) => {
     if (!city || !dateKey) { setEntryOptionsMap((m) => ({ ...m, [dateKey]: [] })); return; }
     const items = await fetchEntryFees({ q: q || "", city, date: dateKey, limit: 50 });
@@ -668,11 +681,13 @@ const makeHotelLoader = (dateKey) => async (input) => {
                     placeholder="Город (например, Tashkent)"
                     value={st.city || ""}
                     onChange={(e) => {
-                      const city = e.target.value;
+                      const city = (e.target.value || "").trim();
                       setByDay((p) => ({ ...p, [k]: { ...p[k], city, guide: null, transport: null, hotel: null, entrySelected: [] } }));
                       // обновим опции билетов под новый city
                       setEntryQMap((m) => ({ ...m, [k]: "" }));
                       loadEntryOptionsForDay(k, city, "");
+                      // сразу предзагрузим список отелей для селекта
+                      loadHotelOptionsForDay(k, city);
                       // при смене города сбросили поставщиков; автоподбор произойдёт после выбора
                     }}
                   />
@@ -844,10 +859,20 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       cacheOptions
                       defaultOptions={true}
                       loadOptions={makeHotelLoader(k)}
+                      key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
+                      isDisabled={!cityChosen}
+                      cacheOptions={false}
+                      /* используем предзагруженные варианты */
+                      defaultOptions={hotelOptionsMap[k] || []}
+                      loadOptions={(input, cb) => cb(hotelOptionsMap[k] || [])}
                       components={{ Option: HotelOption }}
                       placeholder={cityChosen ? "Выберите отель" : "Сначала укажите город"}
                       noOptionsMessage={() => cityChosen ? "Нет вариантов" : "Укажите город"}
-                      value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
+                      value={
+                        st.hotel
+                          ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel }
+                          : null
+                      }
                       onChange={async (opt) => {
                          const hotel = opt?.raw || null;
                          // сбрасываем прежние данные отеля
