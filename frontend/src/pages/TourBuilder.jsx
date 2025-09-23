@@ -144,7 +144,7 @@ const normalizeProvider = (row, kind) => ({
   email: row.email || "",
   location: row.location || row.city || "",
   price_per_day: toNum(row.price_per_day ?? row.price ?? row.rate_day ?? 0, 0),
-  currency: row.currency || "USD",
+  currency: row.currency || "UZS",
   languages: row.languages || [],
   telegram: row.telegram || row.social || row.telegram_handle || "",
 });
@@ -153,7 +153,7 @@ const normalizeService = (row) => {
   const details = row?.details || {};
   const price =
     Number(details.grossPrice) || Number(row?.price) || 0;
-  const currency = details.currency || row?.currency || "USD";
+  const currency = details.currency || row?.currency || "UZS";
   return {
     id: row?.id ?? row?._id ?? String(Math.random()),
     title: row?.title || CATEGORY_LABELS[row?.category] || "Услуга",
@@ -225,7 +225,7 @@ const normalizeHotel = (row) => ({
   name: row.name || row.title || "Hotel",
   city: row.city || row.location || "",
   price: toNum(row.price ?? row.net ?? row.price_per_night ?? 0, 0),
-  currency: row.currency || "USD",
+  currency: row.currency || "UZS",
 });
 
 async function fetchHotelsSmart({ city, date, q = "", limit = 30 }) {
@@ -332,7 +332,7 @@ const ProviderOption = (props) => {
           )}
 
           {Number(p.price_per_day) > 0 && (
-            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "USD"}</div>
+            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "UZS"}</div>
           )}
 
           {url && (
@@ -359,7 +359,7 @@ const HotelOption = (props) => {
   const tip = [
     h?.name,
     h?.city ? `Город: ${h.city}` : "",
-    typeof h?.price === "number" && h?.price > 0 ? `Цена/ночь: ${h.price} ${h.currency || "USD"}` : "",
+    typeof h?.price === "number" && h?.price > 0 ? `Цена/ночь: ${h.price} ${h.currency || "UZS"}` : "",
   ].filter(Boolean).join("\n");
   return (
     <div title={tip}>
@@ -386,6 +386,10 @@ export default function TourBuilder() {
     while (d <= range.to) { res.push(new Date(d)); d = addDays(d, 1); }
     return res;
   }, [range.from, range.to]);
+
+   // курс USD (UZS за 1 USD), для конвертации итогов вниз страницы
+ const [usdRate, setUsdRate] = useState(Number(import.meta.env.VITE_USD_RATE || 0) || 0);
+ const toUSD = (vUZS) => (Number(usdRate) > 0 ? Number(vUZS) / Number(usdRate) : 0);
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -528,16 +532,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
   });
   return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
 };
-
-const makeHotelLoader = (dateKey) => async (input) => {
-  const day = byDay[dateKey] || {};
-  if (!dateKey || !day.city) return [];
-  const all = await fetchHotelsByCity(day.city); // <- здесь каскад по городу
-  const q = (input || "").trim().toLowerCase();
-  if (!q) return all;
-  return all.filter(o => o.label.toLowerCase().includes(q));
-};
-
 
   /* ----- totals (entry fees по видам дня) ----- */
   const entryCell = (siteRaw, kind, pax) => {
@@ -774,7 +768,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_day')}: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "USD")}
+                      {t('tb.price_per_day')}: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "UZS")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
@@ -846,7 +840,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.price_per_day')}: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "USD")}
+                     {t('tb.price_per_day')}: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "UZS")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
@@ -931,7 +925,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       )}
 
                     <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "USD"}
+                      {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>
                   </div>
 
@@ -974,7 +968,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                 </div>
 
                 <div className="text-sm text-gray-700">
-                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} = <b>{(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} USD</b>
+                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} = <b>{(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} UZS</b>
                 </div>
               </div>
             );
@@ -991,16 +985,68 @@ const makeHotelLoader = (dateKey) => async (input) => {
       />
 
         <div className="grid md:grid-cols-5 gap-3 text-sm">
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} USD</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} USD</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} UZS</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div></div>
+          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div></div>
           <div className="bg-gray-50 rounded p-3 border">
             <div className="font-semibold">{t('tb.totals.total')}</div>
-            <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} USD</span></div>
-            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} USD</span></div>
+            <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} UZS</span></div>
+            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} UZS</span></div>
           </div>
         </div>
+              {/* ===== Курс и итоги в USD ===== */}
+      <div className="mt-3 p-3 border rounded-lg bg-white">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium">
+            USD rate (UZS for 1 USD)
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className="h-9 w-52 border rounded px-2 text-sm"
+            placeholder="например, 12600"
+            value={usdRate}
+            onChange={(e) => setUsdRate(Number(e.target.value) || 0)}
+          />
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-5 gap-3 text-sm mt-3">
+        <div className="bg-gray-50 rounded p-3 border">
+          <div className="font-medium mb-1">{t('tb.totals.guide')} (USD)</div>
+          <div>{toUSD(totals.guide).toFixed(2)} USD</div>
+        </div>
+        <div className="bg-gray-50 rounded p-3 border">
+          <div className="font-medium mb-1">{t('tb.totals.transport')} (USD)</div>
+          <div>{toUSD(totals.transport).toFixed(2)} USD</div>
+        </div>
+        <div className="bg-gray-50 rounded p-3 border">
+          <div className="font-medium mb-1">{t('tb.totals.hotels')} (USD)</div>
+          <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
+        </div>
+        <div className="bg-gray-50 rounded p-3 border">
+          <div className="font-medium mb-1">{t('tb.totals.entry')} (USD)</div>
+          <div>{toUSD(totals.entries).toFixed(2)} USD</div>
+        </div>
+        <div className="bg-gray-50 rounded p-3 border">
+          <div className="font-semibold">Total (USD)</div>
+          <div className="flex justify-between">
+            <span>NET</span>
+            <span>{toUSD(totals.net).toFixed(2)} USD</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span>/ pax</span>
+            <span>{toUSD(totals.perPax).toFixed(2)} USD</span>
+          </div>
+          {Number(usdRate) <= 0 && (
+            <div className="text-xs text-amber-600 mt-2">
+              Введите корректный курс, чтобы увидеть суммы в USD
+            </div>
+          )}
+        </div>
+      </div>
       </div>
     </div>
   );
