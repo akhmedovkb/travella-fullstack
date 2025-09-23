@@ -827,7 +827,7 @@
   },
 
   "tb": {
-     "tariff_for": "Tariffs for:",
+    "tariff_for": "Tariffs for:",
     "residents": "Residents",
     "nonresidents": "Non-residents",
     "pick_transport_service_ph": "Select a transport service...",
