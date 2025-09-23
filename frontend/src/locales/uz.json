@@ -851,6 +851,7 @@
   },
 
   "tb": {
+    "usd_enter_valid_rate": "USD miqdorini ko‘rsatish uchun to‘g‘ri kurs kiriting",
     "tariff_for": "Tariflar:",
     "residents": "Rezidentlar",
     "nonresidents": "Norezidentlar",
