@@ -22,7 +22,7 @@
   "airline": "Авиакомпания",
   "authored_tour": "Авторский тур",
   "back": "← Назад",
-  "badges": { "boosted": "Рекомендовано" }, 
+  "badges": { "boosted": "Рекомендовано" },
 
   "booking": {
     "date": "Дата",
@@ -80,9 +80,7 @@
         "client": "Отменено: клиентом"
       }
     },
-    "labels": {
-      "client_comment": "Комментарий:"
-    },
+    "labels": { "client_comment": "Комментарий:" },
     "types": {
       "guide": "Гид",
       "transport": "Транспорт",
@@ -94,18 +92,13 @@
       "reject": "Отклонить",
       "cancel": "Отмена"
     },
-
     "confirmed": "Бронирование подтверждено",
     "confirm_error": "Ошибка подтверждения",
     "rejected": "Бронирование отклонено",
     "reject_error": "Ошибка отклонения",
-
     "dates_label": "Даты забронированы:",
     "wait_price": "Ожидаем предложение цены от поставщика",
-
-    "search": {
-      "placeholder": "Поиск: поставщик, услуга, статус…"
-    },
+    "search": { "placeholder": "Поиск: поставщик, услуга, статус…" },
     "view": {
       "compact": "Компактный",
       "normal": "Обычный",
@@ -122,8 +115,11 @@
   "border_transfer": "Пограничный трансфер",
 
   "calendar": {
+    "title_public": "Календарь занятости",
     "blocking_title": "Календарь занятости",
     "booked": "Занято",
+    "busy": "занято",
+    "selected": "выбрано",
     "dates_saved": "Занятые даты сохранены",
     "label_blocked_manual": "Заблокировано вручную",
     "label_booked_by_clients": "Занято по бронированиям",
@@ -132,13 +128,11 @@
     "save_blocked_dates": "Сохранить занятые даты",
     "save_button": "Сохранить занятые даты",
     "save_error": "Ошибка сохранения дат",
-    "saved_successfully": "Даты сохранены",
-    "title_public": "Календарь занятости",
-    "busy": "занято",
-    "selected": "выбрано"
+    "saved_successfully": "Даты сохранены"
   },
 
   "cancel": "Отмена",
+
   "category": {
     "author_tour": "Авторский тур",
     "border_transfer": "Трансфер до границы",
@@ -169,9 +163,7 @@
   "clear_all_images_confirm": "Удалить все изображения?",
 
   "client": {
-    "profile": {
-      "title": "Клиент"
-    },
+    "profile": { "title": "Клиент" },
     "dashboard": {
       "avatarUrl": "Ссылка на аватар",
       "changeBtn": "Сменить",
@@ -197,16 +189,10 @@
       "requestDeleted": "Запрос удалён",
       "deleteRequest": "Удалить",
       "saveBtn": "Сохранить",
-      "tabs": {
-        "myBookings": "Мои бронирования",
-        "myRequests": "Мои запросы"
-      },
+      "tabs": { "myBookings": "Мои бронирования", "myRequests": "Мои запросы" },
       "uploadPhoto": "Загрузить фото"
     },
-    "header": {
-      "cabinet": "Кабинет",
-      "favorites": "Избранное"
-    },
+    "header": { "cabinet": "Кабинет", "favorites": "Избранное" },
     "login": {
       "loginBtn": "Войти",
       "noAccount": "Нет аккаунта?",
@@ -245,8 +231,6 @@
     "created": "Создано",
     "date": "Дата",
     "loading_error": "Не удалось загрузить данные",
-    "load_error": "Не удалось загрузить данные",
-    "loading": "Загрузка…",
     "nothing_found": "Ничего не найдено",
     "refresh": "Обновить",
     "request": "Запрос",
@@ -270,10 +254,7 @@
   },
 
   "confirm_delete": "Удалить элемент?",
-  "countdown": {
-    "until_end": "До окончания",
-    "expired": "Время истекло"
-  },
+  "countdown": { "until_end": "До окончания", "expired": "Время истекло" },
 
   "country_not_chosen": "Страны не найдены",
   "cover": "Обложка",
@@ -323,14 +304,9 @@
     "tab_load": "Не удалось загрузить вкладку",
     "write_review": "Напишите общий отзыв",
     "save_failed": "Не удалось сохранить инспекцию",
-    "only_providers": "Оставлять инспекции могут только авторизованные провайдеры/турагенты. в кабинет провайдера.",
-    "write_review": "Напишите общий отзыв",
-    "only_providers": "Только провайдер/агент может оставить инспекцию",
-    "save_failed": "Не удалось сохранить инспекцию",
+    "only_providers": "Оставлять инспекции могут только авторизованные провайдеры/турагенты.",
     "already_inspected": "Вы уже оставляли инспекцию для этого отеля.",
-    "only_providers": "Оставлять инспекции могут только провайдеры/турагенты.",
-    "save_failed": "Не удалось сохранить. Попробуйте позже.",
-    "write_review": "Напишите общий отзыв"
+    "save_failed_generic": "Не удалось сохранить. Попробуйте позже."
   },
 
   "event_category_concert": "Концерт",
@@ -403,15 +379,12 @@
     "searching": "Поиск...",
     "col": { "name": "Название", "city": "Город", "rating": "Оценка" },
     "empty": "Ничего не найдено",
-    
+
     "inspections": {
       "author_fallback": "провайдер",
       "author": "Автор",
       "hotel_label": "Отель",
-      "sort": {
-        "top": "Сначала с большим числом лайков",
-        "new": "Сначала новые"
-      },
+      "sort": { "top": "Сначала с большим числом лайков", "new": "Сначала новые" },
       "back_to_hotel": "Назад к отелю",
       "empty": "Инспекций пока нет",
       "new": {
@@ -479,12 +452,12 @@
   "location": "Регион или место проведения",
 
   "labels": {
-  "client": "Клиент",
-  "agent": "Турагент",
-  "guide": "Гид",
-  "transport": "Транспорт",
-  "hotel": "Отель"
-},
+    "client": "Клиент",
+    "agent": "Турагент",
+    "guide": "Гид",
+    "transport": "Транспорт",
+    "hotel": "Отель"
+  },
 
   "languages": {
     "heading": "Владение языками",
@@ -585,10 +558,7 @@
     "unpublish_error": "Ошибка снятия с публикации",
     "forbidden": "Доступ только для администратора",
     "empty": "Нет элементов",
-    "tabs": {
-      "pending": "Ожидают",
-      "rejected": "Отклонённые"
-    }
+    "tabs": { "pending": "Ожидают", "rejected": "Отклонённые" }
   },
 
   "mountain_tour": "Тур в горы",
@@ -630,10 +600,7 @@
   "one_way": "В одну сторону",
   "one_way_transfer": "Трансфер в одну сторону",
 
-  "pagination": {
-    "next": "Вперёд",
-    "prev": "Назад"
-  },
+  "pagination": { "next": "Вперёд", "prev": "Назад" },
 
   "password_change": "Сменить пароль",
   "password_changed": "Пароль обновлён",
@@ -645,10 +612,7 @@
   "pick_dates": "Выберите даты начала и конца",
   "price": "Цена",
 
-  "profile": {
-    "password_changed": "Пароль изменён",
-    "saved": "Профиль сохранён"
-  },
+  "profile": { "password_changed": "Пароль изменён", "saved": "Профиль сохранён" },
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
 
@@ -710,11 +674,7 @@
   },
 
   "provider_profile": "Профиль поставщика",
-  "providerProfile": {
-    "type": "Тип поставщика",
-    "region": "Регион поставщика",
-    "address": "Адрес"
-  },
+  "providerProfile": { "type": "Тип поставщика", "region": "Регион поставщика", "address": "Адрес" },
 
   "refused_hotel": "Отказной отель",
   "refused_hotel_city": "Город",
@@ -743,7 +703,8 @@
     "type": "Тип поставщика"
   },
 
-  "requests.tabs.incoming": "Входящие", "requests.tabs.outgoing": "Исходящие",
+  "requests.tabs.incoming": "Входящие",
+  "requests.tabs.outgoing": "Исходящие",
 
   "requests_list": {
     "empty": "Пока нет запросов.",
@@ -778,11 +739,7 @@
     "your_rating": "Ваша оценка"
   },
 
-  "roles": {
-    "client": "Клиент",
-    "provider": "Поставщик",
-    "admin": "Админ"
-  },
+  "roles": { "client": "Клиент", "provider": "Поставщик", "admin": "Админ" },
 
   "room_rent": "Аренда номера",
   "round_trip": "Туда-обратно",
@@ -849,35 +806,72 @@
     "speaking_lang": "Speaking language",
     "city_ph": "Город (например, Tashkent)",
     "pick_city_first": "Сначала укажите город",
+
     "guide": "Гид",
     "pick_guide": "Выберите гида",
     "no_providers": "Нет доступных провайдеров",
     "no_services_for_guide": "Для этого гида услуги не найдены. Заполните их в Dashboard → Services.",
+
     "transport": "Транспорт",
     "pick_transport": "Выберите транспорт",
     "no_services_for_transport": "Для этого перевозчика услуги не найдены. Заполните их в Dashboard → Services.",
+
     "hotel": "Отель (за ночь, нетто)",
     "hotel_short": "Отель",
     "pick_hotel": "Выберите отель",
     "no_hotels": "Нет вариантов",
     "loading_hotel": "Загружаем фонд и сезоны…",
+
     "entry_fees": "Входные билеты (объекты)",
     "entry_ph": "Начните вводить объект…",
     "pick_sites": "Выберите объекты",
     "nothing_found": "Ничего не найдено",
     "entry_for_day": "На этот день",
     "entry_hint_suffix": "учтены ADT/CHD и статус резидента",
+
     "price_per_day": "Цена/день",
     "price_per_night": "Цена/ночь",
     "day_total": "Итого по дню",
     "rooms_and_meals": "Номера и питание",
+
     "totals": {
       "guide": "Гид (нетто)",
       "transport": "Транспорт (нетто)",
       "hotels": "Отели (нетто)",
       "entry": "Entry fees (нетто)",
       "total": "ИТОГО"
-    }
+    },
+
+    "load_draft": "Загрузить черновик",
+    "save_draft": "Сохранить черновик",
+    "draft_saved": "Черновик сохранён",
+    "draft_saved_locally": "Черновик сохранён локально",
+    "draft_loaded": "Черновик загружен",
+    "draft_loaded_local": "Черновик загружен из браузера",
+    "no_drafts": "Черновиков не найдено",
+
+    "pax": "Гости (PAX)",
+    "loop_route": "замкнуть маршрут",
+    "loop": "повтор",
+    "override_by_day": "Переопределить по дням",
+    "use_default": "Как по умолчанию",
+
+    "guides_suggest": "Гиды, доступные на выбранные даты",
+    "no_guides": "Нет подходящих гидов",
+    "transports_suggest": "Транспорт, доступный на выбранные даты",
+    "no_transports": "Нет подходящего транспорта",
+
+    "hotels_nights": "Ночёвки (отели добавляются вручную)",
+    "net": "Нетто",
+    "notes": "Заметка",
+
+    "pricing": "Ценообразование",
+    "currency": "Валюта",
+    "markup": "Наценка, %",
+    "tourist_fee": "Туристический сбор / ночь",
+    "hotels_cost": "Отели (нетто)",
+    "providers_cost": "Гид/Транспорт (нетто)",
+    "total": "Суммарно"
   },
 
   "ticket_details": "Детали билета (ряд, место и т.д.)",
@@ -946,19 +940,13 @@
   "tourism_fee_resident": "Туристический сбор (резиденты), сум/ночь",
   "tourism_fee_nonresident": "Туристический сбор (нерезиденты), сум/ночь",
   "extra_bed_cost": "Доп. место, сум/ночь",
-  "room_category": "Категория",
-  "select.type_more": "Введите минимум 2 символа",
-  "select.no_options": "Ничего не найдено",
-  "select.loading": "Загрузка…",
 
   "admin": { "new_hotel_title": "Новый отель" },
-
   "hotel_name": "Название",
   "enter_hotel_name": "Введите название отеля",
   "enter_address": "Укажите адрес",
   "hotel_saved": "Отель сохранён",
   "hotel_save_error": "Ошибка сохранения отеля",
-
   "country": "Страна",
   "city": "Город",
   "currency": "Валюта",
@@ -969,15 +957,11 @@
   "room_type_name": "Название типа",
   "add_custom_room_type_ph": "Добавить свой тип номера (например, Deluxe…)",
   "add_type": "Добавить тип",
-
   "extra_bed_price": "Стоимость доп. места (за человека/ночь)",
 
   "taxes_and_fees": "Налоги и сборы",
   "vat_included": "Цены включают НДС",
   "vat_rate": "Ставка НДС, %",
-
-  "tourist_tax_resident": "Туристический сбор (резидент), /чел/ночь",
-  "tourist_tax_nonresident": "Туристический сбор (нерезидент), /чел/ночь",
 
   "amenities": "Удобства",
   "add_amenity": "Добавить удобство…",
@@ -995,65 +979,67 @@
   },
 
   "tourBuilder": {
-  "title": "Конструктор тура",
-  "dates": "Даты тура",
-  "arrivalDay1": "Время прибытия первого дня",
-  "monuments": "Monuments entry fees",
-  "monuments_ph": "Выберите объекты",
-  "guide": "Гид",
-  "transport": "Транспорт",
-  "cities": "Города (multiselect)",
-  "cities_ph": "Начните вводить город...",
-  "dragToReorder": "Перетащите для изменения порядка",
-  "rooming": "Rooming (кол-во номеров)",
-  "map": "Карта",
-  "monuments": "Входные билеты (объекты)",
-  "monuments_ph": "Начните вводить объект/город…",
-  "segments": "Сегменты маршрута",
-  "dep": "Время выезда",
-  "arr": "Время приезда",
-  "extras": "Доп. элементы",
-  "extras_ph": "Питание, мастер-класс…",
-  "markerHint": "Перетащите маркер для уточнения точки",
-  "generate": "Сформировать программу",
-  "programText": "Текстовая программа"
-},
-
-"tb": {
-  "load_draft": "Загрузить черновик",
-  "save_draft": "Сохранить черновик",
-  "draft_saved": "Черновик сохранён",
-  "draft_saved_locally": "Черновик сохранён локально",
-  "draft_loaded": "Черновик загружен",
-  "draft_loaded_local": "Черновик загружен из браузера",
-  "no_drafts": "Черновиков не найдено",
-  "tariff_for": "Тарифы для:",
-  "residents": "Резиденты",
-  "nonresidents": "Нерезиденты",
-  "entry_fees_net": "Entry fees (нетто)",
-  "pax": "Гости (PAX)",
-  "loop_route": "замкнуть маршрут",
-  "loop": "повтор",
-  "override_by_day": "Переопределить по дням",
-  "use_default": "Как по умолчанию",
-
-  "guides_suggest": "Гиды, доступные на выбранные даты",
-  "no_guides": "Нет подходящих гидов",
-  "transports_suggest": "Транспорт, доступный на выбранные даты",
-  "no_transports": "Нет подходящего транспорта",
-
-  "hotels_nights": "Ночёвки (отели добавляются вручную)",
-  "net": "Нетто",
-  "notes": "Заметка",
-
-  "pricing": "Ценообразование",
-  "currency": "Валюта",
-  "markup": "Наценка, %",
-  "tourist_fee": "Туристический сбор / ночь",
-  "hotels_cost": "Отели (нетто)",
-  "providers_cost": "Гид/Транспорт (нетто)",
-  "total": "Суммарно"
-}
-
-
+    "title": "Конструктор тура",
+    "dates": "Даты тура",
+    "arrivalDay1": "Время прибытия первого дня",
+    "monuments": "Входные билеты (объекты)",
+    "monuments_ph": "Начните вводить объект/город…",
+    "guide": "Гид",
+    "transport": "Транспорт",
+    "cities": "Города (multiselect)",
+    "cities_ph": "Начните вводить город...",
+    "dragToReorder": "Перетащите для изменения порядка",
+    "rooming": "Rooming (кол-во номеров)",
+    "map": "Карта",
+    "segments": "Сегменты маршрута",
+    "dep": "Время выезда",
+    "arr": "Время приезда",
+    "extras": "Доп. элементы",
+    "extras_ph": "Питание, мастер-класс…",
+    "markerHint": "Перетащите маркер для уточнения точки",
+    "generate": "Сформировать программу",
+    "programText": "Текстовая программа"
+  },
+  
+  "tb": {
+    "title": "Конструктор тура",
+    "dates": "Даты тура",
+    "pick_dates": "Выберите даты начала и конца",
+    "dates_span": "{{from}} — {{to}} • {{days}} дн.",
+    "tariffs_for": "Тарифы для",
+    "residents": "Резиденты",
+    "nonresidents": "Нерезиденты",
+    "speaking_lang": "Speaking language",
+    "city_ph": "Город (например, Tashkent)",
+    "pick_city_first": "Сначала укажите город",
+    "guide": "Гид",
+    "pick_guide": "Выберите гида",
+    "no_providers": "Нет доступных провайдеров",
+    "no_services_for_guide": "Для этого гида услуги не найдены. Заполните их в Dashboard → Services.",
+    "transport": "Транспорт",
+    "pick_transport": "Выберите транспорт",
+    "no_services_for_transport": "Для этого перевозчика услуги не найдены. Заполните их в Dashboard → Services.",
+    "hotel": "Отель (за ночь, нетто)",
+    "hotel_short": "Отель",
+    "pick_hotel": "Выберите отель",
+    "no_hotels": "Нет вариантов",
+    "loading_hotel": "Загружаем фонд и сезоны…",
+    "entry_fees": "Входные билеты (объекты)",
+    "entry_ph": "Начните вводить объект…",
+    "pick_sites": "Выберите объекты",
+    "nothing_found": "Ничего не найдено",
+    "entry_for_day": "На этот день",
+    "entry_hint_suffix": "учтены ADT/CHD и статус резидента",
+    "price_per_day": "Цена/день",
+    "price_per_night": "Цена/ночь",
+    "day_total": "Итого по дню",
+    "rooms_and_meals": "Номера и питание",
+    "totals": {
+      "guide": "Гид (нетто)",
+      "transport": "Транспорт (нетто)",
+      "hotels": "Отели (нетто)",
+      "entry": "Entry fees (нетто)",
+      "total": "ИТОГО"
+    }
+  }
 }
