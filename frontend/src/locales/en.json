@@ -133,9 +133,7 @@
     "dates_label": "Dates reserved:",
     "wait_price": "Waiting for a price offer from the provider",
 
-    "search": {
-      "placeholder": "Search: provider, service, status…"
-    },
+    "search": { "placeholder": "Search: provider, service, status…" },
 
     "view": {
       "compact": "Compact",
@@ -228,16 +226,10 @@
       "requestDeleted": "Request deleted",
       "deleteRequest": "Delete",
       "saveBtn": "Save",
-      "tabs": {
-        "myBookings": "My bookings",
-        "myRequests": "My requests"
-      },
+      "tabs": { "myBookings": "My bookings", "myRequests": "My requests" },
       "uploadPhoto": "Upload photo"
     },
-    "header": {
-      "cabinet": "Dashboard",
-      "favorites": "Favorites"
-    },
+    "header": { "cabinet": "Dashboard", "favorites": "Favorites" },
     "login": {
       "loginBtn": "Log in",
       "noAccount": "No account?",
@@ -297,12 +289,7 @@
   },
 
   "confirm_delete": "Delete this item?",
-  "countdown": { 
-    "until_end": "Time left", 
-    "expired": "Expired",
-    "days_short": "d"
-  },
-  
+  "countdown": { "until_end": "Time left", "expired": "Expired", "days_short": "d" },
 
   "country_not_chosen": "No countries found",
   "cover": "Cover",
@@ -344,7 +331,6 @@
     "password_change": "Failed to change password",
     "password_short": "Password must be at least 6 characters",
     "profile_load": "Failed to load profile",
-    "profile_load_failed": "Failed to load profile",
     "profile_save": "Failed to save profile",
     "request_send": "Failed to send request",
     "request_already_sent": "You have already sent this request",
@@ -352,16 +338,10 @@
     "service_unknown": "Service not found",
     "tab_load": "Failed to load tab",
     "write_review": "Please write a general review",
-    "save_failed": "Failed to save the inspection",
-    "only_providers": "Only authenticated providers/agents can leave inspections. Please sign in to the provider dashboard.",
-    "write_review": "Please write a general review",
-    "only_providers": "Only a provider/agent can submit an inspection",
-    "save_failed": "Failed to save the inspection",
-    "already_inspected": "You’ve already submitted an inspection for this hotel.",
     "only_providers": "Only providers/agents can submit inspections.",
     "save_failed": "Couldn’t save. Please try again later.",
-    "write_review": "Please write a general review"
-    },
+    "already_inspected": "You’ve already submitted an inspection for this hotel."
+  },
 
   "event_category_concert": "Concert",
   "event_category_exhibition": "Exhibition",
@@ -422,7 +402,7 @@
   "hotel.no_options": "No options",
   "hotel.search_placeholder": "Enter hotel name",
 
-    "hotels": {
+  "hotels": {
     "title": "Hotels",
     "tabs": { "top": "Top", "popular": "Popular", "new": "New", "worst": "Worst" },
     "emptyHint": "Pick a tab or run a search to show hotels.",
@@ -433,15 +413,12 @@
     "searching": "Searching...",
     "col": { "name": "Name", "city": "City", "rating": "Rating" },
     "empty": "Nothing found",
-      
+
     "inspections": {
       "author_fallback": "provider",
       "author": "Author",
       "hotel_label": "Hotel",
-      "sort": {
-        "topOption": "Most likes first",
-        "newOption": "Newest first"
-      },
+      "sort": { "topOption": "Most likes first", "newOption": "Newest first" },
       "back_to_hotel": "Back to hotel",
       "empty": "No inspections yet",
       "new": {
@@ -505,14 +482,14 @@
   "loading": "Loading…",
   "loading_stats": "Loading stats...",
   "location": "Region or venue",
-  
+
   "labels": {
-  "client": "Client",
-  "agent": "Agent",
-  "guide": "Guide",
-  "transport": "Transport",
-  "hotel": "Hotel"
-},
+    "client": "Client",
+    "agent": "Agent",
+    "guide": "Guide",
+    "transport": "Transport",
+    "hotel": "Hotel"
+  },
 
   "languages": {
     "heading": "Language proficiency",
@@ -613,10 +590,7 @@
     "unpublish_error": "Unpublish error",
     "forbidden": "Admins only",
     "empty": "No items",
-    "tabs": {
-      "pending": "Pending",
-      "rejected": "Rejected"
-    }
+    "tabs": { "pending": "Pending", "rejected": "Rejected" }
   },
 
   "mountain_tour": "Mountain tour",
@@ -761,7 +735,8 @@
     "type": "Provider type"
   },
 
-  "requests.tabs.incoming": "Incoming", "requests.tabs.outgoing": "Outgoing",
+  "requests.tabs.incoming": "Incoming",
+  "requests.tabs.outgoing": "Outgoing",
 
   "requests_list": {
     "empty": "No requests yet.",
@@ -808,9 +783,6 @@
   "select_country": "Choose a visa country",
   "select_event_category": "Choose an event category",
   "select_files": "Choose files",
-  "select.type_more": "Enter min 2 letters",
-  "select_hotel": "Choose a hotel",
-  
 
   "service": "Service",
   "service_added": "Service added",
@@ -855,41 +827,41 @@
   },
 
   "tb": {
-  "load_draft": "Load draft",
-  "save_draft": "Save draft",
-  "draft_saved": "Draft saved",
-  "draft_saved_locally": "Draft saved locally",
-  "draft_loaded": "Draft loaded",
-  "draft_loaded_local": "Draft loaded from browser",
-  "no_drafts": "No drafts found",
-  "tariff_for": "Tariffs for:",
-  "residents": "Residents",
-  "nonresidents": "Non-residents",
-  "entry_fees_net": "Entry fees (net)",
+    "load_draft": "Load draft",
+    "save_draft": "Save draft",
+    "draft_saved": "Draft saved",
+    "draft_saved_locally": "Draft saved locally",
+    "draft_loaded": "Draft loaded",
+    "draft_loaded_local": "Draft loaded from browser",
+    "no_drafts": "No drafts found",
+    "tariff_for": "Tariffs for:",
+    "residents": "Residents",
+    "nonresidents": "Non-residents",
+    "entry_fees_net": "Entry fees (net)",
 
-  "pax": "Guests (PAX)",
-  "loop_route": "close the loop",
-  "loop": "repeat",
-  "override_by_day": "Override by day",
-  "use_default": "Use default",
+    "pax": "Guests (PAX)",
+    "loop_route": "close the loop",
+    "loop": "repeat",
+    "override_by_day": "Override by day",
+    "use_default": "Use default",
 
-  "guides_suggest": "Guides available for selected dates",
-  "no_guides": "No suitable guides",
-  "transports_suggest": "Transport available for selected dates",
-  "no_transports": "No suitable transport",
+    "guides_suggest": "Guides available for selected dates",
+    "no_guides": "No suitable guides",
+    "transports_suggest": "Transport available for selected dates",
+    "no_transports": "No suitable transport",
 
-  "hotels_nights": "Overnights (add hotels manually)",
-  "net": "Net",
-  "notes": "Note",
+    "hotels_nights": "Overnights (add hotels manually)",
+    "net": "Net",
+    "notes": "Note",
 
-  "pricing": "Pricing",
-  "currency": "Currency",
-  "markup": "Markup, %",
-  "tourist_fee": "Tourist fee / night",
-  "hotels_cost": "Hotels (net)",
-  "providers_cost": "Guide/Transport (net)",
-  "total": "Total"
-},
+    "pricing": "Pricing",
+    "currency": "Currency",
+    "markup": "Markup, %",
+    "tourist_fee": "Tourist fee / night",
+    "hotels_cost": "Hotels (net)",
+    "providers_cost": "Guide/Transport (net)",
+    "total": "Total"
+  },
 
   "telegram": {
     "enable_title": "Telegram notifications",
@@ -907,30 +879,27 @@
   },
 
   "tourBuilder": {
-  "title": "Tour Builder",
-  "dates": "Tour dates",
-  "arrivalDay1": "Arrival time (Day 1)",
-  "monuments": "Monuments entry fees",
-  "monuments_ph": "Select sites",
-  "guide": "Guide",
-  "transport": "Transport",
-  "cities": "Cities (multiselect)",
-  "cities_ph": "Start typing a city...",
-  "dragToReorder": "Drag to reorder",
-  "rooming": "Rooming (number of rooms)",
-  "map": "Map",
-  "segments": "Route segments",
-  "dep": "Departure time",
-  "arr": "Arrival time",
-  "extras": "Extras",
-  "extras_ph": "Meals, master class…",
-  "markerHint": "Drag the marker to refine the point",
-  "generate": "Generate program",
-  "programText": "Program text",
-  "monuments": "Monuments entry fees",
-  "monuments_ph": "Start typing a site or city…"
-},
-
+    "title": "Tour Builder",
+    "dates": "Tour dates",
+    "arrivalDay1": "Arrival time (Day 1)",
+    "monuments": "Monuments entry fees",
+    "monuments_ph": "Start typing a site or city…",
+    "guide": "Guide",
+    "transport": "Transport",
+    "cities": "Cities (multiselect)",
+    "cities_ph": "Start typing a city...",
+    "dragToReorder": "Drag to reorder",
+    "rooming": "Rooming (number of rooms)",
+    "map": "Map",
+    "segments": "Route segments",
+    "dep": "Departure time",
+    "arr": "Arrival time",
+    "extras": "Extras",
+    "extras_ph": "Meals, master class…",
+    "markerHint": "Drag the marker to refine the point",
+    "generate": "Generate program",
+    "programText": "Program text"
+  },
 
   "transfer": "Transfer",
   "transfer_options": {
@@ -982,6 +951,7 @@
     "login_required": "Log in to continue",
     "provider_login_required": "Log in as provider"
   },
+
   "rooms_and_prices": "Rooms & prices",
   "room_category": "Room category",
   "count_short": "Qty",
@@ -995,9 +965,17 @@
   "tourism_fee_resident": "Tourist tax (residents), UZS/night",
   "tourism_fee_nonresident": "Tourist tax (non-residents), UZS/night",
   "extra_bed_cost": "Extra bed, UZS/night",
-  "room_category": "Room category",
-  "select.no_options": "No options",
-  "select.loading": "Loading…",
+
+  "images": "Images",
+
+  "select_city": "Choose a city",
+  "select_country": "Choose a country",
+  "select": {
+    "type_more": "Enter at least 2 characters",
+    "no_options": "No options",
+    "loading": "Loading…"
+  },
+
   "admin": { "new_hotel_title": "New hotel" },
 
   "hotel_name": "Name",
@@ -1021,23 +999,5 @@
 
   "taxes_and_fees": "Taxes & fees",
   "vat_included": "Prices include VAT",
-  "vat_rate": "VAT rate, %",
-
-  "tourist_tax_resident": "Tourist tax (resident), /person/night",
-  "tourist_tax_nonresident": "Tourist tax (non-resident), /person/night",
-
-  "amenities": "Amenities",
-  "add_amenity": "Add amenity…",
-  "add_service": "Add service…",
-  "add": "Add",
-
-  "images": "Images",
-
-  "select_city": "Choose a city",
-  "select_country": "Choose a country",
-  "select": {
-    "type_more": "Enter at least 2 characters",
-    "no_options": "No options",
-    "loading": "Loading…"
-  }
+  "vat_rate": "VAT rate, %"
 }
