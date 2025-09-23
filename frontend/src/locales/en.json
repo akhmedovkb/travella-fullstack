@@ -827,6 +827,7 @@
   },
 
   "tb": {
+    "usd_enter_valid_rate": "Enter a valid USD rate to see totals in USD",
     "tariff_for": "Tariffs for:",
     "residents": "Residents",
     "nonresidents": "Non-residents",
