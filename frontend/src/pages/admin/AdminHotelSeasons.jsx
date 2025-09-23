@@ -4,25 +4,18 @@ import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
-const api = axios.create({
-  baseURL: API_BASE,
-  withCredentials: true,
-});
+const api = axios.create({ baseURL: API_BASE, withCredentials: true });
 
-// ---- auth helpers ----
-function getToken() {
-  return (
-    localStorage.getItem("providerToken") ||
-    localStorage.getItem("token") ||
-    null
-  );
-}
-function authHeaders() {
+const getToken = () =>
+  localStorage.getItem("providerToken") ||
+  localStorage.getItem("token") ||
+  null;
+
+const authHeaders = () => {
   const t = getToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
-}
+};
 
-// ---- utils ----
 const iso = (d) => {
   if (!d) return "";
   const x = typeof d === "string" ? new Date(d + "T00:00:00Z") : new Date(d);
@@ -145,8 +138,7 @@ export default function AdminHotelSeasons() {
       setRows((rs) => rs.filter((x) => x.id !== row.id));
     } catch (e) {
       console.error(e);
-      if (e?.response?.status === 401) alert("Нужна авторизация");
-      else alert("Не удалось удалить");
+      alert(e?.response?.status === 401 ? "Нужна авторизация" : "Не удалось удалить");
     } finally {
       setSaving(false);
     }
@@ -154,17 +146,22 @@ export default function AdminHotelSeasons() {
 
   const saveRow = async (row) => {
     setServerMsg("");
+    // локальная проверка строки
     const localErrors = validateSeasons([row]);
     if (localErrors.length) {
-      setServerMsg("Заполните корректно даты");
+      setServerMsg(
+        "Заполните корректно даты. Если сезон тянется через Новый год — поставьте конец в следующем году."
+      );
       return;
     }
+    // проверка пересечений глобально
     const tmp = rows.map((r) => (r.id === row.id ? row : r));
     const errs = validateSeasons(tmp);
     if (errs.length) {
       setServerMsg("Исправьте пересечения интервалов");
       return;
     }
+
     try {
       setSaving(true);
       if (String(row.id).startsWith("new-")) {
@@ -182,7 +179,8 @@ export default function AdminHotelSeasons() {
           rs.map((x) =>
             x.id === row.id
               ? {
-                  ...created,
+                  id: created.id,
+                  label: created.label || row.label,
                   start_date: iso(created.start_date),
                   end_date: iso(created.end_date),
                 }
@@ -204,7 +202,8 @@ export default function AdminHotelSeasons() {
           rs.map((x) =>
             x.id === row.id
               ? {
-                  ...updated,
+                  id: updated.id,
+                  label: updated.label || row.label,
                   start_date: iso(updated.start_date),
                   end_date: iso(updated.end_date),
                 }
@@ -262,13 +261,13 @@ export default function AdminHotelSeasons() {
       setServerMsg("Заменено ✅");
     } catch (e) {
       console.error(e);
-      if (e?.response?.status === 401) setServerMsg("Нужна авторизация");
-      else {
-        const code = e?.response?.data?.error || "bulk_failed";
-        if (code === "overlap_in_payload")
-          setServerMsg("Пересечения в отправленном наборе");
-        else setServerMsg("Ошибка сохранения");
-      }
+      setServerMsg(
+        e?.response?.data?.error === "overlap_in_payload"
+          ? "Пересечения в отправленном наборе"
+          : e?.response?.status === 401
+          ? "Нужна авторизация"
+          : "Ошибка сохранения"
+      );
     } finally {
       setSaving(false);
     }
@@ -305,18 +304,18 @@ export default function AdminHotelSeasons() {
       )}
 
       <div className="rounded border overflow-hidden">
-        {/* чуть шире, чтобы элементы не наезжали */}
-        <div className="grid grid-cols-[1fr,180px,180px,200px] bg-gray-50 px-3 py-2 text-sm font-medium">
+        {/* Адаптивная сетка: на мобилках — 1 колонка, на >=sm — широкая таблица */}
+        <div className="px-3 py-2 text-sm font-medium bg-gray-50 grid grid-cols-1 sm:[grid-template-columns:1fr_200px_200px_240px] gap-2 sm:gap-3">
           <div>Тег сезона</div>
-          <div>Начало</div>
-          <div>Конец</div>
-          <div className="text-right">Действия</div>
+          <div className="hidden sm:block">Начало</div>
+          <div className="hidden sm:block">Конец</div>
+          <div className="hidden sm:block text-right">Действия</div>
         </div>
 
         {rows.map((r) => (
           <div
             key={r.id}
-            className="grid grid-cols-[1fr,180px,180px,200px] items-center gap-2 px-3 py-2 border-t text-sm"
+            className="px-3 py-2 border-t text-sm grid grid-cols-1 sm:[grid-template-columns:1fr_200px_200px_240px] items-center gap-2 sm:gap-3"
           >
             <div>
               <select
@@ -338,7 +337,7 @@ export default function AdminHotelSeasons() {
               </select>
             </div>
 
-            <div>
+            <div className="sm:col-auto">
               <input
                 type="date"
                 className={`border rounded h-9 px-2 w-full ${
@@ -355,7 +354,7 @@ export default function AdminHotelSeasons() {
               />
             </div>
 
-            <div>
+            <div className="sm:col-auto">
               <input
                 type="date"
                 className={`border rounded h-9 px-2 w-full ${
@@ -372,11 +371,11 @@ export default function AdminHotelSeasons() {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-start sm:justify-end gap-2">
               {errors.some((e) => e.id === r.id) && (
                 <span
                   title={errTextFor(r.id)}
-                  className="text-xs text-red-600 mr-2"
+                  className="text-xs text-red-600 mr-1"
                 >
                   есть ошибки
                 </span>
@@ -406,7 +405,7 @@ export default function AdminHotelSeasons() {
         )}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           className="h-9 px-3 border rounded hover:bg-gray-50"
           onClick={addRow}
@@ -422,6 +421,10 @@ export default function AdminHotelSeasons() {
         >
           Заменить все текущим списком
         </button>
+        <div className="text-xs text-gray-500 ml-2">
+          Подсказка: если сезон переходит на следующий год, укажите дату конца в
+          следующем году (например, 2025-11-16 → 2026-03-15).
+        </div>
       </div>
 
       {errors.length > 0 && (
