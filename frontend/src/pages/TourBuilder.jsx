@@ -874,6 +874,7 @@ const makeHotelLoader = (dateKey) => async (input) => {
                       noOptionsMessage={() => (cityChosen ? t('tb.no_hotels') : t('tb.pick_city_first'))}
                       value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
                       onChange={async (opt) => {
+                         const hotel = opt?.raw || null;
                          // сбрасываем прежние данные отеля
                          setByDay((p) => ({
                            ...p,
