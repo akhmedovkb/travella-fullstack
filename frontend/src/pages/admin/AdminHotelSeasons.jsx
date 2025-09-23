@@ -25,7 +25,6 @@ function validateSeasons(rows) {
     }))
     .filter((r) => r.start && r.end);
 
-  // пустые поля и порядок
   rows.forEach((r) => {
     if (!r.start_date) errors.push({ id: r.id, field: "start_date", msg: "Обязательное поле" });
     if (!r.end_date) errors.push({ id: r.id, field: "end_date", msg: "Обязательное поле" });
@@ -35,7 +34,6 @@ function validateSeasons(rows) {
     }
   });
 
-  // пересечения
   const sorted = [...items].sort((a, b) => cmp(a.start, b.start) || cmp(a.end, b.end));
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
@@ -75,7 +73,6 @@ export default function AdminHotelSeasons() {
       );
     } catch (e) {
       setServerMsg("Не удалось загрузить данные");
-      // eslint-disable-next-line no-console
       console.error(e);
     } finally {
       setLoading(false);
@@ -88,7 +85,6 @@ export default function AdminHotelSeasons() {
   }, [hotelId]);
 
   const errors = useMemo(() => validateSeasons(rows), [rows]);
-
   const mark = (id, field) => errors.some((e) => e.id === id && e.field === field);
   const errTextFor = (id) => {
     const uniq = new Set(errors.filter((e) => e.id === id).map((e) => e.msg));
@@ -97,15 +93,7 @@ export default function AdminHotelSeasons() {
 
   const addRow = () => {
     const tmpId = "new-" + Math.random().toString(36).slice(2, 7);
-    setRows((r) => [
-      ...r,
-      {
-        id: tmpId,
-        label: "low",
-        start_date: "",
-        end_date: "",
-      },
-    ]);
+    setRows((r) => [...r, { id: tmpId, label: "low", start_date: "", end_date: "" }]);
   };
 
   const removeRow = async (row) => {
@@ -119,7 +107,6 @@ export default function AdminHotelSeasons() {
       await axios.delete(API(`/api/hotels/${hotelId}/seasons/${row.id}`));
       setRows((rs) => rs.filter((x) => x.id !== row.id));
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error(e);
       alert("Не удалось удалить");
     } finally {
@@ -129,13 +116,11 @@ export default function AdminHotelSeasons() {
 
   const saveRow = async (row) => {
     setServerMsg("");
-    // базовая валидация самого ряда
     const localErrors = validateSeasons([row]);
     if (localErrors.length) {
       setServerMsg("Заполните корректно даты");
       return;
     }
-    // проверка на пересечения со всем набором
     const tmp = rows.map((r) => (r.id === row.id ? row : r));
     const errs = validateSeasons(tmp);
     if (errs.length) {
@@ -175,7 +160,6 @@ export default function AdminHotelSeasons() {
       }
       setServerMsg("Сохранено ✅");
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error(e);
       const code = e?.response?.data?.error || "save_failed";
       if (code === "overlap" || code === "overlap_in_payload") setServerMsg("На сервере обнаружено пересечение интервалов");
@@ -195,19 +179,12 @@ export default function AdminHotelSeasons() {
     }
     try {
       setSaving(true);
-      const payload = {
-        items: rows.map((r) => ({
-          label: r.label || "low",
-          start_date: r.start_date,
-          end_date: r.end_date,
-        })),
-      };
+      const payload = { items: rows.map((r) => ({ label: r.label || "low", start_date: r.start_date, end_date: r.end_date })) };
       const res = await axios.put(API(`/api/hotels/${hotelId}/seasons/bulk`), payload);
       const items = res.data?.items || [];
       setRows(items.map((x) => ({ id: x.id, label: x.label || "low", start_date: iso(x.start_date), end_date: iso(x.end_date) })));
       setServerMsg("Заменено ✅");
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error(e);
       const code = e?.response?.data?.error || "bulk_failed";
       if (code === "overlap_in_payload") setServerMsg("Пересечения в отправленном наборе");
@@ -243,13 +220,9 @@ export default function AdminHotelSeasons() {
       {serverMsg && <div className="mb-3 text-sm">{serverMsg}</div>}
 
       <div className="rounded border overflow-hidden">
-        {/* HEADER */}
-        <div
-          className="
-            grid grid-cols-[minmax(260px,1fr),200px,200px,240px]
-            gap-2 bg-gray-50 px-3 py-2 text-sm font-medium
-          "
-        >
+        {/* HEADER — только на >= sm */}
+        <div className="hidden sm:grid bg-gray-50 px-3 py-2 text-sm font-medium
+                        sm:grid-cols-[minmax(260px,1fr),200px,200px,240px] gap-2">
           <div>Тег сезона</div>
           <div>Начало</div>
           <div>Конец</div>
@@ -261,10 +234,14 @@ export default function AdminHotelSeasons() {
           <div
             key={r.id}
             className="
-              grid grid-cols-[minmax(260px,1fr),200px,200px,240px]
-              gap-2 items-center px-3 py-2 border-t text-sm
+              grid gap-3 px-3 py-3 border-t text-sm
+              grid-cols-1
+              sm:grid-cols-[minmax(260px,1fr),200px,200px,240px]
+              sm:gap-2 sm:items-center
             "
           >
+            {/* label (моб. подпись) */}
+            <div className="sm:hidden text-xs text-gray-500">Тег сезона</div>
             <div>
               <select
                 className="border rounded h-9 px-2 w-full"
@@ -279,6 +256,7 @@ export default function AdminHotelSeasons() {
               </select>
             </div>
 
+            <div className="sm:hidden text-xs text-gray-500">Начало</div>
             <div>
               <input
                 type="date"
@@ -288,6 +266,7 @@ export default function AdminHotelSeasons() {
               />
             </div>
 
+            <div className="sm:hidden text-xs text-gray-500">Конец</div>
             <div>
               <input
                 type="date"
@@ -297,9 +276,10 @@ export default function AdminHotelSeasons() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* actions: занимает одну колонку на десктопе и целую строку на мобилке */}
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:col-auto col-auto">
               {errors.some((e) => e.id === r.id) && (
-                <span title={errTextFor(r.id)} className="text-xs text-red-600 mr-2">
+                <span title={errTextFor(r.id)} className="text-xs text-red-600 sm:mr-2">
                   есть ошибки
                 </span>
               )}
