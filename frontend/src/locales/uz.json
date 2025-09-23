@@ -851,6 +851,15 @@
   },
 
   "tb": {
+    "tariff_for": "Tariflar:",
+    "residents": "Rezidentlar",
+    "nonresidents": "Norezidentlar",
+    "pick_transport_service_ph": "Transport xizmatini tanlang...",
+    "pick_guide_service_ph": "Gid xizmatini tanlang...",
+    "calc_day_hint": "Ushbu kunda: {{amount}} (ADT/CHD va rezidentlik hisobga olingan)",
+    "pick_places": "Joylarni tanlang",
+    "entry_ph": "Obyektlarni qidiring: muzeylar, bog‘lar…",
+    "speaking_lang": "Afzal muloqot tili",
     "title": "Tur konstruktori",
     "dates": "Sanalar",
     "pick_dates": "Kalendar orqali sanalarni tanlang",
