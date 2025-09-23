@@ -799,7 +799,7 @@
     "tariff_for": "Тарифы для",
     "pick_guide_service_ph": "Выберите услугу гида…",
     "pick_transport_service_ph": "Выберите услугу транспорта…",
-    "calc_day_hint": "На этот день: {{amount}} (учтены ADT/CHD и резидентство)"
+    "calc_day_hint": "На этот день: {{amount}} (учтены ADT/CHD и резидентство)",
     "title": "Конструктор тура",
     "dates": "Даты тура",
     "pick_dates": "Выберите даты начала и конца",
