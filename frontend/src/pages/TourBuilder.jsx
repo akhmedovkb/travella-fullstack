@@ -852,33 +852,28 @@ const makeHotelLoader = (dateKey) => async (input) => {
                   {/* если услуг нет: */}
                   {st.transport && (servicesCache[st.transport.id]?.length === 0) && (
                     <div className="text-xs text-amber-600 mt-1">
-                      {t('tb.no_services_for_transport')}s.
+                      {t('tb.no_services_for_transport')}
                     </div>
                   )}
                   {/* Hotel */}
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">{t('tb.hotel')}</label>
-                    <AsyncSelect
-                      isDisabled={!cityChosen}
-                      cacheOptions
-                      defaultOptions={true}
-                      loadOptions={makeHotelLoader(k)}
+                      <AsyncSelect
                       key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
                       isDisabled={!cityChosen}
                       cacheOptions={false}
-                      /* используем предзагруженные варианты */
+                      /* используем предзагруженные варианты из предзагрузки по городу */
                       defaultOptions={hotelOptionsMap[k] || []}
-                      loadOptions={(input, cb) => cb(hotelOptionsMap[k] || [])}
+                      loadOptions={(input, cb) => {
+                        const all = hotelOptionsMap[k] || [];
+                        const q = (input || '').trim().toLowerCase();
+                        cb(q ? all.filter(o => o.label.toLowerCase().includes(q)) : all);
+                      }}
                       components={{ Option: HotelOption }}
                       placeholder={cityChosen ? t('tb.pick_hotel') : t('tb.pick_city_first')}
-                      noOptionsMessage={() => cityChosen ? t('tb.no_hotels') : t('tb.pick_city_first')}
-                      value={
-                        st.hotel
-                          ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel }
-                          : null
-                      }
+                      noOptionsMessage={() => (cityChosen ? t('tb.no_hotels') : t('tb.pick_city_first'))}
+                      value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
                       onChange={async (opt) => {
-                         const hotel = opt?.raw || null;
                          // сбрасываем прежние данные отеля
                          setByDay((p) => ({
                            ...p,
@@ -1031,6 +1026,8 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
 }
 
 function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, onTotalChange }) {
+    // локализация внутри дочернего компонента
+  const { t } = useTranslation();
   const MEALS = ["BB","HB","FB","AI","UAI"];
   const [meal, setMeal] = useState("BB");
   // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
