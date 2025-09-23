@@ -827,7 +827,49 @@
   },
 
   "tb": {
-    "load_draft": "Load draft",
+    "title": "Tour builder",
+    "dates": "Dates",
+    "pick_dates": "Pick the dates on the calendar",
+    "dates_span": "{{from}} → {{to}} ({{days}} days)",
+    "city_ph": "City (slug or name)",
+    "speaking_lang": "Preferred speaking language",
+    "residents": "Residents",
+    "nonresidents": "Non-residents",
+    "pick_city_first": "Pick a city first",
+
+    "guide": "Guide",
+    "pick_guide": "Pick a guide",
+    "no_providers": "No providers found",
+    "no_services_for_guide": "This guide has no services matching your filters",
+
+    "transport": "Transport",
+    "pick_transport": "Pick a transport provider",
+    "no_services_for_transport": "This transport provider has no services matching your filters",
+
+    "hotel": "Hotel",
+    "hotel_short": "Hotel",
+    "pick_hotel": "Pick a hotel",
+    "no_hotels": "No hotels found",
+    "loading_hotel": "Loading hotel info…",
+
+    "entry_fees": "Entry fees / tickets",
+    "entry_ph": "Search sites, museums, parks…",
+    "pick_sites": "Pick places",
+    "nothing_found": "Nothing found",
+
+    "price_per_day": "Price/day",
+    "price_per_night": "Price/night",
+    "rooms_and_meals": "Rooms & meal plan",
+    "day_total": "Day total",
+
+    "totals": {
+      "guide": "Guide",
+      "transport": "Transport",
+      "hotels": "Hotels",
+      "entry": "Entry fees",
+      "total": "Total"
+    },
+   "load_draft": "Load draft",
     "save_draft": "Save draft",
     "draft_saved": "Draft saved",
     "draft_saved_locally": "Draft saved locally",
