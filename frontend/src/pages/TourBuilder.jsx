@@ -1012,17 +1012,28 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       <div className="text-xs text-gray-700 mt-2">
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <span>
-                            Номера: <b>{Number(st.hotelBreakdown.rooms || 0).toFixed(2)} UZS</b>
+                                {t('tb.rooms')}:{' '}
+                                <b>{Number(st.hotelBreakdown.rooms || 0).toFixed(2)} UZS</b>
                           </span>
                           <span>
-                            Доп. места: <b>{Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} UZS</b>
+                                {t('tb.extra_beds_short')}:{' '}
+                                <b>{Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} UZS</b>
                           </span>
                           <span>
-                            Тур. сбор: <b>{Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</b>
+                                {t('tb.tourism_fee_short')}:{' '}
+                                <b>{Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</b>
                           </span>
-                          {st.hotelBreakdown.vatIncluded
-                            ? <span>НДС: <b>включён в цену</b></span>
-                            : <span>НДС: <b>{Number(st.hotelBreakdown.vat || 0).toFixed(2)} UZS</b></span>}
+                              {st.hotelBreakdown.vatIncluded ? (
+                                <span>
+                                  {t('tb.vat')}:{' '}
+                                  <b>{t('tb.vat_included')}</b>
+                                </span>
+                              ) : (
+                                <span>
+                                  {t('tb.vat')}:{' '}
+                                  <b>{Number(st.hotelBreakdown.vat || 0).toFixed(2)} UZS</b>
+                                </span>
+                              )}
                         </div>
                       </div>
                     )}
@@ -1315,24 +1326,19 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
             onChange={(e) => setExtraBeds(Math.max(0, Number(e.target.value) || 0))}
           />
         </label>
-        <div className="text-xs text-gray-600 flex items-center px-2">
+                <div className="text-xs text-gray-600 flex items-center px-2">
           {(() => {
-            const feeRes = pickNumeric(hotelBrief, [
-              "tourism_fee_resident", "tourism_fee_res", "tourist_fee_resident",
-              "resident_tourist_fee", "tourism_tax_resident", "resident_city_tax"
-            ]);
-            const feeNrs = pickNumeric(hotelBrief, [
-              "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
-              "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
-            ]);
+            const feeRes = pickNumeric(hotelBrief, [...]);
+           const feeNrs = pickNumeric(hotelBrief, [...]);
             const haveFee = feeRes > 0 || feeNrs > 0;
             return haveFee
-              ? `Туристический сбор: рез. ${feeRes.toFixed(0)} / нерез. ${feeNrs.toFixed(0)} сум за человека/ночь`
-              : 'Туристический сбор не задан в профиле отеля';
+              ? t('tb.tourism_fee_hint', {
+                  res: feeRes.toFixed(0),
+                  nrs: feeNrs.toFixed(0),
+                })
+              : t('tb.tourism_fee_absent');
           })()}
         </div>
-      </div>
-
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
           const max = Number(mapByType.get(type)?.count ?? 0);
