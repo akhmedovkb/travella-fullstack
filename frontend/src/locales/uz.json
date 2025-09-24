@@ -732,6 +732,74 @@
   "provider_profile": "Ta’minotchi profili",
   "providerProfile": { "type": "Ta’minotchi turi", "region": "Ta’minotchi mintaqasi", "address": "Manzil" },
 
+  "ps": {
+    "title": "Tour Builder uchun Xizmatlar",
+
+    "btn": {
+      "refresh": "Yangilash",
+      "generate_from_profile": "Profil asosida yaratish",
+      "generating": "Yaratilmoqda…",
+      "generate_hint": "Profil shahar va avtomobillari bo‘yicha avto-yaratish"
+    },
+
+    "grp": {
+      "guide": "GID",
+      "guide_transport": "GID+TRANSPORT",
+      "transport": "TRANSPORT"
+    },
+
+    "form": {
+      "category": "Toifa",
+      "category_ph": "— toifa tanlang —",
+      "name_opt": "Nomi (ixtiyoriy)",
+      "name_optional_ph": "masalan, 4 soat yoki avtomobil modeli",
+      "seats": "Joylar",
+      "price": "Narx",
+      "price_ph": "100, 120.50 …",
+      "currency": "Valyuta",
+      "add": "Qo‘shish"
+    },
+
+    "table": {
+      "category": "Toifa",
+      "name": "Nomi",
+      "seats": "Joylar",
+      "price": "Narx",
+      "currency": "Valyuta",
+      "status": "Holat",
+      "actions": "Amallar"
+    },
+
+    "row": {
+      "name_ph": "Nomi…",
+      "enable": "Yoqish",
+      "disable": "O‘chirish",
+      "delete": "O‘chirish"
+    },
+
+    "status": {
+      "enabled": "Yoqilgan",
+      "disabled": "O‘chirilgan"
+    },
+
+    "empty": "Xizmatlar topilmadi. Hech bo‘lmaganda bittasini qo‘shing.",
+    "hint": {
+      "zero_price": "Maslahat: narxi 0 bo‘lgan xizmatlar TourBuilder’da ko‘rinmaydi. Narxlarni kiriting — va ular darhol paydo bo‘ladi."
+    },
+
+    "confirm": {
+      "delete": "Xizmat o‘chirilsinmi?",
+      "bulk": "Ommaviy qo‘shishni tasdiqlang."
+    },
+
+    "error": {
+      "delete": "O‘chirish imkonsiz: ",
+      "no_cities": "Avval profilga “Faoliyat hududi”ni kiriting.",
+      "nothing_to_generate": "Hech narsa yaratib bo‘lmaydi: profilda shaharlar va/yoki avtomobillarni qo‘shing.",
+      "bulk": "Paket yaratish xatosi: "
+    }
+  }
+
   "refused_hotel": "Rad etilgan mehmonxona",
   "refused_hotel_city": "Shahar",
   "refused_hotel_name": "Rad etilgan mehmonxona nomi",
