@@ -235,7 +235,7 @@ export default function Header() {
           MARKETPLACE
         </Link>
 
-        <NavItem to="/tour-builder" label={t("nav.tour_builder", "Конструктор тура")} />
+        <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
 
         {role === "provider" && (
           <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
