@@ -895,6 +895,7 @@
     "price_per_night": "Tuniga narx",
     "rooms_and_meals": "Xonalar va ovqatlanish",
     "day_total": "Kun bo‘yicha jami",
+    "extra_beds_qty": "Qo`shimcha krovat miqdori",
 
     "totals": {
       "guide": "Gid",
