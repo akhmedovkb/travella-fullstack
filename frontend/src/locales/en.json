@@ -169,6 +169,7 @@
   },
 
   "cancel": "Cancel",
+  "car_fleet" : "Available transport",
 
   "category": {
     "author_tour": "Authored tour",
