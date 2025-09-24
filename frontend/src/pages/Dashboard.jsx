@@ -1701,12 +1701,23 @@ useEffect(() => {
                           {!isTgLinked && tgDeepLink && (
                             <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
                               <div className="font-medium mb-1">
-                                {t("tg.title", { defaultValue: "Уведомления в Telegram" })}
+                                  {t("tg.title", {
+                                  defaultValue:
+                                    (i18n?.language || "").startsWith("uz")
+                                      ? "Telegram orqali bildirishnomalar"
+                                      : (i18n?.language || "").startsWith("en")
+                                      ? "Notifications in Telegram"
+                                      : "Уведомления в Telegram"
+                                })}
                               </div>
                               <div className="mb-2">
                                 {t("tg.subtitle", {
                                   defaultValue:
-                                    "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
+                                    (i18n?.language || "").startsWith("uz")
+                                      ? "Telegram’ni bog‘lab, so‘rovlar va bronlar haqida xabarnomalarni oling."
+                                      : (i18n?.language || "").startsWith("en")
+                                      ? "Link your Telegram to receive notifications about requests and bookings."
+                                      : "Нажмите, чтобы связать Telegram и получать уведомления о заявках и бронированиях.",
                                 })}
                               </div>
                               <a
@@ -1715,7 +1726,14 @@ useEffect(() => {
                                 rel="noreferrer"
                                 className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
                               >
-                                {t("tg.connect", { defaultValue: "Подключить Telegram" })}
+                                {t("tg.connect", {
+                                  defaultValue:
+                                    (i18n?.language || "").startsWith("uz")
+                                      ? "Telegram’ni ulash"
+                                      : (i18n?.language || "").startsWith("en")
+                                      ? "Connect Telegram"
+                                      : "Подключить Telegram"
+                                })}
                               </a>
                             </div>
                           )}
