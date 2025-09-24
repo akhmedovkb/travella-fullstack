@@ -1546,6 +1546,27 @@ useEffect(() => {
                 {t("logout")}
               </button>
             </div>
+            {/* Смена пароля */}
+              <div className="mt-4">
+                <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
+                <input
+                  type="password"
+                  placeholder={t("current_password") || "Текущий пароль"}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="border px-3 py-2 mb-2 rounded w-full"
+                />
+                <input
+                  type="password"
+                  placeholder={t("new_password")}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="border px-3 py-2 mb-2 rounded w-full"
+                />
+                <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
+                  {t("change")}
+                </button>
+              </div>
 
             {/* Правая часть профиля */}
             <div className="w-1/2 space-y-3">
@@ -1730,28 +1751,6 @@ useEffect(() => {
               >
                 {isEditing ? t("save") : t("edit")}
               </button>
-
-              {/* Смена пароля */}
-              <div className="mt-4">
-                <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
-                <input
-                  type="password"
-                  placeholder={t("current_password") || "Текущий пароль"}
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  className="border px-3 py-2 mb-2 rounded w-full"
-                />
-                <input
-                  type="password"
-                  placeholder={t("new_password")}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="border px-3 py-2 mb-2 rounded w-full"
-                />
-                <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
-                  {t("change")}
-                </button>
-              </div>
             </div>
           </div>
           
