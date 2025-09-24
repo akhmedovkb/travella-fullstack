@@ -1,5 +1,6 @@
 // frontend/src/components/ProviderServicesCard.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const CATEGORY_LABELS = {
   // guide
@@ -80,6 +81,14 @@ export default function ProviderServicesCard({
   providerType, // 'guide' | 'transport'
   currencyDefault = "USD",
 }) {
+  const { t, i18n } = useTranslation();
+  const lang = (i18n?.language || "").toLowerCase();
+  const isUZ = lang.startsWith("uz");
+  const isEN = lang.startsWith("en");
+  // удобный fallback, если ключей нет в словаре
+  const F = (ru, uz, en) => (isUZ ? uz : isEN ? en : ru);
+  const TT = (key, ru, uz, en, opts={}) => t(key, { defaultValue: F(ru, uz, en), ...opts });
+
   const pid = Number(providerId);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,29 +128,34 @@ export default function ProviderServicesCard({
   const labelForCategory = useMemo(() => {
     const isGuide = providerType === "guide";
     return (cat) => {
+      // пробуем взять из i18n, иначе дефолтные мапы
       if (isGuide && isTransportCategory(cat)) {
-        return GUIDE_TRANSPORT_LABELS[cat] || CATEGORY_LABELS[cat] || cat;
+        return t(`category.${cat}`, {
+          defaultValue: GUIDE_TRANSPORT_LABELS[cat] || CATEGORY_LABELS[cat] || cat,
+        });
       }
-      return CATEGORY_LABELS[cat] || cat;
+      return t(`category.${cat}`, {
+        defaultValue: CATEGORY_LABELS[cat] || cat,
+      });
     };
   }, [providerType]);
 
   const categories = useMemo(() => {
-    const base = [{ label: "— выберите категорию —", value: "" }];
+    const base = [{ label: TT("ps.form.category_ph", "— выберите категорию —", "— toifa tanlang —", "— choose category —"), value: "" }];
 
     const guide = [
-      { label: "ГИД", value: "_sep1", disabled: true },
-      ...GUIDE_ALLOWED.map((v) => ({ value: v, label: CATEGORY_LABELS[v] })),
+      { label: TT("ps.grp.guide", "ГИД", "GID", "Guide"), value: "_sep1", disabled: true },
+      ...GUIDE_ALLOWED.map((v) => ({ value: v, label: t(`category.${v}`, { defaultValue: CATEGORY_LABELS[v] }) })),
     ];
 
     // если гид БЕЗ авто — не показываем транспортные опции вообще
     const guideTransport =
       providerType === "guide" && hasFleet
         ? [
-            { label: "ГИД+ТРАНСПОРТ", value: "_sep2", disabled: true },
+            { label: TT("ps.grp.guide_transport", "ГИД+ТРАНСПОРТ", "GID+TRANSPORT", "Guide+Transport"), value: "_sep2", disabled: true },
             ...TRANSPORT_ALLOWED.map((v) => ({
               value: v,
-              label: GUIDE_TRANSPORT_LABELS[v] || CATEGORY_LABELS[v],
+              label: t(`category.${v}`, { defaultValue: GUIDE_TRANSPORT_LABELS[v] || CATEGORY_LABELS[v] }),
             })),
           ]
         : [];
@@ -149,10 +163,10 @@ export default function ProviderServicesCard({
     const transportSection =
       providerType === "transport"
         ? [
-            { label: "ТРАНСПОРТ", value: "_sep3", disabled: true },
+            { label: TT("ps.grp.transport", "ТРАНСПОРТ", "TRANSPORT", "Transport"), value: "_sep3", disabled: true },
             ...TRANSPORT_ALLOWED.map((v) => ({
               value: v,
-              label: CATEGORY_LABELS[v],
+              label: t(`category.${v}`, { defaultValue: CATEGORY_LABELS[v] }),
             })),
           ]
         : [];
@@ -316,22 +330,26 @@ export default function ProviderServicesCard({
   return (
     <div className="rounded-xl border bg-white shadow-sm">
       <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Services</h2>
+        <h2 className="text-lg font-semibold">
+          {TT("ps.title", "Услуги", "Xizmatlar", "Services")}
+        </h2>>
         <div className="flex items-center gap-2">
           <button
             className="h-9 px-3 rounded border text-sm hover:bg-gray-50"
             onClick={load}
             disabled={loading}
           >
-            Обновить
+            {TT("ps.btn.refresh", "Обновить", "Yangilash", "Refresh")}
           </button>
           <button
             className="h-9 px-3 rounded bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-60"
             onClick={bulkGenerateFromProfile}
             disabled={bulkBusy}
-            title="Автогенерация по городам и авто из профиля"
+            title={TT("ps.btn.generate_hint", "Автогенерация по городам и авто из профиля", "Profil shahar/autolari bo‘yicha avto-yaratish", "Autogenerate by profile cities & cars")}
           >
-            {bulkBusy ? "Генерируем…" : "Сгенерировать из профиля"}
+              {bulkBusy
+              ? TT("ps.btn.generating", "Генерируем…", "Yaratilmoqda…", "Generating…")
+              : TT("ps.btn.generate_from_profile", "Сгенерировать из профиля", "Profil asosida yaratish", "Generate from profile")}
           </button>
         </div>
       </div>
@@ -339,7 +357,9 @@ export default function ProviderServicesCard({
       {/* add form */}
       <div className="p-4 grid gap-3 md:grid-cols-[minmax(220px,270px)_minmax(180px,1fr)_140px_110px_auto] items-center">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Категория</label>
+          <label className="block text-xs text-gray-600 mb-1">
+            {TT("ps.form.category", "Категория", "Toifa", "Category")}
+          </label>
           <select
             className="w-full h-9 border rounded px-2 text-sm"
             value={category}
@@ -355,18 +375,20 @@ export default function ProviderServicesCard({
 
         <div>
           <label className="block text-xs text-gray-600 mb-1">
-            Название (опц.)
+            {TT("ps.form.name_opt", "Название (опц.)", "Nomi (ixtiyoriy)", "Name (opt.)")}
           </label>
           <input
             className="w-full h-9 border rounded px-2 text-sm"
-            placeholder="например, 4 часа или модель авто"
+            placeholder={TT("ps.form.name_optional_ph", "например, 4 часа или модель авто", "masalan, 4 soat yoki avtomobil modeli", "e.g., 4 hours or car model")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Мест</label>
+          <label className="block text-xs text-gray-600 mb-1">
+            {TT("ps.form.seats", "Мест", "Joylar", "Seats")}
+          </label>
           <input
             className="w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
             type="number"
@@ -379,16 +401,20 @@ export default function ProviderServicesCard({
 
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Цена</label>
+            <label className="block text-xs text-gray-600 mb-1">
+              {TT("ps.form.price", "Цена", "Narx", "Price")}
+            </label>
             <input
               className="w-full h-9 border rounded px-2 text-sm"
-              placeholder="100, 120.50 …"
+              placeholder={TT("ps.form.price_ph", "100, 120.50 …", "100, 120.50 …", "100, 120.50 …")}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Валюта</label>
+            <label className="block text-xs text-gray-600 mb-1">
+              {TT("ps.form.currency", "Валюта", "Valyuta", "Currency")}
+            </label>
             <select
               className="h-9 border rounded px-2 text-sm"
               value={currency}
@@ -407,7 +433,7 @@ export default function ProviderServicesCard({
             className="h-9 px-4 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60"
             disabled={!category}
           >
-            Добавить
+            {TT("ps.form.add", "Добавить", "Qo‘shish", "Add")}
           </button>
         </div>
       </div>
@@ -420,13 +446,13 @@ export default function ProviderServicesCard({
           <table className="w-full text-sm border rounded">
             <thead className="bg-gray-50 text-gray-700">
               <tr>
-                <th className="text-left p-2 border-b">Категория</th>
-                <th className="text-left p-2 border-b">Название</th>
-                <th className="text-left p-2 border-b">Мест</th>
-                <th className="text-left p-2 border-b">Цена</th>
-                <th className="text-left p-2 border-b">Валюта</th>
-                <th className="text-left p-2 border-b">Статус</th>
-                <th className="text-right p-2 border-b">Действия</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.category","Категория","Toifa","Category")}</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.name","Название","Nomi","Name")}</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.seats","Мест","Joylar","Seats")}</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.price","Цена","Narx","Price")}</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.currency","Валюта","Valyuta","Currency")}</th>
+                <th className="text-left p-2 border-b">{TT("ps.table.status","Статус","Holat","Status")}</th>
+                <th className="text-right p-2 border-b">{TT("ps.table.actions","Действия","Amallar","Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -454,7 +480,7 @@ export default function ProviderServicesCard({
                         <input
                           className="w-full h-8 border rounded px-2"
                           value={r.title || ""}
-                          placeholder="Название…"
+                          placeholder={TT("ps.row.name_ph","Название…","Nomi…","Name…")}
                           onChange={(e) =>
                             setRows((m) =>
                               m.map((x) =>
@@ -541,7 +567,7 @@ export default function ProviderServicesCard({
                       <td className="p-2">
                         {r.is_active ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700">
-                            ● Активна
+                           ● {TT("ps.status.disabled","Выключена","O‘chirilgan","Disabled")}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-gray-500">
@@ -555,13 +581,14 @@ export default function ProviderServicesCard({
                           className="h-8 px-3 rounded border text-xs mr-2"
                           onClick={() => toggleActive(r)}
                         >
-                          {r.is_active ? "Disable" : "Enable"}
+                          {r.is_active ? TT("ps.row.disable","Выключить","O‘chirish","Disable")
+                                       : TT("ps.row.enable","Включить","Yoqish","Enable")}
                         </button>
                         <button
                           className="h-8 px-3 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
                           onClick={() => removeRow(r.id)}
                         >
-                          Delete
+                          {TT("ps.row.delete","Удалить","O‘chirish","Delete")}
                         </button>
                       </td>
                     </tr>
@@ -570,7 +597,7 @@ export default function ProviderServicesCard({
               ) : (
                 <tr>
                   <td className="p-3 text-gray-500" colSpan={7}>
-                    Услуги не найдены. Добавьте хотя бы одну.
+                    {TT("ps.empty","Услуги не найдены. Добавьте хотя бы одну.","Xizmatlar topilmadi. Hech bo‘lmaganda bittasini qo‘shing.","No services yet. Please add one.")}
                   </td>
                 </tr>
               )}
@@ -579,8 +606,12 @@ export default function ProviderServicesCard({
         </div>
 
         <p className="text-xs text-gray-500 mt-2">
-          Подсказка: услуги с ценой 0 TourBuilder не показывает. Заполните цены — и
-          они сразу появятся в конструкторе.
+          {TT(
+            "ps.hint.zero_price",
+            "Подсказка: услуги с ценой 0 TourBuilder не показывает. Заполните цены — и они сразу появятся в конструкторе.",
+            "Maslahat: narxi 0 bo‘lgan xizmatlar TourBuilder’da ko‘rinmaydi. Narxlarni kiriting — va ular darhol konstruktorda paydo bo‘ladi.",
+            "Tip: services priced 0 are hidden in TourBuilder. Fill in prices — they will appear in the builder right away."
+          )}
         </p>
       </div>
     </div>
