@@ -931,7 +931,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         />
                       )}
 
-                    {/* Мини-подсумки по отелю за ночь: номера / доп. места / тур. сбор */}
+                    {/* Разбивка по отелю за ночь: номера / доп. места / тур. сбор */}
                     {!!st.hotelBreakdown && (
                       <div className="text-xs text-gray-700 mt-2">
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -951,13 +951,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>
-                      {st.hotelBreakdown && (
-                      <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                        <div>Номера: {Number(st.hotelBreakdown.rooms || 0).toFixed(2)} UZS</div>
-                        <div>Доп. места: {Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} UZS</div>
-                        <div>Тур. сбор: {Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</div>
-                      </div>
-                    )}
                   </div>
 
                   {/* Entry fees */}
