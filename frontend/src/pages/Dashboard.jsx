@@ -1533,19 +1533,7 @@ useEffect(() => {
                   />
                 </div>
               )}
-
-              {/* Выйти */}
-              <button
-                onClick={() => {
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("provider_id");
-                  window.location.href = "/login";
-                }}
-                className="mt-auto w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
-              >
-                {t("logout")}
-              </button>
-              
+                          
               {/* Смена пароля */}
               <div className="mt-4">
                 <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
@@ -1568,8 +1556,19 @@ useEffect(() => {
                 </button>
               </div>
             </div>
-            
 
+            {/* Выйти */}
+              <button
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  localStorage.removeItem("provider_id");
+                  window.location.href = "/login";
+                }}
+                className="mt-auto w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
+              >
+                {t("logout")}
+              </button>
+            
             {/* Правая часть профиля */}
             <div className="w-1/2 space-y-3">
               <div>
