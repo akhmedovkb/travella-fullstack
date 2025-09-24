@@ -709,6 +709,74 @@
 
   "provider_profile": "Provider profile",
   "providerProfile": { "type": "Provider type", "region": "Provider region", "address": "Address" },
+  
+  "ps": {
+    "title": "Services for Tour Builder",
+
+    "btn": {
+      "refresh": "Refresh",
+      "generate_from_profile": "Generate from profile",
+      "generating": "Generating…",
+      "generate_hint": "Autogenerate by profile cities & cars"
+    },
+
+    "grp": {
+      "guide": "Guide",
+      "guide_transport": "Guide+Transport",
+      "transport": "Transport"
+    },
+
+    "form": {
+      "category": "Category",
+      "category_ph": "— choose category —",
+      "name_opt": "Name (opt.)",
+      "name_optional_ph": "e.g., 4 hours or car model",
+      "seats": "Seats",
+      "price": "Price",
+      "price_ph": "100, 120.50 …",
+      "currency": "Currency",
+      "add": "Add"
+    },
+
+    "table": {
+      "category": "Category",
+      "name": "Name",
+      "seats": "Seats",
+      "price": "Price",
+      "currency": "Currency",
+      "status": "Status",
+      "actions": "Actions"
+    },
+
+    "row": {
+      "name_ph": "Name…",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
+
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+
+    "empty": "No services yet. Please add one.",
+    "hint": {
+      "zero_price": "Tip: services priced 0 are hidden in TourBuilder. Fill in prices — they will appear right away."
+    },
+
+    "confirm": {
+      "delete": "Delete this service?",
+      "bulk": "Confirm bulk creation of services."
+    },
+
+    "error": {
+      "delete": "Failed to delete: ",
+      "no_cities": "Please fill “Region of activity” in your profile first.",
+      "nothing_to_generate": "Nothing to generate: add cities and/or cars in your profile.",
+      "bulk": "Bulk create error: "
+    }
+  },
 
   "refused_hotel": "Non-refundable hotel",
   "refused_hotel_city": "City",
