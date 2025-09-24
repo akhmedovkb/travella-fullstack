@@ -919,6 +919,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           // для конструктора «по дню» ночёвка ровно одна: передаем текущую дату
                           nightDates={[k]}                              // ['YYYY-MM-DD']
                           residentFlag={residentType === "res"}        // true/false
+                          adt={toNum(adt, 0)}
+                          chd={toNum(chd, 0)}
                           paxCount={Math.max(1, toNum(adt) + toNum(chd))}
                           onBreakdown={(b) =>
                              setByDay((p) => ({ ...p, [k]: { ...p[k], hotelBreakdown: b } }))
@@ -949,6 +951,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>
+                      {st.hotelBreakdown && (
+                      <div className="text-xs text-gray-600 mt-1 space-y-0.5">
+                        <div>Номера: {Number(st.hotelBreakdown.rooms || 0).toFixed(2)} UZS</div>
+                        <div>Доп. места: {Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} UZS</div>
+                        <div>Тур. сбор: {Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Entry fees */}
@@ -1159,15 +1168,31 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
    const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
    sum += tourismFeeTotal;
     
+        // 1) Доп. место (за человека/ночь)
+    const nights = Array.isArray(nightDates) ? nightDates.length : 0;
+   const extraBedUnit =
+      (Number(hotelBrief?.extra_bed_cost ?? hotelBrief?.extra_bed_price) || 0);
+    const extraBedsTotal = Math.max(0, Number(extraBeds) || 0) * extraBedUnit * nights;
+    sum += extraBedsTotal;
+
+    // 2) Туристический сбор (за человека/ночь)
+    const feeResident =
+      (Number(hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res) || 0);
+    const feeNonResident =
+      (Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs) || 0);
+    const feePerPerson = residentFlag ? feeResident : feeNonResident;
+    const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
+    sum += tourismFeeTotal;
+
     onTotalChange?.(sum);
-       onBreakdown?.({
-     rooms: sum - extraBedsTotal - tourismFeeTotal,
-     extraBeds: extraBedsTotal,
-     tourismFee: tourismFeeTotal,
-     nights,
-     pax: paxCount
-   });
-  }, [qty, meal, nightDates, seasons, residentFlag, paxCount, extraBeds, mapByType, onTotalChange, onBreakdown]);
+    onBreakdown?.({
+      rooms: sum - extraBedsTotal - tourismFeeTotal,
+      extraBeds: extraBedsTotal,
+      tourismFee: tourismFeeTotal,
+      nights,
+      pax: paxCount
+    });
+  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, onTotalChange, extraBeds, paxCount, onBreakdown]);
 
   return (
     <div className="mt-3 border rounded p-2">
@@ -1179,29 +1204,29 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
         <div className="text-xs text-gray-500">({residentFlag ? t('tb.residents') : t('tb.nonresidents')})</div>
       </div>
 
-        {/* Доп. место и тур. сбор */}
-     <div className="grid sm:grid-cols-2 gap-2 mb-2">
-       <label className="flex items-center justify-between border rounded px-2 py-1">
-         <span className="text-sm">{t('extra_bed_cost') || 'Доп. место (шт)'}</span>
-         <input
-           type="number"
-           min={0}
-           className="h-8 w-20 border rounded px-2 text-sm"
-           value={extraBeds}
-           onChange={(e) => setExtraBeds(Math.max(0, Number(e.target.value) || 0))}
-         />
-       </label>
-       <div className="text-xs text-gray-600 flex items-center px-2">
-         {(() => {
-           const feeRes = Number(hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res ?? 0);
-           const feeNrs = Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs ?? 0);
-           const haveFee = feeRes > 0 || feeNrs > 0;
-           return haveFee
-             ? `Туристический сбор: рез. ${feeRes.toFixed(0)} / нерез. ${feeNrs.toFixed(0)} сум за человека/ночь`
-             : 'Туристический сбор не задан в профиле отеля';
-         })()}
-       </div>
-     </div>
+        {/* Доп. место и подсказка по тур. сбору */}
+      <div className="grid sm:grid-cols-2 gap-2 mb-2">
+        <label className="flex items-center justify-between border rounded px-2 py-1">
+          <span className="text-sm">{t('extra_bed_cost') || 'Доп. место (шт)'}</span>
+          <input
+            type="number"
+            min={0}
+            className="h-8 w-20 border rounded px-2 text-sm"
+            value={extraBeds}
+            onChange={(e) => setExtraBeds(Math.max(0, Number(e.target.value) || 0))}
+          />
+        </label>
+        <div className="text-xs text-gray-600 flex items-center px-2">
+          {(() => {
+            const feeRes = Number(hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res) || 0;
+            const feeNrs = Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs) || 0;
+            const haveFee = feeRes > 0 || feeNrs > 0;
+            return haveFee
+              ? `Туристический сбор: рез. ${feeRes.toFixed(0)} / нерез. ${feeNrs.toFixed(0)} сум за человека/ночь`
+              : 'Туристический сбор не задан в профиле отеля';
+          })()}
+        </div>
+      </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
