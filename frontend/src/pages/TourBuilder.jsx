@@ -163,6 +163,15 @@ async function fetchHotelBrief(hotelId) {
     full.tourism_fee_nrs,
     full?.taxes?.touristTax?.nonResidentPerNight
   );
+  
+  // НДС: флаг включённости и ставка (в %)
+  const vatIncluded =
+    (brief?.vat_included ?? brief?.vatIncluded ?? brief?.taxes?.vatIncluded ??
+     full?.vat_included  ?? full?.vatIncluded  ?? full?.taxes?.vatIncluded) ?? false;
+  const vatRate = Number(
+    brief?.vat_rate ?? brief?.vatRate ?? brief?.taxes?.vatRate ??
+    full?.vat_rate  ?? full?.vatRate  ?? full?.taxes?.vatRate ?? 0
+  ) || 0;
 
   // возвращаем бриф, дополненный нужными полями
   return {
@@ -172,6 +181,8 @@ async function fetchHotelBrief(hotelId) {
     extra_bed_cost,
     tourism_fee_resident,
     tourism_fee_nonresident,
+    vatIncluded,
+    vatRate,
   };
 }
 
@@ -1004,6 +1015,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           <span>
                             Тур. сбор: <b>{Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</b>
                           </span>
+                          {st.hotelBreakdown.vatIncluded
+                            ? <span>НДС: <b>включён в цену</b></span>
+                            : <span>НДС: <b>{Number(st.hotelBreakdown.vat || 0).toFixed(2)} UZS</b></span>}
                         </div>
                       </div>
                     )}
@@ -1221,6 +1235,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
   // пересчёт тотала при каждом изменении
   useEffect(() => {
     let sum = 0;
+    let roomsSubtotal = 0;
     const personKey = residentFlag ? "resident" : "nonResident";
     const nights = Array.isArray(nightDates) ? nightDates.length : 0;
     for (const ymd of (nightDates || [])) {
@@ -1232,9 +1247,10 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
         const price = Number(
           row?.prices?.[season]?.[personKey]?.[meal] ?? 0
         );
-        sum += count * price;
+        roomsSubtotal += count * price;
       }
     }
+    sum += roomsSubtotal;
       
     
         // 1) Доп. место (за чел/ночь)
@@ -1248,33 +1264,37 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
 
     // 2) Туристический сбор (за чел/ночь)
     const feeResident = pickNumeric(hotelBrief, [
+      "taxes.touristTax.residentPerNight",
       "tourism_fee_resident", "tourism_fee_res", "tourist_fee_resident",
       "resident_tourist_fee", "tourism_tax_resident", "resident_city_tax"
     ]);
     const feeNonResident = pickNumeric(hotelBrief, [
+      "taxes.touristTax.nonResidentPerNight",
       "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
       "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
     ]);
-    console.log(
-      'hotelBrief peek:', hotelBrief,
-      'extraBedUnit:', extraBedUnit,
-      'feeRes/feeNrs:', feeResident, feeNonResident,
-      'nights:', nights,
-      'paxCount:', paxCount
-    );
+
     const feePerPerson = residentFlag ? feeResident : feeNonResident;
     const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
     sum += tourismFeeTotal;
+    // 3) НДС (если не включён в цены)
+    const vatIncluded = Boolean(hotelBrief?.vatIncluded ?? hotelBrief?.vat_included);
+    const vatRate = Number(hotelBrief?.vatRate ?? hotelBrief?.vat_rate ?? 0) || 0;
+    const vatBase = roomsSubtotal + extraBedsTotal; // турсбор не облагаем
+    const vat = (!vatIncluded && vatRate > 0) ? Math.round(vatBase * (vatRate / 100)) : 0;
+    sum += vat;
 
     onTotalChange?.(sum);
     onBreakdown?.({
-      rooms: sum - extraBedsTotal - tourismFeeTotal,
+      rooms: roomsSubtotal,
       extraBeds: extraBedsTotal,
       tourismFee: tourismFeeTotal,
+      vat,
+      vatIncluded,
       nights,
       pax: paxCount
     });
-  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, onTotalChange, onBreakdown]);
+  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, hotelBrief, onTotalChange, onBreakdown]);
 
   return (
     <div className="mt-3 border rounded p-2">
