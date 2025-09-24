@@ -796,6 +796,14 @@
   },
 
   "tb": {
+  "tourism_fee_hint": "Туристический сбор: рез. {{res}} / нерез. {{nrs}} сум за человека/ночь",
+  "tourism_fee_absent": "Туристический сбор не задан в профиле отеля",
+  "rooms": "Номера",
+  "extra_beds_short": "Доп. места",
+  "tourism_fee_short": "Тур. сбор",
+  "vat": "НДС",
+  "vat_included": "включён в цену",
+  "extra_beds_qty": "Доп. места, шт"  
   "usd_enter_valid_rate": "Введите корректный курс, чтобы увидеть суммы в USD",
   "tariff_for": "Тарифы для",
   "tariffs_for": "Тарифы для",
