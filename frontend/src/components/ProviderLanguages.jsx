@@ -1,10 +1,10 @@
 //frontend/src/components/ProviderLanguages.jsx
   
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select, { components } from "react-select";   // ⬅ добавили { components }
 import ISO6391 from "iso-639-1";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { tSuccess, tError } from "../shared/toast";
 import { useTranslation } from "react-i18next";
 
 /** кастомный input, который гасит автозаполнение браузера */
@@ -36,8 +36,10 @@ const allLanguageOptions = (uiLang = "en") => {
 const ProviderLanguages = ({ token }) => {
   const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+    // idle | saving | saved | error
+  const [saving, setSaving] = useState("idle");
   const [selected, setSelected] = useState([]);
+  const saveTimer = useRef(null);
 
   const cfg = useMemo(() => {
     const stored = token || localStorage.getItem("providerToken") || localStorage.getItem("token");
@@ -59,7 +61,8 @@ const ProviderLanguages = ({ token }) => {
         setSelected(codes);
       } catch (e) {
         console.error("load languages error", e);
-        toast.error(t("languages.load_error", { defaultValue: "Не удалось загрузить языки" }));
+        tError(t("languages.load_error", { defaultValue: "Не удалось загрузить языки" }));
+        setSaving("error");
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -72,24 +75,32 @@ const ProviderLanguages = ({ token }) => {
     [selected, i18n.language]
   );
 
-  const handleChange = (vals) => setSelected((vals || []).map((v) => v.value));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await axios.put(
-        `${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`,
-        { languages: selected },
-        cfg
-      );
-      toast.success(t("languages.saved", { defaultValue: "Языки сохранены" }));
-    } catch (e) {
-      console.error("save languages error", e);
-      toast.error(t("languages.save_error", { defaultValue: "Ошибка сохранения языков" }));
-    } finally {
-      setSaving(false);
-    }
+    // дебаунс-автосохранение
+  const scheduleSave = (nextSelected) => {
+    setSelected(nextSelected);
+    setSaving("saving");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await axios.patch(
+          `${import.meta.env.VITE_API_BASE_URL}/api/providers/profile`,
+          { languages: nextSelected },
+          cfg
+        );
+        setSaving("saved");
+        tSuccess(t("languages.saved", { defaultValue: "Языки сохранены" }));
+      } catch (e) {
+        console.error("save languages error", e);
+        setSaving("error");
+        tError(t("languages.save_error", { defaultValue: "Ошибка сохранения языков" }));
+      }
+    }, 800); // 0.8s debounce
   };
+
+  const handleChange = (vals) => {
+    const next = (vals || []).map((v) => v.value);
+    scheduleSave(next);
+  }
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-md" autoComplete="off">{/* страховка */}
@@ -120,15 +131,12 @@ const ProviderLanguages = ({ token }) => {
         />
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-60"
-      >
-        {saving
-          ? t("common.saving", { defaultValue: "Сохранение…" })
-          : t("common.save", { defaultValue: "Сохранить" })}
-      </button>
+      {/* индикатор состояния вместо кнопки */}
+      <div className="text-xs text-gray-500 h-4">
+        {saving === "saving" && t("common.saving", { defaultValue: "Сохранение…" })}
+        {saving === "saved"  && t("common.saved", { defaultValue: "Сохранено" })}
+        {saving === "error"  && t("languages.save_error", { defaultValue: "Ошибка сохранения языков" })}
+      </div>
     </div>
   );
 };
