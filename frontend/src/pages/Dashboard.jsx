@@ -1545,8 +1545,8 @@ useEffect(() => {
               >
                 {t("logout")}
               </button>
-            </div>
-            {/* Смена пароля */}
+              
+              {/* Смена пароля */}
               <div className="mt-4">
                 <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
                 <input
@@ -1567,6 +1567,8 @@ useEffect(() => {
                   {t("change")}
                 </button>
               </div>
+            </div>
+            
 
             {/* Правая часть профиля */}
             <div className="w-1/2 space-y-3">
