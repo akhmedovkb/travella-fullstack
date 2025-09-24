@@ -9,6 +9,18 @@ import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+/* ---------------- react-select styles (белый фон выпадашки) --------------- */
+const RS_STYLES = {
+  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+  menu: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
+  menuList: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isFocused ? "#f3f4f6" : "#fff", // hover = светло-серый, иначе белый
+    color: "#111827",
+  }),
+  control: (b) => ({ ...b, backgroundColor: "#fff" }),
+};
 
 /* ---------------- utils ---------------- */
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
@@ -798,12 +810,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         }}
                         classNamePrefix="rs"
                         menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                          menu: (b) => ({ ...b, overflow: "visible" }),
-                          menuList: (b) => ({ ...b, overflow: "visible" }),
-                        }}
-                      />
+                        styles={RS_STYLES}
+                        />
                                         {/* выпадашка услуг гида */}
                     <select
                       className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
@@ -881,13 +889,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           } 
                         }}
                         classNamePrefix="rs"
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                          menu: (b) => ({ ...b, overflow: "visible" }),
-                          menuList: (b) => ({ ...b, overflow: "visible" }),
-                        }}
-                      />
+                         menuPortalTarget={document.body}
+                         styles={RS_STYLES}
+                        />
                                         {/* выпадашка услуг транспорта */}
                     <select
                       className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
@@ -979,11 +983,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                        }}
                       classNamePrefix="rs"
                       menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        menu: (b) => ({ ...b, overflow: "visible" }),
-                        menuList: (b) => ({ ...b, overflow: "visible" }),
-                      }}
+                      styles={RS_STYLES}
                     />
 
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
@@ -1056,13 +1056,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
                       placeholder={cityChosen ? t('tb.pick_sites') : t('tb.pick_city_first')}
                       noOptionsMessage={() => (cityChosen ? t('tb.nothing_found') : t('tb.pick_city_first'))}
-                      classNamePrefix="rs"
                       menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        menu: (b) => ({ ...b, overflow: "visible" }),
-                        menuList: (b) => ({ ...b, overflow: "visible" }),
-                      }}
+                      styles={RS_STYLES}
                     />
                    <div className="text-xs text-gray-600 mt-1">
                      {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
