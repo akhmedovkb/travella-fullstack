@@ -1146,19 +1146,15 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     }
       
     
-        // 1) Доп. место (за человека/ночь)
-    const nights = Array.isArray(nightDates) ? nightDates.length : 0;
-   const extraBedUnit =
-      (Number(hotelBrief?.extra_bed_cost ?? hotelBrief?.extra_bed_price) || 0);
+    // 1) Доп. место (за человека/ночь)
+    const extraBedUnit = Number(hotelBrief?.extra_bed_cost ?? hotelBrief?.extra_bed_price ?? 0);
     const extraBedsTotal = Math.max(0, Number(extraBeds) || 0) * extraBedUnit * nights;
     sum += extraBedsTotal;
 
     // 2) Туристический сбор (за человека/ночь)
-    const feeResident =
-      (Number(hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res) || 0);
-    const feeNonResident =
-      (Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs) || 0);
-    const feePerPerson = residentFlag ? feeResident : feeNonResident;
+    const feeResident    = Number(hotelBrief?.tourism_fee_resident    ?? hotelBrief?.tourism_fee_res ?? 0);
+    const feeNonResident = Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs ?? 0);
+    const feePerPerson   = residentFlag ? feeResident : feeNonResident;
     const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
     sum += tourismFeeTotal;
 
@@ -1170,7 +1166,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
       nights,
       pax: paxCount
     });
-  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, onTotalChange, extraBeds, paxCount, onBreakdown]);
+  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, onTotalChange, onBreakdown]);
 
   return (
     <div className="mt-3 border rounded p-2">
