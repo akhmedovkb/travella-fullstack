@@ -1353,6 +1353,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
               : t("tb.tourism_fee_absent");
           })()}
         </div>
+      </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
