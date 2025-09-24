@@ -827,6 +827,14 @@
   },
 
   "tb": {
+    "tourism_fee_hint": "Tourism fee: res. {{res}} / non-res. {{nrs}} UZS per person/night",
+    "tourism_fee_absent": "Tourism fee is not set in the hotel profile",
+    "rooms": "Rooms",
+    "extra_beds_short": "Extra beds",
+    "tourism_fee_short": "Tourism fee",
+    "vat": "VAT",
+    "vat_included": "included in price",
+    "extra_beds_qty": "Extra beds, qty",
     "usd_enter_valid_rate": "Enter a valid USD rate to see totals in USD",
     "tariff_for": "Tariffs for:",
     "residents": "Residents",
