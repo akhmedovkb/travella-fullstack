@@ -115,9 +115,46 @@ async function fetchHotelsByCity(city) {
   }));
 }
 
+// вместо: async function fetchHotelBrief(hotelId) { return await fetchJSON(`/api/hotels/${hotelId}/brief`); }
 async function fetchHotelBrief(hotelId) {
-  return await fetchJSON(`/api/hotels/${hotelId}/brief`);
+  // 1) пробуем короткий бриф
+  const brief = (await fetchJSONLoose(`/api/hotels/${hotelId}/brief`)) || {};
+  // 2) тянем полный профиль как источник недостающих полей
+  const full  = (await fetchJSONLoose(`/api/hotels/${hotelId}`)) || {};
+
+  // helper для безопасного числа
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+  // собираем итоговый объект брифа с подстановкой значений
+  return {
+    ...brief,
+    currency: brief.currency ?? full.currency ?? "UZS",
+
+    // доп. место (варианты ключей на всякий случай)
+    extra_bed_cost:
+      n(brief.extra_bed_cost) ??
+      n(brief.extra_bed_price) ??
+      n(full.extra_bed_cost) ??
+      n(full.extra_bed_price) ??
+      0,
+
+    // тур. сборы (резидент / нерезидент) — тоже берём откуда найдём
+    tourism_fee_resident:
+      n(brief.tourism_fee_resident) ??
+      n(brief.tourism_fee_res) ??
+      n(full.tourism_fee_resident) ??
+      n(full.tourism_fee_res) ??
+      0,
+
+    tourism_fee_nonresident:
+      n(brief.tourism_fee_nonresident) ??
+      n(brief.tourism_fee_nrs) ??
+      n(full.tourism_fee_nonresident) ??
+      n(full.tourism_fee_nrs) ??
+      0,
+  };
 }
+
 
 async function fetchHotelSeasons(hotelId) {
   // [{ id, label:'low'|'high', start_date:'YYYY-MM-DD', end_date:'YYYY-MM-DD' }, ...]
