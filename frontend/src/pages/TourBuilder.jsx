@@ -888,6 +888,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                              fetchHotelBrief(hotel.id).catch(() => null),
                              fetchHotelSeasons(hotel.id).catch(() => []),
                            ]);
+                           console.log('hotel brief =>', brief);
+                           console.log('hotel seasons =>', seasons);
                            setByDay((p) => ({
                              ...p,
                              [k]: { 
@@ -1195,6 +1197,13 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
       "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
       "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
     ]);
+    console.log(
+      'hotelBrief peek:', hotelBrief,
+      'extraBedUnit:', extraBedUnit,
+      'feeRes/feeNrs:', feeResident, feeNonResident,
+      'nights:', nights,
+      'paxCount:', paxCount
+    );
     const feePerPerson = residentFlag ? feeResident : feeNonResident;
     const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
     sum += tourismFeeTotal;
