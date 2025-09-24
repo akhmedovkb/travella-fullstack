@@ -871,7 +871,7 @@
     "price_per_night": "Price/night",
     "rooms_and_meals": "Rooms & meal plan",
     "day_total": "Day total",
-    "extra_beds_qty": "Extra beds.",
+    "extra_beds_qty": "Extra beds q-ty",
 
     "totals": {
       "guide": "Guide",
