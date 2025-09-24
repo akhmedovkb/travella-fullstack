@@ -115,45 +115,66 @@ async function fetchHotelsByCity(city) {
   }));
 }
 
+// Берём первое положительное число из списка значений
+const pickPos = (...vals) => {
+  for (const v of vals) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+};
+
 // вместо: async function fetchHotelBrief(hotelId) { return await fetchJSON(`/api/hotels/${hotelId}/brief`); }
 async function fetchHotelBrief(hotelId) {
-  // 1) пробуем короткий бриф
-  const brief = (await fetchJSONLoose(`/api/hotels/${hotelId}/brief`)) || {};
-  // 2) тянем полный профиль как источник недостающих полей
-  const full  = (await fetchJSONLoose(`/api/hotels/${hotelId}`)) || {};
+  // параллельно тянем короткий бриф и полный профиль
+  const [briefRaw, fullRaw] = await Promise.all([
+    fetchJSONLoose(`/api/hotels/${hotelId}/brief`),
+    fetchJSONLoose(`/api/hotels/${hotelId}`),
+  ]);
 
-  // helper для безопасного числа
-  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const brief = briefRaw || {};
+  const full  = fullRaw  || {};
 
-  // собираем итоговый объект брифа с подстановкой значений
+  // валюта — из brief, иначе из полного профиля, иначе UZS
+  const currency = brief.currency ?? full.currency ?? "UZS";
+
+  // Доп. место (шт/ночь): из brief → full → (если вдруг положили в taxes)
+  const extra_bed_cost = pickPos(
+    brief.extra_bed_cost,
+    brief.extra_bed_price,
+    full.extra_bed_cost,
+    full.extra_bed_price,
+    full?.taxes?.extra_bed_price
+  );
+
+  // Туристический сбор (чел/ночь): резидент/нерезидент — из brief → full → taxes.touristTax
+  const tourism_fee_resident = pickPos(
+    brief.tourism_fee_resident,
+    brief.tourism_fee_res,
+    full.tourism_fee_resident,
+    full.tourism_fee_res,
+    full?.taxes?.touristTax?.residentPerNight
+  );
+
+  const tourism_fee_nonresident = pickPos(
+    brief.tourism_fee_nonresident,
+    brief.tourism_fee_nrs,
+    full.tourism_fee_nonresident,
+    full.tourism_fee_nrs,
+    full?.taxes?.touristTax?.nonResidentPerNight
+  );
+
+  // возвращаем бриф, дополненный нужными полями
   return {
-    ...brief,
-    currency: brief.currency ?? full.currency ?? "UZS",
-
-    // доп. место (варианты ключей на всякий случай)
-    extra_bed_cost:
-      n(brief.extra_bed_cost) ??
-      n(brief.extra_bed_price) ??
-      n(full.extra_bed_cost) ??
-      n(full.extra_bed_price) ??
-      0,
-
-    // тур. сборы (резидент / нерезидент) — тоже берём откуда найдём
-    tourism_fee_resident:
-      n(brief.tourism_fee_resident) ??
-      n(brief.tourism_fee_res) ??
-      n(full.tourism_fee_resident) ??
-      n(full.tourism_fee_res) ??
-      0,
-
-    tourism_fee_nonresident:
-      n(brief.tourism_fee_nonresident) ??
-      n(brief.tourism_fee_nrs) ??
-      n(full.tourism_fee_nonresident) ??
-      n(full.tourism_fee_nrs) ??
-      0,
+    ...full,           // на случай, если в brief чего-то нет (например, rooms)
+    ...brief,          // а brief приоритетнее по отображаемым данным
+    currency,
+    extra_bed_cost,
+    tourism_fee_resident,
+    tourism_fee_nonresident,
   };
 }
+
 
 
 async function fetchHotelSeasons(hotelId) {
