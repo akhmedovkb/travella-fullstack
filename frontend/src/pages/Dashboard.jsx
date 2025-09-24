@@ -1554,21 +1554,21 @@ useEffect(() => {
                 <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
                   {t("change")}
                 </button>
-              </div>
-            </div>
-
-            {/* Выйти */}
-              <button
+                 {/* Выйти */}
+                <button
                 onClick={() => {
                   localStorage.removeItem("token");
                   localStorage.removeItem("provider_id");
                   window.location.href = "/login";
                 }}
                 className="mt-auto w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
-              >
+                >
                 {t("logout")}
-              </button>
-            
+               </button>
+              </div>
+            </div>
+
+                      
             {/* Правая часть профиля */}
             <div className="w-1/2 space-y-3">
               <div>
