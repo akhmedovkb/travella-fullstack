@@ -851,6 +851,14 @@
   },
 
   "tb": {
+    "tourism_fee_hint": "Turistik yig‘im: rez. {{res}} / norez. {{nrs}} so‘m kishi/kecha",
+    "tourism_fee_absent": "Mehmonxona profilida turistik yig‘im ko‘rsatilmagan",
+    "rooms": "Xonalar",
+    "extra_beds_short": "Qo‘shimcha o‘rinlar",
+    "tourism_fee_short": "Turistik yig‘im",
+    "vat": "QQS",
+    "vat_included": "narxga kiritilgan",
+    "extra_beds_qty": "Qo‘shimcha o‘rin, dona",
     "usd_enter_valid_rate": "USD miqdorini ko‘rsatish uchun to‘g‘ri kurs kiriting",
     "tariff_for": "Tariflar:",
     "residents": "Rezidentlar",
