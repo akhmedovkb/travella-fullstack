@@ -650,6 +650,7 @@
   "profile_updated": "Profile updated",
 
   "provider": {
+    "languages": "Languages",
     "type": "Provider type",
     "region": "Provider region",
     "types": {
