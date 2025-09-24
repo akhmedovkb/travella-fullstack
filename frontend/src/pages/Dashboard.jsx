@@ -1463,8 +1463,8 @@ useEffect(() => {
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* Левый блок: профиль */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
-          <div className="flex gap-4">
-            <div className="flex flex-col items-center w-1/2">
+          <div className="flex gap-4 items-stretch">
+            <div className="flex flex-col items-center w-1/2 h-full">
               {/* Фото */}
               <div className="relative flex flex-col items-center">
                 <img
@@ -1541,7 +1541,7 @@ useEffect(() => {
                   localStorage.removeItem("provider_id");
                   window.location.href = "/login";
                 }}
-                className="mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold w-full"
+                className="mt-auto w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
               >
                 {t("logout")}
               </button>
