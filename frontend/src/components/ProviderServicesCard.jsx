@@ -1,6 +1,7 @@
 // frontend/src/components/ProviderServicesCard.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { tSuccess, tError, tInfo } from "../shared/toast";
 
 const CATEGORY_LABELS = {
   // guide
@@ -9,7 +10,7 @@ const CATEGORY_LABELS = {
   meet: "Встреча (гид)",
   seeoff: "Провод (гид)",
   translation: "Перевод (гид)",
-  // transport (для перевозчиков)
+  // transport
   city_tour_transport: "Тур по городу (транспорт)",
   mountain_tour_transport: "Тур в горы (транспорт)",
   one_way_transfer: "Трансфер в одну сторону",
@@ -17,7 +18,7 @@ const CATEGORY_LABELS = {
   border_transfer: "Междугородний/погран. трансфер",
 };
 
-// подписи для гида с авто («гид+транспорт»)
+// подписи для «гид+транспорт»
 const GUIDE_TRANSPORT_LABELS = {
   city_tour_transport: "Тур по городу (гид+транспорт)",
   mountain_tour_transport: "Тур в горы (гид+транспорт)",
@@ -85,9 +86,10 @@ export default function ProviderServicesCard({
   const lang = (i18n?.language || "").toLowerCase();
   const isUZ = lang.startsWith("uz");
   const isEN = lang.startsWith("en");
-  // удобный fallback, если ключей нет в словаре
+  // fallback, если ключей нет
   const F = (ru, uz, en) => (isUZ ? uz : isEN ? en : ru);
-  const TT = (key, ru, uz, en, opts={}) => t(key, { defaultValue: F(ru, uz, en), ...opts });
+  const TT = (key, ru, uz, en, opts = {}) =>
+    t(key, { defaultValue: F(ru, uz, en), ...opts });
 
   const pid = Number(providerId);
   const [rows, setRows] = useState([]);
@@ -128,34 +130,59 @@ export default function ProviderServicesCard({
   const labelForCategory = useMemo(() => {
     const isGuide = providerType === "guide";
     return (cat) => {
-      // пробуем взять из i18n, иначе дефолтные мапы
       if (isGuide && isTransportCategory(cat)) {
         return t(`category.${cat}`, {
-          defaultValue: GUIDE_TRANSPORT_LABELS[cat] || CATEGORY_LABELS[cat] || cat,
+          defaultValue:
+            GUIDE_TRANSPORT_LABELS[cat] || CATEGORY_LABELS[cat] || cat,
         });
       }
       return t(`category.${cat}`, {
         defaultValue: CATEGORY_LABELS[cat] || cat,
       });
     };
-  }, [providerType]);
+    // важно: зависим от t тоже
+  }, [providerType, t]);
 
   const categories = useMemo(() => {
-    const base = [{ label: TT("ps.form.category_ph", "— выберите категорию —", "— toifa tanlang —", "— choose category —"), value: "" }];
+    const base = [
+      {
+        label: TT(
+          "ps.form.category_ph",
+          "— выберите категорию —",
+          "— toifa tanlang —",
+          "— choose category —"
+        ),
+        value: "",
+      },
+    ];
 
     const guide = [
       { label: TT("ps.grp.guide", "ГИД", "GID", "Guide"), value: "_sep1", disabled: true },
-      ...GUIDE_ALLOWED.map((v) => ({ value: v, label: t(`category.${v}`, { defaultValue: CATEGORY_LABELS[v] }) })),
+      ...GUIDE_ALLOWED.map((v) => ({
+        value: v,
+        label: t(`category.${v}`, { defaultValue: CATEGORY_LABELS[v] }),
+      })),
     ];
 
-    // если гид БЕЗ авто — не показываем транспортные опции вообще
     const guideTransport =
       providerType === "guide" && hasFleet
         ? [
-            { label: TT("ps.grp.guide_transport", "ГИД+ТРАНСПОРТ", "GID+TRANSPORT", "Guide+Transport"), value: "_sep2", disabled: true },
+            {
+              label: TT(
+                "ps.grp.guide_transport",
+                "ГИД+ТРАНСПОРТ",
+                "GID+TRANSPORT",
+                "Guide+Transport"
+              ),
+              value: "_sep2",
+              disabled: true,
+            },
             ...TRANSPORT_ALLOWED.map((v) => ({
               value: v,
-              label: t(`category.${v}`, { defaultValue: GUIDE_TRANSPORT_LABELS[v] || CATEGORY_LABELS[v] }),
+              label: t(`category.${v}`, {
+                defaultValue:
+                  GUIDE_TRANSPORT_LABELS[v] || CATEGORY_LABELS[v],
+              }),
             })),
           ]
         : [];
@@ -163,7 +190,11 @@ export default function ProviderServicesCard({
     const transportSection =
       providerType === "transport"
         ? [
-            { label: TT("ps.grp.transport", "ТРАНСПОРТ", "TRANSPORT", "Transport"), value: "_sep3", disabled: true },
+            {
+              label: TT("ps.grp.transport", "ТРАНСПОРТ", "TRANSPORT", "Transport"),
+              value: "_sep3",
+              disabled: true,
+            },
             ...TRANSPORT_ALLOWED.map((v) => ({
               value: v,
               label: t(`category.${v}`, { defaultValue: CATEGORY_LABELS[v] }),
@@ -173,9 +204,8 @@ export default function ProviderServicesCard({
 
     if (providerType === "guide") return [...base, ...guide, ...guideTransport];
     if (providerType === "transport") return [...base, ...transportSection];
-    // на всякий случай для других: всё
     return [...base, ...guide, ...guideTransport, ...transportSection];
-  }, [providerType, hasFleet]);
+  }, [providerType, hasFleet, t]);
 
   useEffect(() => setCurrency(currencyDefault || "USD"), [currencyDefault]);
 
@@ -219,8 +249,13 @@ export default function ProviderServicesCard({
       setTitle("");
       setPrice("");
       if (isTransportCategory(category)) setSeats("");
+      tSuccess(TT("service_added", "Услуга добавлена", "Xizmat qo‘shildi", "Service added"));
     } catch (e) {
-      alert("Ошибка добавления: " + e.message);
+      tError(
+        TT("add_error", "Ошибка добавления", "Qo‘shishda xatolik", "Add error") +
+          ": " +
+          e.message
+      );
     }
   }
 
@@ -230,9 +265,16 @@ export default function ProviderServicesCard({
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-    setRows((m) => m.map((r) => (r.id === id ? updated : r)));
+      setRows((m) => m.map((r) => (r.id === id ? updated : r)));
     } catch (e) {
-      alert("Не удалось сохранить: " + e.message);
+      tError(
+        TT(
+          "update_error",
+          "Ошибка обновления",
+          "Yangilashda xatolik",
+          "Update error"
+        ) + ": " + e.message
+      );
       load();
     }
   }
@@ -242,12 +284,39 @@ export default function ProviderServicesCard({
   }
 
   async function removeRow(id) {
-    if (!confirm(TT("ps.confirm.delete","Удалить услугу?","Xizmatni o‘chirilsinmi?","Delete this service?"))) return;
+    if (
+      !confirm(
+        TT(
+          "ps.confirm.delete",
+          "Удалить услугу?",
+          "Xizmat o‘chirilsinmi?",
+          "Delete this service?"
+        )
+      )
+    )
+      return;
     try {
-      await fetchJSON(`/api/providers/${pid}/services/${id}`, { method: "DELETE" });
+      await fetchJSON(`/api/providers/${pid}/services/${id}`, {
+        method: "DELETE",
+      });
       setRows((m) => m.filter((r) => r.id !== id));
+      tSuccess(
+        TT(
+          "service_deleted",
+          "Услуга удалена",
+          "Xizmat o‘chirildi",
+          "Service deleted"
+        )
+      );
     } catch (e) {
-      alert(TT("ps.error.delete","Не удалось удалить: ","O‘chirish imkonsiz: ","Failed to delete: ") + e.message);
+      tError(
+        TT(
+          "delete_error",
+          "Ошибка удаления",
+          "O‘chirishda xatolik",
+          "Delete error"
+        ) + ": " + e.message
+      );
     }
   }
 
@@ -259,7 +328,14 @@ export default function ProviderServicesCard({
       const fleet = Array.isArray(me?.car_fleet) ? me.car_fleet : [];
 
       if (!cities.length) {
-        alert(TT("ps.error.no_cities",'Сначала заполните "Регион деятельности" в профиле.','Avval profilda “Faoliyat hududi”ni to‘ldiring.','Please fill “Region of activity” in your profile first.'));
+        tError(
+          TT(
+            "ps.error.no_cities",
+            'Сначала заполните "Регион деятельности" в профиле.',
+            "Avval profilda “Faoliyat hududi”ni to‘ldiring.",
+            "Please fill “Region of activity” in your profile first."
+          )
+        );
         setBulkBusy(false);
         return;
       }
@@ -285,7 +361,7 @@ export default function ProviderServicesCard({
             )} (гид+транспорт ${seatsOk ? `${n}-местный ` : ""}${model})`,
             price: 0,
             currency: currencyDefault || "USD",
-                        details: {
+            details: {
               ...(seatsOk ? { seats: n } : {}),
               city_slug: slug,
             },
@@ -299,7 +375,14 @@ export default function ProviderServicesCard({
           : [...guideItems, ...transportItems];
 
       if (!items.length) {
-        alert(TT("ps.error.nothing_to_generate","Не из чего генерировать: добавьте города и/или автомобили в профиле.","Hech narsa yaratib bo‘lmaydi: profilga shaharlar va/yoki avtomobillar qo‘shing.","Nothing to generate: add cities and/or cars in your profile."));
+        tInfo(
+          TT(
+            "ps.error.nothing_to_generate",
+            "Не из чего генерировать: добавьте города и/или автомобили в профиле.",
+            "Hech narsa yaratib bo‘lmaydi: profilga shaharlar va/yoki avtomobillar qo‘shing.",
+            "Nothing to generate: add cities and/or cars in your profile."
+          )
+        );
         setBulkBusy(false);
         return;
       }
@@ -325,8 +408,23 @@ export default function ProviderServicesCard({
       const created = Array.isArray(res?.items) ? res.items : [];
       if (created.length) setRows((m) => [...created, ...m]);
       await load();
+      tSuccess(
+        TT(
+          "ps.bulk_done",
+          "Услуги сгенерированы",
+          "Xizmatlar yaratildi",
+          "Services generated"
+        )
+      );
     } catch (e) {
-      alert(TT("ps.error.bulk","Ошибка пакетного создания: ","Paket yaratish xatosi: ","Bulk create error: ") + e.message);
+      tError(
+        TT(
+          "ps.error.bulk",
+          "Ошибка пакетного создания",
+          "Paket yaratish xatosi",
+          "Bulk create error"
+        ) + ": " + e.message
+      );
     } finally {
       setBulkBusy(false);
     }
@@ -337,7 +435,7 @@ export default function ProviderServicesCard({
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="text-lg font-semibold">
           {TT("ps.title", "Услуги", "Xizmatlar", "Services")}
-        </h2>>
+        </h2>
         <div className="flex items-center gap-2">
           <button
             className="h-9 px-3 rounded border text-sm hover:bg-gray-50"
@@ -350,11 +448,21 @@ export default function ProviderServicesCard({
             className="h-9 px-3 rounded bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-60"
             onClick={bulkGenerateFromProfile}
             disabled={bulkBusy}
-            title={TT("ps.btn.generate_hint", "Автогенерация по городам и авто из профиля", "Profil shahar/autolari bo‘yicha avto-yaratish", "Autogenerate by profile cities & cars")}
+            title={TT(
+              "ps.btn.generate_hint",
+              "Автогенерация по городам и авто из профиля",
+              "Profil shahar/autolari bo‘yicha avto-yaratish",
+              "Autogenerate by profile cities & cars"
+            )}
           >
-              {bulkBusy
+            {bulkBusy
               ? TT("ps.btn.generating", "Генерируем…", "Yaratilmoqda…", "Generating…")
-              : TT("ps.btn.generate_from_profile", "Сгенерировать из профиля", "Profil asosida yaratish", "Generate from profile")}
+              : TT(
+                  "ps.btn.generate_from_profile",
+                  "Сгенерировать из профиля",
+                  "Profil asosida yaratish",
+                  "Generate from profile"
+                )}
           </button>
         </div>
       </div>
@@ -384,7 +492,12 @@ export default function ProviderServicesCard({
           </label>
           <input
             className="w-full h-9 border rounded px-2 text-sm"
-            placeholder={TT("ps.form.name_optional_ph", "например, 4 часа или модель авто", "masalan, 4 soat yoki avtomobil modeli", "e.g., 4 hours or car model")}
+            placeholder={TT(
+              "ps.form.name_optional_ph",
+              "например, 4 часа или модель авто",
+              "masalan, 4 soat yoki avtomobil modeli",
+              "e.g., 4 hours or car model"
+            )}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -445,26 +558,45 @@ export default function ProviderServicesCard({
 
       {/* table */}
       <div className="px-4 pb-4">
-        {err && <div className="text-sm text-red-600 mb-2">Ошибка: {err}</div>}
+        {err && (
+          <div className="text-sm text-red-600 mb-2">
+            {TT("errors.data_load", "Не удалось загрузить данные", "Ma’lumotlarni yuklab bo‘lmadi", "Failed to load data")}
+            {": " + err}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border rounded">
             <thead className="bg-gray-50 text-gray-700">
               <tr>
-                <th className="text-left p-2 border-b">{TT("ps.table.category","Категория","Toifa","Category")}</th>
-                <th className="text-left p-2 border-b">{TT("ps.table.name","Название","Nomi","Name")}</th>
-                <th className="text-left p-2 border-b">{TT("ps.table.seats","Мест","Joylar","Seats")}</th>
-                <th className="text-left p-2 border-b">{TT("ps.table.price","Цена","Narx","Price")}</th>
-                <th className="text-left p-2 border-b">{TT("ps.table.currency","Валюта","Valyuta","Currency")}</th>
-                <th className="text-left p-2 border-b">{TT("ps.table.status","Статус","Holat","Status")}</th>
-                <th className="text-right p-2 border-b">{TT("ps.table.actions","Действия","Amallar","Actions")}</th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.category", "Категория", "Toifa", "Category")}
+                </th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.name", "Название", "Nomi", "Name")}
+                </th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.seats", "Мест", "Joylar", "Seats")}
+                </th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.price", "Цена", "Narx", "Price")}
+                </th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.currency", "Валюта", "Valyuta", "Currency")}
+                </th>
+                <th className="text-left p-2 border-b">
+                  {TT("ps.table.status", "Статус", "Holat", "Status")}
+                </th>
+                <th className="text-right p-2 border-b">
+                  {TT("ps.table.actions", "Действия", "Amallar", "Actions")}
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
                   <td className="p-3 text-gray-500" colSpan={7}>
-                    Загружаем…
+                    {TT("common.loading", "Загрузка…", "Yuklanmoqda…", "Loading…")}
                   </td>
                 </tr>
               ) : rows.length ? (
@@ -477,15 +609,13 @@ export default function ProviderServicesCard({
 
                   return (
                     <tr key={r.id} className="odd:bg-white even:bg-gray-50">
-                      <td className="p-2 align-middle">
-                        {labelForCategory(r.category)}
-                      </td>
+                      <td className="p-2 align-middle">{labelForCategory(r.category)}</td>
 
                       <td className="p-2">
                         <input
                           className="w-full h-8 border rounded px-2"
                           value={r.title || ""}
-                          placeholder={TT("ps.row.name_ph","Название…","Nomi…","Name…")}
+                          placeholder={TT("ps.row.name_ph", "Название…", "Nomi…", "Name…")}
                           onChange={(e) =>
                             setRows((m) =>
                               m.map((x) =>
@@ -493,7 +623,9 @@ export default function ProviderServicesCard({
                               )
                             )
                           }
-                          onBlur={(e) => patchRow(r.id, { title: e.target.value || null })}
+                          onBlur={(e) =>
+                            patchRow(r.id, { title: e.target.value || null })
+                          }
                         />
                       </td>
 
@@ -544,7 +676,9 @@ export default function ProviderServicesCard({
                               )
                             )
                           }
-                          onBlur={(e) => patchRow(r.id, { price: toMoney(e.target.value) })}
+                          onBlur={(e) =>
+                            patchRow(r.id, { price: toMoney(e.target.value) })
+                          }
                         />
                       </td>
 
@@ -561,7 +695,9 @@ export default function ProviderServicesCard({
                               )
                             )
                           }
-                          onBlur={(e) => patchRow(r.id, { currency: e.target.value })}
+                          onBlur={(e) =>
+                            patchRow(r.id, { currency: e.target.value })
+                          }
                         >
                           <option>USD</option>
                           <option>UZS</option>
@@ -572,11 +708,11 @@ export default function ProviderServicesCard({
                       <td className="p-2">
                         {r.is_active ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700">
-                            ● Включена
+                            ● {TT("ps.status.enabled", "Включена", "Yoqilgan", "Enabled")}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-gray-500">
-                            ● Выключена
+                            ● {TT("ps.status.disabled", "Выключена", "O‘chirilgan", "Disabled")}
                           </span>
                         )}
                       </td>
@@ -586,14 +722,15 @@ export default function ProviderServicesCard({
                           className="h-8 px-3 rounded border text-xs mr-2"
                           onClick={() => toggleActive(r)}
                         >
-                          {r.is_active ? TT("ps.row.disable","Выключить","O‘chirish","Disable")
-                                       : TT("ps.row.enable","Включить","Yoqish","Enable")}
+                          {r.is_active
+                            ? TT("ps.row.disable", "Выключить", "O‘chirish", "Disable")
+                            : TT("ps.row.enable", "Включить", "Yoqish", "Enable")}
                         </button>
                         <button
                           className="h-8 px-3 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
                           onClick={() => removeRow(r.id)}
                         >
-                          {TT("ps.row.delete","Удалить","O‘chirish","Delete")}
+                          {TT("ps.row.delete", "Удалить", "O‘chirish", "Delete")}
                         </button>
                       </td>
                     </tr>
@@ -602,7 +739,12 @@ export default function ProviderServicesCard({
               ) : (
                 <tr>
                   <td className="p-3 text-gray-500" colSpan={7}>
-                    {TT("ps.empty","Услуги не найдены. Добавьте хотя бы одну.","Xizmatlar topilmadi. Hech bo‘lmaganda bittasini qo‘shing.","No services yet. Please add one.")}
+                    {TT(
+                      "ps.empty",
+                      "Услуги не найдены. Добавьте хотя бы одну.",
+                      "Xizmatlar topilmadi. Hech bo‘lmaganda bittasini qo‘shing.",
+                      "No services yet. Please add one."
+                    )}
                   </td>
                 </tr>
               )}
