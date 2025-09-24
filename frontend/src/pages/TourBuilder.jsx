@@ -1127,6 +1127,37 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     return m;
   }, [hotelBrief]);
 
+  
+  // --- универсальные геттеры числовых полей из брифа ---
+  const toNumSafe = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  // ищем по цепочке ключей на любом уровне вложенности (1-2 уровня хватит для брифа)
+  const pickNumeric = (obj, candidates) => {
+    if (!obj) return 0;
+    // прямые ключи
+    for (const key of candidates) {
+      if (obj[key] !== undefined && obj[key] !== null) {
+        const n = toNumSafe(obj[key]);
+        if (n) return n;
+      }
+    }
+    // один уровень вложенности
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (v && typeof v === "object") {
+        for (const key of candidates) {
+          if (v[key] !== undefined && v[key] !== null) {
+            const n = toNumSafe(v[key]);
+            if (n) return n;
+          }
+        }
+      }
+    }
+    return 0;
+  };
+
   // пересчёт тотала при каждом изменении
   useEffect(() => {
     let sum = 0;
@@ -1146,15 +1177,25 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     }
       
     
-    // 1) Доп. место (за человека/ночь)
-    const extraBedUnit = Number(hotelBrief?.extra_bed_cost ?? hotelBrief?.extra_bed_price ?? 0);
+        // 1) Доп. место (за чел/ночь)
+    const extraBedUnit = pickNumeric(hotelBrief, [
+     "extra_bed_cost", "extra_bed_price", "extra_bed",
+      "extra_bed_uzs", "extra_bed_per_night", "extraBed",
+      "extra_bed_amount"
+    ]);
     const extraBedsTotal = Math.max(0, Number(extraBeds) || 0) * extraBedUnit * nights;
     sum += extraBedsTotal;
 
-    // 2) Туристический сбор (за человека/ночь)
-    const feeResident    = Number(hotelBrief?.tourism_fee_resident    ?? hotelBrief?.tourism_fee_res ?? 0);
-    const feeNonResident = Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs ?? 0);
-    const feePerPerson   = residentFlag ? feeResident : feeNonResident;
+    // 2) Туристический сбор (за чел/ночь)
+    const feeResident = pickNumeric(hotelBrief, [
+      "tourism_fee_resident", "tourism_fee_res", "tourist_fee_resident",
+      "resident_tourist_fee", "tourism_tax_resident", "resident_city_tax"
+    ]);
+    const feeNonResident = pickNumeric(hotelBrief, [
+      "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
+      "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
+    ]);
+    const feePerPerson = residentFlag ? feeResident : feeNonResident;
     const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
     sum += tourismFeeTotal;
 
@@ -1181,7 +1222,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
         {/* Доп. место и подсказка по тур. сбору */}
       <div className="grid sm:grid-cols-2 gap-2 mb-2">
         <label className="flex items-center justify-between border rounded px-2 py-1">
-          <span className="text-sm">{t('extra_bed_cost') || 'Доп. место (шт)'}</span>
+          <span className="text-sm">{t('tb.extra_beds_qty') || 'Доп. место (шт)'}</span>
           <input
             type="number"
             min={0}
@@ -1192,8 +1233,14 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
         </label>
         <div className="text-xs text-gray-600 flex items-center px-2">
           {(() => {
-            const feeRes = Number(hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res) || 0;
-            const feeNrs = Number(hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs) || 0;
+            const feeRes = pickNumeric(hotelBrief, [
+              "tourism_fee_resident", "tourism_fee_res", "tourist_fee_resident",
+              "resident_tourist_fee", "tourism_tax_resident", "resident_city_tax"
+            ]);
+            const feeNrs = pickNumeric(hotelBrief, [
+              "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
+              "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
+            ]);
             const haveFee = feeRes > 0 || feeNrs > 0;
             return haveFee
               ? `Туристический сбор: рез. ${feeRes.toFixed(0)} / нерез. ${feeNrs.toFixed(0)} сум за человека/ночь`
