@@ -124,6 +124,10 @@ const pickPos = (...vals) => {
   return 0;
 };
 
+// helpers
+const toBool = (v) =>
+  v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true";
+
 // вместо: async function fetchHotelBrief(hotelId) { return await fetchJSON(`/api/hotels/${hotelId}/brief`); }
 async function fetchHotelBrief(hotelId) {
   // параллельно тянем короткий бриф и полный профиль
@@ -165,9 +169,10 @@ async function fetchHotelBrief(hotelId) {
   );
   
   // НДС: флаг включённости и ставка (в %)
-  const vatIncluded =
+  const vatIncluded = toBool(
     (brief?.vat_included ?? brief?.vatIncluded ?? brief?.taxes?.vatIncluded ??
-     full?.vat_included  ?? full?.vatIncluded  ?? full?.taxes?.vatIncluded) ?? false;
+     full?.vat_included  ?? full?.vatIncluded  ?? full?.taxes?.vatIncluded)
+  );
   const vatRate = Number(
     brief?.vat_rate ?? brief?.vatRate ?? brief?.taxes?.vatRate ??
     full?.vat_rate  ?? full?.vatRate  ?? full?.taxes?.vatRate ?? 0
@@ -1208,24 +1213,21 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     return Number.isFinite(n) ? n : 0;
   };
   // ищем по цепочке ключей на любом уровне вложенности (1-2 уровня хватит для брифа)
+  const getByPath = (obj, path) =>
+  path.split(".").reduce((o,k)=> (o && o[k] != null ? o[k] : undefined), obj);
+
   const pickNumeric = (obj, candidates) => {
-    if (!obj) return 0;
-    // прямые ключи
-    for (const key of candidates) {
-      if (obj[key] !== undefined && obj[key] !== null) {
-        const n = toNumSafe(obj[key]);
-        if (n) return n;
-      }
+    for (const c of candidates) {
+      const v = c.includes(".") ? getByPath(obj, c) : obj?.[c];
+      const n = Number(v);
+      if (Number.isFinite(n) && n) return n;
     }
-    // один уровень вложенности
-    for (const k of Object.keys(obj)) {
-      const v = obj[k];
+    // один уровень fallback
+    for (const v of Object.values(obj || {})) {
       if (v && typeof v === "object") {
-        for (const key of candidates) {
-          if (v[key] !== undefined && v[key] !== null) {
-            const n = toNumSafe(v[key]);
-            if (n) return n;
-          }
+        for (const c of candidates) {
+          const n = Number(c.includes(".") ? getByPath(v, c) : v?.[c]);
+          if (Number.isFinite(n) && n) return n;
         }
       }
     }
@@ -1278,7 +1280,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
     sum += tourismFeeTotal;
     // 3) НДС (если не включён в цены)
-    const vatIncluded = Boolean(hotelBrief?.vatIncluded ?? hotelBrief?.vat_included);
+    const vatIncluded = toBool(hotelBrief?.vatIncluded ?? hotelBrief?.vat_included);
     const vatRate = Number(hotelBrief?.vatRate ?? hotelBrief?.vat_rate ?? 0) || 0;
     const vatBase = roomsSubtotal + extraBedsTotal; // турсбор не облагаем
     const vat = (!vatIncluded && vatRate > 0) ? Math.round(vatBase * (vatRate / 100)) : 0;
