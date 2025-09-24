@@ -1151,22 +1151,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
         sum += count * price;
       }
     }
-       // 1) Доп. место (за человека/ночь), поле может называться extra_bed_cost | extra_bed_price
-   const extraBedUnit =
-     Number(hotelBrief?.extra_bed_cost ?? hotelBrief?.extra_bed_price ?? 0);
-   const extraBedsTotal = Math.max(0, Number(extraBeds) || 0) * extraBedUnit * nights;
-   sum += extraBedsTotal;
-
-   // 2) Туристический сбор (за человека/ночь), отдельные ставки для рез/нерез
-   const feeResident = Number(
-     hotelBrief?.tourism_fee_resident ?? hotelBrief?.tourism_fee_res ?? 0
-   );
-   const feeNonResident = Number(
-     hotelBrief?.tourism_fee_nonresident ?? hotelBrief?.tourism_fee_nrs ?? 0
-   );
-   const feePerPerson = residentFlag ? feeResident : feeNonResident;
-   const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
-   sum += tourismFeeTotal;
+      
     
         // 1) Доп. место (за человека/ночь)
     const nights = Array.isArray(nightDates) ? nightDates.length : 0;
