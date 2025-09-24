@@ -1,3 +1,5 @@
+//frontend/src/components/ProviderLanguages.jsx
+  
 import React, { useEffect, useMemo, useState } from "react";
 import Select, { components } from "react-select";   // ⬅ добавили { components }
 import ISO6391 from "iso-639-1";
