@@ -572,7 +572,7 @@ export default function ProviderServicesCard({
                       <td className="p-2">
                         {r.is_active ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700">
-                           ● {TT("ps.status.disabled","Выключена","O‘chirilgan","Disabled")}
+                            ● Включена
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-gray-500">
