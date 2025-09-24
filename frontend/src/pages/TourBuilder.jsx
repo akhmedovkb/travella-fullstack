@@ -1326,19 +1326,34 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
             onChange={(e) => setExtraBeds(Math.max(0, Number(e.target.value) || 0))}
           />
         </label>
-                <div className="text-xs text-gray-600 flex items-center px-2">
+        
+          <div className="text-xs text-gray-600 flex items-center px-2">
           {(() => {
-            const feeRes = pickNumeric(hotelBrief, [...]);
-           const feeNrs = pickNumeric(hotelBrief, [...]);
+            const feeRes = pickNumeric(hotelBrief, [
+              "taxes.touristTax.residentPerNight",
+              "tourism_fee_resident",
+              "tourism_fee_res",
+              "tourist_fee_resident",
+              "resident_tourist_fee",
+              "tourism_tax_resident",
+              "resident_city_tax"
+            ]);
+            const feeNrs = pickNumeric(hotelBrief, [
+              "taxes.touristTax.nonResidentPerNight",
+              "tourism_fee_nonresident",
+              "tourism_fee_nrs",
+              "tourist_fee_nonresident",
+              "nonresident_tourist_fee",
+              "tourism_tax_nonresident",
+              "nonresident_city_tax"
+            ]);
             const haveFee = feeRes > 0 || feeNrs > 0;
             return haveFee
-              ? t('tb.tourism_fee_hint', {
-                  res: feeRes.toFixed(0),
-                  nrs: feeNrs.toFixed(0),
-                })
-              : t('tb.tourism_fee_absent');
+              ? t("tb.tourism_fee_hint", { res: feeRes.toFixed(0), nrs: feeNrs.toFixed(0) })
+              : t("tb.tourism_fee_absent");
           })()}
         </div>
+
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
           const max = Number(mapByType.get(type)?.count ?? 0);
