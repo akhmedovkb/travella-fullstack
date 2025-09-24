@@ -1580,9 +1580,20 @@ useEffect(() => {
                 <div className="border px-3 py-2 rounded bg-gray-100">{t(profile.type)}</div>
               </div>
               <div>
-                                <label className="block font-medium">
+                <label className="block font-medium">
                   {t("location")}{" "}
-                  <span className="text-xs text-gray-500">(вводите название города только на английском)</span>
+                  <span className="text-xs text-gray-500">
+                    {
+                      t("location_hint", {
+                        defaultValue:
+                          (i18n?.language || "").startsWith("ru")
+                            ? "(вводите название города только на английском)"
+                            : (i18n?.language || "").startsWith("uz")
+                            ? "(shahar nomini faqat ingliz tilida kiriting)"
+                            : "(enter the city name in English only)"
+                      })
+                    }
+                  </span>
                 </label>
                 {isEditing ? (
                   <AsyncCreatableSelect
