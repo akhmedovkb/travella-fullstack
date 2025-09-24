@@ -242,12 +242,12 @@ export default function ProviderServicesCard({
   }
 
   async function removeRow(id) {
-    if (!confirm("Удалить услугу?")) return;
+    if (!confirm(TT("ps.confirm.delete","Удалить услугу?","Xizmatni o‘chirilsinmi?","Delete this service?"))) return;
     try {
       await fetchJSON(`/api/providers/${pid}/services/${id}`, { method: "DELETE" });
       setRows((m) => m.filter((r) => r.id !== id));
     } catch (e) {
-      alert("Не удалось удалить: " + e.message);
+      alert(TT("ps.error.delete","Не удалось удалить: ","O‘chirish imkonsiz: ","Failed to delete: ") + e.message);
     }
   }
 
@@ -259,7 +259,7 @@ export default function ProviderServicesCard({
       const fleet = Array.isArray(me?.car_fleet) ? me.car_fleet : [];
 
       if (!cities.length) {
-        alert('Сначала заполните "Регион деятельности" в профиле.');
+        alert(TT("ps.error.no_cities",'Сначала заполните "Регион деятельности" в профиле.','Avval profilda “Faoliyat hududi”ni to‘ldiring.','Please fill “Region of activity” in your profile first.'));
         setBulkBusy(false);
         return;
       }
@@ -299,14 +299,19 @@ export default function ProviderServicesCard({
           : [...guideItems, ...transportItems];
 
       if (!items.length) {
-        alert("Не из чего генерировать: добавьте города и/или автомобили в профиле.");
+        alert(TT("ps.error.nothing_to_generate","Не из чего генерировать: добавьте города и/или автомобили в профиле.","Hech narsa yaratib bo‘lmaydi: profilga shaharlar va/yoki avtomobillar qo‘shing.","Nothing to generate: add cities and/or cars in your profile."));
         setBulkBusy(false);
         return;
       }
 
       if (
         !confirm(
-          `Будут добавлены ${items.length} услуг(и). Цены = 0 — заполните после создания. Продолжить?`
+          TT(
+            "ps.confirm.bulk",
+            `Будут добавлены ${items.length} услуг(и). Цены = 0 — заполните после создания. Продолжить?`,
+            `${items.length} ta xizmat qo‘shiladi. Narxlar = 0 — keyin to‘ldiring. Davom etamizmi?`,
+            `${items.length} services will be created. Prices = 0 — fill them after creation. Continue?`
+          )
         )
       ) {
         setBulkBusy(false);
@@ -321,7 +326,7 @@ export default function ProviderServicesCard({
       if (created.length) setRows((m) => [...created, ...m]);
       await load();
     } catch (e) {
-      alert("Bulk ошибка: " + e.message);
+      alert(TT("ps.error.bulk","Ошибка пакетного создания: ","Paket yaratish xatosi: ","Bulk create error: ") + e.message);
     } finally {
       setBulkBusy(false);
     }
