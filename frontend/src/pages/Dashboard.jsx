@@ -672,7 +672,6 @@ const Dashboard = () => {
 
   // Geography
   const [countryOptions, setCountryOptions] = useState([]);
-  const [countryOptions, setCountryOptions] = useState([]);
   const [rcEnMap, setRcEnMap] = useState(() => ({})); // EN name -> ISO2
   const [selectedCountry, setSelectedCountry] = useState(null); // {value,label,code}
     // Умный поиск страны по value/label/ISO2 для обратной совместимости
