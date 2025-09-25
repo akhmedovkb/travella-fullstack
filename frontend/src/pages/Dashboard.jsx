@@ -670,12 +670,24 @@ const Dashboard = () => {
 
   // Geography
   const [countryOptions, setCountryOptions] = useState([]);
+  const [countryOptions, setCountryOptions] = useState([]);
+  const [rcEnMap, setRcEnMap] = useState(() => ({})); // EN name -> ISO2
   const [selectedCountry, setSelectedCountry] = useState(null); // {value,label,code}
     // Умный поиск страны по value/label/ISO2 для обратной совместимости
-   const findCountryOpt = useCallback(
-   (v) => countryOptions.find((c) => c.code === v) || null,
-   [countryOptions]
- );
+  const findCountryOpt = useCallback((v) => {
+    if (!v) return null;
+    const up = String(v).trim().toUpperCase();
+    return (
+      countryOptions.find(
+        (c) =>
+          c.code?.toUpperCase() === up ||
+          c.value?.toUpperCase() === up ||
+          c.label?.toUpperCase() === up ||
+          (Array.isArray(c.aliases) && c.aliases.includes(up)) ||
+          rcEnMap[up] === c.code?.toUpperCase()
+      ) || null
+    );
+  }, [countryOptions, rcEnMap]);
 
   const [departureCity, setDepartureCity] = useState(null);
   const [cityOptionsTo, setCityOptionsTo] = useState([]);
@@ -918,34 +930,49 @@ useEffect(() => {
           }
         );
         countries = (data?.geonames || []).map((c) => ({
-          value: c.countryCode, // ISO-2
+          value: c.countryCode,     // ISO-2
           code:  c.countryCode,
-          label: c.countryName, // локализованное имя
+          label: c.countryName,     // локализованное имя
+          aliases: [ String(c.countryCode).toUpperCase() ], // дополним позже EN-именем
         }));
       } catch (_) {
         // молча сваливаемся на restcountries
       }
 
-      // 2) Если GeoNames недоступен — фолбэк на restcountries
-      if (!countries.length) {
-        const res = await axios.get(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,translations"
-        );
-        const trKey = ui === "ru" ? "rus" : null; // uzb почти нигде нет
-        countries = (res.data || []).map((country) => {
-          const code = country?.cca2;
-          const label =
-            (trKey && country?.translations?.[trKey]?.common) ||
-            country?.name?.common ||
-            code;
-          return { value: code, code, label };
-        });
-      }
-
-      if (!alive) return;
-      setCountryOptions(
-        countries.sort((a, b) => a.label.localeCompare(b.label, ui))
+            // 2) Всегда берём restcountries, чтобы иметь английские имена
+      const res = await axios.get(
+        "https://restcountries.com/v3.1/all?fields=name,cca2"
       );
+      const enMap = {};
+      const enArr = (res.data || []).map((rc) => {
+        const code = rc?.cca2 || "";
+        const en   = rc?.name?.common || "";
+        if (code && en) enMap[en.toUpperCase()] = code.toUpperCase();
+        return { code: code.toUpperCase(), en };
+      });
+
+      // если GeoNames не отдал список — строим из restcountries
+      if (!countries.length) {
+       countries = enArr.map(({ code, en }) => ({
+          value: code,
+          code,
+          label: en,
+          aliases: [code, en.toUpperCase()],
+        }));
+      } else {
+        // иначе дополняем алиасами EN-имен
+        const enByCode = Object.fromEntries(enArr.map(({code,en}) => [code, en]));
+        countries = countries.map((c) => ({
+          ...c,
+          aliases: Array.from(new Set([
+            ...(c.aliases || []),
+            (enByCode[c.code] || "").toUpperCase(),
+          ].filter(Boolean))),
+        }));
+      }
+      if (!alive) return;
+      setCountryOptions(countries.sort((a,b) => a.label.localeCompare(b.label, ui)));
+      setRcEnMap(enMap);
     } catch (e) {
       // можно показать тост, если нужно
       console.error("Не удалось загрузить список стран", e);
@@ -976,10 +1003,15 @@ useEffect(() => {
           },
           signal: controller.signal,
         });
-        const cities = response.data.geonames.map((city) => ({
+        let cities = response.data.geonames.map((city) => ({
           value: city.name,
           label: city.name,
         }));
+                // гарантируем, что сохранённый город виден как value
+        if (details?.directionTo &&
+            !cities.some(o => o.value === details.directionTo)) {
+          cities = [{ value: details.directionTo, label: details.directionTo }, ...cities];
+        }
         setCityOptionsTo(cities);
       } catch (error) {
               if (error?.code !== "ERR_CANCELED") {
@@ -989,7 +1021,7 @@ useEffect(() => {
     };
     fetchCities();
     return () => controller.abort();
-  }, [selectedCountry, pickGeoLang]);
+  }, [selectedCountry, pickGeoLang, details?.directionTo]);
 
       /** ===== Load profile + services + stats ===== */
 useEffect(() => {
@@ -1052,16 +1084,14 @@ useEffect(() => {
   if (!selectedService) return;
   const d = selectedService.details || {};
 
-  const valCountry = d.directionCountry || d.direction; // что есть
-    const co = countryOptions.find(
-    (c) => c.value === valCountry || c.label === valCountry || c.code === valCountry
-  );
-  if (co) setSelectedCountry(co);
+    const valCountry = d.directionCountry || d.direction;
+    const co = findCountryOpt(valCountry);
+    if (co) setSelectedCountry(co);
 
   if (d.directionFrom) {
     setDepartureCity({ value: d.directionFrom, label: d.directionFrom });
   }
-}, [selectedService, countryOptions]);
+}, [selectedService, countryOptions, findCountryOpt]);
 
 
 
