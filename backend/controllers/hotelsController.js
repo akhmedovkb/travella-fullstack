@@ -643,9 +643,23 @@ async function listHotelInspections(req, res) {
         ? `i.created_at DESC, i.id DESC`
         : `COALESCE(i.likes,0) DESC, i.created_at DESC`;
 
-    // свои инспекции сверху, если известен providerId
-    const myOrder = myProviderId ? `CASE WHEN i.author_provider_id = $2::int THEN 0 ELSE 1 END, ` : ``;
-
+        // динамически собираем параметры и их индексы
+    const params = [hotelId];
+    let idx = 1;
+    
+    let myOrder = ``;
+    let myProvIdx = null;
+    if (myProviderId != null) {
+      params.push(myProviderId);
+      myProvIdx = ++idx;
+      myOrder = `CASE WHEN i.author_provider_id = $${myProvIdx}::int THEN 0 ELSE 1 END, `;
+    }
+    
+    // актор для liked_by_me
+    params.push(actorId);      const actorIdIdx   = ++idx;
+    params.push(actorType);    const actorTypeIdx = ++idx;
+    params.push(fp);           const fpIdx        = ++idx;
+    
     const sql = `
       SELECT
         i.id, i.hotel_id, i.author_name, i.author_provider_id,
@@ -657,15 +671,15 @@ async function listHotelInspections(req, res) {
       LEFT JOIN inspection_likes liked
         ON liked.inspection_id = i.id
        AND (
-            ($3::int IS NOT NULL AND liked.actor_type = $4::text AND liked.actor_id = $3::int)
-            OR ($5::text IS NOT NULL AND liked.fp = $5::text)
+            ($${actorIdIdx}::int IS NOT NULL AND liked.actor_type = $${actorTypeIdx}::text AND liked.actor_id = $${actorIdIdx}::int)
+            OR ($${fpIdx}::text IS NOT NULL AND liked.fp = $${fpIdx}::text)
        )
       WHERE i.hotel_id = $1
       ORDER BY ${myOrder}${baseOrder}
       LIMIT 200
     `;
-
-    const { rows } = await db.query(sql, [hotelId, myProviderId, actorId, actorType, fp]);
+    
+    const { rows } = await db.query(sql, params);
 
     const items = (rows || []).map((r) => ({
       ...r,
