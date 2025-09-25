@@ -620,6 +620,8 @@ const Dashboard = () => {
   const [stats, setStats] = useState(null);
     // стартуем с JWT, чтобы таб появился сразу
   const [isAdmin, setIsAdmin] = useState(() => detectAdminFromJwt());
+    // ref для блока языков (значение читаем при сохранении профиля)
+  const langRef = useRef(null);
 
     // АВТОПАРК (в профиле гида/транспортника)
   const emptyCar = useMemo(() => ({ model: "", seats: "", images: [], is_active: true }), []);
@@ -1144,6 +1146,22 @@ useEffect(() => {
         is_active: c.is_active !== false,
       }))
       .filter((c) => c.model && c.seats);
+
+        // ---------- ЯЗЫКИ (берём из ProviderLanguages по ref) ----------
+    try {
+      const nextLangs = Array.isArray(langRef.current?.getValue())
+        ? langRef.current.getValue()
+        : [];
+     const prevLangs = Array.isArray(profile.languages) ? profile.languages : [];
+      const sameLangs =
+        nextLangs.length === prevLangs.length &&
+        nextLangs.every((x, i) => x === prevLangs[i]);
+      if (!sameLangs) {
+        updated.languages = nextLangs;
+      }
+    } catch (_) {
+      /* ignore */
+    }
 
     if (Object.keys(updated).length === 0) {
       tInfo(t("no_changes") || "Изменений нет");
@@ -1769,10 +1787,10 @@ useEffect(() => {
                           )}
                         </div>
 
-                                        {/* Владение языками */}
+                                        {/* Владение языками (сохранение через кнопку профиля) */}
                           {(profile.type === "guide" || profile.type === "transport") && (
                             <div className="mt-4">
-                              <ProviderLanguages token={token} />
+                              <ProviderLanguages ref={langRef} token={token} />
                             </div>
                           )}        
 
