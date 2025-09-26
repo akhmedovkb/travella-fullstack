@@ -27,11 +27,17 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
     profile.certUrl
   );
   const logoOk = hasAny(
+    // основные варианты
     profile.logo,
     profile.logoUrl,
+    profile.logo_url,
+    // часто используемые алиасы
     profile.avatar,
+    profile.photo,       // <-- добавлено
     profile.photoUrl,
-    profile.imageUrl
+    profile.image,
+    profile.imageUrl,
+    profile.image_url
   );
   const tgOk = hasAny(
     profile.telegram_username,
