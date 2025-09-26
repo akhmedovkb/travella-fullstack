@@ -13,7 +13,6 @@ import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
-import ProviderCompleteness from "../components/ProviderCompleteness";
 
 /** ================= Helpers ================= */
 
@@ -592,23 +591,6 @@ const makeAsyncSelectI18n = (t) => ({
 /** ================= Main ================= */
 const Dashboard = () => {
    const { t, i18n } = useTranslation();
-  
-  // --- profile completeness: smooth scroll to sections ---
-const idMap = useRef({
-  languages: "anchor-languages",
-  transport: "anchor-transport",
-  certificate: "anchor-certificate",
-  logo: "anchor-logo",
-  telegram: "anchor-telegram",
-  fallback: "anchor-profile-left",
-}).current;
-
-const scrollToProfilePart = useCallback((key) => {
-  const id = idMap[key] || idMap.fallback;
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-}, [idMap]);
-
 
  // RU/UZ/EN приоритет: i18n → navigator → en (стабильная ссылка)
  const pickGeoLang = useCallback(() => {
@@ -1528,13 +1510,10 @@ useEffect(() => {
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* Левый блок: профиль */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
-          <div id="anchor-profile-left" />
           <div className="flex gap-4 items-stretch">
             <div className="flex flex-col items-center w-1/2 h-full">
               {/* Фото */}
               <div className="relative flex flex-col items-center">
-                <div className="relative flex flex-col items-center">
-                 <div id="anchor-logo" />
                 <img
                   src={newPhoto || profile.photo || "https://placehold.co/96x96"}
                   className="w-24 h-24 rounded-full object-cover mb-2"
@@ -1684,7 +1663,6 @@ useEffect(() => {
               </div>
                             {(profile.type === "guide" || profile.type === "transport") && (
                 <div className="mt-3">
-                  <div id="anchor-transport" />
                   <label className="block font-medium mb-2">{t("car_fleet") || "Автопарк"}</label>
                   {isEditing ? (
                     <>
@@ -1766,8 +1744,7 @@ useEffect(() => {
                             </div>
                           )}
                         
-                 {/* ⬇️ Плашка вынесена за пределы isEditing */}
-                          <div id="anchor-telegram" />
+                          {/* ⬇️ Плашка вынесена за пределы isEditing */}
                           {!isTgLinked && tgDeepLink && (
                             <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 ring-1 ring-blue-200">
                               <div className="font-medium mb-1">
@@ -1812,14 +1789,12 @@ useEffect(() => {
                                         {/* Владение языками (сохранение через кнопку профиля) */}
                           {(profile.type === "guide" || profile.type === "transport") && (
                             <div className="mt-4">
-                              <div id="anchor-languages" />
                               <ProviderLanguages ref={langRef} token={token} />
                             </div>
                           )}        
 
               {/* Сертификат */}
               <div>
-                <div id="anchor-certificate" />
                 <label className="block font-medium">{t("certificate")}</label>
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
@@ -1853,7 +1828,6 @@ useEffect(() => {
               >
                 {isEditing ? t("save") : t("edit")}
               </button>
-              <ProviderCompleteness profile={profile} onFix={scrollToProfilePart} />
             </div>
           </div>
           
