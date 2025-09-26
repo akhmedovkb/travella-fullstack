@@ -9,62 +9,99 @@ const hasAny = (...vals) =>
 export default function ProviderCompleteness({ profile = {}, onFix }) {
   const { t } = useTranslation();
 
+  /** ——— Источники данных ——— */
   const languagesOk = hasAny(
     profile.languages,
     profile.langs,
     profile.languageSkills
   );
-  const transportOk = hasAny(
-    profile.transport,
-    profile.hasTransport,
-    profile.transportAvailable,
-    profile.transport_name
-  );
+
+  // есть ли активный автопарк/транспорт
+  const carFleetOk = Array.isArray(profile?.car_fleet)
+    ? profile.car_fleet.some(
+        (c) =>
+          c &&
+          (c.is_active !== false) &&
+          (c.model || c.seats || (Array.isArray(c.images) && c.images.length > 0))
+      )
+    : false;
+
+  const transportOk =
+    hasAny(
+      profile.transport,
+      profile.hasTransport,
+      profile.transportAvailable,
+      profile.transport_name,
+      profile.cars,
+      profile.fleet,
+      profile.vehicleFleet
+    ) || carFleetOk;
+
   const certificateOk = hasAny(
     profile.certificate,
     profile.certificateUrl,
     profile.certificate_url,
     profile.certUrl
   );
+
   const logoOk = hasAny(
     // основные варианты
     profile.logo,
     profile.logoUrl,
     profile.logo_url,
-    // часто используемые алиасы
+    // часто встречающиеся алиасы
     profile.avatar,
-    profile.photo,       // <-- добавлено
+    profile.photo,
     profile.photoUrl,
     profile.image,
     profile.imageUrl,
     profile.image_url
   );
+
   const tgOk = hasAny(
     profile.telegram_username,
     profile.telegramUsername,
     profile.telegram_user,
     profile.telegram_connected,
-    profile.telegramLinked
+    profile.telegramLinked,
+    // прямое связывание через chat_id
+    profile.telegram_chat_id,
+    profile.tg_chat_id,
+    profile.telegramChatId
   );
 
-  const isTransportProvider = String(profile?.type || "")
-    .toLowerCase()
-    .includes("transport");
+  /** ——— Логика показа пунктов по типу поставщика ——— */
+  const providerType = String(profile?.type || "").toLowerCase();
+  const isAgent = providerType.includes("agent");
+  const isGuide = providerType.includes("guide");
+  const isTransportProvider = providerType.includes("transport");
 
-  const items = useMemo(
-    () => [
-      {
+  /** ——— Чеклист ——— */
+  const items = useMemo(() => {
+    const arr = [];
+
+    // Языки: не показываем у агента
+    if (!isAgent) {
+      arr.push({
         key: "languages",
         label: t("profile.completeness.languages", "Владение языками"),
         ok: languagesOk,
         required: true,
-      },
-      {
+      });
+    }
+
+    // Транспорт: обязателен у транспортника, необязателен у гида, скрыт у агента
+    if (isTransportProvider || isGuide) {
+      arr.push({
         key: "transport",
         label: t("profile.completeness.transport", "Транспорт в наличии"),
         ok: transportOk,
         required: isTransportProvider,
-      },
+      });
+    }
+
+    // Общие для всех
+    arr.push(
       {
         key: "certificate",
         label: t("profile.completeness.certificate", "Загрузка сертификата"),
@@ -82,17 +119,29 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
         label: t("profile.completeness.telegram", "Подключение Telegram"),
         ok: tgOk,
         required: true,
-      },
-    ],
-    [languagesOk, transportOk, certificateOk, logoOk, tgOk, isTransportProvider, t]
-  );
+      }
+    );
 
+    return arr;
+  }, [
+    isAgent,
+    isGuide,
+    isTransportProvider,
+    languagesOk,
+    transportOk,
+    certificateOk,
+    logoOk,
+    tgOk,
+    t,
+  ]);
+
+  /** ——— Прогресс ——— */
   const totalRequired = items.filter((i) => i.required).length;
   const doneRequired = items.filter((i) => i.required && i.ok).length;
   const percent = Math.round((doneRequired / Math.max(1, totalRequired)) * 100);
-
   const showHint = percent < 100;
 
+  /** ——— Render ——— */
   return (
     <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-2">
