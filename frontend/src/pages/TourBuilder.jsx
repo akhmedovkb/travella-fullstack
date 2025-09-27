@@ -12,6 +12,14 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
+/* ---------------- brand colors ---------------- */
+const BRAND = {
+  primary: "#FF5722",  // ключевой акцент
+  accent:  "#FFAD7A",  // бордеры/hover
+  sand:    "#FFEAD2",  // фон карточек дня
+  gray:    "#F1F1F1",  // фон блоков итогов
+};
+
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -19,10 +27,16 @@ const RS_STYLES = {
   menuList: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
   option: (base, state) => ({
     ...base,
-    backgroundColor: state.isFocused ? "#f3f4f6" : "#fff", // hover = светло-серый, иначе белый
+    backgroundColor: state.isFocused ? BRAND.sand : "#fff",
     color: "#111827",
   }),
-  control: (b) => ({ ...b, backgroundColor: "#fff" }),
+  control: (b, s) => ({
+    ...b,
+    backgroundColor: "#fff",
+    borderColor: s.isFocused ? BRAND.accent : `${BRAND.accent}66`,
+    boxShadow: s.isFocused ? "0 0 0 2px rgba(255,173,122,.25)" : "none",
+    ":hover": { borderColor: BRAND.accent },
+  }),
 };
 
 /* ---------------- utils ---------------- */
@@ -787,9 +801,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
             return (
-              <div key={k} className="border rounded-lg p-3 space-y-3">
+              <div
+                key={k}
+                className="border rounded-lg p-3 space-y-3"
+                style={{
+                  background: BRAND.sand,
+                  borderColor: `${BRAND.accent}55`,
+                }}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="font-semibold">D{i + 1}</div>
+                  <div className="font-semibold" style={{ color: BRAND.primary }}>
+                    D{i + 1}
+                  </div>
                   <input
                     className="border rounded px-3 py-2 min-w-[220px] flex-1"
                     placeholder={t('tb.city_ph')}
@@ -805,13 +828,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       // при смене города сбросили поставщиков; автоподбор произойдёт после выбора
                     }}
                   />
-                  <div className="text-sm text-gray-500">{k}</div>
+                  <div className="text-sm" style={{ color: BRAND.primary }}>
+                    {k}
+                  </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
                   {/* Guide */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">{t('tb.guide')}</label>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                    >
+                      {t('tb.guide')}
+                    </label>
                     <AsyncSelect
                         key={`guide-${k}-${st.city}-${lang}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
@@ -880,7 +910,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_day')}: {calcGuideForDay(k).toFixed(2)} {(st.guideService?.currency || st.guide?.currency || "UZS")}
+                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcGuideForDay(k).toFixed(2)}</b> {(st.guideService?.currency || st.guide?.currency || "UZS")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
@@ -892,7 +922,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                   {/* Transport */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">{t('tb.transport')}</label>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                    >
+                      {t('tb.transport')}
+                    </label>
                     <AsyncSelect
                         key={`transport-${k}-${st.city}-${lang}`}   // ⬅️ важный ключ
                         isDisabled={!cityChosen}
@@ -948,7 +983,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         ))}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.price_per_day')}: {calcTransportForDay(k).toFixed(2)} {(st.transportService?.currency || st.transport?.currency || "UZS")}
+                     {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcTransportForDay(k).toFixed(2)}</b> {(st.transportService?.currency || st.transport?.currency || "UZS")}
                     </div>
                   </div>
                   {/* если услуг нет: */}
@@ -959,7 +994,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   )}
                   {/* Hotel */}
                   <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">{t('tb.hotel')}</label>
+                     <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                     >
+                      {t('tb.hotel')}
+                     </label>
                       <AsyncSelect
                       key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
                       isDisabled={!cityChosen}
@@ -1068,7 +1108,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     )}
 
                     <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_night')}: {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
+                      {t('tb.price_per_night')}: <b style={{ color: BRAND.primary }}>{toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)}</b> {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>
                   </div>
 
@@ -1106,7 +1146,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                 </div>
 
                 <div className="text-sm text-gray-700">
-                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} = <b>{(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} UZS</b>
+                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} =
+                  {" "}
+                  <b style={{ color: BRAND.primary }}>
+                    {(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} UZS
+                  </b>
                 </div>
               </div>
             );
@@ -1121,15 +1165,22 @@ const makeTransportLoader = (dateKey) => async (input) => {
         servicesCache={servicesCache}
         onRecalc={autoPickForDay}
       />
-
         <div className="grid md:grid-cols-5 gap-3 text-sm">
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} UZS</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div></div>
-          <div className="bg-gray-50 rounded p-3 border"><div className="font-medium mb-1">{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div></div>
-          <div className="bg-gray-50 rounded p-3 border">
-            <div className="font-semibold">{t('tb.totals.total')}</div>
-            <div className="flex justify-between"><span>NET</span><span>{totals.net.toFixed(2)} UZS</span></div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-semibold" style={{ color: BRAND.primary }}>{t('tb.totals.total')}</div>
+            <div className="flex justify-between"><span>NET</span><span style={{ color: BRAND.primary, fontWeight: 700 }}>{totals.net.toFixed(2)} UZS</span></div>
             <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} UZS</span></div>
           </div>
         </div>
@@ -1152,27 +1203,26 @@ const makeTransportLoader = (dateKey) => async (input) => {
       </div>
 
       <div className="grid md:grid-cols-5 gap-3 text-sm mt-3">
-        <div className="bg-gray-50 rounded p-3 border">
-          <div className="font-medium mb-1">{t('tb.totals.guide')} (USD)</div>
-          <div>{toUSD(totals.guide).toFixed(2)} USD</div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
         </div>
-        <div className="bg-gray-50 rounded p-3 border">
-          <div className="font-medium mb-1">{t('tb.totals.transport')} (USD)</div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')} (USD)</div>
           <div>{toUSD(totals.transport).toFixed(2)} USD</div>
         </div>
-        <div className="bg-gray-50 rounded p-3 border">
-          <div className="font-medium mb-1">{t('tb.totals.hotels')} (USD)</div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')} (USD)</div>
           <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
         </div>
-        <div className="bg-gray-50 rounded p-3 border">
-          <div className="font-medium mb-1">{t('tb.totals.entry')} (USD)</div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')} (USD)</div>
           <div>{toUSD(totals.entries).toFixed(2)} USD</div>
         </div>
-        <div className="bg-gray-50 rounded p-3 border">
-          <div className="font-semibold">Total (USD)</div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-semibold" style={{ color: BRAND.primary }}>Total (USD)</div
           <div className="flex justify-between">
             <span>NET</span>
-            <span>{toUSD(totals.net).toFixed(2)} USD</span>
+            <span style={{ color: BRAND.primary, fontWeight: 700 }}>{toUSD(totals.net).toFixed(2)} USD</span>
           </div>
           <div className="flex justify-between mt-1">
             <span>/ pax</span>
