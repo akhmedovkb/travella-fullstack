@@ -27,6 +27,13 @@ const BRAND = {
   { id: "air" },
  ];
 
+/* ---------------- per-day meals ---------------- */
+const MEAL_TYPES = [
+  { id: "lunch" },  // tb.meal_types.lunch
+  { id: "dinner" }, // tb.meal_types.dinner
+  { id: "gala" },   // tb.meal_types.gala
+];
+
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -537,7 +544,8 @@ export default function TourBuilder() {
           guide: null, transport: null, hotel: null,
           guideService: null, transportService: null,   // ⬅️ выбранные услуги
           entrySelected: [],
-          transfers: [],                
+          transfers: [],
+          meals: [],                  
         };
       });
       Object.keys(copy).forEach((k) => {
@@ -690,6 +698,24 @@ const makeTransportLoader = (dateKey) => async (input) => {
     return sum;
   };
 
+    // стоимость питания за день в UZS
+  const calcMealsForDay = (dateKey) => {
+    const st = byDay[dateKey] || {};
+    const pax = Math.max(1, toNum(adt) + toNum(chd));
+    const list = Array.isArray(st.meals) ? st.meals : [];
+    let sum = 0;
+    for (const m of list) {
+      const price = toNum(m?.price, 0);
+      if (!price) continue;
+      const isUSD = String(m?.currency || "UZS").toUpperCase() === "USD";
+      const priceUZS =
+        isUSD ? (Number(usdRate) > 0 ? price * Number(usdRate) : 0) : price;
+      sum += priceUZS * (m?.perPax ? pax : 1);
+    }
+    return sum;
+  };
+
+
     const calcGuideForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     // приоритет: выбранная услуга гида -> ставка провайдера
@@ -725,17 +751,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
 
   const totals = useMemo(() => {
-    let guide = 0, transport = 0, hotel = 0, entries = 0, transfers = 0;
+    let guide = 0, transport = 0, hotel = 0, entries = 0, transfers = 0, meals = 0;
     Object.keys(byDay).forEach((k) => {
       guide += calcGuideForDay(k);
       transport += calcTransportForDay(k);
       hotel += calcHotelForDay(k);
       entries += calcEntryForDay(k);
       transfers += calcTransfersForDay(k);
+      meals += calcMealsForDay(k);
     });
-    const net = guide + transport + hotel + entries + transfers;
+    const net = guide + transport + hotel + entries + transfers + meals;
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
-    return { guide, transport, hotel, entries, transfers, net, perPax: net / pax };
+    return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
 
     // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
@@ -1317,15 +1344,132 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     </div>
                   </div>
 
+                                {/* Meals */}
+                <div className="border rounded p-2 md:col-span-2">
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                  >
+                    {t('tb.meals')}
+                  </label>
+
+                  {/* список позиций питания */}
+                  <div className="space-y-2">
+                    {(st.meals || []).map((ml, idx) => (
+                      <div key={idx} className="grid md:grid-cols-12 gap-2 items-center">
+                        {/* тип питания */}
+                        <select
+                          className="md:col-span-3 border rounded px-2 py-2 text-sm"
+                          value={ml.type || "lunch"}
+                          onChange={(e) =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].meals || [])];
+                              arr[idx] = { ...arr[idx], type: e.target.value };
+                              return { ...p, [k]: { ...p[k], meals: arr } };
+                            })
+                          }
+                        >
+                          {MEAL_TYPES.map(mt => (
+                            <option key={mt.id} value={mt.id}>{t(`tb.meal_types.${mt.id}`)}</option>
+                          ))}
+                        </select>
+
+                        {/* цена */}
+                        <input
+                          type="number"
+                          min={0}
+                          className="md:col-span-2 border rounded px-2 py-2 text-sm"
+                          placeholder={t('tb.meal_price_ph')}
+                          value={ml.price ?? 0}
+                          onChange={(e) =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].meals || [])];
+                              arr[idx] = { ...arr[idx], price: Number(e.target.value) || 0 };
+                              return { ...p, [k]: { ...p[k], meals: arr } };
+                            })
+                          }
+                        />
+
+                        {/* валюта (переиспользуем ключи как в трансфере для единообразия) */}
+                        <select
+                          className="md:col-span-1 border rounded px-2 py-2 text-sm"
+                          value={ml.currency || "UZS"}
+                          onChange={(e) =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].meals || [])];
+                              arr[idx] = { ...arr[idx], currency: e.target.value };
+                              return { ...p, [k]: { ...p[k], meals: arr } };
+                            })
+                          }
+                        >
+                          <option value="UZS">{t('tb.currencyintercities.uzs')}</option>
+                          <option value="USD">{t('tb.currencyintercities.usd')}</option>
+                        </select>
+
+                        {/* / pax */}
+                        <label className="md:col-span-2 inline-flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={!!ml.perPax}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].meals || [])];
+                                arr[idx] = { ...arr[idx], perPax: e.target.checked };
+                                return { ...p, [k]: { ...p[k], meals: arr } };
+                              })
+                            }
+                          />
+                          <span>{t('tb.per_pax')}</span>
+                        </label>
+
+                        {/* удалить */}
+                        <button
+                          className="md:col-span-1 text-xs px-2 py-2 rounded border"
+                          style={{ borderColor: `${BRAND.accent}88` }}
+                          onClick={() =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].meals || [])];
+                              arr.splice(idx, 1);
+                              return { ...p, [k]: { ...p[k], meals: arr } };
+                            })
+                          }
+                        >
+                          {t('tb.remove')}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2">
+                    <button
+                      className="text-sm px-3 py-1 rounded border"
+                      style={{ color: BRAND.primary, borderColor: BRAND.accent }}
+                      onClick={() =>
+                        setByDay((p) => ({
+                          ...p,
+                          [k]: { ...(p[k] || {}), meals: [ ...(p[k]?.meals || []), { type: "lunch", price: 0, currency: "UZS", perPax: true } ] }
+                        }))
+                      }
+                    >
+                      + {t('tb.add_meal')}
+                    </button>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {t('tb.meals_day_sum')}: <b style={{ color: BRAND.primary }}>{calcMealsForDay(k).toFixed(2)} UZS</b>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="text-sm text-gray-700">
-                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Transfer {calcTransfersForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} =
+                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Transfer {calcTransfersForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} + {t('tb.meals')} {calcMealsForDay(k).toFixed(2)} =
                   {" "}
                   <b style={{ color: BRAND.primary }}>
                     {(calcGuideForDay(k)
                       + calcTransportForDay(k)
                       + calcHotelForDay(k)
                       + calcTransfersForDay(k)
-                      + calcEntryForDay(k)).toFixed(2)} UZS
+                      + calcEntryForDay(k)
+                      + calcMealsForDay(k)
+                    ).toFixed(2)} UZS
                   </b>
                 </div>
               </div>
@@ -1353,6 +1497,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')}</div><div>{totals.transfers.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')}</div>
+            <div>{totals.meals.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
@@ -1395,7 +1543,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')} (USD)</div>
-          <div>{toUSD(totals.transfers).toFixed(2)} USD</div>
+        </div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')} (USD)</div>
+          <div>{toUSD(totals.meals).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')} (USD)</div>
