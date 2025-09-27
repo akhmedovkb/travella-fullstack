@@ -3714,7 +3714,11 @@ useEffect(() => {
       {(profile.type === "guide" || profile.type === "transport") && (
         <div className="px-6 pb-10">
           <div className="mt-10 bg-white p-6 rounded shadow border max-w-3xl mx-auto">
-            <ProviderCalendar token={token} />
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+             <div className="min-w-[360px] w-fit max-w-full">
+              <ProviderCalendar token={token} />
+             </div>
+            </div>
           </div>
         </div>
       )}
