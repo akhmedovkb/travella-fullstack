@@ -733,7 +733,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
       entries += calcEntryForDay(k);
       transfers += calcTransfersForDay(k);
     });
-    const net = guide + transport + hotel + entries;
     const net = guide + transport + hotel + entries + transfers;
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, net, perPax: net / pax };
