@@ -1527,10 +1527,10 @@ useEffect(() => {
       )}
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* Левый блок: профиль */}
-        <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col">
+        <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0">
           <div id="anchor-profile-left" />
-          <div className="flex gap-4 items-stretch">
-            <div className="flex flex-col items-center w-1/2 h-full">
+          <div className="flex flex-col md:flex-row gap-4 items-stretch">
+            <div className="flex flex-col items-center w-full md:w-1/2 h-full">
               {/* Фото */}
               <div className="relative flex flex-col items-center">
                 <div id="anchor-logo" />
@@ -1637,7 +1637,7 @@ useEffect(() => {
 
                       
             {/* Правая часть профиля */}
-            <div className="w-1/2 space-y-3">
+            <div className="w-full md:w-1/2 space-y-3 min-w-0">
               <div>
                 <label className="block font-medium">{t("name")}</label>
                 <div className="border px-3 py-2 rounded bg-gray-100">{profile.name}</div>
@@ -1928,7 +1928,8 @@ useEffect(() => {
 
             {/* Список услуг */}
             {!selectedService && (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 overflow-x-auto -mx-2 px-2">
+                <div className="space-y-2 min-w-[320px]">
                 {services.map((s) => (
                   <div
                     key={s.id}
@@ -2014,6 +2015,7 @@ useEffect(() => {
                 ))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Форма редактирования/создания */}
@@ -2086,7 +2088,7 @@ useEffect(() => {
               {/* ----- CATEGORY-SPECIFIC ----- */}
               {["refused_tour", "author_tour"].includes(category) && profile.type === "agent" && (
                 <>
-                  <div className="flex gap-4 mb-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-2">
                     <Select
                       options={countryOptions}
                       value={selectedCountry}
@@ -2104,7 +2106,7 @@ useEffect(() => {
                       }}
                       placeholder={tr(["direction_country","direction.country"], "Страна направления")}
                       noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
-                      className="w-1/3"
+                      className="min-w-0"
                     />
                     <AsyncSelect
                         cacheOptions
@@ -2132,7 +2134,7 @@ useEffect(() => {
                              }));
                           }}
                         placeholder={tr(["direction_from","direction.from"], "Город вылета")}
-                        className="w-1/3"
+                        className="min-w-0"
                       />
 
                     <Select
@@ -2151,14 +2153,14 @@ useEffect(() => {
                       }
                       placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
                       noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
-                      className="w-1/3"
+                      className="min-w-0"
                     />
                   
                     </div>
                     
 
-                  <div className="flex gap-4 mb-2">
-                    <div className="w-1/2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                    <div className="min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                       <input
                         type="date"
@@ -2168,7 +2170,7 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded"
                       />
                     </div>
-                    <div className="w-1/2">
+                    <div className="min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                       <input
                         type="date"
@@ -2359,8 +2361,8 @@ useEffect(() => {
                      />
                   </div>
 
-                  <div className="flex gap-4 mb-2">
-                    <div className="w-1/2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                    <div className="min-w-0">
                       <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                       <input
                         type="date"
@@ -2370,7 +2372,7 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded"
                       />
                     </div>
-                    <div className="w-1/2">
+                    <div className="min-w-0">
                       <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                       <input
                         type="date"
@@ -2492,7 +2494,7 @@ useEffect(() => {
 
               {category === "refused_flight" && profile.type === "agent" && (
                 <>
-                       <div className="flex gap-4 mb-2">
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
@@ -2506,7 +2508,7 @@ useEffect(() => {
                           }}
                           placeholder={tr(["direction_country","direction.country"], "Страна направления")}
                           noOptionsMessage={() => tr("country_not_found", "Страна не найдена")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
                         <AsyncSelect
                           cacheOptions
@@ -2526,7 +2528,7 @@ useEffect(() => {
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
                           placeholder={tr(["direction_from","direction.from"], "Город вылета")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
 
                         <Select
@@ -2541,7 +2543,7 @@ useEffect(() => {
                           }}
                           placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
                           noOptionsMessage={() => tr("direction_to_not_found", "Город прибытия не найден")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
                       </div>
 
@@ -2574,7 +2576,7 @@ useEffect(() => {
                       </div>
 
                       <div className="flex gap-4 mb-3">
-                        <div className="w-1/2">
+                        <div className="min-w-0">
                           <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                           <input
                             type="date"
@@ -2585,7 +2587,7 @@ useEffect(() => {
                           />
                         </div>
                         {!details.oneWay && (
-                          <div className="w-1/2">
+                          <div className="min-w-0">
                             <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                             <input
                               type="date"
@@ -2916,7 +2918,7 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <div className="flex gap-4 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
@@ -2926,7 +2928,7 @@ useEffect(() => {
                           }}
                           placeholder={tr(["direction_country","direction.country"], "Страна направления")}
                           noOptionsMessage={() => tr("country_not_chosen", "Страна не выбрана")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
 
 
@@ -2948,7 +2950,7 @@ useEffect(() => {
                             setDetails((prev) => ({ ...prev, directionFrom: selected?.value || "" }));
                           }}
                           placeholder={tr(["direction_from","direction.from"], "Город вылета")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
 
 
@@ -2958,13 +2960,13 @@ useEffect(() => {
                           onChange={(value) => setDetails((prev) => ({ ...prev, directionTo: value?.value || "" }))}
                           placeholder={tr(["direction_to","direction.to"], "Город прибытия")}
                           noOptionsMessage={() => tr("direction_to_not_chosen", "Город прибытия не выбран")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
                         </div>
 
 
-                      <div className="flex gap-4 mb-2">
-                        <div className="w-1/2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                        <div className="min-w-0">
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("start_flight_date")}</label>
                           <input
                             type="date"
@@ -2974,7 +2976,7 @@ useEffect(() => {
                             className="w-full border px-3 py-2 rounded"
                           />
                         </div>
-                        <div className="w-1/2">
+                        <div className="min-w-0">
                           <label className="block text-sm font-medium text-gray-700 mb-1">{t("end_flight_date")}</label>
                           <input
                             type="date"
@@ -3170,8 +3172,8 @@ useEffect(() => {
                            />
                       </div>
 
-                      <div className="flex gap-4 mb-2">
-                        <div className="w-1/2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                        <div className="min-w-0">
                           <label className="block font-medium mb-1">{t("hotel_check_in")}</label>
                           <input
                             type="date"
@@ -3181,7 +3183,7 @@ useEffect(() => {
                             className="w-full border px-3 py-2 rounded"
                           />
                         </div>
-                        <div className="w-1/2">
+                        <div className="min-w-0">
                           <label className="block font-medium mb-1">{t("hotel_check_out")}</label>
                           <input
                             type="date"
@@ -3313,7 +3315,7 @@ useEffect(() => {
                         className="w-full border px-3 py-2 rounded mb-2"
                       />
 
-                      <div className="flex gap-4 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <Select
                           options={countryOptions}
                           value={selectedCountry}
@@ -3327,7 +3329,7 @@ useEffect(() => {
                           }}
                           placeholder={t("direction_country")}
                           noOptionsMessage={() => t("country_not_found")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
 
                         <AsyncSelect
@@ -3352,7 +3354,7 @@ useEffect(() => {
                             }));
                           }}
                           placeholder={t("direction_from")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
                         <Select
                           options={cityOptionsTo}
@@ -3366,7 +3368,7 @@ useEffect(() => {
                           }}
                           placeholder={t("direction_to")}
                           noOptionsMessage={() => t("direction_to_not_found")}
-                          className="w-1/3"
+                          className="min-w-0"
                         />
                       </div>
 
@@ -3399,7 +3401,7 @@ useEffect(() => {
                       </div>
 
                       <div className="flex gap-4 mb-3">
-                        <div className="w-1/2">
+                        <div className="min-w-0">
                           <label className="block text-sm font-medium mb-1">{t("departure_date")}</label>
                           <input
                             type="date"
@@ -3410,7 +3412,7 @@ useEffect(() => {
                           />
                         </div>
                         {!details.oneWay && (
-                          <div className="w-1/2">
+                          <div className="min-w-0">
                             <label className="block text-sm font-medium mb-1">{t("return_date")}</label>
                             <input
                               type="date"
