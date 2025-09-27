@@ -1138,6 +1138,44 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.price_per_night')}: <b style={{ color: BRAND.primary }}>{toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)}</b> {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>
                   </div>
+                  
+                  {/* Entry fees */}
+                    <div className="border rounded p-2">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                    >
+                      {t('tb.entry_fees')}
+                    </label>
+                    <input
+                      className="w-full border rounded px-3 py-2 mb-2"
+                      placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
+                      value={entryQMap[k] || ""}
+                      disabled={!cityChosen}
+                      onChange={async (e) => {
+                        const q = e.target.value;
+                        setEntryQMap((m) => ({ ...m, [k]: q }));
+                        await loadEntryOptionsForDay(k, st.city, q);
+                      }}
+                    />
+                    <AsyncSelect
+                      isMulti
+                      isDisabled={!cityChosen}
+                      cacheOptions
+                      defaultOptions={entryOptionsMap[k] || []}
+                      loadOptions={(input, cb) => cb(entryOptionsMap[k] || [])}
+                      value={st.entrySelected || []}
+                      onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
+                      placeholder={cityChosen ? t('tb.pick_sites') : t('tb.pick_city_first')}
+                      noOptionsMessage={() => (cityChosen ? t('tb.nothing_found') : t('tb.pick_city_first'))}
+                      menuPortalTarget={document.body}
+                      styles={RS_STYLES}
+                    />
+                   <div className="text-xs text-gray-600 mt-1">
+                     {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
+                   </div>
+                  </div>
+                </div>
 
                   {/* Intercity transfers */}
                   <div className="border rounded p-2 md:col-span-2">
@@ -1278,45 +1316,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       </div>
                     </div>
                   </div>
-
-
-                  {/* Entry fees */}
-                    <div className="border rounded p-2">
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                    >
-                      {t('tb.entry_fees')}
-                    </label>
-                    <input
-                      className="w-full border rounded px-3 py-2 mb-2"
-                      placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
-                      value={entryQMap[k] || ""}
-                      disabled={!cityChosen}
-                      onChange={async (e) => {
-                        const q = e.target.value;
-                        setEntryQMap((m) => ({ ...m, [k]: q }));
-                        await loadEntryOptionsForDay(k, st.city, q);
-                      }}
-                    />
-                    <AsyncSelect
-                      isMulti
-                      isDisabled={!cityChosen}
-                      cacheOptions
-                      defaultOptions={entryOptionsMap[k] || []}
-                      loadOptions={(input, cb) => cb(entryOptionsMap[k] || [])}
-                      value={st.entrySelected || []}
-                      onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
-                      placeholder={cityChosen ? t('tb.pick_sites') : t('tb.pick_city_first')}
-                      noOptionsMessage={() => (cityChosen ? t('tb.nothing_found') : t('tb.pick_city_first'))}
-                      menuPortalTarget={document.body}
-                      styles={RS_STYLES}
-                    />
-                   <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
-                   </div>
-                  </div>
-                </div>
 
                 <div className="text-sm text-gray-700">
                   {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Transfer {calcTransfersForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} =
