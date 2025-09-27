@@ -1035,7 +1035,17 @@
   "tourist_fee": "Turist to‘lovi / tun",
   "hotels_cost": "Mehmonxonalar (netto)",
   "providers_cost": "Gid/Transport (netto)",
-  "total": "Jami"
+  "total": "Jami",
+
+  "meals": "Ovqatlanish",
+  "meal_types": {
+    "lunch": "Tushlik",
+    "dinner": "Kechki ovqat",
+    "gala": "Gala kechki ovqat"
+  },
+  "meal_price_ph": "Narx",
+  "add_meal": "Ovqat qoʻshish",
+  "meals_day_sum": "Kunlik ovqatlanish summasi"
 },
 
   "telegram": {
