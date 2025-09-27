@@ -293,7 +293,7 @@ export default function Header() {
           </div>
 
           {/* Right: language */}
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center justify-end h-9">
             <LanguageSelector />
           </div>
         </div>
