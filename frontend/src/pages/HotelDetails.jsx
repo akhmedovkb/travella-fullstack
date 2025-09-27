@@ -205,10 +205,6 @@ export default function HotelDetails() {
               )}
             </InfoRow>
 
-            <InfoRow label="Валюта">
-              {hotel.currency || "UZS"}
-            </InfoRow>
-
             {/* при желании можно добавить удобства / услуги */}
             {/* <InfoRow label="Удобства">{Array.isArray(hotel.amenities) ? hotel.amenities.join(", ") : "—"}</InfoRow> */}
           </div>
