@@ -1876,9 +1876,10 @@ useEffect(() => {
           {/* Отзывы клиентов о провайдере */}
           <div className="px-6 mt-6">
             <div className="rounded-xl border bg-white p-4 sm:p-6 overflow-hidden">
-              {/* анти-скролл на мобилках */}
-              <div className="min-w-0 max-w-full break-words whitespace-normal [overflow-wrap:anywhere]">
-            {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
+              {/* аккуратные переносы: текст переносим «по словам», даты и короткие метки — без переноса */}
+              <div className="min-w-0 max-w-full break-normal whitespace-normal [text-wrap:pretty] 
+                              [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">
+                {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
               </div>
             </div>
           </div>
