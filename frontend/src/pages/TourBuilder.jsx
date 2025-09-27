@@ -1258,8 +1258,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               })
                             }
                           >
-                          <option value="UZS">{t('tb.currency.uzs')}</option>
-                         <option value="USD">{t('tb.currency.usd')}</option>
+                          <option value="UZS">{t('tb.currency.intercities.uzs')}</option>
+                         <option value="USD">{t('tb.currency.intercities.usd')}</option>
                           </select>
                           <label className="md:col-span-2 inline-flex items-center gap-2 text-xs">
                             <input
