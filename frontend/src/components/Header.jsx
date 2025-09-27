@@ -6,63 +6,12 @@ import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 
-/* --- Inline SVG иконки --- */
+/* --- Inline SVG icons --- */
 const IconModeration = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
   </svg>
 );
-
-const YES = new Set(["1", "true", "yes", "on"]);
-function detectAdmin(profile) {
-  const p = profile || {};
-  const roles = []
-    .concat(p.role || [])
-    .concat(p.roles || [])
-    .flatMap(r => String(r).split(","))
-    .map(s => s.trim());
-  const perms = []
-    .concat(p.permissions || p.perms || [])
-    .map(String);
-
-  let is =
-    !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
-    roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
-    perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()));
-
-  if (typeof window !== "undefined" && import.meta?.env?.DEV) {
-    const v = localStorage.getItem("isAdminUiHint");
-    if (v && YES.has(String(v).toLowerCase())) is = true;
-  }
-  return is;
-}
-
-function detectAdminFromJwt() {
-  try {
-    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
-    if (!tok) return false;
-    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-    const json = decodeURIComponent(
-      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
-    );
-    const claims = JSON.parse(json);
-    const roles = []
-      .concat(claims.role || [])
-      .concat(claims.roles || [])
-      .flatMap(r => String(r).split(","))
-      .map(s => s.trim());
-    const perms = []
-      .concat(claims.permissions || claims.perms || [])
-      .map(String);
-    return (
-      claims.role === "admin" || claims.is_admin === true || claims.moderator === true ||
-      roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
-      perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()))
-    );
-  } catch { return false; }
-}
-
 const IconDashboard = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z" stroke="currentColor" strokeWidth="2" />
@@ -93,8 +42,6 @@ const IconHotel = (p) => (
     <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
-
-/* NEW: иконка “Entry fees” */
 const IconTicket = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 7h16v10H4z" stroke="currentColor" strokeWidth="2"/>
@@ -102,13 +49,81 @@ const IconTicket = (p) => (
     <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
   </svg>
 );
+const IconBurger = (p) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+const IconClose = (p) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+const YES = new Set(["1","true","yes","on"]);
+function detectAdmin(profile) {
+  const p = profile || {};
+  const roles = []
+    .concat(p.role || [])
+    .concat(p.roles || [])
+    .flatMap(r => String(r).split(","))
+    .map(s => s.trim());
+  const perms = []
+    .concat(p.permissions || p.perms || [])
+    .map(String);
+  let is =
+    !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
+    roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+    perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()));
+  if (typeof window !== "undefined" && import.meta?.env?.DEV) {
+    const v = localStorage.getItem("isAdminUiHint");
+    if (v && YES.has(String(v).toLowerCase())) is = true;
+  }
+  return is;
+}
+function detectAdminFromJwt() {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [])
+      .concat(claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim());
+    const perms = []
+      .concat(claims.permissions || claims.perms || [])
+      .map(String);
+    return (
+      claims.role === "admin" || claims.is_admin === true || claims.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()))
+    );
+  } catch { return false; }
+}
 
 export default function Header() {
   const hasClient = !!localStorage.getItem("clientToken");
   const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
   const role = hasClient ? "client" : hasProvider ? "provider" : null;
-  const [isAdmin, setIsAdmin] = useState(false);
 
+  const { t } = useTranslation();
+  const location = useLocation();
+
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [favCount, setFavCount] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // Admin detect
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -126,14 +141,7 @@ export default function Header() {
     return () => { alive = false; };
   }, [role]);
 
-  const { t } = useTranslation();
-  const location = useLocation();
-
-  const [counts, setCounts] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [favCount, setFavCount] = useState(0);
-  const [refreshTick, setRefreshTick] = useState(0);
-
+  // Favorites (provider)
   useEffect(() => {
     if (role !== "provider") return;
     let alive = true;
@@ -151,6 +159,7 @@ export default function Header() {
     return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
   }, [role]);
 
+  // Counters (provider)
   useEffect(() => {
     if (role !== "provider") return;
     let cancelled = false;
@@ -177,8 +186,8 @@ export default function Header() {
         }
         if (!cancelled) {
           setCounts({
-            requests_open: requestsNew,
-            requests_accepted: 0,
+            requests_open: Number(rs?.open || 0) + requestsNew,
+            requests_accepted: Number(rs?.accepted || 0),
             bookings_pending: bookingsPending,
             bookings_total: bookingsTotal,
           });
@@ -194,6 +203,7 @@ export default function Header() {
     return () => { cancelled = true; clearInterval(id); };
   }, [role, refreshTick]);
 
+  // External events
   useEffect(() => {
     const bump = () => setRefreshTick((x) => x + 1);
     window.addEventListener("provider:counts:refresh", bump);
@@ -204,6 +214,7 @@ export default function Header() {
     };
   }, []);
 
+  // Client favorites
   useEffect(() => {
     if (role !== "client") return;
     const fetchFavs = async () => {
@@ -221,63 +232,124 @@ export default function Header() {
     return () => window.removeEventListener("wishlist:changed", onFavChanged);
   }, [role, location]);
 
-  const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
+  const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
+
+  // close mobile menu on route change
+  useEffect(() => { setMobileOpen(false); }, [location]);
 
   return (
-    <div className="mb-4 flex items-center justify-between">
-      <div className="flex items-center gap-6">
-        <Link
-          to="/marketplace"
-          className="text-xl font-bold text-gray-800 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
-          aria-label="Go to marketplace"
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
+      <div className="mx-auto max-w-7xl px-3 sm:px-4">
+        <div className="h-14 flex items-center justify-between gap-2">
+          {/* Left: logo + burger */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label="Menu"
+            >
+              {mobileOpen ? <IconClose /> : <IconBurger />}
+            </button>
+
+            <Link
+              to="/marketplace"
+              className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
+              aria-label="Go to marketplace"
+            >
+              MARKETPLACE
+            </Link>
+
+            {/* Desktop/Tablet primary nav (scrollable row) */}
+            <div className="hidden md:flex items-center gap-1">
+              <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+
+              {role === "provider" && (
+                <div className="ml-2 flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/70 px-1 py-0.5 ring-1 ring-gray-200">
+                  <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                  <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
+                  <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
+                  <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
+                  {isAdmin && (
+                    <>
+                      <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                      <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+                    </>
+                  )}
+                </div>
+              )}
+
+              {role === "client" && (
+                <div className="ml-2 flex items-center gap-1">
+                  <NavItem to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                  <NavBadge to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} value={favCount} loading={false} icon={<IconHeart />} />
+                </div>
+              )}
+
+              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              {isAdmin && <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />}
+            </div>
+          </div>
+
+          {/* Right: language */}
+          <div className="shrink-0">
+            <LanguageSelector />
+          </div>
+        </div>
+
+        {/* Mobile drawer */}
+        <div
+          className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
+          aria-hidden={!mobileOpen}
         >
-          MARKETPLACE
-        </Link>
+          <nav className="pb-3 -mx-1">
+            <RowGroup title={t("nav.tour_builder", "Tour Builder")}>
+              <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+            </RowGroup>
 
-        <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-
-        {role === "provider" && (
-          <nav className="flex items-center gap-2 text-sm bg-white/60 rounded-full px-2 py-1 shadow-sm">
-            <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-            <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
-            <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
-            <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-            {isAdmin && (
-              <>
-                <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                {/* NEW: форма базы входных билетов */}
-                <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-              </>
+            {role === "provider" && (
+              <RowGroup title={t("nav.provider", "Поставщик")}>
+                <NavItemMobile to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                <NavItemMobile to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
+                <NavItemMobile to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
+                <NavItemMobile to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                {isAdmin && (
+                  <>
+                    <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                    <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+                  </>
+                )}
+              </RowGroup>
             )}
+
+            {role === "client" && (
+              <RowGroup title={t("client.header.title","Профиль")}>
+                <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                <NavItemMobile to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+              </RowGroup>
+            )}
+
+            <RowGroup title={t("nav.common","Общее")}>
+              <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              {isAdmin && (
+                <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+              )}
+            </RowGroup>
           </nav>
-        )}
-
-        {role === "client" && (
-          <nav className="flex items-center gap-2 text-sm">
-            <Link to="/client/dashboard" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100">
-              <IconDashboard />
-              <span>{t("client.header.cabinet", "Кабинет")}</span>
-            </Link>
-            <Link to="/client/dashboard?tab=favorites" className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-gray-700 hover:text-gray-900 hover:bg-gray-100" title={t("client.header.favorites", "Избранное")}>
-              <IconHeart />
-              <span>{t("client.header.favorites", "Избранное")}</span>
-              <span className="min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center bg-orange-500 text-white">{favCount}</span>
-            </Link>
-          </nav>
-        )}
-
-        <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-
-        {isAdmin && (
-          <>
-            <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
-            
-          </>
-        )}
+        </div>
       </div>
+    </header>
+  );
+}
 
-      <LanguageSelector />
+/* ---------- Subcomponents ---------- */
+
+function RowGroup({ title, children }) {
+  return (
+    <div className="mb-2 rounded-xl ring-1 ring-gray-200 bg-white/70 overflow-hidden">
+      <div className="px-3 py-2 text-[13px] font-semibold text-gray-600 bg-gray-50">{title}</div>
+      <div className="flex flex-col">{children}</div>
     </div>
   );
 }
@@ -289,15 +361,16 @@ function NavItem({ to, label, icon, end }) {
       end={end}
       className={({ isActive }) =>
         [
-          "inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors",
+          "inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
           isActive
-            ? "text-orange-600 font-semibold border-b-2 border-orange-500"
+            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
         ].join(" ")
       }
     >
       {icon}
-      <span>{label}</span>
+      <span className="hidden lg:inline">{label}</span>
+      <span className="inline lg:hidden">{label}</span>
     </NavLink>
   );
 }
@@ -309,17 +382,50 @@ function NavBadge({ to, label, value, loading, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "relative inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors",
+          "relative inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
           isActive
-            ? "text-orange-600 font-semibold border-b-2 border-orange-500"
+            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
         ].join(" ")
       }
     >
       {icon}
-      <span>{label}</span>
-      <span className={["min-w-[22px] h-[22px] px-1 rounded-full text-xs flex items-center justify-center transition-transform", show ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600"].join(" ")}>
+      <span className="hidden lg:inline">{label}</span>
+      <span className="inline lg:hidden">{label}</span>
+      <span
+        className={[
+          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center transition-colors",
+          show ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600",
+        ].join(" ")}
+      >
         {loading ? "…" : show ? value : 0}
+      </span>
+    </NavLink>
+  );
+}
+
+function NavItemMobile({ to, label, icon, end, badge, loading }) {
+  const show = Number.isFinite(badge) && badge > 0;
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        [
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-orange-50 text-orange-700" : "hover:bg-gray-100",
+        ].join(" ")
+      }
+    >
+      <div className="w-5 h-5 text-gray-700">{icon}</div>
+      <div className="flex-1">{label}</div>
+      <span
+        className={[
+          "min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center",
+          show ? "bg-orange-500 text-white" : "bg-gray-200 text-gray-600",
+        ].join(" ")}
+      >
+        {loading ? "…" : show ? badge : 0}
       </span>
     </NavLink>
   );
