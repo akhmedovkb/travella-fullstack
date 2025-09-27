@@ -732,6 +732,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
               numberOfMonths={months}
               disabled={{ before: new Date() }}
               className="text-sm"
+              locale={dpLocale}
             />
             <p className="text-sm text-gray-600 mt-2">
               {range.from && range.to
