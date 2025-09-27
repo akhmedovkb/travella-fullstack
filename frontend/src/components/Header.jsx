@@ -264,6 +264,7 @@ export default function Header() {
             {/* Desktop/Tablet primary nav (scrollable row) */}
             <div className="hidden md:flex items-center gap-1 min-w-0">
               <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
 
               {role === "provider" && (
                 <div className="ml-2 flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/70 px-1 py-0.5 ring-1 ring-gray-200 max-w-[70vw]">
@@ -285,9 +286,7 @@ export default function Header() {
                   <NavItem to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
                   <NavBadge to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} value={favCount} loading={false} icon={<IconHeart />} />
                 </div>
-              )}
-
-              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              )}              
               {isAdmin && <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />}
             </div>
           </div>
