@@ -1875,7 +1875,12 @@ useEffect(() => {
 
           {/* Отзывы клиентов о провайдере */}
           <div className="px-6 mt-6">
+            <div className="rounded-xl border bg-white p-4 sm:p-6 overflow-hidden">
+              {/* анти-скролл на мобилках */}
+              <div className="min-w-0 max-w-full break-words whitespace-normal [overflow-wrap:anywhere]">
             {hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}
+              </div>
+            </div>
           </div>
         </div>
        
