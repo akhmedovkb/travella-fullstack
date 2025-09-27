@@ -12,3 +12,23 @@ input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0
 .rs__menu, .rs__menu-list { overflow: visible !important; }
 .rs__menu { z-index: 9999; }
 
+/* Провоцируем переносы в шапке отзывов и запрещаем «распирание» строкой рейтинга */
+.reviews-header,
+.reviews-header * {
+  min-width: 0;
+}
+.reviews-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;        /* ⬅ на мобилке всё переносится на 2 строки */
+  gap: .5rem;
+}
+
+/* Текст отзыва не должен вызывать горизонтальный скролл */
+.review-text {
+  overflow-wrap: anywhere;   /* tailwind-аналог: [overflow-wrap:anywhere] */
+  word-break: break-word;
+}
+
+
