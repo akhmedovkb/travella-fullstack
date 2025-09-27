@@ -1235,7 +1235,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                                 })
                               }
                             />
-                            span>{t('tb.per_pax')}</span>
+                            <span>{t('tb.per_pax')}</span>
                           </label>
                           <button
                             className="md:col-span-1 text-xs px-2 py-2 rounded border"
