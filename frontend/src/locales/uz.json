@@ -926,7 +926,7 @@
       "transfer_price_ph": "Narx",
       "per_pax": "/ pax",
       "remove": "O‘chirish",
-      "add_transfer": "+ Transfer qo‘shish",
+      "add_transfer": " Transfer qo‘shish",
       "transfers_day_sum": "Kun bo‘yicha transferlar yig‘indisi",
       "totals": {
         "transfers": "Transferlar"
