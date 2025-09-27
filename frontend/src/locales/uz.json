@@ -936,10 +936,10 @@
         "train": "Poyezd",
         "air": "Aviya"
       },
-      "currency": {
-        "uzs": "UZS",
-        "usd": "USD"
-      },
+  "currencyintercities": {
+      "uzs": "UZS",
+      "usd": "USD"      
+    },
     
     "tourism_fee_hint": "Turistik yig‘im: rez. {{res}} / norez. {{nrs}} so‘m kishi/kecha",
     "tourism_fee_absent": "Mehmonxona profilida turistik yig‘im ko‘rsatilmagan",
