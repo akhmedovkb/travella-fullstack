@@ -913,9 +913,9 @@
       "train": "Train",
       "air": "Flight"
     },
-    "currency": {
+  "currencyintercities": {
       "uzs": "UZS",
-      "usd": "USD"
+      "usd": "USD"      
     },
     "tourism_fee_hint": "Tourism fee: res. {{res}} / non-res. {{nrs}} UZS per person/night",
     "tourism_fee_absent": "Tourism fee is not set in the hotel profile",
