@@ -262,11 +262,11 @@ export default function Header() {
             </Link>
 
             {/* Desktop/Tablet primary nav (scrollable row) */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1 min-w-0">
               <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
 
               {role === "provider" && (
-                <div className="ml-2 flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/70 px-1 py-0.5 ring-1 ring-gray-200">
+                <div className="ml-2 flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/70 px-1 py-0.5 ring-1 ring-gray-200 max-w-[70vw]">
                   <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
                   <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
                   <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
@@ -361,7 +361,7 @@ function NavItem({ to, label, icon, end }) {
       end={end}
       className={({ isActive }) =>
         [
-          "inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
+          "shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
           isActive
             ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
@@ -369,8 +369,7 @@ function NavItem({ to, label, icon, end }) {
       }
     >
       {icon}
-      <span className="hidden lg:inline">{label}</span>
-      <span className="inline lg:hidden">{label}</span>
+      <span>{label}</span>
     </NavLink>
   );
 }
@@ -382,7 +381,7 @@ function NavBadge({ to, label, value, loading, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "relative inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
           isActive
             ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
@@ -390,8 +389,7 @@ function NavBadge({ to, label, value, loading, icon }) {
       }
     >
       {icon}
-      <span className="hidden lg:inline">{label}</span>
-      <span className="inline lg:hidden">{label}</span>
+      <span>{label}</span>
       <span
         className={[
           "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center transition-colors",
