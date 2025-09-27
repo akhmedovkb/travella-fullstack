@@ -865,6 +865,28 @@
   },
 
   "tb": {
+   "transfers": "Межгородние трансферы",
+    "transfer_from_ph": "Откуда (город)",
+    "transfer_to_ph": "Куда (город)",
+    "transfer_price_ph": "Цена",
+    "per_pax": "/ pax",
+    "remove": "Удалить",
+    "add_transfer": "+ Добавить трансфер",
+    "transfers_day_sum": "Сумма по трансферам на день",
+    "totals": {
+      "transfers": "Трансферы"
+    },
+    "transfer_types": {
+      "car": "Авто",
+      "train": "Поезд",
+      "air": "Авиа"
+    },
+    "currency": {
+      "uzs": "UZS",
+      "usd": "USD"
+    }
+  },
+  
   "tourism_fee_hint": "Туристический сбор: рез. {{res}} / нерез. {{nrs}} сум за человека/ночь",
   "tourism_fee_absent": "Туристический сбор не задан в профиле отеля",
   "rooms": "Номера",
