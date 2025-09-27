@@ -21,11 +21,11 @@ const BRAND = {
 };
 
 /* ---------------- intercity transfer types ---------------- */
-const TRANSFER_TYPES = [
-  { id: "car",   label: "Авто"   },
-  { id: "train", label: "Поезд"  },
-  { id: "air",   label: "Авиа"   },
-];
+ const TRANSFER_TYPES = [
+  { id: "car" },   // подписи берём из i18n: tb.transfer_types.*
+  { id: "train" },
+  { id: "air" },
+ ];
 
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
@@ -1145,7 +1145,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
                     >
-                      Межгородние трансферы
+                      {t('tb.transfers')}
                     </label>
 
                     {/* список трансферов */}
@@ -1155,7 +1155,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           {/* From / To */}
                           <input
                             className="md:col-span-3 border rounded px-2 py-2 text-sm"
-                            placeholder="Откуда (город)"
+                            placeholder={t('tb.transfer_from_ph')}
                             value={tr.from || ""}
                             onChange={(e) =>
                               setByDay((p) => {
@@ -1168,7 +1168,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           <span className="hidden md:block text-center md:col-span-1">→</span>
                           <input
                             className="md:col-span-3 border rounded px-2 py-2 text-sm"
-                            placeholder="Куда (город)"
+                            placeholder={t('tb.transfer_to_ph')}
                             value={tr.to || ""}
                             onChange={(e) =>
                               setByDay((p) => {
@@ -1190,16 +1190,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               })
                             }
                           >
-                            {TRANSFER_TYPES.map(t => (
-                              <option key={t.id} value={t.id}>{t.label}</option>
-                            ))}
+                             {TRANSFER_TYPES.map(tt => (
+                               <option key={tt.id} value={tt.id}>{t(`tb.transfer_types.${tt.id}`)}</option>
+                             ))}
                           </select>
                           {/* price */}
                           <input
                             type="number"
                             min={0}
                             className="md:col-span-2 border rounded px-2 py-2 text-sm"
-                            placeholder="Цена"
+                            placeholder={t('tb.transfer_price_ph')}
                             value={tr.price ?? 0}
                             onChange={(e) =>
                               setByDay((p) => {
@@ -1220,8 +1220,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               })
                             }
                           >
-                            <option value="UZS">UZS</option>
-                            <option value="USD">USD</option>
+                          <option value="UZS">{t('tb.currency.uzs')}</option>
+                         <option value="USD">{t('tb.currency.usd')}</option>
                           </select>
                           <label className="md:col-span-2 inline-flex items-center gap-2 text-xs">
                             <input
@@ -1235,7 +1235,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                                 })
                               }
                             />
-                            <span>/ pax</span>
+                            span>{t('tb.per_pax')}</span>
                           </label>
                           <button
                             className="md:col-span-1 text-xs px-2 py-2 rounded border"
@@ -1248,7 +1248,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               })
                             }
                           >
-                            Удалить
+                            {t('tb.remove')}
                           </button>
                         </div>
                      ))}
@@ -1271,18 +1271,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           }))
                         }
                       >
-                        + Добавить трансфер
+                        + {t('tb.add_transfer')}
                       </button>
                       <div className="text-xs text-gray-600 mt-1">
-                        Сумма по трансферам на день: <b style={{ color: BRAND.primary }}>{calcTransfersForDay(k).toFixed(2)} UZS</b>
+                        {t('tb.transfers_day_sum')}: <b style={{ color: BRAND.primary }}>{calcTransfersForDay(k).toFixed(2)} UZS</b>
                       </div>
                     </div>
                   </div>
 
 
                   {/* Entry fees */}
-                  <div className="border rounded p-2">
-                    <label className="block text-sm font-medium mb-1">{t('tb.entry_fees')}</label>
+                    <div className="border rounded p-2">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                    >
+                      {t('tb.entry_fees')}
+                    </label>
                     <input
                       className="w-full border rounded px-3 py-2 mb-2"
                       placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
@@ -1348,7 +1353,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>Transfers</div><div>{totals.transfers.toFixed(2)} UZS</div>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')}</div><div>{totals.transfers.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
@@ -1390,7 +1395,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>Transfers (USD)</div>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')} (USD)</div>
           <div>{toUSD(totals.transfers).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
