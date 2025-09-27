@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
+import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
+
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -459,7 +461,15 @@ const HotelOption = (props) => {
 /* =========================== PAGE =========================== */
 
 export default function TourBuilder() {
+  
   const { t, i18n } = useTranslation();
+  
+  const localeMap = {
+    en: enUS,
+    ru: ruLocale,
+    uz: uzLocale,
+  };
+  const dpLocale = localeMap[i18n.language?.slice(0,2)] || enUS;
   
   // ⬇️ сколько месяцев показывать
   const [months, setMonths] = useState(
@@ -715,6 +725,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           <div className="md:col-span-2 min-w-0">
             <label className="block text-sm font-medium mb-1">{t('tb.dates')}</label>
             <DayPicker
+              key={`dp-${i18n.language}`}
               mode="range"
               selected={range}
               onSelect={setRange}
