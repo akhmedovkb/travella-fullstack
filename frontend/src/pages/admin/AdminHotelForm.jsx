@@ -232,6 +232,18 @@ const composeDualLabel = (local, en) => {
   return local.toLowerCase() === en.toLowerCase() ? local : `${local} / ${en}`;
 };
 
+/* ——— альфанумерическая очистка для поля «Контакт» ——— */
+function sanitizeAlnumContact(v) {
+  // Разрешаем буквы/цифры (любой локали), пробел и набор безопасных символов
+  // + @ ( ) . , ; : / \ - _ | #
+  return String(v || "")
+    .replace(
+      /[^\p{L}\p{N}\s@+\(\)\.,;:\/\\\-\_\|\#]/gu,
+      ""
+    )
+    .slice(0, 300); // ограничим длину на всякий случай
+}
+
 export default function AdminHotelForm() {
   const { t, i18n } = useTranslation();
   const geoLang = useGeoLang(i18n);
@@ -242,6 +254,7 @@ export default function AdminHotelForm() {
   const fillFromHotel = (h) => {
     setName(h?.name || "");
     setAddress(h?.address || "");
+    setContact(sanitizeAlnumContact(h?.contact ?? ""));
     setCurrency(h?.currency || "UZS");
     setImages(Array.isArray(h?.images) ? h.images : []);
     setStars(h?.stars ?? ""); // ← добавлено
@@ -304,6 +317,7 @@ export default function AdminHotelForm() {
   // Основные поля
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [contact, setContact] = useState("");
   const [images, setImages] = useState([]);
 
     // Категория отеля (звёзды)
@@ -617,6 +631,7 @@ const invalidRowIds = useMemo(
       address: address.trim(),
       currency,
       stars: clampStars(stars),
+      contact: contact.trim() || null,
       rooms,
       extraBedPrice: numOrNull(extraBedPrice),
       taxes: {
@@ -692,6 +707,20 @@ const invalidRowIds = useMemo(
                 onChange={(opt) => setName(opt?.value || "")}
                 onCreateOption={(input) => setName(input)}
                 isClearable
+              />
+            </div>
+            <div className="w-72 md:w-96">
+              <label className="block text-sm font-medium mb-1">
+                {t("contact", { defaultValue: "Контакт" })}
+              </label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                inputMode="text"
+                autoComplete="off"
+                placeholder="+998..., email, https://..."
+                maxLength={300}
               />
             </div>
             <div className="w-28">
