@@ -11,7 +11,7 @@ const LanguageSelector = () => {
   };
 
   return (
-    <div className="mb-4 flex gap-2 justify-center">
+    <div className="h-9 flex items-center gap-2">
       <button
         onClick={() => changeLanguage("ru")}
         className={`px-3 py-1 rounded ${i18n.language === "ru" ? "bg-orange-500 text-white" : "bg-gray-200"}`}
