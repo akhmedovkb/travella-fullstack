@@ -9,6 +9,19 @@ import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+// ⬇️ сколько месяцев показывать
+  const [months, setMonths] = useState(
+    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 2 : 1
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e) => setMonths(e.matches ? 2 : 1);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -693,18 +706,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
   /* ---------------- render ---------------- */
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6 overflow-x-hidden">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
         <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-2">
+        <div className="grid gap-4 md:grid-cols-3 min-w-0">
+          <div className="md:col-span-2 min-w-0">
             <label className="block text-sm font-medium mb-1">{t('tb.dates')}</label>
             <DayPicker
               mode="range"
               selected={range}
               onSelect={setRange}
-              numberOfMonths={2}
+              numberOfMonths={months}
               disabled={{ before: new Date() }}
               className="text-sm"
             />
