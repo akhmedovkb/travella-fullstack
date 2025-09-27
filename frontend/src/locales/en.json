@@ -903,7 +903,7 @@
     "transfer_price_ph": "Price",
     "per_pax": "/ pax",
     "remove": "Remove",
-    "add_transfer": "+ Add transfer",
+    "add_transfer": " Add transfer",
     "transfers_day_sum": "Transfers total for the day",
     "totals": {
       "transfers": "Transfers"
