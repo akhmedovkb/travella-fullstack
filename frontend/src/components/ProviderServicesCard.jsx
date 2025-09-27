@@ -432,11 +432,13 @@ export default function ProviderServicesCard({
 
   return (
     <div className="rounded-xl border bg-white shadow-sm">
-      <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
+      <div className="p-4 border-b flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-lg font-semibold flex-1 min-w-[240px] break-normal whitespace-normal [text-wrap:balance]">
           {TT("ps.title", "Услуги", "Xizmatlar", "Services")}
         </h2>
-        <div className="flex items-center gap-2">
+      
+        {/* кнопки справа */}
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
           <button
             className="h-9 px-3 rounded border text-sm hover:bg-gray-50"
             onClick={load}
@@ -457,12 +459,7 @@ export default function ProviderServicesCard({
           >
             {bulkBusy
               ? TT("ps.btn.generating", "Генерируем…", "Yaratilmoqda…", "Generating…")
-              : TT(
-                  "ps.btn.generate_from_profile",
-                  "Сгенерировать из профиля",
-                  "Profil asosida yaratish",
-                  "Generate from profile"
-                )}
+              : TT("ps.btn.generate_from_profile", "Сгенерировать из профиля", "Profil asosida yaratish", "Generate from profile")}
           </button>
         </div>
       </div>
