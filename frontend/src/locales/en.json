@@ -897,6 +897,27 @@
   },
 
   "tb": {
+    "transfers": "Intercity transfers",
+    "transfer_from_ph": "From (city)",
+    "transfer_to_ph": "To (city)",
+    "transfer_price_ph": "Price",
+    "per_pax": "/ pax",
+    "remove": "Remove",
+    "add_transfer": "+ Add transfer",
+    "transfers_day_sum": "Transfers total for the day",
+    "totals": {
+      "transfers": "Transfers"
+    },
+    "transfer_types": {
+      "car": "Car",
+      "train": "Train",
+      "air": "Flight"
+    },
+    "currency": {
+      "uzs": "UZS",
+      "usd": "USD"
+    }
+  },
     "tourism_fee_hint": "Tourism fee: res. {{res}} / non-res. {{nrs}} UZS per person/night",
     "tourism_fee_absent": "Tourism fee is not set in the hotel profile",
     "rooms": "Rooms",
