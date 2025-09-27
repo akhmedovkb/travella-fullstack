@@ -871,7 +871,7 @@
     "transfer_price_ph": "Цена",
     "per_pax": "/ pax",
     "remove": "Удалить",
-    "add_transfer": "+ Добавить трансфер",
+    "add_transfer": " Добавить трансфер",
     "transfers_day_sum": "Сумма по трансферам на день",
     "totals": {
       "transfers": "Трансферы"
