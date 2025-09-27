@@ -37,6 +37,26 @@ function normalizeLanguagesISO(input, fallback = []) {
   return Array.from(new Set(codes));
 }
 
+// --- Dates helpers (robust parse for ISO/YYYY-MM-DD) -------------------------
+function parseDateSafe(v) {
+  if (!v) return null;
+  try {
+    const d = new Date(String(v));
+    return Number.isFinite(d.getTime()) ? d : null;
+  } catch { return null; }
+}
+function pickFirst(obj, keys = []) {
+  for (const k of keys) {
+    if (!k) continue;
+    const val = k.includes(".")
+      ? k.split(".").reduce((o, kk) => (o && o[kk] != null ? o[kk] : undefined), obj)
+      : obj?.[k];
+    if (val != null && String(val).trim() !== "") return val;
+  }
+  return null;
+}
+
+
 // Нормализуем Telegram username к виду "@username"
 function normalizeTelegramUsername(input) {
   if (!input) return null;
@@ -489,6 +509,19 @@ const addService = async (req, res) => {
     } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
+    
+    // ── Business validation: expire_at must not be earlier than start_date
+    // Источники: либо в теле напрямую, либо в details.*
+    const startRaw  = pickFirst(req.body, ["start_date"]) ?? pickFirst(detailsObj, ["start_date","start_at","begin_date"]);
+    const expireRaw = pickFirst(req.body, ["expire_at","expiration_at"]) ?? pickFirst(detailsObj, ["expire_at","expiration_at","valid_until"]);
+    const startDate  = parseDateSafe(startRaw);
+    const expireDate = parseDateSafe(expireRaw);
+    if (startDate && expireDate && expireDate < startDate) {
+      return res.status(400).json({
+        code: "EXPIRY_BEFORE_START",
+        message: "Expiration must not be earlier than start date"
+      });
+    }
 
     const ins = await pool.query(
       `INSERT INTO services (provider_id, title, description, price, category, images, availability, details)
@@ -509,6 +542,21 @@ const addService = async (req, res) => {
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка добавления услуги:", err);
+        // дружелюбный маппинг pg: time zone displacement out of range (22009)
+    const msg = (err && err.message) || "";
+    const where = (err && err.where) || "";
+    const routine = (err && err.routine) || "";
+    const isTzOutOfRange =
+      err?.code === "22009" ||
+      /time zone displacement out of range/i.test(msg) ||
+      /parse_iso_minute_utc/i.test(where) ||
+      /DateTimeParseError/i.test(routine);
+    if (isTzOutOfRange) {
+      return res.status(400).json({
+        code: "EXPIRY_BEFORE_START",
+        message: "Expiration must not be earlier than start date"
+      });
+    }
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -577,6 +625,18 @@ const updateService = async (req, res) => {
     } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
+    
+    // ── Business validation: expire_at must not be earlier than start_date
+    const startRaw  = pickFirst(req.body, ["start_date"]) ?? pickFirst(detailsObj, ["start_date","start_at","begin_date"]);
+    const expireRaw = pickFirst(req.body, ["expire_at","expiration_at"]) ?? pickFirst(detailsObj, ["expire_at","expiration_at","valid_until"]);
+    const startDate  = parseDateSafe(startRaw);
+    const expireDate = parseDateSafe(expireRaw);
+    if (startDate && expireDate && expireDate < startDate) {
+      return res.status(400).json({
+        code: "EXPIRY_BEFORE_START",
+        message: "Expiration must not be earlier than start date"
+      });
+    }
 
     // 4) Обновляем основное содержимое
     const upd = await pool.query(
@@ -611,6 +671,21 @@ const updateService = async (req, res) => {
     return res.json(upd.rows[0]);
   } catch (err) {
     console.error("❌ Ошибка обновления услуги:", err);
+        // дружелюбный маппинг pg: time zone displacement out of range (22009)
+    const msg = (err && err.message) || "";
+    const where = (err && err.where) || "";
+    const routine = (err && err.routine) || "";
+    const isTzOutOfRange =
+      err?.code === "22009" ||
+      /time zone displacement out of range/i.test(msg) ||
+      /parse_iso_minute_utc/i.test(where) ||
+      /DateTimeParseError/i.test(routine);
+    if (isTzOutOfRange) {
+      return res.status(400).json({
+        code: "EXPIRY_BEFORE_START",
+        message: "Expiration must not be earlier than start date"
+      });
+    }
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
