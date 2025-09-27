@@ -10,18 +10,6 @@ import { pickProviderService } from "../utils/pickProviderService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-// ⬇️ сколько месяцев показывать
-  const [months, setMonths] = useState(
-    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 2 : 1
-  );
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(min-width: 768px)");
-    const onChange = (e) => setMonths(e.matches ? 2 : 1);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -472,6 +460,19 @@ const HotelOption = (props) => {
 
 export default function TourBuilder() {
   const { t, i18n } = useTranslation();
+  
+  // ⬇️ сколько месяцев показывать
+  const [months, setMonths] = useState(
+    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? 2 : 1
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e) => setMonths(e.matches ? 2 : 1);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  
   const [range, setRange] = useState({ from: undefined, to: undefined });
 
   const [adt, setAdt] = useState(2);
