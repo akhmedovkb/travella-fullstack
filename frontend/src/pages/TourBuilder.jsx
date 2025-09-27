@@ -20,6 +20,13 @@ const BRAND = {
   gray:    "#F1F1F1",  // фон блоков итогов
 };
 
+/* ---------------- intercity transfer types ---------------- */
+const TRANSFER_TYPES = [
+  { id: "car",   label: "Авто"   },
+  { id: "train", label: "Поезд"  },
+  { id: "air",   label: "Авиа"   },
+];
+
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -530,6 +537,7 @@ export default function TourBuilder() {
           guide: null, transport: null, hotel: null,
           guideService: null, transportService: null,   // ⬅️ выбранные услуги
           entrySelected: [],
+          transfers: [],                
         };
       });
       Object.keys(copy).forEach((k) => {
@@ -698,19 +706,38 @@ const makeTransportLoader = (dateKey) => async (input) => {
   return toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0));
 };
 
+  
+  // стоимость межгородних трансферов за день в UZS
+  const calcTransfersForDay = (dateKey) => {
+    const st = byDay[dateKey] || {};
+    const pax = Math.max(1, toNum(adt) + toNum(chd));
+    const list = Array.isArray(st.transfers) ? st.transfers : [];
+    let sum = 0;
+    for (const tr of list) {
+      const price = toNum(tr?.price, 0);
+      if (!price) continue;
+      const isUSD = String(tr?.currency || "UZS").toUpperCase() === "USD";
+      const priceUZS = isUSD ? (Number(usdRate) > 0 ? price * Number(usdRate) : 0) : price;
+      sum += priceUZS * (tr?.perPax ? pax : 1);
+    }
+    return sum;
+  };
+
 
   const totals = useMemo(() => {
-    let guide = 0, transport = 0, hotel = 0, entries = 0;
+    let guide = 0, transport = 0, hotel = 0, entries = 0, transfers = 0;
     Object.keys(byDay).forEach((k) => {
       guide += calcGuideForDay(k);
       transport += calcTransportForDay(k);
       hotel += calcHotelForDay(k);
       entries += calcEntryForDay(k);
+      transfers += calcTransfersForDay(k);
     });
     const net = guide + transport + hotel + entries;
+    const net = guide + transport + hotel + entries + transfers;
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
-    return { guide, transport, hotel, entries, net, perPax: net / pax };
-  }, [byDay, adt, chd, residentType]);
+    return { guide, transport, hotel, entries, transfers, net, perPax: net / pax };
+  }, [byDay, adt, chd, residentType, usdRate]);
 
     // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
   useEffect(() => {
@@ -913,6 +940,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcGuideForDay(k).toFixed(2)}</b> {(st.guideService?.currency || st.guide?.currency || "UZS")}
                     </div>
                   </div>
+                  
                   {/* если услуг нет: */}
                   {st.guide && (servicesCache[st.guide.id]?.length === 0) && (
                     <div className="text-xs text-amber-600 mt-1">
@@ -1112,6 +1140,147 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     </div>
                   </div>
 
+                  {/* Intercity transfers */}
+                  <div className="border rounded p-2 md:col-span-2">
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
+                    >
+                      Межгородние трансферы
+                    </label>
+
+                    {/* список трансферов */}
+                    <div className="space-y-2">
+                      {(st.transfers || []).map((tr, idx) => (
+                        <div key={idx} className="grid md:grid-cols-12 gap-2 items-center">
+                          {/* From / To */}
+                          <input
+                            className="md:col-span-3 border rounded px-2 py-2 text-sm"
+                            placeholder="Откуда (город)"
+                            value={tr.from || ""}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr[idx] = { ...arr[idx], from: e.target.value };
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          />
+                          <span className="hidden md:block text-center md:col-span-1">→</span>
+                          <input
+                            className="md:col-span-3 border rounded px-2 py-2 text-sm"
+                            placeholder="Куда (город)"
+                            value={tr.to || ""}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr[idx] = { ...arr[idx], to: e.target.value };
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          />
+                          {/* type */}
+                          <select
+                            className="md:col-span-2 border rounded px-2 py-2 text-sm"
+                            value={tr.type || "car"}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr[idx] = { ...arr[idx], type: e.target.value };
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          >
+                            {TRANSFER_TYPES.map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                          {/* price */}
+                          <input
+                            type="number"
+                            min={0}
+                            className="md:col-span-2 border rounded px-2 py-2 text-sm"
+                            placeholder="Цена"
+                            value={tr.price ?? 0}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr[idx] = { ...arr[idx], price: Number(e.target.value) || 0 };
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          />
+                          <select
+                            className="md:col-span-1 border rounded px-2 py-2 text-sm"
+                            value={tr.currency || "UZS"}
+                            onChange={(e) =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr[idx] = { ...arr[idx], currency: e.target.value };
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          >
+                            <option value="UZS">UZS</option>
+                            <option value="USD">USD</option>
+                          </select>
+                          <label className="md:col-span-2 inline-flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={!!tr.perPax}
+                              onChange={(e) =>
+                                setByDay((p) => {
+                                  const arr = [...(p[k].transfers || [])];
+                                  arr[idx] = { ...arr[idx], perPax: e.target.checked };
+                                  return { ...p, [k]: { ...p[k], transfers: arr } };
+                                })
+                              }
+                            />
+                            <span>/ pax</span>
+                          </label>
+                          <button
+                            className="md:col-span-1 text-xs px-2 py-2 rounded border"
+                            style={{ borderColor: `${BRAND.accent}88` }}
+                            onClick={() =>
+                              setByDay((p) => {
+                                const arr = [...(p[k].transfers || [])];
+                                arr.splice(idx, 1);
+                                return { ...p, [k]: { ...p[k], transfers: arr } };
+                              })
+                            }
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                     ))}
+                    </div>
+
+                    <div className="mt-2">
+                      <button
+                        className="text-sm px-3 py-1 rounded border"
+                        style={{ color: BRAND.primary, borderColor: BRAND.accent }}
+                        onClick={() =>
+                         setByDay((p) => ({
+                            ...p,
+                            [k]: {
+                              ...p[k],
+                              transfers: [
+                                ...(p[k].transfers || []),
+                                { from: st.city || "", to: "", type: "car", price: 0, currency: "UZS", perPax: false },
+                              ],
+                            },
+                          }))
+                        }
+                      >
+                        + Добавить трансфер
+                      </button>
+                      <div className="text-xs text-gray-600 mt-1">
+                        Сумма по трансферам на день: <b style={{ color: BRAND.primary }}>{calcTransfersForDay(k).toFixed(2)} UZS</b>
+                      </div>
+                    </div>
+                  </div>
+
+
                   {/* Entry fees */}
                   <div className="border rounded p-2">
                     <label className="block text-sm font-medium mb-1">{t('tb.entry_fees')}</label>
@@ -1146,10 +1315,14 @@ const makeTransportLoader = (dateKey) => async (input) => {
                 </div>
 
                 <div className="text-sm text-gray-700">
-                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} =
+                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Transfer {calcTransfersForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} =
                   {" "}
                   <b style={{ color: BRAND.primary }}>
-                    {(calcGuideForDay(k) + calcTransportForDay(k) + calcHotelForDay(k) + calcEntryForDay(k)).toFixed(2)} UZS
+                    {(calcGuideForDay(k)
+                      + calcTransportForDay(k)
+                      + calcHotelForDay(k)
+                      + calcTransfersForDay(k)
+                      + calcEntryForDay(k)).toFixed(2)} UZS
                   </b>
                 </div>
               </div>
@@ -1174,6 +1347,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
+          </div>
+          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>Transfers</div><div>{totals.transfers.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
@@ -1213,6 +1389,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')} (USD)</div>
           <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
+        </div>
+        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
+          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>Transfers (USD)</div>
+          <div>{toUSD(totals.transfers).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')} (USD)</div>
