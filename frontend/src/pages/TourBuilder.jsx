@@ -1219,7 +1219,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           <div>{toUSD(totals.entries).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-semibold" style={{ color: BRAND.primary }}>Total (USD)</div
+          <div className="font-semibold" style={{ color: BRAND.primary }}>Total (USD)</div>
           <div className="flex justify-between">
             <span>NET</span>
             <span style={{ color: BRAND.primary, fontWeight: 700 }}>{toUSD(totals.net).toFixed(2)} USD</span>
