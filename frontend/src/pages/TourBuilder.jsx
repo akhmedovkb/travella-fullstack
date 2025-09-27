@@ -36,6 +36,9 @@ const toYMD = (d) => {
 };
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
+// Нормализованный пустой диапазон (чтобы состояние не становилось undefined)
+const EMPTY_RANGE = { from: undefined, to: undefined };
+
 /* ---------------- categories / labels (для выпадашек услуг) ---------------- */
 const CATEGORY_LABELS = {
   // guide
@@ -483,7 +486,7 @@ export default function TourBuilder() {
     return () => mq.removeEventListener("change", onChange);
   }, []);
   
-  const [range, setRange] = useState({ from: undefined, to: undefined });
+  const [range, setRange] = useState(EMPTY_RANGE);
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
@@ -491,12 +494,12 @@ export default function TourBuilder() {
   const [lang, setLang] = useState("en");
 
   const days = useMemo(() => {
-    if (!range.from || !range.to) return [];
+    if (!range?.from || !range?.to) return [];
     const res = [];
     let d = new Date(range.from);
     while (d <= range.to) { res.push(new Date(d)); d = addDays(d, 1); }
     return res;
-  }, [range.from, range.to]);
+  }, [range?.from, range?.to]);
 
    // курс USD (UZS за 1 USD), для конвертации итогов вниз страницы
  const [usdRate, setUsdRate] = useState(Number(import.meta.env.VITE_USD_RATE || 0) || 0);
@@ -727,15 +730,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
             <DayPicker
               key={`dp-${i18n.language}`}
               mode="range"
-              selected={range}
-              onSelect={setRange}
+              selected={range?.from || range?.to ? range : undefined}
+              onSelect={(r) => setRange(r || EMPTY_RANGE)}
               numberOfMonths={months}
               disabled={{ before: new Date() }}
               className="text-sm"
               locale={dpLocale}
             />
             <p className="text-sm text-gray-600 mt-2">
-              {range.from && range.to
+              {range?.from && range?.to
                 ? t('tb.dates_span', { from: toYMD(range.from), to: toYMD(range.to), days: Math.max(1, (range.to - range.from) / 86400000 + 1) })
                 : t('tb.pick_dates')}
             </p>
