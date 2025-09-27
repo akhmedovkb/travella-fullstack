@@ -1011,7 +1011,18 @@
     "tourist_fee": "Tourist fee / night",
     "hotels_cost": "Hotels (net)",
     "providers_cost": "Guide/Transport (net)",
-    "total": "Total"
+    "total": "Total",
+
+    "meals": "Meals",
+    "meal_types": {
+    "lunch": "Lunch",
+    "dinner": "Dinner",
+    "gala": "Gala dinner"
+   },
+  "meal_price_ph": "Price",
+  "add_meal": "Add meal",
+  "meals_day_sum": "Meals total for the day"
+    
   },
 
   "telegram": {
