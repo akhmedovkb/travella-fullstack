@@ -882,8 +882,10 @@
       "air": "Авиа"
     },
     "currency": {
+      "intercities": {
       "uzs": "UZS",
       "usd": "USD"
+        }
     },
   
   "tourism_fee_hint": "Туристический сбор: рез. {{res}} / нерез. {{nrs}} сум за человека/ночь",
