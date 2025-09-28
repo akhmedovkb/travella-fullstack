@@ -255,6 +255,7 @@
       "generic": "Roʻyxatdan oʻtishda xatolik"
     },
       "haveAccount": "Hisobingiz bormi?",
+      "loading" : "Ro`yxatidan o`tkazilmoqda ...",
       "loginLink": "Kirish",
       "name": "Ism",
       "password": "Parol",
