@@ -241,6 +241,12 @@
       "error": "Login error"
     },
     "register": {
+      "errors": {
+      "email_taken": "This e-mail is already registered",
+      "phone_taken": "This phone number is already registered",
+      "weak_password": "Password is too weak",
+      "generic": "Registration error"
+    },
       "haveAccount": "Already have an account?",
       "loginLink": "Log in",
       "name": "Name",
