@@ -248,6 +248,12 @@
       "error": "Kirish xatosi"
     },
     "register": {
+      "errors": {
+      "email_taken": "Bu e-pochta allaqachon roʻyxatdan oʻtgan",
+      "phone_taken": "Bu telefon raqami allaqachon roʻyxatdan oʻtgan",
+      "weak_password": "Parol juda oddiy",
+      "generic": "Roʻyxatdan oʻtishda xatolik"
+    },
       "haveAccount": "Hisobingiz bormi?",
       "loginLink": "Kirish",
       "name": "Ism",
