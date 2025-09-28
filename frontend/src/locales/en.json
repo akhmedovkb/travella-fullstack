@@ -248,6 +248,7 @@
       "generic": "Registration error"
     },
       "haveAccount": "Already have an account?",
+      "loading" : "Signing up ...",
       "loginLink": "Log in",
       "name": "Name",
       "password": "Password",
