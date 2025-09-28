@@ -11,6 +11,19 @@ function toInt(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/* ---------- helpers: YouTube ---------- */
+const YT_RX =
+  /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+
+function getYoutubeId(u = "") {
+  const m = String(u).trim().match(YT_RX);
+  return m ? m[1] : null;
+}
+function isYoutubeUrl(u = "") {
+  return !!getYoutubeId(u);
+}
+
+
 /* ---------- Константы (ключи для i18n) ---------- */
 const SCORE_FIELDS = [
   { key: "quiet_level",     labelKey: "hotels.scores.quiet_level" },
@@ -158,11 +171,35 @@ function Card({ item, onLike }) {
       </div>
 
       {Array.isArray(item.media) && item.media.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-          {item.media.map((src, i) => (
-            <img key={i} src={src} alt="" className="w-full h-28 object-cover rounded border" />
-          ))}
-        </div>
+        <>
+          {/* Видео (YouTube) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            {item.media.filter(isYoutubeUrl).map((u, i) => {
+              const vid = getYoutubeId(u);
+              const src = `https://www.youtube.com/embed/${vid}`;
+              return (
+                <div key={`yt-${i}`} className="aspect-video w-full rounded border overflow-hidden">
+                  <iframe
+                    src={src}
+                    title={`YouTube video ${vid}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Изображения */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+            {item.media
+              .filter((src) => !isYoutubeUrl(src))
+              .map((src, i) => (
+                <img key={`img-${i}`} src={src} alt="" className="w-full h-28 object-cover rounded border" />
+              ))}
+          </div>
+        </>
       )}
 
       <div className="mt-3 flex items-center gap-3">
@@ -186,6 +223,7 @@ function NewInspectionForm({ hotelId, onCancel, onCreated }) {
   const [cons, setCons] = useState("");
   const [features, setFeatures] = useState("");
   const [media, setMedia] = useState([]);
+  const [videoUrl, setVideoUrl] = useState("");
 
   // Новые поля (шаблон оценки)
   const [scores, setScores] = useState({});
@@ -248,12 +286,19 @@ const submit = async (e) => {
   }
   setSaving(true);
   try {
+      const mediaToSend = (() => {
+      const list = [...media];
+      const id = getYoutubeId(videoUrl);
+      if (id) list.push(`https://www.youtube.com/watch?v=${id}`);
+      return list;
+    })();
+
     await createInspection(hotelId, {
       review: review.trim(),
       pros: nonEmpty(pros),
       cons: nonEmpty(cons),
       features: nonEmpty(features),
-      media, // тут норм ок — массив может быть пустым, но можно: nonEmpty(media)
+      media: mediaToSend,
       scores: nonEmpty(normalizeScores(scores)),
       amenities: nonEmpty(amenities),
       nearby: nonEmpty(normalizeNearby(nearby)),
@@ -433,6 +478,24 @@ const submit = async (e) => {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+            {/* Видео (YouTube) */}
+      <div className="mt-3">
+        <label className="block text-sm text-gray-600 mb-1">
+          {t("hotels.inspections.new.video_label", "Видео (ссылка на YouTube)")}
+        </label>
+        <input
+          type="url"
+          inputMode="url"
+          placeholder="https://youtu.be/… или https://www.youtube.com/watch?v=…"
+          className="w-full border rounded px-3 py-2"
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+        />
+        {!!videoUrl && !isYoutubeUrl(videoUrl) && (
+          <div className="text-xs text-rose-700 mt-1">{t("hotels.inspections.new.video_invalid", "Похоже, это не ссылка на YouTube")}</div>
         )}
       </div>
 
