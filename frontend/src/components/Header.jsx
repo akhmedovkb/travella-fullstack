@@ -263,7 +263,9 @@ export default function Header() {
 
             {/* Desktop/Tablet primary nav (scrollable row) */}
             <div className="hidden md:flex items-center gap-1 min-w-0">
-              <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              {role === "provider" && (
+                <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              )}
               <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
 
               {role === "provider" && (
@@ -303,9 +305,11 @@ export default function Header() {
           aria-hidden={!mobileOpen}
         >
           <nav className="pb-3 -mx-1">
-            <RowGroup title={t("nav.tour_builder", "Tour Builder")}>
-              <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-            </RowGroup>
+            {role === "provider" && (
+              <RowGroup title={t("nav.tour_builder", "Tour Builder")}>
+                <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              </RowGroup>
+            )}
 
             {role === "provider" && (
               <RowGroup title={t("nav.provider", "Поставщик")}>
