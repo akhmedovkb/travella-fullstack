@@ -686,13 +686,96 @@ const matchQuery = (query, it) => {
     return svc.id ?? it?.id ?? svc._id ?? it?._id ?? null;
   };
 
+  /* ---------- авто-категория из текста запроса ---------- */
+const CATEGORY_KEYWORDS = {
+  guide: [
+    "гид","гид анг","гид английский","экскурсия","экскурсовод",
+    "guide","gid","tour guide"
+  ],
+  transport: [
+    "транспорт","трансфер","машина","водитель","авто","микроавтобус","такси",
+    "transport","transfer","driver","car","minivan","bus"
+  ],
+  refused_tour: ["отказной тур","пакет","package","package tour","refused tour"],
+  refused_hotel: ["отказной отель","отель","hotel","room","номер"],
+  refused_flight: ["авиабилет","билет на самолёт","flight","ticket","refused flight"],
+  visa_support: ["виза","визовая","visa","visa support"]
+};
+function detectCategoryFromQuery(q) {
+  const nq = norm(q);
+  if (!nq) return null;
+  for (const [cat, words] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (words.some(w => nq.includes(norm(w)) || norm(cyr2lat(w)).includes(nq))) {
+      return cat;
+    }
+  }
+  return null;
+}
+
+/* ---------- скоринг результата ---------- */
+function scoreItem(query, it) {
+  const { title, hotel, inlineProvider, flatName, details, svc } = extractServiceFields(it, getRole());
+  const providerName =
+    flatName ||
+    inlineProvider?.display_name ||
+    inlineProvider?.company_name ||
+    inlineProvider?.brand ||
+    inlineProvider?.name ||
+    "";
+  const city =
+    norm(
+      _firstNonEmpty(
+        details?.city, svc?.city, details?.location, svc?.location,
+        details?.direction, details?.direction_to, details?.directionFrom
+      ) || ""
+    );
+
+  const idx = buildSearchIndex(it); // { n, n_lat, n_cyr }
+  const tokens = norm(query).split(/\s+/).filter(Boolean);
+  let score = 0;
+
+  const adds = (str, tok, inc = 6, start = 14) => {
+    if (!str) return 0;
+    const s = norm(str);
+    if (s.startsWith(tok)) return start;
+    return s.includes(tok) ? inc : 0;
+  };
+
+  tokens.forEach((tokRaw) => {
+   const vars = [tokRaw, cyr2lat(tokRaw), lat2cyr(tokRaw)].map(norm);
+    for (const tok of vars) {
+      score += adds(title || "", tok, 12, 25);
+      score += adds(providerName, tok, 9, 18);
+      score += adds(hotel || "", tok, 7, 14);
+      score += adds(city, tok, 8, 14);
+      // общий хейстек
+      if (idx.n.includes(tok) || idx.n_lat.includes(tok) || idx.n_cyr.includes(tok)) score += 6;
+    }
+  });
+
+  const detected = detectCategoryFromQuery(query);
+  const cat = svc?.category || details?.category || details?.type || "";
+  if (detected && String(cat).toLowerCase().includes(detected)) score += 30;
+
+  // лёгкий бонус свежим «upcoming» (если есть дата истечения в будущем)
+  const exp = resolveExpireAt(it?.service || it || {});
+  if (exp && exp > Date.now()) {
+    const hoursLeft = Math.max(0, (exp - Date.now()) / 3600000);
+    score += Math.min(12, 12 - Math.min(12, Math.floor(hoursLeft / 24))); // чем ближе дедлайн — тем выше
+  }
+
+  return score;
+}
+
   /* ===================== search ===================== */
 const search = async (opts = {}) => {
   setLoading(true);
   setError(null);
 
   try {
-    const rawPayload = opts?.all ? {} : filters;
+        // авто-категория, если юзер не выбрал явно
+    const autoCat = !category && filters?.q ? detectCategoryFromQuery(filters.q) : null;
+    const rawPayload = opts?.all ? {} : { ...filters, ...(autoCat ? { category: autoCat } : {}) };
     const payload = Object.fromEntries(
       Object.entries(rawPayload).filter(([, v]) =>
         v != null && (typeof v === "number" ? true : String(v).trim() !== "")
@@ -761,6 +844,11 @@ const search = async (opts = {}) => {
       const published = (svc.status ?? 'published') === 'published';
       return published && isMarketplaceVisible(it, now);
     });
+        // сортируем по релевантности (скор)
+    if (filters?.q) {
+      const qLocal = filters.q;
+      list.sort((a, b) => scoreItem(qLocal, b) - scoreItem(qLocal, a));
+    }
     
     setItems(list);
 
