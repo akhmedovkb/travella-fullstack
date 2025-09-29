@@ -7,7 +7,6 @@ if (!pg || typeof pg.query !== "function") {
 
 const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
 
-// алиасы категорий как раньше
 const CATEGORY_ALIAS = {
   guide: ["city_tour_guide", "mountain_tour_guide"],
   transport: [
@@ -23,17 +22,19 @@ const CATEGORY_ALIAS = {
 const expandCategory = (cat) => (cat ? (CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()]) : null);
 const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-// =================== SEARCH ===================
+/**
+ * SEARCH
+ * Ищем ТОЛЬКО по полям провайдера:
+ *   - providers.type
+ *   - providers.location
+ *   - providers.languages (любой тип; приводим к jsonb -> text и ищем по строке)
+ */
 module.exports.search = async (req, res, next) => {
   try {
-    // общий источник параметров: поддержка и POST(body), и GET(query)
     const src = { ...(req.query || {}), ...(req.body || {}) };
 
     const q           = typeof src.q === "string" ? src.q.trim() : "";
     const category    = src.category ?? null;
-    const location    = typeof src.location === "string" ? src.location.trim() : "";
-    const price_min   = src.price_min ?? src.min ?? undefined;
-    const price_max   = src.price_max ?? src.max ?? undefined;
     const sort        = src.sort ?? null;
     const only_active = String(src.only_active ?? "true").toLowerCase() !== "false";
 
@@ -46,55 +47,33 @@ module.exports.search = async (req, res, next) => {
     const params = [];
     let p = 1;
 
-    // только опубликованные
+    // только опубликованные услуги
     params.push("published");
     where.push(`s.status = $${p++}`);
 
-    // включено + не истекло (по умолчанию)
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, true) = true`);
       where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
     }
 
-    // категория / алиасы
     if (cats && cats.length) {
       const ph = cats.map(() => `$${p++}`).join(",");
       params.push(...cats);
       where.push(`s.category IN (${ph})`);
     }
 
-    // текстовый запрос: ищем по title/description/details + по ВСЕМ полям providers через to_jsonb(p)
+    // --- фильтр по провайдеру ---
     if (q) {
       const like = `%${q}%`;
-      params.push(like, like, like, like);
-      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`, c4 = `$${p++}`;
+      params.push(like, like, like);
+      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
+      // languages приводим к jsonb->text: работает и для массива, и для строки, и для json/jsonb
       where.push(`(
-        s.title ILIKE ${c1}
-        OR s.description ILIKE ${c2}
-        OR s.details::text ILIKE ${c3}
-        OR to_jsonb(p)::text ILIKE ${c4}   -- безопасно ищем по любой колонке провайдера, какие бы ни были
+        COALESCE(p.type,'') ILIKE ${c1}
+        OR COALESCE(p.location,'') ILIKE ${c2}
+        OR COALESCE(to_jsonb(p.languages)::text,'') ILIKE ${c3}
       )`);
     }
-
-    // локация (и по details, и по провайдеру)
-    if (location) {
-      const like = `%${location}%`;
-      params.push(like, like, like, like, like);
-      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`, c4 = `$${p++}`, c5 = `$${p++}`;
-      where.push(`(
-        COALESCE(s.details->>'direction_to','') ILIKE ${c1}
-        OR COALESCE(s.details->>'directionTo','') ILIKE ${c2}
-        OR COALESCE(s.details->>'location','') ILIKE ${c3}
-        OR COALESCE(s.details->>'direction','') ILIKE ${c4}
-        OR COALESCE(p.location,'') ILIKE ${c5}
-      )`);
-    }
-
-    // ценовые фильтры (нетто/фоллбэк на price)
-    const pmin = toNum(price_min);
-    const pmax = toNum(price_max);
-    if (pmin != null) { params.push(pmin); where.push(`${PRICE_SQL} >= $${p++}`); }
-    if (pmax != null) { params.push(pmax); where.push(`${PRICE_SQL} <= $${p++}`); }
 
     // сортировка
     let orderBy = "s.created_at DESC";
@@ -105,11 +84,12 @@ module.exports.search = async (req, res, next) => {
     }
 
     params.push(limit, offset);
+
     const sql = `
       SELECT
         s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
         s.created_at, s.status, s.details, s.expiration_at,
-        row_to_json(p) AS provider           -- вернём провайдера одной нодой для фронта
+        row_to_json(p) AS provider
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
@@ -124,8 +104,10 @@ module.exports.search = async (req, res, next) => {
   }
 };
 
-// =================== SUGGEST ===================
-// GET /api/marketplace/suggest?q=...&limit=8
+/**
+ * SUGGEST
+ * Подсказки строим только из providers: type/location/languages
+ */
 module.exports.suggest = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
@@ -133,38 +115,26 @@ module.exports.suggest = async (req, res, next) => {
     if (q.length < 2) return res.json({ items: [] });
 
     const like = `%${q}%`;
+
+    // Отдаём простые текстовые подсказки. Для languages берём всю строку (если массив — будет вида ["ru","en"]).
     const { rows } = await pg.query(
       `
       WITH cand AS (
-        -- заголовки услуг
-        SELECT s.title AS label, 100 AS w
-        FROM services s
-        WHERE s.status = 'published' AND s.title ILIKE $1
+        SELECT COALESCE(NULLIF(TRIM(p.type), ''), NULL)      AS label, 100 AS w
+        FROM providers p WHERE COALESCE(p.type,'') ILIKE $1
 
         UNION ALL
-        -- локации/направления из детали
-        SELECT NULLIF(s.details->>'location','')     AS label, 80  AS w FROM services s
-          WHERE s.status = 'published' AND COALESCE(s.details->>'location','') ILIKE $1
-        UNION ALL
-        SELECT NULLIF(s.details->>'direction_to','') AS label, 70  AS w FROM services s
-          WHERE s.status = 'published' AND COALESCE(s.details->>'direction_to','') ILIKE $1
-        UNION ALL
-        SELECT NULLIF(s.details->>'direction','')    AS label, 60  AS w FROM services s
-          WHERE s.status = 'published' AND COALESCE(s.details->>'direction','') ILIKE $1
+        SELECT COALESCE(NULLIF(TRIM(p.location), ''), NULL)  AS label, 90  AS w
+        FROM providers p WHERE COALESCE(p.location,'') ILIKE $1
 
         UNION ALL
-        -- подсказки по таблице providers (любые поля через to_jsonb)
-        SELECT NULLIF(p.location,'') AS label, 90 AS w
-        FROM providers p
-        WHERE to_jsonb(p)::text ILIKE $1
+        SELECT COALESCE(NULLIF(TRIM(to_jsonb(p.languages)::text), ''), NULL) AS label, 80 AS w
+        FROM providers p WHERE COALESCE(to_jsonb(p.languages)::text,'') ILIKE $1
       ),
       norm AS (
-        SELECT
-          LOWER(TRIM(label)) AS key,
-          MIN(TRIM(label))   AS label,
-          MAX(w)             AS w
+        SELECT LOWER(TRIM(label)) AS key, MIN(TRIM(label)) AS label, MAX(w) AS w
         FROM cand
-        WHERE label IS NOT NULL AND TRIM(label) <> ''
+        WHERE label IS NOT NULL
         GROUP BY LOWER(TRIM(label))
       )
       SELECT label
