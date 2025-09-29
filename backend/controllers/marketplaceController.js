@@ -101,20 +101,16 @@ function splitTokens(s) {
     .filter(Boolean);
 }
 
+// Словари стали шире, чтобы ловить естественные формулировки
 const TYPE_SYNONYMS = {
-  guide: ["guide", "gid", "гид", "экскурсовод", "экскурсия", "ekskursiya"],
-  transport: ["transport", "transfer", "транспорт", "трансфер", "driver", "car", "авто", "машина", "водитель"],
+  guide: ["guide","gid","гид","экскурсовод","экскурсия","ekskursiya"],
+  transport: ["transport","transfer","транспорт","трансфер","driver","car","авто","машина","водитель"],
 };
 const LANG_SYNONYMS = {
-  // английский
   en: ["en","eng","англ","английский","english","ingliz","inglizcha"],
-  // русский
   ru: ["ru","rus","рус","русский","russian","ruscha"],
-  // узбекский
   uz: ["uz","uzb","узб","o'z","oʻz","oz","uzbek","o'zbek","o'zbekcha","uzbekcha","oʻzbekcha"],
-  // испанский
   es: ["es","spa","испан","испанский","spanish","espanol","español"],
-  // турецкий
   tr: ["tr","тур","турецкий","turk","turkish","turkcha"],
 };
 
@@ -171,27 +167,27 @@ function makeLikePatterns(input) {
 
 function parseQueryForProvider(q) {
   const tokens = splitTokens(q);
-  if (!tokens.length) return { type_q: null, loc_terms: [], lang_syn: [] };
+  if (!tokens.length) return { type_q: null, loc_patterns: [], lang_syn: [] };
 
-  // языки: собираем все найденные синонимы (потом сведём к множеству)
-  const langSyn = [];
+  // 1) язык(и)
+  const lang_syn = [];
   for (const t of tokens) {
-    for (const arr of Object.values(LANG_SYNONYMS)) if (arr.includes(t)) langSyn.push(...arr);
+    for (const arr of Object.values(LANG_SYNONYMS)) if (arr.includes(t)) lang_syn.push(...arr);
   }
 
-  // тип провайдера
+  // 2) тип
   let type_q = null;
   for (const [typ, arr] of Object.entries(TYPE_SYNONYMS)) {
     if (tokens.some((t) => arr.includes(t))) { type_q = typ; break; }
   }
 
-  // все слова, не являющиеся маркерами языка/типа — считаем потенциальными локациями
+  // 3) локация: всё, что не язык/тип — собираем в строку и делаем паттерны
   const blacklist = new Set([...ALL_LANG_TOKENS, ...Object.values(TYPE_SYNONYMS).flat()]);
-  const loc_terms = tokens.filter((t) => !blacklist.has(t) && t.length >= 2);
+  const locWords = tokens.filter((t) => !blacklist.has(t));
+  const loc_patterns = makeLikePatterns(locWords.join(" "));
 
-  return { type_q, loc_terms, lang_syn: [...new Set(langSyn)] };
+  return { type_q, loc_patterns, lang_syn: [...new Set(lang_syn)] };
 }
-
 /* -------------------- SEARCH -------------------- */
 module.exports.search = async (req, res, next) => {
   try {
@@ -215,20 +211,14 @@ module.exports.search = async (req, res, next) => {
     let providerIds = null;
     let textPatterns = [];
 
-    if (q) {
+        if (q) {
       const parsed = parseQueryForProvider(q);
-      tr.log("parsed", parsed);
-      // локационные паттерны из всех "не служебных" токенов
-      const locPatterns = Array.from(
-        new Set(parsed.loc_terms.flatMap((t) => makeLikePatterns(t)))
-      );
       textPatterns = makeLikePatterns(q);
-      tr.log("patterns", { locTerms: parsed.loc_terms, locPatterns, textPatternsLen: textPatterns.length });
+      tr.log("parsed", parsed);
 
-      const nothingToFilter = !parsed.type_q && locPatterns.length === 0 && parsed.lang_syn.length === 0;
-
+      const nothingToFilter = !parsed.type_q && parsed.loc_patterns.length === 0 && parsed.lang_syn.length === 0;
       if (!nothingToFilter) {
-        // Строгая комбинация: каждый переданный критерий обязателен
+        // ПРОСТОЙ И НАДЁЖНЫЙ SQL: тип ∧ (локация) ∧ (язык)
         const provSql = `
           WITH params AS (
             SELECT
@@ -236,12 +226,8 @@ module.exports.search = async (req, res, next) => {
               $2::text[] AS loc_patterns,
               $3::text[] AS lang_syn
           )
-          SELECT DISTINCT p.id
+          SELECT p.id
           FROM providers p
-          LEFT JOIN LATERAL (
-            SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-            FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-          ) l ON TRUE
           CROSS JOIN params par
           WHERE 1=1
             AND (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
@@ -251,17 +237,21 @@ module.exports.search = async (req, res, next) => {
             )
             AND (
               COALESCE(array_length(par.lang_syn,1),0) = 0
-              OR l.lang_token = ANY (par.lang_syn)
+              OR EXISTS (
+                SELECT 1
+                FROM regexp_split_to_table(COALESCE(p.languages::text,''), '[,;\\s]+') t(tok)
+                WHERE lower(trim(both ' "[]{}' FROM tok)) = ANY (par.lang_syn)
+              )
             )
         `;
-        const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
+        const r = await tr.wrapQuery(provSql, [parsed.type_q, parsed.loc_patterns, parsed.lang_syn], "prov");
         providerIds = r.rows.map((x) => x.id);
         tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
       } else {
         tr.log("provider filter skipped (nothingToFilter)");
       }
     }
- 
+
     // --- where для services
     const where = [];
     const params = [];
