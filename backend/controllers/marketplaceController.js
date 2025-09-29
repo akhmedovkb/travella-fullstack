@@ -54,6 +54,79 @@ const LANG_SYNONYMS = {
 };
 const ALL_LANG_TOKENS = [...new Set(Object.values(LANG_SYNONYMS).flat())];
 
+// ---------- helpers: нормализация и LIKE-паттерны с RU⇄UZ лат/кирилл ----------
+
+function _norm(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// очень упрощённая транслитерация (хватает для "самарканд" ⇄ "samarkand/samarqand")
+function _cyr2lat(s) {
+  return _norm(s)
+    .replace(/щ/g, "shch").replace(/ш/g, "sh").replace(/ч/g, "ch").replace(/ж/g, "zh")
+    .replace(/ю/g, "yu").replace(/я/g, "ya").replace(/й/g, "y").replace(/ё/g, "e")
+    .replace(/ъ|’|ʻ|`/g, "").replace(/ь/g, "")
+    .replace(/х/g, "kh").replace(/ц/g, "ts")
+    // UZ cyr → lat
+    .replace(/қ/g, "q").replace(/ғ/g, "g'").replace(/ў/g, "o'").replace(/ҳ/g, "h")
+    .replace(/а/g, "a").replace(/б/g, "b").replace(/в/g, "v").replace(/г/g, "g")
+    .replace(/д/g, "d").replace(/е/g, "e").replace(/з/g, "z").replace(/и/g, "i")
+    .replace(/к/g, "k").replace(/л/g, "l").replace(/м/g, "m").replace(/н/g, "n")
+    .replace(/о/g, "o").replace(/п/g, "p").replace(/р/g, "r").replace(/с/g, "s")
+    .replace(/т/g, "t").replace(/у/g, "u").replace(/ф/g, "f").replace(/ы/g, "y")
+    // частые варианты Самарканда
+    .replace(/\bsamarqand\b/g, "samarqand"); // стабилизируем
+}
+
+function _lat2cyr(s) {
+  let x = _norm(s)
+    .replace(/shch/g, "щ").replace(/sch/g, "щ")
+    .replace(/sh/g, "ш").replace(/ch/g, "ч").replace(/zh/g, "ж")
+    .replace(/ya/g, "я").replace(/yu/g, "ю").replace(/yo/g, "ё")
+    .replace(/kh/g, "х").replace(/ts/g, "ц");
+  x = x.replace(/g'|gʼ|g‘/g, "ғ").replace(/o'|oʼ|o‘/g, "ў");
+  x = x.replace(/q/g, "қ").replace(/x/g, "х").replace(/h/g, "ҳ");
+  x = x
+    .replace(/a/g, "а").replace(/b/g, "б").replace(/v/g, "в").replace(/g/g, "г")
+    .replace(/d/g, "д").replace(/e/g, "е").replace(/z/g, "з").replace(/i/g, "и")
+    .replace(/j/g, "й").replace(/k/g, "к").replace(/l/g, "л").replace(/m/g, "м")
+    .replace(/n/g, "н").replace(/o/g, "о").replace(/p/g, "п").replace(/r/g, "р")
+    .replace(/s/g, "с").replace(/t/g, "т").replace(/u/g, "у").replace(/f/g, "ф")
+    .replace(/y/g, "ы").replace(/c/g, "к").replace(/w/g, "в");
+  return x;
+}
+
+/**
+ * Собираем массив LIKE-паттернов для локации:
+ * - исходный токен
+ * - кириллица ⇄ латиница (RU/UZ)
+ * - оба в виде %...%
+ * Возвращает [] если вход пуст.
+ */
+function makeLikePatterns(loc_q) {
+  const s = _norm(loc_q);
+  if (!s) return [];
+  const parts = s.split(/[,\s]+/).filter(Boolean);
+
+  const set = new Set();
+  for (const t of parts) {
+    const a = _norm(t);
+    const b = _cyr2lat(a);
+    const c = _lat2cyr(a);
+    [a, b, c].forEach((v) => {
+      if (v && v.length >= 2) set.add(`%${v}%`);
+    });
+    // частый кейс: samarkand ↔ samarqand
+    if (a.includes("samarkand")) set.add("%samarqand%");
+    if (a.includes("samarqand")) set.add("%samarkand%");
+  }
+  return Array.from(set);
+}
+
+
 function parseQueryForProvider(q) {
   const tokens = splitTokens(q);
   if (!tokens.length) return { type_q: null, loc_q: "", lang_syn: [] };
