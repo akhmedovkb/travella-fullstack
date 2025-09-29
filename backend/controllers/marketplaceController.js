@@ -7,7 +7,8 @@ if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
 }
 
-const PRICE_SQL = `COALESCE(NULLIF(details->>'netPrice','')::numeric, price)`;
+// важно: использовать алиас таблицы services (s.*) в формулах
+const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
 
 // Алиасы категорий (как было)
 const CATEGORY_ALIAS = {
@@ -30,9 +31,10 @@ function expandCategory(cat) {
 }
 const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
+// ========================= S E A R C H =========================
 module.exports.search = async (req, res, next) => {
   try {
-        // поддерживаем ОДИН код для POST (body) и GET (query)
+    // единый источник параметров: и GET, и POST
     const src = { ...(req.query || {}), ...(req.body || {}) };
     const q          = typeof src.q === "string" ? src.q.trim() : "";
     const category   = src.category ?? null;
@@ -46,8 +48,6 @@ module.exports.search = async (req, res, next) => {
     const offset = Math.max(0, parseInt(src.offset ?? "0", 10));
 
     const cats = expandCategory(category);
-    const lim = limit;
-    const off = offset;
 
     const where = [];
     const params = [];
@@ -55,39 +55,50 @@ module.exports.search = async (req, res, next) => {
 
     // только опубликованные
     params.push("published");
-    where.push(`status = $${p++}`);
+    where.push(`s.status = $${p++}`);
 
     // включено + не истекло (если надо)
     if (only_active) {
-      where.push(`COALESCE((details->>'isActive')::boolean, true) = true`);
-      where.push(`(expiration_at IS NULL OR expiration_at > now())`);
+      where.push(`COALESCE((s.details->>'isActive')::boolean, true) = true`);
+      where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
     }
 
     // категория / алиасы
     if (cats && cats.length) {
       const ph = cats.map(() => `$${p++}`).join(",");
       params.push(...cats);
-      where.push(`category IN (${ph})`);
+      where.push(`s.category IN (${ph})`);
     }
 
-    // текстовый поиск
+    // текстовый поиск (услуга + провайдер)
     if (q) {
       const like = `%${q}%`;
-      params.push(like, like, like);
+      // title/description/details + provider name/company/brand/location
+      params.push(like, like, like, like, like, like, like);
       const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
-      where.push(`(title ILIKE ${c1} OR description ILIKE ${c2} OR details::text ILIKE ${c3})`);
+      const c4 = `$${p++}`, c5 = `$${p++}`, c6 = `$${p++}`, c7 = `$${p++}`;
+      where.push(`(
+        s.title ILIKE ${c1}
+        OR s.description ILIKE ${c2}
+        OR s.details::text ILIKE ${c3}
+        OR COALESCE(p.name,'') ILIKE ${c4}
+        OR COALESCE(p.company_name,'') ILIKE ${c5}
+        OR COALESCE(p.brand,'') ILIKE ${c6}
+        OR COALESCE(p.location,'') ILIKE ${c7}
+      )`);
     }
 
-    // локация
-    if (location && String(location).trim()) {
-      const like = `%${String(location).trim()}%`;
-      params.push(like, like, like, like);
-      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`, c4 = `$${p++}`;
+    // фильтр по локации (и по details у услуги, и по providers.location)
+    if (location) {
+      const like = `%${location}%`;
+      params.push(like, like, like, like, like);
+      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`, c4 = `$${p++}`, c5 = `$${p++}`;
       where.push(`(
-        COALESCE(details->>'direction_to','') ILIKE ${c1}
-        OR COALESCE(details->>'directionTo','') ILIKE ${c2}
-        OR COALESCE(details->>'location','') ILIKE ${c3}
-        OR COALESCE(details->>'direction','') ILIKE ${c4}
+        COALESCE(s.details->>'direction_to','') ILIKE ${c1}
+        OR COALESCE(s.details->>'directionTo','') ILIKE ${c2}
+        OR COALESCE(s.details->>'location','') ILIKE ${c3}
+        OR COALESCE(s.details->>'direction','') ILIKE ${c4}
+        OR COALESCE(p.location,'') ILIKE ${c5}
       )`);
     }
 
@@ -98,31 +109,51 @@ module.exports.search = async (req, res, next) => {
     if (pmax != null) { params.push(pmax); where.push(`${PRICE_SQL} <= $${p++}`); }
 
     // сортировка
-    let orderBy = "created_at DESC";
+    let orderBy = "s.created_at DESC";
     switch (sort) {
-      case "newest":     orderBy = "created_at DESC"; break;
+      case "newest":     orderBy = "s.created_at DESC"; break;
       case "price_asc":  orderBy = `${PRICE_SQL} ASC NULLS LAST`; break;
       case "price_desc": orderBy = `${PRICE_SQL} DESC NULLS LAST`; break;
     }
 
-    params.push(lim, off);
+    params.push(limit, offset);
     const sql = `
-      SELECT id, provider_id, title, description, category, price, images, availability,
-             created_at, status, details, expiration_at
-      FROM services
+      SELECT
+        s.id,
+        s.provider_id,
+        s.title,
+        s.description,
+        s.category,
+        s.price,
+        s.images,
+        s.availability,
+        s.created_at,
+        s.status,
+        s.details,
+        s.expiration_at,
+        -- компактная инфа о провайдере
+        jsonb_build_object(
+          'id', p.id,
+          'name', p.name,
+          'company_name', p.company_name,
+          'brand', p.brand,
+          'location', p.location
+        ) AS provider
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY ${orderBy}
       LIMIT $${p++} OFFSET $${p++}
     `;
 
     const { rows } = await pg.query(sql, params);
-    res.json({ items: rows, limit: lim, offset: off });
+    res.json({ items: rows, limit, offset });
   } catch (err) {
     next(err);
   }
 };
 
-// --- S U G G E S T -----------------------------------------------------------
+// ========================= S U G G E S T =========================
 // GET /api/marketplace/suggest?q=...&limit=8
 module.exports.suggest = async (req, res, next) => {
   try {
@@ -133,31 +164,44 @@ module.exports.suggest = async (req, res, next) => {
     const like = `%${q}%`;
     const { rows } = await pg.query(
       `
-      WITH cand AS (
-        -- заголовки услуг
-        SELECT title              AS label, 100 AS w
-        FROM services
-        WHERE status = 'published' AND title ILIKE $1
+      WITH s_cand AS (
+        -- заголовки/локации/направления из услуг
+        SELECT title AS label, 100 AS w
+        FROM services s
+        WHERE s.status = 'published' AND s.title ILIKE $1
+        UNION ALL
+        SELECT NULLIF(s.details->>'location','') AS label, 80 AS w
+        FROM services s
+        WHERE s.status = 'published' AND COALESCE(s.details->>'location','') ILIKE $1
+        UNION ALL
+        SELECT NULLIF(s.details->>'direction_to','') AS label, 70 AS w
+        FROM services s
+        WHERE s.status = 'published' AND COALESCE(s.details->>'direction_to','') ILIKE $1
+        UNION ALL
+        SELECT NULLIF(s.details->>'direction','') AS label, 60 AS w
+        FROM services s
+        WHERE s.status = 'published' AND COALESCE(s.details->>'direction','') ILIKE $1
+      ),
+      p_cand AS (
+        -- названия и локации провайдеров, у которых есть опубликованные услуги
+        SELECT DISTINCT ON (LOWER(TRIM(p.location)))
+               p.location AS label, 75 AS w
+        FROM providers p
+        JOIN services s ON s.provider_id = p.id AND s.status = 'published'
+        WHERE COALESCE(p.location,'') ILIKE $1
 
         UNION ALL
-        -- локации
-        SELECT NULLIF(details->>'location','')      AS label, 80  AS w
-        FROM services
-        WHERE status = 'published'
-          AND COALESCE(details->>'location','') ILIKE $1
-
+        SELECT DISTINCT ON (LOWER(TRIM(coalesce(p.name,'') || ' ' || coalesce(p.company_name,'') || ' ' || coalesce(p.brand,''))))
+               TRIM(coalesce(p.name,'') || ' ' || coalesce(p.company_name,'') || ' ' || coalesce(p.brand,'')) AS label,
+               65 AS w
+        FROM providers p
+        JOIN services s ON s.provider_id = p.id AND s.status = 'published'
+        WHERE (coalesce(p.name,'') || ' ' || coalesce(p.company_name,'') || ' ' || coalesce(p.brand,'')) ILIKE $1
+      ),
+      cand AS (
+        SELECT * FROM s_cand
         UNION ALL
-        -- направления
-        SELECT NULLIF(details->>'direction_to','')  AS label, 70  AS w
-        FROM services
-        WHERE status = 'published'
-          AND COALESCE(details->>'direction_to','') ILIKE $1
-
-        UNION ALL
-        SELECT NULLIF(details->>'direction','')     AS label, 60  AS w
-        FROM services
-        WHERE status = 'published'
-          AND COALESCE(details->>'direction','') ILIKE $1
+        SELECT * FROM p_cand
       ),
       norm AS (
         SELECT
