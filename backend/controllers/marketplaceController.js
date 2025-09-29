@@ -1,3 +1,5 @@
+//backend/controllers/marketplaceController.js
+
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
 
