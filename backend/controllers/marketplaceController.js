@@ -1,5 +1,4 @@
 // backend/controllers/marketplaceController.js
-
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
 
@@ -8,10 +7,9 @@ if (!pg || typeof pg.query !== "function") {
 }
 
 /* -------------------- константы/хелперы -------------------- */
-
 const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
 
-// алиасы категорий (при необходимости добавляйте свои ключи)
+// алиасы категорий
 const CATEGORY_ALIAS = {
   guide: ["city_tour_guide", "mountain_tour_guide"],
   transport: [
@@ -28,8 +26,7 @@ const CATEGORY_ALIAS = {
   refused_event_ticket: ["refused_event_ticket"],
   visa_support: ["visa_support"],
 };
-const expandCategory = (cat) =>
-  cat ? CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()] : null;
+const expandCategory = (cat) => (cat ? CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()] : null);
 
 function splitTokens(s) {
   return String(s || "")
@@ -40,7 +37,7 @@ function splitTokens(s) {
     .filter(Boolean);
 }
 
-// базовые синонимы для определения типа и языка в свободном тексте
+// синонимы
 const TYPE_SYNONYMS = {
   guide: ["guide", "гид", "ekskursiya", "экскурсия", "экскурсовод", "gid"],
   transport: ["transport", "transfer", "транспорт", "трансфер", "driver", "car", "авто"],
@@ -54,33 +51,22 @@ const LANG_SYNONYMS = {
 };
 const ALL_LANG_TOKENS = [...new Set(Object.values(LANG_SYNONYMS).flat())];
 
-// ---------- helpers: нормализация и LIKE-паттерны с RU⇄UZ лат/кирилл ----------
-
-function _norm(s) {
-  return String(s || "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// очень упрощённая транслитерация (хватает для "самарканд" ⇄ "samarkand/samarqand")
+/* --- нормализация/транслит и LIKE-паттерны --- */
+const _norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 function _cyr2lat(s) {
   return _norm(s)
-    .replace(/щ/g, "shch").replace(/ш/g, "sh").replace(/ч/g, "ch").replace(/ж/g, "zh")
+    .replace(/shch/g, "shch").replace(/щ/g, "shch")
+    .replace(/ш/g, "sh").replace(/ч/g, "ch").replace(/ж/g, "zh")
     .replace(/ю/g, "yu").replace(/я/g, "ya").replace(/й/g, "y").replace(/ё/g, "e")
     .replace(/ъ|’|ʻ|`/g, "").replace(/ь/g, "")
     .replace(/х/g, "kh").replace(/ц/g, "ts")
-    // UZ cyr → lat
     .replace(/қ/g, "q").replace(/ғ/g, "g'").replace(/ў/g, "o'").replace(/ҳ/g, "h")
     .replace(/а/g, "a").replace(/б/g, "b").replace(/в/g, "v").replace(/г/g, "g")
     .replace(/д/g, "d").replace(/е/g, "e").replace(/з/g, "z").replace(/и/g, "i")
     .replace(/к/g, "k").replace(/л/g, "l").replace(/м/g, "m").replace(/н/g, "n")
     .replace(/о/g, "o").replace(/п/g, "p").replace(/р/g, "r").replace(/с/g, "s")
-    .replace(/т/g, "t").replace(/у/g, "u").replace(/ф/g, "f").replace(/ы/g, "y")
-    // частые варианты Самарканда
-    .replace(/\bsamarqand\b/g, "samarqand"); // стабилизируем
+    .replace(/т/g, "t").replace(/у/g, "u").replace(/ф/g, "f").replace(/ы/g, "y");
 }
-
 function _lat2cyr(s) {
   let x = _norm(s)
     .replace(/shch/g, "щ").replace(/sch/g, "щ")
@@ -98,76 +84,46 @@ function _lat2cyr(s) {
     .replace(/y/g, "ы").replace(/c/g, "к").replace(/w/g, "в");
   return x;
 }
-
-/**
- * Собираем массив LIKE-паттернов для локации:
- * - исходный токен
- * - кириллица ⇄ латиница (RU/UZ)
- * - оба в виде %...%
- * Возвращает [] если вход пуст.
- */
 function makeLikePatterns(loc_q) {
   const s = _norm(loc_q);
   if (!s) return [];
   const parts = s.split(/[,\s]+/).filter(Boolean);
-
   const set = new Set();
   for (const t of parts) {
     const a = _norm(t);
     const b = _cyr2lat(a);
     const c = _lat2cyr(a);
-    [a, b, c].forEach((v) => {
-      if (v && v.length >= 2) set.add(`%${v}%`);
-    });
-    // частый кейс: samarkand ↔ samarqand
+    [a, b, c].forEach((v) => v && v.length >= 2 && set.add(`%${v}%`));
     if (a.includes("samarkand")) set.add("%samarqand%");
     if (a.includes("samarqand")) set.add("%samarkand%");
   }
   return Array.from(set);
 }
 
-
 function parseQueryForProvider(q) {
   const tokens = splitTokens(q);
   if (!tokens.length) return { type_q: null, loc_q: "", lang_syn: [] };
 
-  // языки
   const langSyn = [];
-  for (const t of tokens) {
-    for (const arr of Object.values(LANG_SYNONYMS)) if (arr.includes(t)) langSyn.push(...arr);
-  }
+  for (const t of tokens) for (const arr of Object.values(LANG_SYNONYMS)) if (arr.includes(t)) langSyn.push(...arr);
 
-  // тип — ТОЛЬКО если найден по словарю; иначе не требуем
   let type_q = null;
   for (const [typ, arr] of Object.entries(TYPE_SYNONYMS)) {
     if (tokens.some((t) => arr.includes(t))) { type_q = typ; break; }
   }
 
-  // локация — первый токен не из словарей
   const blacklist = new Set([...ALL_LANG_TOKENS, ...Object.values(TYPE_SYNONYMS).flat()]);
   const loc_q =
     tokens.find((t) => !blacklist.has(t) && t.length >= 3) ||
-    tokens.find((t) => !blacklist.has(t)) ||
-    "";
+    tokens.find((t) => !blacklist.has(t)) || "";
 
   return { type_q, loc_q, lang_syn: [...new Set(langSyn)] };
 }
 
-
 /* -------------------- SEARCH -------------------- */
-/**
- * POST/GET /api/marketplace/search
- * Поддерживает:
- *  - q: свободный текст (искать по providers: type/location/languages)
- *  - category: фильтр по services.category (с алиасами)
- *  - sort: newest | price_asc | price_desc
- *  - only_active: true (по умолчанию)
- *  - limit/offset
- */
 module.exports.search = async (req, res, next) => {
   try {
     const src = { ...(req.query || {}), ...(req.body || {}) };
-
     const q           = typeof src.q === "string" ? src.q.trim() : "";
     const category    = src.category ?? null;
     const only_active = String(src.only_active ?? "true").toLowerCase() !== "false";
@@ -177,131 +133,101 @@ module.exports.search = async (req, res, next) => {
 
     const cats = expandCategory(category);
 
-// ... всё как у тебя выше ...
+    // 1) провайдеры
+    let providerIds = null;
+    let textPatterns = [];
+    if (q) {
+      const { type_q, loc_q, lang_syn } = parseQueryForProvider(q);
+      const locPatterns = makeLikePatterns(loc_q);
+      textPatterns = makeLikePatterns(q);
 
-// 1) Если q не пустой — найдём подходящих провайдеров
-let providerIds = null;
-let textPatterns = []; // ⬅ для фоллбека по услугам
+      const nothingToFilter = !type_q && locPatterns.length === 0 && lang_syn.length === 0;
+      if (!nothingToFilter) {
+        const provSql = `
+          WITH params AS (
+            SELECT $1::text AS type_q, $2::text[] AS loc_patterns, $3::text[] AS lang_syn
+          )
+          SELECT DISTINCT p.id
+          FROM providers p
+          LEFT JOIN LATERAL (
+            SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
+            FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+          ) l ON TRUE
+          CROSS JOIN params par
+          WHERE
+            (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
+            AND (
+              (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
+              OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
+            )
+        `;
+        const { rows: provRows } = await pg.query(provSql, [type_q, locPatterns, lang_syn]);
+        providerIds = provRows.map((r) => r.id);
+      }
+    }
 
-if (q) {
-  const { type_q, loc_q, lang_syn } = parseQueryForProvider(q);
-  const locPatterns = makeLikePatterns(loc_q);
+    // 2) услуги
+    const where = [];
+    const params = [];
+    let p = 1;
 
-  // подготовим паттерны из всей строки q для фоллбека
-  textPatterns = makeLikePatterns(q); // %гид%, %самарканд%, %samarkand%, ...
-
-  const nothingToFilter = !type_q && locPatterns.length === 0 && lang_syn.length === 0;
-
-  if (!nothingToFilter) {
-    const provSql = `
-      WITH params AS (
-        SELECT
-          $1::text   AS type_q,
-          $2::text[] AS loc_patterns,
-          $3::text[] AS lang_syn
-      )
-      SELECT DISTINCT p.id
-      FROM providers p
-      LEFT JOIN LATERAL (
-        SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-        FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-      ) l ON TRUE
-      CROSS JOIN params par
-      WHERE
-        (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
-        AND (
-          (COALESCE(array_length(par.loc_patterns,1),0) > 0
-             AND p.location::text ILIKE ANY(par.loc_patterns))
-          OR
-          (COALESCE(array_length(par.lang_syn,1),0) > 0
-             AND l.lang_token = ANY (par.lang_syn))
+    // статус: поддержим 'published' и 'active'
+    where.push(`COALESCE(NULLIF(s.status,''),'published') IN ('published','active')`);
+    if (only_active) {
+      where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
+      where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
+    }
+    if (cats && cats.length) {
+      const ph = cats.map(() => `$${p++}`).join(",");
+      params.push(...cats);
+      where.push(`s.category IN (${ph})`);
+    }
+    if (Array.isArray(providerIds) && providerIds.length > 0) {
+      params.push(providerIds);
+      where.push(`s.provider_id = ANY($${p++})`);
+    }
+    // фоллбек по тексту
+    if (q && (!providerIds || providerIds.length === 0) && textPatterns.length > 0) {
+      params.push(textPatterns);
+      const ph = `$${p++}`;
+      where.push(`(
+        s.title ILIKE ANY(${ph})
+        OR s.description ILIKE ANY(${ph})
+        OR s.location::text ILIKE ANY(${ph})
+        OR s.details::text ILIKE ANY(${ph})
+        OR EXISTS (
+          SELECT 1 FROM providers pp
+          WHERE pp.id = s.provider_id
+            AND (pp.name ILIKE ANY(${ph}) OR pp.title ILIKE ANY(${ph}) OR pp.location::text ILIKE ANY(${ph}))
         )
+      )`);
+    }
+
+    let orderBy = "s.created_at DESC";
+    if (sort === "price_asc") orderBy = `${PRICE_SQL} ASC NULLS LAST`;
+    else if (sort === "price_desc") orderBy = `${PRICE_SQL} DESC NULLS LAST`;
+
+    params.push(limit, offset);
+
+    const sql = `
+      SELECT
+        s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
+        s.created_at, s.status, s.details, s.expiration_at,
+        row_to_json(pv) AS provider
+      FROM services s
+      LEFT JOIN providers pv ON pv.id = s.provider_id
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY ${orderBy}
+      LIMIT $${p++} OFFSET $${p++}
     `;
-    const { rows: provRows } = await pg.query(provSql, [type_q, locPatterns, lang_syn]);
-    providerIds = provRows.map((r) => r.id);
-    // ⬇️ ВАЖНО: БОЛЬШЕ НЕ ДЕЛАЕМ РАННИЙ RETURN, а пойдём в фоллбек по тексту
+    const { rows } = await pg.query(sql, params);
+    return res.json({ items: rows, limit, offset });
+  } catch (err) {
+    next(err);
   }
-}
-
-// 2) Собираем WHERE для услуг
-const where = [];
-const params = [];
-let p = 1;
-
-where.push(`COALESCE(NULLIF(s.status,''),'published') IN ('published','active')`);
-if (only_active) {
-  where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
-  where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
-}
-
-if (cats && cats.length) {
-  const ph = cats.map(() => `$${p++}`).join(",");
-  params.push(...cats);
-  where.push(`s.category IN (${ph})`);
-}
-
-// фильтр по провайдерам — если есть
-if (Array.isArray(providerIds) && providerIds.length > 0) {
-  params.push(providerIds);
-  where.push(`s.provider_id = ANY($${p++})`);
-}
-
-// 🔎 ===== FALLBACK ПО ТЕКСТУ (если q задан, а providerIds нет/пуст) =====
-if (q && (!providerIds || providerIds.length === 0)) {
-  // Ищем по заголовку/описанию/локации/деталям и имени провайдера
-  // (ILIKE ANY($x) с массивом паттернов %...%)
-  if (textPatterns.length > 0) {
-    params.push(textPatterns);
-    const ph = `$${p++}`;
-    where.push(
-      `(
-         s.title ILIKE ANY(${ph})
-         OR s.description ILIKE ANY(${ph})
-         OR s.location::text ILIKE ANY(${ph})
-         OR s.details::text ILIKE ANY(${ph})
-         OR EXISTS (
-              SELECT 1 FROM providers pp
-              WHERE pp.id = s.provider_id
-                AND (
-                  pp.name ILIKE ANY(${ph})
-                  OR pp.title ILIKE ANY(${ph})
-                  OR pp.location::text ILIKE ANY(${ph})
-                )
-           )
-       )`
-    );
-  }
-}
-// ===== END FALLBACK =====
-
-let orderBy = "s.created_at DESC";
-if (sort === "price_asc") orderBy = `${PRICE_SQL} ASC NULLS LAST`;
-else if (sort === "price_desc") orderBy = `${PRICE_SQL} DESC NULLS LAST`;
-
-params.push(limit, offset);
-
-const sql = `
-  SELECT
-    s.id, s.provider_id, s.title, s.description, s.category, s.price, s.images, s.availability,
-    s.created_at, s.status, s.details, s.expiration_at,
-    row_to_json(pv) AS provider
-  FROM services s
-  LEFT JOIN providers pv ON pv.id = s.provider_id
-  ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-  ORDER BY ${orderBy}
-  LIMIT $${p++} OFFSET $${p++}
-`;
-
-const { rows } = await pg.query(sql, params);
-return res.json({ items: rows, limit, offset });
-
+};
 
 /* -------------------- SUGGEST -------------------- */
-/**
- * GET /api/marketplace/suggest?q=...&limit=8
- * Возвращает уникальные подсказки из providers.type/location/languages.
- * Без использования CASE с SRF — только UNION ALL и последующая агрегация.
- */
 module.exports.suggest = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim().toLowerCase();
@@ -309,7 +235,6 @@ module.exports.suggest = async (req, res, next) => {
     if (q.length < 2) return res.json({ items: [] });
 
     const like = `%${q}%`;
-
     const sql = `
       WITH
       typ AS (
@@ -323,10 +248,8 @@ module.exports.suggest = async (req, res, next) => {
         WHERE COALESCE(p.location::text,'') ILIKE $1
       ),
       lang_tokens AS (
-        -- разбиваем languages в токены (json/array/text → text)
         SELECT NULLIF(trim(both ' "[]{}' FROM t),'') AS label, 80 AS w
-        FROM providers p,
-             regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+        FROM providers p, regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
         WHERE t ILIKE $1
       )
       SELECT label
@@ -342,7 +265,6 @@ module.exports.suggest = async (req, res, next) => {
       ORDER BY MAX(w) DESC, label ASC
       LIMIT $2
     `;
-
     const { rows } = await pg.query(sql, [like, limit]);
     res.json({ items: rows.map(r => r.label) });
   } catch (err) {
