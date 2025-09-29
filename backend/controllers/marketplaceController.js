@@ -1,4 +1,3 @@
-// backend/controllers/marketplaceController.js
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
 
@@ -9,7 +8,6 @@ if (!pg || typeof pg.query !== "function") {
 /* -------------------- константы/хелперы -------------------- */
 const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
 
-// алиасы категорий
 const CATEGORY_ALIAS = {
   guide: ["city_tour_guide", "mountain_tour_guide"],
   transport: [
@@ -26,7 +24,8 @@ const CATEGORY_ALIAS = {
   refused_event_ticket: ["refused_event_ticket"],
   visa_support: ["visa_support"],
 };
-const expandCategory = (cat) => (cat ? CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()] : null);
+const expandCategory = (cat) =>
+  cat ? CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()] : null;
 
 function splitTokens(s) {
   return String(s || "")
@@ -37,7 +36,6 @@ function splitTokens(s) {
     .filter(Boolean);
 }
 
-// синонимы
 const TYPE_SYNONYMS = {
   guide: ["guide", "гид", "ekskursiya", "экскурсия", "экскурсовод", "gid"],
   transport: ["transport", "transfer", "транспорт", "трансфер", "driver", "car", "авто"],
@@ -51,7 +49,7 @@ const LANG_SYNONYMS = {
 };
 const ALL_LANG_TOKENS = [...new Set(Object.values(LANG_SYNONYMS).flat())];
 
-/* --- нормализация/транслит и LIKE-паттерны --- */
+/* ---- нормализация/транслит и паттерны LIKE ---- */
 const _norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 function _cyr2lat(s) {
   return _norm(s)
@@ -84,8 +82,8 @@ function _lat2cyr(s) {
     .replace(/y/g, "ы").replace(/c/g, "к").replace(/w/g, "в");
   return x;
 }
-function makeLikePatterns(loc_q) {
-  const s = _norm(loc_q);
+function makeLikePatterns(input) {
+  const s = _norm(input);
   if (!s) return [];
   const parts = s.split(/[,\s]+/).filter(Boolean);
   const set = new Set();
@@ -124,6 +122,7 @@ function parseQueryForProvider(q) {
 module.exports.search = async (req, res, next) => {
   try {
     const src = { ...(req.query || {}), ...(req.body || {}) };
+
     const q           = typeof src.q === "string" ? src.q.trim() : "";
     const category    = src.category ?? null;
     const only_active = String(src.only_active ?? "true").toLowerCase() !== "false";
@@ -133,7 +132,7 @@ module.exports.search = async (req, res, next) => {
 
     const cats = expandCategory(category);
 
-    // 1) провайдеры
+    // 1) Поиск провайдеров (если есть смысл)
     let providerIds = null;
     let textPatterns = [];
     if (q) {
@@ -166,46 +165,50 @@ module.exports.search = async (req, res, next) => {
       }
     }
 
-    // 2) услуги
+    // 2) Фильтры по услугам
     const where = [];
     const params = [];
     let p = 1;
 
-    // статус: поддержим 'published' и 'active'
-    where.push(`COALESCE(NULLIF(s.status,''),'published') IN ('published','active')`);
+    // статус — допускаем разные варианты регистра/значений и NULL
+    where.push(`(s.status IS NULL OR lower(s.status) IN ('published','active','approved'))`);
+
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
       where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
     }
+
     if (cats && cats.length) {
       const ph = cats.map(() => `$${p++}`).join(",");
       params.push(...cats);
       where.push(`s.category IN (${ph})`);
     }
+
     if (Array.isArray(providerIds) && providerIds.length > 0) {
       params.push(providerIds);
       where.push(`s.provider_id = ANY($${p++})`);
     }
-    // фоллбек по тексту
+
+    // 🔎 Fallback-поиск по тексту, если провайдеров не нашли
     if (q && (!providerIds || providerIds.length === 0) && textPatterns.length > 0) {
       params.push(textPatterns);
       const ph = `$${p++}`;
+      // ВНИМАНИЕ: не используем s.location / pp.location — они могут отсутствовать в вашей схеме
       where.push(`(
         s.title ILIKE ANY(${ph})
         OR s.description ILIKE ANY(${ph})
-        OR s.location::text ILIKE ANY(${ph})
         OR s.details::text ILIKE ANY(${ph})
         OR EXISTS (
           SELECT 1 FROM providers pp
           WHERE pp.id = s.provider_id
-            AND (pp.name ILIKE ANY(${ph}) OR pp.title ILIKE ANY(${ph}) OR pp.location::text ILIKE ANY(${ph}))
+            AND (pp.name ILIKE ANY(${ph}) OR pp.title ILIKE ANY(${ph}))
         )
       )`);
     }
 
     let orderBy = "s.created_at DESC";
-    if (sort === "price_asc") orderBy = `${PRICE_SQL} ASC NULLS LAST`;
-    else if (sort === "price_desc") orderBy = `${PRICE_SQL} DESC NULLS LAST`;
+    if (sort === "price_asc")  orderBy = `${PRICE_SQL} ASC NULLS LAST`;
+    if (sort === "price_desc") orderBy = `${PRICE_SQL} DESC NULLS LAST`;
 
     params.push(limit, offset);
 
@@ -220,6 +223,7 @@ module.exports.search = async (req, res, next) => {
       ORDER BY ${orderBy}
       LIMIT $${p++} OFFSET $${p++}
     `;
+
     const { rows } = await pg.query(sql, params);
     return res.json({ items: rows, limit, offset });
   } catch (err) {
