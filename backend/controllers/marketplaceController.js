@@ -217,7 +217,10 @@ module.exports.search = async (req, res, next) => {
       if (!nothingToFilter) {
         const provSql = `
           WITH params AS (
-            SELECT $1::text AS type_q, $2::text[] AS loc_patterns, $3::text[] AS lang_syn
+            SELECT
+              $1::text   AS type_q,
+              $2::text[] AS loc_patterns,
+              $3::text[] AS lang_syn
           )
           SELECT DISTINCT p.id
           FROM providers p
@@ -227,12 +230,16 @@ module.exports.search = async (req, res, next) => {
           ) l ON TRUE
           CROSS JOIN params par
           WHERE
+            -- тип должен совпадать, если он задан
             (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
             AND (
+              -- 1) есть локационные паттерны и совпало по локации
               (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
+              -- 2) либо совпало по языку
               OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
+              -- 3) либо (ВАЖНО) задан только тип — этого достаточно
+              OR (par.type_q IS NOT NULL)
             )
-        `;
         const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
         providerIds = r.rows.map((x) => x.id);
         tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
