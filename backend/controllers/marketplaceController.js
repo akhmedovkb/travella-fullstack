@@ -1,5 +1,10 @@
+// backend/controllers/marketplaceController.js
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
+
+if (!pg || typeof pg.query !== "function") {
+  throw new Error("DB driver not available: expected node-postgres Pool with .query()");
+}
 
 // ====== TRACE HELPERS ======
 const { performance } = require("perf_hooks");
@@ -53,14 +58,17 @@ function mkTracer(req, tag = "MP") {
 
   const done = (label = "done") => log(label);
 
-  return { enable, log, logSQL, wrapQuery, done, rid };
+  // ВАЖНО: эти заголовки будут видны в Network → Response Headers
+  const attach = (res) => {
+    if (!res?.set) return;
+    res.set("x-mp-rid", rid);
+    if (enable) res.set("x-mp-debug", "1");
+  };
+
+  return { enable, log, logSQL, wrapQuery, done, rid, attach };
 }
 // ====== /TRACE HELPERS ======
 
-
-if (!pg || typeof pg.query !== "function") {
-  throw new Error("DB driver not available: expected node-postgres Pool with .query()");
-}
 
 /* -------------------- константы/хелперы -------------------- */
 const PRICE_SQL = `COALESCE(NULLIF(s.details->>'netPrice','')::numeric, s.price)`;
@@ -106,7 +114,7 @@ const LANG_SYNONYMS = {
 };
 const ALL_LANG_TOKENS = [...new Set(Object.values(LANG_SYNONYMS).flat())];
 
-/* ---- нормализация/транслит и паттерны LIKE ---- */
+// ---- нормализация/транслит и паттерны LIKE ----
 const _norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 function _cyr2lat(s) {
   return _norm(s)
@@ -177,8 +185,9 @@ function parseQueryForProvider(q) {
 
 /* -------------------- SEARCH -------------------- */
 module.exports.search = async (req, res, next) => {
-try {
+  try {
     const tr = mkTracer(req, "MP:search");
+    tr.attach(res); // заголовки для Network
 
     const src = { ...(req.query || {}), ...(req.body || {}) };
     tr.log("incoming src", { q: src.q, category: src.category, sort: src.sort, only_active: src.only_active, limit: src.limit, offset: src.offset });
@@ -254,6 +263,7 @@ try {
       where.push(`s.provider_id = ANY($${p++})`);
     }
 
+    // Фоллбек по тексту, если провайдеров не нашли/фильтр пуст
     if (q && (!providerIds || providerIds.length === 0) && textPatterns.length > 0) {
       params.push(textPatterns);
       const ph = `$${p++}`;
@@ -304,6 +314,8 @@ try {
 module.exports.suggest = async (req, res, next) => {
   try {
     const tr = mkTracer(req, "MP:suggest");
+    tr.attach(res); // заголовки для Network
+
     const q = String(req.query.q || "").trim().toLowerCase();
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit || "8", 10)));
     tr.log("incoming", { q, limit });
@@ -350,4 +362,3 @@ module.exports.suggest = async (req, res, next) => {
     next(err);
   }
 };
-
