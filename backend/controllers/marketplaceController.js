@@ -272,10 +272,14 @@ module.exports.search = async (req, res, next) => {
         OR s.description ILIKE ANY(${ph})
         OR s.details::text ILIKE ANY(${ph})
         OR EXISTS (
-          SELECT 1 FROM providers pp
-          WHERE pp.id = s.provider_id
-            AND (pp.name ILIKE ANY(${ph}) OR pp.title ILIKE ANY(${ph}))
-        )
+         SELECT 1 FROM providers pp
+         WHERE pp.id = s.provider_id
+           AND (
+             pp.name ILIKE ANY(${ph})
+             OR pp.type::text ILIKE ANY(${ph})
+             OR pp.location::text ILIKE ANY(${ph})
+           )
+       )
       )`);
       tr.log("fallback text filter enabled", { patterns: textPatterns.length });
     }
