@@ -507,6 +507,10 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
+    // подсказки поиска
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const suggestTimer = useRef(null);
 
       // ===== Режимы и состояние лент секций (Top/New/Upcoming) =====
   const [searchMode, setSearchMode] = useState(false);
@@ -680,6 +684,7 @@ const matchQuery = (query, it) => {
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [favIds, setFavIds] = useState(new Set());
+  const inputRef = useRef(null);
   // единый helper для id услуги
   const getServiceId = (it) => {
     const svc = it?.service || it || {};
@@ -857,6 +862,7 @@ const search = async (opts = {}) => {
     setError(t("common.loading_error") || "Не удалось загрузить данные");
   } finally {
     setLoading(false);
+    setShowSuggest(false);
   }
 };
 
@@ -1134,13 +1140,83 @@ const search = async (opts = {}) => {
         )}
 
       {/* Панель поиска */}
-      <div className="bg-white rounded-xl shadow p-4 border mb-4 flex flex-col md:flex-row gap-3 items-stretch">
-        <input
+      <div className="bg-white rounded-xl shadow p-4 border mb-4">
+        <div className="flex flex-col md:flex-row gap-3 items-stretch relative">
+          <input
+            ref={inputRef}
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+                      onChange={(e) => {
+              const val = e.target.value;
+              setQ(val);
+              // debounce подсказок
+              clearTimeout(suggestTimer.current);
+              if (!val.trim()) {
+                setSuggestions([]);
+                setShowSuggest(false);
+                return;
+              }
+              suggestTimer.current = setTimeout(async () => {
+                try {
+                  // 1) бек-энд подсказки
+                  const resp = await apiGet(
+                    `/api/marketplace/suggest?q=${encodeURIComponent(val)}&limit=8`
+                  );
+                  let list = normalizeList(resp)
+                    .map((x) => String(x.title || x.name || x).trim())
+                    .filter(Boolean);
+                  // 2) fallback: берём секции и строим подсказки локально
+                  if (!list.length) {
+                    const pool = []
+                      .concat(sec.top.items, sec.new.items, sec.upcoming.items)
+                      .slice(0, 60);
+                    const seen = new Set();
+                    list = pool
+                      .map((it) => {
+                       const { title, inlineProvider } = extractServiceFields(it, role);
+                        const prov =
+                          inlineProvider?.display_name ||
+                          inlineProvider?.company_name ||
+                          inlineProvider?.name ||
+                          "";
+                        return [title, prov];
+                      })
+                      .flat()
+                      .filter(Boolean)
+                      .filter((s) => matchQuery(val, { service: { title: s } }))
+                      .filter((s) => (seen.has(s) ? false : (seen.add(s), true)))
+                      .slice(0, 8);
+                  }
+                  setSuggestions(list);
+                  setShowSuggest(true);
+                } catch {
+                  setSuggestions([]);
+                  setShowSuggest(false);
+                }
+              }, 250);
+            }}
           placeholder={t("marketplace.search_placeholder") || "Поиск по услугам, странам, городам…"}
           className="flex-1 border rounded-lg px-3 py-2"
-        />
+                    onFocus={() => suggestions.length && setShowSuggest(true)}
+            onBlur={() => setTimeout(() => setShowSuggest(false), 120)}
+          />
+          {/* выпадающий список подсказок */}
+          {showSuggest && suggestions.length > 0 && (
+            <ul className="absolute z-20 left-0 right-0 top-11 md:top-[42px] bg-white border rounded-lg shadow max-h-72 overflow-auto">
+              {suggestions.map((sug, i) => (
+                <li
+                  key={`${sug}-${i}`}
+                  className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
+                  onMouseDown={() => {
+                    setQ(sug);
+                    setShowSuggest(false);
+                    search({ fallback: true });
+                  }}
+                >
+                  {sug}
+                </li>
+              ))}
+            </ul>
+          )}
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -1153,7 +1229,7 @@ const search = async (opts = {}) => {
           ))}
         </select>
 
-                        <button
+        <button
           onClick={() => {
             const wantSearch = !!(q.trim() || category);
             setSearchMode(wantSearch);
@@ -1169,6 +1245,7 @@ const search = async (opts = {}) => {
           {t("common.find") || "Найти"}
         </button>
       </div>
+    </div>
 
             {/* Список / секции */}
       {searchMode ? (
@@ -1188,6 +1265,7 @@ const search = async (opts = {}) => {
                     item={it}
                     now={now}
                     viewerRole={role}
+                    highlightQuery={q}             // 🔍 подсветка
                     isFav={sid ? favIds.has(String(sid)) : false}
                     onToggleFavorite={() => sid && toggleFavorite(sid)}
                     onQuickRequest={(serviceId, providerId, title) =>
