@@ -7,4 +7,7 @@ const ctrl = require("../controllers/marketplaceController");
 router.post("/search", ctrl.search);
 router.get("/search", ctrl.search);
 
+// автодополнение поиска
+router.get("/suggest", ctrl.suggest);
+
 module.exports = router;
