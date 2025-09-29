@@ -377,3 +377,61 @@ module.exports.suggest = async (req, res, next) => {
     next(err);
   }
 };
+
+// -------------------- FACETS (provider type / location / languages) --------------------
+module.exports.facets = async (req, res, next) => {
+  try {
+    const tr = mkTracer(req, "MP:facets");
+    tr.attach(res);
+
+    // DISTINCT типов
+    const sqlTypes = `
+      SELECT DISTINCT NULLIF(TRIM(p.type::text),'') AS v
+      FROM providers p
+      WHERE NULLIF(TRIM(p.type::text),'') IS NOT NULL
+      ORDER BY v ASC
+    `;
+
+    // Локации: в БД встречается "Samarkand,Bukhara,Shahrisabz" — дробим по запятым/точкам с запятой
+    const sqlLocations = `
+      WITH tokens AS (
+        SELECT NULLIF(TRIM(BOTH ' "' FROM t), '') AS token
+        FROM providers p,
+             regexp_split_to_table(p.location::text, '[,;]') AS t
+      )
+      SELECT DISTINCT token AS v
+      FROM tokens
+      WHERE token IS NOT NULL AND length(token) >= 2
+      ORDER BY v ASC
+    `;
+
+    // Языки: p.languages может быть json/текст — вытаскиваем токены
+    const sqlLangs = `
+      WITH tokens AS (
+        SELECT NULLIF(TRIM(BOTH ' "[]{}' FROM t), '') AS token
+        FROM providers p,
+             regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+      )
+      SELECT DISTINCT LOWER(token) AS v
+      FROM tokens
+      WHERE token IS NOT NULL AND length(token) >= 2
+      ORDER BY v ASC
+    `;
+
+    const [r1, r2, r3] = await Promise.all([
+      pg.query(sqlTypes),
+      pg.query(sqlLocations),
+      pg.query(sqlLangs),
+    ]);
+
+    res.json({
+      types:     r1.rows.map(r => r.v).filter(Boolean),
+      locations: r2.rows.map(r => r.v).filter(Boolean),
+      languages: r3.rows.map(r => r.v).filter(Boolean),
+    });
+  } catch (err) {
+    console.error("[MP:facets ERR]", err?.message || err);
+    next(err);
+  }
+};
+
