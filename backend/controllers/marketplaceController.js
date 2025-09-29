@@ -1,6 +1,63 @@
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
 
+// ====== TRACE HELPERS ======
+const { performance } = require("perf_hooks");
+
+function mkTracer(req, tag = "MP") {
+  // включать: env MP_DEBUG=1 | query ?debug=1 | header x-mp-debug:1
+  const enable =
+    String(process.env.MP_DEBUG || "").toLowerCase() === "1" ||
+    String(req?.query?.debug || "").toLowerCase() === "1" ||
+    String(req?.headers?.["x-mp-debug"] || "").toLowerCase() === "1";
+
+  const t0 = performance.now();
+  const rid = Math.random().toString(36).slice(2, 8);
+
+  const stamp = (label = "") =>
+    `[${tag}#${rid}${label ? " " + label : ""}] +${(performance.now() - t0).toFixed(1)}ms`;
+
+  const sanitizeParam = (v) => {
+    if (v == null) return v;
+    if (typeof v === "string") {
+      const s = v.length > 200 ? v.slice(0, 200) + "…(trunc)" : v;
+      return s.replace(/\s+/g, " ");
+    }
+    if (Array.isArray(v)) return v.map(sanitizeParam);
+    if (typeof v === "object") {
+      try { return JSON.parse(JSON.stringify(v)); } catch { return "[Object]"; }
+    }
+    return v;
+  };
+
+  const log = (...args) => { if (enable) console.log(stamp(), ...args); };
+  const logSQL = (title, sql, params) => {
+    if (!enable) return;
+    const oneLine = String(sql || "").replace(/\s+/g, " ").trim();
+    console.log(stamp(title), oneLine.length > 1000 ? oneLine.slice(0, 1000) + "…(trunc)" : oneLine);
+    if (params) console.log(stamp(title + " params"), sanitizeParam(params));
+  };
+
+  const wrapQuery = async (sql, params, title = "SQL") => {
+    logSQL(title, sql, params);
+    const t1 = performance.now();
+    try {
+      const res = await pg.query(sql, params);
+      log(`${title} ok`, `rows=${res?.rowCount ?? res?.rows?.length ?? 0}`, `dt=${(performance.now()-t1).toFixed(1)}ms`);
+      return res;
+    } catch (e) {
+      console.error(stamp(title + " ERR"), e?.message || e);
+      throw e;
+    }
+  };
+
+  const done = (label = "done") => log(label);
+
+  return { enable, log, logSQL, wrapQuery, done, rid };
+}
+// ====== /TRACE HELPERS ======
+
+
 if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
 }
@@ -120,8 +177,11 @@ function parseQueryForProvider(q) {
 
 /* -------------------- SEARCH -------------------- */
 module.exports.search = async (req, res, next) => {
-  try {
+try {
+    const tr = mkTracer(req, "MP:search");
+
     const src = { ...(req.query || {}), ...(req.body || {}) };
+    tr.log("incoming src", { q: src.q, category: src.category, sort: src.sort, only_active: src.only_active, limit: src.limit, offset: src.offset });
 
     const q           = typeof src.q === "string" ? src.q.trim() : "";
     const category    = src.category ?? null;
@@ -131,16 +191,20 @@ module.exports.search = async (req, res, next) => {
     const offset      = Math.max(0, parseInt(src.offset ?? "0", 10));
 
     const cats = expandCategory(category);
+    tr.log("filters", { q, category, cats, only_active, sort, limit, offset });
 
-    // 1) Поиск провайдеров (если есть смысл)
+    // --- провайдеры
     let providerIds = null;
     let textPatterns = [];
-    if (q) {
-      const { type_q, loc_q, lang_syn } = parseQueryForProvider(q);
-      const locPatterns = makeLikePatterns(loc_q);
-      textPatterns = makeLikePatterns(q);
 
-      const nothingToFilter = !type_q && locPatterns.length === 0 && lang_syn.length === 0;
+    if (q) {
+      const parsed = parseQueryForProvider(q);
+      tr.log("parsed", parsed);
+      const locPatterns = makeLikePatterns(parsed.loc_q);
+      textPatterns = makeLikePatterns(q);
+      tr.log("patterns", { locPatterns, textPatternsLen: textPatterns.length });
+
+      const nothingToFilter = !parsed.type_q && locPatterns.length === 0 && parsed.lang_syn.length === 0;
       if (!nothingToFilter) {
         const provSql = `
           WITH params AS (
@@ -160,19 +224,20 @@ module.exports.search = async (req, res, next) => {
               OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
             )
         `;
-        const { rows: provRows } = await pg.query(provSql, [type_q, locPatterns, lang_syn]);
-        providerIds = provRows.map((r) => r.id);
+        const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
+        providerIds = r.rows.map((x) => x.id);
+        tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
+      } else {
+        tr.log("provider filter skipped (nothingToFilter)");
       }
     }
 
-    // 2) Фильтры по услугам
+    // --- where для services
     const where = [];
     const params = [];
     let p = 1;
 
-    // статус — допускаем разные варианты регистра/значений и NULL
     where.push(`(s.status IS NULL OR lower(s.status) IN ('published','active','approved'))`);
-
     if (only_active) {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
       where.push(`(s.expiration_at IS NULL OR s.expiration_at > now())`);
@@ -189,11 +254,9 @@ module.exports.search = async (req, res, next) => {
       where.push(`s.provider_id = ANY($${p++})`);
     }
 
-    // 🔎 Fallback-поиск по тексту, если провайдеров не нашли
     if (q && (!providerIds || providerIds.length === 0) && textPatterns.length > 0) {
       params.push(textPatterns);
       const ph = `$${p++}`;
-      // ВНИМАНИЕ: не используем s.location / pp.location — они могут отсутствовать в вашей схеме
       where.push(`(
         s.title ILIKE ANY(${ph})
         OR s.description ILIKE ANY(${ph})
@@ -204,6 +267,7 @@ module.exports.search = async (req, res, next) => {
             AND (pp.name ILIKE ANY(${ph}) OR pp.title ILIKE ANY(${ph}))
         )
       )`);
+      tr.log("fallback text filter enabled", { patterns: textPatterns.length });
     }
 
     let orderBy = "s.created_at DESC";
@@ -224,9 +288,14 @@ module.exports.search = async (req, res, next) => {
       LIMIT $${p++} OFFSET $${p++}
     `;
 
-    const { rows } = await pg.query(sql, params);
+    tr.log("where", where);
+    const { rows } = await tr.wrapQuery(sql, params, "services");
+    tr.log("result", { rows: rows.length });
+    tr.done();
+
     return res.json({ items: rows, limit, offset });
   } catch (err) {
+    console.error("[MP:search ERR]", err?.message || err);
     next(err);
   }
 };
@@ -234,9 +303,12 @@ module.exports.search = async (req, res, next) => {
 /* -------------------- SUGGEST -------------------- */
 module.exports.suggest = async (req, res, next) => {
   try {
+    const tr = mkTracer(req, "MP:suggest");
     const q = String(req.query.q || "").trim().toLowerCase();
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit || "8", 10)));
-    if (q.length < 2) return res.json({ items: [] });
+    tr.log("incoming", { q, limit });
+
+    if (q.length < 2) { tr.log("short q — skip"); return res.json({ items: [] }); }
 
     const like = `%${q}%`;
     const sql = `
@@ -269,9 +341,13 @@ module.exports.suggest = async (req, res, next) => {
       ORDER BY MAX(w) DESC, label ASC
       LIMIT $2
     `;
-    const { rows } = await pg.query(sql, [like, limit]);
+    const { rows } = await tr.wrapQuery(sql, [like, limit], "suggest");
+    tr.log("result", rows.length);
+    tr.done();
     res.json({ items: rows.map(r => r.label) });
   } catch (err) {
+    console.error("[MP:suggest ERR]", err?.message || err);
     next(err);
   }
 };
+
