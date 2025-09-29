@@ -1146,6 +1146,13 @@ const search = async (opts = {}) => {
           <input
             ref={inputRef}
             value={q}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const wantSearch = !!(q.trim() || category);
+               setSearchMode(wantSearch);
+                wantSearch ? search() : ["top","new","upcoming"].forEach((k)=>loadSection(k,1));
+              }
+            }}
             onChange={(e) => {
               const val = e.target.value;
               setQ(val);
