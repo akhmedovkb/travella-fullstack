@@ -119,33 +119,40 @@ module.exports.suggest = async (req, res, next) => {
     const like = `%${q}%`;
 
     // Отдаём простые текстовые подсказки. Для languages берём всю строку (если массив — будет вида ["ru","en"]).
-    const { rows } = await pg.query(
-      `
-      WITH cand AS (
-        SELECT COALESCE(NULLIF(TRIM(p.type), ''), NULL)      AS label, 100 AS w
-        FROM providers p WHERE COALESCE(p.type,'') ILIKE $1
+const { rows } = await pg.query(
+  `
+  WITH cand AS (
+    -- тип провайдера
+    SELECT NULLIF(TRIM(p.type::text), '')       AS label, 100 AS w
+    FROM providers p
+    WHERE COALESCE(p.type::text,'') ILIKE $1
 
-        UNION ALL
-        SELECT COALESCE(NULLIF(TRIM(p.location), ''), NULL)  AS label, 90  AS w
-        FROM providers p WHERE COALESCE(p.location,'') ILIKE $1
+    UNION ALL
+    -- локация провайдера
+    SELECT NULLIF(TRIM(p.location::text), '')   AS label, 90  AS w
+    FROM providers p
+    WHERE COALESCE(p.location::text,'') ILIKE $1
 
-        UNION ALL
-        SELECT COALESCE(NULLIF(TRIM(to_jsonb(p.languages)::text), ''), NULL) AS label, 80 AS w
-        FROM providers p WHERE COALESCE(to_jsonb(p.languages)::text,'') ILIKE $1
-      ),
-      norm AS (
-        SELECT LOWER(TRIM(label)) AS key, MIN(TRIM(label)) AS label, MAX(w) AS w
-        FROM cand
-        WHERE label IS NOT NULL
-        GROUP BY LOWER(TRIM(label))
-      )
-      SELECT label
-      FROM norm
-      ORDER BY w DESC, label ASC
-      LIMIT $2
-      `,
-      [like, limit]
-    );
+    UNION ALL
+    -- языки провайдера (json/jsonb/array → text)
+    SELECT NULLIF(TRIM(p.languages::text), '')  AS label, 80  AS w
+    FROM providers p
+    WHERE COALESCE(p.languages::text,'') ILIKE $1
+  ),
+  norm AS (
+    SELECT LOWER(TRIM(label)) AS key, MIN(TRIM(label)) AS label, MAX(w) AS w
+    FROM cand
+    WHERE label IS NOT NULL
+    GROUP BY LOWER(TRIM(label))
+  )
+  SELECT label
+  FROM norm
+  ORDER BY w DESC, label ASC
+  LIMIT $2
+  `,
+  [like, limit]
+);
+
 
     res.json({ items: rows.map(r => r.label) });
   } catch (err) {
