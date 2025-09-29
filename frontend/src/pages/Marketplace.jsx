@@ -1145,8 +1145,8 @@ const search = async (opts = {}) => {
         <div className="flex flex-col md:flex-row gap-3 items-stretch relative">
           <input
             ref={inputRef}
-          value={q}
-                      onChange={(e) => {
+            value={q}
+            onChange={(e) => {
               const val = e.target.value;
               setQ(val);
               // debounce подсказок
