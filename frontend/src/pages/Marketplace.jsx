@@ -507,14 +507,6 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
-    // provider facets
-  const [facetTypes, setFacetTypes] = useState([]);
-  const [facetLocations, setFacetLocations] = useState([]);
-  const [facetLanguages, setFacetLanguages] = useState([]);
-  // selected provider filters
-  const [providerType, setProviderType] = useState("");
-  const [providerLocation, setProviderLocation] = useState("");
-  const [providerLanguage, setProviderLanguage] = useState("");
     // подсказки поиска
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -533,13 +525,10 @@ export default function Marketplace() {
   const filters = useMemo(
     () => ({
       q: q?.trim() || undefined,
+      //location: q?.trim() || undefined,
       category: category || undefined,
-      // явные фильтры провайдера
-      provider_type: providerType || undefined,
-      provider_location: providerLocation || undefined,
-      provider_languages: providerLanguage ? [providerLanguage] : undefined,
     }),
-    [q, category, providerType, providerLocation, providerLanguage]
+    [q, category]
   );
 
 // --- normalize & transliterate helpers ---
@@ -884,24 +873,6 @@ const search = async (opts = {}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-    // загрузка фасетов (type / location / languages) из providers
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiGet("/api/marketplace/facets");
-        const types     = Array.isArray(res?.types)     ? res.types     : [];
-        const locations = Array.isArray(res?.locations) ? res.locations : [];
-        const langs     = Array.isArray(res?.languages) ? res.languages : [];
-        setFacetTypes(types);
-        setFacetLocations(locations);
-        setFacetLanguages(langs);
-      } catch {
-        setFacetTypes([]);
-        setFacetLocations([]);
-        setFacetLanguages([]);
-      }
-    })();
-  }, []);
 
       // универсальная загрузка секции
   const loadSection = async (key, nextPage = 1) => {
@@ -1255,43 +1226,6 @@ const search = async (opts = {}) => {
             <option key={opt.value || "root"} value={opt.value}>
               {opt.label}
             </option>
-          ))}
-        </select>
-
-          
-        {/* Provider Type */}
-        <select
-          value={providerType}
-          onChange={(e) => setProviderType(e.target.value)}
-          className="w-full md:w-56 border rounded-lg px-3 py-2"
-        >
-          <option value="">{t("marketplace.any_type") || "Любой тип"}</option>
-          {facetTypes.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-
-        {/* Provider Location */}
-        <select
-          value={providerLocation}
-          onChange={(e) => setProviderLocation(e.target.value)}
-          className="w-full md:w-56 border rounded-lg px-3 py-2"
-        >
-          <option value="">{t("marketplace.any_location") || "Любая локация"}</option>
-          {facetLocations.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-
-        {/* Provider Language (single) */}
-       <select
-          value={providerLanguage}
-          onChange={(e) => setProviderLanguage(e.target.value)}
-          className="w-full md:w-56 border rounded-lg px-3 py-2"
-        >
-          <option value="">{t("marketplace.any_language") || "Любой язык"}</option>
-          {facetLanguages.map((v) => (
-            <option key={v} value={v}>{v}</option>
           ))}
         </select>
 
