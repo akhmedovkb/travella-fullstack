@@ -32,21 +32,22 @@ const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
 module.exports.search = async (req, res, next) => {
   try {
-    const {
-      q,
-      category,
-      location,
-      price_min,
-      price_max,
-      sort,
-      only_active = true,
-      limit = 60,
-      offset = 0,
-    } = req.body || {};
+        // поддерживаем ОДИН код для POST (body) и GET (query)
+    const src = { ...(req.query || {}), ...(req.body || {}) };
+    const q          = typeof src.q === "string" ? src.q.trim() : "";
+    const category   = src.category ?? null;
+    const location   = typeof src.location === "string" ? src.location.trim() : "";
+    const price_min  = src.price_min ?? src.min ?? undefined;
+    const price_max  = src.price_max ?? src.max ?? undefined;
+    const sort       = src.sort ?? null;
+    const only_active =
+      String(src.only_active ?? "true").toLowerCase() !== "false"; // по умолчанию true
+    const limit  = Math.min(200, Math.max(1, parseInt(src.limit  ?? "60", 10)));
+    const offset = Math.max(0, parseInt(src.offset ?? "0", 10));
 
     const cats = expandCategory(category);
-    const lim = Math.min(200, Math.max(1, Number(limit) || 60));
-    const off = Math.max(0, Number(offset) || 0);
+    const lim = limit;
+    const off = offset;
 
     const where = [];
     const params = [];
@@ -70,8 +71,8 @@ module.exports.search = async (req, res, next) => {
     }
 
     // текстовый поиск
-    if (q && String(q).trim()) {
-      const like = `%${String(q).trim()}%`;
+    if (q) {
+      const like = `%${q}%`;
       params.push(like, like, like);
       const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
       where.push(`(title ILIKE ${c1} OR description ILIKE ${c2} OR details::text ILIKE ${c3})`);
