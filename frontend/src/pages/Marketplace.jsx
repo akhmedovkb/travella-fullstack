@@ -846,7 +846,8 @@ const search = async (opts = {}) => {
         // 🎯 Marketplace: только опубликованные и актуальные
     list = list.filter((it) => {
       const svc = it?.service || it || {};
-      const published = (svc.status ?? 'published') === 'published';
+      const st = String(svc.status || '').toLowerCase();
+      const published = !st || ['published','active','approved'].includes(st);
       return published && isMarketplaceVisible(it, now);
     });
         // сортируем по релевантности (скор)
