@@ -56,25 +56,19 @@ const ALL_LANG_TOKENS = [...new Set(Object.values(LANG_SYNONYMS).flat())];
 
 function parseQueryForProvider(q) {
   const tokens = splitTokens(q);
-  if (!tokens.length) return { type_q: "", loc_q: "", lang_syn: [] };
+  if (!tokens.length) return { type_q: null, loc_q: "", lang_syn: [] };
 
-  // языки — накапливаем все найденные синонимы
+  // языки
   const langSyn = [];
   for (const t of tokens) {
-    for (const arr of Object.values(LANG_SYNONYMS)) {
-      if (arr.includes(t)) langSyn.push(...arr);
-    }
+    for (const arr of Object.values(LANG_SYNONYMS)) if (arr.includes(t)) langSyn.push(...arr);
   }
 
-  // тип — по словарю; иначе берём любой «длинный» токен
-  let type_q = "";
+  // тип — ТОЛЬКО если найден по словарю; иначе не требуем
+  let type_q = null;
   for (const [typ, arr] of Object.entries(TYPE_SYNONYMS)) {
-    if (tokens.some((t) => arr.includes(t))) {
-      type_q = typ;
-      break;
-    }
+    if (tokens.some((t) => arr.includes(t))) { type_q = typ; break; }
   }
-  if (!type_q) type_q = tokens.find((t) => t.length >= 3) || tokens[0] || "";
 
   // локация — первый токен не из словарей
   const blacklist = new Set([...ALL_LANG_TOKENS, ...Object.values(TYPE_SYNONYMS).flat()]);
@@ -85,6 +79,7 @@ function parseQueryForProvider(q) {
 
   return { type_q, loc_q, lang_syn: [...new Set(langSyn)] };
 }
+
 
 /* -------------------- SEARCH -------------------- */
 /**
@@ -109,33 +104,49 @@ module.exports.search = async (req, res, next) => {
 
     const cats = expandCategory(category);
 
-    // 1) Если q не пустой — найдём подходящих провайдеров
-    let providerIds = null;
-    if (q) {
-      const { type_q, loc_q, lang_syn } = parseQueryForProvider(q);
-      const provSql = `
-        WITH params AS (
-          SELECT $1::text AS type_q, $2::text AS loc_q, $3::text[] AS lang_syn
+// 1) Если q не пустой — найдём подходящих провайдеров
+let providerIds = null;
+if (q) {
+  const { type_q, loc_q, lang_syn } = parseQueryForProvider(q);
+  const locPatterns = makeLikePatterns(loc_q); // [%самарканд%, %samarkand%, %samarqand%]
+
+  // если совсем нечего фильтровать — не ограничиваем провайдерами
+  const nothingToFilter =
+    !type_q && locPatterns.length === 0 && lang_syn.length === 0;
+
+  if (!nothingToFilter) {
+    const provSql = `
+      WITH params AS (
+        SELECT
+          $1::text   AS type_q,
+          $2::text[] AS loc_patterns,
+          $3::text[] AS lang_syn
+      )
+      SELECT DISTINCT p.id
+      FROM providers p
+      LEFT JOIN LATERAL (
+        -- раскладываем languages (json/array/text) в токены
+        SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
+        FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+      ) l ON TRUE
+      CROSS JOIN params par
+      WHERE
+        -- тип обязателен ТОЛЬКО если распознан словарём
+        (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
+        AND (
+          (COALESCE(array_length(par.loc_patterns,1),0) > 0
+             AND p.location::text ILIKE ANY(par.loc_patterns))
+          OR
+          (COALESCE(array_length(par.lang_syn,1),0) > 0
+             AND l.lang_token = ANY (par.lang_syn))
         )
-        SELECT DISTINCT p.id
-        FROM providers p
-        LEFT JOIN LATERAL (
-          -- разложим любое представление languages (json/jsonb/array/text) в токены
-          SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-          FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-        ) l ON TRUE
-        CROSS JOIN params par
-        WHERE
-          (p.type::text ILIKE '%' || par.type_q || '%')
-          AND (
-            p.location::text ILIKE '%' || par.loc_q || '%'
-            OR (array_length(par.lang_syn,1) IS NOT NULL AND l.lang_token = ANY (par.lang_syn))
-          )
-      `;
-      const { rows: provRows } = await pg.query(provSql, [type_q, loc_q, lang_syn]);
-      providerIds = provRows.map((r) => r.id);
-      if (!providerIds.length) return res.json({ items: [], limit, offset });
-    }
+    `;
+    const { rows: provRows } = await pg.query(provSql, [type_q, locPatterns, lang_syn]);
+    providerIds = provRows.map((r) => r.id);
+    if (!providerIds.length) return res.json({ items: [], limit, offset });
+  }
+}
+
 
     // 2) Тянем услуги, применяя фильтры: статус/активность/категория/провайдеры(если были)
     const where = [];
