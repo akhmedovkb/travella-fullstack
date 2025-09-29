@@ -130,10 +130,7 @@ module.exports.search = async (req, res, next) => {
   }
 };
 
-/* --------------------------------------------------------------- */
-/* SUGGEST: берём подсказки только из providers                    */
-/* type / location / languages (в т.ч. json/array -> text)         */
-/* --------------------------------------------------------------- */
+// --- SUGGEST: подсказки из providers (type/location/languages) ---
 module.exports.suggest = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
@@ -145,28 +142,23 @@ module.exports.suggest = async (req, res, next) => {
     const { rows } = await pg.query(
       `
       WITH cand AS (
+        -- тип провайдера
         SELECT NULLIF(TRIM(p.type::text), '')       AS label, 100 AS w
         FROM providers p
         WHERE COALESCE(p.type::text,'') ILIKE $1
 
         UNION ALL
+        -- локация провайдера
         SELECT NULLIF(TRIM(p.location::text), '')   AS label, 90  AS w
         FROM providers p
         WHERE COALESCE(p.location::text,'') ILIKE $1
 
         UNION ALL
-        -- языки: вытаскиваем отдельные элементы, если это массив/JSON
-        SELECT NULLIF(TRIM(x.lang), '')            AS label, 80  AS w
-        FROM (
-          SELECT
-            CASE
-              WHEN jsonb_typeof(p.languages::jsonb) = 'array'
-                THEN jsonb_array_elements_text(p.languages::jsonb)
-              ELSE p.languages::text
-            END AS lang
-          FROM providers p
-        ) x
-        WHERE COALESCE(x.lang,'') ILIKE $1
+        -- языки: режем любую форму (text/json/array) как текст на токены
+        SELECT NULLIF(TRIM(BOTH ' "[]{}' FROM lang), '') AS label, 80 AS w
+        FROM providers p
+        CROSS JOIN LATERAL regexp_split_to_table(p.languages::text, '[,;\\s]+') AS lang
+        WHERE COALESCE(lang,'') <> '' AND lang ILIKE $1
       ),
       norm AS (
         SELECT LOWER(label) AS key, MIN(label) AS label, MAX(w) AS w
