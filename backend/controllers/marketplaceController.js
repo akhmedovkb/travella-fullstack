@@ -69,11 +69,11 @@ module.exports.search = async (req, res, next) => {
       const like = `%${q}%`;
       params.push(like, like, like);
       const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
-      // languages приводим к jsonb->text: работает и для массива, и для строки, и для json/jsonb
+      // ВАЖНО: приводим к text, чтобы не было btrim(text[]) / malformed array literal
       where.push(`(
-        COALESCE(p.type,'') ILIKE ${c1}
-        OR COALESCE(p.location,'') ILIKE ${c2}
-        OR COALESCE(to_jsonb(p.languages)::text,'') ILIKE ${c3}
+        COALESCE(p.type::text,      '') ILIKE ${c1}
+        OR COALESCE(p.location::text,  '') ILIKE ${c2}
+        OR COALESCE(p.languages::text, '') ILIKE ${c3}
       )`);
     }
 
