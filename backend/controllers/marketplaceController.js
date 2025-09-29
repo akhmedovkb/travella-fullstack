@@ -206,47 +206,51 @@ module.exports.search = async (req, res, next) => {
     let providerIds = null;
     let textPatterns = [];
 
-    if (q) {
-      const parsed = parseQueryForProvider(q);
-      tr.log("parsed", parsed);
-      const locPatterns = makeLikePatterns(parsed.loc_q);
-      textPatterns = makeLikePatterns(q);
-      tr.log("patterns", { locPatterns, textPatternsLen: textPatterns.length });
+if (q) {
+  const parsed = parseQueryForProvider(q);
+  tr.log("parsed", parsed);
+  const locPatterns = makeLikePatterns(parsed.loc_q);
+  textPatterns = makeLikePatterns(q);
+  tr.log("patterns", { locPatterns, textPatternsLen: textPatterns.length });
 
-      const nothingToFilter = !parsed.type_q && locPatterns.length === 0 && parsed.lang_syn.length === 0;
-      if (!nothingToFilter) {
-        const provSql = `
-          WITH params AS (
-            SELECT
-              $1::text   AS type_q,
-              $2::text[] AS loc_patterns,
-              $3::text[] AS lang_syn
-          )
-          SELECT DISTINCT p.id
-          FROM providers p
-          LEFT JOIN LATERAL (
-            SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-            FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-          ) l ON TRUE
-          CROSS JOIN params par
-          WHERE
-            -- тип должен совпадать, если он задан
-            (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
-            AND (
-              -- 1) есть локационные паттерны и совпало по локации
-              (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
-              -- 2) либо совпало по языку
-              OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
-              -- 3) либо (ВАЖНО) задан только тип — этого достаточно
-              OR (par.type_q IS NOT NULL)
-            )
-        const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
-        providerIds = r.rows.map((x) => x.id);
-        tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
-      } else {
-        tr.log("provider filter skipped (nothingToFilter)");
-      }
-    }
+  const nothingToFilter =
+    !parsed.type_q && locPatterns.length === 0 && parsed.lang_syn.length === 0;
+
+  if (!nothingToFilter) {
+    const provSql = `
+      WITH params AS (
+        SELECT
+          $1::text   AS type_q,
+          $2::text[] AS loc_patterns,
+          $3::text[] AS lang_syn
+      )
+      SELECT DISTINCT p.id
+      FROM providers p
+      LEFT JOIN LATERAL (
+        SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
+        FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+      ) l ON TRUE
+      CROSS JOIN params par
+      WHERE
+        -- тип должен совпадать, если он задан
+        (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
+        AND (
+          -- 1) есть локационные паттерны и совпало по локации
+          (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
+          -- 2) либо совпало по языку
+          OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
+          -- 3) либо (ВАЖНО) задан только тип — этого достаточно
+          OR (par.type_q IS NOT NULL)
+        )
+    `; //  <-- вот этого не хватало
+
+    const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
+    providerIds = r.rows.map((x) => x.id);
+    tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
+  } else {
+    tr.log("provider filter skipped (nothingToFilter)");
+  }
+}
 
     // --- where для services
     const where = [];
