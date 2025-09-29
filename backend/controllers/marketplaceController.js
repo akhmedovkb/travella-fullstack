@@ -120,3 +120,63 @@ module.exports.search = async (req, res, next) => {
     next(err);
   }
 };
+
+// --- S U G G E S T -----------------------------------------------------------
+// GET /api/marketplace/suggest?q=...&limit=8
+module.exports.suggest = async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit || "8", 10)));
+    if (q.length < 2) return res.json({ items: [] });
+
+    const like = `%${q}%`;
+    const { rows } = await pg.query(
+      `
+      WITH cand AS (
+        -- заголовки услуг
+        SELECT title              AS label, 100 AS w
+        FROM services
+        WHERE status = 'published' AND title ILIKE $1
+
+        UNION ALL
+        -- локации
+        SELECT NULLIF(details->>'location','')      AS label, 80  AS w
+        FROM services
+        WHERE status = 'published'
+          AND COALESCE(details->>'location','') ILIKE $1
+
+        UNION ALL
+        -- направления
+        SELECT NULLIF(details->>'direction_to','')  AS label, 70  AS w
+        FROM services
+        WHERE status = 'published'
+          AND COALESCE(details->>'direction_to','') ILIKE $1
+
+        UNION ALL
+        SELECT NULLIF(details->>'direction','')     AS label, 60  AS w
+        FROM services
+        WHERE status = 'published'
+          AND COALESCE(details->>'direction','') ILIKE $1
+      ),
+      norm AS (
+        SELECT
+          LOWER(TRIM(label)) AS key,
+          MIN(TRIM(label))   AS label,
+          MAX(w)             AS w
+        FROM cand
+        WHERE label IS NOT NULL AND TRIM(label) <> ''
+        GROUP BY LOWER(TRIM(label))
+      )
+      SELECT label
+      FROM norm
+      ORDER BY w DESC, label ASC
+      LIMIT $2
+      `,
+      [like, limit]
+    );
+
+    res.json({ items: rows.map(r => r.label) });
+  } catch (err) {
+    next(err);
+  }
+};
