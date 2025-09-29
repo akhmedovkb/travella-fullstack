@@ -1,4 +1,4 @@
-//backend/controllers/marketplaceController.js
+// backend/controllers/marketplaceController.js
 
 const db = require("../db");
 const pg = db?.query ? db : db?.pool;
@@ -24,13 +24,10 @@ const CATEGORY_ALIAS = {
 const expandCategory = (cat) => (cat ? (CATEGORY_ALIAS[String(cat).trim()] || [String(cat).trim()]) : null);
 const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-/**
- * SEARCH
- * Ищем ТОЛЬКО по полям провайдера:
- *   - providers.type
- *   - providers.location
- *   - providers.languages (любой тип; приводим к jsonb -> text и ищем по строке)
- */
+/* ------------------------------------------------------------------ */
+/* SEARCH: ищем по providers (type/location/languages) -> provider_ids */
+/* затем подтягиваем услуги этих провайдеров                           */
+/* ------------------------------------------------------------------ */
 module.exports.search = async (req, res, next) => {
   try {
     const src = { ...(req.query || {}), ...(req.body || {}) };
@@ -42,14 +39,49 @@ module.exports.search = async (req, res, next) => {
 
     const limit  = Math.min(200, Math.max(1, parseInt(src.limit  ?? "60", 10)));
     const offset = Math.max(0, parseInt(src.offset ?? "0", 10));
+    const cats   = expandCategory(category);
 
-    const cats = expandCategory(category);
+    /* 1) Разбиваем запрос на токены и ищем подходящих провайдеров */
+    const tokens = q.split(/\s+/).map(s => s.trim()).filter(Boolean);
 
+    let providerIds = null;
+    if (tokens.length) {
+      const conds = [];
+      const params = [];
+      let p = 1;
+
+      // Для каждого слова требуется совпадение в ЛЮБОМ из полей провайдера
+      for (const t of tokens) {
+        const like = `%${t}%`;
+        params.push(like, like, like);
+        const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
+
+        // languages может быть array/jsonb — приводим к text.
+        conds.push(`(
+          COALESCE(p.type::text,'') ILIKE ${c1}
+          OR COALESCE(p.location::text,'') ILIKE ${c2}
+          OR COALESCE(p.languages::text,'') ILIKE ${c3}
+        )`);
+      }
+
+      const provSql = `
+        SELECT p.id
+        FROM providers p
+        WHERE ${conds.join(" AND ")}
+      `;
+      const { rows } = await pg.query(provSql, params);
+      providerIds = rows.map(r => r.id);
+      if (!providerIds.length) {
+        return res.json({ items: [], limit, offset });
+      }
+    }
+
+    /* 2) Тянем услуги выбранных провайдеров */
     const where = [];
     const params = [];
     let p = 1;
 
-    // только опубликованные услуги
+    // только опубликованные
     params.push("published");
     where.push(`s.status = $${p++}`);
 
@@ -64,17 +96,9 @@ module.exports.search = async (req, res, next) => {
       where.push(`s.category IN (${ph})`);
     }
 
-    // --- фильтр по провайдеру ---
-    if (q) {
-      const like = `%${q}%`;
-      params.push(like, like, like);
-      const c1 = `$${p++}`, c2 = `$${p++}`, c3 = `$${p++}`;
-      // ВАЖНО: приводим к text, чтобы не было btrim(text[]) / malformed array literal
-      where.push(`(
-        COALESCE(p.type::text,      '') ILIKE ${c1}
-        OR COALESCE(p.location::text,  '') ILIKE ${c2}
-        OR COALESCE(p.languages::text, '') ILIKE ${c3}
-      )`);
+    if (providerIds && providerIds.length) {
+      params.push(providerIds);
+      where.push(`s.provider_id = ANY($${p++})`);
     }
 
     // сортировка
@@ -100,16 +124,16 @@ module.exports.search = async (req, res, next) => {
     `;
 
     const { rows } = await pg.query(sql, params);
-    res.json({ items: rows, limit, offset });
+    return res.json({ items: rows, limit, offset });
   } catch (err) {
     next(err);
   }
 };
 
-/**
- * SUGGEST
- * Подсказки строим только из providers: type/location/languages
- */
+/* --------------------------------------------------------------- */
+/* SUGGEST: берём подсказки только из providers                    */
+/* type / location / languages (в т.ч. json/array -> text)         */
+/* --------------------------------------------------------------- */
 module.exports.suggest = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
@@ -118,41 +142,45 @@ module.exports.suggest = async (req, res, next) => {
 
     const like = `%${q}%`;
 
-    // Отдаём простые текстовые подсказки. Для languages берём всю строку (если массив — будет вида ["ru","en"]).
-const { rows } = await pg.query(
-  `
-  WITH cand AS (
-    -- тип провайдера
-    SELECT NULLIF(TRIM(p.type::text), '')       AS label, 100 AS w
-    FROM providers p
-    WHERE COALESCE(p.type::text,'') ILIKE $1
+    const { rows } = await pg.query(
+      `
+      WITH cand AS (
+        SELECT NULLIF(TRIM(p.type::text), '')       AS label, 100 AS w
+        FROM providers p
+        WHERE COALESCE(p.type::text,'') ILIKE $1
 
-    UNION ALL
-    -- локация провайдера
-    SELECT NULLIF(TRIM(p.location::text), '')   AS label, 90  AS w
-    FROM providers p
-    WHERE COALESCE(p.location::text,'') ILIKE $1
+        UNION ALL
+        SELECT NULLIF(TRIM(p.location::text), '')   AS label, 90  AS w
+        FROM providers p
+        WHERE COALESCE(p.location::text,'') ILIKE $1
 
-    UNION ALL
-    -- языки провайдера (json/jsonb/array → text)
-    SELECT NULLIF(TRIM(p.languages::text), '')  AS label, 80  AS w
-    FROM providers p
-    WHERE COALESCE(p.languages::text,'') ILIKE $1
-  ),
-  norm AS (
-    SELECT LOWER(TRIM(label)) AS key, MIN(TRIM(label)) AS label, MAX(w) AS w
-    FROM cand
-    WHERE label IS NOT NULL
-    GROUP BY LOWER(TRIM(label))
-  )
-  SELECT label
-  FROM norm
-  ORDER BY w DESC, label ASC
-  LIMIT $2
-  `,
-  [like, limit]
-);
-
+        UNION ALL
+        -- языки: вытаскиваем отдельные элементы, если это массив/JSON
+        SELECT NULLIF(TRIM(x.lang), '')            AS label, 80  AS w
+        FROM (
+          SELECT
+            CASE
+              WHEN jsonb_typeof(p.languages::jsonb) = 'array'
+                THEN jsonb_array_elements_text(p.languages::jsonb)
+              ELSE p.languages::text
+            END AS lang
+          FROM providers p
+        ) x
+        WHERE COALESCE(x.lang,'') ILIKE $1
+      ),
+      norm AS (
+        SELECT LOWER(label) AS key, MIN(label) AS label, MAX(w) AS w
+        FROM cand
+        WHERE label IS NOT NULL
+        GROUP BY LOWER(label)
+      )
+      SELECT label
+      FROM norm
+      ORDER BY w DESC, label ASC
+      LIMIT $2
+      `,
+      [like, limit]
+    );
 
     res.json({ items: rows.map(r => r.label) });
   } catch (err) {
