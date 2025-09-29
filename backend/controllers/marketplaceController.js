@@ -202,103 +202,55 @@ module.exports.search = async (req, res, next) => {
     const cats = expandCategory(category);
     tr.log("filters", { q, category, cats, only_active, sort, limit, offset });
 
-    // --- провайдеры    // --- провайдеры
+    // --- провайдеры
     let providerIds = null;
     let textPatterns = [];
 
-    // явные фильтры из запроса
-    const provider_type      = src.provider_type ?? null;              // string
-    const provider_location  = src.provider_location ?? null;          // string
-    const provider_languages = Array.isArray(src.provider_languages)
-      ? src.provider_languages
-      : (src.provider_languages ? String(src.provider_languages).split(/[,\s;]+/).filter(Boolean) : []);
+if (q) {
+  const parsed = parseQueryForProvider(q);
+  tr.log("parsed", parsed);
+  const locPatterns = makeLikePatterns(parsed.loc_q);
+  textPatterns = makeLikePatterns(q);
+  tr.log("patterns", { locPatterns, textPatternsLen: textPatterns.length });
 
-    if (q) {
-      const parsed = parseQueryForProvider(q);
-      tr.log("parsed", parsed);
-      const locPatternsFromQ = makeLikePatterns(parsed.loc_q);
-      textPatterns = makeLikePatterns(q);
+  const nothingToFilter =
+    !parsed.type_q && locPatterns.length === 0 && parsed.lang_syn.length === 0;
 
-      // Собираем единый набор критериев (из q И/ИЛИ из явных полей)
-      const type_q     = provider_type || parsed.type_q || null;
-      const loc_patts  = [
-        ...locPatternsFromQ,
-        ...(provider_location ? makeLikePatterns(provider_location) : []),
-      ];
-      const lang_syn   = [
-        ...parsed.lang_syn,
-        ...provider_languages.map(s => String(s).toLowerCase())
-      ];
+  if (!nothingToFilter) {
+    const provSql = `
+      WITH params AS (
+        SELECT
+          $1::text   AS type_q,
+          $2::text[] AS loc_patterns,
+          $3::text[] AS lang_syn
+      )
+      SELECT DISTINCT p.id
+      FROM providers p
+      LEFT JOIN LATERAL (
+        SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
+        FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
+      ) l ON TRUE
+      CROSS JOIN params par
+      WHERE
+        -- тип должен совпадать, если он задан
+        (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
+        AND (
+          -- 1) есть локационные паттерны и совпало по локации
+          (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
+          -- 2) либо совпало по языку
+          OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
+          -- 3) либо (ВАЖНО) задан только тип — этого достаточно
+          OR (par.type_q IS NOT NULL)
+        )
+    `; //  <-- вот этого не хватало
 
-      tr.log("patterns", { locPatterns: loc_patts, textPatternsLen: textPatterns.length, type_q, lang_syn });
-
-      const nothingToFilter =
-        !type_q && loc_patts.length === 0 && lang_syn.length === 0;
-
-      if (!nothingToFilter) {
-        const provSql = `
-          WITH params AS (
-            SELECT
-              $1::text   AS type_q,
-              $2::text[] AS loc_patterns,
-              $3::text[] AS lang_syn
-          )
-          SELECT DISTINCT p.id
-          FROM providers p
-          LEFT JOIN LATERAL (
-            SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-            FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-          ) l ON TRUE
-          CROSS JOIN params par
-          WHERE
-            (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
-            AND (
-              (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
-              OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
-              OR (par.type_q IS NOT NULL)
-            )
-        `;
-
-        const r = await tr.wrapQuery(provSql, [type_q, loc_patts, lang_syn], "prov");
-        providerIds = r.rows.map((x) => x.id);
-        tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
-      } else {
-        tr.log("provider filter skipped (nothingToFilter)");
-      }
-    } else {
-      // нет q, но есть явные фильтры
-      if (provider_type || provider_location || provider_languages.length) {
-        const loc_patts = provider_location ? makeLikePatterns(provider_location) : [];
-        const lang_syn  = provider_languages.map(s => String(s).toLowerCase());
-
-        const provSql = `
-          WITH params AS (
-            SELECT
-              $1::text   AS type_q,
-              $2::text[] AS loc_patterns,
-              $3::text[] AS lang_syn
-          )
-          SELECT DISTINCT p.id
-          FROM providers p
-          LEFT JOIN LATERAL (
-            SELECT lower(trim(both ' "[]{}' FROM t)) AS lang_token
-            FROM regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-          ) l ON TRUE
-          CROSS JOIN params par
-          WHERE
-            (par.type_q IS NULL OR p.type::text ILIKE '%' || par.type_q || '%')
-            AND (
-              (COALESCE(array_length(par.loc_patterns,1),0) > 0 AND p.location::text ILIKE ANY(par.loc_patterns))
-              OR (COALESCE(array_length(par.lang_syn,1),0) > 0 AND l.lang_token = ANY (par.lang_syn))
-              OR (par.type_q IS NOT NULL)
-            )
-        `;
-
-        const r = await tr.wrapQuery(provSql, [provider_type || null, loc_patts, lang_syn], "prov-only");
-        providerIds = r.rows.map((x) => x.id);
-        tr.log("providerIds (no q)", { count: providerIds.length });
-      }
-    }
+    const r = await tr.wrapQuery(provSql, [parsed.type_q, locPatterns, parsed.lang_syn], "prov");
+    providerIds = r.rows.map((x) => x.id);
+    tr.log("providerIds", { count: providerIds.length, sample: providerIds.slice(0, 10) });
+  } else {
+    tr.log("provider filter skipped (nothingToFilter)");
+  }
+}
 
     // --- where для services
     const where = [];
@@ -425,61 +377,3 @@ module.exports.suggest = async (req, res, next) => {
     next(err);
   }
 };
-
-// -------------------- FACETS (provider type / location / languages) --------------------
-module.exports.facets = async (req, res, next) => {
-  try {
-    const tr = mkTracer(req, "MP:facets");
-    tr.attach(res);
-
-    // DISTINCT типов
-    const sqlTypes = `
-      SELECT DISTINCT NULLIF(TRIM(p.type::text),'') AS v
-      FROM providers p
-      WHERE NULLIF(TRIM(p.type::text),'') IS NOT NULL
-      ORDER BY v ASC
-    `;
-
-    // Локации: в БД встречается "Samarkand,Bukhara,Shahrisabz" — дробим по запятым/точкам с запятой
-    const sqlLocations = `
-      WITH tokens AS (
-        SELECT NULLIF(TRIM(BOTH ' "' FROM t), '') AS token
-        FROM providers p,
-             regexp_split_to_table(p.location::text, '[,;]') AS t
-      )
-      SELECT DISTINCT token AS v
-      FROM tokens
-      WHERE token IS NOT NULL AND length(token) >= 2
-      ORDER BY v ASC
-    `;
-
-    // Языки: p.languages может быть json/текст — вытаскиваем токены
-    const sqlLangs = `
-      WITH tokens AS (
-        SELECT NULLIF(TRIM(BOTH ' "[]{}' FROM t), '') AS token
-        FROM providers p,
-             regexp_split_to_table(p.languages::text, '[,;\\s]+') AS t
-      )
-      SELECT DISTINCT LOWER(token) AS v
-      FROM tokens
-      WHERE token IS NOT NULL AND length(token) >= 2
-      ORDER BY v ASC
-    `;
-
-    const [r1, r2, r3] = await Promise.all([
-      pg.query(sqlTypes),
-      pg.query(sqlLocations),
-      pg.query(sqlLangs),
-    ]);
-
-    res.json({
-      types:     r1.rows.map(r => r.v).filter(Boolean),
-      locations: r2.rows.map(r => r.v).filter(Boolean),
-      languages: r3.rows.map(r => r.v).filter(Boolean),
-    });
-  } catch (err) {
-    console.error("[MP:facets ERR]", err?.message || err);
-    next(err);
-  }
-};
-
