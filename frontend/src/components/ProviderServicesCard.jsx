@@ -85,6 +85,8 @@ export default function ProviderServicesCard({
   const { t, i18n } = useTranslation();
   const lang = (i18n?.language || "").toLowerCase();
   const isUZ = lang.startsWith("uz");
+    // валюта — только UZS
+  const FORCE_CURRENCY = "UZS";
   const isEN = lang.startsWith("en");
   // fallback, если ключей нет
   const F = (ru, uz, en) => (isUZ ? uz : isEN ? en : ru);
@@ -109,7 +111,7 @@ export default function ProviderServicesCard({
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
-  const [currency, setCurrency] = useState(currencyDefault || "USD");
+  const [currency, setCurrency] = useState(FORCE_CURRENCY);
   const [seats, setSeats] = useState("");
 
   // bulk
@@ -207,7 +209,7 @@ export default function ProviderServicesCard({
     return [...base, ...guide, ...guideTransport, ...transportSection];
   }, [providerType, hasFleet, t]);
 
-  useEffect(() => setCurrency(currencyDefault || "USD"), [currencyDefault]);
+  useEffect(() => setCurrency(FORCE_CURRENCY), [currencyDefault]);
 
   async function load() {
     if (!pid) return;
@@ -532,12 +534,13 @@ export default function ProviderServicesCard({
             </label>
             <select
               className="h-9 border rounded px-2 text-sm"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              value={FORCE_CURRENCY}
+              onChange={() => setCurrency(FORCE_CURRENCY)}
             >
-              <option>USD</option>
-              <option>UZS</option>
-              <option>EUR</option>
+              {/* только UZS доступна для выбора */}
+              <option value="UZS">UZS</option>
+              <option value="USD" disabled>USD</option>
+              <option value="EUR" disabled>EUR</option>
             </select>
           </div>
         </div>
@@ -682,23 +685,20 @@ export default function ProviderServicesCard({
                       <td className="p-2">
                         <select
                           className="h-8 border rounded px-2"
-                          value={r.currency || currencyDefault || "USD"}
-                          onChange={(e) =>
+                          value={"UZS"}
+                          onChange={() => {
+                            // насильно оставляем UZS в локальном состоянии
                             setRows((m) =>
                               m.map((x) =>
-                                x.id === r.id
-                                  ? { ...x, currency: e.target.value }
-                                  : x
+                                x.id === r.id ? { ...x, currency: "UZS" } : x
                               )
-                            )
-                          }
-                          onBlur={(e) =>
-                            patchRow(r.id, { currency: e.target.value })
-                          }
+                            );
+                          }}
+                          onBlur={() => patchRow(r.id, { currency: "UZS" })}
                         >
-                          <option>USD</option>
-                          <option>UZS</option>
-                          <option>EUR</option>
+                          <option value="UZS">UZS</option>
+                          <option value="USD" disabled>USD</option>
+                          <option value="EUR" disabled>EUR</option>
                         </select>
                       </td>
 
