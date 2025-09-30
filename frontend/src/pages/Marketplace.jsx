@@ -803,8 +803,9 @@ const search = async (opts = {}) => {
     }
 
     let list = normalizeList(res);
+    console.log('[MP] server items:', list?.length, list?.slice?.(0,3));
 
-    // (опц.) поджать результаты сервера локально, чтобы учесть RU⇄EN и направления
+   /* // (опц.) поджать результаты сервера локально, чтобы учесть RU⇄EN и направления
     if (filters?.q) {
       list = list.filter((it) => matchQuery(filters.q, it));
     }
@@ -855,7 +856,7 @@ const search = async (opts = {}) => {
       const qLocal = filters.q;
       list.sort((a, b) => scoreItem(qLocal, b) - scoreItem(qLocal, a));
     }
-    
+    */
     setItems(list);
 
   } catch {
