@@ -14,6 +14,7 @@ import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
+import AgentServicesCard from "../components/AgentServicesCard";
 
 /** ================= Helpers ================= */
 
@@ -2961,6 +2962,17 @@ useEffect(() => {
                 )}
               </select>
 
+              {/* === Прайс-лист турагента для TourBuilder === */}
+              {profile.type === "agent" && profile?.id && (
+                <div className="mb-6">
+                  <AgentServicesCard
+                    agentId={profile.id}
+                    currencyDefault={profile.currency || "UZS"}
+                    // basePath="/api/agents/tb-services" // при необходимости можно переопределить
+                  />
+                </div>
+              )}
+              
               {/* Форма для выбранной категории */}
               {category && (
                 <>
