@@ -958,3 +958,220 @@ module.exports = {
   toggleProviderFavorite,
   removeProviderFavorite,
 };
+
+
+/* ===========================
+ *  PUBLIC: SEARCH / AVAILABLE
+ * =========================== */
+
+// Категории для каскада (как в UI)
+const GUIDE_CATS_PUBLIC = [
+  "city_tour_guide","mountain_tour_guide",
+  "desert_tour_guide","safari_tour_guide",
+  "meet","seeoff","translation",
+];
+const TRANSPORT_CATS_PUBLIC = [
+  "city_tour_transport","mountain_tour_transport",
+  "desert_tour_transport","safari_tour_transport",
+  "one_way_transfer","dinner_transfer","border_transfer",
+];
+function catsForPublic(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "guide" || t === "gid") return GUIDE_CATS_PUBLIC;
+  if (t === "transport") return TRANSPORT_CATS_PUBLIC;
+  return [...GUIDE_CATS_PUBLIC, ...TRANSPORT_CATS_PUBLIC];
+}
+function parsePublicQuery(qs = {}) {
+  const type = String(qs.type || "").trim();
+  const city = String(qs.city || qs.location || "").trim();
+  const q = String(qs.q || "").trim();
+  const language = String(qs.language || qs.lang || "").trim();
+  const date = String(qs.date || "").trim();
+  const start = String(qs.start || "").trim();
+  const end = String(qs.end || "").trim();
+  const limit = Math.min(Math.max(parseInt(qs.limit, 10) || 30, 1), 100);
+  return { type, city, q, language, date, start, end, limit };
+}
+// Универсальный фильтр по p.languages (text | text[] | jsonb[])
+function pushLangWhere(where, vals, lang) {
+  if (!lang) return;
+  vals.push(lang);
+  const iLang = vals.length;
+  where.push(`
+    (
+      (pg_typeof(p.languages)::text = 'text'
+        AND LOWER(p.languages::text) = LOWER($${iLang}))
+      OR
+      EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+               CASE
+                 WHEN jsonb_typeof(to_jsonb(p.languages)) = 'array'
+                   THEN to_jsonb(p.languages)
+                 ELSE NULL::jsonb
+               END
+             ) AS lang(code)
+        WHERE LOWER(lang.code) = LOWER($${iLang})
+      )
+    )
+  `);
+}
+
+// SELECT из provider_services (каскад), затем join на providers и доп.фильтры
+async function baseSearchFromServices({ type, city, q, language, limit, date, start, end }) {
+  const vals = [];
+  const whereProv = [];
+
+  // 1) Резолвим единый slug города
+  let citySlug = null;
+  if (city) {
+    try {
+      const slugs = await resolveCitySlugs(pool, [city]);
+      citySlug = slugs?.[0] || null;
+    } catch { citySlug = null; }
+  }
+
+  // 2) Категории
+  const categories = catsForPublic(type);
+  vals.push(categories);                 // $1
+  const iCats = 1;
+
+  // 3) Условия по услугам (первичная выборка)
+  let cityCond = "";
+  if (city) {
+    // a) строгий slug
+    if (citySlug) {
+      vals.push(citySlug);
+      const iSlug = vals.length;
+      cityCond += `
+        AND (
+              LOWER(s.details->>'city_slug') = LOWER($${iSlug})
+           OR EXISTS (
+                SELECT 1
+                FROM unnest(COALESCE(s.city_slugs, ARRAY[]::text[])) cs
+                WHERE LOWER(cs) = LOWER($${iSlug})
+              )
+        )
+      `;
+    }
+    // b) строковое поле location (на случай если slug не записан у услуги)
+    vals.push(city);
+    const iCityRaw = vals.length;
+    cityCond += `
+      AND (
+            s.location IS NULL
+         OR LOWER(s.location) = LOWER($${iCityRaw})
+      )
+    `;
+  }
+
+  // 4) Фильтр по тексту на уровне провайдера
+  if (q) {
+    vals.push(`%${q}%`);
+    const i = vals.length;
+    whereProv.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
+  }
+  // 5) Фильтр по языку провайдера
+  pushLangWhere(whereProv, vals, language);
+
+  // 6) Недоступные по занятости (для /available)
+  let busyClause = "";
+  if (date) {
+    vals.push(date);
+    const i = vals.length;
+    busyClause = `
+      AND NOT EXISTS (
+        SELECT 1
+        FROM bookings b
+        JOIN booking_dates bd ON bd.booking_id = b.id
+        WHERE b.provider_id = p.id
+          AND b.status IN ('confirmed','active')
+         AND bd.date = $${i}::date
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM provider_blocked_dates d
+        WHERE d.provider_id = p.id
+          AND d.date = $${i}::date
+      )
+    `;
+  } else if (start && end) {
+    vals.push(start); const is = vals.length;
+    vals.push(end);   const ie = vals.length;
+    busyClause = `
+      AND NOT EXISTS (
+        SELECT 1
+        FROM bookings b
+        JOIN booking_dates bd ON bd.booking_id = b.id
+        WHERE b.provider_id = p.id
+         AND b.status IN ('confirmed','active')
+          AND bd.date BETWEEN $${is}::date AND $${ie}::date
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM provider_blocked_dates d
+        WHERE d.provider_id = p.id
+          AND d.date BETWEEN $${is}::date AND $${ie}::date
+      )
+    `;
+  }
+
+  // 7) Лимит
+  vals.push(Math.min(Math.max(Number(limit) || 30, 1), 100));
+  const iLimit = vals.length;
+
+  const sql = `
+    WITH svc AS (
+      SELECT DISTINCT s.provider_id
+      FROM provider_services s
+      WHERE s.is_active = TRUE
+        AND s.price > 0
+        AND s.category = ANY($${iCats})
+        ${cityCond}
+    )
+    SELECT p.id, p.name, p.type, p.location, p.city_slugs,
+           p.phone, p.email, p.photo, p.languages, p.social AS telegram
+    FROM providers p
+    JOIN svc ON svc.provider_id = p.id
+    ${whereProv.length ? "WHERE " + whereProv.join(" AND ") : ""}
+    ${busyClause}
+    ORDER BY p.name ASC
+    LIMIT $${iLimit};
+  `;
+
+  const { rows } = await pool.query(sql, vals);
+  return rows;
+}
+
+// GET /api/providers/search
+async function searchProvidersPublic(req, res) {
+  try {
+    const params = parsePublicQuery(req.query);
+    const items = await baseSearchFromServices({ ...params });
+    res.json({ items });
+  } catch (e) {
+    console.error("GET /api/providers/search", e);
+    res.status(500).json({ error: "Failed to search providers" });
+  }
+}
+
+// GET /api/providers/available
+async function availableProvidersPublic(req, res) {
+  try {
+    const params = parsePublicQuery(req.query);
+    // если нет даты/интервала — это тот же /search
+    if (!params.date && !(params.start && params.end)) {
+      const items = await baseSearchFromServices({ ...params });
+      return res.json({ items });
+    }
+    const items = await baseSearchFromServices({ ...params });
+    res.json({ items });
+  } catch (e) {
+    console.error("GET /api/providers/available", e);
+    res.status(500).json({ error: "Failed to get available providers" });
+  }
+}
+
+// экспортируем публичные обработчики
+module.exports.searchProvidersPublic = searchProvidersPublic;
+module.exports.availableProvidersPublic = availableProvidersPublic;
