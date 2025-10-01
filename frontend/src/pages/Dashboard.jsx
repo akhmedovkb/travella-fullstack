@@ -17,7 +17,21 @@ import ProviderCompleteness from "../components/ProviderCompleteness";
 
 /** ================= Helpers ================= */
 
-// рядом с другими константами/хелперами (выше компонента)
+function dataUrlToBlobUrl(dataUrl) {
+  try {
+    if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return null;
+    const [head, b64] = dataUrl.split(",");
+    const mime = (head.match(/^data:(.*?);base64$/) || [])[1] || "application/octet-stream";
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const blob = new Blob([u8], { type: mime });
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
 const statusBadgeClass = (status) => {
   switch (status) {
     case "published":
@@ -627,7 +641,24 @@ const scrollToProfilePart = useCallback((key) => {
   const [profile, setProfile] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
+  
   const [newCertificate, setNewCertificate] = useState(null);
+  // Просмотр сертификата: поддержка data: → blob:
+  const certObjectUrl = React.useMemo(() => {
+    const src = profile?.certificate || newCertificate || "";
+    return src && src.startsWith("data:")
+      ? dataUrlToBlobUrl(src)
+      : (src || null); // https/ftp/file url как есть
+  }, [profile?.certificate, newCertificate]);
+  
+  React.useEffect(() => {
+    return () => {
+      if (certObjectUrl && certObjectUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(certObjectUrl);
+      }
+    };
+  }, [certObjectUrl]);
+
   const [newAddress, setNewAddress] = useState("");
     // РЕГИОНЫ ДЕЯТЕЛЬНОСТИ (мультиселект городов)
   const [regions, setRegions] = useState([]); // [{value,label}, ...] только EN
@@ -1823,6 +1854,7 @@ useEffect(() => {
               <div>
                 <div id="anchor-certificate" />
                 <label className="block font-medium">{t("certificate")}</label>
+              
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
                     <label className="inline-block bg-orange-500 text-white px-4 py-2 rounded cursor-pointer text-sm w-fit">
@@ -1839,14 +1871,28 @@ useEffect(() => {
                       <div className="text-sm text-gray-600">{t("no_files_selected")}</div>
                     )}
                   </div>
-                ) : profile.certificate ? (
-                  <a href={profile.certificate} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                    {t("view_certificate")}
-                  </a>
+                ) : certObjectUrl ? (
+                  <div className="flex items-center gap-4">
+                    <a
+                      href={certObjectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      {t("view_certificate")}
+                    </a>
+                    <a
+                      href={certObjectUrl}
+                      download="certificate"
+                      className="text-gray-600 underline"
+                    >
+                      {t("download") || "Скачать"}
+                    </a>
+                  </div>
                 ) : (
                   <div className="text-gray-500">{t("not_specified")}</div>
                 )}
-              </div>
+              </div>              
 
               {/* Кнопка сохранить/редактировать */}
               <button
