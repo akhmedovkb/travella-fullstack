@@ -49,7 +49,8 @@ const GUIDE_CATS = [
 const TRANSPORT_CATS = [
   "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
 ];
-const catsFor = (type) => (type === "transport" ? TRANSPORT_CATS : [...GUIDE_CATS, ...TRANSPORT_CATS]);
+// важно: НЕ смешиваем категории
+const catsFor = (type) => (type === "transport" ? TRANSPORT_CATS : GUIDE_CATS);
 
   
 function requireProvider(req, res, next) {
@@ -83,7 +84,11 @@ function parseQuery(qs = {}) {
 function buildBaseWhereWithoutCity({ type, q, language }, vals) {
   const where = [];
 
-    // НЕ ограничиваемся p.type: тип будем проверять по наличию услуг нужных категорий ниже
+  // фильтруем по типу провайдера
+  if (type) {
+    vals.push(type);
+    where.push(`LOWER(p.type) = LOWER($${vals.length})`);
+  }
   
   if (q) {
     vals.push(`%${q}%`);
