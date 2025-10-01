@@ -1022,64 +1022,63 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   const vals = [];
   const whereProv = [];
 
-  // 1) Резолвим единый slug города
+  // 1) slug города
   let citySlug = null;
   if (city) {
     try {
       const slugs = await resolveCitySlugs(pool, [city]);
       citySlug = slugs?.[0] || null;
-    } catch { citySlug = null; }
+    } catch {}
   }
 
-  // 2) Категории
+  // 2) категории
   const categories = catsForPublic(type);
   vals.push(categories);                 // $1
   const iCats = 1;
 
-  // 3) Условия по услугам (первичная выборка)
- // Фильтр по городу в услугах:
- //   а) по details->>'city_slug', если смогли получить slug
-  let cityCond = "";
-  if (city) {
-    if (citySlug) {
-      vals.push(citySlug);
-      const iSlug = vals.length;
-      cityCond += `
-        AND LOWER(s.details->>'city_slug') = LOWER($${iSlug})
-      `;
-    }
-  }
+  // 3) CTE по услугам — без фильтра города, только актив/цены/категории
+  const svcCTE = `
+    WITH svc AS (
+      SELECT DISTINCT s.provider_id
+      FROM provider_services s
+      WHERE s.is_active = TRUE
+        AND COALESCE( (s.details->>'netPrice')::numeric, s.price ) > 0
+        AND s.category = ANY($${iCats})
+    )
+  `;
 
-  // 4) Фильтр по тексту на уровне провайдера
+  // 4) фильтр текста по провайдеру
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
     whereProv.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
- // 4.1) Фильтр по городу на уровне провайдера (fallback)
- if (city) {
-   const haveSlug = !!citySlug;
-   vals.push(haveSlug ? citySlug : city);
-   const iCity = vals.length;
-   // совпадение по p.city_slugs ИЛИ по p.location (text[])
-   whereProv.push(`
-     (
-       ${haveSlug ? `EXISTS (
-          SELECT 1 FROM unnest(COALESCE(p.city_slugs, ARRAY[]::text[])) cs
-          WHERE LOWER(cs) = LOWER($${iCity})
-        ) OR` : ``}
-       EXISTS (
-         SELECT 1 FROM unnest(COALESCE(p.location, ARRAY[]::text[])) loc
-         WHERE LOWER(loc) = LOWER($${iCity})
-       )
-     )
-   `);
- }
-  
-  // 5) Фильтр по языку провайдера
+
+  // 5) язык провайдера
   pushLangWhere(whereProv, vals, language);
 
-  // 6) Недоступные по занятости (для /available)
+  // 6) город — фильтруем на уровне провайдера:
+  if (citySlug) {
+    vals.push(citySlug);
+    const iSlug = vals.length;
+    whereProv.push(`
+      (
+        EXISTS (
+          SELECT 1
+          FROM provider_services s2
+          WHERE s2.provider_id = p.id
+            AND LOWER(s2.details->>'city_slug') = LOWER($${iSlug})
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(COALESCE(p.city_slugs, ARRAY[]::text[])) cs
+          WHERE LOWER(cs) = LOWER($${iSlug})
+        )
+      )
+    `);
+  }
+
+  // 7) занятость как было
   let busyClause = "";
   if (date) {
     vals.push(date);
@@ -1091,7 +1090,7 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
         JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = p.id
           AND b.status IN ('confirmed','active')
-         AND bd.date = $${i}::date
+          AND bd.date = $${i}::date
       )
       AND NOT EXISTS (
         SELECT 1
@@ -1109,7 +1108,7 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
         FROM bookings b
         JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = p.id
-         AND b.status IN ('confirmed','active')
+          AND b.status IN ('confirmed','active')
           AND bd.date BETWEEN $${is}::date AND $${ie}::date
       )
       AND NOT EXISTS (
@@ -1121,19 +1120,12 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     `;
   }
 
-  // 7) Лимит
+  // 8) лимит
   vals.push(Math.min(Math.max(Number(limit) || 30, 1), 100));
   const iLimit = vals.length;
 
   const sql = `
-    WITH svc AS (
-      SELECT DISTINCT s.provider_id
-      FROM provider_services s
-      WHERE s.is_active = TRUE
-        AND s.price > 0
-        AND s.category = ANY($${iCats})
-        ${cityCond}
-    )
+    ${svcCTE}
     SELECT p.id, p.name, p.type, p.location, p.city_slugs,
            p.phone, p.email, p.photo, p.languages, p.social AS telegram
     FROM providers p
@@ -1147,6 +1139,7 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   const { rows } = await pool.query(sql, vals);
   return rows;
 }
+
 
 // GET /api/providers/search
 async function searchProvidersPublic(req, res) {
