@@ -1059,8 +1059,7 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     const iCityRaw = vals.length;
     cityCond += `
       AND (
-            s.location IS NULL
-         OR LOWER(s.location) = LOWER($${iCityRaw})
+          LOWER(s.location) = LOWER($${iCityRaw})
       )
     `;
   }
