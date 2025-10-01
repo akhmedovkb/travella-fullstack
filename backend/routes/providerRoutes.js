@@ -43,20 +43,18 @@ async function resolveCitySlug(city) {
 }
 
 // категории для TB
-const GUIDE_CATS = [
-  "city_tour_guide",
-  "mountain_tour_guide",
-  "meet",
-  "seeoff",
-  "translation",
-];
-const TRANSPORT_CATS = [
-  "city_tour_transport",
-  "mountain_tour_transport",
-  "one_way_transfer",
-  "dinner_transfer",
-  "border_transfer",
-];
+ // Полные перечни допущенных категорий (как в UI/селекте)
+ const GUIDE_CATS = [
+   "city_tour_guide", "mountain_tour_guide",
+   "desert_tour_guide", "safari_tour_guide",
+   "meet", "seeoff", "translation",
+ ];
+ const TRANSPORT_CATS = [
+   "city_tour_transport", "mountain_tour_transport",
+   "desert_tour_transport", "safari_tour_transport",
+   "one_way_transfer", "dinner_transfer", "border_transfer",
+ ];
+
 // ВАЖНО: тип поиска определяет только свои категории.
 // Пустой/неизвестный тип = обе группы (для общего поиска).
 const catsFor = (type) => {
@@ -152,8 +150,8 @@ router.get("/search", async (req, res) => {
     vals.push(categories);
     const iCats = vals.length;
     const cityCond = citySlug
-      ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
-      : "";
+     ? ` AND LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`})`
+     : "";
     const servicesExists = `
       EXISTS (
         SELECT 1
@@ -235,8 +233,8 @@ router.get("/available", async (req, res) => {
     vals.push(categories);
     const iCats = vals.length;
     const cityCond = citySlug
-      ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
-      : "";
+     ? ` AND LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`})`
+     : "";
     where.push(`
       EXISTS (
         SELECT 1
