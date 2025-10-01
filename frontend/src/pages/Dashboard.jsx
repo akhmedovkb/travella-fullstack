@@ -2931,12 +2931,16 @@ useEffect(() => {
                   <>
                     <option value="city_tour_guide">{t("category.city_tour_guide")}</option>
                     <option value="mountain_tour_guide">{t("category.mountain_tour_guide")}</option>
+                    <option value="desert_tour_guide">{t("category.desert_tour_guide", { defaultValue: "Пустынный тур (гид)" })}</option>
+                    <option value="safari_tour_guide">{t("category.safari_tour_guide", { defaultValue: "Сафари-тур (гид)" })}</option>
                   </>
                 )}
                 {profile.type === "transport" && (
                   <>
                     <option value="city_tour_transport">{t("category.city_tour_transport")}</option>
                     <option value="mountain_tour_transport">{t("category.mountain_tour_transport")}</option>
+                    <option value="desert_tour_transport">{t("category.desert_tour_transport", { defaultValue: "Пустынный тур (транспорт)" })}</option>
+                    <option value="safari_tour_transport">{t("category.safari_tour_transport", { defaultValue: "Сафари-тур (транспорт)" })}</option>
                     <option value="one_way_transfer">{t("category.one_way_transfer")}</option>
                     <option value="dinner_transfer">{t("category.dinner_transfer")}</option>
                     <option value="border_transfer">{t("category.border_transfer")}</option>
