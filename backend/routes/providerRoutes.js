@@ -42,6 +42,16 @@ async function resolveCitySlug(city) {
   }
 }
 
+// категории для TB
+const GUIDE_CATS = [
+  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
+];
+const TRANSPORT_CATS = [
+  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
+];
+const catsFor = (type) => (type === "transport" ? TRANSPORT_CATS : [...GUIDE_CATS, ...TRANSPORT_CATS]);
+
+  
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Требуется авторизация" });
@@ -73,11 +83,8 @@ function parseQuery(qs = {}) {
 function buildBaseWhereWithoutCity({ type, q, language }, vals) {
   const where = [];
 
-  if (type) {
-    vals.push(type);
-    where.push(`LOWER(p.type) = LOWER($${vals.length})`);
-  }
-
+    // НЕ ограничиваемся p.type: тип будем проверять по наличию услуг нужных категорий ниже
+  
   if (q) {
     vals.push(`%${q}%`);
     const i = vals.length;
@@ -128,6 +135,27 @@ router.get("/search", async (req, res) => {
       where.push(`$${vals.length} = ANY(p.city_slugs)`);
     }
 
+        // Требуем наличие активной услуги нужной категории у провайдера
+    const categories = catsFor(type);
+    vals.push(categories);
+    const iCats = vals.length;
+    const cityCond =
+      citySlug
+        ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
+        : "";
+    const servicesExists = `
+      EXISTS (
+        SELECT 1
+          FROM provider_services s
+         WHERE s.provider_id = p.id
+           AND s.is_active = TRUE
+           AND s.price > 0
+           AND s.category = ANY($${iCats})
+           ${cityCond}
+      )
+    `;
+    where.push(servicesExists);
+
     const sql = `
       SELECT p.id, p.name, p.type, p.location, p.city_slugs, p.phone, p.email, p.photo, p.languages, p.social AS telegram
       FROM providers p
@@ -159,6 +187,27 @@ router.get("/available", async (req, res) => {
         vals.push(citySlug);
         where.push(`$${vals.length} = ANY(p.city_slugs)`);
       }
+           // требуем наличие услуги нужной категории
+      const categories = catsFor(type);
+      vals.push(categories);
+      const iCats = vals.length;
+      const cityCond =
+        citySlug
+          ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
+          : "";
+      const servicesExists = `
+        EXISTS (
+          SELECT 1
+            FROM provider_services s
+           WHERE s.provider_id = p.id
+             AND s.is_active = TRUE
+             AND s.price > 0
+             AND s.category = ANY($${iCats})
+             ${cityCond}
+        )
+      `;
+      where.push(servicesExists);
+
       const sql = `
         SELECT p.id, p.name, p.type, p.location, p.city_slugs, p.phone, p.email, p.photo, p.languages, p.social AS telegram
         FROM providers p
@@ -176,6 +225,25 @@ router.get("/available", async (req, res) => {
       vals.push(citySlug);
       where.push(`$${vals.length} = ANY(p.city_slugs)`);
     }
+    // наличие услуги нужной категории
+    const categories = catsFor(type);
+    vals.push(categories);
+    const iCats = vals.length;
+    const cityCond =
+      citySlug
+        ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
+        : "";
+    where.push(`
+      EXISTS (
+        SELECT 1
+          FROM provider_services s
+         WHERE s.provider_id = p.id
+           AND s.is_active = TRUE
+           AND s.price > 0
+           AND s.category = ANY($${iCats})
+           ${cityCond}
+      )
+    `);
 
     let busyClause = "";
     if (date) {
