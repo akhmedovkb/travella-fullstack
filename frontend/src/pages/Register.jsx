@@ -255,9 +255,6 @@ const Register = () => {
               placeholder="+998 90 123 45 67"
               className="w-full border p-2 mb-1"
             />
-            <p className="text-xs text-gray-500 mb-3">
-              {t("register.phone_hint")}
-            </p>
 
             <label className="block mb-1">{t("register.email")}</label>
             <input
