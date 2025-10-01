@@ -1037,14 +1037,30 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   const iCats = 1;
 
   // 3) Условия по услугам (первичная выборка)
-  // Фильтруем город ТОЛЬКО по details->>'city_slug'
+  // Фильтр по городу:
+  //   а) по details->>'city_slug', если смогли получить slug
+  //   б) fallback по строковому s.location (многие услуги хранят город так)
   let cityCond = "";
-  if (city && citySlug) {
-    vals.push(citySlug);
-    const iSlug = vals.length;
-    cityCond += `
-      AND LOWER(s.details->>'city_slug') = LOWER($${iSlug})
-    `;
+  if (city) {
+    if (citySlug) {
+      vals.push(citySlug);
+      const iSlug = vals.length;
+      vals.push(city);
+      const iCityRaw = vals.length;
+      cityCond += `
+        AND (
+              LOWER(s.details->>'city_slug') = LOWER($${iSlug})
+           OR (s.location IS NOT NULL AND LOWER(s.location) = LOWER($${iCityRaw}))
+        )
+      `;
+    } else {
+      // slug не распознался — фильтруем только по строковому location
+      vals.push(city);
+      const iCityRaw = vals.length;
+      cityCond += `
+        AND (s.location IS NOT NULL AND LOWER(s.location) = LOWER($${iCityRaw}))
+      `;
+    }
   }
 
   // 4) Фильтр по тексту на уровне провайдера
