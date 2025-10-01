@@ -1154,6 +1154,9 @@ useEffect(() => {
     if (newPhone !== profile.phone) updated.phone = newPhone;
     if (newAddress !== profile.address) updated.address = newAddress;
     if (newPhoto) updated.photo = newPhoto;
+    
+    if (newCertificate) updated.certificate = newCertificate;
+    
         // car_fleet
     updated.car_fleet = (carFleet || [])
       .map((c) => ({
