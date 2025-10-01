@@ -1037,30 +1037,13 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   const iCats = 1;
 
   // 3) Условия по услугам (первичная выборка)
+  // Фильтруем город ТОЛЬКО по details->>'city_slug'
   let cityCond = "";
-  if (city) {
-    // a) строгий slug
-    if (citySlug) {
-      vals.push(citySlug);
-      const iSlug = vals.length;
-      cityCond += `
-        AND (
-              LOWER(s.details->>'city_slug') = LOWER($${iSlug})
-           OR EXISTS (
-                SELECT 1
-                FROM unnest(COALESCE(s.city_slugs, ARRAY[]::text[])) cs
-                WHERE LOWER(cs) = LOWER($${iSlug})
-              )
-        )
-      `;
-    }
-    // b) строковое поле location (на случай если slug не записан у услуги)
-    vals.push(city);
-    const iCityRaw = vals.length;
+  if (city && citySlug) {
+    vals.push(citySlug);
+    const iSlug = vals.length;
     cityCond += `
-      AND (
-          LOWER(s.location) = LOWER($${iCityRaw})
-      )
+      AND LOWER(s.details->>'city_slug') = LOWER($${iSlug})
     `;
   }
 
