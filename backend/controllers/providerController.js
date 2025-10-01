@@ -1037,28 +1037,15 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
   const iCats = 1;
 
   // 3) Условия по услугам (первичная выборка)
-  // Фильтр по городу:
-  //   а) по details->>'city_slug', если смогли получить slug
-  //   б) fallback по строковому s.location (многие услуги хранят город так)
+ // Фильтр по городу в услугах:
+ //   а) по details->>'city_slug', если смогли получить slug
   let cityCond = "";
   if (city) {
     if (citySlug) {
       vals.push(citySlug);
       const iSlug = vals.length;
-      vals.push(city);
-      const iCityRaw = vals.length;
       cityCond += `
-        AND (
-              LOWER(s.details->>'city_slug') = LOWER($${iSlug})
-           OR (s.location IS NOT NULL AND LOWER(s.location) = LOWER($${iCityRaw}))
-        )
-      `;
-    } else {
-      // slug не распознался — фильтруем только по строковому location
-      vals.push(city);
-      const iCityRaw = vals.length;
-      cityCond += `
-        AND (s.location IS NOT NULL AND LOWER(s.location) = LOWER($${iCityRaw}))
+        AND LOWER(s.details->>'city_slug') = LOWER($${iSlug})
       `;
     }
   }
@@ -1069,6 +1056,26 @@ async function baseSearchFromServices({ type, city, q, language, limit, date, st
     const i = vals.length;
     whereProv.push(`(p.name ILIKE $${i} OR p.email ILIKE $${i} OR p.phone ILIKE $${i})`);
   }
+ // 4.1) Фильтр по городу на уровне провайдера (fallback)
+ if (city) {
+   const haveSlug = !!citySlug;
+   vals.push(haveSlug ? citySlug : city);
+   const iCity = vals.length;
+   // совпадение по p.city_slugs ИЛИ по p.location (text[])
+   whereProv.push(`
+     (
+       ${haveSlug ? `EXISTS (
+          SELECT 1 FROM unnest(COALESCE(p.city_slugs, ARRAY[]::text[])) cs
+          WHERE LOWER(cs) = LOWER($${iCity})
+        ) OR` : ``}
+       EXISTS (
+         SELECT 1 FROM unnest(COALESCE(p.location, ARRAY[]::text[])) loc
+         WHERE LOWER(loc) = LOWER($${iCity})
+       )
+     )
+   `);
+ }
+  
   // 5) Фильтр по языку провайдера
   pushLangWhere(whereProv, vals, language);
 
