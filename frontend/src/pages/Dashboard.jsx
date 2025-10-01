@@ -1881,13 +1881,6 @@ useEffect(() => {
                     >
                       {t("view_certificate")}
                     </a>
-                    <a
-                      href={certObjectUrl}
-                      download="certificate"
-                      className="text-gray-600 underline"
-                    >
-                      {t("download") || "Скачать"}
-                    </a>
                   </div>
                 ) : (
                   <div className="text-gray-500">{t("not_specified")}</div>
