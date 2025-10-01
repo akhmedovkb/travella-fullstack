@@ -44,14 +44,27 @@ async function resolveCitySlug(city) {
 
 // категории для TB
 const GUIDE_CATS = [
-  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
+  "city_tour_guide",
+  "mountain_tour_guide",
+  "meet",
+  "seeoff",
+  "translation",
 ];
 const TRANSPORT_CATS = [
-  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
+  "city_tour_transport",
+  "mountain_tour_transport",
+  "one_way_transfer",
+  "dinner_transfer",
+  "border_transfer",
 ];
-// важно: НЕ смешиваем категории
-const catsFor = (type) => (type === "transport" ? TRANSPORT_CATS : GUIDE_CATS);
-
+// ВАЖНО: тип поиска определяет только свои категории.
+// Пустой/неизвестный тип = обе группы (для общего поиска).
+const catsFor = (type) => {
+  const t = String(type || "").toLowerCase();
+  if (t === "guide" || t === "gid") return GUIDE_CATS;
+  if (t === "transport") return TRANSPORT_CATS;
+  return [...GUIDE_CATS, ...TRANSPORT_CATS];
+};
   
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -84,11 +97,8 @@ function parseQuery(qs = {}) {
 function buildBaseWhereWithoutCity({ type, q, language }, vals) {
   const where = [];
 
-  // фильтруем по типу провайдера
-  if (type) {
-    vals.push(type);
-    where.push(`LOWER(p.type) = LOWER($${vals.length})`);
-  }
+  // ВАЖНО: не фильтруем по p.type.
+  // Принадлежность (гид/транспорт/турагент) определяем по наличию активных услуг нужных категорий ниже.
   
   if (q) {
     vals.push(`%${q}%`);
