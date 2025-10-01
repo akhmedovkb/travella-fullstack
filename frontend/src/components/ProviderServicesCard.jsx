@@ -200,7 +200,7 @@ export default function ProviderServicesCard({
         : [];
 
     const transportSection =
-      providerType === "transport"
+      (providerType === "transport" || providerType === "agent")
         ? [
             {
               label: TT("ps.grp.transport", "ТРАНСПОРТ", "TRANSPORT", "Transport"),
