@@ -145,19 +145,15 @@ router.get("/search", async (req, res) => {
     const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
 
     // строгий матч по slug в массиве p.city_slugs
-    if (citySlug) {
-      vals.push(citySlug);
-      where.push(`$${vals.length} = ANY(p.city_slugs)`);
-    }
+// город фильтруем только на уровне услуг ниже (cityCond), чтобы не отсечь провайдеров без заполненных city_slugs
 
         // Требуем наличие активной услуги нужной категории у провайдера
     const categories = catsFor(type);
     vals.push(categories);
     const iCats = vals.length;
-    const cityCond =
-      citySlug
-        ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
-        : "";
+    const cityCond = citySlug
+      ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
+      : "";
     const servicesExists = `
       EXISTS (
         SELECT 1
@@ -198,10 +194,7 @@ router.get("/available", async (req, res) => {
     if (!date && !(start && end)) {
       const vals = [];
       const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
-      if (citySlug) {
-        vals.push(citySlug);
-        where.push(`$${vals.length} = ANY(p.city_slugs)`);
-      }
+// см. комментарий выше — город учитываем только в servicesExists
            // требуем наличие услуги нужной категории
       const categories = catsFor(type);
       vals.push(categories);
@@ -236,18 +229,14 @@ router.get("/available", async (req, res) => {
 
     const vals = [];
     const where = buildBaseWhereWithoutCity({ type, q, language }, vals);
-    if (citySlug) {
-      vals.push(citySlug);
-      where.push(`$${vals.length} = ANY(p.city_slugs)`);
-    }
+// см. комментарий выше — не фильтруем по p.city_slugs при наличии citySlug
     // наличие услуги нужной категории
     const categories = catsFor(type);
     vals.push(categories);
     const iCats = vals.length;
-    const cityCond =
-      citySlug
-        ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
-        : "";
+    const cityCond = citySlug
+      ? ` AND (s.details->>'city_slug' IS NULL OR LOWER(s.details->>'city_slug') = LOWER(${`$${vals.push(citySlug)}`}))`
+      : "";
     where.push(`
       EXISTS (
         SELECT 1
