@@ -7,12 +7,16 @@ const CATEGORY_LABELS = {
   // guide
   city_tour_guide: "Тур по городу (гид)",
   mountain_tour_guide: "Тур в горы (гид)",
+  desert_tour_guide: "Пустынный тур (гид)",
+  safari_tour_guide: "Сафари-тур (гид)",
   meet: "Встреча (гид)",
   seeoff: "Провод (гид)",
   translation: "Перевод (гид)",
   // transport
   city_tour_transport: "Тур по городу (транспорт)",
   mountain_tour_transport: "Тур в горы (транспорт)",
+  desert_tour_transport: "Пустынный тур (транспорт)",
+  safari_tour_transport: "Сафари-тур (транспорт)",
   one_way_transfer: "Трансфер в одну сторону",
   dinner_transfer: "Трансфер на ужин",
   border_transfer: "Междугородний/погран. трансфер",
@@ -22,6 +26,8 @@ const CATEGORY_LABELS = {
 const GUIDE_TRANSPORT_LABELS = {
   city_tour_transport: "Тур по городу (гид+транспорт)",
   mountain_tour_transport: "Тур в горы (гид+транспорт)",
+  desert_tour_transport: "Пустынный тур (гид+транспорт)",
+  safari_tour_transport: "Сафари-тур (гид+транспорт)",
   one_way_transfer: "Трансфер в одну сторону (гид+транспорт)",
   dinner_transfer: "Трансфер на ужин (гид+транспорт)",
   border_transfer: "Междугородний/погран. трансфер (гид+транспорт)",
@@ -30,6 +36,8 @@ const GUIDE_TRANSPORT_LABELS = {
 const GUIDE_ALLOWED = [
   "city_tour_guide",
   "mountain_tour_guide",
+  "desert_tour_guide",
+  "safari_tour_guide",
   "meet",
   "seeoff",
   "translation",
@@ -38,6 +46,8 @@ const GUIDE_ALLOWED = [
 const TRANSPORT_ALLOWED = [
   "city_tour_transport",
   "mountain_tour_transport",
+  "desert_tour_transport",
+  "safari_tour_transport",
   "one_way_transfer",
   "dinner_transfer",
   "border_transfer",
@@ -233,16 +243,20 @@ export default function ProviderServicesCard({
   async function addOne() {
     if (!category) return;
     try {
+      const citySlug = Array.isArray(profile?.city_slugs) && profile.city_slugs.length === 1
+       ? profile.city_slugs[0]
+       : undefined
       const body = {
         category,
         title: title || null,
         price: toMoney(price),
         currency: currency || currencyDefault || "USD",
+        details: {
+         ...(citySlug ? { city_slug: citySlug } : {}),
+         ...(isTransportCategory(category) && Number(seats) > 0 ? { seats: Number(seats) } : {}),
+        },
       };
-      if (isTransportCategory(category)) {
-        const n = Number(seats);
-        if (Number.isInteger(n) && n > 0) body.details = { seats: n };
-      }
+
       const created = await fetchJSON(`/api/providers/${pid}/services`, {
         method: "POST",
         body: JSON.stringify(body),
