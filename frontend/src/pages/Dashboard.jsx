@@ -1843,7 +1843,7 @@ useEffect(() => {
                         </div>
 
                                         {/* Владение языками (сохранение через кнопку профиля) */}
-                          {(profile.type === "guide" || profile.type === "transport") && (
+                          {(["guide", "transport", "agent"].includes(profile.type)) && (
                             <div className="mt-4">
                               <div id="anchor-languages" />
                               <ProviderLanguages ref={langRef} token={token} />
