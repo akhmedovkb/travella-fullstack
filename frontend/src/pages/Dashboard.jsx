@@ -1939,12 +1939,12 @@ useEffect(() => {
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
           
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
-          {(profile.type === "guide" || profile.type === "transport") && profile?.id && (
+          {(profile?.id && (profile.type === "guide" || profile.type === "transport" || profile.type === "agent")) && (
             <div className="mb-6">
-              <ProviderServicesCard
-                providerId={profile.id}
-                providerType={profile.type}              // 'guide' или 'transport'
-                currencyDefault={profile.currency || 'USD'}
+             <ProviderServicesCard
+                  providerId={profile.id}
+                  providerType={profile.type}              // теперь может прийти 'agent'
+                  currencyDefault={profile.currency || 'USD'}
               />
             </div>
           )}
