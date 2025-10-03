@@ -145,13 +145,13 @@ export default function HotelsPage() {
 
   // -------- render --------
   return (
-    <div className="p-6">
+    <div className="p-3 md:p-6">
       <div className="max-w-5xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <h1 className="text-2xl font-bold">
             {t("hotels.title", { defaultValue: "Отели" })}
           </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <TabBtn value="top">{t("hotels.tabs.top", { defaultValue: "Топ" })}</TabBtn>
             <TabBtn value="popular">{t("hotels.tabs.popular", { defaultValue: "Популярные" })}</TabBtn>
             <TabBtn value="new">{t("hotels.tabs.new", { defaultValue: "Новые" })}</TabBtn>
@@ -160,25 +160,25 @@ export default function HotelsPage() {
         </div>
 
         {/* Поисковая форма */}
-        <form onSubmit={onFind} className="flex gap-3 mb-4">
+        <form onSubmit={onFind} className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("hotels.search_by_name", { defaultValue: "Поиск по названию" })}
-            className="flex-1 border rounded px-3 py-2"
+            className="w-full min-w-0 border rounded px-3 py-2"
           />
           <input
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder={t("hotels.city_placeholder", { defaultValue: "Город" })}
-            className="w-64 border rounded px-3 py-2"
+            className="w-full sm:w-56 min-w-0 border rounded px-3 py-2"
           />
           <button
             type="submit"
             disabled={loading}
-            className={`px-4 py-2 rounded bg-gray-800 text-white ${loading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-900"}`}
+            className={`w-full sm:w-auto px-4 py-2 rounded bg-gray-800 text-white ${loading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-900"}`}
           >
             {loading ? t("hotels.searching", { defaultValue: "Поиск..." }) : t("hotels.find_btn", { defaultValue: "Найти" })}
           </button>
@@ -211,7 +211,7 @@ export default function HotelsPage() {
                 ) : rows.length ? (
                   rows.map((h) => (
                     <tr key={h.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 break-words">
                         <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
                           {h.name}
                         </NavLink>
