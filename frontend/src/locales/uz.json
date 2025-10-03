@@ -685,7 +685,19 @@
   "profile": { 
     "password_changed": "Parol yangilandi", 
     "saved": "Profil saqlandi",
-    "regions_placeholder": "Shahar nomini ingliz tilida kiritishni boshlang"
+    "regions_placeholder": "Shahar nomini ingliz tilida kiritishni boshlang",
+        "completeness": {
+      "title": "Profil to‘ldirilganligi",
+      "progress": "{{percent}}% to‘ldirildi",
+      "hint": "Profilingiz 100% to‘ldirilmagan. Xizmatlaringiz Marketplace va TourBuilder’da e’lon qilinishi uchun ma’lumotlarni to‘ldiring.",
+      "languages": "Tillarni bilish",
+      "transport": "Transport mavjudligi",
+      "certificate": "Sertifikat yuklash",
+      "logo": "Logo yuklash",
+      "telegram": "Telegram ulash",
+      "optional": "(ixtiyoriy)",
+      "fill": "To‘ldirish"
+    }
   },
   "profile_load_error": "Profilni yuklab bo‘lmadi",
   "profile_updated": "Profil yangilandi",
