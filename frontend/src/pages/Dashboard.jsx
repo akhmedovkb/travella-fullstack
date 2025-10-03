@@ -1879,7 +1879,7 @@ useEffect(() => {
                           {(["guide", "transport", "agent"].includes(profile.type)) && (
                             <div className="mt-4">
                               <div id="anchor-languages" />
-                              <ProviderLanguages ref={langRef} token={token} />
+                              <ProviderLanguages ref={langRef} token={token} editing={isEditing} />
                             </div>
                           )}        
 
