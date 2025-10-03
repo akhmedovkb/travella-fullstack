@@ -187,7 +187,14 @@
     "refused_flight": "Non-refundable air ticket",
     "refused_hotel": "Non-refundable hotel",
     "refused_tour": "Non-refundable tour",
-    "visa_support": "Visa support"
+    "visa_support": "Visa support",
+    "desert_tour_guide": "Desert tour (guide)",
+    "safari_tour_guide": "Safari tour (guide)",
+    "meet": "Meet (guide)",
+    "seeoff": "See-off (guide)",
+    "translation": "Translation (guide)",
+    "desert_tour_transport": "Desert tour (transport)",
+    "safari_tour_transport": "Safari tour (transport)"
   },
 
   "certificate": "Certificate",
