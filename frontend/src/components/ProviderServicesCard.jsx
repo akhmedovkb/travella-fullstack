@@ -481,7 +481,7 @@ export default function ProviderServicesCard({
       </div>
 
       {/* add form */}
-      <div className="p-4 grid gap-3 md:grid-cols-[minmax(220px,270px)_minmax(180px,1fr)_140px_110px_auto] items-center">
+      <div className="p-4 grid gap-3 md:grid-cols-[minmax(220px,260px)_minmax(140px,1fr)_120px_minmax(260px,420px)_auto] items-center">
         <div>
           <label className="block text-xs text-gray-600 mb-1">
             {TT("ps.form.category", "Категория", "Toifa", "Category")}
