@@ -150,7 +150,14 @@
     "refused_flight": "Отказной авиабилет",
     "refused_hotel": "Отказной отель",
     "refused_tour": "Отказной тур",
-    "visa_support": "Визовая поддержка"
+    "visa_support": "Визовая поддержка",
+    "desert_tour_guide": "Пустынный тур (гид)",
+    "safari_tour_guide": "Сафари-тур (гид)",
+    "meet": "Встреча (гид)",
+    "seeoff": "Провод (гид)",
+    "translation": "Перевод (гид)",
+    "desert_tour_transport": "Пустынный тур (транспорт)",
+    "safari_tour_transport": "Сафари-тур (транспорт)"
   },
 
   "certificate": "Сертификат",
