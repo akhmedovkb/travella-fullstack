@@ -281,7 +281,7 @@ export default function Header() {
 
           {/* ===== Row 2: продукты слева + админ сразу после них ===== */}
           <div className="hidden md:block border-t">
-            <div className="py-2 flex items-center gap-2">
+            <div className="py-2 flex items-center justify-center gap-2">
               {/* Продукты */}
               <nav className="flex items-center gap-1">
                 <NavItem to="/marketplace" label="MARKETPLACE" />
