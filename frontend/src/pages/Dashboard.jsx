@@ -666,6 +666,7 @@ const scrollToProfilePart = useCallback((key) => {
   const [newPhone, setNewPhone] = useState("");
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [pwdOpen, setPwdOpen] = useState(false);
   const [stats, setStats] = useState(null);
     // стартуем с JWT, чтобы таб появился сразу
   const [isAdmin, setIsAdmin] = useState(() => detectAdminFromJwt());
@@ -1257,6 +1258,7 @@ useEffect(() => {
            setOldPassword("");
            setNewPassword("");
            tSuccess(t("password_changed") || "Пароль обновлён");
+           setPwdOpen(false); // ← свернуть форму
          })
          .catch((err) => {
            console.error("Ошибка смены пароля", err);
@@ -1635,38 +1637,67 @@ useEffect(() => {
                 </div>
               )}
                           
-              {/* Смена пароля */}
-              <div className="mt-4">
-                <h3 className="font-semibold text-lg mb-2">{t("change_password")}</h3>
-                <input
-                  type="password"
-                  placeholder={t("current_password") || "Текущий пароль"}
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  className="border px-3 py-2 mb-2 rounded w-full"
-                />
-                <input
-                  type="password"
-                  placeholder={t("new_password")}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="border px-3 py-2 mb-2 rounded w-full"
-                />
-                <button onClick={handleChangePassword} className="w-full bg-orange-500 text-white py-2 rounded font-bold">
-                  {t("change")}
-                </button>
-                 {/* Выйти */}
-                <button
-                onClick={() => {
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("provider_id");
-                  window.location.href = "/login";
-                }}
-                className="mt-auto w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
-                >
-                {t("logout")}
+             {/* Смена пароля (раскрывающийся блок) */}
+             <div className="mt-4">
+               <button
+                 type="button"
+                 onClick={() => setPwdOpen((v) => !v)}
+                 className="w-full flex items-center justify-between rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50"
+                 aria-expanded={pwdOpen}
+                 aria-controls="pwd-collapse"
+               >
+                 <span>{t("change_password")}</span>
+                 <svg
+                   className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`}
+                   viewBox="0 0 20 20" fill="currentColor"
+                 >
+                   <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd"/>
+                 </svg>
                </button>
-              </div>
+               <div
+                 id="pwd-collapse"
+                 className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                   pwdOpen ? "grid-rows-[1fr] mt-3" : "grid-rows-[0fr]"
+                 }`}
+               >
+                 <div className="min-h-0">
+                   <div className="space-y-2">
+                     <input
+                       type="password"
+                       placeholder={t("current_password") || "Текущий пароль"}
+                       value={oldPassword}
+                       onChange={(e) => setOldPassword(e.target.value)}
+                       className="w-full border px-3 py-2 rounded"
+                     />
+                     <input
+                       type="password"
+                       placeholder={t("new_password")}
+                       value={newPassword}
+                       onChange={(e) => setNewPassword(e.target.value)}
+                       className="w-full border px-3 py-2 rounded"
+                     />
+                     <button
+                       onClick={handleChangePassword}
+                       className="w-full bg-orange-500 text-white py-2 rounded font-bold"
+                     >
+                       {t("change")}
+                     </button>
+                   </div>
+                 </div>
+               </div>
+            
+               {/* Выйти (кнопка остаётся на месте) */}
+               <button
+                 onClick={() => {
+                   localStorage.removeItem("token");
+                   localStorage.removeItem("provider_id");
+                   window.location.href = "/login";
+                 }}
+                 className="mt-3 w-full bg-red-600 text-white px-4 py-2 rounded font-semibold"
+               >
+                 {t("logout")}
+               </button>
+             </div>
             </div>
 
                       
