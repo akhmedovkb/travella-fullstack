@@ -1,10 +1,8 @@
 // frontend/src/pages/Hotels.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
-import axios from "axios";
+import { listRanked, searchHotels } from "../api/hotels";
 import { useTranslation } from "react-i18next";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 function normalizeHotel(h) {
   return {
@@ -37,14 +35,6 @@ export default function HotelsPage() {
 
   const limit = 10;
 
-  // один активный запрос; остальные отменяем
-  const get = useCallback(async (url, params = {}) => {
-    if (abortRef.current) abortRef.current.abort();
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    const r = await axios.get(url, { params, signal: ctrl.signal, timeout: 10000 });
-    return Array.isArray(r.data?.items) ? r.data.items : (Array.isArray(r.data) ? r.data : []);
-  }, []);
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
   const toNum = (v) => (v == null ? null : Number(v));
@@ -57,7 +47,7 @@ export default function HotelsPage() {
   const loadRanked = useCallback(async (type) => {
     try {
       // основной корректный эндпоинт
-      const rows = await get(`${API_BASE}/api/hotels/ranked`, { type, limit });
+      const rows = await listRanked({ type, limit });
       let norm = rows.map(normalizeHotel);
 
       // если бэк не поддерживает "worst" сортировку — подстрахуемся
@@ -66,7 +56,8 @@ export default function HotelsPage() {
     } catch {
       // фоллбэк: _list + сортировка на клиенте
       try {
-        const rows = await get(`${API_BASE}/api/hotels/_list`, { limit: 50 });
+              // Фоллбэк: попробуем вытянуть широкий список через публичный поиск
+        const rows = await searchHotels({ page: 1, limit: 50 });
         const norm = rows.map(normalizeHotel);
         if (type === "top")     return sortByRatingDesc(norm).slice(0, limit);
         if (type === "popular") return sortByViewsDesc(norm).slice(0, limit);
@@ -83,15 +74,19 @@ export default function HotelsPage() {
   const loadNew      = useCallback(() => loadRanked("new"),     [loadRanked]);
   const loadWorst    = useCallback(() => loadRanked("worst"),   [loadRanked]);
 
-  const loadSearch = useCallback(async () => {
-    const params = { name: name || undefined, city: city || undefined, limit: 50, ext: 0 };
-    try {
-      const rows = await get(`${API_BASE}/api/hotels/search`, params);
-      return rows.map(normalizeHotel);
-    } catch {
-      return [];
-    }
-  }, [get, name, city]);
+ const loadSearch = useCallback(async () => {
+   try {
+     const rows = await searchHotels({
+       name: name || "",
+       city: city || "",
+       page: 1,
+       limit: 50,
+     });
+     return rows.map(normalizeHotel);
+   } catch {
+     return [];
+   }
+ }, [name, city]);
 
   // -------- единая точка запуска --------
   const run = useCallback(async (kind) => {
