@@ -258,6 +258,7 @@ export default function Header() {
 
             </div>
             {/* Right: операционка (desktop/tablet) */}
+            <div className="hidden md:flex items-center gap-1">
               {role === "provider" && (
                 <>
                   <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
@@ -272,13 +273,13 @@ export default function Header() {
                   <NavBadge to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} value={favCount} loading={false} icon={<IconHeart />} />
                 </>
               )}
-             </div>
             </div>
+
             {/* язык */}
             <div className="shrink-0 flex items-center justify-end h-9">
               <LanguageSelector />
             </div>
-          </div>
+          </div>  {/* конец строки Row1 */}
 
           {/* ===== Row 2: продукты слева + админ сразу после них ===== */}
           <div className="hidden md:block border-t">
