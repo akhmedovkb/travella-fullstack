@@ -188,7 +188,14 @@
     "refused_flight": "Rad etilgan aviachipta",
     "refused_hotel": "Rad etilgan mehmonxona",
     "refused_tour": "Rad etilgan tur",
-    "visa_support": "Viza yordami"
+    "visa_support": "Viza yordami",
+    "desert_tour_guide": "Cho‘l sayohati (gid)",
+    "safari_tour_guide": "Safari-tur (gid)",
+    "meet": "Kutib olish (gid)",
+    "seeoff": "Kuzatib qo‘yish (gid)",
+    "translation": "Tarjima (gid)",
+    "desert_tour_transport": "Cho‘l sayohati (transport)",
+    "safari_tour_transport": "Safari-tur (transport)"
   },
 
   "certificate": "Sertifikat",
