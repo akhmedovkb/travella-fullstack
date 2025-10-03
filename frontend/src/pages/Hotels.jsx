@@ -1,7 +1,7 @@
 // frontend/src/pages/Hotels.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/http"; /* используем общий axios-инстанс с ретраями */
 import { useTranslation } from "react-i18next";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -20,6 +20,11 @@ function normalizeHotel(h) {
 export default function HotelsPage() {
   const { t } = useTranslation();
   const abortRef = useRef(null);
+    // детект “входа” — как в Header
+  const hasClient = !!localStorage.getItem("clientToken");
+  const hasProvider = !!localStorage.getItem("token") || !!localStorage.getItem("providerToken");
+  const role = hasClient ? "client" : hasProvider ? "provider" : null;
+  
 
   // ВАЖНО: по умолчанию ничего не грузим, поэтому tab = null
   const [tab, setTab] = useState(null); // 'top' | 'popular' | 'new' | 'worst' | 'search' | null
@@ -151,34 +156,37 @@ export default function HotelsPage() {
           <h1 className="text-2xl font-bold">
             {t("hotels.title", { defaultValue: "Отели" })}
           </h1>
-          <div className="flex flex-wrap gap-2">
-            <TabBtn value="top">{t("hotels.tabs.top", { defaultValue: "Топ" })}</TabBtn>
-            <TabBtn value="popular">{t("hotels.tabs.popular", { defaultValue: "Популярные" })}</TabBtn>
-            <TabBtn value="new">{t("hotels.tabs.new", { defaultValue: "Новые" })}</TabBtn>
-            <TabBtn value="worst">{t("hotels.tabs.worst", { defaultValue: "Худшие" })}</TabBtn>
-          </div>
+          {/* Табы показываем только залогиненным */}
+          {role && (
+            <div className="flex gap-2">
+              <TabBtn value="top">{t("hotels.tabs.top", { defaultValue: "Топ" })}</TabBtn>
+              <TabBtn value="popular">{t("hotels.tabs.popular", { defaultValue: "Популярные" })}</TabBtn>
+              <TabBtn value="new">{t("hotels.tabs.new", { defaultValue: "Новые" })}</TabBtn>
+              <TabBtn value="worst">{t("hotels.tabs.worst", { defaultValue: "Худшие" })}</TabBtn>
+            </div>
+          )}
         </div>
 
         {/* Поисковая форма */}
-        <form onSubmit={onFind} className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
+        <form onSubmit={onFind} className="flex flex-col sm:flex-row gap-3 mb-4">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("hotels.search_by_name", { defaultValue: "Поиск по названию" })}
-            className="w-full min-w-0 border rounded px-3 py-2"
+            className="flex-1 border rounded px-3 py-2 w-full"
           />
           <input
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder={t("hotels.city_placeholder", { defaultValue: "Город" })}
-            className="w-full sm:w-56 min-w-0 border rounded px-3 py-2"
+            className="flex-1 border rounded px-3 py-2 w-full"
           />
           <button
             type="submit"
             disabled={loading}
-            className={`w-full sm:w-auto px-4 py-2 rounded bg-gray-800 text-white ${loading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-900"}`}
+            className={`px-4 py-2 rounded bg-gray-800 text-white w-full sm:w-auto ${loading ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-900"}`}
           >
             {loading ? t("hotels.searching", { defaultValue: "Поиск..." }) : t("hotels.find_btn", { defaultValue: "Найти" })}
           </button>
@@ -190,46 +198,79 @@ export default function HotelsPage() {
           </div>
         )}
 
-        {/* Таблица показывается только после действия пользователя */}
-        {showResults ? (
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse">
-              <thead>
-                <tr className="text-left text-gray-600">
-                  <th className="px-4 py-3 font-semibold w-1/2">{t("hotels.col.name", { defaultValue: "Название" })}</th>
-                  <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.city", { defaultValue: "Город" })}</th>
-                  <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.rating", { defaultValue: "Оценка" })}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {loading ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
-                      {t("common.loading", { defaultValue: "Загрузка…" })}
-                    </td>
+        {/* Результаты: на мобиле — карточки, на десктопе — таблица.
+            Показываем только после действия пользователя */}
+          <>
+            {/* mobile cards */}
+            <div className="md:hidden grid grid-cols-1 gap-3">
+              {loading ? (
+                <div className="px-4 py-6 text-center text-gray-500">
+                  {t("common.loading", { defaultValue: "Загрузка…" })}
+                </div>
+              ) : rows.length ? (
+                rows.map((h) => (
+                  <NavLink
+                    key={h.id}
+                    to={`/hotels/${h.id}`}
+                    className="block rounded-lg border ring-1 ring-gray-200 bg-white p-3 hover:bg-gray-50"
+                  >
+                    <div className="text-base font-semibold">{h.name}</div>
+                    <div className="text-sm text-gray-600 mt-0.5">{h.city || "—"}</div>
+                    <div className="mt-2 text-sm">
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                        {t("hotels.col.rating", { defaultValue: "Оценка" })}:{" "}
+                        <span className="ml-1 font-semibold">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</span>
+                      </span>
+                    </div>
+                  </NavLink>
+                ))
+              ) : (
+                <div className="px-4 py-6 text-center text-gray-500">
+                  {t("hotels.empty", { defaultValue: "Ничего не найдено" })}
+                </div>
+              )}
+            </div>
+
+            {/* desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full table-auto border-collapse">
+                <thead>
+                  <tr className="text-left text-gray-600">
+                    <th className="px-4 py-3 font-semibold w-1/2">{t("hotels.col.name", { defaultValue: "Название" })}</th>
+                    <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.city", { defaultValue: "Город" })}</th>
+                    <th className="px-4 py-3 font-semibold w-1/4">{t("hotels.col.rating", { defaultValue: "Оценка" })}</th>
                   </tr>
-                ) : rows.length ? (
-                  rows.map((h) => (
-                    <tr key={h.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 break-words">
-                        <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
-                          {h.name}
-                        </NavLink>
+                </thead>
+                <tbody className="divide-y">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
+                        {t("common.loading", { defaultValue: "Загрузка…" })}
                       </td>
-                      <td className="px-4 py-3">{h.city || "—"}</td>
-                      <td className="px-4 py-3">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
-                      {t("hotels.empty", { defaultValue: "Ничего не найдено" })}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : rows.length ? (
+                    rows.map((h) => (
+                      <tr key={h.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <NavLink to={`/hotels/${h.id}`} className="text-blue-600 hover:underline">
+                            {h.name}
+                          </NavLink>
+                        </td>
+                        <td className="px-4 py-3">{h.city || "—"}</td>
+                        <td className="px-4 py-3">{h.rating != null ? Number(h.rating).toFixed(1) : "—"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
+                        {t("hotels.empty", { defaultValue: "Ничего не найдено" })}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <div className="text-gray-500 text-sm py-8">
             {t("hotels.empty_hint", {
