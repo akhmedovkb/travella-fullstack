@@ -255,13 +255,7 @@ export default function Header() {
               >
                 {mobileOpen ? <IconClose /> : <IconBurger />}
               </button>
-              <Link
-                to="/marketplace"
-                className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
-                aria-label="Go to marketplace"
-              >
-                MARKETPLACE
-              </Link>
+
             </div>
             {/* Right: операционка (desktop/tablet) */}
             <div className="hidden md:flex items-center gap-1">
