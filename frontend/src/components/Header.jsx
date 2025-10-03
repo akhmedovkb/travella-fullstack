@@ -319,10 +319,12 @@ export default function Header() {
             {/* Операционка */}
             <RowGroup title={t("nav.ops", "Операционка")}>
               {role === "provider" ? (
+            <>
                 <NavItemMobile to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
                 <NavItemMobile to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobile to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobile to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+            </>
               ) : (
                 <>
                   <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
