@@ -258,20 +258,21 @@ export default function Header() {
 
             </div>
             {/* Right: операционка (desktop/tablet) */}
-            <div className="hidden md:flex items-center gap-1">
-              {role === "provider" ? (
+              {role === "provider" && (
                 <>
                   <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
                   <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
                   <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
                   <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
                 </>
-              ) : (
+              )}
+              {role === "client" && (
                 <>
                   <NavItem to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
                   <NavBadge to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} value={favCount} loading={false} icon={<IconHeart />} />
                 </>
               )}
+             </div>
             </div>
             {/* язык */}
             <div className="shrink-0 flex items-center justify-end h-9">
@@ -310,22 +311,25 @@ export default function Header() {
           aria-hidden={!mobileOpen}
         >
           <nav className="pb-3 -mx-1">
-            {/* Операционка */}
-            <RowGroup title={t("nav.ops", "Операционка")}>
-              {role === "provider" ? (
-            <>
-                <NavItemMobile to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-                <NavItemMobile to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
-                <NavItemMobile to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
-                <NavItemMobile to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
-            </>
-              ) : (
-                <>
-                  <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                  <NavItemMobile to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
-                </>
-              )}
-            </RowGroup>
+            {/* Операционка: показываем только если есть роль */}
+            {role && (
+              <RowGroup title={t("nav.ops", "Операционка")}>
+                {role === "provider" && (
+                  <>
+                    <NavItemMobile to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                    <NavItemMobile to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
+                    <NavItemMobile to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
+                    <NavItemMobile to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                  </>
+                )}
+                {role === "client" && (
+                  <>
+                    <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                    <NavItemMobile to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                  </>
+                )}
+              </RowGroup>
+            )}
 
             {/* Продукты */}
             <RowGroup title={t("nav.products","Продукты")}>
