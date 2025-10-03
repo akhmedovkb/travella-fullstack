@@ -1,7 +1,7 @@
 // frontend/src/pages/Hotels.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
-import axios from "../api/http"; /* используем общий axios-инстанс с ретраями */
+import axios from "axios";
 import { useTranslation } from "react-i18next";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
