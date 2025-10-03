@@ -682,7 +682,11 @@
   "pick_dates": "Boshlanish va tugash sanalarini tanlang",
   "price": "Narx",
 
-  "profile": { "password_changed": "Parol yangilandi", "saved": "Profil saqlandi" },
+  "profile": { 
+    "password_changed": "Parol yangilandi", 
+    "saved": "Profil saqlandi",
+    "regions_placeholder": "Shahar nomini ingliz tilida kiritishni boshlang"
+  },
   "profile_load_error": "Profilni yuklab bo‘lmadi",
   "profile_updated": "Profil yangilandi",
 
