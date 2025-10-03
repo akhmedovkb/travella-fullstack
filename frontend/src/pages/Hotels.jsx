@@ -200,6 +200,7 @@ export default function HotelsPage() {
 
         {/* Результаты: на мобиле — карточки, на десктопе — таблица.
             Показываем только после действия пользователя */}
+        {showResults ? (
           <>
             {/* mobile cards */}
             <div className="md:hidden grid grid-cols-1 gap-3">
