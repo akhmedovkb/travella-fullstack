@@ -662,7 +662,19 @@
   "profile": { 
     "password_changed": "Password updated", 
     "saved": "Profile saved",
-    "regions_placeholder": "Start typing city name (EN)"
+    "regions_placeholder": "Start typing city name (EN)",
+        "completeness": {
+      "title": "Profile completeness",
+      "progress": "{{percent}}% completed",
+      "hint": "Your profile is not 100% complete. Fill it out so your services can be published in the Marketplace and TourBuilder.",
+      "languages": "Language proficiency",
+      "transport": "Transport available",
+      "certificate": "Certificate upload",
+      "logo": "Logo upload",
+      "telegram": "Telegram connection",
+      "optional": "(optional)",
+      "fill": "Fill in"
+    }
   },
   "profile_load_error": "Failed to load profile",
   "profile_updated": "Profile updated",
