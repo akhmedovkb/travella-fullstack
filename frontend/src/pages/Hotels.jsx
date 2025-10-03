@@ -67,7 +67,7 @@ export default function HotelsPage() {
         return [];
       }
     }
-  }, [get]);
+  }, [sortByRatingAsc]);
 
   const loadTop      = useCallback(() => loadRanked("top"),     [loadRanked]);
   const loadPopular  = useCallback(() => loadRanked("popular"), [loadRanked]);
