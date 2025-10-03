@@ -241,104 +241,113 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
       <div className="mx-auto max-w-7xl px-3 sm:px-4">
-        <div className="h-14 flex items-center justify-between gap-2">
-          {/* Left: logo + burger */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              aria-label="Menu"
-            >
-              {mobileOpen ? <IconClose /> : <IconBurger />}
-            </button>
-
-            <Link
-              to="/marketplace"
-              className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
-              aria-label="Go to marketplace"
-            >
-              MARKETPLACE
-            </Link>
-
-            {/* Desktop/Tablet primary nav (scrollable row) */}
-            <div className="hidden md:flex items-center gap-1 min-w-0">
-              {role === "provider" && (
-                <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
-              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-
-              {role === "provider" && (
-                <div className="ml-2 flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-white/70 px-1 py-0.5 ring-1 ring-gray-200 max-w-[70vw]">
+        {/* колонка: Row1 (операционка) + Row2 (продукты/админ) */}
+        <div className="flex flex-col gap-0">
+          {/* ===== Row 1: верхняя операционка ===== */}
+          <div className="h-14 flex items-center justify-between gap-2">
+            {/* Left: burger + бренд */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileOpen((v) => !v)}
+                className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                aria-label="Menu"
+              >
+                {mobileOpen ? <IconClose /> : <IconBurger />}
+              </button>
+              <Link
+                to="/marketplace"
+                className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 hover:text-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 rounded px-1"
+                aria-label="Go to marketplace"
+              >
+                MARKETPLACE
+              </Link>
+            </div>
+            {/* Right: операционка (desktop/tablet) */}
+            <div className="hidden md:flex items-center gap-1">
+              {role === "provider" ? (
+                <>
                   <NavItem to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
                   <NavBadge to="/dashboard/requests" label={t("nav.requests")} value={providerRequests} loading={loading} icon={<IconRequests />} />
                   <NavBadge to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} value={favCount} loading={false} icon={<IconHeart />} />
                   <NavBadge to="/dashboard/bookings" label={t("nav.bookings")} value={bookingsBadge} loading={loading} icon={<IconBookings />} />
-                  {isAdmin && (
-                    <>
-                      <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                      <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-                    </>
-                  )}
-                </div>
-              )}
-
-              {role === "client" && (
-                <div className="ml-2 flex items-center gap-1">
+                </>
+              ) : (
+                <>
                   <NavItem to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
                   <NavBadge to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} value={favCount} loading={false} icon={<IconHeart />} />
-                </div>
-              )}              
-              {isAdmin && <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />}
+                </>
+              )}
+            </div>
+            {/* язык */}
+            <div className="shrink-0 flex items-center justify-end h-9">
+              <LanguageSelector />
             </div>
           </div>
 
-          {/* Right: language */}
-          <div className="shrink-0 flex items-center justify-end h-9">
-            <LanguageSelector />
+          {/* ===== Row 2: продукты слева + админ сразу после них ===== */}
+          <div className="hidden md:block border-t">
+            <div className="py-2 flex items-center gap-2">
+              {/* Продукты */}
+              <nav className="flex items-center gap-1">
+                <NavItem to="/marketplace" label="MARKETPLACE" />
+                {role === "provider" && (
+                  <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+                )}
+                <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              </nav>
+              {/* разделитель */}
+              <div className="mx-2 h-5 w-px bg-gray-200" />
+              {/* Админ */}
+              {isAdmin && (
+                <nav className="flex items-center gap-1">
+                  <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                  <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+                  <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+                </nav>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Mobile drawer */}
+        {/* ===== Mobile drawer ===== */}
         <div
           className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
           aria-hidden={!mobileOpen}
         >
           <nav className="pb-3 -mx-1">
-            {role === "provider" && (
-              <RowGroup title={t("nav.tour_builder", "Tour Builder")}>
-                <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              </RowGroup>
-            )}
-
-            {role === "provider" && (
-              <RowGroup title={t("nav.provider", "Поставщик")}>
+            {/* Операционка */}
+            <RowGroup title={t("nav.ops", "Операционка")}>
+              {role === "provider" ? (
                 <NavItemMobile to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
                 <NavItemMobile to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobile to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobile to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
-                {isAdmin && (
-                  <>
-                    <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                    <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-                  </>
-                )}
-              </RowGroup>
-            )}
-
-            {role === "client" && (
-              <RowGroup title={t("client.header.title","Профиль")}>
-                <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                <NavItemMobile to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
-              </RowGroup>
-            )}
-
-            <RowGroup title={t("nav.common","Общее")}>
-              <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-              {isAdmin && (
-                <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+              ) : (
+                <>
+                  <NavItemMobile to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                  <NavItemMobile to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                </>
               )}
             </RowGroup>
+
+            {/* Продукты */}
+            <RowGroup title={t("nav.products","Продукты")}>
+              <NavItemMobile to="/marketplace" label="MARKETPLACE" />
+              {role === "provider" && (
+                <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              )}
+              <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </RowGroup>
+
+            {/* Админ */}
+            {isAdmin && (
+              <RowGroup title={t("nav.admin","Админ")}>
+                <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+                <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+              </RowGroup>
+            )}
           </nav>
         </div>
       </div>
