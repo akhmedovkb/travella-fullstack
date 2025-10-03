@@ -32,7 +32,7 @@ const allLanguageOptions = (uiLang = "en") => {
   return opts.sort((a, b) => a.label.localeCompare(b.label, uiLang || "en"));
 };
 
-const ProviderLanguages = forwardRef(function ProviderLanguages({ token, onDirty }, ref) {
+const ProviderLanguages = forwardRef(function ProviderLanguages({ token, onDirty, editing = false }, ref) {
   const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState([]);
@@ -95,28 +95,46 @@ const ProviderLanguages = forwardRef(function ProviderLanguages({ token, onDirty
       </h3>
 
       <div className="mb-3">
-        {/* медовая ловушка против автозаполнения e-mail в Chrome (невидимое поле) */}
-        <input type="text" name="prevent_autofill" autoComplete="username" className="hidden" />
+        {/* режим ПРОСМОТРА */}
+        {!editing && (
+          <div className="min-h-11 w-full rounded border px-3 py-2 bg-gray-100 flex flex-wrap gap-2 items-center">
+            {selectedOptions.length ? (
+              selectedOptions.map(opt => (
+                <span key={opt.value} className="inline-flex items-center rounded-full bg-white border px-2 py-0.5 text-sm">
+                  {opt.label}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-gray-500">{t("not_specified", { defaultValue: "Не указано" })}</span>
+            )}
+          </div>
+        )}
 
-        <Select
-          isMulti
-          isClearable
-          isLoading={loading}
-          options={options}
-          value={selectedOptions}
-          onChange={handleChange}
-          placeholder={t("languages.placeholder", { defaultValue: "Начните вводить язык…" })}
-          classNamePrefix="rs"
-          inputId="languages-input"       // те же id/name, что и в кастомном Input
-          name="languages-input"
-          components={{ Input: NoAutoCompleteInput }}
-          styles={{
-            control: (base) => ({ ...base, minHeight: 44, borderColor: "#d1d5db", boxShadow: "none" }),
-            menu: (base) => ({ ...base, zIndex: 50 }),
-          }}
-        />
+        {/* режим РЕДАКТИРОВАНИЯ */}
+        {editing && (
+          <>
+            {/* медовая ловушка против автозаполнения */}
+            <input type="text" name="prevent_autofill" autoComplete="username" className="hidden" />
+            <Select
+              isMulti
+              isClearable
+              isLoading={loading}
+              options={options}
+              value={selectedOptions}
+              onChange={handleChange}
+              placeholder={t("languages.placeholder", { defaultValue: "Начните вводить язык…" })}
+              classNamePrefix="rs"
+              inputId="languages-input"
+              name="languages-input"
+              components={{ Input: NoAutoCompleteInput }}
+              styles={{
+                control: (base) => ({ ...base, minHeight: 44, borderColor: "#d1d5db", boxShadow: "none" }),
+                menu: (base) => ({ ...base, zIndex: 50 }),
+              }}
+            />
+          </>
+        )}
       </div>
-
     </div>
   );
 });
