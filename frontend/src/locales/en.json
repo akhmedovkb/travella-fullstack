@@ -659,7 +659,11 @@
   "pick_dates": "Select start and end dates",
   "price": "Price",
 
-  "profile": { "password_changed": "Password updated", "saved": "Profile saved" },
+  "profile": { 
+    "password_changed": "Password updated", 
+    "saved": "Profile saved",
+    "regions_placeholder": "Start typing city name (EN)"
+  },
   "profile_load_error": "Failed to load profile",
   "profile_updated": "Profile updated",
 
