@@ -1705,7 +1705,9 @@ useEffect(() => {
                     loadOptions={loadCities}
                     noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                     loadingMessage={ASYNC_I18N.loadingMessage}
-                    placeholder="Start typing city name (EN)…"
+                    placeholder={t("profile.regions_placeholder", {
+                       defaultValue: "Start typing city name (EN)…",
+                     })}
                     value={regions}
                     onChange={(vals) => setRegions(vals || [])}
                   />
