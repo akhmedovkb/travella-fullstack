@@ -245,7 +245,7 @@ export default function Header() {
         <div className="flex flex-col gap-0">
           {/* ===== Row 1: верхняя операционка ===== */}
           <div className="h-14 flex items-center justify-between gap-2">
-            {/* Left: burger + бренд */}
+            {/* Left: burger */}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -274,7 +274,6 @@ export default function Header() {
                 </>
               )}
             </div>
-
             {/* язык */}
             <div className="shrink-0 flex items-center justify-end h-9">
               <LanguageSelector />
@@ -283,6 +282,7 @@ export default function Header() {
 
           {/* ===== Row 2: продукты слева + админ сразу после них ===== */}
           <div className="hidden md:block border-t">
+            {/* центрируем вторую строку */}
             <div className="py-2 flex items-center justify-center gap-2">
               {/* Продукты */}
               <nav className="flex items-center gap-1">
@@ -374,7 +374,7 @@ function NavItem({ to, label, icon, end }) {
       end={end}
       className={({ isActive }) =>
         [
-          "shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
           isActive
             ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
@@ -383,6 +383,12 @@ function NavItem({ to, label, icon, end }) {
     >
       {icon}
       <span>{label}</span>
+            {/* тонкая активная полоска снизу */}
+      {/*
+        Нужны before/after utilities tailwind. Если нет — можно удалить блок ниже.
+      */}
+      {/* eslint-disable-next-line jsx-a11y/aria-proptypes */}
+      {({ isActive }) => isActive && <span aria-hidden="true" className="pointer-events-none absolute -bottom-[6px] left-3 right-3 h-[2px] bg-orange-500 rounded-full" />}
     </NavLink>
   );
 }
@@ -411,6 +417,9 @@ function NavBadge({ to, label, value, loading, icon }) {
       >
         {loading ? "…" : show ? value : 0}
       </span>
+            {/* тонкая активная полоска снизу */}
+      {/* eslint-disable-next-line jsx-a11y/aria-proptypes */}
+      {({ isActive }) => isActive && <span aria-hidden="true" className="pointer-events-none absolute -bottom-[6px] left-3 right-3 h-[2px] bg-orange-500 rounded-full" />}
     </NavLink>
   );
 }
