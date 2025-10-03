@@ -620,7 +620,11 @@
   "pick_dates": "Выберите даты начала и конца",
   "price": "Цена",
 
-  "profile": { "password_changed": "Пароль изменён", "saved": "Профиль сохранён" },
+  "profile": { 
+    "password_changed": "Пароль изменён", 
+    "saved": "Профиль сохранён",
+    "regions_placeholder": "Начните вводить город на англ."
+  },
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
 
