@@ -129,4 +129,44 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
   res.json({ ok: true, service: rows[0] });
 });
 
+// --- Change provider password (admin only) ---
+// PATCH /api/admin/providers/:id/password
+// body: { password: "NewPass123" }
+router.patch(
+  "/providers/:id(\\d+)/password",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    const id = Number(req.params.id);
+    const { password } = req.body || {};
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Bad provider id" });
+    }
+    if (typeof password !== "string" || password.trim().length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 chars" });
+    }
+
+    try {
+      const q = `
+        UPDATE public.providers
+           SET password  = $1,
+               updated_at = NOW()
+         WHERE id = $2
+         RETURNING id, name, email
+      `;
+      const { rows } = await pool.query(q, [password.trim(), id]);
+      if (!rows.length) {
+        return res.status(404).json({ message: "Provider not found" });
+      }
+
+      return res.json({ ok: true, provider: rows[0] });
+    } catch (e) {
+      console.error("admin change password error:", e);
+      return res.status(500).json({ message: "Internal error" });
+    }
+  }
+);
+
+
 module.exports = router;
