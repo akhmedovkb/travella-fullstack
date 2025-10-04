@@ -8,7 +8,7 @@ const {
   notifyModerationRejected,
   notifyModerationUnpublished,
 } = require("../utils/telegram");
-const authenticateToken = require("../middleware/authenticateToken");
+
 const requireAdmin = require("../middleware/requireAdmin");
 
 // простая проверка роли
