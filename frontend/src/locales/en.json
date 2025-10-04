@@ -659,7 +659,14 @@
   "pick_dates": "Select start and end dates",
   "price": "Price",
 
-  "profile": { 
+  "profile": {
+    "city": "City",
+    "languages": "Languages",
+    "phone": "Phone",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Price/day",
+    "open_profile": "Open profile →",
     "password_changed": "Password updated", 
     "saved": "Profile saved",
     "regions_placeholder": "Start typing city name (EN)",
