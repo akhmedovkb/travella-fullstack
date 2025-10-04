@@ -952,9 +952,8 @@
       "telegram": "Telegram",
       "email": "Email",
       "price_per_day": "Price/day",
-      "open_profile": "Open profile →"
-    }
-  },
+      "open_profile": "Open profile →"    
+   },
     "transfer_types": {
       "car": "Car",
       "train": "Train",
