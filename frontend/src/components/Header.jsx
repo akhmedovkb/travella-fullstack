@@ -5,6 +5,7 @@ import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
+import AdminQuickTools from "./admin/AdminQuickTools";
 
 /* --- Inline SVG icons --- */
 const IconModeration = (p) => (
@@ -302,6 +303,8 @@ export default function Header() {
                   <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
                 </nav>
               )}
+              {/* быстрый сет пароля справа */}
+              {isAdmin && <AdminQuickTools />}
             </div>
           </div>
         </div>
