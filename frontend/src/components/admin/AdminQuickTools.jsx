@@ -27,7 +27,7 @@ export default function AdminQuickTools() {
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/providers/${id}/password`, {
-        method: "POST",
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getAuthToken()}`,
