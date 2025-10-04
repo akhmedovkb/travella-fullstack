@@ -375,6 +375,7 @@ async function fetchEntryFees({ q = "", city = "", date = "", limit = 50 } = {})
 
 /* ---------------- custom option + tooltip ---------------- */
 const ProviderOption = (props) => {
+  const { t } = useTranslation();
   const p = props.data?.raw || {};
   const url = p?.id ? `/profile/provider/${p.id}` : null;
 
@@ -406,12 +407,12 @@ const ProviderOption = (props) => {
 
         <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text">
           <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
-          {p.location && <div><b>Город:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
-          {p.languages?.length ? <div><b>Языки:</b> {p.languages.join(", ")}</div> : null}
+          {p.location && <div><b>{t("tb.profile.city")}:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
+          {p.languages?.length ? <div><b>{t("tb.profile.languages")}:</b> {p.languages.join(", ")}</div> : null}
 
           {p.phone && (
             <div>
-              <b>Тел.:</b>{" "}
+              <b>{t("tb.profile.phone")}:</b>{" "}
               <a
                 href={tel ? `tel:${tel}` : undefined}
                 onMouseDown={swallowDown}
@@ -424,7 +425,7 @@ const ProviderOption = (props) => {
 
           {tgRaw && (
             <div>
-              <b>Telegram:</b>{" "}
+              <b>{t("tb.profile.telegram")}:</b>{" "}
               {tgHref ? (
                 <a
                   href={tgHref}
@@ -441,7 +442,7 @@ const ProviderOption = (props) => {
 
           {p.email && (
             <div>
-              <b>Email:</b>{" "}
+              <b>{t("tb.profile.email")}:</b>{" "}
               <a
                 href={`mailto:${p.email}`}
                 onMouseDown={swallowDown}
@@ -453,7 +454,7 @@ const ProviderOption = (props) => {
           )}
 
           {Number(p.price_per_day) > 0 && (
-            <div className="mt-1"><b>Цена/день:</b> {p.price_per_day} {p.currency || "UZS"}</div>
+            <div className="mt-1"><b>{t("tb.profile.price_per_day")}:</b> {p.price_per_day} {p.currency || "UZS"}</div>
           )}
 
           {url && (
@@ -466,7 +467,7 @@ const ProviderOption = (props) => {
                 onPointerDown={swallowDown}
                 onClick={openHref(url)}
                 className="text-blue-600 hover:underline"
-              >Открыть профиль →</a>
+              >{t("tb.profile.open_profile")}</a>
             </div>
           )}
         </div>
