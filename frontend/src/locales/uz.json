@@ -683,6 +683,13 @@
   "price": "Narx",
 
   "profile": { 
+    "city": "Shahar",
+    "languages": "Tillar",
+    "phone": "Tel.",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Narx/kun",
+    "open_profile": "Profilni ochish →",
     "password_changed": "Parol yangilandi", 
     "saved": "Profil saqlandi",
     "regions_placeholder": "Shahar nomini ingliz tilida kiritishni boshlang",
@@ -961,6 +968,16 @@
       "totals": {
         "transfers": "Transferlar"
       },
+
+      "profile": {
+      "city": "Shahar",
+      "languages": "Tillar",
+      "phone": "Tel.",
+      "telegram": "Telegram",
+      "email": "Email",
+      "price_per_day": "Narx/kun",
+      "open_profile": "Profilni ochish →"
+    },
       "transfer_types": {
         "car": "Avto",
         "train": "Poyezd",

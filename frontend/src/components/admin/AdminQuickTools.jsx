@@ -16,6 +16,7 @@ export default function AdminQuickTools() {
   const [pwd, setPwd] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [ok, setOk] = useState(null); // null | true | false
 
   const submit = async (e) => {
     e?.preventDefault?.();
@@ -27,18 +28,26 @@ export default function AdminQuickTools() {
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/providers/${id}/password`, {
-        method: "POST",
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({ password: pwd }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      setMsg("✓ Сохранено");
+      const raw = await res.text();
+      let data;
+      try { data = JSON.parse(raw); } catch { /* not json */ }
+      if (!res.ok) {
+        const reason = data?.message || raw || res.statusText || "Error";
+        throw new Error(reason);
+      }
+      setOk(true);
+      setMsg(data?.message || "✓ Сохранено");
       setPwd("");
     } catch (e) {
-      setMsg("Ошибка");
+      setOk(false);
+      setMsg(String(e.message || "Ошибка"));
       console.error("admin password set error:", e);
     } finally {
       setBusy(false);
@@ -70,7 +79,16 @@ export default function AdminQuickTools() {
         className="h-8 px-3 rounded bg-blue-600 text-white text-sm disabled:opacity-60">
         Set
       </button>
-      {msg && <span className="text-xs ml-1 text-gray-600">{msg}</span>}
+            {msg && (
+        <span
+          className={
+            "text-xs ml-1 " +
+            (ok == null ? "text-gray-600" : ok ? "text-emerald-700" : "text-red-600")
+          }
+        >
+          {msg}
+        </span>
+      )}
     </form>
   );
 }

@@ -621,6 +621,13 @@
   "price": "Цена",
 
   "profile": { 
+    "city": "Город",
+    "languages": "Языки",
+    "phone": "Тел.",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Цена/день",
+    "open_profile": "Открыть профиль →",
     "password_changed": "Пароль изменён", 
     "saved": "Профиль сохранён",
     "regions_placeholder": "Начните вводить город на англ.",
@@ -906,6 +913,15 @@
     "transfers_day_sum": "Сумма по трансферам на день",
     "totals": {
       "transfers": "Трансферы"
+    },
+    "profile": {
+    "city": "Город",
+    "languages": "Языки",
+    "phone": "Тел.",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Цена/день",
+    "open_profile": "Открыть профиль →"
     },
     "transfer_types": {
       "car": "Авто",
