@@ -922,8 +922,7 @@
     "email": "Email",
     "price_per_day": "Цена/день",
     "open_profile": "Открыть профиль →"
-    }
-  },
+    },
     "transfer_types": {
       "car": "Авто",
       "train": "Поезд",
