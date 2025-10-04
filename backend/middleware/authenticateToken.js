@@ -28,7 +28,7 @@ module.exports = async function authenticateToken(req, res, next) {
       payload.sub ??
       null;
 
-    // Нормализуем role
+    // Нормализуем role (из токена)
     let role = payload.role ?? payload.type ?? null;
     if (!role) {
       if (payload.providerId || payload.isProvider === true || payload.roleId === "provider")
@@ -37,23 +37,54 @@ module.exports = async function authenticateToken(req, res, next) {
         role = "client";
     }
 
-    // ⬇️ Fallback: если роль все ещё не определена — узнаём по БД
-    if (!role && id) {
+        // ⬇️ Fallback/обогащение по БД: определяем роль и админ-флаги
+    let flags = {};
+    if (id) {
       try {
-        const p = await pool.query("SELECT id FROM providers WHERE id=$1 LIMIT 1", [id]);
-        if (p.rowCount > 0) role = "provider";
-        else {
+        // сначала проверим, провайдер ли
+        const p = await pool.query(
+          "SELECT id, role AS db_role, is_admin, is_moderator, moderator, permissions FROM providers WHERE id=$1 LIMIT 1",
+          [id]
+        );
+        if (p.rowCount > 0) {
+          if (!role) role = "provider";
+          // флаги из БД
+          flags.is_admin = !!p.rows[0].is_admin;
+          flags.is_moderator = !!(p.rows[0].is_moderator || p.rows[0].moderator);
+          flags.permissions = p.rows[0].permissions || [];
+          // если роль до сих пор не определена — возьмём из колонки role
+          if (!payload.role && p.rows[0].db_role) {
+            role = p.rows[0].db_role;
+          }
+        } else if (!role) {
+          // иначе попробуем как клиента
           const c = await pool.query("SELECT id FROM clients WHERE id=$1 LIMIT 1", [id]);
           if (c.rowCount > 0) role = "client";
         }
       } catch (dbErr) {
         // не рушим запрос, просто логируем
-        console.error("auth role infer error:", dbErr);
+        console.error("auth role/flags infer error:", dbErr);
       }
     }
 
-    req.user = { ...payload, id, role };
-    return next();
+    // Нормализуем финальные признаки администратора
+    const roleLc = String(role || "").toLowerCase();
+    const isAdminToken =
+      payload.is_admin === true ||
+      payload.moderator === true ||
+      roleLc === "admin" ||
+      roleLc === "moderator";
+    const is_admin = !!(flags.is_admin || isAdminToken);
+    const is_moderator = !!(flags.is_moderator || roleLc === "moderator");
+
+    req.user = {
+      ...payload,
+      id,
+      role,
+      is_admin,
+      is_moderator,
+      permissions: flags.permissions || payload.permissions || [],
+    };    return next();
   } catch (e) {
     console.error("auth middleware error:", e);
     return res.status(401).json({ message: "Unauthorized" });
