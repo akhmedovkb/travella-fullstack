@@ -5,6 +5,16 @@ import { listTemplates, upsertTemplate, removeTemplate, newId } from "../store/t
 export default function TemplateCreator() {
   const [items, setItems] = useState(listTemplates());
   const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
+  const [adminChecked, setAdminChecked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const me = await fetchMeLoose();
+      setIsAdmin(isAdminFrom(me));
+      setAdminChecked(true);
+    })();
+  }, []);
 
   const empty = { id: newId(), title: "", days: [{ city: "" }] };
 
@@ -27,6 +37,16 @@ export default function TemplateCreator() {
     if (edit && String(edit.id) === String(id)) setEdit(null);
   };
 
+    if (adminChecked && !isAdmin) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <div className="border rounded-lg p-6 bg-white shadow">
+          <div className="text-lg font-semibold mb-2">Доступ запрещён</div>
+          <div className="text-sm text-gray-600">Конструктор шаблонов доступен только администраторам.</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-4">
