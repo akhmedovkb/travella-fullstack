@@ -249,11 +249,18 @@ const rawPrice = (viewerRole === "provider")
   );
 
   const status = firstNonEmpty(svc.status, item.status, details?.status);
+  
+  const flightDetails = firstNonEmpty(
+    details?.flightDetails,
+    details?.flight_details,
+    details?.flight_info,
+    Array.isArray(details?.flights) ? details.flights.join("\n") : null
+  );
 
   return {
     svc, details, title, hotel, accommodation, dates, direction,
     rawPrice, prettyPrice,
-    inlineProvider, providerId, flatName, flatPhone, flatTg, status
+    inlineProvider, providerId, flatName, flatPhone, flatTg, status, flightDetails,
   };
 }
 
@@ -285,7 +292,8 @@ export default function ServiceCard({
     flatTg,
     status: statusRaw,
     details,
-    direction
+    direction,
+    flightDetails,
   } = extractServiceFields(item, viewerRole);
 
   /* ============== таймер карточки услуги ============== */
@@ -459,6 +467,17 @@ export default function ServiceCard({
               <div className="font-semibold line-clamp-2">
                  {direction || title}
               </div>
+              {/* ↓↓↓ НОВОЕ: блок с деталями рейса */}
+              {flightDetails && (
+                <div className="mt-2 text-xs bg-gray-50 border rounded-lg p-2">
+                  <div className="text-gray-600 mb-1">
+                    {t("marketplace.flight_details") || "Детали рейса"}
+                  </div>
+                  <div className="font-mono whitespace-pre-line leading-snug">
+                    {String(flightDetails).replace(/\r\n/g, "\n")}
+                  </div>
+                </div>
+              )}
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
