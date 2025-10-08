@@ -497,23 +497,34 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
+// ---------- Change password ----------
 const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
+
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ message: "Пароль слишком короткий" });
+    }
+
     const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
     if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
-    const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
+
     const plain = String(oldPassword || "");
     const stored = String(q.rows[0].password || "");
+
     let ok;
     if (/^\$2[aby]\$/.test(stored)) {
+      // В БД bcrypt-хэш
       ok = await bcrypt.compare(plain, stored);
     } else {
-      ok = plain === stored; // пароль был в открытом виде
+      // В БД пароль в открытом виде
+      ok = plain === stored;
     }
+
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
-    const hashed = await bcrypt.hash(String(newPassword || ""), 10);
+
+    const hashed = await bcrypt.hash(String(newPassword), 10);
     await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
     res.json({ message: "Пароль обновлён" });
   } catch (err) {
@@ -521,6 +532,7 @@ const changeProviderPassword = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+;
 
 // ---------- Services CRUD ----------
 const addService = async (req, res) => {
