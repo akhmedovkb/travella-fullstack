@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { listTemplates, getTemplate } from "../store/templates"; // [TPL]
+import { listTemplates, getTemplate, syncTemplates } from "../store/templates"; // [TPL]
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { useTranslation } from "react-i18next";
@@ -889,8 +889,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
     // [TPL] локальное состояние шаблонов
   const [tpls, setTpls] = useState(listTemplates());
-  const refreshTpls = () => setTpls(listTemplates());
-  useEffect(()=>{ refreshTpls(); },[]);
+  const refreshTpls = async () => {
+    await syncTemplates();
+    setTpls(listTemplates());
+  };
+  useEffect(() => { refreshTpls(); }, []);
 
   // [TPL] модал применения
   const [applyOpen, setApplyOpen] = useState(false);
