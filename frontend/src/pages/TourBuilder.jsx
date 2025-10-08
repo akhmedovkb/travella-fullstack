@@ -9,7 +9,9 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
+import { useNavigate } from 'react-router-dom';
 
+const navigate = useNavigate();
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -932,7 +934,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
             ))}
             {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
           </div>
-          <a className="ml-auto text-sm underline" href="/templates" target="_blank" rel="noreferrer">Открыть конструктор шаблонов</a>
+           {/* SPA-переход */}
+           <button
+             className="ml-auto text-sm underline"
+             onClick={() => navigate('/templates')}
+           >
+             Открыть конструктор шаблонов
+           </button>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
