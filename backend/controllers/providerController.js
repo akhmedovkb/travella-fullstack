@@ -226,6 +226,7 @@ const registerProvider = async (req, res) => {
   try {
     const { name, email, password, type, location, phone, social, photo, address } =
       req.body || {};
+    const emailNorm = String(email || "").trim().toLowerCase();
 
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
@@ -235,8 +236,8 @@ const registerProvider = async (req, res) => {
     }
 
     const existing = await pool.query(
-      "SELECT 1 FROM providers WHERE email = $1",
-      [email]
+      "SELECT 1 FROM providers WHERE lower(email) = $1",
+      [emailNorm]
     );
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
@@ -248,7 +249,7 @@ const registerProvider = async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         name,
-        email,
+        emailNorm,
         hashed,
         type,
         location,
@@ -268,12 +269,31 @@ const registerProvider = async (req, res) => {
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    const emailNorm = String(email || "").trim().toLowerCase();
+    const q = await pool.query("SELECT * FROM providers WHERE lower(email) = $1", [emailNorm]);
     if (!q.rows.length) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
     const row = q.rows[0];
-    const ok = await bcrypt.compare(String(password || ""), row.password);
+    const plain = String(password || "");
+    const stored = String(row.password || "");
+    let ok = false;
+    if (/^\$2[aby]\$/.test(stored)) {
+      // bcrypt-хэш
+      ok = await bcrypt.compare(plain, stored);
+    } else {
+      // в БД лежит открытый пароль — сравним как текст,
+      // и если совпало — немедленно перехэшируем и сохраним
+      ok = plain === stored;
+      if (ok) {
+        try {
+          const newHash = await bcrypt.hash(plain, 10);
+          await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [newHash, row.id]);
+        } catch (e) {
+          console.warn("rehash-on-login failed:", e);
+        }
+      }
+    }
     if (!ok) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
@@ -477,15 +497,34 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
+// ---------- Change password ----------
 const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
+
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ message: "Пароль слишком короткий" });
+    }
+
     const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
     if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
-    const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
+
+    const plain = String(oldPassword || "");
+    const stored = String(q.rows[0].password || "");
+
+    let ok;
+    if (/^\$2[aby]\$/.test(stored)) {
+      // В БД bcrypt-хэш
+      ok = await bcrypt.compare(plain, stored);
+    } else {
+      // В БД пароль в открытом виде
+      ok = plain === stored;
+    }
+
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
-    const hashed = await bcrypt.hash(String(newPassword || ""), 10);
+
+    const hashed = await bcrypt.hash(String(newPassword), 10);
     await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
     res.json({ message: "Пароль обновлён" });
   } catch (err) {
@@ -493,6 +532,7 @@ const changeProviderPassword = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+;
 
 // ---------- Services CRUD ----------
 const addService = async (req, res) => {

@@ -16,7 +16,11 @@ export default function ClientLogin() {
     setErr("");
     setLoading(true);
     try {
-      const data = await apiPost("/api/clients/login", form, false); // без токена
+      const payload = {
+        ...form,
+        email: form.email ? String(form.email).trim().toLowerCase() : ""
+      };
+      const data = await apiPost("/api/clients/login", payload, false)
       if (!data?.token) throw new Error("No token");
       localStorage.setItem("clientToken", data.token);
       nav("/client/dashboard");

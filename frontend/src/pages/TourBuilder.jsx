@@ -37,8 +37,16 @@ const MEAL_TYPES = [
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-  menu: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
-  menuList: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
+  // контейнер меню — без скролла, скроллим список внутри
+  menu: (b) => ({ ...b, backgroundColor: "#fff", overflow: "hidden" }),
+  // прокрутка списка опций
+  menuList: (b) => ({
+    ...b,
+    backgroundColor: "#fff",
+    maxHeight: 320,        // высота выпадашки ~ 320px
+    overflowY: "auto",     // ⬅️ скролл
+    paddingRight: 0,
+  }),
   option: (base, state) => ({
     ...base,
     backgroundColor: state.isFocused ? BRAND.sand : "#fff",
@@ -108,6 +116,31 @@ const fitsCity = (s, citySlug) => {
   const cs = (citySlug || "").toString().trim().toLowerCase();
   const v = svcCity(s);
   return !v || !cs ? true : v === cs;
+};
+
+/**
+ * Проверяет, подходит ли провайдер под условия (есть хоть одна услуга с достаточной вместимостью).
+ * kind: 'guide' | 'transport'
+ */
+const providerMatchesByPaxCity = async ({
+  provider,
+  kind,
+  citySlug,
+  pax,
+  ensureServicesLoaded,
+}) => {
+  if (!provider?.id) return false;
+  const list = await ensureServicesLoaded(provider);
+  if (!Array.isArray(list) || !list.length) return false;
+  const allowedSet = kind === "transport" ? TRANSPORT_ALLOWED : GUIDE_ALLOWED;
+  return list.some((s) => {
+    // s может быть нормализованной услугой (из normalizeService), а сырые поля лежат в s.raw
+    const raw = s?.raw || s;
+    const category = raw?.category || s?.category;
+    if (!allowedSet.has(category)) return false;
+    if (!fitsCity(raw, citySlug)) return false;
+    return fitsPax(raw, pax);
+  });
 };
 
 /* ---------------- Day kind (на будущее для entry) ---------------- */
@@ -661,8 +694,23 @@ export default function TourBuilder() {
     q: (input || "").trim(),
     limit: 50,
   });
-  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
+  // Фильтруем провайдеров по наличию услуги с seats >= PAX (и по городу/категории)
+  const pax = Math.max(1, toNum(adt) + toNum(chd));
+  const okMask = await Promise.all(
+    rows.map((p) =>
+      providerMatchesByPaxCity({
+        provider: p,
+        kind: "guide",
+        citySlug: day.city,
+        pax,
+        ensureServicesLoaded,
+      })
+    )
+  );
+  const filtered = rows.filter((_, i) => okMask[i]);
+  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
 };
+ 
 
 const makeTransportLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
@@ -675,7 +723,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
     q: (input || "").trim(),
     limit: 50,
   });
-  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
+  const pax = Math.max(1, toNum(adt) + toNum(chd));
+  const okMask = await Promise.all(
+    rows.map((p) =>
+      providerMatchesByPaxCity({
+        provider: p,
+        kind: "transport",
+        citySlug: day.city,
+        pax,
+        ensureServicesLoaded,
+      })
+    )
+  );
+  const filtered = rows.filter((_, i) => okMask[i]);
+  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
 };
 
   /* ----- totals (entry fees по видам дня) ----- */
@@ -1059,6 +1120,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
                       isDisabled={!cityChosen}
                       cacheOptions={false}
+                      maxMenuHeight={320}         /* ⬅️ ограничение высоты меню + скролл */
                       /* используем предзагруженные варианты из предзагрузки по городу */
                       defaultOptions={hotelOptionsMap[k] || []}
                       loadOptions={(input, cb) => {

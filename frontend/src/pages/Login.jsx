@@ -14,9 +14,13 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+      email: String(email).trim().toLowerCase(),
+      password: password
+     };
       const response = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/login`,
-        { email, password }
+        payload
       );
       localStorage.setItem("token", response.data.token);
       navigate("/dashboard");
