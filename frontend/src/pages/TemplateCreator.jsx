@@ -42,6 +42,15 @@ export default function TemplateCreator() {
   const editTpl = (tpl) => setEdit(JSON.parse(JSON.stringify(tpl)));
   const cancel = () => setEdit(null);
 
+      // ⬇️ подтягиваем серверные шаблоны на маунте (и кладём их в localStorage)
+    useEffect(() => {
+      (async () => {
+        await syncTemplates();
+        setItems(listTemplates());
+      })();
+    }, []);
+
+
   const save = () => {
     const clean = { ...edit, days: (edit.days || []).map(d => ({ city: (d.city||"").trim() })).filter(d => d.city) };
     if (!clean.title.trim() || !clean.days.length) return alert("Заполните название и хотя бы один день");
