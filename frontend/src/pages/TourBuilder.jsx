@@ -70,7 +70,14 @@ const ymd = (d) => {
     const day = String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${day}`;
   };
-const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays     = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const daysInclusive = (a, b) => {
+  if (!a || !b) return 0;
+  const from = startOfDay(a);
+  const to   = startOfDay(b);
+  return 1 + Math.max(0, Math.floor((to - from) / 86400000));
+};
 
 // Нормализованный пустой диапазон (чтобы состояние не становилось undefined)
 const EMPTY_RANGE = { from: undefined, to: undefined };
@@ -558,8 +565,9 @@ export default function TourBuilder() {
   const days = useMemo(() => {
     if (!range?.from || !range?.to) return [];
     const res = [];
-    let d = new Date(range.from);
-    while (d <= range.to) { res.push(new Date(d)); d = addDays(d, 1); }
+    let d = startOfDay(range.from);
+    const end = startOfDay(range.to);
+    while (d <= end) { res.push(new Date(d)); d = addDays(d, 1); 
     return res;
   }, [range?.from, range?.to]);
 
@@ -964,7 +972,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
             />
             <p className="text-sm text-gray-600 mt-2">
               {range?.from && range?.to
-                ? t('tb.dates_span', { from: ymd(range.from), to: ymd(range.to), days: Math.max(1, (range.to - range.from) / 86400000 + 1) })
+                ? t('tb.dates_span', {
+                    from: toYMD(startOfDay(range.from)),
+                    to:   toYMD(startOfDay(range.to)),
+                    days: daysInclusive(range.from, range.to)
+                  })
                 : t('tb.pick_dates')}
             </p>
           </div>
