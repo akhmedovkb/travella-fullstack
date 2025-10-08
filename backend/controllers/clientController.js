@@ -37,6 +37,7 @@ function normalizeTelegramUsername(input) {
 exports.register = async (req, res) => {
   try {
     const { name, email, phone, password, telegram } = req.body || {};
+    const emailNorm = email ? String(email).trim().toLowerCase() : null;
     const telegramNorm = normalizeTelegramUsername(telegram);
 
     if (!name || !password || (!email && !phone)) {
@@ -46,7 +47,7 @@ exports.register = async (req, res) => {
     }
 
     if (email) {
-      const q = await db.query("SELECT id FROM clients WHERE email = $1", [email]);
+      const q = await db.query("SELECT id FROM clients WHERE lower(email) = $1", [emailNorm]);
       if (q.rows.length > 0) return res.status(400).json({ message: "Email уже используется" });
     }
     if (phone) {
@@ -59,7 +60,7 @@ exports.register = async (req, res) => {
       `INSERT INTO clients (name, email, phone, telegram, password_hash, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5, NOW(), NOW())
        RETURNING id, name, email, phone, telegram, avatar_url`,
-      [name, email || null, phone || null, telegramNorm || null, password_hash]
+      [name, emailNorm || null, phone || null, telegramNorm || null, password_hash]
     );
 
     const client = ins.rows[0];
