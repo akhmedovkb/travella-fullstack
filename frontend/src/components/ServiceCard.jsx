@@ -479,17 +479,6 @@ export default function ServiceCard({
               <div className="font-semibold line-clamp-2">
                  {direction || title}
               </div>
-              {/* ↓↓↓ НОВОЕ: блок с деталями рейса */}
-              {flightDetails && (
-                <div className="mt-2 text-xs rounded-lg p-2 bg-white/95 text-gray-900 ring-1 ring-black/10 shadow-md">
-                  <div className="text-gray-700 mb-1 font-medium">
-                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
-                  </div>
-                  <div className="font-mono whitespace-pre-line leading-snug">
-                    {String(flightDetails).replace(/\r\n/g, "\n")}
-                  </div>
-                </div>
-              )}
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
