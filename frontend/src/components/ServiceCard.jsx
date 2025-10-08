@@ -53,7 +53,9 @@ const firstImageFrom = (val) => {
     return null;
   }
   if (typeof val === "object") {
-    return firstImageFrom(val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64);
+    return firstImageFrom(
+      val.url ?? val.src ?? val.href ?? val.link ?? val.path ?? val.data ?? val.base64
+    );
   }
   return null;
 };
@@ -103,7 +105,6 @@ function formatLeft(ms, dayLabel = "d") {
   return dd > 0 ? `${dd}${dayLabel} ${pad(hh)}:${pad(mm)}` : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
-
 /* ============== provider profile cache ============== */
 const providerCache = new Map();
 async function fetchProviderProfile(providerId) {
@@ -125,8 +126,12 @@ async function fetchProviderProfile(providerId) {
   for (const url of endpoints) {
     try {
       const res = await apiGet(url);
-      const obj = (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
-      if (obj && (obj.id || obj.name || obj.title)) { profile = obj; break; }
+      const obj =
+        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+      if (obj && (obj.id || obj.name || obj.title)) {
+        profile = obj;
+        break;
+      }
     } catch {}
   }
   providerCache.set(providerId, profile || null);
@@ -175,85 +180,212 @@ function extractServiceFields(item, viewerRole) {
   const bag = { ...details, ...svc, ...item };
 
   const title = firstNonEmpty(
-    svc.title, svc.name, details?.title, details?.name, details?.eventName, item?.title, item?.name
+    svc.title,
+    svc.name,
+    details?.title,
+    details?.name,
+    details?.eventName,
+    item?.title,
+    item?.name
   );
-
 
   // если ПРОВАЙДЕР — показываем net (с фолбэком на gross),
-// иначе (клиент ИЛИ ГОСТЬ) — показываем gross
-const rawPrice = (viewerRole === "provider")
-  ? firstNonEmpty(
-      details?.netPrice, details?.price, details?.totalPrice, details?.priceNet,
-      svc.netPrice, svc.price, item?.price, details?.grossPrice
-    )
-  : firstNonEmpty(
-      details?.grossPrice, details?.priceGross, details?.totalPrice,
-      svc.grossPrice, svc.price_gross,
-      // фолбэк на net, если gross отсутствует
-      details?.netPrice, details?.price, svc.netPrice, svc.price
-    );
+  // иначе (клиент ИЛИ ГОСТЬ) — показываем gross
+  const rawPrice =
+    viewerRole === "provider"
+      ? firstNonEmpty(
+          details?.netPrice,
+          details?.price,
+          details?.totalPrice,
+          details?.priceNet,
+          svc.netPrice,
+          svc.price,
+          item?.price,
+          details?.grossPrice
+        )
+      : firstNonEmpty(
+          details?.grossPrice,
+          details?.priceGross,
+          details?.totalPrice,
+          svc.grossPrice,
+          svc.price_gross,
+          // фолбэк на net, если gross отсутствует
+          details?.netPrice,
+          details?.price,
+          svc.netPrice,
+          svc.price
+        );
 
-  const prettyPrice = rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
+  const prettyPrice =
+    rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
 
   const hotel = firstNonEmpty(
-    details?.hotel, details?.hotelName, details?.hotel?.name, details?.refused_hotel_name,
-    svc.hotel, svc.hotel_name, svc.refused_hotel_name
+    details?.hotel,
+    details?.hotelName,
+    details?.hotel?.name,
+    details?.refused_hotel_name,
+    svc.hotel,
+    svc.hotel_name,
+    svc.refused_hotel_name
   );
   const accommodation = firstNonEmpty(
-    details?.accommodation, details?.accommodationCategory, details?.room, details?.roomType, details?.room_category,
-    svc.accommodation, svc.room, svc.room_type
+    details?.accommodation,
+    details?.accommodationCategory,
+    details?.room,
+    details?.roomType,
+    details?.room_category,
+    svc.accommodation,
+    svc.room,
+    svc.room_type
   );
 
   const left = firstNonEmpty(
-    bag.hotel_check_in, bag.checkIn, bag.startDate, bag.start_flight_date, bag.startFlightDate, bag.departureFlightDate
+    bag.hotel_check_in,
+    bag.checkIn,
+    bag.startDate,
+    bag.start_flight_date,
+    bag.startFlightDate,
+    bag.departureFlightDate
   );
   const right = firstNonEmpty(
-    bag.hotel_check_out, bag.checkOut, bag.returnDate, bag.end_flight_date, bag.endFlightDate, bag.returnFlightDate
+    bag.hotel_check_out,
+    bag.checkOut,
+    bag.returnDate,
+    bag.end_flight_date,
+    bag.endFlightDate,
+    bag.returnFlightDate
   );
   const dates = left && right ? `${left} → ${right}` : left || right || null;
 
   const dirFrom = firstNonEmpty(
-    details?.directionFrom, details?.from, details?.cityFrom, details?.origin, details?.departureCity,
-    svc.directionFrom, svc.from, svc.cityFrom, svc.origin, svc.departureCity,
-    item.directionFrom, item.from, item.cityFrom, item.origin
+    details?.directionFrom,
+    details?.from,
+    details?.cityFrom,
+    details?.origin,
+    details?.departureCity,
+    svc.directionFrom,
+    svc.from,
+    svc.cityFrom,
+    svc.origin,
+    svc.departureCity,
+    item.directionFrom,
+    item.from,
+    item.cityFrom,
+    item.origin
   );
   const dirTo = firstNonEmpty(
-    details?.directionTo, details?.to, details?.cityTo, details?.destination, details?.arrivalCity,
-    svc.directionTo, svc.to, svc.cityTo, svc.destination, svc.arrivalCity,
-    item.directionTo, item.to, item.cityTo, item.destination
+    details?.directionTo,
+    details?.to,
+    details?.cityTo,
+    details?.destination,
+    details?.arrivalCity,
+    svc.directionTo,
+    svc.to,
+    svc.cityTo,
+    svc.destination,
+    svc.arrivalCity,
+    item.directionTo,
+    item.to,
+    item.cityTo,
+    item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
 
-  const inlineProvider = firstNonEmpty(
-    svc.provider, svc.provider_profile, svc.supplier, svc.vendor, svc.agency, svc.owner,
-    item.provider, item.provider_profile, item.supplier, item.vendor, item.agency, item.owner,
-    details?.provider
-  ) || {};
+  const inlineProvider =
+    firstNonEmpty(
+      svc.provider,
+      svc.provider_profile,
+      svc.supplier,
+      svc.vendor,
+      svc.agency,
+      svc.owner,
+      item.provider,
+      item.provider_profile,
+      item.supplier,
+      item.vendor,
+      item.agency,
+      item.owner,
+      details?.provider
+    ) || {};
 
   const providerId = firstNonEmpty(
-    svc.provider_id, svc.providerId, item.provider_id, item.providerId, details?.provider_id,
-    svc.owner_id, svc.agency_id, inlineProvider?.id, inlineProvider?._id
+    svc.provider_id,
+    svc.providerId,
+    item.provider_id,
+    item.providerId,
+    details?.provider_id,
+    svc.owner_id,
+    svc.agency_id,
+    inlineProvider?.id,
+    inlineProvider?._id
   );
 
   const flatName = firstNonEmpty(
-    bag.provider_name, bag.supplier_name, bag.vendor_name, bag.agency_name, bag.company_name, bag.providerTitle, bag.display_name
+    bag.provider_name,
+    bag.supplier_name,
+    bag.vendor_name,
+    bag.agency_name,
+    bag.company_name,
+    bag.providerTitle,
+    bag.display_name
   );
   const flatPhone = firstNonEmpty(
-    bag.provider_phone, bag.supplier_phone, bag.vendor_phone, bag.agency_phone, bag.company_phone, bag.contact_phone, bag.phone, bag.whatsapp, bag.whats_app
+    bag.provider_phone,
+    bag.supplier_phone,
+    bag.vendor_phone,
+    bag.agency_phone,
+    bag.company_phone,
+    bag.contact_phone,
+    bag.phone,
+    bag.whatsapp,
+    bag.whats_app
   );
   const flatTg = firstNonEmpty(
-    bag.provider_telegram, bag.supplier_telegram, bag.vendor_telegram, bag.agency_telegram, bag.company_telegram,
-    bag.telegram, bag.tg, bag.telegram_username, bag.telegram_link,
-    bag.provider_social, bag.supplier_social, bag.vendor_social, bag.agency_social, bag.company_social,
-    bag.social, bag.social_link
+    bag.provider_telegram,
+    bag.supplier_telegram,
+    bag.vendor_telegram,
+    bag.agency_telegram,
+    bag.company_telegram,
+    bag.telegram,
+    bag.tg,
+    bag.telegram_username,
+    bag.telegram_link,
+    bag.provider_social,
+    bag.supplier_social,
+    bag.vendor_social,
+    bag.agency_social,
+    bag.company_social,
+    bag.social,
+    bag.social_link
   );
 
   const status = firstNonEmpty(svc.status, item.status, details?.status);
 
+  // ВАЖНО: детали рейса (для всплывашки)
+  const flightDetails = firstNonEmpty(
+    details?.flightDetails,
+    details?.flight_details,
+    details?.flight_info,
+    Array.isArray(details?.flights) ? details.flights.join("\n") : null
+  );
+
   return {
-    svc, details, title, hotel, accommodation, dates, direction,
-    rawPrice, prettyPrice,
-    inlineProvider, providerId, flatName, flatPhone, flatTg, status
+    svc,
+    details,
+    title,
+    hotel,
+    accommodation,
+    dates,
+    direction,
+    rawPrice,
+    prettyPrice,
+    inlineProvider,
+    providerId,
+    flatName,
+    flatPhone,
+    flatTg,
+    status,
+    flightDetails,
   };
 }
 
@@ -285,26 +417,36 @@ export default function ServiceCard({
     flatTg,
     status: statusRaw,
     details,
-    direction
+    direction,
+    flightDetails,
   } = extractServiceFields(item, viewerRole);
 
   /* ============== таймер карточки услуги ============== */
-    const expireAt = resolveExpireAt(svc, details);
-    const leftMs = expireAt ? (expireAt - now) : null;
-    const isExpired = expireAt && leftMs <= 0;
-    const dayShort = t("countdown.days_short", { defaultValue: "d" });
-
+  const expireAt = resolveExpireAt(svc, details);
+  const leftMs = expireAt ? expireAt - now : null;
+  const isExpired = expireAt && leftMs <= 0;
+  const dayShort = t("countdown.days_short", { defaultValue: "d" });
 
   const id = svc.id ?? item.id;
 
   const image = firstImageFrom([
-    svc.images, details?.images, item?.images,
-    svc.cover, svc.image, details?.cover, details?.image, item?.cover, item?.image,
-    details?.photo, details?.picture, details?.imageUrl,
-    svc.image_url, item?.image_url,
+    svc.images,
+    details?.images,
+    item?.images,
+    svc.cover,
+    svc.image,
+    details?.cover,
+    details?.image,
+    item?.cover,
+    item?.image,
+    details?.photo,
+    details?.picture,
+    details?.imageUrl,
+    svc.image_url,
+    item?.image_url,
   ]);
 
-  // provider profile enrichment (чтобы достать тип провайдера)
+  // provider profile enrichment
   const [provider, setProvider] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -313,23 +455,44 @@ export default function ServiceCard({
       const p = await fetchProviderProfile(providerId);
       if (alive) setProvider(p);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [providerId]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
-  
 
   const supplierName = firstNonEmpty(
-    prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand, flatName
+    prov?.name,
+    prov?.title,
+    prov?.display_name,
+    prov?.company_name,
+    prov?.brand,
+    flatName
   );
   const supplierPhone = firstNonEmpty(
-    prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
-    prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone, prov?.contact_phone, flatPhone
+    prov?.phone,
+    prov?.phone_number,
+    prov?.phoneNumber,
+    prov?.tel,
+    prov?.mobile,
+    prov?.whatsapp,
+    prov?.whatsApp,
+    prov?.phones?.[0],
+    prov?.contacts?.phone,
+    prov?.contact_phone,
+    flatPhone
   );
   const supplierTg = (() => {
     const value = firstNonEmpty(
-      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
-      prov?.contacts?.telegram, prov?.socials?.telegram,
-      prov?.social, prov?.social_link, flatTg
+      prov?.telegram,
+      prov?.tg,
+      prov?.telegram_username,
+      prov?.telegram_link,
+      prov?.contacts?.telegram,
+      prov?.socials?.telegram,
+      prov?.social,
+      prov?.social_link,
+      flatTg
     );
     if (!value) return null;
     const s = String(value).trim();
@@ -341,13 +504,18 @@ export default function ServiceCard({
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
   const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
- // не показываем бейджи для 'draft' и 'published'
-  const statusForBadge = (statusLower === "draft" || statusLower === "published") ? null : statusRaw;
+  // не показываем бейджи для 'draft' и 'published'
+  const statusForBadge =
+    statusLower === "draft" || statusLower === "published" ? null : statusRaw;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
 
-  // ====== ВАЖНО: логика «кнопка Бронировать» только для гида/транспорта ======
-  const serviceLooksBookable = isGuideOrTransport(svc.category || details?.category || item?.category);
-  const providerLooksBookable = isGuideOrTransport(prov?.type || prov?.provider_type || prov?.category);
+  // ====== логика «кнопка Бронировать» только для гида/транспорта ======
+  const serviceLooksBookable = isGuideOrTransport(
+    svc.category || details?.category || item?.category
+  );
+  const providerLooksBookable = isGuideOrTransport(
+    prov?.type || prov?.provider_type || prov?.category
+  );
   const showBookButton = !!providerId && (providerLooksBookable || serviceLooksBookable);
 
   // reviews tooltip
@@ -363,7 +531,7 @@ export default function ServiceCard({
     setRevOpen(true);
     try {
       const res = await apiGet(`/api/reviews/service/${id}?limit=3`);
-      const data = res && typeof res === "object" ? res : {};
+      const data = (res && typeof res === "object" ? res : {}) || {};
       setRevData({
         avg: Number(data.avg) || 0,
         count: Number(data.count) || 0,
@@ -379,18 +547,27 @@ export default function ServiceCard({
     typeof isFav === "boolean"
       ? isFav
       : typeof favActive === "boolean"
-        ? favActive
-        : (favoriteIds ? favoriteIds.has(String(id)) : false);
+      ? favActive
+      : favoriteIds
+      ? favoriteIds.has(String(id))
+      : false;
 
   return (
-    <div className={["group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col", className].join(" ")}>
+    <div
+      className={[
+        "group relative bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col",
+        className,
+      ].join(" ")}
+    >
       <div className="aspect-[16/10] bg-gray-100 relative">
         {image ? (
           <img
             src={image}
             alt={title || t("marketplace.no_image")}
             className="w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.src = ""; }}
+            onError={(e) => {
+              e.currentTarget.src = "";
+            }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -401,9 +578,8 @@ export default function ServiceCard({
         {/* top overlay */}
         <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2">
-
-            {expireAt && (
-              isExpired ? (
+            {expireAt &&
+              (isExpired ? (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                   {t("countdown.expired", { defaultValue: "Expired" })}
                 </span>
@@ -414,11 +590,8 @@ export default function ServiceCard({
                 >
                   ⏳ {formatLeft(leftMs, dayShort)}
                 </span>
-              )
-            )}
+              ))}
 
-
-            
             {badge && (
               <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
                 {badge}
@@ -433,7 +606,14 @@ export default function ServiceCard({
                 onMouseLeave={closeReviews}
                 title={t("marketplace.reviews") || "Отзывы об услуге"}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
                   <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
                 </svg>
               </button>
@@ -451,14 +631,25 @@ export default function ServiceCard({
             />
           </div>
         </div>
-        
-       {/* hover info overlay (glass) — из версии 28AUG25 */}
+
+        {/* hover info overlay (glass) — всплывашка снизу, вровень с нижним краем изображения */}
         <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute inset-x-0 bottom-0 p-3">
-            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-              <div className="font-semibold line-clamp-2">
-                 {direction || title}
-              </div>
+          <div className="absolute inset-x-0 bottom-0 px-3 pt-3 pb-0">
+            <div className="pointer-events-auto rounded-t-lg rounded-b-none bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-[80vh] overflow-auto">
+              {/* Детали рейса */}
+              {flightDetails && (
+                <div className="mt-1 w-full rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
+                  <div className="text-white/80 text-[11px] mb-1">
+                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
+                  </div>
+                  <div className="font-mono text-[12px] whitespace-pre-wrap break-words leading-snug">
+                    {String(flightDetails || "").replace(/\r\n/g, "\n")}
+                  </div>
+                </div>
+              )}
+
+              <div className="font-semibold mt-2 line-clamp-2">{direction || title}</div>
+
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
@@ -476,9 +667,12 @@ export default function ServiceCard({
                   <span className="opacity-80">{t("common.date") || "Дата"}: </span>
                   <span className="font-medium">{dates}</span>
                 </div>
-             )}
+              )}
               {prettyPrice && (
-                <div><span className="opacity-80">{t("marketplace.price") || "Цена"}: </span><span className="font-semibold">{prettyPrice}</span></div>
+                <div>
+                  <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
+                  <span className="font-semibold">{prettyPrice}</span>
+                </div>
               )}
             </div>
           </div>
@@ -521,47 +715,52 @@ export default function ServiceCard({
         )}
 
         {(supplierName || supplierPhone || supplierTg?.label) && (
-  <div className="mt-2 text-sm space-y-0.5">
-    {supplierName && (
-      <div>
-        <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
-        {providerId ? (
-          <a
-            href={`/profile/provider/${providerId}`}
-            className="underline hover:text-gray-900"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {supplierName}
-          </a>
-        ) : (
-          <span className="font-medium">{supplierName}</span>
-        )}
-      </div>
-    )}
+          <div className="mt-2 text-sm space-y-0.5">
+            {supplierName && (
+              <div>
+                <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
+                {providerId ? (
+                  <a
+                    href={`/profile/provider/${providerId}`}
+                    className="underline hover:text-gray-900"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {supplierName}
+                  </a>
+                ) : (
+                  <span className="font-medium">{supplierName}</span>
+                )}
+              </div>
+            )}
 
-    {supplierPhone && (
-      <div>
-        <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
-        <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">
-          {supplierPhone}
-        </a>
-      </div>
-    )}
+            {supplierPhone && (
+              <div>
+                <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
+                <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">
+                  {supplierPhone}
+                </a>
+              </div>
+            )}
 
-    {supplierTg?.label && (
-      <div>
-        <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
-        {supplierTg.href ? (
-          <a href={supplierTg.href} target="_blank" rel="noopener noreferrer" className="underline">
-            {supplierTg.label}
-          </a>
-        ) : (
-          <span className="font-medium">{supplierTg.label}</span>
+            {supplierTg?.label && (
+              <div>
+                <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
+                {supplierTg.href ? (
+                  <a
+                    href={supplierTg.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    {supplierTg.label}
+                  </a>
+                ) : (
+                  <span className="font-medium">{supplierTg.label}</span>
+                )}
+              </div>
+            )}
+          </div>
         )}
-      </div>
-    )}
-  </div>
-)}
 
         <div className="mt-auto pt-3">
           {showBookButton ? (
