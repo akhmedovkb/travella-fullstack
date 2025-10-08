@@ -37,8 +37,16 @@ const MEAL_TYPES = [
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-  menu: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
-  menuList: (b) => ({ ...b, overflow: "visible", backgroundColor: "#fff" }),
+  // контейнер меню — без скролла, скроллим список внутри
+  menu: (b) => ({ ...b, backgroundColor: "#fff", overflow: "hidden" }),
+  // прокрутка списка опций
+  menuList: (b) => ({
+    ...b,
+    backgroundColor: "#fff",
+    maxHeight: 320,        // высота выпадашки ~ 320px
+    overflowY: "auto",     // ⬅️ скролл
+    paddingRight: 0,
+  }),
   option: (base, state) => ({
     ...base,
     backgroundColor: state.isFocused ? BRAND.sand : "#fff",
