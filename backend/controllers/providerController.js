@@ -275,7 +275,25 @@ const loginProvider = async (req, res) => {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
     const row = q.rows[0];
-    const ok = await bcrypt.compare(String(password || ""), row.password);
+    const plain = String(password || "");
+    const stored = String(row.password || "");
+    let ok = false;
+    if (/^\$2[aby]\$/.test(stored)) {
+      // bcrypt-хэш
+      ok = await bcrypt.compare(plain, stored);
+    } else {
+      // в БД лежит открытый пароль — сравним как текст,
+      // и если совпало — немедленно перехэшируем и сохраним
+      ok = plain === stored;
+      if (ok) {
+        try {
+          const newHash = await bcrypt.hash(plain, 10);
+          await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [newHash, row.id]);
+        } catch (e) {
+          console.warn("rehash-on-login failed:", e);
+        }
+      }
+    }
     if (!ok) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
