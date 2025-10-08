@@ -1120,6 +1120,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
                       isDisabled={!cityChosen}
                       cacheOptions={false}
+                      maxMenuHeight={320}         /* ⬅️ ограничение высоты меню + скролл */
                       /* используем предзагруженные варианты из предзагрузки по городу */
                       defaultOptions={hotelOptionsMap[k] || []}
                       loadOptions={(input, cb) => {
