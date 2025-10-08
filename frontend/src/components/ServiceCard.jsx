@@ -445,7 +445,7 @@ export default function ServiceCard({
                   </button>
                 )}
               </div>
-
+              </div> {/* end left column */}
               {/* HEART справа */}
             <div className="pointer-events-auto">
               <WishHeart
