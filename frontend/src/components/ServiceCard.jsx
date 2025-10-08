@@ -469,9 +469,9 @@ export default function ServiceCard({
               </div>
               {/* ↓↓↓ НОВОЕ: блок с деталями рейса */}
               {flightDetails && (
-                <div className="mt-2 text-xs bg-gray-50 border rounded-lg p-2">
-                  <div className="text-gray-600 mb-1">
-                    {t("marketplace.flight_details") || "Детали рейса"}
+                <div className="mt-2 text-xs rounded-lg p-2 bg-white/95 text-gray-900 ring-1 ring-black/10 shadow-md">
+                  <div className="text-gray-700 mb-1 font-medium">
+                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
                   </div>
                   <div className="font-mono whitespace-pre-line leading-snug">
                     {String(flightDetails).replace(/\r\n/g, "\n")}
