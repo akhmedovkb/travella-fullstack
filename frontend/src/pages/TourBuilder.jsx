@@ -908,9 +908,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
    const next = {};
     for (let i=0;i<tpl.days.length;i++){
       const ymdStr = ymd(addDays(start, i));
-      const city = tpl.days[i].city || "";
-      next[ymdStr] = {
-        city,
+         // убираем префикс вида "D1 - ", "D2–", "D3:" и т.п.
+   const city = String(tpl.days[i].city || "")
+     .replace(/^\s*D\d+\s*[-–—:]?\s*/i, "")
+     .trim();
+     next[ymdStr] = {
+       city,
         guide: null, transport: null, hotel: null,
         guideService: null, transportService: null,
         entrySelected: [],
