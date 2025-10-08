@@ -1,6 +1,7 @@
 // frontend/src/pages/TourBuilder.jsx
 
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { listTemplates, getTemplate } from "../store/templates"; // [TPL]
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
@@ -9,9 +10,6 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
-import { useNavigate } from 'react-router-dom';
-
-const navigate = useNavigate();
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -935,12 +933,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
             {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
           </div>
            {/* SPA-переход */}
-           <button
-             className="ml-auto text-sm underline"
-             onClick={() => navigate('/templates')}
-           >
+           <Link className="ml-auto text-sm underline" to="/templates">
              Открыть конструктор шаблонов
-           </button>
+           </Link>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
