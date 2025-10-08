@@ -413,24 +413,34 @@ async function fetchEntryFees({ q = "", city = "", date = "", limit = 50 } = {})
   }
 }
 
-// ------ me / admin helpers (вынесены на уровень модуля) ------
-async function fetchMeLoose() {
-  for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
-    try {
-      const j = await fetchJSON(path);
-      return j;
-    } catch {}
+// ------ admin helper from JWT (локально, без сети) ------
+const isAdminFromJwt = () => {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [], claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim().toLowerCase());
+    const perms = []
+      .concat(claims.permissions || claims.perms || [])
+      .map(x => String(x).toLowerCase());
+    return (
+      claims.is_admin === true ||
+      claims.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r)) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x))
+    );
+  } catch {
+    return false;
   }
-  return null;
-}
-const isAdminFrom = (me) =>
-  !!(
-    me?.is_admin ||
-    me?.provider?.is_admin ||
-    (Array.isArray(me?.providers)
-      ? me.providers.some(p => p?.is_admin)
-      : me?.providers?.is_admin)
-  );
+};
 
 
 /* ---------------- custom option + tooltip ---------------- */
@@ -555,10 +565,7 @@ const HotelOption = (props) => {
 export default function TourBuilder() {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
-    (async () => {
-      const me = await fetchMeLoose();
-      setIsAdmin(isAdminFrom(me));
-    })();
+    setIsAdmin(isAdminFromJwt());
   }, []);
   
   const { t, i18n } = useTranslation();
