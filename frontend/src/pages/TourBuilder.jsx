@@ -987,12 +987,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
             ))}
             {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
           </div>
-           {/* SPA-переход только для админов */}
-           {isAdmin && (
-             <Link className="ml-auto text-sm underline" to="/templates">
-               Открыть конструктор шаблонов
-             </Link>
-           )}
+           {/* Ссылка на шаблоны доступна всем авторизованным; внутри страницы права учитываются */}
+           <Link className="ml-auto text-sm underline" to="/templates">
+             Открыть шаблоны
+           </Link>
           {/* ссылка на конструктор появится ниже, если админ */}
         </div>
 
