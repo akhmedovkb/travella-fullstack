@@ -189,14 +189,14 @@ export default function App() {
           {/* 404 / fallback — держим в самом конце */}
           <Route path="/tour-builder" element={<TourBuilder />} />
 
-          {/* Страница конструктора шаблонов (только для админов) */}
+          {/* Страница конструктора шаблонов:
+              - доступна всем авторизованным
+              - внутри самой страницы действия ограничены ролями */}
           <Route
             path="/templates"
             element={
               <PrivateRoute>
-                <AdminRoute>
-                  <TemplateCreator />
-                </AdminRoute>
+                <TemplateCreator />
               </PrivateRoute>
             }
           />
