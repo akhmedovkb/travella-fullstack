@@ -13,16 +13,6 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-/* --- helpers to check current user (admin) --- */
-const fetchMeLoose = async () => {
-  for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
-    try { return await fetchJSON(path); } catch {}
-  }
-  return null;
-};
-const isAdminFrom = (me) =>
-  !!(me?.is_admin || me?.provider?.is_admin || me?.providers?.is_admin);
-
 /* ---------------- brand colors ---------------- */
 const BRAND = {
   primary: "#FF5722",  // ключевой акцент
@@ -422,6 +412,26 @@ async function fetchEntryFees({ q = "", city = "", date = "", limit = 50 } = {})
     return [];
   }
 }
+
+// ------ me / admin helpers (вынесены на уровень модуля) ------
+async function fetchMeLoose() {
+  for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
+    try {
+      const j = await fetchJSON(path);
+      return j;
+    } catch {}
+  }
+  return null;
+}
+const isAdminFrom = (me) =>
+  !!(
+    me?.is_admin ||
+    me?.provider?.is_admin ||
+    (Array.isArray(me?.providers)
+      ? me.providers.some(p => p?.is_admin)
+      : me?.providers?.is_admin)
+  );
+
 
 /* ---------------- custom option + tooltip ---------------- */
 const ProviderOption = (props) => {
