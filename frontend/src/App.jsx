@@ -32,7 +32,7 @@ import Header from "./components/Header";
 import Hotels from "./pages/Hotels";
 import AdminHotelForm from "./pages/admin/AdminHotelForm";
 // Конструктор шаблонов
-import TemplatesPage from "./pages/TemplatesPage";
+import TemplateCreator from "./pages/TemplateCreator";
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -190,7 +190,7 @@ export default function App() {
           <Route path="/tour-builder" element={<TourBuilder />} />
 
           {/* Страница конструктора шаблонов */}
-          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/templates" element={<TemplateCreator />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
