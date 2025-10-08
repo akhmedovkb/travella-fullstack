@@ -1,6 +1,27 @@
 // frontend/src/pages/TemplateCreator.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { listTemplates, upsertTemplate, removeTemplate, newId } from "../store/templates";
+
+ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+ const fetchJSON = async (path, params = {}) => {
+   const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+   Object.entries(params).forEach(([k, v]) => {
+     if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
+   });
+   const r = await fetch(u.toString(), { credentials: "include" });
+   if (!r.ok) throw new Error("HTTP " + r.status);
+   return await r.json();
+ };
+ async function fetchMeLoose() {
+   for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
+     try { return await fetchJSON(path); } catch {}
+   }
+   return null;
+ }
+ const isAdminFrom = (me) =>
+   !!(me?.is_admin ||
+      me?.provider?.is_admin ||
+      (Array.isArray(me?.providers) ? me.providers.some(p => p?.is_admin) : me?.providers?.is_admin));
 
 export default function TemplateCreator() {
   const [items, setItems] = useState(listTemplates());
@@ -72,7 +93,7 @@ export default function TemplateCreator() {
             <div key={country} className="space-y-3">
               <div className="text-sm font-semibold text-gray-700">{country}</div>
               {list.map(t => (
-                <div key={t.id} className="border rounded p-3 flex items-start justify-between">flex items-start justify-between">
+                <div key={t.id} className="border rounded p-3 flex items-start justify-between">
               <div>
                 <div className="font-semibold">{t.title}</div>
                 <div className="text-sm text-gray-600 mt-1">
