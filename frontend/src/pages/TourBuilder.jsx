@@ -110,6 +110,31 @@ const fitsCity = (s, citySlug) => {
   return !v || !cs ? true : v === cs;
 };
 
+/**
+ * Проверяет, подходит ли провайдер под условия (есть хоть одна услуга с достаточной вместимостью).
+ * kind: 'guide' | 'transport'
+ */
+const providerMatchesByPaxCity = async ({
+  provider,
+  kind,
+  citySlug,
+  pax,
+  ensureServicesLoaded,
+}) => {
+  if (!provider?.id) return false;
+  const list = await ensureServicesLoaded(provider);
+  if (!Array.isArray(list) || !list.length) return false;
+  const allowedSet = kind === "transport" ? TRANSPORT_ALLOWED : GUIDE_ALLOWED;
+  return list.some((s) => {
+    // s может быть нормализованной услугой (из normalizeService), а сырые поля лежат в s.raw
+    const raw = s?.raw || s;
+    const category = raw?.category || s?.category;
+    if (!allowedSet.has(category)) return false;
+    if (!fitsCity(raw, citySlug)) return false;
+    return fitsPax(raw, pax);
+  });
+};
+
 /* ---------------- Day kind (на будущее для entry) ---------------- */
 const dkey = (d) => toYMD(new Date(d));
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
@@ -661,8 +686,23 @@ export default function TourBuilder() {
     q: (input || "").trim(),
     limit: 50,
   });
-  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
+  // Фильтруем провайдеров по наличию услуги с seats >= PAX (и по городу/категории)
+  const pax = Math.max(1, toNum(adt) + toNum(chd));
+  const okMask = await Promise.all(
+    rows.map((p) =>
+      providerMatchesByPaxCity({
+        provider: p,
+        kind: "guide",
+        citySlug: day.city,
+        pax,
+        ensureServicesLoaded,
+      })
+    )
+  );
+  const filtered = rows.filter((_, i) => okMask[i]);
+  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
 };
+ 
 
 const makeTransportLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
@@ -675,7 +715,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
     q: (input || "").trim(),
     limit: 50,
   });
-  return rows.map(p => ({ value: p.id, label: p.name, raw: p }));
+  const pax = Math.max(1, toNum(adt) + toNum(chd));
+  const okMask = await Promise.all(
+    rows.map((p) =>
+      providerMatchesByPaxCity({
+        provider: p,
+        kind: "transport",
+        citySlug: day.city,
+        pax,
+        ensureServicesLoaded,
+      })
+    )
+  );
+  const filtered = rows.filter((_, i) => okMask[i]);
+  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
 };
 
   /* ----- totals (entry fees по видам дня) ----- */
