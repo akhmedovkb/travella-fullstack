@@ -189,8 +189,17 @@ export default function App() {
           {/* 404 / fallback — держим в самом конце */}
           <Route path="/tour-builder" element={<TourBuilder />} />
 
-          {/* Страница конструктора шаблонов */}
-          <Route path="/templates" element={<TemplateCreator />} />
+          {/* Страница конструктора шаблонов (только для админов) */}
+          <Route
+            path="/templates"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <TemplateCreator />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
