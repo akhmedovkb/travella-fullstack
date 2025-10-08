@@ -77,16 +77,18 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, phone, login, password } = req.body || {};
-    const identifier = email || phone || login;
+    const identifier = (email ? String(email).trim().toLowerCase() : null) || phone || login;
 
     if (!identifier || !password) {
       return res.status(400).json({ message: "Неверные учетные данные" });
     }
-
-    const q = await db.query(
-      "SELECT * FROM clients WHERE (email = $1 OR phone = $1) LIMIT 1",
-      [identifier]
-    );
+    
+    let q;
+    if (phone && !email) {
+      q = await db.query("SELECT * FROM clients WHERE phone = $1 LIMIT 1", [phone]);
+    } else {
+      q = await db.query("SELECT * FROM clients WHERE lower(email) = $1 LIMIT 1", [identifier]);
+    }
     if (q.rows.length === 0) return res.status(400).json({ message: "Клиент не найден" });
 
     const client = q.rows[0];
