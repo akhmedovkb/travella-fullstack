@@ -2,40 +2,39 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { listTemplates, upsertTemplate, removeTemplate, newId } from "../store/templates";
 
- const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
- const fetchJSON = async (path, params = {}) => {
-   const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
-   Object.entries(params).forEach(([k, v]) => {
-     if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
-   });
-   const r = await fetch(u.toString(), { credentials: "include" });
-   if (!r.ok) throw new Error("HTTP " + r.status);
-   return await r.json();
- };
- async function fetchMeLoose() {
-   for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
-     try { return await fetchJSON(path); } catch {}
-   }
-   return null;
- }
- const isAdminFrom = (me) =>
-   !!(me?.is_admin ||
-      me?.provider?.is_admin ||
-      (Array.isArray(me?.providers) ? me.providers.some(p => p?.is_admin) : me?.providers?.is_admin));
+// Синхронный детект админа по JWT (без сетевых вызовов)
+const isAdminFromJwt = () => {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [], claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim().toLowerCase());
+    const perms = []
+      .concat(claims.permissions || claims.perms || [])
+      .map(x => String(x).toLowerCase());
+    return (
+      claims.is_admin === true ||
+      claims.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r)) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x))
+    );
+  } catch {
+    return false;
+  }
+};
 
 export default function TemplateCreator() {
   const [items, setItems] = useState(listTemplates());
   const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
-  const [adminChecked, setAdminChecked] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const me = await fetchMeLoose();
-      setIsAdmin(isAdminFrom(me));
-      setAdminChecked(true);
-    })();
-  }, []);
+  const [isAdmin] = useState(isAdminFromJwt());
 
   const empty = { id: newId(), title: "", days: [{ city: "" }] };
 
@@ -58,7 +57,7 @@ export default function TemplateCreator() {
     if (edit && String(edit.id) === String(id)) setEdit(null);
   };
 
-    if (adminChecked && !isAdmin) {
+    if (!isAdmin) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <div className="border rounded-lg p-6 bg-white shadow">
