@@ -504,6 +504,14 @@ const changeProviderPassword = async (req, res) => {
     const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
     if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
     const ok = await bcrypt.compare(String(oldPassword || ""), q.rows[0].password);
+    const plain = String(oldPassword || "");
+    const stored = String(q.rows[0].password || "");
+    let ok;
+    if (/^\$2[aby]\$/.test(stored)) {
+      ok = await bcrypt.compare(plain, stored);
+    } else {
+      ok = plain === stored; // пароль был в открытом виде
+    }
     if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
     const hashed = await bcrypt.hash(String(newPassword || ""), 10);
     await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
