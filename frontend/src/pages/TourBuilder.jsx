@@ -914,14 +914,31 @@ const makeTransportLoader = (dateKey) => async (input) => {
           <div className="text-sm text-gray-700">
             Шаблоны:
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {tpls.map(tpl => (
-              <button key={tpl.id}
-                className="px-3 py-1 rounded border hover:bg-orange-50"
-                title={tpl.days?.map(d=>d.city).join(' → ')}
-                onClick={() => { setApplyTplId(tpl.id); setApplyOpen(true); }}>
-                {tpl.title}
-              </button>
+          <div className="flex flex-col gap-2">
+            {Object.entries(
+              tpls
+                .slice()
+                .sort((a,b)=>a.title.localeCompare(b.title))
+                .reduce((acc, t) => {
+                  const m = String(t.title||"").match(/^([A-Za-z]{2,4})\s*:/);
+                  const key = (m?.[1] || "Other").toUpperCase();
+                  (acc[key] ||= []).push(t);
+                  return acc;
+                }, {})
+            )
+            .sort(([a],[b])=>a.localeCompare(b))
+            .map(([country, list]) => (
+              <div key={country} className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600 mr-1">{country}</span>
+                {list.map(tpl => (
+                  <button key={tpl.id}
+                          className="px-3 py-1 rounded border hover:bg-orange-50"
+                          title={tpl.days?.map(d=>d.city).join(' → ')}
+                          onClick={() => { setApplyTplId(tpl.id); setApplyOpen(true); }}>
+                    {tpl.title}
+                  </button>
+                ))}
+              </div>
             ))}
             {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
           </div>
@@ -929,6 +946,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
            <Link className="ml-auto text-sm underline" to="/templates">
              Открыть конструктор шаблонов
            </Link>
+          {/* ссылка на конструктор появится ниже, если админ */}
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
