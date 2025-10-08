@@ -407,56 +407,68 @@ export default function ServiceCard({
         )}
 
         {/* top overlay */}
-        <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
-          <div className="flex items-center gap-2">
+        <div className="absolute top-2 left-2 right-2 z-20 pointer-events-none">
+          <div className="flex items-start justify-between gap-2">
+            {/* левый столбец: таймер/бейдж + детали рейса */}
+            <div className="flex flex-col gap-2 max-w-[calc(100%-48px)]">
+              <div className="flex items-center gap-2 pointer-events-auto">
+                {expireAt && (
+                  isExpired ? (
+                    <span className="px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                      {t("countdown.expired", { defaultValue: "Expired" })}
+                    </span>
+                  ) : (
+                    <span
+                      className="px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20"
+                      title={t("countdown.until_end", { defaultValue: "Time left" })}
+                    >
+                      ⏳ {formatLeft(leftMs, dayShort)}
+                    </span>
+                  )
+                )}
+                {badge && (
+                  <span className="px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                    {badge}
+                  </span>
+                )}
+                {SHOW_REVIEWS && (
+                  <button
+                    ref={revBtnRef}
+                    className="p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
+                    onMouseEnter={openReviews}
+                    onMouseLeave={closeReviews}
+                    title={t("marketplace.reviews") || "Отзывы об услуге"}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
 
-            {expireAt && (
-              isExpired ? (
-                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                  {t("countdown.expired", { defaultValue: "Expired" })}
-                </span>
-              ) : (
-                <span
-                  className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20"
-                  title={t("countdown.until_end", { defaultValue: "Time left" })}
-                >
-                  ⏳ {formatLeft(leftMs, dayShort)}
-                </span>
-              )
-            )}
+              {/* Плашка с деталями рейса — тёмная, целиком в кадре */}
+              {flightDetails && (
+                <div className="pointer-events-auto rounded-xl px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
+                  <div className="text-white/80 text-[11px] mb-1">
+                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
+                  </div>
+                  <div className="font-mono text-[12px] whitespace-pre-line break-words leading-snug max-h-28 overflow-auto">
+                    {String(flightDetails).replace(/\r\n/g, "\n")}
+                  </div>
+                </div>
+              )}
+            </div>
 
-
-            
-            {badge && (
-              <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                {badge}
-              </span>
-            )}
-
-            {SHOW_REVIEWS && (
-              <button
-                ref={revBtnRef}
-                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
-                onMouseEnter={openReviews}
-                onMouseLeave={closeReviews}
-                title={t("marketplace.reviews") || "Отзывы об услуге"}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {/* HEART */}
-          <div className="pointer-events-auto">
-            <WishHeart
-              active={!!activeFav}
-              onClick={() => onToggleFavorite?.(id)}
-              size={36}
-              titleAdd={t("favorites.add") || "Добавить в избранное"}
-              titleRemove={t("favorites.remove_from") || "Удалить из избранного"}
-            />
+            {/* HEART справа */}
+            <div className="pointer-events-auto">
+              <WishHeart
+                active={!!activeFav}
+                onClick={() => onToggleFavorite?.(id)}
+                size={36}
+                titleAdd={t("favorites.add") || "Добавить в избранное"}
+                titleRemove={t("favorites.remove_from") || "Удалить из избранного"}
+              />
+            </div>
           </div>
         </div>
         
