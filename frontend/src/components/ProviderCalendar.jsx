@@ -342,7 +342,7 @@ const ProviderCalendar = ({ token }) => {
         <h3 className="text-lg font-semibold text-gray-800">
           {t("calendar.title_public", { defaultValue: "Bandlik kalendari" })}
         </h3>
-        <div className="flex items-center gap-4 text-sm text-gray-700">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700">
           <span>
             <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-2" />
             {t("calendar.busy", { defaultValue: "занято" })}
@@ -384,11 +384,24 @@ const ProviderCalendar = ({ token }) => {
               booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
             }}
             components={{ DayContent: DayCell }}
+            /* Растянуть календарь и зафиксировать сетку таблицы */
+            className="rdp w-full !m-0"
             classNames={{
-              cell: "overflow-visible relative",
-              day: "rdp-day overflow-visible relative",
+              months: "w-full",
+              month: "w-full",
+              table: "w-full table-fixed",
+              head_row: "grid grid-cols-7",
+              row: "grid grid-cols-7",
+              cell: "overflow-visible relative h-10",
+              day: "rdp-day overflow-visible relative w-full h-10 flex items-center justify-center rounded-full",
             }}
-            styles={{ cell: { overflow: "visible" }, day: { overflow: "visible" } }}
+            styles={{
+              months: { width: "100%" },
+              month: { width: "100%" },
+              table: { width: "100%" },
+              cell: { overflow: "visible" },
+              day: { overflow: "visible" },
+            }}
             onDayMouseEnter={(date) => {
               const ymd = toYMD(date);
               if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
