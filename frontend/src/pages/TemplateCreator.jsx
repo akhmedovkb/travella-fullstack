@@ -33,12 +33,26 @@ export default function TemplateCreator() {
         <h1 className="text-2xl font-bold">Шаблоны туров</h1>
         <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={startNew}>+ Новый шаблон</button>
       </div>
-
       {!edit && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {!items.length && <div className="text-gray-500">Пока нет шаблонов</div>}
-          {items.map(t => (
-            <div key={t.id} className="border rounded p-3 flex items-start justify-between">
+          {Object.entries(
+            items
+              .slice()
+              .sort((a,b)=>a.title.localeCompare(b.title))
+              .reduce((acc, t) => {
+                const m = String(t.title||"").match(/^([A-Za-z]{2,4})\s*:/);
+                const key = (m?.[1] || "Other").toUpperCase();
+                (acc[key] ||= []).push(t);
+                return acc;
+              }, {})
+          )
+          .sort(([a],[b])=>a.localeCompare(b))
+          .map(([country, list]) => (
+            <div key={country} className="space-y-3">
+              <div className="text-sm font-semibold text-gray-700">{country}</div>
+              {list.map(t => (
+                <div key={t.id} className="border rounded p-3 flex items-start justify-between">flex items-start justify-between">
               <div>
                 <div className="font-semibold">{t.title}</div>
                 <div className="text-sm text-gray-600 mt-1">
@@ -49,6 +63,8 @@ export default function TemplateCreator() {
                 <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>Редактировать</button>
                 <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>Удалить</button>
               </div>
+            </div>
+              ))}
             </div>
           ))}
         </div>
