@@ -1,6 +1,7 @@
 // frontend/src/pages/TourBuilder.jsx
 
 import React, { useEffect, useMemo, useState } from "react";
+import { listTemplates, getTemplate } from "../store/templates"; // [TPL]
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { useTranslation } from "react-i18next";
@@ -811,7 +812,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
     return sum;
   };
 
-
   const totals = useMemo(() => {
     let guide = 0, transport = 0, hotel = 0, entries = 0, transfers = 0, meals = 0;
     Object.keys(byDay).forEach((k) => {
@@ -846,12 +846,78 @@ const makeTransportLoader = (dateKey) => async (input) => {
     });
   }, [adt, chd]);
 
+    // [TPL] локальное состояние шаблонов
+  const [tpls, setTpls] = useState(listTemplates());
+  const refreshTpls = () => setTpls(listTemplates());
+  useEffect(()=>{ refreshTpls(); },[]);
+
+  // [TPL] модал применения
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applyTplId, setApplyTplId] = useState("");
+  const [applyFrom, setApplyFrom] = useState(""); // 'YYYY-MM-DD'
+
+  // [TPL] утилита добавить дни по шаблону
+  const toYMD = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  };
+  const addDaysDate = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+
+  function applyTemplateNow() {
+    const tpl = getTemplate(applyTplId);
+    if (!tpl) return alert("Выберите шаблон");
+    if (!applyFrom) return alert("Укажите дату начала");
+    if (!tpl.days?.length) return alert("В шаблоне нет дней");
+    const start = new Date(applyFrom);
+    if (isNaN(start)) return alert("Неверная дата");
+
+    // выставляем диапазон под длину шаблона
+    const to = addDaysDate(start, tpl.days.length - 1);
+   setRange({ from: start, to });
+
+    // предзаполняем byDay: города из шаблона по порядку
+   const next = {};
+    for (let i=0;i<tpl.days.length;i++){
+      const ymd = toYMD(addDaysDate(start, i));
+      const city = tpl.days[i].city || "";
+      next[ymd] = {
+        city,
+        guide: null, transport: null, hotel: null,
+        guideService: null, transportService: null,
+        entrySelected: [],
+        transfers: [],
+        meals: [],
+      };
+    }
+    setByDay(next);
+    setApplyOpen(false);
+  }
 
   /* ---------------- render ---------------- */
   return (
     <div className="p-4 md:p-6 overflow-x-hidden">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
         <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
+                {/* [TPL] панель шаблонов */}
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-gray-700">
+            Шаблоны:
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {tpls.map(tpl => (
+              <button key={tpl.id}
+                className="px-3 py-1 rounded border hover:bg-orange-50"
+                title={tpl.days?.map(d=>d.city).join(' → ')}
+                onClick={() => { setApplyTplId(tpl.id); setApplyOpen(true); }}>
+                {tpl.title}
+              </button>
+            ))}
+            {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
+          </div>
+          <a className="ml-auto text-sm underline" href="/templates" target="_blank" rel="noreferrer">Открыть конструктор шаблонов</a>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
           <div className="md:col-span-2 min-w-0">
@@ -1633,6 +1699,35 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
       </div>
       </div>
+            {/* [TPL] Модал применения шаблона */}
+      {applyOpen && (
+        <div className="fixed inset-0 z-[2000] bg-black/30 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl border w-[92vw] max-w-md p-4">
+            <div className="text-lg font-semibold mb-2">Применить шаблон</div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm mb-1">Шаблон</label>
+                <select className="w-full h-10 border rounded px-2"
+                        value={applyTplId}
+                        onChange={e=>setApplyTplId(e.target.value)}>
+                  <option value="">— выберите —</option>
+                  {tpls.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Дата начала</label>
+                <input type="date" className="w-full h-10 border rounded px-2"
+                       value={applyFrom}
+                       onChange={e=>setApplyFrom(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button className="px-3 py-2 border rounded" onClick={()=>setApplyOpen(false)}>Отмена</button>
+              <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={applyTemplateNow}>Применить</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
