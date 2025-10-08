@@ -57,22 +57,22 @@ export default function TemplateCreator() {
     if (edit && String(edit.id) === String(id)) setEdit(null);
   };
 
-    if (!isAdmin) {
-    return (
-      <div className="p-6 max-w-2xl mx-auto">
-        <div className="border rounded-lg p-6 bg-white shadow">
-          <div className="text-lg font-semibold mb-2">Доступ запрещён</div>
-          <div className="text-sm text-gray-600">Конструктор шаблонов доступен только администраторам.</div>
-        </div>
-      </div>
-    );
-  }
+// Для не-админов: страница открыта в режиме просмотра (без CRUD-кнопок)
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Шаблоны туров</h1>
-        <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={startNew}>+ Новый шаблон</button>
+                {isAdmin && (
+          <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={startNew}>
+            + Новый шаблон
+          </button>
+        )}
       </div>
+            {!isAdmin && (
+        <div className="mb-3 text-sm text-gray-600">
+          Просмотр доступен всем поставщикам. Создавать и редактировать шаблоны могут только администраторы.
+        </div>
+      )}
       {!edit && (
         <div className="space-y-4">
           {!items.length && <div className="text-gray-500">Пока нет шаблонов</div>}
@@ -99,10 +99,14 @@ export default function TemplateCreator() {
                   {t.days?.map((d, i) => <span key={i}>{d.city}{i < t.days.length-1 ? " → " : ""}</span>)}
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>Редактировать</button>
-                <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>Удалить</button>
-              </div>
+              {isAdmin ? (
+                <div className="flex gap-2">
+                  <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>Редактировать</button>
+                  <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>Удалить</button>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 self-center">Только просмотр</div>
+              )}
             </div>
               ))}
             </div>
@@ -110,7 +114,7 @@ export default function TemplateCreator() {
         </div>
       )}
 
-      {edit && (
+      {isAdmin && edit && (
         <div className="border rounded p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium mb-1">Название шаблона</label>
@@ -146,7 +150,6 @@ export default function TemplateCreator() {
               + Добавить день
             </button>
           </div>
-
           <div className="flex gap-2 pt-2">
             <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={save}>Сохранить</button>
             <button className="px-3 py-2 rounded border" onClick={cancel}>Отмена</button>
