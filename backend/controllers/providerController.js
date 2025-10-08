@@ -269,7 +269,8 @@ const registerProvider = async (req, res) => {
 const loginProvider = async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    const q = await pool.query("SELECT * FROM providers WHERE email = $1", [email]);
+    const emailNorm = String(email || "").trim().toLowerCase();
+    const q = await pool.query("SELECT * FROM providers WHERE lower(email) = $1", [emailNorm]);
     if (!q.rows.length) {
       return res.status(400).json({ message: "Неверный email или пароль" });
     }
