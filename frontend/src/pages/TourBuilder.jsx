@@ -144,7 +144,7 @@ const providerMatchesByPaxCity = async ({
 };
 
 /* ---------------- Day kind (на будущее для entry) ---------------- */
-const dkey = (d) => toYMD(new Date(d));
+const dkey = (d) => ymd(new Date(d));
 const isWeekend = (d) => [0, 6].includes(new Date(d).getDay());
 const HOLIDAYS = [];
 const isHoliday = (d) => HOLIDAYS.includes(dkey(d));
@@ -572,7 +572,7 @@ export default function TourBuilder() {
     setByDay((prev) => {
       const copy = { ...prev };
       days.forEach((d) => {
-        const k = toYMD(d);
+        const k = ymd(d);
                 if (!copy[k]) copy[k] = {
           city: "",
           guide: null, transport: null, hotel: null,
@@ -583,7 +583,7 @@ export default function TourBuilder() {
         };
       });
       Object.keys(copy).forEach((k) => {
-        if (!days.find((d) => toYMD(d) === k)) delete copy[k];
+        if (!days.find((d) => ymd(d) === k)) delete copy[k];
       });
       return copy;
     });
@@ -855,14 +855,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
   const [applyTplId, setApplyTplId] = useState("");
   const [applyFrom, setApplyFrom] = useState(""); // 'YYYY-MM-DD'
 
-  // [TPL] утилита добавить дни по шаблону
-  const toYMD = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,"0");
-    const day = String(d.getDate()).padStart(2,"0");
-    return `${y}-${m}-${day}`;
-  };
-  const addDaysDate = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+// [TPL] используем модульные ymd() и addDays()
 
   function applyTemplateNow() {
     const tpl = getTemplate(applyTplId);
@@ -873,13 +866,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
     if (isNaN(start)) return alert("Неверная дата");
 
     // выставляем диапазон под длину шаблона
-    const to = addDaysDate(start, tpl.days.length - 1);
+    const to = addDays(start, tpl.days.length - 1);
    setRange({ from: start, to });
 
     // предзаполняем byDay: города из шаблона по порядку
    const next = {};
     for (let i=0;i<tpl.days.length;i++){
-      const ymdStr = ymd(addDaysDate(start, i));
+      const ymdStr = ymd(addDays(start, i));
       const city = tpl.days[i].city || "";
       next[ymdStr] = {
         city,
@@ -953,7 +946,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             />
             <p className="text-sm text-gray-600 mt-2">
               {range?.from && range?.to
-                ? t('tb.dates_span', { from: toYMD(range.from), to: toYMD(range.to), days: Math.max(1, (range.to - range.from) / 86400000 + 1) })
+                ? t('tb.dates_span', { from: ymd(range.from), to: ymd(range.to), days: Math.max(1, (range.to - range.from) / 86400000 + 1) })
                 : t('tb.pick_dates')}
             </p>
           </div>
@@ -997,7 +990,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         {/* days */}
         <div className="space-y-6">
           {days.map((d, i) => {
-            const k = toYMD(d);
+            const k = ymd(d);
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
             return (
@@ -1761,7 +1754,7 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
     const pax = Math.max(1, Number(adt) + Number(chd));
     // при изменении PAX или при появлении услуг в кешах — пробегаемся по дням
     for (const d of days) {
-      const k = toYMD(d);
+      const k = ymd(d);
       const st = byDay[k] || {};
       if (!st.city) continue;
       // пересчитываем только если для выбранного провайдера уже подгружены услуги
@@ -1770,7 +1763,7 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
       if (readyGuide || readyTransport) onRecalc(k);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adt, chd, servicesCache, days.map((d) => toYMD(d)).join("|")]);
+  }, [adt, chd, servicesCache, days.map((d) => ymd(d)).join("|")]);
   return null;
 }
 
