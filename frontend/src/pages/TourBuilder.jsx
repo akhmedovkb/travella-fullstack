@@ -893,7 +893,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
     await syncTemplates();
     setTpls(listTemplates());
   };
-  useEffect(() => { refreshTpls(); }, []);
+    useEffect(() => {
+    (async () => {
+      await syncTemplates();   // подтянуть серверные (если есть API)
+      refreshTpls();           // и обновить локальный список
+    })();
+  }, []);
 
   // [TPL] модал применения
   const [applyOpen, setApplyOpen] = useState(false);
