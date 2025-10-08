@@ -64,13 +64,12 @@ const RS_STYLES = {
 
 /* ---------------- utils ---------------- */
 const toNum = (v, def = 0) => (Number.isFinite(Number(v)) ? Number(v) : def);
-const toYMD = (d) => {
-  if (!d) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+const ymd = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  };
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 // Нормализованный пустой диапазон (чтобы состояние не становилось undefined)
@@ -880,9 +879,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
     // предзаполняем byDay: города из шаблона по порядку
    const next = {};
     for (let i=0;i<tpl.days.length;i++){
-      const ymd = toYMD(addDaysDate(start, i));
+      const ymdStr = ymd(addDaysDate(start, i));
       const city = tpl.days[i].city || "";
-      next[ymd] = {
+      next[ymdStr] = {
         city,
         guide: null, transport: null, hotel: null,
         guideService: null, transportService: null,
@@ -894,6 +893,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
     setByDay(next);
     setApplyOpen(false);
   }
+
+    // Блокировка прокрутки фона, пока открыта модалка
+  useEffect(() => {
+    if (!applyOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [applyOpen]);
+
+  // Закрытие модалки по Esc
+  useEffect(() => {
+    if (!applyOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setApplyOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [applyOpen]);
+
 
   /* ---------------- render ---------------- */
   return (
@@ -1701,8 +1717,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
       </div>
             {/* [TPL] Модал применения шаблона */}
       {applyOpen && (
-        <div className="fixed inset-0 z-[2000] bg-black/30 flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-xl border w-[92vw] max-w-md p-4">
+        <div
+          className="fixed inset-0 z-[12000] bg-black/30 flex items-center justify-center"
+          onClick={() => setApplyOpen(false)}
+        >
+          <div className="bg-white rounded-xl shadow-xl border w-[92vw] max-w-md p-4" onClick={(e)=>e.stopPropagation()}>
             <div className="text-lg font-semibold mb-2">Применить шаблон</div>
             <div className="space-y-3">
               <div>
