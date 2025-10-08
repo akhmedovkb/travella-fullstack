@@ -13,6 +13,16 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
+/* --- helpers to check current user (admin) --- */
+const fetchMeLoose = async () => {
+  for (const path of ["/api/providers/me", "/api/me", "/api/profile"]) {
+    try { return await fetchJSON(path); } catch {}
+  }
+  return null;
+};
+const isAdminFrom = (me) =>
+  !!(me?.is_admin || me?.provider?.is_admin || me?.providers?.is_admin);
+
 /* ---------------- brand colors ---------------- */
 const BRAND = {
   primary: "#FF5722",  // ключевой акцент
@@ -533,6 +543,13 @@ const HotelOption = (props) => {
 /* =========================== PAGE =========================== */
 
 export default function TourBuilder() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const me = await fetchMeLoose();
+      setIsAdmin(isAdminFrom(me));
+    })();
+  }, []);
   
   const { t, i18n } = useTranslation();
   
@@ -567,7 +584,7 @@ export default function TourBuilder() {
     const res = [];
     let d = startOfDay(range.from);
     const end = startOfDay(range.to);
-    while (d <= end) { res.push(new Date(d)); d = addDays(d, 1); 
+    while (d <= end) { res.push(new Date(d)); d = addDays(d, 1); } 
     return res;
   }, [range?.from, range?.to]);
 
@@ -950,10 +967,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
             ))}
             {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
           </div>
-           {/* SPA-переход */}
-           <Link className="ml-auto text-sm underline" to="/templates">
-             Открыть конструктор шаблонов
-           </Link>
+           {/* SPA-переход только для админов */}
+           {isAdmin && (
+             <Link className="ml-auto text-sm underline" to="/templates">
+               Открыть конструктор шаблонов
+             </Link>
+           )}
           {/* ссылка на конструктор появится ниже, если админ */}
         </div>
 
@@ -973,8 +992,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
             <p className="text-sm text-gray-600 mt-2">
               {range?.from && range?.to
                 ? t('tb.dates_span', {
-                    from: toYMD(startOfDay(range.from)),
-                    to:   toYMD(startOfDay(range.to)),
+                    from: ymd(startOfDay(range.from)),
+                    to:   ymd(startOfDay(range.to)),
                     days: daysInclusive(range.from, range.to)
                   })
                 : t('tb.pick_dates')}
