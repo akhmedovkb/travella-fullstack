@@ -632,10 +632,10 @@ export default function ServiceCard({
           </div>
         </div>
 
-        {/* hover info overlay (glass) — всплывашка снизу, вровень с нижним краем изображения */}
-        <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute inset-x-0 bottom-0 px-3 pt-3 pb-0">
-            <div className="pointer-events-auto rounded-t-lg rounded-b-none bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-[80vh] overflow-auto">
++        {/* hover info overlay (glass) — панель растягивается на всю высоту, контент прижат книзу */}
++        <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
++          <div className="absolute inset-0 flex items-end px-3 pt-0 pb-0">
++            <div className="pointer-events-auto w-full min-h-full rounded-t-lg rounded-b-none bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-full overflow-auto flex flex-col">
               {/* Детали рейса */}
               {flightDetails && (
                 <div className="mt-1 w-full rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
@@ -669,7 +669,7 @@ export default function ServiceCard({
                 </div>
               )}
               {prettyPrice && (
-                <div>
+                <div className="mt-auto pt-2">
                   <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
                   <span className="font-semibold">{prettyPrice}</span>
                 </div>
