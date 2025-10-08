@@ -446,20 +446,7 @@ export default function ServiceCard({
                 )}
               </div>
 
-              {/* Плашка с деталями рейса — тёмная, целиком в кадре */}
-              {flightDetails && (
-                <div className="pointer-events-auto rounded-xl px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
-                  <div className="text-white/80 text-[11px] mb-1">
-                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
-                  </div>
-                  <div className="font-mono text-[12px] whitespace-pre-line break-words leading-snug max-h-28 overflow-auto">
-                    {String(flightDetails).replace(/\r\n/g, "\n")}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* HEART справа */}
+              {/* HEART справа */}
             <div className="pointer-events-auto">
               <WishHeart
                 active={!!activeFav}
@@ -472,13 +459,21 @@ export default function ServiceCard({
           </div>
         </div>
         
-       {/* hover info overlay (glass) — из версии 28AUG25 */}
+       {/* hover info overlay (glass) — всплывашка снизу */}
         <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="absolute inset-x-0 bottom-0 p-3">
-            <div className="rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg">
-              <div className="font-semibold line-clamp-2">
-                 {direction || title}
-              </div>
+            <div className="pointer-events-auto rounded-lg bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-[70vh] overflow-auto">
+              {/* Детали рейса во всплывашке */}
+              {flightDetails && (
+                <div className="mt-2 rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
+                  <div className="text-white/80 text-[11px] mb-1">
+                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
+                  </div>
+                  <div className="font-mono text-[12px] whitespace-pre-line break-words leading-snug max-h-60 sm:max-h-72 overflow-auto">
+                    {String(flightDetails).replace(/\r\n/g, "\n")}
+                  </div>
+                </div>
+              )}
               {hotel && (
                 <div>
                   <span className="opacity-80">Отель: </span>
