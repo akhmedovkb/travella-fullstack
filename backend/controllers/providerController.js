@@ -226,6 +226,7 @@ const registerProvider = async (req, res) => {
   try {
     const { name, email, password, type, location, phone, social, photo, address } =
       req.body || {};
+    const emailNorm = String(email || "").trim().toLowerCase();
 
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
@@ -235,8 +236,8 @@ const registerProvider = async (req, res) => {
     }
 
     const existing = await pool.query(
-      "SELECT 1 FROM providers WHERE email = $1",
-      [email]
+      "SELECT 1 FROM providers WHERE lower(email) = $1",
+      [emailNorm]
     );
     if (existing.rows.length) {
       return res.status(400).json({ message: "Email уже используется" });
@@ -248,7 +249,7 @@ const registerProvider = async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         name,
-        email,
+        emailNorm,
         hashed,
         type,
         location,
