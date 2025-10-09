@@ -957,6 +957,15 @@
   },
 
   "tb": {
+      "templates": "Andozalar",
+      "templates_open": "Andozalarni ochish",
+      "templates_count": "{{count}} ta",
+      "tpl_apply_title": "Andozani qo‘llash",
+      "tpl_select": "Andoza",
+      "tpl_select_placeholder": "— tanlang —",
+      "tpl_start_date": "Boshlanish sanasi",
+      "tpl_btn_cancel": "Bekor qilish",
+      "tpl_btn_apply": "Qo‘llash"
       "transfers": "Shaharlararo transferlar",
       "transfer_from_ph": "Qayerdan (shahar)",
       "transfer_to_ph": "Qayerga (shahar)",
@@ -1094,6 +1103,21 @@
   "add_meal": "Ovqat qoʻshish",
   "meals_day_sum": "Kunlik ovqatlanish summasi"
 },
+"tpl": {
+    "title": "Tur andozalari",
+    "btn_new": "+ Yangi andoza",
+    "readonly_hint": "Barcha ta’minotchilar ko‘rishi mumkin. Andozalarni faqat administratorlar yaratishi va tahrirlashi mumkin.",
+    "empty": "Hozircha andozalar yo‘q",
+    "btn_edit": "Tahrirlash",
+    "btn_delete": "O‘chirish",
+    "view_only": "Faqat ko‘rish",
+    "name": "Andoza nomi",
+    "days_title": "Kunlar (shaharlar tartibda)",
+    "city_ph": "Shahar",
+    "btn_add_day": "+ Kun qo‘shish",
+    "btn_save": "Saqlash",
+    "btn_cancel": "Bekor qilish"
+  },
 
   "telegram": {
     "enable_title": "Telegram bildirishnomalari",
