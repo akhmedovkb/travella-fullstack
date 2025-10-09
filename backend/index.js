@@ -2,6 +2,8 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
+
 dotenv.config();
 
 const app = express();
@@ -227,5 +229,9 @@ app.use(providerServices);
 /** ===================== HotelsSeasons ===================== */
 const hotelSeasonsRouter = require('./routes/hotelSeasons');
 app.use('/api/hotels/:id/seasons', hotelSeasonsRouter);
+
+/** ===================== TBtemplates ===================== */
+app.use("/api/tour-templates", tbTemplatesRoutes);
+app.use("/api/templates", tbTemplatesRoutes); // алиас для обратной совместимости
 
 
