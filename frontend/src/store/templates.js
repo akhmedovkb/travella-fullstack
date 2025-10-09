@@ -1,98 +1,108 @@
 // frontend/src/store/templates.js
-// Самодостаточный модуль шаблонов: локальный кеш (localStorage) + мягкая синхронизация с бэкендом.
-// Не ломает текущие вызовы (listTemplates / upsertTemplate / removeTemplate / getTemplate / newId),
-// но при наличии API сохранит/подтянет шаблоны с сервера и обновит локальный кеш.
+const LS_KEY = "TB_TEMPLATES_V1";
 
-const LS_KEY = "tour_templates_v1";
-const API_BASE = import.meta?.env?.VITE_API_BASE_URL || "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-// ---- helpers ---------------------------------------------------------------
-const safeJSON = (s, fallback) => {
-  try { return JSON.parse(s); } catch { return fallback; }
-};
-const saveCache = (arr) => localStorage.setItem(LS_KEY, JSON.stringify(arr || []));
-const readCache = () => safeJSON(localStorage.getItem(LS_KEY) || "[]", []);
-
-const urlJoin = (path) => new URL(path, API_BASE || window.frontend?.API_BASE || "").toString();
-const fetchJSON = async (path, opts = {}) => {
-  const r = await fetch(urlJoin(path), {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
+const fetchJSON = async (path, params = {}) => {
+  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
   });
+  const r = await fetch(u.toString(), { credentials: "include" });
   if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.status === 204 ? null : await r.json();
+  return await r.json();
 };
 
-const normalizeTpl = (t) => ({
-  id: t.id ?? t._id ?? t.uuid ?? t.slug ?? newId(),
+const fetchJSONLoose = async (path, params) => {
+  try { return await fetchJSON(path, params); } catch { return null; }
+};
+
+export const newId = () =>
+  Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+const readLS = () => {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const arr = JSON.parse(raw || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+};
+
+const writeLS = (arr) => {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(arr || []));
+  } catch {}
+};
+
+const norm = (t) => ({
+  id: String(t.id || newId()),
   title: String(t.title || "").trim(),
-  days: Array.isArray(t.days) ? t.days.map(d => ({ city: String(d.city || "").trim() })) : [],
+  days: Array.isArray(t.days) ? t.days
+    .map(d => ({ city: String(d?.city || "").trim() }))
+    .filter(d => d.city) : [],
 });
 
-// ---- публичный API (совместимый с вашим текущим кодом) --------------------
+/** Публичный список — НИЧЕГО не трогаем в хранилище */
+export const listTemplates = () => readLS();
 
-// Вернёт локальный кеш (который может быть обновлён syncTemplates()).
-export function listTemplates() {
-  return readCache();
-}
+/** Получить один шаблон по id */
+export const getTemplate = (id) => readLS().find(t => String(t.id) === String(id));
 
-export function saveTemplates(arr) {
-  saveCache(arr);
-}
+/** Создать/обновить локально. (Админская страница уже сама дергает бэкенд при желании.) */
+export const upsertTemplate = (tpl) => {
+  const next = norm(tpl);
+  if (!next.title || next.days.length === 0) return;
+  const arr = readLS();
+  const i = arr.findIndex(t => String(t.id) === String(next.id));
+  if (i >= 0) arr[i] = next; else arr.push(next);
+  writeLS(arr);
+};
 
-// create/update: попробуем отправить на сервер, при ошибке — пишем в localStorage
-export async function upsertTemplate(tpl) {
-  const clean = normalizeTpl(tpl || {});
-  // 1) Попробуем бэкенд
-  try {
-    const isNew = !tpl?.id;
-    const path = isNew ? "/api/templates" : `/api/templates/${encodeURIComponent(clean.id)}`;
-    await fetchJSON(path, { method: isNew ? "POST" : "PUT", body: JSON.stringify(clean) });
-    // После успешной операции — подтянуть список с сервера и обновить кеш
-    await syncTemplates();
-    return;
-  } catch (_) {
-    // 2) Фоллбек: работаем локально
-    const all = readCache();
-    const i = all.findIndex(x => String(x.id) === String(clean.id));
-    if (i >= 0) all[i] = clean; else all.unshift(clean);
-    saveCache(all);
+/** Удалить локально */
+export const removeTemplate = (id) => {
+  const arr = readLS().filter(t => String(t.id) !== String(id));
+  writeLS(arr);
+};
+
+/**
+ * Подтянуть серверные шаблоны (если есть API) и слить с локальными.
+ * Политика мерджа:
+ *  - одинаковый id → серверная версия заменяет локальную
+ *  - уникальные id сохраняем все
+ * Возвращаем актуальный массив (и кладём его в LS).
+ */
+export const syncTemplates = async () => {
+  // пробуем несколько общепринятых эндпоинтов
+  let remote = null;
+  for (const q of [
+    ["/api/templates", {}],
+    ["/api/tour-templates", {}],
+    ["/api/templates/public", {}],
+  ]) {
+    const r = await fetchJSONLoose(q[0], q[1]);
+    const items = Array.isArray(r?.items) ? r.items : (Array.isArray(r) ? r : null);
+    if (items) { remote = items; break; }
   }
-}
 
-export async function removeTemplate(id) {
-  // 1) Попробуем удалить на сервере
-  try {
-    await fetchJSON(`/api/templates/${encodeURIComponent(id)}`, { method: "DELETE" });
-    await syncTemplates();
-    return;
-  } catch (_) {
-    // 2) Локальный фоллбек
-    saveCache(readCache().filter(x => String(x.id) !== String(id)));
+  const local = readLS();
+  if (!remote) {
+    // нет сервера — оставляем локальные как есть
+    return local;
   }
-}
 
-export function getTemplate(id) {
-  return readCache().find(x => String(x.id) === String(id)) || null;
-}
+  const serverNorm = remote
+    .map(norm)
+    // фильтр на пустые
+    .filter(t => t.title && t.days.length);
 
-// утилита: генерим id
-export function newId(prefix = "tpl") {
-  return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now() % 1e6}`;
-}
+  // мердж по id
+  const byId = new Map();
+  for (const t of local) byId.set(String(t.id), norm(t));
+  for (const t of serverNorm) byId.set(String(t.id), norm(t)); // сервер приоритетнее
 
-// ---- доп. API (по желанию используйте в компонентах) ----------------------
-// Подтянуть шаблоны с бэка (если доступен) и положить в localStorage.
-// Возвращает актуальный список (уже из кеша).
-export async function syncTemplates() {
-  try {
-    const data = await fetchJSON("/api/templates"); // допускаем как массив, так и {items:[]}
-    const arr = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
-    const normalized = arr.map(normalizeTpl);
-    saveCache(normalized);
-  } catch (_) {
-    // тихий фоллбек — остаёмся на локальном кеше
-  }
-  return readCache();
-}
+  const merged = Array.from(byId.values())
+    .sort((a,b) => a.title.localeCompare(b.title));
+
+  writeLS(merged);
+  return merged;
+};
