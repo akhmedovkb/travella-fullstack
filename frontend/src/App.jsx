@@ -192,14 +192,8 @@ export default function App() {
           {/* Страница конструктора шаблонов:
               - доступна всем авторизованным
               - внутри самой страницы действия ограничены ролями */}
-          <Route
-            path="/templates"
-            element={
-              <PrivateRoute>
-                <TemplateCreator />
-              </PrivateRoute>
-            }
-          />
+
+          <Route path="/templates" element={<TemplateCreator />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
