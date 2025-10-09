@@ -904,6 +904,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyTplId, setApplyTplId] = useState("");
   const [applyFrom, setApplyFrom] = useState(""); // 'YYYY-MM-DD'
+  // [TPL] раскрытые группы (аккордеон по странам)
+  const [openGroups, setOpenGroups] = useState({});
+  const toggleGroup = (code) => setOpenGroups((m) => ({ ...m, [code]: !m[code] }));
 
 // [TPL] используем модульные ymd() и addDays()
 
@@ -962,44 +965,77 @@ const makeTransportLoader = (dateKey) => async (input) => {
     <div className="p-4 md:p-6 overflow-x-hidden">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
         <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
-                {/* [TPL] панель шаблонов */}
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-gray-700">
-            Шаблоны:
-          </div>
-          <div className="flex flex-col gap-2">
+        {/* [TPL] панель шаблонов — аккордеон по странам */}
+        <div className="flex items-start gap-3">
+          <div className="text-sm text-gray-700 mt-2 shrink-0">Шаблоны:</div>
+
+          <div className="flex-1 space-y-2">
             {Object.entries(
               tpls
                 .slice()
-                .sort((a,b)=>a.title.localeCompare(b.title))
+                .sort((a, b) => a.title.localeCompare(b.title))
                 .reduce((acc, t) => {
-                  const m = String(t.title||"").match(/^([A-Za-z]{2,4})\s*:/);
+                  const m = String(t.title || "").match(/^([A-Za-z]{2,4})\s*:/);
                   const key = (m?.[1] || "Other").toUpperCase();
                   (acc[key] ||= []).push(t);
                   return acc;
                 }, {})
             )
-            .sort(([a],[b])=>a.localeCompare(b))
-            .map(([country, list]) => (
-              <div key={country} className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-600 mr-1">{country}</span>
-                {list.map(tpl => (
-                  <button key={tpl.id}
-                          className="px-3 py-1 rounded border hover:bg-orange-50"
-                          title={tpl.days?.map(d=>d.city).join(' → ')}
-                          onClick={() => { setApplyTplId(tpl.id); setApplyOpen(true); }}>
-                    {tpl.title}
-                  </button>
-                ))}
-              </div>
-            ))}
-            {!tpls.length && <span className="text-sm text-gray-500">Нет шаблонов. Создайте в /templates</span>}
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([country, list]) => {
+                const open = !!openGroups[country];
+                return (
+                  <div key={country} className="border rounded-lg bg-white">
+                    {/* шапка группы (кнопка UZB/...) */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(country)}
+                      className="w-full flex items-center justify-between px-3 py-2"
+                    >
+                      <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                        <span className="inline-flex h-6 px-2 items-center rounded-full border">
+                          {country}
+                        </span>
+                        <span className="text-gray-500 font-normal">
+                          {list.length} шт.
+                        </span>
+                      </span>
+                      <span className={`transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+                    </button>
+
+                    {/* содержимое группы */}
+                    {open && (
+                      <div className="px-3 pb-3 pt-1 flex flex-wrap gap-2">
+                        {list.map((tpl) => (
+                          <button
+                           key={tpl.id}
+                            className="px-3 py-1 rounded border hover:bg-orange-50"
+                            title={tpl.days?.map((d) => d.city).join(" → ")}
+                            onClick={() => {
+                              setApplyTplId(tpl.id);
+                              setApplyOpen(true);
+                            }}
+                          >
+                            {tpl.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+            {!tpls.length && (
+              <span className="text-sm text-gray-500">
+                Нет шаблонов. Создайте в /templates
+              </span>
+            )}
           </div>
-           {/* Ссылка на шаблоны доступна всем авторизованным; внутри страницы права учитываются */}
-           <Link className="ml-auto text-sm underline" to="/templates">
-             Открыть шаблоны
-           </Link>
-          {/* ссылка на конструктор появится ниже, если админ */}
+
+          {/* Ссылка на страницу управления шаблонами */}
+          <Link className="ml-auto text-sm underline mt-2 shrink-0" to="/templates">
+            Открыть шаблоны
+          </Link>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
