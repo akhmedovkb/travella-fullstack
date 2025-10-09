@@ -902,16 +902,24 @@
   },
 
   "tb": {
-    
+   "templates": "Шаблоны",
+   "templates_open": "Открыть шаблоны",
+   "templates_count": "{{count}} шт.",
+   "tpl_apply_title": "Применить шаблон",
+   "tpl_select": "Шаблон",
+   "tpl_select_placeholder": "— выберите —",
+   "tpl_start_date": "Дата начала",
+   "tpl_btn_cancel": "Отмена",
+   "tpl_btn_apply": "Применить,
    "transfers": "Межгородние трансферы",
-    "transfer_from_ph": "Откуда (город)",
-    "transfer_to_ph": "Куда (город)",
-    "transfer_price_ph": "Цена",
-    "per_pax": "/ pax",
-    "remove": "Удалить",
-    "add_transfer": " Добавить трансфер",
-    "transfers_day_sum": "Сумма по трансферам на день",
-    "totals": {
+   "transfer_from_ph": "Откуда (город)",
+   "transfer_to_ph": "Куда (город)",
+   "transfer_price_ph": "Цена",
+   "per_pax": "/ pax",
+   "remove": "Удалить",
+   "add_transfer": " Добавить трансфер",
+   "transfers_day_sum": "Сумма по трансферам на день",
+   "totals": {
       "transfers": "Трансферы"
     },
     "profile": {
@@ -1037,6 +1045,22 @@
   "add_meal": " Добавить питание",
   "meals_day_sum": "Сумма по питанию на день"
 },
+
+"tpl": {
+    "title": "Шаблоны туров",
+    "btn_new": "+ Новый шаблон",
+    "readonly_hint": "Просмотр доступен всем поставщикам. Создавать и редактировать шаблоны могут только администраторы.",
+    "empty": "Пока нет шаблонов",
+    "btn_edit": "Редактировать",
+    "btn_delete": "Удалить",
+    "view_only": "Только просмотр",
+    "name": "Название шаблона",
+    "days_title": "Дни (города по порядку)",
+    "city_ph": "Город",
+    "btn_add_day": "+ Добавить день",
+    "btn_save": "Сохранить",
+    "btn_cancel": "Отмена"
+  },
 
   "ticket_details": "Детали билета (ряд, место и т.д.)",
   "title": "Название",
