@@ -934,6 +934,15 @@
   },
 
   "tb": {
+    "templates": "Templates",
+    "templates_open": "Open templates",
+    "templates_count": "{{count}} pcs",
+    "tpl_apply_title": "Apply template",
+    "tpl_select": "Template",
+    "tpl_select_placeholder": "— choose —",
+    "tpl_start_date": "Start date",
+    "tpl_btn_cancel": "Cancel",
+    "tpl_btn_apply": "Apply",
     "transfers": "Intercity transfers",
     "transfer_from_ph": "From (city)",
     "transfer_to_ph": "To (city)",
@@ -1070,6 +1079,21 @@
   "add_meal": "Add meal",
   "meals_day_sum": "Meals total for the day"
     
+  },
+    "tpl": {
+    "title": "Tour templates",
+    "btn_new": "+ New template",
+    "readonly_hint": "All providers can view. Only administrators can create and edit templates.",
+    "empty": "No templates yet",
+    "btn_edit": "Edit",
+    "btn_delete": "Delete",
+    "view_only": "View only",
+    "name": "Template name",
+    "days_title": "Days (cities in order)",
+    "city_ph": "City",
+    "btn_add_day": "+ Add day",
+    "btn_save": "Save",
+    "btn_cancel": "Cancel"
   },
 
   "telegram": {
