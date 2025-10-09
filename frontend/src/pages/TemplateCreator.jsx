@@ -1,6 +1,5 @@
 // frontend/src/pages/TemplateCreator.jsx
 import React, { useMemo, useState, useEffect } from "react";
-import React, { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { listTemplates, upsertTemplate, removeTemplate, newId, syncTemplates } from "../store/templates";
 
