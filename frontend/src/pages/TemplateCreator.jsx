@@ -1,5 +1,7 @@
 // frontend/src/pages/TemplateCreator.jsx
 import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { listTemplates, upsertTemplate, removeTemplate, newId, syncTemplates } from "../store/templates";
 
 // Синхронный детект админа по JWT (без сетевых вызовов)
@@ -32,6 +34,7 @@ const isAdminFromJwt = () => {
 };
 
 export default function TemplateCreator() {
+  const { t } = useTranslation();
   const [items, setItems] = useState(listTemplates());
   const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
   const [isAdmin] = useState(isAdminFromJwt());
@@ -68,21 +71,21 @@ export default function TemplateCreator() {
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Шаблоны туров</h1>
+        <h1 className="text-2xl font-bold">{t('tpl.title')}</h1>
                 {isAdmin && (
           <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={startNew}>
-            + Новый шаблон
+            {t('tpl.btn_new')}
           </button>
         )}
       </div>
             {!isAdmin && (
         <div className="mb-3 text-sm text-gray-600">
-          Просмотр доступен всем поставщикам. Создавать и редактировать шаблоны могут только администраторы.
+          {t('tpl.readonly_hint')}
         </div>
       )}
       {!edit && (
         <div className="space-y-4">
-          {!items.length && <div className="text-gray-500">Пока нет шаблонов</div>}
+          {!items.length && <div className="text-gray-500">{t('tpl.empty')}</div>}
           {Object.entries(
             items
               .slice()
@@ -108,11 +111,11 @@ export default function TemplateCreator() {
               </div>
               {isAdmin ? (
                 <div className="flex gap-2">
-                  <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>Редактировать</button>
-                  <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>Удалить</button>
+                  <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>{t('tpl.btn_edit')}</button>
+                  <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>{t('tpl.btn_delete')}</button>
                 </div>
               ) : (
-                <div className="text-xs text-gray-400 self-center">Только просмотр</div>
+                <div className="text-xs text-gray-400 self-center">{t('tpl.view_only')}</div>
               )}
             </div>
               ))}
@@ -124,17 +127,17 @@ export default function TemplateCreator() {
       {isAdmin && edit && (
         <div className="border rounded p-4 space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Название шаблона</label>
+            <label className="block text-sm font-medium mb-1">{t('tpl.name')}</label>
             <input className="w-full border rounded px-3 py-2" value={edit.title}
                    onChange={e=>setEdit(p=>({...p, title:e.target.value}))} />
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">Дни (города по порядку)</div>
+            <div className="text-sm font-medium">{t('tpl.days_title')}</div>
             {(edit.days||[]).map((d, idx)=>(
               <div key={idx} className="flex gap-2">
                 <input className="flex-1 border rounded px-3 py-2"
-                       placeholder={`D${idx+1} — Город`}
+                       placeholder={`D${idx+1} — ${t('tpl.city_ph')}`}
                        value={d.city}
                        onChange={e=>{
                          const v = e.target.value;
@@ -154,12 +157,12 @@ export default function TemplateCreator() {
               </div>
             ))}
             <button className="px-3 py-1 border rounded" onClick={()=>setEdit(p=>({...p, days:[...(p.days||[]), {city:""}]}))}>
-              + Добавить день
+              {t('tpl.btn_add_day')}
             </button>
           </div>
           <div className="flex gap-2 pt-2">
-            <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={save}>Сохранить</button>
-            <button className="px-3 py-2 rounded border" onClick={cancel}>Отмена</button>
+            <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={save}>{t('tpl.btn_save')}</button>
+            <button className="px-3 py-2 rounded border" onClick={cancel}>{t('tpl.btn_cancel')}</button>
           </div>
         </div>
       )}
