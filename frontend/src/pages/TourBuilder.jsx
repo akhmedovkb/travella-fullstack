@@ -967,7 +967,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
         <div className="flex items-start gap-3">
-          <div className="text-sm text-gray-700 mt-2 shrink-0">Шаблоны:</div>
+          <div className="text-sm text-gray-700 mt-2 shrink-0">{t('tb.templates')}:</div>
 
           <div className="flex-1 space-y-2">
             {Object.entries(
@@ -997,7 +997,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           {country}
                         </span>
                         <span className="text-gray-500 font-normal">
-                          {list.length} шт.
+                          {t('tb.templates_count', { count: list.length })}
                         </span>
                       </span>
                       <span className={`transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
@@ -1034,7 +1034,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
           {/* Ссылка на страницу управления шаблонами */}
           <Link className="ml-auto text-sm underline mt-2 shrink-0" to="/templates">
-            Открыть шаблоны
+            {t('tb.templates_open')}
           </Link>
         </div>
 
@@ -1829,27 +1829,27 @@ const makeTransportLoader = (dateKey) => async (input) => {
           onClick={() => setApplyOpen(false)}
         >
           <div className="bg-white rounded-xl shadow-xl border w-[92vw] max-w-md p-4" onClick={(e)=>e.stopPropagation()}>
-            <div className="text-lg font-semibold mb-2">Применить шаблон</div>
+            <div className="text-lg font-semibold mb-2">{t('tb.tpl_apply_title')}</div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm mb-1">Шаблон</label>
+                <label className="block text-sm mb-1">{t('tb.tpl_select')}</label>
                 <select className="w-full h-10 border rounded px-2"
                         value={applyTplId}
                         onChange={e=>setApplyTplId(e.target.value)}>
-                  <option value="">— выберите —</option>
+                  <option value="">{t('tb.tpl_select_placeholder')}</option>
                   {tpls.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm mb-1">Дата начала</label>
+                <label className="block text-sm mb-1">{t('tb.tpl_start_date')}</label>
                 <input type="date" className="w-full h-10 border rounded px-2"
                        value={applyFrom}
                        onChange={e=>setApplyFrom(e.target.value)} />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button className="px-3 py-2 border rounded" onClick={()=>setApplyOpen(false)}>Отмена</button>
-              <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={applyTemplateNow}>Применить</button>
+              <button className="px-3 py-2 border rounded" onClick={()=>setApplyOpen(false)}>{t('tb.tpl_btn_cancel')}</button>
+              <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={applyTemplateNow}>{t('tb.tpl_btn_apply')}</button>
             </div>
           </div>
         </div>
