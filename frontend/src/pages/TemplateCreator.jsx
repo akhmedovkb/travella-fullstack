@@ -1,6 +1,6 @@
 // frontend/src/pages/TemplateCreator.jsx
 import React, { useMemo, useState, useEffect } from "react";
-import { listTemplates, upsertTemplate, removeTemplate, newId } from "../store/templates";
+import { listTemplates, upsertTemplate, removeTemplate, newId, syncTemplates } from "../store/templates";
 
 // Синхронный детект админа по JWT (без сетевых вызовов)
 const isAdminFromJwt = () => {
