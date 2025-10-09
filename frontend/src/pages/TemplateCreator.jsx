@@ -41,7 +41,6 @@ export default function TemplateCreator() {
   const startNew = () => setEdit({ ...empty });
   const editTpl = (tpl) => setEdit(JSON.parse(JSON.stringify(tpl)));
   const cancel = () => setEdit(null);
-
       // ⬇️ подтягиваем серверные шаблоны на маунте (и кладём их в localStorage)
     useEffect(() => {
       (async () => {
@@ -49,7 +48,6 @@ export default function TemplateCreator() {
         setItems(listTemplates());
       })();
     }, []);
-
 
   const save = () => {
     const clean = { ...edit, days: (edit.days || []).map(d => ({ city: (d.city||"").trim() })).filter(d => d.city) };
