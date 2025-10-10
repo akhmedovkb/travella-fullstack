@@ -1,7 +1,7 @@
 // frontend/src/pages/TemplateCreator.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import {
+ import {
    listTemplates,
    upsertTemplateLocal,
    upsertTemplateServer,
@@ -58,15 +58,13 @@ export default function TemplateCreator() {
       })();
     }, []);
 
-  const save = () => {
+  const save = async () => {
     const clean = { ...edit, days: (edit.days || []).map(d => ({ city: (d.city||"").trim() })).filter(d => d.city) };
     if (!clean.title.trim() || !clean.days.length) return alert("Заполните название и хотя бы один день");
-   // 1) локально
-   upsertTemplateLocal(clean);
-   // 2) сервер (best-effort)
-   try { await upsertTemplateServer(clean); } catch {}
-   // 3) пересинкать и обновить список
-   await syncTemplates();
+   upsertTemplateLocal(clean);                 // локально
+   try { await upsertTemplateServer(clean); }  // best-effort на бэк
+   catch {}
+   await syncTemplates();                      // подтянуть и слить
    setItems(listTemplates());
    setEdit(null);
   };
