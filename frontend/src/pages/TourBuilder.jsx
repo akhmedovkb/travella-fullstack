@@ -572,14 +572,28 @@ function TemplateButtonWithTip({ tpl, onClick }) {
   const btnRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
+    // фиксированная ширина тултипа и «разумная» высота
+  const TIP_W = 420;      // px
+  const TIP_PAD = 10;     // отступ от кнопки
+  const TIP_MAX_VH = 70;  // % высоты окна
 
   const show = () => {
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setPos({ top: r.top + r.height / 2, left: r.right + 10 });
-    setOpen(true);
-  };
+        // если справа не помещаемся — показываем слева
+    const spaceRight = window.innerWidth - r.right;
+    const placeRight = spaceRight > (TIP_W + TIP_PAD + 8);
+    const left = placeRight ? (r.right + TIP_PAD)
+                            : Math.max(8, r.left - TIP_W - TIP_PAD);
+    // зажимаем top в границах окна
+    const midY = r.top + r.height / 2;
+    const topMin = 8;
+    const topMax = window.innerHeight - 8;
+    const top = Math.min(topMax, Math.max(topMin, midY));
+    setPos({ top, left });
+   setOpen(true);
+ };
   const hide = () => setOpen(false);
 
   const route = (Array.isArray(tpl?.days) ? tpl.days : [])
@@ -597,7 +611,9 @@ function TemplateButtonWithTip({ tpl, onClick }) {
         left: pos.left,
         transform: "translateY(-50%)",
         zIndex: 10000,
-        maxWidth: 360,
+        width: TIP_W,
+        maxHeight: `${TIP_MAX_VH}vh`,
+        overflowY: "auto",
       }}
       className="rounded-lg shadow-lg border bg-white p-3 text-sm leading-5"
       onMouseDown={(e) => e.stopPropagation()}
@@ -608,7 +624,12 @@ function TemplateButtonWithTip({ tpl, onClick }) {
       {program && (
         <>
           <div className="text-xs text-gray-500 mb-1">{t('tpl.program')}</div>
-          <div className="text-[13px] whitespace-pre-wrap">{program}</div>
+          <div
+            className="text-[13px]"
+            style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+          >
+            {program}
+          </div>
         </>
       )}
     </div>
