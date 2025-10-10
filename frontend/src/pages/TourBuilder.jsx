@@ -601,7 +601,16 @@ function TemplateButtonWithTip({ tpl, onClick }) {
     .filter(Boolean)
     .join(" → ");
 
-  const program = String(tpl?.program || "").trim();
+  const program = (() => {
+  const i18nObj = tpl?.program_i18n || {};
+  const lang = (navigator.language || 'en').slice(0,2); // у вас уже есть i18n — можно использовать i18n.language
+  const pref = [lang, 'en', 'ru', 'uz'];
+  for (const k of pref) {
+    const v = (i18nObj?.[k] || "").trim();
+    if (v) return v;
+  }
+  return "";
+})();
 
   const Tip = (
     <div
