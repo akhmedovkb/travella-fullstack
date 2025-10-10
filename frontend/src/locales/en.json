@@ -1081,6 +1081,8 @@
     
   },
     "tpl": {
+    "program": "Tour program",
+    "program_ph": "Describe the program (multi-line text, one item per line)…",
     "title": "Tour templates",
     "btn_new": "+ New template",
     "readonly_hint": "All providers can view. Only administrators can create and edit templates.",
