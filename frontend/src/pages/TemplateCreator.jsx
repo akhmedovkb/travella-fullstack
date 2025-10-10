@@ -9,6 +9,7 @@ import {
   removeTemplateLocal,
   newId,
   syncTemplates,
+  removeTemplateServer,
 } from "../store/templates";
 
 // Синхронный детект админа по JWT (без сетевых вызовов)
@@ -75,6 +76,7 @@ export default function TemplateCreator() {
   const del = async (id) => {
     if (!confirm("Удалить шаблон?")) return;
    removeTemplateLocal(id);
+   try { await removeTemplateServer(id); } catch {}
    await syncTemplates();
    setItems(listTemplates());
     if (edit && String(edit.id) === String(id)) setEdit(null);
