@@ -1,108 +1,99 @@
 // frontend/src/store/templates.js
-const LS_KEY = "TB_TEMPLATES_V1";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
-
-const fetchJSON = async (path, params = {}) => {
-  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
-  });
-  const r = await fetch(u.toString(), { credentials: "include" });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return await r.json();
-};
-
-const fetchJSONLoose = async (path, params) => {
-  try { return await fetchJSON(path, params); } catch { return null; }
-};
+const LS_KEY = "tb_templates_v1";
 
 export const newId = () =>
   Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 const readLS = () => {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    const arr = JSON.parse(raw || "[]");
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
+  catch { return []; }
 };
-
 const writeLS = (arr) => {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(arr || []));
-  } catch {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(arr || [])); } catch {}
 };
 
-const norm = (t) => ({
-  id: String(t.id || newId()),
-  title: String(t.title || "").trim(),
-  days: Array.isArray(t.days) ? t.days
-    .map(d => ({ city: String(d?.city || "").trim() }))
-    .filter(d => d.city) : [],
-});
+export const listTemplates = () => {
+  // Всегда возвращаем локальные — страница работает офлайн/без API.
+  return readLS();
+};
 
-/** Публичный список — НИЧЕГО не трогаем в хранилище */
-export const listTemplates = () => readLS();
+export const getTemplate = (id) =>
+  readLS().find((t) => String(t.id) === String(id));
 
-/** Получить один шаблон по id */
-export const getTemplate = (id) => readLS().find(t => String(t.id) === String(id));
-
-/** Создать/обновить локально. (Админская страница уже сама дергает бэкенд при желании.) */
 export const upsertTemplate = (tpl) => {
-  const next = norm(tpl);
-  if (!next.title || next.days.length === 0) return;
-  const arr = readLS();
-  const i = arr.findIndex(t => String(t.id) === String(next.id));
-  if (i >= 0) arr[i] = next; else arr.push(next);
-  writeLS(arr);
+  const items = readLS();
+  const i = items.findIndex((x) => String(x.id) === String(tpl.id));
+  if (i >= 0) items[i] = { ...items[i], ...tpl };
+  else items.push({ ...tpl, id: tpl.id || newId() });
+  writeLS(items);
+  return items;
 };
 
-/** Удалить локально */
 export const removeTemplate = (id) => {
-  const arr = readLS().filter(t => String(t.id) !== String(id));
-  writeLS(arr);
+  const next = readLS().filter((x) => String(x.id) !== String(id));
+  writeLS(next);
+  return next;
 };
+
+/** универсальный fetch JSON с credentials */
+async function fetchJSON(url) {
+  const r = await fetch(url, { credentials: "include" });
+  if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
+  return r.json();
+}
 
 /**
- * Подтянуть серверные шаблоны (если есть API) и слить с локальными.
- * Политика мерджа:
- *  - одинаковый id → серверная версия заменяет локальную
- *  - уникальные id сохраняем все
- * Возвращаем актуальный массив (и кладём его в LS).
+ * Синхронизация с сервером:
+ * 1) /api/templates (для админов/авторов)
+ * 2) если нет доступа/пусто — /api/templates/public (для всех)
+ * 3) локальное не затираем пустотой; мердж по id + title/days
  */
-export const syncTemplates = async () => {
-  // пробуем несколько общепринятых эндпоинтов
-  let remote = null;
-  for (const q of [
-    ["/api/templates", {}],
-    ["/api/tour-templates", {}],
-    ["/api/templates/public", {}],
-  ]) {
-    const r = await fetchJSONLoose(q[0], q[1]);
-    const items = Array.isArray(r?.items) ? r.items : (Array.isArray(r) ? r : null);
-    if (items) { remote = items; break; }
+export async function syncTemplates() {
+  const current = readLS();
+
+  // helper: приводит к унифицированной форме
+  const norm = (row) => ({
+    id: row.id || row._id || row.slug || newId(),
+    title: row.title || row.name || "Template",
+    days: Array.isArray(row.days)
+      ? row.days.map((d) => ({ city: (d.city || d.name || "").trim() }))
+      : [],
+  });
+
+  let serverItems = [];
+  const tryPush = (arrLike) => {
+    const arr = Array.isArray(arrLike?.items) ? arrLike.items
+              : Array.isArray(arrLike) ? arrLike : [];
+    serverItems = arr.map(norm).filter((t) => t.title && t.days.length);
+  };
+
+  // 1) основная попытка
+  try {
+    const j = await fetchJSON("/api/templates");
+    tryPush(j);
+  } catch (e) {
+    // игнорируем — попробуем public
+    // console.debug("templates: private fetch failed", e);
   }
 
-  const local = readLS();
-  if (!remote) {
-    // нет сервера — оставляем локальные как есть
-    return local;
+  // 2) public, если надо
+  if (!serverItems.length) {
+    try {
+      const j2 = await fetchJSON("/api/templates/public");
+      tryPush(j2);
+    } catch (e) {
+      // оба запроса не удались — выходим, не трогая localStorage
+      return current;
+    }
   }
 
-  const serverNorm = remote
-    .map(norm)
-    // фильтр на пустые
-    .filter(t => t.title && t.days.length);
+  // 3) мердж по id
+  const map = new Map(current.map((t) => [String(t.id), t]));
+  for (const t of serverItems) map.set(String(t.id), { ...(map.get(String(t.id))||{}), ...t });
+  const merged = Array.from(map.values())
+    .filter((t) => t.title && Array.isArray(t.days))
+    .sort((a, b) => a.title.localeCompare(b.title));
 
-  // мердж по id
-  const byId = new Map();
-  for (const t of local) byId.set(String(t.id), norm(t));
-  for (const t of serverNorm) byId.set(String(t.id), norm(t)); // сервер приоритетнее
-
-  const merged = Array.from(byId.values())
-    .sort((a,b) => a.title.localeCompare(b.title));
-
-  writeLS(merged);
-  return merged;
-};
+  if (merged.length) writeLS(merged); // не пишем пустоту
+  return merged.length ? merged : current;
+}
