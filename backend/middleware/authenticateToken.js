@@ -10,25 +10,22 @@ async function readProviderFlags(id) {
   const key = `provider:${id}`;
   const now = Date.now();
   const hit = cache.get(key);
-  if (hit && now - hit.ts < 60_000) return hit; // 60s
+  if (hit && now - hit.ts < 60_000) return hit;
 
-  // один запрос на все интересующие поля
-  const q = `
-    SELECT id,
-           COALESCE(is_admin, false)        AS is_admin,
-           COALESCE(is_moderator, false)
-             OR COALESCE(moderator, false)  AS is_moderator,
-           COALESCE(permissions, '[]'::jsonb) AS permissions
-      FROM providers
-     WHERE id = $1
-     LIMIT 1
-  `;
-  const { rows } = await pool.query(q, [id]);
-  const row = rows[0] || null;
-  const val = row
-    ? { is_admin: !!row.is_admin, is_moderator: !!row.is_moderator, permissions: row.permissions, ts: now }
-    : null;
-  cache.set(key, val ? val : { ts: now }); // кэшируем “нет” тоже, чтобы не долбить БД
+  const { rows } = await pool.query(
+    "SELECT to_jsonb(p) AS p FROM providers p WHERE id = $1 LIMIT 1",
+    [id]
+  );
+  const p = rows[0]?.p || null;
+
+  const val = p ? {
+    is_admin: !!(p.is_admin || p.admin === true),
+    is_moderator: !!(p.is_moderator || p.moderator === true),
+    permissions: Array.isArray(p.permissions) ? p.permissions : [],
+    ts: now
+  } : null;
+
+  cache.set(key, val ? val : { ts: now });
   return val;
 }
 
