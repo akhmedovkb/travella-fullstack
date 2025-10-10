@@ -47,8 +47,7 @@ export default function TemplateCreator() {
   const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
   const [isAdmin] = useState(isAdminFromJwt());
 
-  const empty = { id: newId(), title: "", days: [{ city: "" }] };
-
+  const empty = { id: newId(), title: "", days: [{ city: "" }], program: "" };
   const startNew = () => setEdit({ ...empty });
   const editTpl = (tpl) => setEdit(JSON.parse(JSON.stringify(tpl)));
   const cancel = () => setEdit(null);
@@ -61,7 +60,13 @@ export default function TemplateCreator() {
     }, []);
 
   const save = async () => {
-    const clean = { ...edit, days: (edit.days || []).map(d => ({ city: (d.city||"").trim() })).filter(d => d.city) };
+    const clean = {
+     ...edit,
+     program: String(edit.program || "").trim(),
+     days: (edit.days || [])
+       .map(d => ({ city: (d.city || "").trim() }))
+       .filter(d => d.city),
+   };
     if (!clean.title.trim() || !clean.days.length) return alert("Заполните название и хотя бы один день");
     // 1) локально
     upsertTemplateLocal(clean);
@@ -202,6 +207,18 @@ export default function TemplateCreator() {
               {t('tpl.btn_add_day')}
             </button>
           </div>
+             {/* Программа тура */}
+           <div>
+             <label className="block text-sm font-medium mb-1">
+               {t('tpl.program') || "Программа тура"}
+             </label>
+             <textarea
+               className="w-full border rounded px-3 py-2 min-h-[140px]"
+               placeholder={t('tpl.program_ph') || "Свободный текст: что происходит по дням, примечания и т.п."}
+               value={edit.program || ""}
+               onChange={e => setEdit(p => ({ ...p, program: e.target.value }))}
+             />
+           </div>
           <div className="flex gap-2 pt-2">
             <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={save}>{t('tpl.btn_save')}</button>
             <button className="px-3 py-2 rounded border" onClick={cancel}>{t('tpl.btn_cancel')}</button>
