@@ -1,7 +1,14 @@
 // frontend/src/pages/TemplateCreator.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { listTemplates, upsertTemplate, removeTemplate, newId, syncTemplates } from "../store/templates";
+import {
+   listTemplates,
+   upsertTemplateLocal,
+   upsertTemplateServer,
+   removeTemplateLocal,
+   newId,
+   syncTemplates
+ } from "../store/templates";
 
 // Синхронный детект админа по JWT (без сетевых вызовов)
 const isAdminFromJwt = () => {
@@ -54,15 +61,21 @@ export default function TemplateCreator() {
   const save = () => {
     const clean = { ...edit, days: (edit.days || []).map(d => ({ city: (d.city||"").trim() })).filter(d => d.city) };
     if (!clean.title.trim() || !clean.days.length) return alert("Заполните название и хотя бы один день");
-    upsertTemplate(clean);
-    setItems(listTemplates());
-    setEdit(null);
+   // 1) локально
+   upsertTemplateLocal(clean);
+   // 2) сервер (best-effort)
+   try { await upsertTemplateServer(clean); } catch {}
+   // 3) пересинкать и обновить список
+   await syncTemplates();
+   setItems(listTemplates());
+   setEdit(null);
   };
 
-  const del = (id) => {
+  const del = async (id) => {
     if (!confirm("Удалить шаблон?")) return;
-    removeTemplate(id);
-    setItems(listTemplates());
+   removeTemplateLocal(id);
+   await syncTemplates();
+   setItems(listTemplates());
     if (edit && String(edit.id) === String(id)) setEdit(null);
   };
 
