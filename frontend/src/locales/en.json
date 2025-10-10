@@ -934,6 +934,7 @@
   },
 
   "tb": {
+    "route": "Route",
     "templates": "Templates",
     "templates_open": "Open templates",
     "templates_count": "{{count}} pcs",
