@@ -47,9 +47,12 @@ export default function TemplateCreator() {
   const [edit, setEdit] = useState(null); // {id,title,days:[{city}]}
   const [isAdmin] = useState(isAdminFromJwt());
 
-  const empty = { id: newId(), title: "", days: [{ city: "" }], program: "" };
+  const empty = { id: newId(), title: "", days: [{ city: "" }], program_i18n: { ru:"", en:"", uz:"" } };
   const startNew = () => setEdit({ ...empty });
-  const editTpl = (tpl) => setEdit(JSON.parse(JSON.stringify(tpl)));
+  const editTpl = (tpl) => {
+  const p = (tpl.program_i18n || (tpl.program ? { ru: String(tpl.program) } : {}));
+  setEdit({ ...tpl, program_i18n: { ru: p.ru || "", en: p.en || "", uz: p.uz || "" } });
+};
   const cancel = () => setEdit(null);
       // ⬇️ подтягиваем серверные шаблоны на маунте (и кладём их в localStorage)
     useEffect(() => {
@@ -62,7 +65,11 @@ export default function TemplateCreator() {
   const save = async () => {
     const clean = {
      ...edit,
-     program: String(edit.program || "").trim(),
+      program_i18n: {
+       ru: String(edit.program_i18n?.ru || "").trim(),
+       en: String(edit.program_i18n?.en || "").trim(),
+       uz: String(edit.program_i18n?.uz || "").trim(),
+     },
      days: (edit.days || [])
        .map(d => ({ city: (d.city || "").trim() }))
        .filter(d => d.city),
@@ -207,17 +214,32 @@ export default function TemplateCreator() {
               {t('tpl.btn_add_day')}
             </button>
           </div>
-             {/* Программа тура */}
+             {/* Программа тура (RU/EN/UZ) */}
            <div>
              <label className="block text-sm font-medium mb-1">
                {t('tpl.program') || "Программа тура"}
              </label>
-             <textarea
-               className="w-full border rounded px-3 py-2 min-h-[140px]"
-               placeholder={t('tpl.program_ph') || "Свободный текст: что происходит по дням, примечания и т.п."}
-               value={edit.program || ""}
-               onChange={e => setEdit(p => ({ ...p, program: e.target.value }))}
-             />
+            <div className="flex gap-2 mb-2">
+              {["ru","en","uz"].map(code => (
+                <button key={code}
+                  type="button"
+                  onClick={() => setEdit(p => ({ ...p, _progTab: code }))}
+                  className={`px-2 py-1 border rounded text-xs ${ (edit._progTab || "ru")===code ? "bg-orange-50" : ""}`}>
+                  {code.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const lang = edit._progTab || "ru";
+              return (
+                <textarea
+                  className="w-full border rounded px-3 py-2 min-h-[140px]"
+                  placeholder={t('tpl.program_ph')}
+                  value={edit.program_i18n?.[lang] || ""}
+                  onChange={e => setEdit(p => ({ ...p, program_i18n: { ...(p.program_i18n||{}), [lang]: e.target.value } }))}
+                />
+              );
+            })()}
            </div>
           <div className="flex gap-2 pt-2">
             <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={save}>{t('tpl.btn_save')}</button>
