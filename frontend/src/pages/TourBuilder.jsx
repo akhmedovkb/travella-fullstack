@@ -1,6 +1,7 @@
 // frontend/src/pages/TourBuilder.jsx
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { listTemplates, getTemplate, syncTemplates } from "../store/templates"; // [TPL]
 import AsyncSelect from "react-select/async";
@@ -39,13 +40,15 @@ const MEAL_TYPES = [
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
   // контейнер меню — без скролла, скроллим список внутри
-  menu: (b) => ({ ...b, backgroundColor: "#fff", overflow: "hidden" }),
+  // меню не должно резать портированный тултип (он fixed и в body),
+  // так что overflow можно не задавать
+  menu: (b) => ({ ...b, backgroundColor: "#fff" }),
   // прокрутка списка опций
   menuList: (b) => ({
     ...b,
     backgroundColor: "#fff",
     maxHeight: 320,        // высота выпадашки ~ 320px
-    overflowY: "auto",     // ⬅️ скролл
+    overflowY: "auto",     // скроллим список
     paddingRight: 0,
   }),
   option: (base, state) => ({
@@ -463,88 +466,106 @@ const ProviderOption = (props) => {
   const tgHref = tgRaw ? (tgRaw.includes("t.me") ? tgRaw : `https://t.me/${tgUser}`) : null;
   const tel = (p.phone || "").replace(/[^\d+]/g, "");
 
-  return (
-    <div className="rs-option-wrap relative group">
-      <SelectComponents.Option {...props} />
+    // ► Портируем тултип в body и позиционируем по rect опции
+  const rowRef = useRef(null);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
 
-      <div
-        className="rs-tip absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block group-focus-within:block z-[10000]"
-        tabIndex={0}
-        onMouseDown={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <div className="absolute -left-2 top-0 bottom-0 w-2" />
+  const showTip = () => {
+    const el = rowRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.top + r.height / 2,
+      left: r.right + 8,
+    });
+    setTipOpen(true);
+  };
+  const hideTip = () => setTipOpen(false);
 
-        <div className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text">
-          <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
-          {p.location && <div><b>{t("tb.profile.city")}:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
-          {p.languages?.length ? <div><b>{t("tb.profile.languages")}:</b> {p.languages.join(", ")}</div> : null}
-
-          {p.phone && (
-            <div>
-              <b>{t("tb.profile.phone")}:</b>{" "}
-              <a
-                href={tel ? `tel:${tel}` : undefined}
-                onMouseDown={swallowDown}
-                onPointerDown={swallowDown}
-                onClick={openHref(tel ? `tel:${tel}` : "")}
-                className="text-blue-600 hover:underline"
-              >{p.phone}</a>
-            </div>
-          )}
-
-          {tgRaw && (
-            <div>
-              <b>{t("tb.profile.telegram")}:</b>{" "}
-              {tgHref ? (
-                <a
-                  href={tgHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onMouseDown={swallowDown}
-                  onPointerDown={swallowDown}
-                  onClick={openHref(tgHref)}
-                  className="text-blue-600 hover:underline"
-                >@{tgUser}</a>
-              ) : <span>{tgRaw}</span>}
-            </div>
-          )}
-
-          {p.email && (
-            <div>
-              <b>{t("tb.profile.email")}:</b>{" "}
-              <a
-                href={`mailto:${p.email}`}
-                onMouseDown={swallowDown}
-                onPointerDown={swallowDown}
-                onClick={openHref(`mailto:${p.email}`)}
-                className="text-blue-600 hover:underline"
-              >{p.email}</a>
-            </div>
-          )}
-
-          {Number(p.price_per_day) > 0 && (
-            <div className="mt-1"><b>{t("tb.profile.price_per_day")}:</b> {p.price_per_day} {p.currency || "UZS"}</div>
-          )}
-
-          {url && (
-            <div className="mt-2">
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                onMouseDown={swallowDown}
-                onPointerDown={swallowDown}
-                onClick={openHref(url)}
-                className="text-blue-600 hover:underline"
-              >{t("tb.profile.open_profile")}</a>
-            </div>
-          )}
+  const Tip = (
+    <div
+      style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateY(-50%)", zIndex: 10000 }}
+      className="min-w-[260px] max-w-[320px] rounded-lg shadow-lg border bg-white p-3 text-xs leading-5 select-text"
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="font-semibold text-sm mb-1">{p.name || "—"}</div>
+      {p.location && <div><b>{t("tb.profile.city")}:</b> {Array.isArray(p.location) ? p.location.join(", ") : p.location}</div>}
+      {p.languages?.length ? <div><b>{t("tb.profile.languages")}:</b> {p.languages.join(", ")}</div> : null}
+      {p.phone && (
+        <div>
+          <b>{t("tb.profile.phone")}:</b>{" "}
+          <a
+            href={tel ? `tel:${tel}` : undefined}
+            onMouseDown={swallowDown}
+            onPointerDown={swallowDown}
+            onClick={openHref(tel ? `tel:${tel}` : "")}
+            className="text-blue-600 hover:underline"
+          >{p.phone}</a>
         </div>
-      </div>
+      )}
+      {tgRaw && (
+        <div>
+          <b>{t("tb.profile.telegram")}:</b>{" "}
+          {tgHref ? (
+            <a
+              href={tgHref}
+             target="_blank"
+              rel="noopener noreferrer"
+              onMouseDown={swallowDown}
+              onPointerDown={swallowDown}
+              onClick={openHref(tgHref)}
+              className="text-blue-600 hover:underline"
+            >@{tgUser}</a>
+          ) : <span>{tgRaw}</span>}
+        </div>
+      )}
+      {p.email && (
+        <div>
+          <b>{t("tb.profile.email")}:</b>{" "}
+          <a
+            href={`mailto:${p.email}`}
+            onMouseDown={swallowDown}
+            onPointerDown={swallowDown}
+            onClick={openHref(`mailto:${p.email}`)}
+            className="text-blue-600 hover:underline"
+          >{p.email}</a>
+        </div>
+      )}
+      {Number(p.price_per_day) > 0 && (
+        <div className="mt-1"><b>{t("tb.profile.price_per_day")}:</b> {p.price_per_day} {p.currency || "UZS"}</div>
+      )}
+      {url && (
+        <div className="mt-2">
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            onMouseDown={swallowDown}
+            onPointerDown={swallowDown}
+            onClick={openHref(url)}
+            className="text-blue-600 hover:underline"
+          >{t("tb.profile.open_profile")}</a>
+        </div>
+      )}
     </div>
   );
-};
+
+  return (
+    <div
+      ref={rowRef}
+      onMouseEnter={showTip}
+      onFocus={showTip}
+      onMouseLeave={hideTip}
+      onBlur={hideTip}
+      className="rs-option-wrap"
+    >
+      <SelectComponents.Option {...props} />
+      {tipOpen && createPortal(Tip, document.body)}
+    </div>
+  );
+;
 
 const HotelOption = (props) => {
   const h = props.data?.raw;
