@@ -567,8 +567,8 @@ const ProviderOption = (props) => {
   );
 };
 
-function TemplateButtonWithTip({ tpl, onClick }) {
-  const { t } = useTranslation();
+ function TemplateButtonWithTip({ tpl, onClick }) {
+  const { t, i18n } = useTranslation();
   const btnRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
@@ -602,15 +602,16 @@ function TemplateButtonWithTip({ tpl, onClick }) {
     .join(" → ");
 
   const program = (() => {
-  const i18nObj = tpl?.program_i18n || {};
-  const lang = (navigator.language || 'en').slice(0,2); // у вас уже есть i18n — можно использовать i18n.language
-  const pref = [lang, 'en', 'ru', 'uz'];
-  for (const k of pref) {
-    const v = (i18nObj?.[k] || "").trim();
-    if (v) return v;
-  }
-  return "";
-})();
+    const dict = tpl?.program_i18n || {};
+    // текущий язык из i18next, если что — падаем на язык браузера, потом en/ru/uz
+    const cur = (i18n?.language || navigator.language || 'en').slice(0, 2).toLowerCase();
+    const pref = Array.from(new Set([cur, 'en', 'ru', 'uz']));
+    for (const k of pref) {
+      const v = (dict[k] || '').trim();
+      if (v) return v;
+    }
+    return '';
+  })();
 
   const Tip = (
     <div
