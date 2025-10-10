@@ -1,99 +1,129 @@
 // frontend/src/store/templates.js
-const LS_KEY = "tb_templates_v1";
+const LS_KEYS = ["TB_TEMPLATES_V1", "TB_TEMPLATES", "TB_TPLS"]; // <- миграция со старых ключей
+const LS_PRIMARY = LS_KEYS[0];
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+const fetchJSON = async (path, params = {}) => {
+  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
+  });
+  const r = await fetch(u.toString(), {
+    credentials: "include",
+    headers: { Accept: "application/json" }
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return await r.json();
+};
+
+const fetchJSONLoose = async (path, params) => {
+  try { return await fetchJSON(path, params); } catch { return null; }
+};
 
 export const newId = () =>
   Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-const readLS = () => {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
+const safeParse = (s) => {
+  try { const v = JSON.parse(s || "[]"); return Array.isArray(v) ? v : []; }
   catch { return []; }
 };
-const writeLS = (arr) => {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(arr || [])); } catch {}
+
+// читаем с миграцией (берём первый непустой из списка ключей)
+const readLS = () => {
+  for (const k of LS_KEYS) {
+    const arr = safeParse(localStorage.getItem(k));
+    if (arr.length) return arr;
+  }
+  return [];
 };
 
-export const listTemplates = () => {
-  // Всегда возвращаем локальные — страница работает офлайн/без API.
-  return readLS();
+const writeLS = (arr) => {
+  try { localStorage.setItem(LS_PRIMARY, JSON.stringify(arr || [])); } catch {}
 };
+
+const norm = (t) => ({
+  id: String(t?.id || newId()),
+  title: String(t?.title || "").trim(),
+  days: Array.isArray(t?.days)
+    ? t.days
+        .map((d) => ({ city: String(d?.city || "").trim() }))
+        .filter((d) => d.city)
+    : [],
+});
+
+export const listTemplates = () => readLS();
 
 export const getTemplate = (id) =>
   readLS().find((t) => String(t.id) === String(id));
 
-export const upsertTemplate = (tpl) => {
-  const items = readLS();
-  const i = items.findIndex((x) => String(x.id) === String(tpl.id));
-  if (i >= 0) items[i] = { ...items[i], ...tpl };
-  else items.push({ ...tpl, id: tpl.id || newId() });
-  writeLS(items);
-  return items;
+export const upsertTemplateLocal = (tpl) => {
+  const next = norm(tpl);
+  if (!next.title || next.days.length === 0) return;
+  const arr = readLS();
+  const i = arr.findIndex((t) => String(t.id) === String(next.id));
+  if (i >= 0) arr[i] = next; else arr.push(next);
+  writeLS(arr);
 };
 
-export const removeTemplate = (id) => {
-  const next = readLS().filter((x) => String(x.id) !== String(id));
-  writeLS(next);
-  return next;
+export const removeTemplateLocal = (id) => {
+  writeLS(readLS().filter((t) => String(t.id) !== String(id)));
 };
 
-/** универсальный fetch JSON с credentials */
-async function fetchJSON(url) {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
-  return r.json();
-}
+// ── серверные вызовы (best-effort) ─────────────────────────────────────────────
+export const upsertTemplateServer = async (tpl) => {
+  // безопасный best-effort апсерт; если на бэке другой путь — добавь сюда
+  for (const [url, method] of [
+    ["/api/templates", "POST"],
+    ["/api/tour-templates", "POST"],
+  ]) {
+    const res = await fetchJSONLoose(url, null)?.catch?.(() => null); // ping
+    // если эндпоинт существует, шлём отдельным запросом
+    try {
+      await fetch(new URL(url, API_BASE || window.frontend?.API_BASE || ""), {
+        method,
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tpl),
+      });
+      break;
+    } catch { /* ignore and try next */ }
+  }
+};
 
 /**
- * Синхронизация с сервером:
- * 1) /api/templates (для админов/авторов)
- * 2) если нет доступа/пусто — /api/templates/public (для всех)
- * 3) локальное не затираем пустотой; мердж по id + title/days
+ * Синхронизация: тянем публичный список с бэка и мержим с локальными.
+ * ВАЖНО: если сервер вернул пусто/ошибку — НИЧЕГО не перетираем.
  */
-export async function syncTemplates() {
-  const current = readLS();
+export const syncTemplates = async () => {
+  let remote = null;
 
-  // helper: приводит к унифицированной форме
-  const norm = (row) => ({
-    id: row.id || row._id || row.slug || newId(),
-    title: row.title || row.name || "Template",
-    days: Array.isArray(row.days)
-      ? row.days.map((d) => ({ city: (d.city || d.name || "").trim() }))
-      : [],
-  });
-
-  let serverItems = [];
-  const tryPush = (arrLike) => {
-    const arr = Array.isArray(arrLike?.items) ? arrLike.items
-              : Array.isArray(arrLike) ? arrLike : [];
-    serverItems = arr.map(norm).filter((t) => t.title && t.days.length);
-  };
-
-  // 1) основная попытка
-  try {
-    const j = await fetchJSON("/api/templates");
-    tryPush(j);
-  } catch (e) {
-    // игнорируем — попробуем public
-    // console.debug("templates: private fetch failed", e);
+  for (const [url, params] of [
+    ["/api/templates/public", {}],
+    ["/api/templates", {}],
+    ["/api/tour-templates", {}],
+    ["/api/templates/list", {}],
+  ]) {
+    const r = await fetchJSONLoose(url, params);
+    const items = Array.isArray(r?.items) ? r.items : (Array.isArray(r) ? r : null);
+    if (items != null) { remote = items; break; }
   }
 
-  // 2) public, если надо
-  if (!serverItems.length) {
-    try {
-      const j2 = await fetchJSON("/api/templates/public");
-      tryPush(j2);
-    } catch (e) {
-      // оба запроса не удались — выходим, не трогая localStorage
-      return current;
-    }
+  const local = readLS();
+
+  // если сервера нет или пришёл пустой список — оставляем локальные как есть
+  if (!remote || (Array.isArray(remote) && remote.length === 0)) {
+    return local;
   }
 
-  // 3) мердж по id
-  const map = new Map(current.map((t) => [String(t.id), t]));
-  for (const t of serverItems) map.set(String(t.id), { ...(map.get(String(t.id))||{}), ...t });
-  const merged = Array.from(map.values())
-    .filter((t) => t.title && Array.isArray(t.days))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const serverNorm = remote.map(norm).filter(t => t.title && t.days.length);
 
-  if (merged.length) writeLS(merged); // не пишем пустоту
-  return merged.length ? merged : current;
-}
+  // merge by id (server wins)
+  const byId = new Map();
+  for (const t of local) byId.set(String(t.id), norm(t));
+  for (const t of serverNorm) byId.set(String(t.id), norm(t));
+
+  const merged = Array.from(byId.values()).sort((a, b) => a.title.localeCompare(b.title));
+  writeLS(merged);
+  return merged;
+};
