@@ -723,7 +723,7 @@ arr = arr
               <ul className="list-disc ml-5 text-sm">
                 {langs.map((l, i) => (
                   <li key={`${l.code}-${l.level || "na"}`}>
-                    {getLangLabel(l.code)}
+                    {getLangLabel(l.code, i18n.language)}
                     {l.level ? ` — ${getLevelLabel(l.level)}` : ""}
                   </li>
                 ))}
