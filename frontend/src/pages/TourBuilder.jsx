@@ -565,7 +565,7 @@ const ProviderOption = (props) => {
       {tipOpen && createPortal(Tip, document.body)}
     </div>
   );
-;
+};
 
 const HotelOption = (props) => {
   const h = props.data?.raw;
