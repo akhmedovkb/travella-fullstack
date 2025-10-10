@@ -99,17 +99,22 @@ export default function TemplateCreator() {
       {!edit && (
         <div className="space-y-4">
           {!items.length && <div className="text-gray-500">{t('tpl.empty')}</div>}
-          {Object.entries(
-            items
-              .slice()
-              .sort((a,b)=>a.title.localeCompare(b.title))
-              .reduce((acc, t) => {
-                const m = String(t.title||"").match(/^([A-Za-z]{2,4})\s*:/);
-                const key = (m?.[1] || "Other").toUpperCase();
-                (acc[key] ||= []).push(t);
-                return acc;
-              }, {})
-          )
+          {Object.entries((Array.isArray(items) ? items : [])
+            .slice()
+            .sort((a, b) => String(a?.title || "").localeCompare(String(b?.title || "")))
+            .reduce((acc, t) => {
+              const m   = String(t?.title || "").match(/^([A-Za-z]{2,4})\s*:/);
+              const key = (m && m[1] ? m[1] : "Other").toUpperCase();
+              if (!acc[key]) acc[key] = [];            // без ||= чтобы не зависеть от поддержки
+              acc[key].push({
+                ...t,
+                // страховка: days всегда массив объектов {city}
+                days: Array.isArray(t?.days)
+                  ? t.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city)
+                  : [],
+              });
+              return acc;
+            }, {}))
           .sort(([a],[b])=>a.localeCompare(b))
           .map(([country, list]) => (
             <div key={country} className="space-y-3">
@@ -119,7 +124,9 @@ export default function TemplateCreator() {
               <div>
                 <div className="font-semibold">{t.title}</div>
                 <div className="text-sm text-gray-600 mt-1">
-                  {t.days?.map((d, i) => <span key={i}>{d.city}{i < t.days.length-1 ? " → " : ""}</span>)}
+                  {(Array.isArray(t.days) ? t.days : []).map((d, i) => (
+                          <span key={i}>{d.city}{i < t.days.length - 1 ? " → " : ""}</span>
+                    ))}
                 </div>
               </div>
               {isAdmin ? (
