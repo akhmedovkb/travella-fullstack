@@ -895,8 +895,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
   };
     useEffect(() => {
     (async () => {
-      await syncTemplates();   // подтянуть серверные (если есть API)
-      refreshTpls();           // и обновить локальный список
+    await refreshTpls();
     })();
   }, []);
 
