@@ -109,21 +109,16 @@ export const syncTemplates = async () => {
     if (items != null) { remote = items; break; }
   }
 
-  const local = readLS();
-
-  // если сервера нет или пришёл пустой список — оставляем локальные как есть
-  if (!remote || (Array.isArray(remote) && remote.length === 0)) {
-    return local;
+  // если удалённый список получен — он авторитетный
+  if (Array.isArray(remote)) {
+    const serverNorm = remote
+      .map(norm)
+      .filter(t => t.title && t.days.length)
+      .sort((a, b) => a.title.localeCompare(b.title));
+    writeLS(serverNorm);
+    return serverNorm;
   }
 
-  const serverNorm = remote.map(norm).filter(t => t.title && t.days.length);
-
-  // merge by id (server wins)
-  const byId = new Map();
-  for (const t of local) byId.set(String(t.id), norm(t));
-  for (const t of serverNorm) byId.set(String(t.id), norm(t));
-
-  const merged = Array.from(byId.values()).sort((a, b) => a.title.localeCompare(b.title));
-  writeLS(merged);
-  return merged;
+  // фолбэк: ничего не трогаем, оставляем локальные
+  return readLS();
 };
