@@ -16,7 +16,9 @@ export const listTemplates = () => {
     id: String(x?.id || ""),
     title: String(x?.title || ""),
     days: Array.isArray(x?.days) ? x.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
-    program: (x?.program === null || x?.program === undefined) ? null : String(x.program)
+    program_i18n: typeof x?.program_i18n === 'object' && x.program_i18n
+      ? x.program_i18n
+      : (x?.program ? { ru: String(x.program) } : {})   // back-compat
   }));
 };
 
@@ -29,7 +31,7 @@ export const upsertTemplateLocal = (tpl) => {
     id: tpl.id || newId(),
     title: String(tpl.title || "").trim(),
     days: Array.isArray(tpl.days) ? tpl.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
-    program: (tpl.program === null || tpl.program === undefined) ? null : String(tpl.program).trim()
+    program_i18n: (typeof tpl.program_i18n === 'object' && tpl.program_i18n) ? tpl.program_i18n : {}
   };
   const list = listTemplates();
   const idx = list.findIndex(t => String(t.id) === String(clean.id));
@@ -68,7 +70,7 @@ export const upsertTemplateServer = async (tpl) => {
     title: String(tpl.title || "").trim(),
     days: Array.isArray(tpl.days) ? tpl.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
     is_public: tpl.is_public !== false, // по умолчанию публичный
-    program: (tpl.program === null || tpl.program === undefined) ? null : String(tpl.program).trim(),
+    program_i18n: (typeof tpl.program_i18n === 'object' && tpl.program_i18n) ? tpl.program_i18n : {},
   };
   return await fetchJSON("/api/tour-templates", {
     method: "POST",
@@ -109,7 +111,8 @@ export const syncTemplates = async () => {
       id: String(s.id || ""),
       title: String(s.title || ""),
       days: Array.isArray(s.days) ? s.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
-      program: (s.program === null || s.program === undefined) ? null : String(s.program)
+       program_i18n: (typeof s.program_i18n === 'object' && s.program_i18n) ? s.program_i18n
+                     : (s.program ? { ru: String(s.program) } : {})
     };
     if (clean.id) map.set(clean.id, clean);
   }
