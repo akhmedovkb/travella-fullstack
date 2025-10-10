@@ -140,6 +140,9 @@ const LANGUAGE_OPTIONS = [
   { value: "tr", label: "Türkçe" },
   { value: "de", label: "Deutsch" },
   { value: "ar", label: "العربية" },
+  { value: "fr", label: "Français" },
+  { value: "es", label: "Español" },
+  { value: "it", label: "Italiano" },
 ];
 
 const LEVEL_OPTIONS = [
