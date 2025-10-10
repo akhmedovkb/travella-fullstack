@@ -65,22 +65,26 @@ router.post("/", async (req, res) => {
     }
 
     if (t.id) {
-      // попытка обновить по id
+      // UPDATE по id
       const q = `
         UPDATE tour_templates
-           SET title = $2, days = $3::jsonb, is_public = $4, program_i18n = $5::jsonb,
+           SET title = $2,
+               days = $3::jsonb,
+               is_public = $4,
+               program_i18n = $5::jsonb,
                updated_at = now()
          WHERE id = $1
        RETURNING id, title, days, program_i18n`;
-      const { rows } = await pool.query(q, [t.id, t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
+      const { rows } = await pool.query(q, [
         t.id,
         t.title,
         JSON.stringify(t.days),
         t.is_public,
-        t.program ?? null
+        JSON.stringify(t.program_i18n || {})
       ]);
       if (rows.length) return res.json(rows[0]); // 200
-      // если не нашли — создаём новый с указанным id
+
+      // INSERT с указанным id
       const qi = `
         INSERT INTO tour_templates (id, title, days, is_public, program_i18n)
         VALUES ($1, $2, $3::jsonb, $4, $5::jsonb)
@@ -90,15 +94,26 @@ router.post("/", async (req, res) => {
               is_public = EXCLUDED.is_public,
               program_i18n = EXCLUDED.program_i18n
         RETURNING id, title, days, program_i18n`;
-      const ins = await pool.query(qi, [t.id, t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
+      const ins = await pool.query(qi, [
+        t.id,
+        t.title,
+        JSON.stringify(t.days),
+        t.is_public,
+        JSON.stringify(t.program_i18n || {})
+      ]);
       return res.status(201).json(ins.rows[0]);
     } else {
-      // без id — обычный insert
+      // обычный INSERT
       const q = `
         INSERT INTO tour_templates (title, days, is_public, program_i18n)
         VALUES ($1, $2::jsonb, $3, $4::jsonb)
         RETURNING id, title, days, program_i18n`;
-      const { rows } = await pool.query(q, [t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
+      const { rows } = await pool.query(q, [
+        t.title,
+        JSON.stringify(t.days),
+        t.is_public,
+        JSON.stringify(t.program_i18n || {})
+      ]);
       return res.status(201).json(rows[0]);
     }
   } catch (e) {
