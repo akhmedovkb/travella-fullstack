@@ -1,11 +1,7 @@
 // backend/routes/TBtemplatesRoutes.js
 const express = require("express");
 const router = express.Router();
-const { Pool } = require("pg");
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL // или ваши env
-});
+const pool = require("../db");
 
 // нормализация входных данных
 const norm = (t = {}) => ({
@@ -17,8 +13,8 @@ const norm = (t = {}) => ({
   is_public: t.is_public !== false
 });
 
-// ---- GET /api/templates/public ----
-router.get(["/api/templates/public", "/api/tour-templates/public", "/api/templates", "/api/tour-templates"], async (_req, res) => {
+// ---- GET /public (mounted under /api/tour-templates and /api/templates) ----
+router.get("/public", async (_req, res) => {
   try {
     const q = `SELECT id, title, days FROM tour_templates WHERE is_public = TRUE ORDER BY title ASC`;
     const { rows } = await pool.query(q);
@@ -30,8 +26,20 @@ router.get(["/api/templates/public", "/api/tour-templates/public", "/api/templat
   }
 });
 
-// ---- POST /api/tour-templates (upsert) ----
-router.post(["/api/tour-templates", "/api/templates"], async (req, res) => {
+// ---- GET / (список публичных по умолчанию) ----
+router.get("/", async (_req, res) => {
+  try {
+    const q = `SELECT id, title, days FROM tour_templates WHERE is_public = TRUE ORDER BY title ASC`;
+    const { rows } = await pool.query(q);
+    res.json(rows);
+  } catch (e) {
+    console.error("GET /templates", e);
+    res.status(500).json({ error: "Failed to list templates" });
+  }
+});
+
+// ---- POST / (upsert) ----
+router.post("/", async (req, res) => {
   try {
     const t = norm(req.body || {});
     if (!t.title || t.days.length === 0) {
@@ -71,8 +79,8 @@ router.post(["/api/tour-templates", "/api/templates"], async (req, res) => {
   }
 });
 
-// ---- DELETE /api/tour-templates/:id ----
-router.delete(["/api/tour-templates/:id", "/api/templates/:id"], async (req, res) => {
+// ---- DELETE /:id ----
+router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     await pool.query(`DELETE FROM tour_templates WHERE id = $1`, [id]);
