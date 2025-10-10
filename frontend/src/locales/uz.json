@@ -1104,6 +1104,8 @@
   "meals_day_sum": "Kunlik ovqatlanish summasi"
 },
 "tpl": {
+    "program": "Sayohat dasturi",
+    "program_ph": "Dastur matnini kiriting (ko‘p qator, har band yangi qatorda)…",
     "title": "Tur andozalari",
     "btn_new": "+ Yangi andoza",
     "readonly_hint": "Barcha ta’minotchilar ko‘rishi mumkin. Andozalarni faqat administratorlar yaratishi va tahrirlashi mumkin.",
