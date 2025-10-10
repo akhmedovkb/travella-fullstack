@@ -568,6 +568,7 @@ const ProviderOption = (props) => {
 };
 
 function TemplateButtonWithTip({ tpl, onClick }) {
+  const { t } = useTranslation();
   const btnRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
@@ -602,11 +603,11 @@ function TemplateButtonWithTip({ tpl, onClick }) {
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="text-xs text-gray-500 mb-1">Маршрут</div>
+      <div className="text-xs text-gray-500 mb-1">{t('tb.route')}</div>
       <div className="font-medium mb-2">{route || "—"}</div>
       {program && (
         <>
-          <div className="text-xs text-gray-500 mb-1">Программа тура</div>
+          <div className="text-xs text-gray-500 mb-1">{t('tpl.program')}</div>
           <div className="text-[13px] whitespace-pre-wrap">{program}</div>
         </>
       )}
@@ -1869,6 +1870,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
       <div className="grid md:grid-cols-5 gap-3 text-sm mt-3">
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
+          <div>{toUSD(totals.guide).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')} (USD)</div>
@@ -1880,6 +1882,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')} (USD)</div>
+          <div>{toUSD(totals.transfers).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')} (USD)</div>
