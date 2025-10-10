@@ -15,7 +15,8 @@ export const listTemplates = () => {
   return (Array.isArray(arr) ? arr : []).map(x => ({
     id: String(x?.id || ""),
     title: String(x?.title || ""),
-    days: Array.isArray(x?.days) ? x.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : []
+    days: Array.isArray(x?.days) ? x.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
+    program: (x?.program === null || x?.program === undefined) ? null : String(x.program)
   }));
 };
 
@@ -27,7 +28,8 @@ export const upsertTemplateLocal = (tpl) => {
   const clean = {
     id: tpl.id || newId(),
     title: String(tpl.title || "").trim(),
-    days: Array.isArray(tpl.days) ? tpl.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : []
+    days: Array.isArray(tpl.days) ? tpl.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
+    program: (tpl.program === null || tpl.program === undefined) ? null : String(tpl.program).trim()
   };
   const list = listTemplates();
   const idx = list.findIndex(t => String(t.id) === String(clean.id));
@@ -66,6 +68,7 @@ export const upsertTemplateServer = async (tpl) => {
     title: String(tpl.title || "").trim(),
     days: Array.isArray(tpl.days) ? tpl.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
     is_public: tpl.is_public !== false, // по умолчанию публичный
+    program: (tpl.program === null || tpl.program === undefined) ? null : String(tpl.program).trim(),
   };
   return await fetchJSON("/api/tour-templates", {
     method: "POST",
@@ -105,7 +108,8 @@ export const syncTemplates = async () => {
     const clean = {
       id: String(s.id || ""),
       title: String(s.title || ""),
-      days: Array.isArray(s.days) ? s.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : []
+      days: Array.isArray(s.days) ? s.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city) : [],
+      program: (s.program === null || s.program === undefined) ? null : String(s.program)
     };
     if (clean.id) map.set(clean.id, clean);
   }
