@@ -1030,7 +1030,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           <button
                            key={tpl.id}
                             className="px-3 py-1 rounded border hover:bg-orange-50"
-                            title={tpl.days?.map((d) => d.city).join(" → ")}
+                            title={[
+                                        (tpl.days || []).map((d) => d.city).join(" → "),
+                                        (tpl.program ? "\n\n" + String(tpl.program) : "")
+                                      ].filter(Boolean).join("")}
                             onClick={() => {
                               setApplyTplId(tpl.id);
                               setApplyOpen(true);
