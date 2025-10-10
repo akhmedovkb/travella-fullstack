@@ -99,34 +99,53 @@ export default function TemplateCreator() {
       {!edit && (
         <div className="space-y-4">
           {!items.length && <div className="text-gray-500">{t('tpl.empty')}</div>}
-          {Object.entries((Array.isArray(items) ? items : [])
-            .slice()
-            .sort((a, b) => String(a?.title || "").localeCompare(String(b?.title || "")))
-            .reduce((acc, t) => {
-              const m   = String(t?.title || "").match(/^([A-Za-z]{2,4})\s*:/);
-              const key = (m && m[1] ? m[1] : "Other").toUpperCase();
-              if (!acc[key]) acc[key] = [];            // без ||= чтобы не зависеть от поддержки
-              acc[key].push({
-                ...t,
-                // страховка: days всегда массив объектов {city}
-                days: Array.isArray(t?.days)
-                  ? t.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city)
-                  : [],
-              });
-              return acc;
-            }, {}))
-          .sort(([a],[b])=>a.localeCompare(b))
-          .map(([country, list]) => (
+          {Object.entries(
+            (Array.isArray(items) ? items : [])
+              .slice()
+              /* стабильная сортировка без деструктуризации аргументов */
+              .sort((x, y) =>
+                String((x && x.title) || "").localeCompare(String((y && y.title) || ""))
+              )
+              .reduce((acc, it) => {
+                const title = String((it && it.title) || "");
+                const m = title.match(/^([A-Za-z]{2,4})\s*:/);
+                const key = (m && m[1] ? m[1] : "Other").toUpperCase();
+                if (!acc[key]) acc[key] = [];
+                acc[key].push({
+                  ...it,
+                  // страховка: days — всегда массив объектов { city }
+                  days: Array.isArray(it && it.days)
+                    ? it.days
+                        .map((d) => ({ city: String((d && d.city) || "").trim() }))
+                        .filter((d) => d.city)
+                    : [],
+                });
+                return acc;
+              }, {})
+          )
+          /* сортируем пары [key, list] — тоже без деструктуризации */
+          .sort((pa, pb) => {
+            const ka = String((pa && pa[0]) || "");
+            const kb = String((pb && pb[0]) || "");
+            return ka.localeCompare(kb);
+          })
+          .map((pair) => {
+            const country = pair && pair[0];
+            const list = (pair && pair[1]) || [];
+            return (
             <div key={country} className="space-y-3">
               <div className="text-sm font-semibold text-gray-700">{country}</div>
-              {list.map(t => (
+              {list.map((t) => (
                 <div key={t.id} className="border rounded p-3 flex items-start justify-between">
               <div>
                 <div className="font-semibold">{t.title}</div>
                 <div className="text-sm text-gray-600 mt-1">
                   {(Array.isArray(t.days) ? t.days : []).map((d, i) => (
-                          <span key={i}>{d.city}{i < t.days.length - 1 ? " → " : ""}</span>
-                    ))}
+                    <span key={i}>
+                      {d.city}
+                      {i < t.days.length - 1 ? " → " : ""}
+                    </span>
+                  ))}
                 </div>
               </div>
               {isAdmin ? (
@@ -140,7 +159,8 @@ export default function TemplateCreator() {
             </div>
               ))}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
