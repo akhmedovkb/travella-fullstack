@@ -135,23 +135,23 @@ export default function TemplateCreator() {
             return (
             <div key={country} className="space-y-3">
               <div className="text-sm font-semibold text-gray-700">{country}</div>
-              {list.map((t) => (
-                <div key={t.id} className="border rounded p-3 flex items-start justify-between">
+              {list.map((tpl) => (
+                <div key={tpl.id} className="border rounded p-3 flex items-start justify-between">
               <div>
-                <div className="font-semibold">{t.title}</div>
+                <div className="font-semibold">{tpl.title}</div>
                 <div className="text-sm text-gray-600 mt-1">
-                  {(Array.isArray(t.days) ? t.days : []).map((d, i) => (
+                  {(Array.isArray(tpl.days) ? tpl.days : []).map((d, i) => (
                     <span key={i}>
                       {d.city}
-                      {i < t.days.length - 1 ? " → " : ""}
+                      {i < tpl.days.length - 1 ? " → " : ""}
                     </span>
                   ))}
                 </div>
               </div>
               {isAdmin ? (
                 <div className="flex gap-2">
-                  <button className="px-3 py-1 border rounded" onClick={() => editTpl(t)}>{t('tpl.btn_edit')}</button>
-                  <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(t.id)}>{t('tpl.btn_delete')}</button>
+                  <button className="px-3 py-1 border rounded" onClick={() => editTpl(tpl)}>{t('tpl.btn_edit')}</button>
+                  <button className="px-3 py-1 border rounded text-red-600" onClick={() => del(tpl.id)}>{t('tpl.btn_delete')}</button>
                 </div>
               ) : (
                 <div className="text-xs text-gray-400 self-center">{t('tpl.view_only')}</div>
