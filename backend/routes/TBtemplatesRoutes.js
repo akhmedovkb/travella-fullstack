@@ -4,22 +4,31 @@ const router = express.Router();
 const pool = require("../db");
 
 // нормализация входных данных
-const norm = (t = {}) => ({
+const norm = (t = {}) => {
+  const obj = (t.program_i18n && typeof t.program_i18n === 'object') ? t.program_i18n : {};
+  const fromFlat = (t.program == null ? {} : { ru: String(t.program).trim() });
+  const fromRu = (t.program_ru == null ? {} : { ru: String(t.program_ru).trim() });
+  const fromEn = (t.program_en == null ? {} : { en: String(t.program_en).trim() });
+  const fromUz = (t.program_uz == null ? {} : { uz: String(t.program_uz).trim() });
+  const program_i18n = Object.fromEntries(
+    Object.entries({ ...obj, ...fromFlat, ...fromRu, ...fromEn, ...fromUz })
+      .map(([k,v]) => [k, String(v || '').trim()])
+      .filter(([,v]) => v.length)
+  );
+  return {
   id: t.id || null,
   title: String(t.title || "").trim(),
   days: Array.isArray(t.days)
     ? t.days.map(d => ({ city: String(d?.city || "").trim() })).filter(d => d.city)
     : [],
-    is_public: t.is_public !== false,
-  program: (t.program === null || t.program === undefined)
-    ? null
-    : String(t.program).trim()
-});
+  is_public: t.is_public !== false,
+  program_i18n
+}};
 
 // ---- GET /public (mounted under /api/tour-templates and /api/templates) ----
 router.get("/public", async (_req, res) => {
   try {
-        const q = `SELECT id, title, days, program
+        const q = `SELECT id, title, days, program_i18n
                FROM tour_templates
                WHERE is_public = TRUE
                ORDER BY title ASC`;
@@ -35,7 +44,7 @@ router.get("/public", async (_req, res) => {
 // ---- GET / (список публичных по умолчанию) ----
 router.get("/", async (_req, res) => {
   try {
-        const q = `SELECT id, title, days, program
+        const q = `SELECT id, title, days, program_i18n
                FROM tour_templates
                WHERE is_public = TRUE
                ORDER BY title ASC`;
@@ -59,14 +68,11 @@ router.post("/", async (req, res) => {
       // попытка обновить по id
       const q = `
         UPDATE tour_templates
-           SET title = $2,
-               days = $3::jsonb,
-               is_public = $4,
-               program = NULLIF($5,''),
+           SET title = $2, days = $3::jsonb, is_public = $4, program_i18n = $5::jsonb,
                updated_at = now()
          WHERE id = $1
-       RETURNING id, title, days, program`;
-      const { rows } = await pool.query(q, [
+       RETURNING id, title, days, program_i18n`;
+      const { rows } = await pool.query(q, [t.id, t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
         t.id,
         t.title,
         JSON.stringify(t.days),
@@ -76,34 +82,23 @@ router.post("/", async (req, res) => {
       if (rows.length) return res.json(rows[0]); // 200
       // если не нашли — создаём новый с указанным id
       const qi = `
-        INSERT INTO tour_templates (id, title, days, is_public, program)
-        VALUES ($1, $2, $3::jsonb, $4, NULLIF($5,''))
+        INSERT INTO tour_templates (id, title, days, is_public, program_i18n)
+        VALUES ($1, $2, $3::jsonb, $4, $5::jsonb)
         ON CONFLICT (id) DO UPDATE
           SET title = EXCLUDED.title,
               days = EXCLUDED.days,
               is_public = EXCLUDED.is_public,
-              program = EXCLUDED.program
-        RETURNING id, title, days, program`;
-      const ins = await pool.query(qi, [
-        t.id,
-        t.title,
-        JSON.stringify(t.days),
-        t.is_public,
-        t.program ?? null
-      ]);
+              program_i18n = EXCLUDED.program_i18n
+        RETURNING id, title, days, program_i18n`;
+      const ins = await pool.query(qi, [t.id, t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
       return res.status(201).json(ins.rows[0]);
     } else {
       // без id — обычный insert
       const q = `
-        INSERT INTO tour_templates (title, days, is_public, program)
-        VALUES ($1, $2::jsonb, $3, NULLIF($4,''))
-        RETURNING id, title, days, program`;
-      const { rows } = await pool.query(q, [
-        t.title,
-        JSON.stringify(t.days),
-        t.is_public,
-        t.program ?? null
-      ]);
+        INSERT INTO tour_templates (title, days, is_public, program_i18n)
+        VALUES ($1, $2::jsonb, $3, $4::jsonb)
+        RETURNING id, title, days, program_i18n`;
+      const { rows } = await pool.query(q, [t.title, JSON.stringify(t.days), t.is_public, JSON.stringify(t.program_i18n || {})]);
       return res.status(201).json(rows[0]);
     }
   } catch (e) {
