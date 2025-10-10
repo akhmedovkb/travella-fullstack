@@ -72,23 +72,28 @@ export const removeTemplateLocal = (id) => {
 
 // ── серверные вызовы (best-effort) ─────────────────────────────────────────────
 export const upsertTemplateServer = async (tpl) => {
-  // безопасный best-effort апсерт; если на бэке другой путь — добавь сюда
-  for (const [url, method] of [
+  // best-effort: пробуем несколько путей, успешным считаем только res.ok
+  const base = API_BASE || window.frontend?.API_BASE || "";
+  const tries = [
     ["/api/templates", "POST"],
     ["/api/tour-templates", "POST"],
-  ]) {
-    const res = await fetchJSONLoose(url, null)?.catch?.(() => null); // ping
-    // если эндпоинт существует, шлём отдельным запросом
+    // при желании можно добавить сюда PUT/UPSERT варианты
+    // ["/api/templates/upsert", "POST"],
+  ];
+  for (const [url, method] of tries) {
     try {
-      await fetch(new URL(url, API_BASE || window.frontend?.API_BASE || ""), {
+      const res = await fetch(new URL(url, base), {
         method,
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(tpl),
       });
-      break;
-    } catch { /* ignore and try next */ }
+      if (res && res.ok) return true;   // только ok считаем успехом
+    } catch {
+      // сетевые ошибки игнорируем и идём к следующему пути
+    }
   }
+  return false;
 };
 
 /**
@@ -109,16 +114,20 @@ export const syncTemplates = async () => {
     if (items != null) { remote = items; break; }
   }
 
-  // если удалённый список получен — он авторитетный
-  if (Array.isArray(remote)) {
-    const serverNorm = remote
-      .map(norm)
-      .filter(t => t.title && t.days.length)
-      .sort((a, b) => a.title.localeCompare(b.title));
-    writeLS(serverNorm);
-    return serverNorm;
+  const local = readLS();
+  // Если сервера нет ИЛИ пришёл пустой список — ничего не трогаем
+  if (!Array.isArray(remote) || remote.length === 0) {
+    return local;
   }
-
-  // фолбэк: ничего не трогаем, оставляем локальные
-  return readLS();
+  // Сервер есть и вернул непустой список — мержим (сервер приоритетнее)
+  const serverNorm = remote
+    .map(norm)
+    .filter(t => t.title && t.days.length);
+  const byId = new Map();
+  for (const t of local) byId.set(String(t.id), norm(t));
+  for (const t of serverNorm) byId.set(String(t.id), norm(t));
+  const merged = Array.from(byId.values())
+    .sort((a,b) => a.title.localeCompare(b.title));
+  writeLS(merged);
+  return merged;
 };
