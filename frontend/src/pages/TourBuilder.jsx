@@ -567,6 +567,74 @@ const ProviderOption = (props) => {
   );
 };
 
+function TemplateButtonWithTip({ tpl, onClick }) {
+  const btnRef = React.useRef(null);
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+
+  const show = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.top + r.height / 2, left: r.right + 10 });
+    setOpen(true);
+  };
+  const hide = () => setOpen(false);
+
+  const route = (Array.isArray(tpl?.days) ? tpl.days : [])
+    .map((d) => String(d?.city || "").trim())
+    .filter(Boolean)
+    .join(" → ");
+
+  const program = String(tpl?.program || "").trim();
+
+  const Tip = (
+    <div
+      style={{
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        transform: "translateY(-50%)",
+        zIndex: 10000,
+        maxWidth: 360,
+      }}
+      className="rounded-lg shadow-lg border bg-white p-3 text-sm leading-5"
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="text-xs text-gray-500 mb-1">Маршрут</div>
+      <div className="font-medium mb-2">{route || "—"}</div>
+      {program && (
+        <>
+          <div className="text-xs text-gray-500 mb-1">Программа тура</div>
+          <div className="text-[13px] whitespace-pre-wrap">{program}</div>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      ref={btnRef}
+      onMouseEnter={show}
+      onFocus={show}
+      onMouseLeave={hide}
+      onBlur={hide}
+      className="inline-block"
+    >
+      <button
+        className="px-3 py-1 rounded border hover:bg-orange-50"
+        onClick={onClick}
+        title=""                       /* отключаем системный tooltip */
+      >
+        {tpl.title}
+      </button>
+      {open && createPortal(Tip, document.body)}
+    </div>
+  );
+}
+
+
 const HotelOption = (props) => {
   const h = props.data?.raw;
   const tip = [
@@ -1026,22 +1094,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {/* содержимое группы */}
                     {open && (
                       <div className="px-3 pb-3 pt-1 flex flex-wrap gap-2">
-                        {list.map((tpl) => (
-                          <button
+                       {list.map((tpl) => (
+                         <TemplateButtonWithTip
                            key={tpl.id}
-                            className="px-3 py-1 rounded border hover:bg-orange-50"
-                            title={[
-                                        (tpl.days || []).map((d) => d.city).join(" → "),
-                                        (tpl.program ? "\n\n" + String(tpl.program) : "")
-                                      ].filter(Boolean).join("")}
-                            onClick={() => {
-                              setApplyTplId(tpl.id);
-                              setApplyOpen(true);
-                            }}
-                          >
-                            {tpl.title}
-                          </button>
-                        ))}
+                           tpl={tpl}
+                           onClick={() => {
+                             setApplyTplId(tpl.id);
+                             setApplyOpen(true);
+                           }}
+                         />
+                       ))}
                       </div>
                     )}
                   </div>
