@@ -166,9 +166,17 @@ const normalizeLevel = (s) => {
   return x; // оставляем как есть, вдруг кастом
 };
 
-const getLangLabel = (code) => {
+const getLangLabel = (code, uiLang = "en") => {
   const c = normalizeLangCode(code);
-  return LANGUAGE_OPTIONS.find(o => o.value === c)?.label || code;
+  try {
+    if (typeof Intl !== "undefined" && Intl.DisplayNames) {
+      const dn = new Intl.DisplayNames([uiLang], { type: "language" });
+      const name = dn.of(c);
+      if (name && name !== c) return name[0].toUpperCase() + name.slice(1);
+    }
+  } catch {}
+  // фолбэк на ручной список, если что-то пойдёт не так
+  return LANGUAGE_OPTIONS.find(o => o.value === c)?.label || c;
 };
 
 const getLevelLabel = (lvl) => {
