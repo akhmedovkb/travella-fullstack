@@ -2,9 +2,16 @@
 const express = require("express");
 const router = express.Router();
 const {
-  linkProviderChat,
-  linkClientChat /* , tgSend */,
-} = require("../utils/telegram");
+   linkProviderChat,
+   linkClientChat,
+   tgSend,
+ } = require("../utils/telegram");
+
+// RU/UZ/EN привет после успешной привязки
+const WELCOME_TEXT =
+  "Вы подключили бот! Ожидайте сообщения по заявкам!\n" +
+  "Botni uladingiz! Arizalar bo‘yicha xabarlarni kuting!\n" +
+  "You have connected the bot! Please wait for request notifications!";
 
 const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret";
 // Если при установке вебхука в Telegram вы передавали secret_token,
@@ -87,24 +94,23 @@ router.post(`/webhook/${SECRET}`, async (req, res) => {
       if (Number.isFinite(providerId) && providerId > 0) {
         // В utils/telegram можно принимать (id, chatId) или (id, chatId, username) — не ломает совместимость
         await linkProviderChat(providerId, chatId, username);
-        // Можно отправить подтверждение:
-        // await tgSend(chatId, "Профиль поставщика привязан. Будете получать уведомления.");
+       // Мгновенно подтверждаем на трёх языках
+       await tgSend(chatId, WELCOME_TEXT);
         return res.json({ ok: true, linked: "provider", id: providerId });
       }
 
       if (Number.isFinite(clientId) && clientId > 0) {
         await linkClientChat(clientId, chatId, username);
-        // await tgSend(chatId, "Профиль клиента привязан. Будете получать уведомления.");
+        await tgSend(chatId, WELCOME_TEXT);
         return res.json({ ok: true, linked: "client", id: clientId });
       }
 
-      // Если пришёл /start без полезной нагрузки — просто ок
-      return res.json({ ok: true, linked: null });
+     // Если пришёл /start без payload — просто приветствуем
+     await tgSend(chatId, WELCOME_TEXT);
+     return res.json({ ok: true, linked: null });
     }
 
-    // Не /start — можно молча отвечать ok.
-    // Или включить авто-ответ (на ваш вкус):
-    // await tgSend(chatId, "Бот подключен. Теперь вы будете получать уведомления.");
+  // Не /start — просто ok (ничего не шлём)
     return res.json({ ok: true });
   } catch (e) {
     // Telegram ждёт 200, чтобы не ретраить. Возвращаем ok.
