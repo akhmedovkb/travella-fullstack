@@ -27,6 +27,11 @@ import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
 
 import Header from "./components/Header";
+// CMS (подвал)
+import Footer from "./components/Footer";
+import CmsPage from "./pages/CmsPage";
+import CmsEditor from "./pages/admin/CmsEditor";
+
 
 // Отели
 import Hotels from "./pages/Hotels";
@@ -80,10 +85,10 @@ export default function App() {
   return (
     <Router>
       <ToastMount />
-      <div className="min-h-screen bg-gray-100 p-4">
+      <div className="min-h-screen bg-gray-100 flex flex-col">
         <Header />
-
-        <Routes>
+        <main className="flex-1 p-4">
+          <Routes>
           {/* Поставщик */}
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
@@ -135,6 +140,9 @@ export default function App() {
           />
           <Route path="/profile/client/:id" element={<ClientProfile />} />
           <Route path="/admin/moderation" element={<AdminModeration />} />
+           {/* Публичные CMS-страницы (подвал) */}
+          <Route path="/page/:slug" element={<CmsPage />} />
+
 
           {/* Отели (публичные) */}
           <Route path="/hotels" element={<Hotels />} />
@@ -152,6 +160,18 @@ export default function App() {
               </PrivateRoute>
             }
           />
+          {/* Админ: редактор CMS страниц подвала */}
+          <Route
+            path="/admin/pages"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <CmsEditor />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+
 
           {/* Админ: база входных билетов */}
            <Route
@@ -209,7 +229,9 @@ export default function App() {
             }
           />
 
-        </Routes>
+          </Routes>
+        </main>
+        <Footer />
       </div>
     </Router>
   );
