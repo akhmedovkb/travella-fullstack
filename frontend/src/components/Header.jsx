@@ -50,6 +50,13 @@ const IconTicket = (p) => (
     <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
   </svg>
 );
+const IconDoc = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M7 3h7l5 5v13H7z" stroke="currentColor" strokeWidth="2"/>
+    <path d="M14 3v6h6" stroke="currentColor" strokeWidth="2"/>
+    <path d="M10 13h7M10 17h7M10 9h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
 const IconBurger = (p) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -301,6 +308,7 @@ export default function Header() {
                   <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                   <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                   <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+                  <NavItem to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
                 </nav>
               )}
               {/* быстрый сет пароля справа */}
@@ -350,6 +358,7 @@ export default function Header() {
                 <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
                 <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                 <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+                <NavItemMobile to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
               </RowGroup>
             )}
           </nav>
