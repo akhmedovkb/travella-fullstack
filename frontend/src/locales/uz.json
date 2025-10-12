@@ -34,6 +34,8 @@
   },
 
   "bookings": {
+    "provider_cancel_reason": "Rad etilishning sababini ko`rsating",
+    "waiting_for_requester": "Taklif yo`naltirildi. Mijozning javobi kutilmoqda!",
     "price_agreement": "Narxni kelishish",
     "last_offer": "Oxirgi taklif",
     "price": "Narx",
