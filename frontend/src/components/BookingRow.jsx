@@ -136,6 +136,7 @@ export default function BookingRow({
   booking,
   viewerRole,            // 'provider' (входящие) | 'client' (исходящие у провайдера и кабинет клиента)
   needPriceForAccept,    // показать «Подтвердить» только при наличии provider_price
+  hideAcceptIfQuoted = false, // скрыть «Подтвердить», если цена уже отправлена (ожидаем подтверждение заявителя)
   hideClientCancel,      // спрятать кнопку «Отмена» (когда надо)
   onAccept,
   onReject,
@@ -239,11 +240,13 @@ const profileHref = useMemo(() => {
   const createdAtLabel = createdAt
     ? createdAt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
     : null;
-
+  const alreadyQuoted = Number(booking?.provider_price) > 0;
+  // Поставщик больше НЕ подтверждает входящие: блокируем всегда
   const canAccept =
-    viewerRole === "provider" &&
+    viewerRole !== "provider" &&
     String(booking?.status) === "pending" &&
-    (!needPriceForAccept || Number(booking?.provider_price) > 0);
+    (!needPriceForAccept || alreadyQuoted) &&
+    !hideAcceptIfQuoted;
 
   const canReject = viewerRole === "provider" && String(booking?.status) === "pending";
   const canCancel = viewerRole !== "provider" && !hideClientCancel && String(booking?.status) === "pending";
@@ -350,19 +353,24 @@ const profileHref = useMemo(() => {
           <div className="mt-3 flex flex-wrap gap-2">
             {toFiles(booking.attachments).map((raw, i) => {
               const { url, name } = resolveFile(raw);
-                  if (!url) {
-                    const label = name || String(f.url || f.src || f.href || "file");
-                    return (
-                      <span
-                        key={i}
-                        className="rounded border bg-gray-50 px-2 py-1 text-sm"
-                        title={label}
-                      >
-                        {label}
-                      </span>
-                    );
-                  }
-                  return isImg(url) ? (
+              if (!url) {
+                // raw может быть строкой или объектом — достаём подпись безопасно
+                const fallback =
+                  name ||
+                  (typeof raw === "string"
+                    ? raw
+                    : String(raw?.url || raw?.src || raw?.href || "file"));
+                return (
+                  <span
+                    key={i}
+                    className="rounded border bg-gray-50 px-2 py-1 text-sm"
+                    title={fallback}
+                  >
+                    {fallback}
+                  </span>
+                );
+              }
+              return isImg(url) ? (
                 <a
                   key={i}
                   href={url}
