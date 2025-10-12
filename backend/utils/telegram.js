@@ -670,13 +670,26 @@ async function notifyModerationNew({ service }) {
 async function notifyModerationApproved({ service }) {
   try {
     const s = await _enrichService(service);
-    const lines = [
+    // 1) автору услуги (RU/UZ/EN)
+    const chatId = await getProviderChatId(s.provider_id);
+    if (chatId) {
+      const textProvider =
+        `✅ Услуга одобрена\n` +
+        `${_serviceLines(s).join("\n")}\n\n` +
+        `✅ Xizmat tasdiqlandi\n` +
+        `${_serviceLines(s).join("\n")}\n\n` +
+        `✅ Service approved\n` +
+        `${_serviceLines(s).join("\n")}`;
+      await tgSend(chatId, textProvider);
+    }
+    // 2) как и раньше — уведомим админов (для лога модерации)
+    const linesAdmin = [
       `<b>✅ Услуга одобрена</b>`,
       ..._serviceLines(s),
       "",
       `🔗 Модерация: ${urlAdmin("moderation")}`,
     ];
-    await _sendToAdmins(lines.join("\n"));
+    await _sendToAdmins(linesAdmin.join("\n"));
   } catch (e) {
     console.error("[tg] notifyModerationApproved failed:", e?.message || e);
   }
@@ -685,14 +698,25 @@ async function notifyModerationApproved({ service }) {
 async function notifyModerationRejected({ service, reason }) {
   try {
     const s = await _enrichService(service);
-    const lines = [
+    // 1) автору услуги (RU/UZ/EN)
+    const chatId = await getProviderChatId(s.provider_id);
+    if (chatId) {
+      const reasonLine = reason ? `📝 Причина: ${esc(reason)}` : "";
+      const textProvider =
+        `❌ Услуга отклонена\n${_serviceLines(s).join("\n")}\n${reasonLine}\n\n` +
+        `❌ Xizmat rad etildi\n${_serviceLines(s).join("\n")}\n${reasonLine}\n\n` +
+        `❌ Service rejected\n${_serviceLines(s).join("\n")}\n${reasonLine}`;
+      await tgSend(chatId, textProvider);
+    }
+    // 2) админам — как и раньше
+    const linesAdmin = [
       `<b>❌ Услуга отклонена</b>`,
       ..._serviceLines(s),
       reason ? `📝 Причина: ${esc(reason)}` : "",
       "",
       `🔗 Модерация: ${urlAdmin("moderation")}`,
     ].filter(Boolean);
-    await _sendToAdmins(lines.join("\n"));
+    await _sendToAdmins(linesAdmin.join("\n"));
   } catch (e) {
     console.error("[tg] notifyModerationRejected failed:", e?.message || e);
   }
@@ -701,13 +725,23 @@ async function notifyModerationRejected({ service, reason }) {
 async function notifyModerationUnpublished({ service }) {
   try {
     const s = await _enrichService(service);
-    const lines = [
+    // 1) автору услуги — уведомление о снятии
+    const chatId = await getProviderChatId(s.provider_id);
+    if (chatId) {
+      const textProvider =
+        `📦 Услуга снята с публикации\n${_serviceLines(s).join("\n")}\n\n` +
+        `📦 Xizmat nashrdan olindi\n${_serviceLines(s).join("\n")}\n\n` +
+        `📦 Listing unpublished\n${_serviceLines(s).join("\n")}`;
+      await tgSend(chatId, textProvider);
+    }
+    // 2) админам — как и раньше
+    const linesAdmin = [
       `<b>📦 Услуга снята с публикации</b>`,
       ..._serviceLines(s),
       "",
       `🔗 Модерация: ${urlAdmin("moderation")}`,
     ];
-    await _sendToAdmins(lines.join("\n"));
+    await _sendToAdmins(linesAdmin.join("\n"));
   } catch (e) {
     console.error("[tg] notifyModerationUnpublished failed:", e?.message || e);
   }
