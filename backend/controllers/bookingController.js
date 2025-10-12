@@ -482,60 +482,12 @@ const providerQuote = async (req, res) => {
 };
 
 // Провайдер подтверждает входящую бронь
-const acceptBooking = async (req, res) => {
-  try {
-    const providerId = req.user?.id;
-    const id = Number(req.params.id);
-    const { price, note } = req.body || {};
-
-    const pType = await getProviderType(providerId);
-    if (!["guide", "transport"].includes(pType)) {
-      return res.status(400).json({ message: "Действие доступно только для гида и транспорта" });
-    }
-
-    const own = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
-    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
-    if (own.rows[0].provider_id !== providerId) {
-      return res.status(403).json({ message: "Недостаточно прав" });
-    }
-
-    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
-    const days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
-    if (!days.length) return res.status(400).json({ message: "Не удалось определить даты бронирования" });
-
-    const ok = await isDatesFree(providerId, days, id);
-    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
-
-    await pool.query(
-      `UPDATE bookings
-          SET status='confirmed',
-              provider_price = COALESCE($1, provider_price),
-              provider_note  = COALESCE($2, provider_note),
-              updated_at = NOW()
-        WHERE id=$3`,
-      [price ?? null, note ?? null, id]
-    );
-    res.json({ ok: true, status: "confirmed" });
-        try {
-      const bQ = await pool.query(
-        `SELECT id, provider_id, client_id, requester_provider_id
-           FROM bookings WHERE id=$1`, [id]
-      );
-      const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
-      const booking = {
-        ...bQ.rows[0],
-        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-      };
-      tg.notifyConfirmed({ booking }).catch(e => {
-        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
-      });
-    } catch (e) {
-  console.error("acceptBooking notify block failed:", e?.message || e);
-}
-  } catch (err) {
-    console.error("acceptBooking error:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
-  }
+const acceptBooking = async (_req, res) => {
+  // Поставщик больше не может подтверждать; подтверждение — только у заявителя
+  return res.status(409).json({
+    code: "PROVIDER_CANNOT_CONFIRM",
+    message: "Подтверждение выполняет заявитель после получения предложения по цене",
+  });
 };
 
 // Провайдер отклоняет (входящую)
@@ -633,6 +585,86 @@ const cancelBooking = async (req, res) => {
   } catch (err) {
     console.error("cancelBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+/* ========= provider cancel (reason + penalty) ========= */
+async function penalizeProvider(providerId, delta = -0.2) {
+  try {
+    const cols = await getExistingColumns("providers", ["rating", "cancel_penalty", "cancellations"]);
+    if (cols.rating) {
+      await pool.query(
+        `UPDATE providers
+            SET rating = GREATEST(0, LEAST(5, COALESCE(rating,3) + $2)),
+                updated_at = NOW()
+         WHERE id=$1`,
+        [providerId, delta]
+      );
+    } else if (cols.cancel_penalty) {
+      await pool.query(
+        `UPDATE providers SET cancel_penalty = COALESCE(cancel_penalty,0)+1 WHERE id=$1`,
+        [providerId]
+      );
+    }
+    if (cols.cancellations) {
+      await pool.query(
+        `UPDATE providers SET cancellations = COALESCE(cancellations,0)+1 WHERE id=$1`,
+        [providerId]
+      );
+    }
+  } catch {}
+}
+
+// Поставщик отменяет входящую бронь (после согласования — обязательно указать причину)
+const cancelBookingByProvider = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    const id = Number(req.params.id);
+    const { reason } = req.body || {};
+
+    const own = await pool.query(`SELECT provider_id, status FROM bookings WHERE id=$1`, [id]);
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].provider_id !== providerId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    const wasConfirmed = own.rows[0].status === "confirmed";
+    if (wasConfirmed && !reason) {
+      return res.status(400).json({ message: "Укажите причину отмены согласованной брони" });
+    }
+
+    const cols = await getExistingColumns("bookings", ["cancelled_by"]);
+    let sql = `UPDATE bookings
+                  SET status='cancelled',
+                      provider_note = COALESCE($2, provider_note),
+                      updated_at = NOW()`;
+    if (cols.cancelled_by) sql += `, cancelled_by='provider'`;
+    sql += ` WHERE id=$1`;
+    await pool.query(sql, [id, reason ?? null]);
+
+    if (wasConfirmed) await penalizeProvider(providerId, -0.2);
+
+    try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id FROM bookings WHERE id=$1`,
+        [id]
+      );
+      const dQ = await pool.query(
+        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`,
+        [id]
+      );
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d))),
+      };
+      await tg.notifyCancelled({ booking, by: "provider", reason });
+    } catch (e) {
+      console.error("cancelByProvider notify failed:", e?.message || e);
+    }
+    return res.json({ ok: true, status: "cancelled" });
+  } catch (err) {
+    console.error("cancelBookingByProvider error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
@@ -828,4 +860,5 @@ module.exports = {
   confirmBooking,
   confirmBookingByRequester,
   cancelBookingByRequester,
+  cancelBookingByProvider,
 };
