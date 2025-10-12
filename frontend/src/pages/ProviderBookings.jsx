@@ -200,6 +200,22 @@ export default function ProviderBookings() {
       window.dispatchEvent(new Event("provider:counts:refresh"));
     }
   };
+  
+  // входящие: отмена подтверждённой брони поставщиком (с причиной)
+  const cancelIncomingConfirmed = async (b) => {
+    const reason = window.prompt(
+      t("bookings.provider_cancel_reason", { defaultValue: "Укажите причину отмены" })
+    );
+    try {
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/cancel-by-provider`, { reason }, cfg());
+      tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
+    } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
+  };
 
   const reject = async (b) => {
     try {
@@ -352,6 +368,17 @@ export default function ProviderBookings() {
                   </button>
                   <button onClick={() => cancelOutgoing(b)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800">
                     {t("actions.cancel", { defaultValue: "Отмена" })}
+                  </button>
+                </div>
+              )}             
+              {/* Входящие подтверждённые: дать поставщику отменить с причиной */}
+              {isIncoming && String(b.status) === "confirmed" && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => cancelIncomingConfirmed(b)}
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
+                  >
+                    {t("actions.cancel", { defaultValue: "Отменить" })}
                   </button>
                 </div>
               )}
