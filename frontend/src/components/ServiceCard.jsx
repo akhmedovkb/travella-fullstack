@@ -60,6 +60,24 @@ const firstImageFrom = (val) => {
   return null;
 };
 
+/** Собрать массив изображений из разных мест, убрать дубли */
+const collectImages = (...vals) => {
+  const out = [];
+  const push = (v) => {
+    const r = firstImageFrom(v);
+    if (r && !out.includes(r)) out.push(r);
+  };
+  for (const val of vals) {
+    if (!val) continue;
+    if (typeof val === "string" || typeof val === "object" && !Array.isArray(val)) {
+      push(val);
+    } else if (Array.isArray(val)) {
+      for (const it of val) push(it);
+    }
+  }
+  return out;
+};
+
 /* Тип провайдера/категории: гид/транспорт? */
 const isGuideOrTransport = (raw) => {
   if (raw == null) return false;
@@ -189,8 +207,6 @@ function extractServiceFields(item, viewerRole) {
     item?.name
   );
 
-  // если ПРОВАЙДЕР — показываем net (с фолбэком на gross),
-  // иначе (клиент ИЛИ ГОСТЬ) — показываем gross
   const rawPrice =
     viewerRole === "provider"
       ? firstNonEmpty(
@@ -209,7 +225,6 @@ function extractServiceFields(item, viewerRole) {
           details?.totalPrice,
           svc.grossPrice,
           svc.price_gross,
-          // фолбэк на net, если gross отсутствует
           details?.netPrice,
           details?.price,
           svc.netPrice,
@@ -361,7 +376,6 @@ function extractServiceFields(item, viewerRole) {
 
   const status = firstNonEmpty(svc.status, item.status, details?.status);
 
-  // ВАЖНО: детали рейса (для всплывашки)
   const flightDetails = firstNonEmpty(
     details?.flightDetails,
     details?.flight_details,
@@ -377,7 +391,6 @@ function extractServiceFields(item, viewerRole) {
     accommodation,
     dates,
     direction,
-    rawPrice,
     prettyPrice,
     inlineProvider,
     providerId,
@@ -429,22 +442,47 @@ export default function ServiceCard({
 
   const id = svc.id ?? item.id;
 
-  const image = firstImageFrom([
-    svc.images,
-    details?.images,
-    item?.images,
-    svc.cover,
-    svc.image,
-    details?.cover,
-    details?.image,
-    item?.cover,
-    item?.image,
-    details?.photo,
-    details?.picture,
-    details?.imageUrl,
-    svc.image_url,
-    item?.image_url,
-  ]);
+  /* ========= КАРУСЕЛЬ: собираем список изображений ========= */
+  const images = collectImages(
+    svc.images, details?.images, item?.images,
+    svc.gallery, details?.gallery, item?.gallery,
+    svc.photos, details?.photos, item?.photos,
+    svc.cover, svc.image, details?.cover, details?.image,
+    item?.cover, item?.image,
+    details?.photo, details?.picture, details?.imageUrl,
+    svc.image_url, item?.image_url
+  );
+  const [idx, setIdx] = useState(0);
+  useEffect(() => { setIdx(0); }, [id]);             // при смене услуги — к первому кадру
+  useEffect(() => { if (idx >= images.length) setIdx(0); }, [images.length]); // на случай фильтрации
+
+  const go = (n) => { if (!images.length) return; setIdx((p) => (p + n + images.length) % images.length); };
+  const prev = () => go(-1);
+  const next = () => go(+1);
+
+  // обработка ошибок загрузки кадра — пропускаем испорченный
+  const onImgError = () => {
+    if (!images.length) return;
+    // попробуем сдвинуться дальше, чтобы пользователь не видел битое изображение
+    setIdx((p) => (p + 1) % images.length);
+  };
+
+  // свайп для мобильных
+  const touch = useRef({ x: 0, y: 0, active: false });
+  const onTouchStart = (e) => {
+    const t = e.touches?.[0]; if (!t) return;
+    touch.current = { x: t.clientX, y: t.clientY, active: true };
+  };
+  const onTouchEnd = (e) => {
+    if (!touch.current.active) return;
+    const t = e.changedTouches?.[0]; if (!t) return;
+    const dx = t.clientX - touch.current.x;
+    const dy = t.clientY - touch.current.y;
+    touch.current.active = false;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) next(); else prev();
+    }
+  };
 
   // provider profile enrichment
   const [provider, setProvider] = useState(null);
@@ -455,44 +493,22 @@ export default function ServiceCard({
       const p = await fetchProviderProfile(providerId);
       if (alive) setProvider(p);
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [providerId]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
   const supplierName = firstNonEmpty(
-    prov?.name,
-    prov?.title,
-    prov?.display_name,
-    prov?.company_name,
-    prov?.brand,
-    flatName
+    prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand, flatName
   );
   const supplierPhone = firstNonEmpty(
-    prov?.phone,
-    prov?.phone_number,
-    prov?.phoneNumber,
-    prov?.tel,
-    prov?.mobile,
-    prov?.whatsapp,
-    prov?.whatsApp,
-    prov?.phones?.[0],
-    prov?.contacts?.phone,
-    prov?.contact_phone,
-    flatPhone
+    prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
+    prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone,
+    prov?.contact_phone, flatPhone
   );
   const supplierTg = (() => {
     const value = firstNonEmpty(
-      prov?.telegram,
-      prov?.tg,
-      prov?.telegram_username,
-      prov?.telegram_link,
-      prov?.contacts?.telegram,
-      prov?.socials?.telegram,
-      prov?.social,
-      prov?.social_link,
-      flatTg
+      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
+      prov?.contacts?.telegram, prov?.socials?.telegram, prov?.social, prov?.social_link, flatTg
     );
     if (!value) return null;
     const s = String(value).trim();
@@ -504,7 +520,6 @@ export default function ServiceCard({
 
   const rating = Number(svc.rating ?? item.rating ?? 0);
   const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
-  // не показываем бейджи для 'draft' и 'published'
   const statusForBadge =
     statusLower === "draft" || statusLower === "published" ? null : statusRaw;
   const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
@@ -559,23 +574,84 @@ export default function ServiceCard({
         className,
       ].join(" ")}
     >
-      <div className="aspect-[16/10] bg-gray-100 relative">
-        {image ? (
-          <img
-            src={image}
-            alt={title || t("marketplace.no_image")}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.currentTarget.src = "";
-            }}
-          />
+      {/* ===== IMAGES with CAROUSEL ===== */}
+      <div
+        className="aspect-[16/10] bg-gray-100 relative select-none"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {images.length ? (
+          <>
+            <img
+              key={images[idx]}
+              src={images[idx]}
+              alt={title || t("marketplace.no_image")}
+              className="w-full h-full object-cover"
+              onError={onImgError}
+              draggable={false}
+            />
+
+            {/* arrows */}
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous"
+                  onClick={(e) => { e.stopPropagation(); prev(); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-30 hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/40 hover:bg-black/55 text-white ring-1 ring-white/20"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next"
+                  onClick={(e) => { e.stopPropagation(); next(); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-30 hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/40 hover:bg-black/55 text-white ring-1 ring-white/20"
+                >
+                  ›
+                </button>
+              </>
+            )}
+
+            {/* dots + mini previews */}
+            {images.length > 1 && (
+              <div className="absolute bottom-2 left-0 right-0 z-30 flex items-center justify-center gap-1.5">
+                {images.map((src, i) => (
+                  <button
+                    key={src + i}
+                    onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+                    className={[
+                      "relative w-2.5 h-2.5 rounded-full ring-1 ring-white/40 transition-opacity",
+                      i === idx ? "bg-white/95 opacity-100" : "bg-white/60 opacity-60 hover:opacity-90",
+                    ].join(" ")}
+                    title={`${i + 1}/${images.length}`}
+                    onMouseEnter={(e) => {
+                      const preview = e.currentTarget.querySelector("img");
+                      if (preview) preview.style.opacity = "1";
+                    }}
+                    onMouseLeave={(e) => {
+                      const preview = e.currentTarget.querySelector("img");
+                      if (preview) preview.style.opacity = "0";
+                    }}
+                  >
+                    {/* mini-preview (desktop hover) */}
+                    <img
+                      src={src}
+                      alt=""
+                      className="pointer-events-none opacity-0 transition-opacity duration-150 hidden md:block absolute -top-16 left-1/2 -translate-x-1/2 w-20 h-12 object-cover rounded-md ring-1 ring-white/30 shadow-lg"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400">
             <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
           </div>
         )}
 
-        {/* top overlay */}
+        {/* top overlay (таймер, бейджи, избранное) */}
         <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none">
           <div className="flex items-center gap-2">
             {expireAt &&
@@ -591,39 +667,31 @@ export default function ServiceCard({
                   ⏳ {formatLeft(leftMs, dayShort)}
                 </span>
               ))}
-
-            {badge && (
-              <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                {badge}
-              </span>
-            )}
-
-            {SHOW_REVIEWS && (
-              <button
-                ref={revBtnRef}
-                className="pointer-events-auto p-1.5 rounded-full bg-black/30 hover:bg-black/40 text-white backdrop-blur-md ring-1 ring-white/20 relative"
-                onMouseEnter={openReviews}
-                onMouseLeave={closeReviews}
-                title={t("marketplace.reviews") || "Отзывы об услуге"}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z" />
-                </svg>
-              </button>
-            )}
+            {(() => {
+              const rating = Number(svc.rating ?? item.rating ?? 0);
+              const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
+              const statusForBadge =
+                statusLower === "draft" || statusLower === "published" ? null : statusRaw;
+              const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
+              return badge ? (
+                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                  {badge}
+                </span>
+              ) : null;
+            })()}
           </div>
 
-          {/* HEART */}
           <div className="pointer-events-auto">
             <WishHeart
-              active={!!activeFav}
+              active={
+                typeof isFav === "boolean"
+                  ? isFav
+                  : typeof favActive === "boolean"
+                  ? favActive
+                  : favoriteIds
+                  ? favoriteIds.has(String(id))
+                  : false
+              }
               onClick={() => onToggleFavorite?.(id)}
               size={36}
               titleAdd={t("favorites.add") || "Добавить в избранное"}
@@ -632,11 +700,10 @@ export default function ServiceCard({
           </div>
         </div>
 
-        {/* hover info overlay (glass) — панель растягивается на всю высоту, контент прижат книзу */}
+        {/* hover info overlay (glass) */}
         <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="absolute inset-0 flex items-end px-3 pt-0 pb-0">
             <div className="pointer-events-auto w-full min-h-full rounded-t-lg rounded-b-none bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-full overflow-auto flex flex-col">
-              {/* Детали рейса */}
               {flightDetails && (
                 <div className="mt-1 w-full rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
                   <div className="text-white/80 text-[11px] mb-1">
