@@ -697,7 +697,6 @@ async function notifyModerationApproved({ service }) {
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const textProvider =
-      const textProvider =
         `✅ Услуга одобрена\n${_serviceLinesI18n(s, "ru").join("\n")}\n\n` +
         `✅ Xizmat tasdiqlandi\n${_serviceLinesI18n(s, "uz").join("\n")}\n\n` +
         `✅ Service approved\n${_serviceLinesI18n(s, "en").join("\n")}`;
