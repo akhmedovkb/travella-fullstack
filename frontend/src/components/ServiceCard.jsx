@@ -700,10 +700,14 @@ export default function ServiceCard({
           </div>
         </div>
 
-        {/* hover info overlay (glass) */}
-        <div className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute inset-0 flex items-end px-3 pt-0 pb-0">
-            <div className="pointer-events-auto w-full min-h-full rounded-t-lg rounded-b-none bg-black/55 backdrop-blur-md text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg max-h-full overflow-auto flex flex-col">
+        {/* hover info overlay (glass) — НЕ перекрывает карусель */}
+        <div className="pointer-events-none absolute inset-0 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
+          <div className="absolute inset-x-0 bottom-0 px-3 pb-0">
+            <div
+              className="pointer-events-auto w-full rounded-t-lg bg-black/55 backdrop-blur-md
+                         text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg
+                         max-h-[55%] overflow-auto flex flex-col"
+              >
               {flightDetails && (
                 <div className="mt-1 w-full rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
                   <div className="text-white/80 text-[11px] mb-1">
