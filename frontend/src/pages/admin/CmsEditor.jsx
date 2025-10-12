@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { apiGet, apiPut } from "../../api";
 
-const SLUGS = ["about","mission","project","partners","contacts"];
+const SLUGS = ["about","mission","project","partners","contacts","privacy","faq"];
 
 export default function CmsEditor() {
   const [slug, setSlug] = useState(SLUGS[0]);
