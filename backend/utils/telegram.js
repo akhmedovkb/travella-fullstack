@@ -647,6 +647,29 @@ function _serviceLines(s) {
   return lines;
 }
 
+// i18n-вариант для блоков RU / UZ / EN
+function _serviceLinesI18n(s, lang) {
+  const d = typeof s.details === "object" ? s.details : {};
+  const title = s.title || (lang === "en" ? "Service" : lang === "uz" ? "Xizmat" : "Услуга");
+  const labels = {
+    ru: { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" },
+    uz: { cat: "Kategoriya", supp: "Ta’minotchi", net: "Netto", gross: "Gross" },
+    en: { cat: "Category",  supp: "Supplier",   net: "Net",   gross: "Gross" },
+  }[lang] || { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" };
+
+  const out = [];
+  out.push(`🏷️ <b>${esc(title)}</b>`);
+  if (s.category) out.push(`📂 ${labels.cat}: ${esc(s.category)}`);
+  if (s.provider_name) {
+    const t = s.provider_type ? ` (${esc(s.provider_type)})` : "";
+    out.push(`🏢 ${labels.supp}: <b>${esc(s.provider_name)}</b>${t}`);
+  }
+  if (d.netPrice != null || d.grossPrice != null) {
+    out.push(`💵 ${labels.net}: <b>${_fmtMoney(d.netPrice)}</b> / ${labels.gross}: <b>${_fmtMoney(d.grossPrice)}</b>`);
+  }
+  return out;
+}
+
 async function _sendToAdmins(text) {
   const ids = await getAdminChatIds();
   await Promise.all(ids.map((id) => tgSend(id, text)));
@@ -670,16 +693,14 @@ async function notifyModerationNew({ service }) {
 async function notifyModerationApproved({ service }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги (RU/UZ/EN)
+    // 1) автору услуги (RU/UZ/EN) — с переводом лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const textProvider =
-        `✅ Услуга одобрена\n` +
-        `${_serviceLines(s).join("\n")}\n\n` +
-        `✅ Xizmat tasdiqlandi\n` +
-        `${_serviceLines(s).join("\n")}\n\n` +
-        `✅ Service approved\n` +
-        `${_serviceLines(s).join("\n")}`;
+      const textProvider =
+        `✅ Услуга одобрена\n${_serviceLinesI18n(s, "ru").join("\n")}\n\n` +
+        `✅ Xizmat tasdiqlandi\n${_serviceLinesI18n(s, "uz").join("\n")}\n\n` +
+        `✅ Service approved\n${_serviceLinesI18n(s, "en").join("\n")}`;
       await tgSend(chatId, textProvider);
     }
     // 2) как и раньше — уведомим админов (для лога модерации)
@@ -698,14 +719,14 @@ async function notifyModerationApproved({ service }) {
 async function notifyModerationRejected({ service, reason }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги (RU/UZ/EN)
+    // 1) автору услуги (RU/UZ/EN) — с переводом лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const reasonLine = reason ? `📝 Причина: ${esc(reason)}` : "";
       const textProvider =
-        `❌ Услуга отклонена\n${_serviceLines(s).join("\n")}\n${reasonLine}\n\n` +
-        `❌ Xizmat rad etildi\n${_serviceLines(s).join("\n")}\n${reasonLine}\n\n` +
-        `❌ Service rejected\n${_serviceLines(s).join("\n")}\n${reasonLine}`;
+        `❌ Услуга отклонена\n${_serviceLinesI18n(s, "ru").join("\n")}\n${reasonLine}\n\n` +
+        `❌ Xizmat rad etildi\n${_serviceLinesI18n(s, "uz").join("\n")}\n${reasonLine}\n\n` +
+        `❌ Service rejected\n${_serviceLinesI18n(s, "en").join("\n")}\n${reasonLine}`;
       await tgSend(chatId, textProvider);
     }
     // 2) админам — как и раньше
@@ -725,13 +746,13 @@ async function notifyModerationRejected({ service, reason }) {
 async function notifyModerationUnpublished({ service }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги — уведомление о снятии
+    // 1) автору услуги — уведомление о снятии (RU/UZ/EN) с переводами лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const textProvider =
-        `📦 Услуга снята с публикации\n${_serviceLines(s).join("\n")}\n\n` +
-        `📦 Xizmat nashrdan olindi\n${_serviceLines(s).join("\n")}\n\n` +
-        `📦 Listing unpublished\n${_serviceLines(s).join("\n")}`;
+        `📦 Услуга снята с публикации\n${_serviceLinesI18n(s, "ru").join("\n")}\n\n` +
+        `📦 Xizmat nashrdan olindi\n${_serviceLinesI18n(s, "uz").join("\n")}\n\n` +
+        `📦 Listing unpublished\n${_serviceLinesI18n(s, "en").join("\n")}`;
       await tgSend(chatId, textProvider);
     }
     // 2) админам — как и раньше
