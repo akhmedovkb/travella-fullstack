@@ -15,6 +15,7 @@ const {
   confirmBooking,
   confirmBookingByRequester,
   cancelBookingByRequester,
+  cancelBookingByProvider,
 } = require("../controllers/bookingController");
 
 function requireProvider(req, res, next) {
@@ -34,6 +35,7 @@ router.get("/my", authenticateToken, getMyBookings);                            
 router.post("/:id/accept", authenticateToken, requireProvider, acceptBooking);
 router.post("/:id/reject", authenticateToken, requireProvider, rejectBooking);
 router.post("/:id/quote", authenticateToken, requireProvider, providerQuote);
+router.post("/:id/cancel-by-provider", authenticateToken, requireProvider, cancelBookingByProvider);
 
 // Действия клиента
 router.post("/:id/cancel", authenticateToken, cancelBooking);
