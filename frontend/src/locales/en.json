@@ -44,6 +44,8 @@
   },
 
   "bookings": {
+    "provider_cancel_reason": "Show the reason of cancellation",
+    "waiting_for_requester": "Proposal has been sent. Waiting for reply of the client",
     "price_agreement": "Price agreement",
     "last_offer": "Last offer",
     "price": "Price",
