@@ -56,10 +56,10 @@ export default function Footer() {
               src="/payments/visa-mastercard.png"
               alt="Visa / MasterCard"
               loading="lazy"
-              className="h-8 sm:h-10 object-contain opacity-80 hover:opacity-100 transition"
+              className="h-10 sm:h-[3.125rem] object-contain opacity-80 hover:opacity-100 transition"
             />
-            <img src="/payments/uzcard.jpg" alt="Uzcard" loading="lazy" className="h-8 sm:h-10 object-contain opacity-80 hover:opacity-100 transition" />
-            <img src="/payments/humo.png"   alt="HUMO"   loading="lazy" className="h-8 sm:h-10 object-contain opacity-80 hover:opacity-100 transition" />
+            <img src="/payments/uzcard.jpg" alt="Uzcard" loading="lazy" className="h-10 sm:h-[3.125rem] object-contain opacity-80 hover:opacity-100 transition" />
+            <img src="/payments/humo.png"   alt="HUMO"   loading="lazy" className="h-10 sm:h-[3.125rem] object-contain opacity-80 hover:opacity-100 transition" />
           </div>
         </div>
       </div>
