@@ -26,6 +26,8 @@ export default function Footer() {
     { slug: "project",  fallback: { ru: "О проекте",     uz: "Loyiha haqida",      en: "About the project" } },
     { slug: "partners", fallback: { ru: "Наши партнёры", uz: "Hamkorlarimiz",      en: "Our partners" } },
     { slug: "contacts", fallback: { ru: "Наши контакты", uz: "Kontaktlarimiz",     en: "Contacts" } },
+    { slug: "privacy",  fallback: { ru: "Политика конфиденциальности", uz: "Maxfiylik siyosati", en: "Privacy Policy" } },
+    { slug: "faq",      fallback: { ru: "FAQ",                         uz: "FAQ", 
   ];
 
   const map = Object.fromEntries(pages.map(p => [p.slug, p.title]));
