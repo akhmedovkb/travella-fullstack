@@ -3,7 +3,8 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
-const { authenticateToken } = require("../middleware/authenticateToken");
+// middleware экспортируется функцией, без именованных экспортов
+const authenticateToken = require("../middleware/authenticateToken");
 
 // helper: выбрать поля под язык
 function pickLang(row, lang = "ru") {
@@ -68,7 +69,7 @@ router.put("/pages/:slug", authenticateToken, async (req, res) => {
        title_uz = COALESCE($3, cms_pages.title_uz),
        title_en = COALESCE($4, cms_pages.title_en),
        body_ru  = COALESCE($5, cms_pages.body_ru),
-       body_uz  = COCOALESCE($6, cms_pages.body_uz),
+       body_uz  = COALESCE($6, cms_pages.body_uz),
        body_en  = COALESCE($7, cms_pages.body_en),
        published= COALESCE($8, cms_pages.published),
        updated_by = $9,
