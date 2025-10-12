@@ -234,4 +234,9 @@ app.use('/api/hotels/:id/seasons', hotelSeasonsRouter);
 app.use("/api/tour-templates", tbTemplatesRoutes);
 app.use("/api/templates", tbTemplatesRoutes); // алиас для обратной совместимости
 
+/** ===================== Подвал ===================== */
+const cmsRoutes = require("./routes/cmsRoutes");
+app.use("/api/cms", cmsRoutes);
+
+
 
