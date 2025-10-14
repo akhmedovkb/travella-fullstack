@@ -37,23 +37,18 @@ router.get("/pages/:slug", async (req, res) => {
   res.json(pickLang(q.rows[0], lang));
 });
 
-// --- Админ: CRUD (только авторизованным + роль админа)
-async function isAdmin(userId) {
-  if (!userId) return false;
-  try {
-    const r = await pool.query(
-      "SELECT (is_admin = TRUE OR lower(coalesce(role,'')) LIKE '%admin%') AS ok FROM providers WHERE id = $1",
-      [userId]
-    );
-    return !!r.rows[0]?.ok;
-  } catch { return false; }
+// --- Админ/модератор/пермишен cms:edit
+function canEditCms(user) {
+  if (!user) return false;
+  if (user.is_admin || user.is_moderator) return true;
+  const perms = (user.permissions || []).map((x) => String(x).toLowerCase());
+  return perms.includes('cms:edit');
 }
 
 // создать/обновить
 router.put("/pages/:slug", authenticateToken, async (req, res) => {
   const { slug } = req.params;
-  const ok = await isAdmin(req.user?.id);
-  if (!ok) return res.status(403).json({ error: "forbidden" });
+  if (!canEditCms(req.user)) return res.status(403).json({ error: "forbidden" });
 
   const {
     title_ru, title_uz, title_en,
@@ -82,8 +77,7 @@ router.put("/pages/:slug", authenticateToken, async (req, res) => {
 
 // переключить публикацию
 router.patch("/pages/:slug/publish", authenticateToken, async (req, res) => {
-  const ok = await isAdmin(req.user?.id);
-  if (!ok) return res.status(403).json({ error: "forbidden" });
+  if (!canEditCms(req.user)) return res.status(403).json({ error: "forbidden" });
   const { slug } = req.params;
   const { published } = req.body;
   const q = await pool.query(
