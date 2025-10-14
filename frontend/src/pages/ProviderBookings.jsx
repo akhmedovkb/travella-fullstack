@@ -4,6 +4,7 @@ import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
 import { tSuccess, tError } from "../shared/toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -156,6 +157,11 @@ export default function ProviderBookings() {
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
+    // --- Модалка отмены поставщиком ---
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   useEffect(() => {
     load();
@@ -224,6 +230,33 @@ export default function ProviderBookings() {
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.reject_error", { defaultValue: "Ошибка отклонения" }));
     } finally {
+      await load();
+      window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
+  };
+  // входящие (я — поставщик): отмена подтверждённой/активной заявки
+  const openCancelIncoming = (b) => {
+    setCancelTarget(b);
+    setCancelReason("");
+    setShowCancelModal(true);
+  };
+  const submitCancelIncoming = async () => {
+    if (!cancelTarget) return;
+    try {
+      setCancelBusy(true);
+      await axios.post(
+        `${API_BASE}/api/bookings/${cancelTarget.id}/cancel-by-provider`,
+        { reason: cancelReason.trim() || null },
+        cfg()
+      );
+      tSuccess(t("bookings.cancelled", { defaultValue: "Бронь отменена" }));
+      setShowCancelModal(false);
+      setCancelTarget(null);
+      setCancelReason("");
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.cancel_error", { defaultValue: "Ошибка отмены" }));
+    } finally {
+      setCancelBusy(false);
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
     }
@@ -340,6 +373,7 @@ export default function ProviderBookings() {
                 onAccept={accept}
                 onReject={reject}
                 onCancel={cancelOutgoing}
+                onCancelByProvider={openCancelIncoming}
               />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
@@ -445,6 +479,31 @@ export default function ProviderBookings() {
       </div>
 
       {content}
+            {/* Модалка отмены поставщиком — через общий ConfirmModal */}
+      <ConfirmModal
+        open={showCancelModal}
+        danger
+        title={t("bookings.provider_cancel_title", { defaultValue: "Отменить бронирование?" })}
+        confirmLabel="OK"
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        busy={cancelBusy}
+        onClose={() => { setShowCancelModal(false); setCancelTarget(null); }}
+        onConfirm={submitCancelIncoming}
+        message={
+          <label className="block">
+            <div className="mb-1 text-sm text-gray-600">
+              {t("bookings.provider_cancel_reason", { defaultValue: "Укажите причину отмены" })}
+            </div>
+            <input
+              autoFocus
+              className="h-11 w-full rounded-lg border px-3 outline-none focus:ring-2 focus:ring-orange-400"
+              placeholder={t("bookings.provider_cancel_reason_ph", { defaultValue: "Например: внезапная поломка авто" })}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </label>
+        }
+      />
     </div>
   );
 }
