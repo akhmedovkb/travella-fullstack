@@ -674,7 +674,7 @@ const invalidRowIds = useMemo(
       {/* ── ШАПКА С КНОПКОЙ СЕЗОНОВ ── */}
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
-          {hotelId
+          {isNew
             ? t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })
             : t("admin.new_hotel_title",  { defaultValue: "Новый отель" })}
         </h1>
