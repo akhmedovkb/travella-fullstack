@@ -82,6 +82,17 @@ async function httpPost(path, body = {}, role) {
   }
 }
 
+// <-- ДОБАВЛЕНО: обновление
+async function httpPut(path, body = {}, role) {
+  try {
+    const res = await axios.put(apiURL(path), body, {
+      withCredentials: true,
+      headers: { "Content-Type": "application/json", ...authHeaders(role) },
+    });
+    return res.data;
+  } catch (e) { throw normErr(e); }
+}
+
 /* Публичный поиск отелей (локальная реализация) */
 async function apiSearchHotels({ name = "", city = "", country = "", page = 1, limit = 50 } = {}) {
   const params = {
@@ -301,7 +312,7 @@ export default function AdminHotelForm() {
     setRoomRows(rows);
   };
 
-  // при наличии :id грузим карточку
+  // при наличии :id грузим карточку (режим правки)
   useEffect(() => {
     if (!hotelId) return;
     (async () => {
@@ -653,6 +664,19 @@ const invalidRowIds = useMemo(
         tSuccess(t("hotel_saved") || "Изменения сохранены");
         navigate(`/admin/hotels/${hotelId}/edit`);
       } else {
+        const created = await apiCreateHotel(payload);
+        tSuccess(t("hotel_saved") || "Отель сохранён");
+        navigate(`/admin/hotels/${created?.id || ""}/edit`);
+      }
+    } catch (e) {
+              try {
+      if (hotelId) {
+        // ОБНОВЛЕНИЕ
+        await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
+        tSuccess(t("hotel_saved") || "Изменения сохранены");
+        navigate(`/admin/hotels/${hotelId}/edit`);
+      } else {
+        // СОЗДАНИЕ
         const created = await apiCreateHotel(payload);
         tSuccess(t("hotel_saved") || "Отель сохранён");
         navigate(`/admin/hotels/${created?.id || ""}/edit`);
