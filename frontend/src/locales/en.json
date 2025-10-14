@@ -936,6 +936,8 @@
   },
 
   "tb": {
+    "hotel_category": "Hotel category",
+    "any": "Any",
     "route": "Route",
     "templates": "Templates",
     "templates_open": "Open templates",
