@@ -447,7 +447,6 @@ export default function ProviderServicesCard({
   }
 
   return (
-    {/* ⬇️ прячем возможный горизонтальный оверфлоу внутри карточки */}
     <div className="rounded-xl border bg-white shadow-sm overflow-x-hidden">
       <div className="p-4 border-b flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-lg font-semibold flex-1 min-w-[240px] break-normal whitespace-normal [text-wrap:balance]">
