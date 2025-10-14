@@ -193,14 +193,18 @@ const fetchJSONLoose = async (path, params = {}) => {
 };
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
-async function fetchHotelsByCity(city) {
+// starsFilter: '' | 1..7
+async function fetchHotelsByCity(city, starsFilter = "") {
   if (!city) return [];
-  const rows = await fetchJSON("/api/hotels/by-city", { city });
+    // если бэкенд поддерживает фильтр — он применится; если нет — отфильтруем ниже
+  const rows = await fetchJSON("/api/hotels/by-city", {
+    city, stars: starsFilter || undefined
+  });
   // приведение к options для react-select
   return (Array.isArray(rows) ? rows : []).map(h => ({
     value: h.id,
-    label: `${h.name}${h.city ? " — " + h.city : ""}`,
-    raw: h,
+    label: `${h.name}${(h.city || h.location) ? " — " + (h.city || h.location) : ""}`,
+    raw: { ...h, city: h.city || h.location }, // на всякий случай приводим city
   }));
 }
 
@@ -211,6 +215,13 @@ const pickPos = (...vals) => {
     if (Number.isFinite(n) && n > 0) return n;
   }
   return 0;
+};
+
+// матчинг звёзд ('' = любая)
+const matchStars = (hotelStars, filter) => {
+  if (filter === "" || filter === null || filter === undefined) return true;
+  const n = Number(hotelStars), f = Number(filter);
+  return Number.isFinite(n) && Number.isFinite(f) ? n === f : false;
 };
 
 // helpers
@@ -716,6 +727,8 @@ export default function TourBuilder() {
   const [chd, setChd] = useState(0);
   const [residentType, setResidentType] = useState("nrs");
   const [lang, setLang] = useState("en");
+    // фильтр по категории (звёздам) отелей: '' | 1..7
+  const [hotelStars, setHotelStars] = useState("");
 
   const days = useMemo(() => {
     if (!range?.from || !range?.to) return [];
@@ -829,10 +842,28 @@ export default function TourBuilder() {
       setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
       return;
     }
-    const items = await fetchHotelsByCity(cityNorm); // → [{value,label,raw}]
-    // fetchHotelsByCity уже приводит к options, можно класть как есть
-    setHotelOptionsMap((m) => ({ ...m, [dateKey]: items }));
+    // пробуем серверный фильтр, плюс страхуемся клиентским
+    const items = await fetchHotelsByCity(cityNorm, hotelStars); // → [{value,label,raw}]
+    const filtered = items.filter(o => matchStars(o?.raw?.stars, hotelStars));
+    setHotelOptionsMap((m) => ({ ...m, [dateKey]: filtered }));
   };
+
+    // при смене фильтра звёзд — обновляем списки по всем дням и сбрасываем неподходящие выборы
+  useEffect(() => {
+    setByDay((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        const st = next[k] || {};
+        if (!st.city) continue;
+        loadHotelOptionsForDay(k, st.city);
+        if (st.hotel && !matchStars(st.hotel.stars, hotelStars)) {
+          next[k] = { ...st, hotel: null, hotelBrief: null, hotelSeasons: [], hotelRoomsTotal: 0, hotelBreakdown: null };
+        }
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelStars]);
 
   const loadEntryOptionsForDay = async (dateKey, city, q) => {
     if (!city || !dateKey) { setEntryOptionsMap((m) => ({ ...m, [dateKey]: [] })); return; }
@@ -1211,6 +1242,21 @@ const makeTransportLoader = (dateKey) => async (input) => {
               <select className="w-full h-9 border rounded px-2 text-sm" value={lang} onChange={(e) => setLang(e.target.value)}>
                 {LANGS.map(([name, code]) => <option key={code} value={code}>{name}</option>)}
               </select>
+                          </div>
+
+            {/* фильтр: категория (звёзды) отелей */}
+            <div>
+              <div className="text-sm font-medium mb-1">
+                {t('tb.hotel_category', { defaultValue: 'Категория отелей' })}
+              </div>
+              <select
+                className="w-full h-9 border rounded px-2 text-sm"
+                value={hotelStars}
+                onChange={(e) => setHotelStars(e.target.value)}
+              >
+                <option value="">{t('tb.any', { defaultValue: 'Любая' })}</option>
+                {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}★</option>)}
+              </select>
             </div>
           </div>
         </div>
@@ -1437,7 +1483,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       components={{ Option: HotelOption }}
                       placeholder={cityChosen ? t('tb.pick_hotel') : t('tb.pick_city_first')}
                       noOptionsMessage={() => (cityChosen ? t('tb.no_hotels') : t('tb.pick_city_first'))}
-                      value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${st.hotel.city ? " — " + st.hotel.city : ""}`, raw: st.hotel } : null}
+                      value={st.hotel ? { value: st.hotel.id, label: `${st.hotel.name}${(st.hotel.city || st.hotel.location) ? " — " + (st.hotel.city || st.hotel.location) : ""}`, raw: st.hotel } : null}
                       onChange={async (opt) => {
                          const hotel = opt?.raw || null;
                          // сбрасываем прежние данные отеля
