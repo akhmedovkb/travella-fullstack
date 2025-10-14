@@ -447,7 +447,8 @@ export default function ProviderServicesCard({
   }
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm">
+    {/* ⬇️ прячем возможный горизонтальный оверфлоу внутри карточки */}
+    <div className="rounded-xl border bg-white shadow-sm overflow-x-hidden">
       <div className="p-4 border-b flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-lg font-semibold flex-1 min-w-[240px] break-normal whitespace-normal [text-wrap:balance]">
           {TT("ps.title", "Услуги", "Xizmatlar", "Services")}
@@ -481,13 +482,18 @@ export default function ProviderServicesCard({
       </div>
 
       {/* add form */}
-      <div className="p-4 grid gap-3 md:grid-cols-[minmax(220px,260px)_minmax(140px,1fr)_120px_minmax(260px,420px)_auto] items-center">
+      {/* ⬇️ адаптивная сетка без вылезаний: на мобиле — одна колонка,
+           на md — упругая сетка; min-w-0, чтобы инпуты не расталкивали контейнер */}
+      <div className="p-4 grid gap-3 min-w-0
+                      sm:grid-cols-2
+                      md:grid-cols-[minmax(180px,240px)_minmax(160px,1fr)_minmax(90px,120px)_minmax(180px,360px)_auto]
+                      items-center">
         <div>
           <label className="block text-xs text-gray-600 mb-1">
             {TT("ps.form.category", "Категория", "Toifa", "Category")}
           </label>
           <select
-            className="w-full h-9 border rounded px-2 text-sm"
+            className="w-full h-9 border rounded px-2 text-sm min-w-0"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -504,7 +510,7 @@ export default function ProviderServicesCard({
             {TT("ps.form.name_opt", "Название (опц.)", "Nomi (ixtiyoriy)", "Name (opt.)")}
           </label>
           <input
-            className="w-full h-9 border rounded px-2 text-sm"
+            className="w-full h-9 border rounded px-2 text-sm min-w-0"
             placeholder={TT(
               "ps.form.name_optional_ph",
               "например, 4 часа или модель авто",
@@ -521,7 +527,7 @@ export default function ProviderServicesCard({
             {TT("ps.form.seats", "Мест", "Joylar", "Seats")}
           </label>
           <input
-            className="w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
+            className="w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50 min-w-0"
             type="number"
             min={0}
             value={seats}
@@ -530,13 +536,14 @@ export default function ProviderServicesCard({
           />
         </div>
 
-        <div className="grid grid-cols-[1fr_auto] gap-2">
+                {/* ⬇️ цены и валюта: не даём полям выталкивать сетку */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 min-w-0">
           <div>
             <label className="block text-xs text-gray-600 mb-1">
               {TT("ps.form.price", "Цена", "Narx", "Price")}
             </label>
             <input
-              className="w-full h-9 border rounded px-2 text-sm"
+              className="w-full h-9 border rounded px-2 text-sm min-w-0"
               placeholder={TT("ps.form.price_ph", "100, 120.50 …", "100, 120.50 …", "100, 120.50 …")}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
@@ -571,6 +578,7 @@ export default function ProviderServicesCard({
       </div>
 
       {/* table */}
+      {/* список: собственный горизонтальный скролл только для таблицы */}
       <div className="px-4 pb-4">
         {err && (
           <div className="text-sm text-red-600 mb-2">
@@ -579,7 +587,7 @@ export default function ProviderServicesCard({
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full text-sm border rounded">
             <thead className="bg-gray-50 text-gray-700">
               <tr>
