@@ -28,19 +28,29 @@ async function getHotelBrief(req, res) {
   });
 };
 
-// /api/hotels/by-city?city=Samarkand
+// /api/hotels/by-city?city=Samarkand&stars=3
 async function listHotelsByCity(req, res) {
   const city = (req.query.city || "").trim();
   if (!city) return res.status(400).json({ error: "city required" });
-  const q = `
+
+  const stars = Number(req.query.stars);
+  const params = [city];
+  let where = `LOWER(city) = LOWER($1)`;
+
+  if (Number.isFinite(stars)) {
+    params.push(stars);
+    where += ` AND stars = $2`;
+  }
+
+  const sql = `
     SELECT id, name, stars, city, country, currency
-    FROM hotels
-    WHERE LOWER(city) = LOWER($1)
-    ORDER BY name ASC
+      FROM hotels
+     WHERE ${where}
+     ORDER BY name ASC
   `;
-  const { rows } = await db.query(q, [city]);
+  const { rows } = await db.query(sql, params);
   res.json(rows);
-};
+}
 
 // ─── мониторинг (фолбек в консоль) ───
 let monitor = { record: (...args) => console.log("[monitor]", ...args) };
