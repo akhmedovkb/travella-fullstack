@@ -727,7 +727,7 @@ export default function TourBuilder() {
   const [chd, setChd] = useState(0);
   const [residentType, setResidentType] = useState("nrs");
   const [lang, setLang] = useState("en");
-    // фильтр по категории (звёздам) отелей: '' | 1..7
+  // фильтр по категории (звёздам) отелей: '' | 1..7
   const [hotelStars, setHotelStars] = useState("");
 
   const days = useMemo(() => {
