@@ -959,6 +959,8 @@
   },
 
   "tb": {
+      "hotel_category": "Mehmonxonalar toifasi",
+      "any": "Har qanday",
       "templates": "Andozalar",
       "templates_open": "Andozalarni ochish",
       "templates_count": "{{count}} ta",
