@@ -548,7 +548,28 @@ const invalidRowIds = useMemo(
   const onImagePick = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const readers = files.map(
+    // фильтры: ≤ 3 МБ, максимум 10 изображений всего
+    const MAX_MB = 3;
+    const MAX_FILES = 10;
+    const available = Math.max(0, MAX_FILES - images.length);
+    if (available === 0) {
+      tError(t("images_limit_reached", { defaultValue: "Достигнут лимит: максимум 10 изображений" }));
+      e.target.value = "";
+      return;
+    }
+    const picked = files.slice(0, available);
+    const oversized = picked.filter(f => f.size > MAX_MB * 1024 * 1024);
+    if (oversized.length) {
+      tError(
+        t("images_too_large", {
+          defaultValue: "Некоторые файлы больше 3 МБ и были пропущены",
+        })
+      );
+    }
+    const accepted = picked.filter(f => f.size <= MAX_MB * 1024 * 1024);
+    if (!accepted.length) { e.target.value = ""; return; }
+
+    const readers = accepted.map(
       (f) =>
         new Promise((res) => {
           const fr = new FileReader();
@@ -674,9 +695,9 @@ const invalidRowIds = useMemo(
       {/* ── ШАПКА С КНОПКОЙ СЕЗОНОВ ── */}
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
-          {isNew
-            ? t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })
-            : t("admin.new_hotel_title",  { defaultValue: "Новый отель" })}
+         {isNew
+            ? t("admin.new_hotel_title",  { defaultValue: "Новый отель" })
+            : t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })}
         </h1>
 
         {hotelId && (
@@ -719,7 +740,7 @@ const invalidRowIds = useMemo(
               <input
                 className="w-full border rounded px-3 py-2"
                 value={contact}
-                onChange={(e) => setContact(e.target.value)}
+                onChange={(e) => setContact(sanitizeAlnumContact(e.target.value))}
                 inputMode="text"
                 autoComplete="off"
                 placeholder="+998..., email, https://..."
@@ -858,7 +879,7 @@ const invalidRowIds = useMemo(
           </thead>
           <tbody>
             {roomRows.map((row) => (
-              <tr
+              <tr key={row.id}
                 id={`row-${row.id}`}
                 className={`border-t ${invalidRowIds.includes(row.id) ? "bg-red-50/40" : ""}`}
               >
