@@ -90,27 +90,27 @@ const CATEGORY_LABELS = {
   // guide
   city_tour_guide: "Тур по городу",
   mountain_tour_guide: "Тур в горы",
+  desert_tour_guide: "Пустынный тур",
+  safari_tour_guide: "Сафари-тур",
   meet: "Встреча",
   seeoff: "Провод",
   translation: "Перевод",
   // transport
   city_tour_transport: "Тур по городу",
   mountain_tour_transport: "Тур в горы",
+  desert_tour_transport: "Пустынный тур",
+  safari_tour_transport: "Сафари-тур",
   one_way_transfer: "Трансфер в одну сторону",
   dinner_transfer: "Трансфер на ужин",
   border_transfer: "Междугородний/погран. трансфер",
 };
 
-const GUIDE_ALLOWED = new Set([
-  "city_tour_guide","mountain_tour_guide","meet","seeoff","translation",
-]);
-const TRANSPORT_ALLOWED = new Set([
-  "city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer",
-]);
+const GUIDE_ALLOWED = new Set(["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"]);
+const TRANSPORT_ALLOWED = new Set(["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer"]);
 
 // массивы для утилиты подбора
-const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","meet","seeoff","translation"];
-const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
+const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"];
++const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
 /* helpers для фильтрации услуг под PAX и город */
 const svcSeats = (s) =>
   toNum(s?.raw?.details?.seats ?? s?.details?.seats ?? NaN, NaN);
