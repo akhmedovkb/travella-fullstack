@@ -3,15 +3,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
-async function httpPut(path, body = {}, role) {
-  try {
-    const res = await axios.put(apiURL(path), body, {
-      withCredentials: true,
-      headers: { "Content-Type": "application/json", ...authHeaders(role) },
-    });
-    return res.data;
-  } catch (e) { throw normErr(e); }
-}
 import { useTranslation } from "react-i18next";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
@@ -259,7 +250,9 @@ export default function AdminHotelForm() {
   const { t, i18n } = useTranslation();
   const geoLang = useGeoLang(i18n);
   const navigate = useNavigate();
-  const { id: hotelId } = useParams();
+  const { id: rawId } = useParams();
+  const isNew = !rawId || rawId === "new";
+  const hotelId = isNew ? null : rawId;
 
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
@@ -314,7 +307,7 @@ export default function AdminHotelForm() {
 
   // при наличии :id грузим карточку (режим правки)
   useEffect(() => {
-    if (!hotelId) return;
+    if (isNew) return;
     (async () => {
       try {
         const data = await httpGet(`/api/hotels/${encodeURIComponent(hotelId)}`);
@@ -323,7 +316,7 @@ export default function AdminHotelForm() {
         tError(t("load_error") || "Не удалось загрузить отель");
       }
     })();
-  }, [hotelId]);
+  }, [hotelId, isNew]);
 
   // Основные поля
   const [name, setName] = useState("");
@@ -658,8 +651,8 @@ const invalidRowIds = useMemo(
       images,
     };
 
-        try {
-      if (hotelId) {
+    try {
+      if (!isNew && hotelId) {
         await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
         tSuccess(t("hotel_saved") || "Изменения сохранены");
         navigate(`/admin/hotels/${hotelId}/edit`);
@@ -669,20 +662,6 @@ const invalidRowIds = useMemo(
         navigate(`/admin/hotels/${created?.id || ""}/edit`);
       }
     } catch (e) {
-              try {
-      if (hotelId) {
-        // ОБНОВЛЕНИЕ
-        await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
-        tSuccess(t("hotel_saved") || "Изменения сохранены");
-        navigate(`/admin/hotels/${hotelId}/edit`);
-      } else {
-        // СОЗДАНИЕ
-        const created = await apiCreateHotel(payload);
-        tSuccess(t("hotel_saved") || "Отель сохранён");
-        navigate(`/admin/hotels/${created?.id || ""}/edit`);
-      }
-    } catch (e) {
-      // eslint-disable-next-line no-console
       console.error(e);
       tError(t("hotel_save_error") || "Ошибка сохранения отеля");
     }
