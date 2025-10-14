@@ -20,10 +20,11 @@ const buildUrl = (path) => {
 function getTokenByRole(role) {
   if (role === "client")   return localStorage.getItem("clientToken");
   if (role === "provider") return localStorage.getItem("token") || localStorage.getItem("providerToken");
+  // по умолчанию: предпочитаем провайдера/админа
   return (
-    localStorage.getItem("clientToken") ||
     localStorage.getItem("token") ||
-    localStorage.getItem("providerToken")
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("clientToken")
   );
 }
 export function getAuthHeaders(role = null) {
