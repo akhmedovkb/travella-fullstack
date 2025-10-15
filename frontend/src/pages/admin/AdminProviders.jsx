@@ -221,3 +221,90 @@ export default function AdminProviders() {
     </div>
   );
 }
+@@
+   );
+ }
+
+/* ---------- helpers: social ---------- */
+function SocialCell({ value }) {
+  const links = normalizeSocial(value);
+  if (!links.length) return <span>—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {links.map((x, i) => (
+        <a
+          key={i}
+          href={x.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-2 py-0.5 rounded-full bg-gray-100 hover:bg-gray-200 text-xs text-gray-800"
+          title={x.url}
+        >
+          {x.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function normalizeSocial(raw) {
+  if (!raw) return [];
+  try {
+    // если пришёл объект {telegram:"...", instagram:"..."}
+    if (typeof raw === "object" && !Array.isArray(raw)) {
+      return Object.entries(raw)
+        .filter(([,v]) => typeof v === "string" && v.trim())
+        .map(([k, v]) => ({ label: prettyPlatform(k, v), url: toUrl(v) }))
+        .filter(x => !!x.url);
+    }
+    // если массив
+    if (Array.isArray(raw)) {
+      return raw
+        .map(v => (typeof v === "string" ? v : (v?.url || "")))
+        .filter(Boolean)
+        .map(v => ({ label: prettyPlatform("", v), url: toUrl(v) }))
+        .filter(x => !!x.url);
+    }
+    // строка: может быть JSON, либо просто "url1, url2"
+    if (typeof raw === "string") {
+      const s = raw.trim();
+      if (!s) return [];
+      try {
+        const parsed = JSON.parse(s);
+        return normalizeSocial(parsed);
+      } catch {
+        return s.split(/[,\s]+/).filter(Boolean).map(v => ({ label: prettyPlatform("", v), url: toUrl(v) })).filter(x => !!x.url);
+      }
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+function toUrl(v) {
+  let s = String(v).trim();
+  if (!s) return "";
+  // короткие формы telegram/whatsapp
+  if (/^@[\w_]+$/.test(s)) s = "https://t.me/" + s.slice(1);
+  if (/^(t\.me|telegram\.me)\//i.test(s)) s = "https://" + s.replace(/^https?:\/\//i, "");
+  if (/^wa\.me\//i.test(s)) s = "https://" + s.replace(/^https?:\/\//i, "");
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  try { new URL(s); return s; } catch { return ""; }
+}
+
+function prettyPlatform(k, url) {
+  const u = String(url).toLowerCase();
+  const map = [
+    { test: /t\.me|telegram/, label: "TG" },
+    { test: /wa\.me|whatsapp/, label: "WA" },
+    { test: /instagram\.com/, label: "IG" },
+    { test: /facebook\.com/, label: "FB" },
+    { test: /vk\.com/, label: "VK" },
+    { test: /youtube\.com|youtu\.be/, label: "YT" },
+    { test: /twitter\.com|x\.com/, label: "X" },
+    { test: /linkedin\.com/, label: "IN" },
+  ];
+  const byHost = map.find(m => m.test.test(u));
+  if (byHost) return byHost.label;
+  if (k) return String(k).toUpperCase();
+  return "LINK";
+}
