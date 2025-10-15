@@ -221,9 +221,7 @@ export default function AdminProviders() {
     </div>
   );
 }
-@@
-   );
- }
+
 
 /* ---------- helpers: social ---------- */
 function SocialCell({ value }) {
