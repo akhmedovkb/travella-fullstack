@@ -156,6 +156,7 @@ export default function AdminProviders() {
               <th className="text-left p-3">Телефон</th>
               <th className="text-left p-3">Локация</th>
               <th className="text-left p-3">Языки</th>
+              <th className="text-left p-3">Соцсети</th>
               <th className="text-left p-3">Создан</th>
               <th className="text-left p-3">Обновлен</th>
               <th className="text-left p-3"></th>
@@ -179,6 +180,9 @@ export default function AdminProviders() {
                   <td className="p-3">{p.location || "—"}</td>
                   <td className="p-3">
                     {Array.isArray(p.languages) ? p.languages.join(", ") : (p.languages || "—")}
+                  </td>
+                  <td className="p-3">
+                    <SocialCell value={p.social} />
                   </td>
                   <td className="p-3">{p.created_at ? new Date(p.created_at).toLocaleString() : "—"}</td>
                   <td className="p-3">{p.updated_at ? new Date(p.updated_at).toLocaleString() : "—"}</td>
