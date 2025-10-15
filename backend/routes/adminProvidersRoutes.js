@@ -35,14 +35,14 @@ function requireAdmin(req, res, next) {
 }
 
 /**
- * GET /api/admin/providers
+ * // GET /api/admin/providers-table
  * Параметры:
  *   - q (поиск по имени/email/телефону)
  *   - type (guide|transport|agent|hotel)
  *   - limit (по умолчанию 50)
  *   - cursor_created_at (ISO) + cursor_id (для пагинации по курсору вниз)
  */
-router.get("/providers", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/providers-table", authenticateToken, requireAdmin, async (req, res) => {
   const { q, type, limit = 50, cursor_created_at, cursor_id } = req.query;
 
   const where = [];
@@ -83,20 +83,20 @@ router.get("/providers", authenticateToken, requireAdmin, async (req, res) => {
     const last = rows[rows.length - 1];
     nextCursor = { cursor_created_at: last.created_at, cursor_id: last.id };
   }
-  res.json({ items: rows, nextCursor });
+  res.type("application/json").json({ items: rows, nextCursor });
 });
 
 /**
  * GET /api/admin/providers/new-count?since=ISO
  * Возвращает число провайдеров, созданных после метки времени.
  */
-router.get("/providers/new-count", authenticateToken, requireAdmin, async (req, res) => {
+router.get("/providers-table/new-count", authenticateToken, requireAdmin, async (req, res) => {
   const { since } = req.query;
   if (!since) return res.json({ count: 0 });
 
   const sql = `SELECT COUNT(*)::int AS count FROM providers WHERE created_at > $1`;
   const { rows } = await pool.query(sql, [new Date(since).toISOString()]);
-  res.json({ count: rows[0].count });
+  res.type("application/json").json({ count: rows[0].count });
 });
 
 module.exports = router;
