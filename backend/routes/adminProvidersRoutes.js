@@ -6,12 +6,29 @@ const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 
 // простая проверка админа (в токене должен быть is_admin=true)
+// Проверка админа, согласованная с фронтом (Header.jsx)
 function requireAdmin(req, res, next) {
   try {
-    if (!req.user || !req.user.is_admin) {
+    const u = req.user || {};
+    const roles = []
+      .concat(u.role || [])
+      .concat(u.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim().toLowerCase());
+    const perms = []
+      .concat(u.permissions || u.perms || [])
+      .map(x => String(x).toLowerCase());
+
+    const isAdmin =
+      u.is_admin === true ||
+      u.moderator === true ||
+      roles.some(r => ["admin","moderator","super","root"].includes(r)) ||
+      perms.some(x => ["moderation","admin:moderation"].includes(x));
+
+    if (!isAdmin) {
       return res.status(403).json({ error: "Admin only" });
     }
-    next();
+    return next();
   } catch (e) {
     return res.status(401).json({ error: "Unauthorized" });
   }
