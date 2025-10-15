@@ -15,6 +15,7 @@ import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
 import HotelInspections from "./pages/HotelInspections";
 import AdminHotelsTable from "./pages/admin/AdminHotelsTable"; // ← ОСТАВИЛ один импорт
+import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
 
 // Клиентские
@@ -150,6 +151,18 @@ export default function App() {
           <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
 
           {/* Админ: список/форма отелей */}
+                      
+          {/* Админ: список провайдеров */}
+          <Route
+            path="/admin/providers"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <AdminProviders />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/admin/hotels"
             element={
