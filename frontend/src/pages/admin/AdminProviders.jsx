@@ -1,3 +1,5 @@
+//frontend/src/pages/admin/AdminProviders.jsx
+  
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
