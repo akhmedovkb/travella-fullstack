@@ -44,12 +44,17 @@ export default function AdminProviders() {
         params.set("cursor_id", opts.cursor.cursor_id);
       }
       const res = await apiGet(`/api/admin/providers-table?${params.toString()}`, "provider");
+      // apiGet обычно возвращает уже data; но на всякий случай поддержим оба формата
+      const payload = (res && res.data && (res.data.items || res.data.nextCursor !== undefined))
+        ? res.data
+        : res;
+      const newItems = payload?.items || [];
       if (opts.append) {
-        setItems((prev) => [...prev, ...(res?.data?.items || [])]);
+        setItems((prev) => [...prev, ...newItems]);
       } else {
-        setItems(res?.data?.items || []);
+        setItems(newItems);
       }
-      setNextCursor(res?.data?.nextCursor || null);
+      setNextCursor(payload?.nextCursor || null);
     } catch (e) {
       console.error(e);
       toast.error("Не удалось загрузить список провайдеров");
@@ -62,7 +67,8 @@ export default function AdminProviders() {
     try {
       const since = encodeURIComponent(lastSeen);
       const res = await apiGet(`/api/admin/providers-table/new-count?since=${since}`, "provider");
-      const count = res?.data?.count || 0;
+      const payload = (res && res.data && (typeof res.data.count !== "undefined")) ? res.data : res;
+      const count = Number(payload?.count || 0);
       if (count > 0) {
         toast.info(`Новых провайдеров: ${count}`, { icon: "🆕" });
       }
