@@ -67,6 +67,7 @@ router.get("/providers-table", authenticateToken, requireAdmin, async (req, res)
 
   const sql = `
     SELECT p.id, p.name, p.type, p.email, p.phone, p.location, p.languages,
+           p.social,
            p.created_at, p.updated_at, p.city_slugs, p.telegram_chat_id, p.photo
     FROM providers p
     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
