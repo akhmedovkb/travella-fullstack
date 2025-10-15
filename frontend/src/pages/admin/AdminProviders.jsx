@@ -43,7 +43,7 @@ export default function AdminProviders() {
         params.set("cursor_created_at", opts.cursor.cursor_created_at);
         params.set("cursor_id", opts.cursor.cursor_id);
       }
-      const res = await apiGet(`/api/admin/providers?${params.toString()}`, "provider");
+      const res = await apiGet(`/api/admin/providers-table?${params.toString()}`, "provider");
       if (opts.append) {
         setItems((prev) => [...prev, ...(res?.data?.items || [])]);
       } else {
@@ -61,7 +61,7 @@ export default function AdminProviders() {
   const checkNew = useCallback(async () => {
     try {
       const since = encodeURIComponent(lastSeen);
-      const res = await apiGet(`/api/admin/providers/new-count?since=${since}`, "provider");
+      const res = await apiGet(`/api/admin/providers-table/new-count?since=${since}`, "provider");
       const count = res?.data?.count || 0;
       if (count > 0) {
         toast.info(`Новых провайдеров: ${count}`, { icon: "🆕" });
