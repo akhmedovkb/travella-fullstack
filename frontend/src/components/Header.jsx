@@ -35,6 +35,14 @@ const IconHeart = (p) => (
     <path d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
   </svg>
 );
+const IconUsers = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/>
+    <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="2"/>
+    <path d="M20 21v-2a3 3 0 0 0-3-3h-1" stroke="currentColor" strokeWidth="2"/>
+    <circle cx="17" cy="7" r="2" stroke="currentColor" strokeWidth="2"/>
+  </svg>
+);
 const IconHotel = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
@@ -306,6 +314,7 @@ export default function Header() {
               {isAdmin && (
                 <nav className="flex items-center gap-1">
                   <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                  <NavItem to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
                   <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                   <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
                   <NavItem to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
@@ -356,6 +365,7 @@ export default function Header() {
             {isAdmin && (
               <RowGroup title={t("nav.admin","Админ")}>
                 <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobile to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                 <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
                 <NavItemMobile to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
