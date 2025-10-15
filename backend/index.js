@@ -238,5 +238,8 @@ app.use("/api/templates", tbTemplatesRoutes); // алиас для обратн�
 const cmsRoutes = require("./routes/cmsRoutes");
 app.use("/api/cms", cmsRoutes);
 
+/** ===================== Providers table for admin ===================== */
+const adminProvidersRoutes = require("./routes/adminProvidersRoutes");
+app.use("/api/admin", adminProvidersRoutes);
 
 
