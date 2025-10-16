@@ -55,7 +55,7 @@ const normalizeHotel = (h) => ({
   city: h.city ?? h.location ?? "",
 });
 
-export default function AdminHotelsTable() {
+export default function AdminHotelsTable({
   scope = "admin",          // "admin" | "provider"
   providerId,               // чьи отели грузить (если понадобится на бэке)
   onEdit,                   // (row) => void
@@ -117,12 +117,7 @@ export default function AdminHotelsTable() {
           <h1 className="text-2xl font-bold">
             {providerMode ? "Мои отели" : "Отели (админ)"}
           </h1>
-          <Link
-            to="/admin/hotels/new"
-            className="px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700"
-          >
-            + Новый отель
-          </Link>
+
               {onNew ? (
             <button
               type="button"
