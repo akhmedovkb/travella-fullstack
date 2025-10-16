@@ -430,6 +430,7 @@ async function updateHotel(req, res) {
   if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
 
   try {
+    await assertCanTouchHotel(req, id);
     const p = req.body || {};
     const now = new Date();
 
@@ -479,6 +480,7 @@ async function updateHotel(req, res) {
       return res.json({ id, _fallback: true });
     }
   } catch (e) {
+    if (e && e.status === 403) return res.status(403).json({ error: "forbidden" });
     console.error("hotels.update error:", e);
     return res.status(500).json({ error: "update_failed" });
   }
