@@ -1091,6 +1091,25 @@ const makeTransportLoader = (dateKey) => async (input) => {
       };
     }
     setByDay(next);
+       // 🔽 СРАЗУ подтягиваем «Отели» и «Входные билеты» для каждого дня
+   (async () => {
+     const tasks = [];
+     for (let i = 0; i < tpl.days.length; i++) {
+       const ymdStr = ymd(addDays(start, i));
+       const city = next[ymdStr].city;
+       // очистим строку поиска для entry и загрузим варианты
+       tasks.push(
+         (async () => {
+           setEntryQMap(m => ({ ...m, [ymdStr]: "" }));
+           await Promise.all([
+             loadEntryOptionsForDay(ymdStr, city, ""),
+             loadHotelOptionsForDay(ymdStr, city),
+           ]);
+         })()
+       );
+     }
+     await Promise.all(tasks);
+   })();
     setApplyOpen(false);
   }
 
