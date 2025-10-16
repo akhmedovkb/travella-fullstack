@@ -278,26 +278,21 @@ const loginProvider = async (req, res) => {
     const plain = String(password || "");
     const stored = String(row.password || "");
     let ok = false;
-    if (/^\$2[aby]\$/.test(stored)) {
-      // bcrypt-хэш
-      ok = await bcrypt.compare(plain, stored);
-    } else {
-      // в БД лежит открытый пароль — сравним как текст,
-      // и если совпало — немедленно перехэшируем и сохраним
+
+    if (/^\$2[aby]\$/.test(stored)) ok = await bcrypt.compare(plain, stored);
+    else {
       ok = plain === stored;
       if (ok) {
         try {
           const newHash = await bcrypt.hash(plain, 10);
           await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [newHash, row.id]);
-        } catch (e) {
-          console.warn("rehash-on-login failed:", e);
-        }
+        } catch (e) { console.warn("rehash-on-login failed:", e); }
       }
     }
-    if (!ok) {
-      return res.status(400).json({ message: "Неверный email или пароль" });
-    }
+    if (!ok) return res.status(400).json({ message: "Неверный email или пароль" });
 
+    // проверим, есть ли колонка hotel_id
+    const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
     const isAdmin = row.is_admin === true;
     const payload = { id: row.id, role: "provider", is_admin: isAdmin };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
@@ -306,7 +301,7 @@ const loginProvider = async (req, res) => {
       message: "Вход успешен",
       provider: {
         id: row.id,
-        hotel_id: row.hotel_id ?? null,
+        hotel_id: cols.hotel_id ? (row.hotel_id ?? null) : null,
         name: row.name,
         email: row.email,
         type: row.type,
@@ -320,7 +315,7 @@ const loginProvider = async (req, res) => {
         tg_chat_id: row.telegram_chat_id || null,
         languages: normalizeLanguagesISO(row.languages ?? []),
         role: "provider",
-        is_admin: row.is_admin === true,
+        is_admin: isAdmin,
         city_slugs: row.city_slugs || [],
         car_fleet: Array.isArray(row.car_fleet) ? row.car_fleet : [],
       },
@@ -332,15 +327,20 @@ const loginProvider = async (req, res) => {
   }
 };
 
+
 // ---------- Profile ----------
 const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
+
+    const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
+    const hotelSelect = cols.hotel_id ? "hotel_id" : "NULL::int AS hotel_id";
+
     const r = await pool.query(
-            `SELECT id, name, email, type, location, phone, social, photo, certificate, address,
+      `SELECT id, name, email, type, location, phone, social, photo, certificate, address,
               telegram_chat_id, languages, is_admin, city_slugs, car_fleet,
-              hotel_id
-       FROM providers WHERE id = $1`,
+              ${hotelSelect}
+         FROM providers WHERE id = $1`,
       [id]
     );
     const p = r.rows[0] || null;
@@ -372,6 +372,7 @@ const getProviderProfile = async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+
 
 const updateProviderProfile = async (req, res) => {
   try {
@@ -466,7 +467,8 @@ const updateProviderProfile = async (req, res) => {
           SET ${fields.join(", ")}
         WHERE id = $11
         RETURNING id, name, email, type, location, phone, social, photo, certificate, address,
-                  telegram_chat_id, languages, city_slugs, car_fleet, is_admin, hotel_id`,
+                  telegram_chat_id, languages, city_slugs, car_fleet, is_admin
+      `,
       values
     );
 
