@@ -101,6 +101,25 @@ async function tableHasColumns(table, cols = []) {
   const set = new Set(q.rows.map((r) => r.column_name));
   return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
 }
+/* hotels */
+function isAdminLike(u = {}) {
+  const roles = []
+    .concat(u.role || u.type || [])
+    .concat(Array.isArray(u.roles) ? u.roles : [])
+    .map(r => String(r).toLowerCase());
+  return roles.includes("admin") || roles.includes("moderator");
+}
+
+async function assertCanTouchHotel(req, hotelId) {
+  if (isAdminLike(req.user)) return;
+  const meProviderId = Number(req?.user?.id);              // у провайдера это его provider_id
+  if (!meProviderId) throw Object.assign(new Error("forbidden"), { status: 403 });
+  const q = await db.query(`SELECT provider_id FROM hotels WHERE id=$1`, [hotelId]);
+  const owner = q.rows?.[0]?.provider_id || null;
+  if (!owner || owner !== meProviderId) {
+    throw Object.assign(new Error("forbidden"), { status: 403 });
+  }
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SEARCH (с опцией внешних подсказок)
@@ -299,7 +318,7 @@ async function createHotel(req, res) {
     try {
       const support = await tableHasColumns("hotels", [
         "address","currency","rooms","extra_bed_price","taxes",
-        "amenities","services","images","stars","contact","country","city","location"
+        "amenities","services","images","stars","contact","country","city","location","provider_id"
       ]);
 
       const cols = ["name"];
@@ -319,7 +338,11 @@ async function createHotel(req, res) {
       if (support.images)          { cols.push("images");           vals.push(JSON.stringify(p.images || [])); }
       if (support.stars)           { cols.push("stars");            vals.push(p.stars ?? null); }
       if (support.contact)         { cols.push("contact");          vals.push(p.contact ?? null); }
-
+      // владелец: только текущий провайдер (или админ может явно задать)
+      if (support.provider_id) {
+        const provId = isAdminLike(req.user) ? (p.provider_id ?? req.user?.id) : req.user?.id;
+        cols.push("provider_id"); vals.push(provId ?? null);
+      }
       cols.push("created_at","updated_at");
       vals.push(now, now);
 
@@ -351,6 +374,7 @@ async function getHotel(req, res) {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: "bad_id" });
   try {
+    await assertCanTouchHotel(req, id);
     const { rows } = await db.query(`SELECT * FROM hotels WHERE id = $1`, [id]);
     if (!rows.length) return res.status(404).json({ error: "not_found" });
 
