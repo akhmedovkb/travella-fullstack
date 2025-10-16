@@ -30,8 +30,9 @@ function parseJwtRoles() {
     return { roles: [], role: "", type: "" };
   }
 }
-const isAdminLike = ({ roles, role, type }) => {
+const isAdminLike = ({ roles, role, type, claims }) => {
   const pool = new Set([role, type, ...roles]);
+  if (claims?.is_admin === true || String(claims?.is_admin) === "true") return true;
   return pool.has("admin") || pool.has("moderator");
 };
 const isProviderRole = ({ roles, role, type }) => {
