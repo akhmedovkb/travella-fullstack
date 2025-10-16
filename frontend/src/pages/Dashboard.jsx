@@ -1982,20 +1982,6 @@ useEffect(() => {
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
             <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-2xl font-bold">
-                  {t("my_hotels", { defaultValue: "Мои отели" })}
-                </h2>
-          
-                <button
-                  type="button"
-                  onClick={openNewHotel}
-                  className="inline-flex items-center rounded-md bg-orange-600 px-3 py-2 text-white font-semibold hover:bg-orange-700"
-                >
-                  + {t("new_hotel", { defaultValue: "Новый отель" })}
-                </button>
-              </div>
-          
               {/* Таблица со СВОИМИ отелями и действиями «Править/Сезоны» */}
               <AdminHotelsTable
                 scope="provider"              // ⬅️ скажем таблице работать от лица провайдера
