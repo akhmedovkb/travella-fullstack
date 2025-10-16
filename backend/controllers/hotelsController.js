@@ -52,6 +52,51 @@ async function listHotelsByCity(req, res) {
   res.json(rows);
 }
 
+// GET /api/hotels/mine?q=&city=&page=&limit=
+async function listMyHotels(req, res) {
+  const providerId = Number(req?.user?.id);
+  if (!Number.isFinite(providerId)) return res.status(401).json({ error: "auth_required" });
+
+  const page  = Math.max(1, parseInt(req.query.page || "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "20", 10)));
+  const offset = (page - 1) * limit;
+
+  const qName = String(req.query.q || "").trim();
+  const qCity = String(req.query.city || "").trim();
+
+  const where = [`provider_id = $1`];
+  const params = [providerId];
+  let i = params.length;
+
+  if (qName) { params.push(`%${qName}%`); where.push(`name ILIKE $${++i}`); }
+  if (qCity) { params.push(`%${qCity}%`); where.push(`COALESCE(city,location,'') ILIKE $${++i}`); }
+
+  try {
+    const sql = `
+      SELECT id, name, COALESCE(city, location) AS city, created_at
+        FROM hotels
+       WHERE ${where.join(" AND ")}
+       ORDER BY id DESC
+       LIMIT $${i + 1} OFFSET $${i + 2}
+    `;
+    params.push(limit, offset);
+
+    const { rows } = await db.query(sql, params);
+
+    // Подсчёт total (для пагинации, опционально)
+    const { rows: cnt } = await db.query(
+      `SELECT COUNT(*)::int AS c FROM hotels WHERE ${where.join(" AND ")}`,
+      params.slice(0, i) // те же параметры без limit/offset
+    );
+
+    return res.json({ items: rows, page, limit, total: cnt[0]?.c ?? rows.length });
+  } catch (e) {
+    console.error("hotels.listMy error:", e);
+    return res.status(500).json({ error: "list_failed" });
+  }
+}
+
+
 // ─── мониторинг (фолбек в консоль) ───
 let monitor = { record: (...args) => console.log("[monitor]", ...args) };
 try {
@@ -892,6 +937,7 @@ module.exports = {
   getHotel,
   listHotels,
   updateHotel,
+  listMyHotels,
   getHotelBrief,
   listHotelsByCity,
   // инспекции + лайки
