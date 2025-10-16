@@ -306,6 +306,7 @@ const loginProvider = async (req, res) => {
       message: "Вход успешен",
       provider: {
         id: row.id,
+        hotel_id: row.hotel_id ?? null,
         name: row.name,
         email: row.email,
         type: row.type,
@@ -336,7 +337,9 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
     const r = await pool.query(
-      `SELECT id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, is_admin, city_slugs, car_fleet
+            `SELECT id, name, email, type, location, phone, social, photo, certificate, address,
+              telegram_chat_id, languages, is_admin, city_slugs, car_fleet,
+              hotel_id
        FROM providers WHERE id = $1`,
       [id]
     );
@@ -345,6 +348,7 @@ const getProviderProfile = async (req, res) => {
 
     res.json({
       id: p.id,
+      hotel_id: p.hotel_id ?? null,
       name: p.name,
       email: p.email,
       type: p.type,
@@ -461,7 +465,8 @@ const updateProviderProfile = async (req, res) => {
       `UPDATE providers
           SET ${fields.join(", ")}
         WHERE id = $11
-        RETURNING id, name, email, type, location, phone, social, photo, certificate, address, telegram_chat_id, languages, city_slugs, car_fleet, is_admin`,
+        RETURNING id, name, email, type, location, phone, social, photo, certificate, address,
+                  telegram_chat_id, languages, city_slugs, car_fleet, is_admin, hotel_id`,
       values
     );
 
@@ -472,6 +477,7 @@ const updateProviderProfile = async (req, res) => {
       provider: p
         ? {
             id: p.id,
+            hotel_id: p.hotel_id ?? null,
             name: p.name,
             email: p.email,
             type: p.type,
