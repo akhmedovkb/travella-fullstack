@@ -19,7 +19,7 @@ const buildUrl = (path) => {
 
 function getTokenByRole(role) {
   if (role === "client")   return localStorage.getItem("clientToken");
-  if (role === "provider") return localStorage.getItem("token") || localStorage.getItem("providerToken");
+  if (role === "provider") return localStorage.getItem("providerToken") || localStorage.getItem("token");
   // по умолчанию: предпочитаем провайдера/админа
   return (
     localStorage.getItem("token") ||
