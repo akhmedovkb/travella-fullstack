@@ -320,7 +320,7 @@ const loginProvider = async (req, res) => {
     // проверим, есть ли колонка hotel_id
     const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
     const isAdmin = row.is_admin === true;
-    const payload = { id: row.id, role: "provider", is_admin: isAdmin };
+    const payload = { id: row.id, role: "provider", roles: isAdmin ? ["admin"] : [], is_admin: isAdmin };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     res.json({
