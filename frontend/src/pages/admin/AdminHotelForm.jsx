@@ -246,13 +246,15 @@ function sanitizeAlnumContact(v) {
 }
 
 
-export default function AdminHotelForm() {
+export default function AdminHotelForm({ hotelIdProp } = {}) {
   const { t, i18n } = useTranslation();
   const geoLang = useGeoLang(i18n);
   const navigate = useNavigate();
   const { id: rawId } = useParams();
-  const isNew = !rawId || rawId === "new";
-  const hotelId = isNew ? null : rawId;
+  const routedId = !rawId || rawId === "new" ? null : rawId;
+  const effId    = hotelIdProp === "new" ? null : (hotelIdProp ?? routedId);
+  const isNew    = !effId;
+  const hotelId  = effId || null;
 
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
