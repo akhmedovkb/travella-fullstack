@@ -674,6 +674,7 @@ const invalidRowIds = useMemo(
       amenities,
       services,
       images,
+      provider_id: numOrNull(providerId),
     };
 
     try {
