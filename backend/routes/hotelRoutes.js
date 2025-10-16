@@ -67,6 +67,9 @@ router.get("/_list", listHotels);
 /* ===  список по городу для каскада === */
 router.get("/by-city", listHotelsByCity);   // /api/hotels/by-city?city=Samarkand
 
+/* ===== МОИ ОТЕЛИ (для провайдера) — ДО динамических ===== */
+router.get("/mine", providerOnly, listMyHotels);
+
 /* --- лайки инспекций (авторизация обязательна) --- */
 // ставим выше, чтобы не конфликтовало с "/:id/inspections"
 router.post("/inspections/:id/like", canLike, likeInspection);
@@ -86,7 +89,5 @@ router.get("/:id", tryAuth, getHotel);  // ← чтобы распарсить �
 /* ==================== CRUD отеля (для провайдера/админа) ==================== */
 router.post("/", providerOrAdmin, createHotel);
 router.put("/:id", providerOrAdmin, updateHotel);
-// список только моих отелей (для провайдера)
-router.get("/mine", providerOnly, listMyHotels);
 
 module.exports = router;
