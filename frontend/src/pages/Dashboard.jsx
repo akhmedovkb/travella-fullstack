@@ -14,7 +14,6 @@ import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
-import AdminHotelForm from "./admin/AdminHotelForm";
 import AdminHotelsTable from "./admin/AdminHotelsTable";
 
 /** ================= Helpers ================= */
@@ -644,9 +643,7 @@ const scrollToProfilePart = useCallback((key) => {
   const [hotelId, setHotelId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
-  // hotel-only: переключатель «Прайс / Мои отели»
-  const [hotelTab, setHotelTab] = useState("price"); // "price" | "list"
-  
+   
   const [newCertificate, setNewCertificate] = useState(null);
   // Просмотр сертификата: поддержка data: → blob:
   const certObjectUrl = React.useMemo(() => {
@@ -1122,11 +1119,6 @@ useEffect(() => {
       if (err?.code === "ERR_CANCELED") return;
       setStats({});
     });
-  //hotels
-  // me: чтобы узнать свой hotel_id
-  api.get(`/api/providers/me`, { signal: c1.signal })
-    .then(({data}) => setHotelId(data?.hotel_id ?? null))
-    .catch(() => setHotelId(null));
 
   return () => { c1.abort(); c2.abort(); c3.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1984,27 +1976,12 @@ useEffect(() => {
           {profile?.type === "hotel" && (
             <div className="mb-6">
              <div className="flex items-center justify-between mb-3">
-               <h2 className="text-2xl font-bold">{t("hotel_section_title", { defaultValue: "Отель" })}</h2>
-               <div className="inline-flex rounded-lg border bg-white p-1">
-                 <button
-                   onClick={() => setHotelTab("price")}
-                   className={`px-3 py-1.5 text-sm rounded-md ${hotelTab==="price" ? "bg-gray-900 text-white" : "hover:bg-gray-100"}`}
-                 >
-                   {t("hotel_price_title", { defaultValue: "Прайс" })}
-                 </button>
-                 <button
-                   onClick={() => setHotelTab("list")}
-                   className={`px-3 py-1.5 text-sm rounded-md ${hotelTab==="list" ? "bg-gray-900 text-white" : "hover:bg-gray-100"}`}
-                 >
-                   {t("my_hotels", { defaultValue: "Мои отели" })}
-                 </button>
-               </div>
+               <h2 className="text-2xl font-bold">{t("my_hotels", { defaultValue: "Мои отели" })}</h2>
+               <span className="inline-flex px-3 py-1.5 text-sm rounded-md bg-gray-900 text-white">
+                 {t("my_hotels", { defaultValue: "Мои отели" })}
+               </span>
              </div>
-                 {hotelTab === "price" ? (
-                   <AdminHotelForm hotelIdProp={hotelId ?? "new"} />
-                 ) : (
-                   <AdminHotelsTable />
-                 )}
+             <AdminHotelsTable />
             </div>
           )}
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
