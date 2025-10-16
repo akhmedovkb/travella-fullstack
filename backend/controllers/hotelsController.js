@@ -384,10 +384,14 @@ async function createHotel(req, res) {
       if (support.images)          { cols.push("images");           vals.push(JSON.stringify(p.images || [])); }
       if (support.stars)           { cols.push("stars");            vals.push(p.stars ?? null); }
       if (support.contact)         { cols.push("contact");          vals.push(p.contact ?? null); }
-      // владелец: только текущий провайдер (или админ может явно задать)
+      // смена владельца — только для админа (если колонка есть)
+      // владелец: текущий провайдер, а админ может явно задать p.provider_id
       if (support.provider_id) {
-        const provId = isAdminLike(req.user) ? (p.provider_id ?? req.user?.id) : req.user?.id;
-        cols.push("provider_id"); vals.push(provId ?? null);
+        const provId = isAdminLike(req.user)
+          ? (parseIntSafe(p.provider_id) ?? parseIntSafe(req.user?.id) ?? null)
+          : (parseIntSafe(req.user?.id) ?? null);
+        cols.push("provider_id");
+        vals.push(provId);
       }
       cols.push("created_at","updated_at");
       vals.push(now, now);
@@ -483,7 +487,7 @@ async function updateHotel(req, res) {
     try {
       const support = await tableHasColumns("hotels", [
         "address","currency","rooms","extra_bed_price","taxes",
-        "amenities","services","images","stars","contact","country","city","location"
+        "amenities","services","images","stars","contact","country","city","location","provider_id"
       ]);
 
       const sets = ["name=$1"];
@@ -504,7 +508,14 @@ async function updateHotel(req, res) {
       if (support.images)          { sets.push(`images=$${++i}::jsonb`);   params.push(JSON.stringify(p.images || [])); }
       if (support.stars)           { sets.push(`stars=$${++i}`);           params.push(p.stars ?? null); }
       if (support.contact)         { sets.push(`contact=$${++i}`);         params.push(p.contact ?? null); }
-
+      // смена владельца — только для админа
+      if (support.provider_id && isAdminLike(req.user)) {
+        if (Object.prototype.hasOwnProperty.call(p, "provider_id")) {
+          sets.push(`provider_id=$${++i}`);
+          const newOwner = Number.isFinite(Number(p.provider_id)) ? Number(p.provider_id) : null;
+          params.push(newOwner);
+        }
+      }
       sets.push(`updated_at=$${++i}`); params.push(now);
 
       params.push(id);
