@@ -50,10 +50,10 @@ function allowRoles(...roles) {
 }
 
 // Создание/редактирование отеля — провайдер/турагент/агентство/поставщик (админ/модер тоже ок)
-const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier");
+const providerOrAdmin = allowRoles("provider", "tour_agent", "agency", "supplier", "hotel");
 
 // Создание инспекции — только для провайдера/турагента/агентства/поставщика
-const providerOnly = allowRoles("provider", "tour_agent", "agency", "supplier");
+const providerOnly    = allowRoles("provider", "tour_agent", "agency", "supplier", "hotel");
 
 // Лайк — авторизованный toggle (уникальность на пользователя)
 // Разрешаем: провайдер/агент/агентство/поставщик/клиент/юзер
