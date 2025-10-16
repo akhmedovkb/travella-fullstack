@@ -246,7 +246,7 @@ function sanitizeAlnumContact(v) {
 }
 
 
-export default function AdminHotelForm({ hotelIdProp } = {}) {
+export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const { t, i18n } = useTranslation();
   const geoLang = useGeoLang(i18n);
   const navigate = useNavigate();
@@ -681,11 +681,14 @@ const invalidRowIds = useMemo(
       if (!isNew && hotelId) {
         await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
         tSuccess(t("hotel_saved") || "Изменения сохранены");
-        navigate(`/admin/hotels/${hotelId}/edit`);
+        if (typeof onSaved === "function") onSaved(hotelId);
+        else navigate(`/admin/hotels/${hotelId}/edit`);
       } else {
         const created = await apiCreateHotel(payload);
         tSuccess(t("hotel_saved") || "Отель сохранён");
-        navigate(`/admin/hotels/${created?.id || ""}/edit`);
+        const id = created?.id || "";
+        if (typeof onSaved === "function") onSaved(id);
+        else navigate(`/admin/hotels/${id}/edit`);
       }
     } catch (e) {
       console.error(e);
