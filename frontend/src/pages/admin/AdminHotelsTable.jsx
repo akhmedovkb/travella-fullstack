@@ -42,10 +42,12 @@ const isProviderRole = ({ roles, role, type }) =>
 
 /* ====== api helpers ====== */
 async function apiGetMyHotels({ q = "", city = "", page = 1, limit = 200 } = {}) {
-  return apiGet("/api/hotels/mine", { params: { q, city, page, limit } });
+  const qs = new URLSearchParams({ q, city, page, limit }).toString();
+  return apiGet(`/api/hotels/mine?${qs}`, "provider"); // важна роль
 }
 async function apiSearchHotels({ name = "", city = "", limit = 200 } = {}) {
-  return apiGet("/api/hotels/search", { params: { name, city, limit } });
+  const qs = new URLSearchParams({ name, city, limit }).toString();
+  return apiGet(`/api/hotels/search?${qs}`, true);
 }
 
 /* ====== normalize ====== */
