@@ -42,11 +42,10 @@ const isProviderRole = ({ roles, role, type }) =>
 
 /* ====== api helpers ====== */
 async function apiGetMyHotels({ q = "", city = "", page = 1, limit = 200 } = {}) {
-  // apiGet сам префиксует /api
-  return apiGet("/hotels/mine", { params: { q, city, page, limit } });
+  return apiGet("/api/hotels/mine", { params: { q, city, page, limit } });
 }
 async function apiSearchHotels({ name = "", city = "", limit = 200 } = {}) {
-  return apiGet("/hotels/search", { params: { name, city, limit } });
+  return apiGet("/api/hotels/search", { params: { name, city, limit } });
 }
 
 /* ====== normalize ====== */
