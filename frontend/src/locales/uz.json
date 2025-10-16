@@ -959,6 +959,20 @@
   },
 
   "tb": {
+    "tpl_apply_title": "Shablonni qo‘llash",
+    "tpl_select": "Shablon",
+    "tpl_select_placeholder": "Shablonni tanlang…",
+    "tpl_start_date": "Boshlanish sanasi",
+    "tpl_start_hint": "Faqat bugun yoki kelajakdagi sana tanlanadi.",
+    "tpl_btn_cancel": "Bekor qilish",
+    "tpl_btn_apply": "Qo‘llash",
+    "err": {
+      "select_template": "Iltimos, shablonni tanlang.",
+      "start_required": "Boshlanish sanasini kiriting.",
+      "template_empty": "Shablonda kunlar yo‘q.",
+      "invalid_date": "Noto‘g‘ri sana.",
+      "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas."
+    },
       "hotel_category": "Mehmonxonalar toifasi",
       "any": "Har qanday",
       "templates": "Andozalar",
