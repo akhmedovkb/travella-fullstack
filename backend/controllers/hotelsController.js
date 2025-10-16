@@ -390,6 +390,10 @@ async function getHotel(req, res) {
 
     return res.json(rows[0]);
   } catch (e) {
+    if (e && e.status === 403) {
+      // правильный статус вместо 500
+      return res.status(403).json({ error: "forbidden" });
+    }
     console.error("hotels.get error:", e);
     return res.status(500).json({ error: "read_failed" });
   }
