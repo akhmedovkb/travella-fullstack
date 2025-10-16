@@ -3812,6 +3812,44 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* Модалка создания/редактирования отеля */}
+      {hotelFormOpen && (
+        <div role="dialog" aria-modal="true"
+             className="fixed inset-0 z-[60] grid place-items-center bg-black/40">
+          <div className="w-[min(1200px,95vw)] max-h-[90vh] overflow-auto rounded-xl bg-white p-4 sm:p-6 shadow-2xl">
+            <div className="flex items-start justify-between mb-3">
+              <h3 className="text-xl font-semibold">
+                {hotelToEdit
+                  ? t("edit_hotel", { defaultValue: "Редактировать отель" })
+                  : t("new_hotel", { defaultValue: "Новый отель" })}
+              </h3>
+              <button
+                onClick={closeHotelForm}
+                className="rounded-md border px-3 py-1.5 hover:bg-gray-50"
+              >
+                {t("close", { defaultValue: "Закрыть" })}
+              </button>
+            </div>
+      
+            {/* ВАЖНО: передаём API-инстанс и колбеки обновления */}
+            <AdminHotelForm
+              apiBase={API_BASE}
+              apiInstance={api}
+              providerId={profile?.id}
+              initialHotel={hotelToEdit}     // null -> создание, объект -> редактирование
+              onSaved={() => {
+                // после сохранения закрываем форму и просим таблицу перечитать данные
+                closeHotelForm();
+                // диспатчим кастомное событие — таблица на него подпишется
+                window.dispatchEvent(new CustomEvent("provider-hotels:reload"));
+              }}
+              onCancel={closeHotelForm}
+              mode="provider"                // чтобы форма не требовала «админских» полей
+            />
+          </div>
+        </div>
+      )}
+
       {/* МОДАЛКА УДАЛЕНИЯ УСЛУГИ */}
       {deleteConfirmOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
