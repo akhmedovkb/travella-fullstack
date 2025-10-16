@@ -16,6 +16,7 @@ const {
   listHotelInspections,
   createHotelInspection,
   likeInspection,
+  listMyHotels,
 } = require("../controllers/hotelsController");
 
 const authenticateToken = require("../middleware/authenticateToken");
@@ -85,5 +86,7 @@ router.get("/:id", tryAuth, getHotel);  // ← чтобы распарсить �
 /* ==================== CRUD отеля (для провайдера/админа) ==================== */
 router.post("/", providerOrAdmin, createHotel);
 router.put("/:id", providerOrAdmin, updateHotel);
+// список только моих отелей (для провайдера)
+router.get("/mine", providerOnly, listMyHotels);
 
 module.exports = router;
