@@ -904,6 +904,20 @@
   },
 
   "tb": {
+    "tpl_apply_title": "Применить шаблон",
+    "tpl_select": "Шаблон",
+    "tpl_select_placeholder": "Выберите шаблон…",
+    "tpl_start_date": "Дата начала",
+    "tpl_start_hint": "Можно выбрать только сегодняшнюю дату или позже.",
+    "tpl_btn_cancel": "Отмена",
+    "tpl_btn_apply": "Применить",
+    "err": {
+      "select_template": "Выберите шаблон.",
+      "start_required": "Укажите дату начала.",
+      "template_empty": "В шаблоне нет дней.",
+      "invalid_date": "Неверная дата.",
+      "past_forbidden": "Дата начала не может быть в прошлом."
+    },
    "hotel_category": "Категория отелей",
    "any": "Любая",
    "route": "Маршрут",
