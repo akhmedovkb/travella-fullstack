@@ -107,7 +107,8 @@ function isAdminLike(u = {}) {
     .concat(u.role || u.type || [])
     .concat(Array.isArray(u.roles) ? u.roles : [])
     .map(r => String(r).toLowerCase());
-  return roles.includes("admin") || roles.includes("moderator");
+  const flag = u.is_admin === true || String(u.is_admin).toLowerCase() === "true";
+  return flag || roles.includes("admin") || roles.includes("moderator");
 }
 
 async function assertCanTouchHotel(req, hotelId) {
