@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
 
+// компонент теперь поддерживает внешний onNew/onEdit и режим "provider"
+
 /* ===== helpers: JWT roles / admin check ===== */
 function parseJwtRoles() {
   try {
@@ -54,11 +56,17 @@ const normalizeHotel = (h) => ({
 });
 
 export default function AdminHotelsTable() {
+  scope = "admin",          // "admin" | "provider"
+  providerId,               // чьи отели грузить (если понадобится на бэке)
+  onEdit,                   // (row) => void
+  onNew,                    // () => void
+} = {}) {
   // RBAC
   const who = useMemo(() => parseJwtRoles(), []);
   const admin = isAdminLike(who);
   const provider = isProviderRole(who);
-  const providerMode = provider && !admin;
+  // приоритет — явный пропс scope; если не задан, остаётся автоопределение по JWT
+  const providerMode = scope === "provider" ? true : (provider && !admin);
 
   // фильтры
   const [qName, setQName] = useState("");
@@ -90,6 +98,12 @@ export default function AdminHotelsTable() {
   }, [providerMode, qName, qCity]);
 
   useEffect(() => { load(); }, [load]);
+  // мягкий рефреш по сохранению формы (из Dashboard)
+  useEffect(() => {
+    const h = () => load();
+    window.addEventListener("provider-hotels:reload", h);
+    return () => window.removeEventListener("provider-hotels:reload", h);
+  }, [load]);
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -109,6 +123,22 @@ export default function AdminHotelsTable() {
           >
             + Новый отель
           </Link>
+              {onNew ? (
+            <button
+              type="button"
+              onClick={onNew}
+              className="px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700"
+            >
+              + Новый отель
+            </button>
+          ) : (
+            <Link
+              to="/admin/hotels/new"
+              className="px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700"
+            >
+              + Новый отель
+            </Link>
+          )}
         </div>
 
         {/* Поиск */}
@@ -172,6 +202,22 @@ export default function AdminHotelsTable() {
                           >
                             Править
                           </Link>
+                          {onEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => onEdit(h)}
+                              className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                            >
+                              Править
+                            </button>
+                          ) : (
+                            <Link
+                              to={`/admin/hotels/${h.id}/edit`}
+                              className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                            >
+                              Править
+                            </Link>
+                          )}
                           <Link
                             to={`/admin/hotels/${h.id}/seasons`}
                             className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
