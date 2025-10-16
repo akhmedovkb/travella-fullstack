@@ -15,6 +15,7 @@ import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
 import AdminHotelsTable from "./admin/AdminHotelsTable";
+import AdminHotelForm from "./admin/AdminHotelForm"; 
 
 /** ================= Helpers ================= */
 
@@ -606,10 +607,16 @@ const makeAsyncSelectI18n = (t) => ({
 
 /** ================= Main ================= */
 const Dashboard = () => {
-   const { t, i18n } = useTranslation();
+  const [hotelFormOpen, setHotelFormOpen] = useState(false);   
+  const [hotelToEdit, setHotelToEdit]   = useState(null);       
+
+  const openNewHotel  = () => { setHotelToEdit(null); setHotelFormOpen(true); };   
+  const openEditHotel = (row) => { setHotelToEdit(row); setHotelFormOpen(true); }; 
+  const closeHotelForm = () => { setHotelFormOpen(false); setHotelToEdit(null); }; 
+  const { t, i18n } = useTranslation();
 
   // --- profile completeness: smooth scroll to sections ---
-const idMap = useRef({
+  const idMap = useRef({
   languages: "anchor-languages",
   transport: "anchor-transport",
   certificate: "anchor-certificate",
@@ -1975,13 +1982,27 @@ useEffect(() => {
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
             <div className="mb-6">
-             <div className="flex items-center justify-between mb-3">
-               <h2 className="text-2xl font-bold">{t("my_hotels", { defaultValue: "Мои отели" })}</h2>
-               <span className="inline-flex px-3 py-1.5 text-sm rounded-md bg-gray-900 text-white">
-                 {t("my_hotels", { defaultValue: "Мои отели" })}
-               </span>
-             </div>
-             <AdminHotelsTable />
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-2xl font-bold">
+                  {t("my_hotels", { defaultValue: "Мои отели" })}
+                </h2>
+          
+                <button
+                  type="button"
+                  onClick={openNewHotel}
+                  className="inline-flex items-center rounded-md bg-orange-600 px-3 py-2 text-white font-semibold hover:bg-orange-700"
+                >
+                  + {t("new_hotel", { defaultValue: "Новый отель" })}
+                </button>
+              </div>
+          
+              {/* Таблица со СВОИМИ отелями и действиями «Править/Сезоны» */}
+              <AdminHotelsTable
+                scope="provider"              // ⬅️ скажем таблице работать от лица провайдера
+                providerId={profile?.id}      // ⬅️ ограничить «моими» отелями
+                onEdit={openEditHotel}        // ⬅️ клик «Править» откроет форму
+                onNew={openNewHotel}          // ⬅️ (если в таблице есть своя кнопка)
+              />
             </div>
           )}
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
