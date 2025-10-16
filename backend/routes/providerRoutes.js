@@ -207,4 +207,22 @@ router.post(
 
 router.get("/:id(\\d+)", getProviderPublicById);
 
+/* -------------------- HOTELS -------------------- */
+router.get("/me", authenticateToken, requireProvider, async (req, res) => {
+  try {
+    const providerId = req.user.id;
+    const q = await pool.query(
+      "SELECT id FROM hotels WHERE provider_id=$1 LIMIT 1",
+      [providerId]
+    );
+    return res.json({
+      id: providerId,
+      hotel_id: q.rows?.[0]?.id || null,
+    });
+  } catch (e) {
+    console.error("providers/me error:", e);
+    res.status(500).json({ message: "me error" });
+  }
+});
+
 module.exports = router;
