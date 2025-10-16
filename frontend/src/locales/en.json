@@ -936,6 +936,20 @@
   },
 
   "tb": {
+    "tpl_apply_title": "Apply template",
+    "tpl_select": "Template",
+    "tpl_select_placeholder": "Choose a template…",
+    "tpl_start_date": "Start date",
+    "tpl_start_hint": "Only today or a future date is allowed.",
+    "tpl_btn_cancel": "Cancel",
+    "tpl_btn_apply": "Apply",
+    "err": {
+      "select_template": "Please choose a template.",
+      "start_required": "Please specify the start date.",
+      "template_empty": "The template has no days.",
+      "invalid_date": "Invalid date.",
+      "past_forbidden": "Start date cannot be in the past."
+    },
     "hotel_category": "Hotel category",
     "any": "Any",
     "route": "Route",
