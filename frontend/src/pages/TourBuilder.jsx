@@ -1055,6 +1055,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyTplId, setApplyTplId] = useState("");
   const [applyFrom, setApplyFrom] = useState(""); // 'YYYY-MM-DD'
+  // при открытии модалки подставляем сегодня (или текущий from, если он в будущем)
+  useEffect(() => {
+    if (!applyOpen) return;
+    const today = ymd(startOfDay(new Date()));
+    const current = range?.from ? ymd(startOfDay(range.from)) : today;
+    setApplyFrom(current < today ? today : current);
+  }, [applyOpen]);
   // [TPL] раскрытые группы (аккордеон по странам)
   const [openGroups, setOpenGroups] = useState({});
   const toggleGroup = (code) => setOpenGroups((m) => ({ ...m, [code]: !m[code] }));
@@ -1063,15 +1070,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
   function applyTemplateNow() {
     const tpl = getTemplate(applyTplId);
-    if (!tpl) return alert("Выберите шаблон");
-    if (!applyFrom) return alert("Укажите дату начала");
-    if (!tpl.days?.length) return alert("В шаблоне нет дней");
+    if (!tpl) return alert(t('tb.err.select_template'));
+    if (!applyFrom) return alert(t('tb.err.start_required'));
+    if (!tpl.days?.length) return alert(t('tb.err.template_empty'));
     const start = new Date(applyFrom);
-    if (isNaN(start)) return alert("Неверная дата");
+    if (isNaN(start)) return alert(t('tb.err.invalid_date'));
        // ❗ не допускаем прошлые даты (сравнение по началу суток)
    const today = startOfDay(new Date());
    if (start < today) {
-     alert("Дата начала не может быть в прошлом");
+     alert(t('tb.err.past_forbidden'));
      return;
    }
 
@@ -2033,6 +2040,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
               <div>
                 <label className="block text-sm mb-1">{t('tb.tpl_start_date')}</label>
                <input
+                 <div className="mt-1 text-xs text-gray-500">
+                  {t('tb.tpl_start_hint')}
+                </div>
                  type="date"
                  className="w-full h-10 border rounded px-2"
                  value={applyFrom}
