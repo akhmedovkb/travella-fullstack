@@ -126,58 +126,66 @@ export default function AdminHotelsTable() {
   };
 
   /* ===================== RENDER ===================== */
-  // --- провайдер видит только свой отель (или создание) ---
-  if (provider && !admin) {
-    return (
-      <div className="p-6">
-        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
-          <h1 className="text-2xl font-bold mb-4">Мой отель</h1>
-          {meLoading ? (
-            <div className="text-gray-500">Загрузка…</div>
-          ) : meError ? (
-            <div className="mb-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">
-              {meError}
-            </div>
-          ) : myHotelId ? (
-            <div className="flex items-center gap-3">
-              <Link
-                to={`/admin/hotels/${myHotelId}/edit`}
-                className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-900"
-              >
-                Править мой отель
-              </Link>
-              <Link
-                to={`/admin/hotels/${myHotelId}/seasons`}
-                className="px-4 py-2 rounded border hover:bg-gray-50"
-              >
-                Сезоны
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Link
-                to="/admin/hotels/new"
-                className="px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700"
-              >
-                + Создать отель
-              </Link>
-              <span className="text-gray-500 text-sm">
-                Отель ещё не создан
-              </span>
-            </div>
-          )}
-          <div className="mt-6">
-            <button
-              onClick={() => nav(-1)}
-              className="text-sm text-gray-600 hover:underline"
-            >
-              ← Назад
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+ // --- провайдер: список «мои отели» ---
+ if (provider && !admin) {
+   const [pItems, setPItems] = useState([]);
+   const [pName, setPName] = useState("");
+   const [pCity, setPCity] = useState("");
+   const [pLoading, setPLoading] = useState(false);
+   const loadMine = useCallback(async () => {
+     setPLoading(true);
+     const res = await apiGetMyHotels({ q: pName, city: pCity, limit: 200 });
+     setPItems((res?.items || []).map(normalizeHotel));
+     setPLoading(false);
+   }, [pName, pCity]);
+   useEffect(() => { loadMine(); }, [loadMine]);
+
+   return (
+     <div className="p-6">
+       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
+         <div className="flex items-center justify-between mb-4">
+           <h1 className="text-2xl font-bold">Мои отели</h1>
+           <Link to="/admin/hotels/new" className="px-3 py-2 rounded bg-orange-600 text-white">
+             + Создать отель
+           </Link>
+         </div>
+         <form onSubmit={(e)=>{e.preventDefault();loadMine();}} className="flex gap-3 mb-4">
+           <input className="flex-1 border rounded px-3 py-2" placeholder="Поиск по названию"
+                  value={pName} onChange={(e)=>setPName(e.target.value)} />
+           <input className="w-64 border rounded px-3 py-2" placeholder="Поиск по городу"
+                  value={pCity} onChange={(e)=>setPCity(e.target.value)} />
+           <button className="px-4 py-2 rounded bg-gray-800 text-white">
+             {pLoading ? "Поиск…" : "Найти"}
+           </button>
+         </form>
+         <div className="overflow-x-auto">
+           <table className="w-full table-auto border-collapse">
+             <thead>…</thead>
+             <tbody>
+               {pLoading ? (
+                 <tr><td colSpan={4} className="px-4 py-6 text-center">Загрузка…</td></tr>
+               ) : pItems.length === 0 ? (
+                 <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">Пусто</td></tr>
+               ) : pItems.map(h => (
+                 <tr key={h.id} className="hover:bg-gray-50">
+                   <td className="px-4 py-3">{h.id}</td>
+                   <td className="px-4 py-3">{h.name}</td>
+                   <td className="px-4 py-3">{h.city || "—"}</td>
+                   <td className="px-4 py-3">
+                     <div className="flex items-center gap-2">
+                       <Link to={`/admin/hotels/${h.id}/edit`} className="px-3 py-1.5 border rounded">Править</Link>
+                       <Link to={`/admin/hotels/${h.id}/seasons`} className="px-3 py-1.5 border rounded">Сезоны</Link>
+                     </div>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+         </div>
+       </div>
+     </div>
+   );
+ }
 
   // --- админ/модер: полный список + создание ---
   return (
