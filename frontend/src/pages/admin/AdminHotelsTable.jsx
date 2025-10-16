@@ -1,6 +1,6 @@
 // frontend/src/pages/admin/AdminHotelsTable.jsx
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
 
 /* ===== helpers: JWT roles / admin check ===== */
@@ -10,7 +10,7 @@ function parseJwtRoles() {
       localStorage.getItem("token") ||
       localStorage.getItem("providerToken") ||
       "";
-    if (!tok.includes(".")) return { roles: [], role: "", type: "" };
+    if (!tok.includes(".")) return { roles: [], role: "", type: "", claims: {} };
     const base64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     const json = decodeURIComponent(
       atob(base64)
@@ -27,173 +27,82 @@ function parseJwtRoles() {
       .filter(Boolean);
     return { roles, role: String(claims.role || "").toLowerCase(), type: String(claims.type || "").toLowerCase(), claims };
   } catch {
-    return { roles: [], role: "", type: "" };
+    return { roles: [], role: "", type: "", claims: {} };
   }
 }
-const isAdminLike = ({ roles, role, type, claims }) => {
-  const pool = new Set([role, type, ...roles]);
-  if (claims?.is_admin === true || String(claims?.is_admin) === "true") return true;
-  return pool.has("admin") || pool.has("moderator");
-};
-const isProviderRole = ({ roles, role, type }) => {
-  const pool = new Set([role, type, ...roles]);
-  return pool.has("provider");
-};
+const isAdminLike = ({ roles, role, type, claims }) =>
+  claims?.is_admin === true ||
+  String(claims?.is_admin) === "true" ||
+  new Set([role, type, ...roles]).has("admin") ||
+  new Set([role, type, ...roles]).has("moderator");
+const isProviderRole = ({ roles, role, type }) =>
+  new Set([role, type, ...roles]).has("provider");
 
-function normalizeHotel(h) {
-  return {
-    id:   h.id ?? h.hotel_id ?? h._id ?? null,
-    name: h.name ?? h.title ?? "",
-    city: h.city ?? h.location ?? h.town ?? "",
-  };
+/* ====== api helpers ====== */
+async function apiGetMyHotels({ q = "", city = "", page = 1, limit = 200 } = {}) {
+  return apiGet("/api/hotels/mine", { params: { q, city, page, limit } });
+}
+async function apiSearchHotels({ name = "", city = "", limit = 200 } = {}) {
+  return apiGet("/api/hotels/search", { params: { name, city, limit } });
 }
 
-export default function AdminHotelsTable() {
-  const nav = useNavigate();
+/* ====== normalize ====== */
+const normalizeHotel = (h) => ({
+  id:   h.id ?? h.hotel_id ?? null,
+  name: h.name ?? "",
+  city: h.city ?? h.location ?? "",
+});
 
+export default function AdminHotelsTable() {
   // RBAC
   const who = useMemo(() => parseJwtRoles(), []);
   const admin = isAdminLike(who);
   const provider = isProviderRole(who);
+  const providerMode = provider && !admin;
 
-  // провайдерский режим
-  const [meLoading, setMeLoading] = useState(false);
-  const [meError, setMeError] = useState("");
-  const [myHotelId, setMyHotelId] = useState(null);
-
-  // список (для админа/модера)
-  const [items, setItems] = useState([]);
+  // фильтры
   const [qName, setQName] = useState("");
   const [qCity, setQCity] = useState("");
+
+  // данные
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const reqIdRef = useRef(0);
 
-  const url = useMemo(() => {
-    const p = new URLSearchParams({
-      name: qName || "",
-      city: qCity || "",
-      limit: "200",
-    });
-    return `/api/hotels/search?${p.toString()}`;
-  }, [qName, qCity]);
-
+  // загрузчик
   const load = useCallback(async () => {
-    if (!admin) return; // провайдеру список не загружаем
     const myReq = ++reqIdRef.current;
     setLoading(true);
     setError("");
     try {
-      const res = await apiGet(url);
-      const data = Array.isArray(res) ? res : (Array.isArray(res?.items) ? res.items : []);
-      const rows = data.map(normalizeHotel);
-      if (reqIdRef.current === myReq) setItems(rows);
-    } catch (_e) {
-      if (reqIdRef.current === myReq) {
-        setItems([]);
-        setError("Не удалось загрузить список отелей");
-      }
+      const data = providerMode
+        ? await apiGetMyHotels({ q: qName.trim(), city: qCity.trim(), limit: 200 })
+        : await apiSearchHotels({ name: qName.trim(), city: qCity.trim(), limit: 200 });
+
+      const rows = (providerMode ? data?.items : Array.isArray(data) ? data : data?.items) || [];
+      if (reqIdRef.current === myReq) setItems(rows.map(normalizeHotel));
+    } catch (e) {
+      if (reqIdRef.current === myReq) setError("Не удалось загрузить список отелей");
     } finally {
       if (reqIdRef.current === myReq) setLoading(false);
     }
-  }, [url, admin]);
+  }, [providerMode, qName, qCity]);
 
-  // первичная загрузка: админ — список, провайдер — свой hotel_id
-  useEffect(() => {
-    if (admin) {
-      load();
-      return;
-    }
-    if (provider) {
-      (async () => {
-        try {
-          setMeLoading(true);
-          setMeError("");
-          const me = await apiGet("/api/providers/profile"); // { id, hotel_id }
-          setMyHotelId(me?.hotel_id ?? null);
-        } catch (e) {
-          setMeError("Не удалось получить данные провайдера");
-        } finally {
-          setMeLoading(false);
-        }
-      })();
-    }
-  }, [admin, provider, load]);
+  useEffect(() => { load(); }, [load]);
 
-  const onSubmit = async (e) => {
+  const onSubmit = (e) => {
     e.preventDefault();
-    if (admin) load();
+    load();
   };
 
-  /* ===================== RENDER ===================== */
- // --- провайдер: список «мои отели» ---
- if (provider && !admin) {
-   const [pItems, setPItems] = useState([]);
-   const [pName, setPName] = useState("");
-   const [pCity, setPCity] = useState("");
-   const [pLoading, setPLoading] = useState(false);
-   const loadMine = useCallback(async () => {
-     setPLoading(true);
-     const res = await apiGetMyHotels({ q: pName, city: pCity, limit: 200 });
-     setPItems((res?.items || []).map(normalizeHotel));
-     setPLoading(false);
-   }, [pName, pCity]);
-   useEffect(() => { loadMine(); }, [loadMine]);
-
-   return (
-     <div className="p-6">
-       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
-         <div className="flex items-center justify-between mb-4">
-           <h1 className="text-2xl font-bold">Мои отели</h1>
-           <Link to="/admin/hotels/new" className="px-3 py-2 rounded bg-orange-600 text-white">
-             + Создать отель
-           </Link>
-         </div>
-         <form onSubmit={(e)=>{e.preventDefault();loadMine();}} className="flex gap-3 mb-4">
-           <input className="flex-1 border rounded px-3 py-2" placeholder="Поиск по названию"
-                  value={pName} onChange={(e)=>setPName(e.target.value)} />
-           <input className="w-64 border rounded px-3 py-2" placeholder="Поиск по городу"
-                  value={pCity} onChange={(e)=>setPCity(e.target.value)} />
-           <button className="px-4 py-2 rounded bg-gray-800 text-white">
-             {pLoading ? "Поиск…" : "Найти"}
-           </button>
-         </form>
-         <div className="overflow-x-auto">
-           <table className="w-full table-auto border-collapse">
-             <thead>…</thead>
-             <tbody>
-               {pLoading ? (
-                 <tr><td colSpan={4} className="px-4 py-6 text-center">Загрузка…</td></tr>
-               ) : pItems.length === 0 ? (
-                 <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">Пусто</td></tr>
-               ) : pItems.map(h => (
-                 <tr key={h.id} className="hover:bg-gray-50">
-                   <td className="px-4 py-3">{h.id}</td>
-                   <td className="px-4 py-3">{h.name}</td>
-                   <td className="px-4 py-3">{h.city || "—"}</td>
-                   <td className="px-4 py-3">
-                     <div className="flex items-center gap-2">
-                       <Link to={`/admin/hotels/${h.id}/edit`} className="px-3 py-1.5 border rounded">Править</Link>
-                       <Link to={`/admin/hotels/${h.id}/seasons`} className="px-3 py-1.5 border rounded">Сезоны</Link>
-                     </div>
-                   </td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
-         </div>
-       </div>
-     </div>
-   );
- }
-
-  // --- админ/модер: полный список + создание ---
   return (
     <div className="p-6">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Отели (админ)</h1>
-          {/* кнопку «Новый отель» показываем только админу/модеру */}
+          <h1 className="text-2xl font-bold">
+            {providerMode ? "Мои отели" : "Отели (админ)"}
+          </h1>
           <Link
             to="/admin/hotels/new"
             className="px-3 py-2 rounded bg-orange-600 text-white hover:bg-orange-700"
@@ -235,7 +144,7 @@ export default function AdminHotelsTable() {
 
         <div className="overflow-x-auto">
           <table className="w-full table-auto border-collapse">
-            <thead>
+            <thead className="bg-gray-50">
               <tr className="text-left text-gray-600">
                 <th className="px-4 py-3 font-semibold w-[90px]">ID</th>
                 <th className="px-4 py-3 font-semibold">Название</th>
@@ -245,17 +154,9 @@ export default function AdminHotelsTable() {
             </thead>
             <tbody className="divide-y">
               {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                    Загрузка…
-                  </td>
-                </tr>
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">Загрузка…</td></tr>
               ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                    Ничего не найдено
-                  </td>
-                </tr>
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">Ничего не найдено</td></tr>
               ) : (
                 items.map((h) => (
                   <tr key={h.id ?? `${h.name}-${h.city}`} className="hover:bg-gray-50">
