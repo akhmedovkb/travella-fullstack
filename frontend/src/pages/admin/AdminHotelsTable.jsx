@@ -191,36 +191,30 @@ export default function AdminHotelsTable({
                     <td className="px-4 py-3">{h.city || "—"}</td>
                     <td className="px-4 py-3">
                       {h.id ? (
-                        <div className="flex items-center gap-2">
-                          <Link
-                            to={`/admin/hotels/${h.id}/edit`}
-                            className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
-                          >
-                            Править
-                          </Link>
-                          {onEdit ? (
-                            <button
-                              type="button"
-                              onClick={() => onEdit(h)}
-                              className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
-                            >
-                              Править
-                            </button>
-                          ) : (
-                            <Link
-                              to={`/admin/hotels/${h.id}/edit`}
-                              className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
-                            >
-                              Править
-                            </Link>
-                          )}
-                          <Link
-                            to={`/admin/hotels/${h.id}/seasons`}
-                            className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
-                          >
-                            Сезоны
-                          </Link>
-                        </div>
+                       <div className="flex items-center gap-2">
+                         {onEdit ? (
+                           <button
+                             type="button"
+                             onClick={() => onEdit(h)}
+                             className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                           >
+                             Править
+                           </button>
+                         ) : (
+                           <Link
+                             to={`/admin/hotels/${h.id}/edit`}
+                             className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                           >
+                             Править
+                           </Link>
+                         )}
+                         <Link
+                           to={`/admin/hotels/${h.id}/seasons`}
+                           className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50"
+                         >
+                           Сезоны
+                         </Link>
+                       </div>
                       ) : (
                         <span className="text-gray-400">локальная подсказка</span>
                       )}
