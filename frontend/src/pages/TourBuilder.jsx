@@ -2040,9 +2040,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
               <div>
                 <label className="block text-sm mb-1">{t('tb.tpl_start_date')}</label>
                <input
-                 <div className="mt-1 text-xs text-gray-500">
-                  {t('tb.tpl_start_hint')}
-                </div>
                  type="date"
                  className="w-full h-10 border rounded px-2"
                  value={applyFrom}
@@ -2053,6 +2050,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
                    if (e.target.value && e.target.value < min) setApplyFrom(min);
                  }}
                />
+                <div className="mt-1 text-xs text-gray-500">
+                  {t('tb.tpl_start_hint')}
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
