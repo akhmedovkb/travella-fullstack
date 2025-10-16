@@ -111,6 +111,32 @@ const sanitizeImages = (images) =>
     .filter(Boolean)
     .slice(0, 20);
 
+// --- DB columns helper: check if a table has given columns -------------------
+// Usage:
+//   const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
+//      or
+//   const cols = await tableHasColumns("providers", ["hotel_id"]);
+async function tableHasColumns(arg1, arg2, arg3) {
+  let client = pool;
+  let table, cols;
+  if (Array.isArray(arg3)) {
+    client = arg1 || pool;
+    table = arg2;
+    cols  = arg3;
+  } else {
+    table = arg1;
+    cols  = arg2;
+  }
+  const q = await client.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_name = $1
+        AND column_name = ANY($2::text[])`,
+    [table, cols]
+  );
+  const set = new Set(q.rows.map(r => r.column_name));
+  return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
+}
 
 // ---------------- Cars in provider profile (no new table) ----------------
 function normalizeCarFleet(input) {
