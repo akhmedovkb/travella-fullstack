@@ -264,6 +264,7 @@ export default function AdminHotelForm({ hotelIdProp } = {}) {
     setCurrency(h?.currency || "UZS");
     setImages(Array.isArray(h?.images) ? h.images : []);
     setStars(h?.stars ?? ""); // ← добавлено
+    setProviderId(h?.provider_id ?? h?.providerId ?? "");
     setAmenities(Array.isArray(h?.amenities) ? h.amenities : []);
     setServices(Array.isArray(h?.services) ? h.services : []);
     setCountryOpt(h?.country ? { value: h.country, code: "", label: h.country } : null);
@@ -325,7 +326,8 @@ export default function AdminHotelForm({ hotelIdProp } = {}) {
   const [address, setAddress] = useState("");
   const [contact, setContact] = useState("");
   const [images, setImages] = useState([]);
-
+  // владелец
+  const [providerId, setProviderId] = useState("");
     // Категория отеля (звёзды)
   const [stars, setStars] = useState("");
 
@@ -764,6 +766,23 @@ const invalidRowIds = useMemo(
                 onChange={(e) => setStars(e.target.value)}
               />
             </div>
+            <div className="w-36">
+             <label className="block text-sm font-medium mb-1">
+               provider_id
+             </label>
+             <input
+               type="number"
+               min={1}
+               step={1}
+               className="w-full border rounded px-3 py-2"
+               placeholder="id владельца"
+               value={providerId ?? ""}
+               onChange={(e) => setProviderId(e.target.value)}
+             />
+             <div className="text-[11px] text-gray-500 mt-1">
+               Изменение учитывается только для админов
+             </div>
+           </div>
           </div>
         </div>
 
