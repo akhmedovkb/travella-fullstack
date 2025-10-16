@@ -313,7 +313,7 @@ export default function AdminHotelForm({ hotelIdProp } = {}) {
     if (isNew) return;
     (async () => {
       try {
-        const data = await httpGet(`/api/hotels/${encodeURIComponent(hotelId)}`);
+        const data = await httpGet(`/api/hotels/${encodeURIComponent(hotelId)}`, { role: "provider" });
         fillFromHotel(data);
       } catch (e) {
         tError(t("load_error") || "Не удалось загрузить отель");
