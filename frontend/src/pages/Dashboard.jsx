@@ -2000,6 +2000,11 @@ useEffect(() => {
                  </button>
                </div>
              </div>
+                 {hotelTab === "price" ? (
+                   <AdminHotelForm hotelIdProp={hotelId ?? "new"} />
+                 ) : (
+                   <AdminHotelsTable />
+                 )}
             </div>
           )}
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
