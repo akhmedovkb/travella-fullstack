@@ -80,7 +80,7 @@ router.post("/:id/inspections", providerOnly, createHotelInspection);
 router.get("/:id/brief", getHotelBrief);   // /api/hotels/:id/brief
 
 /* --- карточка отеля --- */
-router.get("/:id", getHotel);
+router.get("/:id", tryAuth, getHotel);  // ← чтобы распарсить токен и пропустить админа
 
 /* ==================== CRUD отеля (для провайдера/админа) ==================== */
 router.post("/", providerOrAdmin, createHotel);
