@@ -2004,7 +2004,7 @@ useEffect(() => {
           )}
           <div className="mb-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">{t("services")}</h2>
+              <h2 className="text-2xl font-bold">{t("services_marketplace", { defaultValue: "Услуги для MARKETPLACE" })}</h2>
               {selectedService && (
                 <button
                   onClick={resetServiceForm}
