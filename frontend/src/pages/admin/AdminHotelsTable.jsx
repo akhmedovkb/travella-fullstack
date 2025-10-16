@@ -117,8 +117,7 @@ export default function AdminHotelsTable({
           <h1 className="text-2xl font-bold">
             {providerMode ? "Мои отели" : "Отели (админ)"}
           </h1>
-
-              {onNew ? (
+          {onNew ? (
             <button
               type="button"
               onClick={onNew}
