@@ -108,7 +108,7 @@ export default function AdminHotelsTable() {
         try {
           setMeLoading(true);
           setMeError("");
-          const me = await apiGet("/api/providers/me"); // { id, hotel_id }
+          onst me = await apiGet("/api/providers/profile"); // { id, hotel_id }
           setMyHotelId(me?.hotel_id ?? null);
         } catch (e) {
           setMeError("Не удалось получить данные провайдера");
