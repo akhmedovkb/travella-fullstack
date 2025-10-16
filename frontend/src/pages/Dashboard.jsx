@@ -14,6 +14,7 @@ import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
+import AdminHotelForm from "./admin/AdminHotelForm";
 
 /** ================= Helpers ================= */
 
@@ -639,6 +640,7 @@ const scrollToProfilePart = useCallback((key) => {
 
   // Profile
   const [profile, setProfile] = useState({});
+  const [hotelId, setHotelId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
   
@@ -1117,6 +1119,11 @@ useEffect(() => {
       if (err?.code === "ERR_CANCELED") return;
       setStats({});
     });
+  //hotels
+  // me: чтобы узнать свой hotel_id
+  api.get(`/api/providers/me`, { signal: c1.signal })
+    .then(({data}) => setHotelId(data?.hotel_id ?? null))
+    .catch(() => setHotelId(null));
 
   return () => { c1.abort(); c2.abort(); c3.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1970,7 +1977,13 @@ useEffect(() => {
        
         {/* Правый блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
-          
+            {/* === Отель: прайс и карточка === */}
+          {profile?.type === "hotel" && (
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-3">{t("hotel_price_title",{defaultValue:"Прайс отеля"})}</h2>
+              <AdminHotelForm hotelIdProp={hotelId ?? "new"} />
+            </div>
+          )}
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
           {(profile?.id && (profile.type === "guide" || profile.type === "transport" || profile.type === "agent")) && (
             <div className="mb-6">
