@@ -15,6 +15,7 @@ import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
 import AdminHotelForm from "./admin/AdminHotelForm";
+import AdminHotelsTable from "./admin/AdminHotelsTable";
 
 /** ================= Helpers ================= */
 
@@ -643,6 +644,8 @@ const scrollToProfilePart = useCallback((key) => {
   const [hotelId, setHotelId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newPhoto, setNewPhoto] = useState(null);
+  // hotel-only: переключатель «Прайс / Мои отели»
+  const [hotelTab, setHotelTab] = useState("price"); // "price" | "list"
   
   const [newCertificate, setNewCertificate] = useState(null);
   // Просмотр сертификата: поддержка data: → blob:
@@ -1980,8 +1983,29 @@ useEffect(() => {
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
             <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-3">{t("hotel_price_title",{defaultValue:"Прайс отеля"})}</h2>
-              <AdminHotelForm hotelIdProp={hotelId ?? "new"} />
+             <div className="flex items-center justify-between mb-3">
+               <h2 className="text-2xl font-bold">{t("hotel_section_title", { defaultValue: "Отель" })}</h2>
+               <div className="inline-flex rounded-lg border bg-white p-1">
+                 <button
+                   onClick={() => setHotelTab("price")}
+                   className={`px-3 py-1.5 text-sm rounded-md ${hotelTab==="price" ? "bg-gray-900 text-white" : "hover:bg-gray-100"}`}
+                 >
+                   {t("hotel_price_title", { defaultValue: "Прайс" })}
+                 </button>
+                 <button
+                   onClick={() => setHotelTab("list")}
+                   className={`px-3 py-1.5 text-sm rounded-md ${hotelTab==="list" ? "bg-gray-900 text-white" : "hover:bg-gray-100"}`}
+                 >
+                   {t("my_hotels", { defaultValue: "Мои отели" })}
+                 </button>
+               </div>
+             </div>
+          
+             {hotelTab === "price" ? (
+               <AdminHotelForm hotelIdProp={hotelId ?? "new"} />
+             ) : (
+               <AdminHotelsTable />
+             )}
             </div>
           )}
           {/* === Прайс-лист для TourBuilder (guide/transport) === */}
