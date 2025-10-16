@@ -1068,6 +1068,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
     if (!tpl.days?.length) return alert("В шаблоне нет дней");
     const start = new Date(applyFrom);
     if (isNaN(start)) return alert("Неверная дата");
+       // ❗ не допускаем прошлые даты (сравнение по началу суток)
+   const today = startOfDay(new Date());
+   if (start < today) {
+     alert("Дата начала не может быть в прошлом");
+     return;
+   }
 
     // выставляем диапазон под длину шаблона
     const to = addDays(start, tpl.days.length - 1);
@@ -2026,9 +2032,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
               </div>
               <div>
                 <label className="block text-sm mb-1">{t('tb.tpl_start_date')}</label>
-                <input type="date" className="w-full h-10 border rounded px-2"
-                       value={applyFrom}
-                       onChange={e=>setApplyFrom(e.target.value)} />
+               <input
+                 type="date"
+                 className="w-full h-10 border rounded px-2"
+                 value={applyFrom}
+                 min={ymd(startOfDay(new Date()))}     // ❗ запрет прошлых дат
+                 onChange={(e) => setApplyFrom(e.target.value)}
+                 onBlur={(e) => {                      // подстрахуемся при ручном вводе
+                   const min = ymd(startOfDay(new Date()));
+                   if (e.target.value && e.target.value < min) setApplyFrom(min);
+                 }}
+               />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
