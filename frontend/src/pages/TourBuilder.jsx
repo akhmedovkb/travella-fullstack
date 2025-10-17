@@ -826,7 +826,10 @@ export default function TourBuilder() {
   const [availability, setAvailability] = useState(null);
   const [holdInfo, setHoldInfo] = useState(null);
   const [docs, setDocs] = useState(null);
-  const [busy, setBusy] = useState({ avail:false, hold:false, docs:false, confirm:false });
+  const [busy, setBusy] = useState({
+    avail:false, hold:false, docs:false, confirm:false,
+    accept:false, reject:false, cancelReq:false, cancelProv:false
+  });
   const [holdHours, setHoldHours] = useState(24);
 
   const handleCheckAvailability = async () => {
@@ -980,6 +983,74 @@ const handleGetDocs = async () => {
   }
 };
 
+  /* ---------- NEW: accept / reject / cancel ---------- */
+  const handleAcceptBooking = async () => {
+    if (!bookingId) return;
+    try {
+      setBusy(b => ({...b, accept:true}));
+      const res = await postJSON(`/api/bookings/${bookingId}/accept`, {});
+      toast.success(t("tb.accept_ok","Бронь принята"));
+      // можно при желании тут обновить локальный статус
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только провайдер услуги)"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, accept:false}));
+    }
+  };
+
+  const handleRejectBooking = async () => {
+    if (!bookingId) return;
+    const reason = window.prompt(t("tb.reject_reason_ph","Причина отказа (необязательно)")) || null;
+   try {
+      setBusy(b => ({...b, reject:true}));
+      const res = await postJSON(`/api/bookings/${bookingId}/reject`, { reason });
+      toast(t("tb.reject_ok","Бронь отклонена"), { icon:"🚫" });
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только провайдер услуги)"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, reject:false}));
+    }
+  };
+
+  const handleCancelByRequester = async () => {
+    if (!bookingId) return;
+    const reason = window.prompt(t("tb.cancel_reason_ph","Причина отмены (необязательно)")) || null;
+    try {
+      setBusy(b => ({...b, cancelReq:true}));
+      const res = await postJSON(`/api/bookings/${bookingId}/cancel-by-requester`, { reason });
+      toast(t("tb.cancel_req_ok","Заявка отменена (со стороны инициатора)"), { icon:"🛑" });
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, cancelReq:false}));
+    }
+  };
+
+  const handleCancelByProvider = async () => {
+    if (!bookingId) return;
+    const reason = window.prompt(t("tb.cancel_reason_req_if_confirmed","Причина отмены (обязательна, если уже подтверждено)")) || null;
+    try {
+      setBusy(b => ({...b, cancelProv:true}));
+      const res = await postJSON(`/api/bookings/${bookingId}/cancel-by-provider`, { reason });
+      toast(t("tb.cancel_prov_ok","Заявка отменена (со стороны провайдера)"), { icon:"🛑" });
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только владелец услуги)"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, cancelProv:false}));
+    }
+  };
   
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
@@ -1567,6 +1638,50 @@ const makeTransportLoader = (dateKey) => async (input) => {
             >
               {busy.docs ? t('tb.loading','Загрузка…') : t('tb.docs','Документы')}
             </button>
+            {/* ----- NEW: provider actions ----- */}
+            {isProvider && (
+              <>
+                <span className="mx-1 opacity-50">|</span>
+                <button
+                  onClick={handleAcceptBooking}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm disabled:opacity-50"
+                  disabled={!bookingId || busy.accept}
+                  title={t('tb.accept_tt','Подтвердить входящую бронь как провайдер')}
+                >
+                  {busy.accept ? t('tb.loading','Загрузка…') : t('tb.accept','Принять')}
+                </button>
+                <button
+                  onClick={handleRejectBooking}
+                  className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm disabled:opacity-50"
+                  disabled={!bookingId || busy.reject}
+                  title={t('tb.reject_tt','Отклонить входящую бронь как провайдер')}
+                >
+                  {busy.reject ? t('tb.loading','Загрузка…') : t('tb.reject','Отклонить')}
+                </button>
+                <button
+                  onClick={handleCancelByProvider}
+                  className="px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 text-sm disabled:opacity-50"
+                  disabled={!bookingId || busy.cancelProv}
+                  title={t('tb.cancel_prov_tt','Отменить как провайдер услуги')}
+                >
+                  {busy.cancelProv ? t('tb.loading','Загрузка…') : t('tb.cancel_as_provider','Отменить (провайдер)')}
+                </button>
+              </>
+            )}
+            {/* ----- NEW: requester action (для инициатора брони, не обязательно провайдер) ----- */}
+            {!isProvider && (
+              <>
+                <span className="mx-1 opacity-50">|</span>
+                <button
+                  onClick={handleCancelByRequester}
+                  className="px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 text-sm disabled:opacity-50"
+                  disabled={!bookingId || busy.cancelReq}
+                  title={t('tb.cancel_req_tt','Отменить как инициатор заявки')}
+                >
+                  {busy.cancelReq ? t('tb.loading','Загрузка…') : t('tb.cancel_as_requester','Отменить (инициатор)')}
+                </button>
+              </>
+            )}
           </div>
           {/* Confirmations panel */}
           {confirmations && (
