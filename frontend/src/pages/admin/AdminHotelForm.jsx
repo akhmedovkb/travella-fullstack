@@ -14,6 +14,43 @@ import axios from "axios";
    ========================== */
 const API_BASE = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const apiURL = (path) => `${API_BASE}${path}`;
+// --- чтение роли из JWT (без внешних либ) ---
+function decodeJwtPayload(token) {
+  try {
+    const base = token.split(".")[1] || "";
+    const b64 = base.replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(b64)
+        .split("")
+        .map((c) => `%${("00" + c.charCodeAt(0).toString(16)).slice(-2)}`)
+        .join("")
+    );
+    return JSON.parse(json);
+  } catch { return {}; }
+}
+function getUserFromToken() {
+  const t =
+    localStorage.getItem("providerToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("clientToken") ||
+    null;
+  return t ? decodeJwtPayload(t) : {};
+}
+function isAdminLikeUser(u = {}) {
+  const roles = []
+    .concat(u.role || u.type || [])
+    .concat(Array.isArray(u.roles) ? u.roles : [])
+    .map((r) => String(r).toLowerCase());
+  const flag = u.is_admin === true || String(u.is_admin).toLowerCase() === "true";
+  return flag || roles.includes("admin") || roles.includes("moderator");
+}
+function isProviderLikeUser(u = {}) {
+  const roles = []
+    .concat(u.role || u.type || [])
+    .concat(Array.isArray(u.roles) ? u.roles : [])
+    .map((r) => String(r).toLowerCase());
+  return roles.includes("provider") || roles.includes("hotel") || roles.includes("supplier") || roles.includes("tour_agent") || roles.includes("agency");
+}
 
 function getToken(role) {
   if (role === "provider") {
@@ -255,7 +292,9 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const effId    = hotelIdProp === "new" ? null : (hotelIdProp ?? routedId);
   const isNew    = !effId;
   const hotelId  = effId || null;
-
+  const userInfo = useMemo(() => getUserFromToken(), []);
+  const isAdminLike = useMemo(() => isAdminLikeUser(userInfo), [userInfo]);
+  const isProviderLike = useMemo(() => isProviderLikeUser(userInfo), [userInfo]);
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
     setName(h?.name || "");
@@ -674,8 +713,12 @@ const invalidRowIds = useMemo(
       amenities,
       services,
       images,
-      provider_id: numOrNull(providerId),
+      
     };
+         // Владелец может менять только админ — для провайдера не шлём это поле
+    if (isAdminLike) {
+      payload.provider_id = numOrNull(providerId);
+    }
 
     try {
       if (!isNew && hotelId) {
@@ -771,22 +814,31 @@ const invalidRowIds = useMemo(
               />
             </div>
             <div className="w-36">
-             <label className="block text-sm font-medium mb-1">
-               provider_id
-             </label>
-             <input
-               type="number"
-               min={1}
-               step={1}
-               className="w-full border rounded px-3 py-2"
-               placeholder="id владельца"
-               value={providerId ?? ""}
-               onChange={(e) => setProviderId(e.target.value)}
-             />
-             <div className="text-[11px] text-gray-500 mt-1">
-               Изменение учитывается только для админов
-             </div>
-           </div>
+              <label className="block text-sm font-medium mb-1">
+                provider_id
+              </label>
+              {isAdminLike ? (
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="id владельца"
+                  value={providerId ?? ""}
+                  onChange={(e) => setProviderId(e.target.value)}
+                />
+              ) : (
+                <input
+                  className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-700"
+                  value={providerId ?? ""}
+                  readOnly
+                  disabled
+                />
+              )}
+              <div className="text-[11px] text-gray-500 mt-1">
+                {isAdminLike ? "Админ может изменить владельца" : "Только админ может менять владельца"}
+              </div>
+            </div>
           </div>
         </div>
 
