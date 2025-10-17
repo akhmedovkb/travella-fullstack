@@ -17,6 +17,17 @@ async function getExistingColumns(table, cols = []) {
   return cols.reduce((acc, c) => ((acc[c] = set.has(c)), acc), {});
 }
 
+// есть ли таблица
+async function tableExists(table) {
+  const q = await pool.query(
+    `SELECT 1
+       FROM information_schema.tables
+      WHERE table_schema='public' AND table_name=$1`,
+    [table]
+  );
+  return q.rowCount > 0;
+}
+
 const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
 
 /** Надёжно переводит любую входную дату в ISO YYYY-MM-DD (UTC). */
@@ -132,6 +143,8 @@ const createBooking = async (req, res) => {
       "requester_phone",
       "requester_telegram",
       "requester_email",
+      "hold_until",       // <- для конвейера
+      "code", "status",   // <- поддержим мягко
     ]);
 
     // базовые колонки
@@ -140,7 +153,7 @@ const createBooking = async (req, res) => {
       service_id ?? null,
       providerId,
       userRole === "client" ? userId : null,
-      primaryDate, // <-- ОБЯЗАТЕЛЬНО
+      primaryDate,
       "pending",
       message ?? null,
       JSON.stringify(attachments ?? []),
@@ -163,7 +176,6 @@ const createBooking = async (req, res) => {
       if (cols.requester_email)    { insertCols.push("requester_email");    values.push(me?.email ?? null); }
     }
 
-    // собрать плейсхолдеры
     const placeholders = insertCols
       .map((name, i) => (name === "date" ? `$${i + 1}::date` : `$${i + 1}`))
       .join(",");
@@ -171,7 +183,7 @@ const createBooking = async (req, res) => {
     const ins = await pool.query(
       `INSERT INTO bookings (${insertCols.join(",")})
        VALUES (${placeholders})
-       RETURNING id, status`,
+       RETURNING id, status, provider_id, service_id`,
       values
     );
     const bookingId = ins.rows[0].id;
@@ -185,20 +197,22 @@ const createBooking = async (req, res) => {
     }
 
     res.status(201).json({ id: bookingId, status: "pending", dates: days });
+
     const bkg = {
       id: bookingId,
-      provider_id: providerId,
+      provider_id: ins.rows[0].provider_id,
+      service_id: ins.rows[0].service_id,
       dates: days,
       client_message: message ?? null,
     };
-const service = { title: (await pool.query(`SELECT title FROM services WHERE id=$1`, [service_id ?? null])).rows[0]?.title || null };
-const client = userRole === "client"
-  ? (await pool.query(`SELECT name FROM clients WHERE id=$1`, [userId])).rows[0]
-  : null;
+    const service = { title: (await pool.query(`SELECT title FROM services WHERE id=$1`, [service_id ?? null])).rows[0]?.title || null };
+    const client = userRole === "client"
+      ? (await pool.query(`SELECT name FROM clients WHERE id=$1`, [userId])).rows[0]
+      : null;
 
-tg.notifyNewRequest({ booking: bkg, provider: null, client, service }).catch(e => {
-  console.error("tg.notifyNewRequest failed:", e?.response?.data || e?.message || e);
-});
+    tg.notifyNewRequest({ booking: bkg, provider: null, client, service }).catch(e => {
+      console.error("tg.notifyNewRequest failed:", e?.response?.data || e?.message || e);
+    });
   } catch (err) {
     console.error("createBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -296,7 +310,6 @@ async function getProviderBookings(req, res) {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 }
-
 
 // ИСХОДЯЩИЕ (я — провайдер, бронирую чужую услугу)
 async function getProviderOutgoingBookings(req, res) {
@@ -407,7 +420,6 @@ const getMyBookings = async (req, res) => {
   }
 };
 
-
 // Провайдер отправляет цену/комментарий
 const providerQuote = async (req, res) => {
   try {
@@ -453,8 +465,8 @@ const providerQuote = async (req, res) => {
 
     if (!q.rowCount) return res.status(404).json({ message: "Booking not found" });
     res.json({ ok: true, booking: q.rows[0] });
-        try {
-      // узнаём даты и booking поля
+
+    try {
       const bQ = await pool.query(
         `SELECT id, provider_id, client_id, requester_provider_id
            FROM bookings WHERE id=$1`, [bookingId]
@@ -473,8 +485,8 @@ const providerQuote = async (req, res) => {
         console.error("tg.notifyQuote failed:", e?.response?.data || e?.message || e);
       });
     } catch (e) {
-  console.error("providerQuote notify block failed:", e?.message || e);
-}
+      console.error("providerQuote notify block failed:", e?.message || e);
+    }
   } catch (err) {
     console.error("providerQuote error:", err);
     res.status(500).json({ message: "Server error" });
@@ -508,35 +520,34 @@ const rejectBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
-    
-  const cols = await getExistingColumns("bookings", ["rejected_by"]);
-  let sql = `
-    UPDATE bookings
-       SET status='rejected',
-           provider_note = COALESCE($1, provider_note),
-           updated_at = NOW()`;
-  const params = [reason ?? null, id];
-  if (cols.rejected_by) sql += `, rejected_by='provider'`;
-  sql += ` WHERE id=$2`;
-  await pool.query(sql, params);
+    const cols = await getExistingColumns("bookings", ["rejected_by"]);
+    let sql = `
+      UPDATE bookings
+         SET status='rejected',
+             provider_note = COALESCE($1, provider_note),
+             updated_at = NOW()`;
+    const params = [reason ?? null, id];
+    if (cols.rejected_by) sql += `, rejected_by='provider'`;
+    sql += ` WHERE id=$2`;
+    await pool.query(sql, params);
     res.json({ ok: true, status: "rejected" });
 
     try {
-  const bQ = await pool.query(
-    `SELECT id, provider_id, client_id, requester_provider_id
-       FROM bookings WHERE id=$1`, [id]
-  );
-  const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
-  const booking = {
-    ...bQ.rows[0],
-    dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-  };
-  tg.notifyRejected({ booking, reason }).catch(e => {
-  console.error("tg.notifyRejected failed:", e?.response?.data || e?.message || e);
-});
-} catch (e) {
-  console.error("rejectBooking notify block failed:", e?.message || e);
-}
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyRejected({ booking, reason }).catch(e => {
+        console.error("tg.notifyRejected failed:", e?.response?.data || e?.message || e);
+      });
+    } catch (e) {
+      console.error("rejectBooking notify block failed:", e?.message || e);
+    }
   } catch (err) {
     console.error("rejectBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -555,33 +566,32 @@ const cancelBooking = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
 
- const cols = await getExistingColumns("bookings", ["cancelled_by"]);
-  let sql = `
-    UPDATE bookings
-       SET status='cancelled',
-           updated_at = NOW()`;
-  if (cols.cancelled_by) sql += `, cancelled_by='client'`;
-  sql += ` WHERE id=$1`;
-  await pool.query(sql, [id]);
+    const cols = await getExistingColumns("bookings", ["cancelled_by"]);
+    let sql = `
+      UPDATE bookings
+         SET status='cancelled',
+             updated_at = NOW()`;
+    if (cols.cancelled_by) sql += `, cancelled_by='client'`;
+    sql += ` WHERE id=$1`;
+    await pool.query(sql, [id]);
     res.json({ ok: true, status: "cancelled" });
 
     try {
-  const bQ = await pool.query(
-    `SELECT id, provider_id, client_id, requester_provider_id
-       FROM bookings WHERE id=$1`, [id]
-  );
-  const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
-  const booking = {
-    ...bQ.rows[0],
-    dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-  };
-  tg.notifyCancelled({ booking }).catch(e => {
-  console.error("tg.notifyCancelled failed:", e?.response?.data || e?.message || e);
-});
-} catch (e) {
-  console.error("cancelBooking notify block failed:", e?.message || e);
-}
-  
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyCancelled({ booking }).catch(e => {
+        console.error("tg.notifyCancelled failed:", e?.response?.data || e?.message || e);
+      });
+    } catch (e) {
+      console.error("cancelBooking notify block failed:", e?.message || e);
+    }
   } catch (err) {
     console.error("cancelBooking error:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -615,7 +625,7 @@ async function penalizeProvider(providerId, delta = -0.2) {
   } catch {}
 }
 
-// Поставщик отменяет входящую бронь (после согласования — обязательно указать причину)
+// Поставщик отменяет входящую бронь
 const cancelBookingByProvider = async (req, res) => {
   try {
     const providerId = req.user?.id;
@@ -709,35 +719,34 @@ const confirmBooking = async (req, res) => {
       [id]
     );
 
-      res.json({ ok: true, status: "confirmed" });
+    res.json({ ok: true, status: "confirmed" });
 
-  // TG: сообщаем о подтверждении клиентом
-  try {
-    const bQ = await pool.query(
-      `SELECT id, provider_id, client_id, requester_provider_id
-         FROM bookings WHERE id=$1`, [id]
-    );
-    const dQ = await pool.query(
-      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
-    );
-    const booking = {
-      ...bQ.rows[0],
-      dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-    };
-    tg.notifyConfirmed({ booking }).catch(e => {
-  console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
-});
-  } catch (e) {
-  console.error("confirmBooking notify block failed:", e?.message || e);
-}
-   
+    // TG
+    try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(
+        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+      );
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyConfirmed({ booking }).catch(e => {
+        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
+      });
+    } catch (e) {
+      console.error("confirmBooking notify block failed:", e?.message || e);
+    }
   } catch (err) {
     console.error("confirmBooking error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
-// Подтверждение исходящей провайдером-заказчиком (если колонка requester_provider_id существует)
+// Подтверждение исходящей провайдером-заказчиком
 const confirmBookingByRequester = async (req, res) => {
   try {
     const requesterId = req.user?.id;
@@ -754,8 +763,6 @@ const confirmBookingByRequester = async (req, res) => {
       return res.status(409).json({ message: "Бронирование уже обработано" });
     }
 
-    
-    // Проверяем, что на эти даты нет другого confirmed
     const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
     let days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
     if (!days.length) {
@@ -769,28 +776,27 @@ const confirmBookingByRequester = async (req, res) => {
     if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
 
     await pool.query(`UPDATE bookings SET status='confirmed', updated_at=NOW() WHERE id=$1`, [id]);
-      res.json({ ok: true, status: "confirmed" });
+    res.json({ ok: true, status: "confirmed" });
 
-  // TG: подтверждение исходящей поставщиком-заявителем
-  try {
-    const bQ = await pool.query(
-      `SELECT id, provider_id, client_id, requester_provider_id
-         FROM bookings WHERE id=$1`, [id]
-    );
-    const dQ = await pool.query(
-      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
-    );
-    const booking = {
-      ...bQ.rows[0],
-      dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-    };
-    tg.notifyConfirmed({ booking }).catch(e => {
-  console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
-});
-
-  } catch (e) {
-  console.error("confirmBookingByRequester notify block failed:", e?.message || e);
-}
+    // TG
+    try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ = await pool.query(
+        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+      );
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyConfirmed({ booking }).catch(e => {
+        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
+      });
+    } catch (e) {
+      console.error("confirmBookingByRequester notify block failed:", e?.message || e);
+    }
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);
     return res.status(500).json({ message: "Ошибка сервера" });
@@ -818,8 +824,6 @@ const cancelBookingByRequester = async (req, res) => {
     sql += ` WHERE id=$1`;
     await pool.query(sql, [id]);
 
-    // TG: отмена исходящей поставщиком-заявителем
-          
     try {
       const bQ = await pool.query(
         `SELECT id, provider_id, client_id, requester_provider_id
@@ -835,11 +839,11 @@ const cancelBookingByRequester = async (req, res) => {
         )
       };
       tg.notifyCancelledByRequester({ booking }).catch(e => {
-  console.error("tg.notifyCancelledByRequester failed:", e?.response?.data || e?.message || e);
-});
+        console.error("tg.notifyCancelledByRequester failed:", e?.response?.data || e?.message || e);
+      });
     } catch (e) {
-  console.error("cancelBookingByRequester notify block failed:", e?.message || e);
-}
+      console.error("cancelBookingByRequester notify block failed:", e?.message || e);
+    }
     return res.json({ ok: true, status: "cancelled" });
   } catch (err) {
     console.error("cancelBookingByRequester error:", err);
@@ -847,6 +851,150 @@ const cancelBookingByRequester = async (req, res) => {
   }
 };
 
+/* ================= NEW: Booking Conveyor endpoints ================= */
+
+/**
+ * POST /api/bookings/:id/check-availability
+ * Возвращает список дат со статусом: ok | conflict
+ * Не меняет запись в БД — чисто проверка для панельки Availability.
+ */
+const checkAvailability = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+
+    const bQ = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
+    if (!bQ.rowCount) return res.status(404).json({ message: "Бронь не найдена" });
+    const providerId = bQ.rows[0].provider_id;
+
+    // собираем даты
+    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1 ORDER BY date`, [id]);
+    let days = dQ.rows.map(r => toISO(r.d)).filter(Boolean);
+    if (!days.length) {
+      const bD = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
+      if (bD.rowCount) days = [toISO(bD.rows[0].d)].filter(Boolean);
+    }
+    if (!days.length) return res.status(400).json({ message: "У брони нет дат" });
+
+    // проверяем каждую дату отдельно (чтобы подсветить конфликтные)
+    const results = [];
+    for (const ymd of days) {
+      const free = await isDatesFree(providerId, [ymd], id);
+      results.push({ date: ymd, status: free ? "ok" : "conflict" });
+    }
+
+    // агрегированный итог
+    const allOk = results.every(r => r.status === "ok");
+    return res.json({ ok: true, overall: allOk ? "ok" : "conflict", results });
+  } catch (err) {
+    console.error("checkAvailability error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+/**
+ * POST /api/bookings/:id/place-hold
+ * Ставит дедлайн (hold_until). Если есть таблица supplier_orders — создаёт по 1 заявке (MVP).
+ * Body: { hours?: number, payload?: any }
+ */
+const placeHold = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const hours = Math.max(1, Math.min(240, Number(req.body?.hours ?? 24))); // 1..240 часов
+    const payload = req.body?.payload ?? {};
+
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+
+    const bQ = await pool.query(
+      `SELECT id, provider_id, client_id, status
+         FROM bookings WHERE id=$1`,
+      [id]
+    );
+    if (!bQ.rowCount) return res.status(404).json({ message: "Бронь не найдена" });
+
+    // соберём даты
+    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1 ORDER BY date`, [id]);
+    const days = dQ.rows.map(r => toISO(r.d)).filter(Boolean);
+
+    // проверим, что на момент HOLД дат нет в конфликте
+    const providerId = bQ.rows[0].provider_id;
+    const free = await isDatesFree(providerId, days, id);
+    if (!free) return res.status(409).json({ message: "Даты уже заняты" });
+
+    const cols = await getExistingColumns("bookings", ["hold_until"]);
+    const untilSql = cols.hold_until
+      ? `, hold_until = NOW() + $2::interval`
+      : ``;
+
+    const up = await pool.query(
+      `UPDATE bookings
+          SET updated_at = NOW()${untilSql}
+        WHERE id=$1
+      RETURNING id`,
+      cols.hold_until ? [id, `${hours} hours`] : [id]
+    );
+
+    // supplier_orders если таблица существует
+    if (await tableExists("supplier_orders")) {
+      await pool.query(
+        `INSERT INTO supplier_orders (booking_id, supplier_id, status, hold_until, payload)
+         VALUES ($1,$2,'held', NOW() + $3::interval, $4::jsonb)`,
+        [id, providerId, `${hours} hours`, JSON.stringify(payload)]
+      );
+    }
+
+    // TG — уведомление про hold
+    try {
+      const booking = { id, provider_id: providerId, dates: days };
+      tg.notifyHoldPlaced({ booking, hours }).catch(() => {});
+    } catch {}
+
+    return res.json({ ok: true, hold_until_in: `${hours}h` });
+  } catch (err) {
+    console.error("placeHold error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+/**
+ * GET /api/bookings/:id/docs
+ * Заглушка для UI: возвращает ссылки/метаданные документов (пока без генерации PDF).
+ * Позже сюда добавим генерацию инвойса/ваучеров/itinerary.
+ */
+const getBookingDocs = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+
+    const bQ = await pool.query(
+      `SELECT b.id, b.service_id, b.provider_id, b.client_id, b.status,
+              COALESCE((SELECT array_agg(d.date::date ORDER BY d.date)
+                          FROM booking_dates d WHERE d.booking_id=b.id), ARRAY[]::date[]) AS dates
+         FROM bookings b
+        WHERE b.id=$1`,
+      [id]
+    );
+    if (!bQ.rowCount) return res.status(404).json({ message: "Бронь не найдена" });
+
+    const b = bQ.rows[0];
+
+    // Пока отдаём "виртуальные" ссылки — UI может их отрисовать.
+    // Позже заменим на реальные URL генераторов PDF/Excel.
+    const base = `/api/bookings/${id}/docs`;
+    const docs = {
+      invoice_pdf:      `${base}/invoice.pdf`,
+      voucher_pdf:      `${base}/voucher.pdf`,
+      rooming_list_xlsx:`${base}/rooming-list.xlsx`,
+      itinerary_pdf:    `${base}/itinerary.pdf`,
+      share_url:        `${base}/share`, // публичный просмотр (в будущем)
+    };
+
+    return res.json({ ok: true, booking: b, docs });
+  } catch (err) {
+    console.error("getBookingDocs error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
 
 module.exports = {
   createBooking,
@@ -861,4 +1009,9 @@ module.exports = {
   confirmBookingByRequester,
   cancelBookingByRequester,
   cancelBookingByProvider,
+
+  // NEW
+  checkAvailability,
+  placeHold,
+  getBookingDocs,
 };
