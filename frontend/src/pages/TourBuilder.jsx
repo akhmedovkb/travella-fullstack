@@ -915,7 +915,7 @@ export default function TourBuilder() {
     }
   };
   // --- исходящая (я — провайдер-заявитель) ---
-  const handleCancelByRequester = async () => {
+  /*const handleCancelByRequester = async () => {
     if (!bookingId) return;
     try {
       setBusy(b => ({...b, cancelReq:true}));
@@ -926,7 +926,7 @@ export default function TourBuilder() {
     } finally {
       setBusy(b => ({...b, cancelReq:false}));
     }
-  };
+  };*/
 
   /* ---------- CONFIRMATIONS: запрос и пуллинг ---------- */
   const [confirmations, setConfirmations] = useState(null); // { batch_id, items:[{date, guide:{status}, transport:{status}}] }
