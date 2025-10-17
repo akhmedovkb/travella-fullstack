@@ -477,6 +477,24 @@ const isAdminFromJwt = () => {
   }
 };
 
+// провайдер из JWT (по role/roles)
+const isProviderFromJwt = () => {
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
+    if (!tok) return false;
+    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    const claims = JSON.parse(json);
+    const roles = []
+      .concat(claims.role || [], claims.roles || [])
+      .flatMap(r => String(r).split(","))
+      .map(s => s.trim().toLowerCase());
+    return roles.includes("provider");
+  } catch { return false; }
+};
 
 /* ---------------- custom option + tooltip ---------------- */
 const ProviderOption = (props) => {
@@ -717,8 +735,10 @@ const HotelOption = (props) => {
 
 export default function TourBuilder() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isProvider, setIsProvider] = useState(false);
   useEffect(() => {
     setIsAdmin(isAdminFromJwt());
+    setIsProvider(isProviderFromJwt());
   }, []);
   
   const { t, i18n } = useTranslation();
@@ -789,26 +809,80 @@ export default function TourBuilder() {
   /* ---------- BOOKING: быстрые действия (Availability / Hold / Docs) ---------- */
   // TODO: если у тебя есть bookingId из URL/стора — подставь сюда и убери поле ввода ниже
   const [bookingId, setBookingId] = useState("");
-  const [availability, setAvailability] = useState(null); // { overall, results:[{date,status}] }
-  const [holdInfo, setHoldInfo] = useState(null);         // { hours, untilAt }
-  const [docs, setDocs] = useState(null);                 // { voucher_pdf, invoice_pdf, ... }
+  const bookingIdRef = useRef("");
+  useEffect(() => {
+    // из ?booking=… или последнего сегмента пути, если это число/uuid-похоже
+    try {
+      const usp = new URLSearchParams(window.location.search);
+      const q = usp.get("booking") || "";
+      const fromPath = window.location.pathname.split("/").filter(Boolean).pop() || "";
+      const candidate = q || fromPath;
+      if (candidate && candidate !== bookingIdRef.current) {
+        setBookingId(candidate);
+        bookingIdRef.current = candidate;
+      }
+    } catch {}
+  }, []);
+  const [availability, setAvailability] = useState(null);
+  const [holdInfo, setHoldInfo] = useState(null);
+  const [docs, setDocs] = useState(null);
+  const [busy, setBusy] = useState({ avail:false, hold:false, docs:false });
+  const [holdHours, setHoldHours] = useState(24);
 
   const handleCheckAvailability = async () => {
     if (!bookingId) return;
-    const data = await postJSON(`/api/bookings/${bookingId}/check-availability`, {});
-    setAvailability(data);
+    try {
+      setBusy(b => ({...b, avail:true}));
+      const data = await postJSON(`/api/bookings/${bookingId}/check-availability`, {});
+      setAvailability(data);
+      toast.success((data?.overall === "ok") ? t("tb.avail_ok","Все даты доступны") : t("tb.avail_warn","Есть конфликты"));
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (provider only)"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, avail:false}));
+    }
     // toast?.success?.(data?.overall === "ok" ? "Все даты доступны" : "Есть конфликты");
   };
-  const handlePlaceHold = async (hours = 24) => {
+  const handlePlaceHold = async (hours = holdHours) => {
     if (!bookingId) return;
-    await postJSON(`/api/bookings/${bookingId}/place-hold`, { hours });
-    setHoldInfo({ hours, untilAt: new Date(Date.now() + hours * 3600 * 1000) });
+    try {
+      setBusy(b => ({...b, hold:true}));
+      const j = await postJSON(`/api/bookings/${bookingId}/place-hold`, { hours: Number(hours)||24 });
+      const serverUntil = j?.hold_until || j?.hold_until_iso || j?.until; // бэкенд может вернуть дату
+      setHoldInfo({
+        hours: Number(hours)||24,
+        untilAt: serverUntil ? new Date(serverUntil) : new Date(Date.now() + (Number(hours)||24) * 3600 * 1000)
+      });
+      toast.success(t("tb.hold_set","Холд установлен"));
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (provider only)"));
+      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+    } finally {
+      setBusy(b => ({...b, hold:false}));
+    }
   };
-  const handleGetDocs = async () => {
-    if (!bookingId) return;
+const handleGetDocs = async () => {
+  if (!bookingId) return;
+  try {
+    setBusy(b => ({...b, docs:true}));
     const data = await fetchJSON(`/api/bookings/${bookingId}/docs`);
     setDocs(data?.docs || null);
-  };
+    if (!data?.docs) toast(t("tb.no_docs","Документов пока нет"), { icon:"🗒️" });
+  } catch (e) {
+    const msg = String(e?.message || "");
+    if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав"));
+    else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
+    else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
+  } finally {
+    setBusy(b => ({...b, docs:false}));
+  }
+};
+
   
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
@@ -1340,6 +1414,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
         {/* days */}
                 {/* ===== QUICK BOOKING ACTIONS (сверху перед днями) ===== */}
+               {isProvider && (
         <div className="border rounded-lg p-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-sm font-medium">Booking ID</label>
@@ -1349,26 +1424,34 @@ const makeTransportLoader = (dateKey) => async (input) => {
               value={bookingId}
              onChange={(e) => setBookingId(e.target.value)}
             />
+            <input
+              type="number"
+              min={1}
+              className="h-9 w-28 border rounded px-2 text-sm"
+              title={t('tb.hold_hours','Часы холда')}
+              value={holdHours}
+              onChange={(e)=>setHoldHours(Math.max(1, Number(e.target.value)||24))}
+            />
             <button
               onClick={handleCheckAvailability}
               className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50"
-              disabled={!bookingId}
+              disabled={!bookingId || busy.avail}
             >
-              Проверить доступность
+              {busy.avail ? t('tb.loading','Загрузка…') : t('tb.check_avail','Проверить доступность')}
             </button>
             <button
-              onClick={() => handlePlaceHold(24)}
+              onClick={() => handlePlaceHold(holdHours)}
               className="px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm disabled:opacity-50"
-              disabled={!bookingId}
+              disabled={!bookingId || busy.hold}
             >
-              Поставить на холд (24ч)
+              {busy.hold ? t('tb.loading','Загрузка…') : t('tb.place_hold','Поставить на холд')} ({holdHours}ч)
             </button>
             <button
               onClick={handleGetDocs}
               className="px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
-              disabled={!bookingId}
+              disabled={!bookingId || busy.docs}
             >
-              Документы
+              {busy.docs ? t('tb.loading','Загрузка…') : t('tb.docs','Документы')}
             </button>
           </div>
 
