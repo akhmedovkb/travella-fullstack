@@ -16,6 +16,11 @@ const {
   confirmBookingByRequester,
   cancelBookingByRequester,
   cancelBookingByProvider,
+
+  // NEW for conveyor
+  checkAvailability,
+  placeHold,
+  getBookingDocs,
 } = require("../controllers/bookingController");
 
 function requireProvider(req, res, next) {
@@ -44,5 +49,15 @@ router.post("/:id/confirm", authenticateToken, confirmBooking);
 // Действия провайдера-заказчика по исходящим
 router.post("/:id/confirm-by-requester", authenticateToken, requireProvider, confirmBookingByRequester);
 router.post("/:id/cancel-by-requester", authenticateToken, requireProvider, cancelBookingByRequester);
+
+// === NEW: Booking Conveyor ===
+// Батч-проверка доступности по датам текущей брони
+router.post("/:id/check-availability", authenticateToken, checkAvailability);
+
+// Поставить на холд (hold_until + supplier_orders если есть)
+router.post("/:id/place-hold", authenticateToken, placeHold);
+
+// Документы (инвойс, ваучеры, таймлайн) — заглушка для UI
+router.get("/:id/docs", authenticateToken, getBookingDocs);
 
 module.exports = router;
