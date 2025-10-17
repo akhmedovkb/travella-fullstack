@@ -123,8 +123,9 @@ const createBooking = async (req, res) => {
     if (!providerId) return res.status(400).json({ message: "Не указан provider_id / service_id" });
 
     const pType = await getProviderType(providerId);
-    if (!["guide", "transport"].includes(pType)) {
-      return res.status(400).json({ message: "Бронирование доступно только для гида и транспорта" });
+    // теперь допускаем: гид, транспорт, отель (и опционально тур)
+    if (!["guide", "transport", "hotel", "tour", "tour_builder"].includes(pType)) {
+      return res.status(400).json({ message: "Бронирование доступно только для гида, транспорта, отеля или тура" });
     }
 
     const days = toArray(dates).map(toISO).filter(Boolean);
@@ -132,8 +133,12 @@ const createBooking = async (req, res) => {
 
     const primaryDate = [...days].sort()[0];
 
-    const ok = await isDatesFree(providerId, days);
-    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+    // Для отелей фильтра по доступности нет — не блокируем создание.
+    // Для остальных типов проверяем как раньше.
+    if (pType !== "hotel") {
+      const ok = await isDatesFree(providerId, days);
+      if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
+    }
 
     // какие колонки реально есть
     const cols = await getExistingColumns("bookings", [
@@ -269,7 +274,7 @@ async function getProviderBookings(req, res) {
 
         s.title AS service_title,
 
-        c.id         AS client_id,
+        c.id         AS client_profile_id,
         c.name       AS client_name,
         c.phone      AS client_phone,
         c.email      AS client_email,
@@ -470,7 +475,7 @@ const providerQuote = async (req, res) => {
       const bQ = await pool.query(
         `SELECT id, provider_id, client_id, status
            FROM bookings WHERE id=$1`,
-        [id]
+        [bookingId]
       );
       const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [bookingId]);
       const booking = {
@@ -494,13 +499,72 @@ const providerQuote = async (req, res) => {
   }
 };
 
-// Провайдер подтверждает входящую бронь
-const acceptBooking = async (_req, res) => {
-  // Поставщик больше не может подтверждать; подтверждение — только у заявителя
-  return res.status(409).json({
-    code: "PROVIDER_CANNOT_CONFIRM",
-    message: "Подтверждение выполняет заявитель после получения предложения по цене",
-  });
+// Провайдер подтверждает входящую бронь (теперь именно он финально подтверждает)
+const acceptBooking = async (req, res) => {
+  try {
+    const providerId = req.user?.id;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid booking id" });
+
+    const own = await pool.query(
+      `SELECT provider_id, status FROM bookings WHERE id=$1`,
+      [id]
+    );
+    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
+    if (own.rows[0].provider_id !== providerId) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+    if (own.rows[0].status !== "pending") {
+      return res.status(409).json({ message: "Бронирование уже обработано" });
+    }
+
+    // Даты: для отеля — подтверждаем без проверки; для остальных проверяем
+    const type = await getProviderType(providerId);
+    let days = [];
+    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1 ORDER BY date`, [id]);
+    days = dQ.rows.map(r => toISO(r.d)).filter(Boolean);
+    if (!days.length) {
+      const bQ = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
+      if (bQ.rowCount) days = [toISO(bQ.rows[0].d)].filter(Boolean);
+    }
+    if (!days.length) return res.status(400).json({ message: "У брони нет дат" });
+
+    if (type !== "hotel") {
+      const free = await isDatesFree(providerId, days, id);
+      if (!free) return res.status(409).json({ message: "Даты уже заняты" });
+    }
+
+    await pool.query(
+      `UPDATE bookings
+          SET status='confirmed',
+              updated_at = NOW()
+        WHERE id=$1`,
+      [id]
+    );
+
+    res.json({ ok: true, status: "confirmed" });
+
+    // TG уведомление о подтверждении поставщиком
+    try {
+      const bQ = await pool.query(
+        `SELECT id, provider_id, client_id, requester_provider_id
+           FROM bookings WHERE id=$1`, [id]
+      );
+      const dQ2 = await pool.query(
+        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
+      );
+      const booking = {
+        ...bQ.rows[0],
+        dates: dQ2.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
+      };
+      tg.notifyConfirmed({ booking, by: "provider" }).catch(() => {});
+    } catch (e) {
+      console.error("acceptBooking notify block failed:", e?.message || e);
+    }
+  } catch (err) {
+    console.error("acceptBooking error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
 };
 
 // Провайдер отклоняет (входящую)
@@ -511,8 +575,8 @@ const rejectBooking = async (req, res) => {
     const { reason } = req.body || {};
 
     const pType = await getProviderType(providerId);
-    if (!["guide", "transport"].includes(pType)) {
-      return res.status(400).json({ message: "Действие доступно только для гида и транспорта" });
+    if (!["guide", "transport", "hotel"].includes(pType)) {
+      return res.status(400).json({ message: "Действие доступно только для гида, транспорта или отеля" });
     }
 
     const own = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
@@ -679,129 +743,20 @@ const cancelBookingByProvider = async (req, res) => {
   }
 };
 
-// Клиент подтверждает: POST /api/bookings/:id/confirm
-const confirmBooking = async (req, res) => {
-  try {
-    const clientId = req.user?.id;
-    const id = Number(req.params.id);
-
-    const own = await pool.query(
-      `SELECT provider_id, client_id, status FROM bookings WHERE id=$1`,
-      [id]
-    );
-    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
-    if (own.rows[0].client_id !== clientId) {
-      return res.status(403).json({ message: "Недостаточно прав" });
-    }
-    if (own.rows[0].status !== "pending") {
-      return res.status(409).json({ message: "Бронирование уже обработано" });
-    }
-
-    const dQ = await pool.query(
-      `SELECT date AS d FROM booking_dates WHERE booking_id=$1`,
-      [id]
-    );
-    let days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
-
-    if (!days.length) {
-      const bQ = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
-      if (bQ.rowCount) days = [toISO(bQ.rows[0].d)].filter(Boolean);
-    }
-    if (!days.length) return res.status(400).json({ message: "Не удалось определить даты бронирования" });
-
-    const ok = await isDatesFree(own.rows[0].provider_id, days, id);
-    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
-
-    await pool.query(
-      `UPDATE bookings
-         SET status='confirmed',
-             updated_at = NOW()
-       WHERE id=$1`,
-      [id]
-    );
-
-    res.json({ ok: true, status: "confirmed" });
-
-    // TG
-    try {
-      const bQ = await pool.query(
-        `SELECT id, provider_id, client_id, requester_provider_id
-           FROM bookings WHERE id=$1`, [id]
-      );
-      const dQ = await pool.query(
-        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
-      );
-      const booking = {
-        ...bQ.rows[0],
-        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-      };
-      tg.notifyConfirmed({ booking }).catch(e => {
-        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
-      });
-    } catch (e) {
-      console.error("confirmBooking notify block failed:", e?.message || e);
-    }
-  } catch (err) {
-    console.error("confirmBooking error:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
-  }
+// Клиент больше не подтверждает — подтверждение выполняет поставщик
+const confirmBooking = async (_req, res) => {
+  return res.status(409).json({
+    code: "CLIENT_CANNOT_CONFIRM",
+    message: "Финальное подтверждение выполняет поставщик.",
+  });
 };
 
-// Подтверждение исходящей провайдером-заказчиком
-const confirmBookingByRequester = async (req, res) => {
-  try {
-    const requesterId = req.user?.id;
-    const id = Number(req.params.id);
-    const cols = await getExistingColumns("bookings", ["requester_provider_id"]);
-    if (!cols.requester_provider_id) return res.status(400).json({ message: "Функция недоступна (нет поддержки в БД)" });
-
-    const own = await pool.query(`SELECT requester_provider_id, provider_id, status FROM bookings WHERE id=$1`, [id]);
-    if (!own.rowCount) return res.status(404).json({ message: "Заявка не найдена" });
-    if (own.rows[0].requester_provider_id !== requesterId) {
-      return res.status(403).json({ message: "Недостаточно прав" });
-    }
-    if (own.rows[0].status !== "pending") {
-      return res.status(409).json({ message: "Бронирование уже обработано" });
-    }
-
-    const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]);
-    let days = dQ.rows.map((r) => toISO(r.d)).filter(Boolean);
-    if (!days.length) {
-      const bQ = await pool.query(`SELECT date AS d FROM bookings WHERE id=$1`, [id]);
-      if (bQ.rowCount) days = [toISO(bQ.rows[0].d)].filter(Boolean);
-    }
-    if (!days.length) return res.status(400).json({ message: "Не удалось определить даты бронирования" });
-
-    const providerId = own.rows[0].provider_id;
-    const ok = await isDatesFree(providerId, days, id);
-    if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
-
-    await pool.query(`UPDATE bookings SET status='confirmed', updated_at=NOW() WHERE id=$1`, [id]);
-    res.json({ ok: true, status: "confirmed" });
-
-    // TG
-    try {
-      const bQ = await pool.query(
-        `SELECT id, provider_id, client_id, requester_provider_id
-           FROM bookings WHERE id=$1`, [id]
-      );
-      const dQ = await pool.query(
-        `SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [id]
-      );
-      const booking = {
-        ...bQ.rows[0],
-        dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
-      };
-      tg.notifyConfirmed({ booking }).catch(e => {
-        console.error("tg.notifyConfirmed failed:", e?.response?.data || e?.message || e);
-      });
-    } catch (e) {
-      console.error("confirmBookingByRequester notify block failed:", e?.message || e);
-    }
-  } catch (err) {
-    console.error("confirmBookingByRequester error:", err);
-    return res.status(500).json({ message: "Ошибка сервера" });
-  }
+// Исходящий заявитель тоже не подтверждает — финал за поставщиком
+const confirmBookingByRequester = async (_req, res) => {
+  return res.status(409).json({
+    code: "REQUESTER_CANNOT_CONFIRM",
+    message: "Финальное подтверждение выполняет поставщик.",
+  });
 };
 
 const cancelBookingByRequester = async (req, res) => {
@@ -871,6 +826,7 @@ const checkAvailability = async (req, res) => {
       return res.status(403).json({ message: "Недостаточно прав" });
     }
     const providerId = bQ.rows[0].provider_id;
+    const pType = await getProviderType(providerId);
 
     // собираем даты
     const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1 ORDER BY date`, [id]);
@@ -881,14 +837,18 @@ const checkAvailability = async (req, res) => {
     }
     if (!days.length) return res.status(400).json({ message: "У брони нет дат" });
 
-    // проверяем каждую дату отдельно (чтобы подсветить конфликтные)
+    // Для отелей — фильтра нет: считаем всё ok (UI подсветит «без проверки» при желании)
+    if (pType === "hotel") {
+      const results = days.map(ymd => ({ date: ymd, status: "ok" }));
+      return res.json({ ok: true, overall: "ok", results });
+    }
+
+    // Для остальных — старая логика
     const results = [];
     for (const ymd of days) {
       const free = await isDatesFree(providerId, [ymd], id);
       results.push({ date: ymd, status: free ? "ok" : "conflict" });
     }
-
-    // агрегированный итог
     const allOk = results.every(r => r.status === "ok");
     return res.json({ ok: true, overall: allOk ? "ok" : "conflict", results });
   } catch (err) {
@@ -921,17 +881,20 @@ const placeHold = async (req, res) => {
     const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1 ORDER BY date`, [id]);
     const days = dQ.rows.map(r => toISO(r.d)).filter(Boolean);
 
-    // проверим, что на момент HOLД дат нет в конфликте
+    // проверим конфликт только для не-отелей
     const providerId = bQ.rows[0].provider_id;
-    const free = await isDatesFree(providerId, days, id);
-    if (!free) return res.status(409).json({ message: "Даты уже заняты" });
+    const pType = await getProviderType(providerId);
+    if (pType !== "hotel") {
+      const free = await isDatesFree(providerId, days, id);
+      if (!free) return res.status(409).json({ message: "Даты уже заняты" });
+    }
 
     const cols = await getExistingColumns("bookings", ["hold_until"]);
     const untilSql = cols.hold_until
       ? `, hold_until = NOW() + $2::interval`
       : ``;
 
-    const up = await pool.query(
+    await pool.query(
       `UPDATE bookings
           SET updated_at = NOW()${untilSql}
         WHERE id=$1
