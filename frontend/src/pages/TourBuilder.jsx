@@ -174,17 +174,26 @@ const LANGS = [
 ];
 
 /* ---------------- fetch helpers ---------------- */
-const fetchJSON = async (path, params = {}) => {
- const authHeaders = () => {
-   const tok =
-     localStorage.getItem("token") ||
-     localStorage.getItem("providerToken") ||
-     ""; // любой из ваших кейсов
-   return tok ? { Authorization: `Bearer ${tok}` } : {};
- };
+// заголовки авторизации (безопасно для SSR)
+const authHeaders = () => {
+  try {
+    if (typeof window === "undefined") return {};
+    const tok =
+      localStorage.getItem("token") ||
+      localStorage.getItem("providerToken") ||
+      "";
+    return tok ? { Authorization: `Bearer ${tok}` } : {};
+  } catch {
+    return {};
+  }
+};
 
- const fetchJSON = async (path, params = {}) => {
-  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+const fetchJSON = async (path, params = {}) => {
+  const base =
+    API_BASE ||
+    (typeof window !== "undefined" ? window.frontend?.API_BASE : "") ||
+    "";
+  const u = new URL(path, base);
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
   });
@@ -206,7 +215,11 @@ const fetchJSONLoose = async (path, params = {}) => {
 
 // ------ helpers: POST JSON (с куками) ------
 const postJSON = async (path, body) => {
-  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  const base =
+    API_BASE ||
+    (typeof window !== "undefined" ? window.frontend?.API_BASE : "") ||
+    "";
+  const u = new URL(path, base);
   const r = await fetch(u.toString(), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
