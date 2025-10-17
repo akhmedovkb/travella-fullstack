@@ -192,6 +192,29 @@ const fetchJSONLoose = async (path, params = {}) => {
   }
 };
 
+// ------ helpers: POST JSON (с куками) ------
+const postJSON = async (path, body) => {
+  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  const r = await fetch(u.toString(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`HTTP ${r.status} ${txt}`.trim());
+  }
+  return await r.json().catch(() => ({}));
+};
+
+// ------ Requests API (вкладка «Запросы») ------
+// ожидаемый контракт бэкенда:
+// POST /api/requests  { provider_id, service_id?, dates:string[], pax_adult, pax_child, language, city?, message?, source? }
+async function createRequest(payload) {
+  return await postJSON("/api/requests", payload);
+}
+
 // --- Hotels (каскад по городу + бриф + сезоны) ---
 // starsFilter: '' | 1..7
 async function fetchHotelsByCity(city, starsFilter = "") {
@@ -1019,8 +1042,81 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
+  // ===== СБОРКА И ОТПРАВКА ЗАПРОСОВ ПРОВАЙДЕРАМ =====
+  // схема: на каждого уникального провайдера (guide/transport) — один запрос с массивом дат.
+  const buildRequests = () => {
+    const buckets = new Map(); // key = `${kind}:${provider_id}` → { provider_id, service_id?, dates[], city }
+    for (const [dateKey, st] of Object.entries(byDay)) {
+      if (!st?.city) continue;
+      // гид
+      if (st?.guide?.id) {
+        const pid = String(st.guide.id);
+        const key = `guide:${pid}`;
+        const svcId = st?.guideService?.id ? String(st.guideService.id) : null;
+        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: svcId, dates: [], city: st.city });
+        const b = buckets.get(key);
+        if (svcId && !b.service_id) b.service_id = svcId; // первый попавшийся (или можно оставить массив, если нужно)
+        b.dates.push(dateKey);
+      }
+      // транспорт
+      if (st?.transport?.id) {
+        const pid = String(st.transport.id);
+        const key = `transport:${pid}`;
+        const svcId = st?.transportService?.id ? String(st.transportService.id) : null;
+        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: svcId, dates: [], city: st.city });
+        const b = buckets.get(key);
+        if (svcId && !b.service_id) b.service_id = svcId;
+        b.dates.push(dateKey);
+      }
+    }
+   // формируем payload'ы
+    const payloads = [];
+    for (const b of buckets.values()) {
+      payloads.push({
+        provider_id: b.provider_id,
+        service_id: b.service_id || undefined,
+        dates: Array.from(new Set(b.dates)).sort(),
+        pax_adult: Number(adt) || 0,
+        pax_child: Number(chd) || 0,
+        language: String(lang || "en"),
+        city: b.city || undefined,
+        message: `[TourBuilder] ${b.kind} • ${b.city || ""} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
+        source: "tour-builder",
+      });
+    }
+    return payloads;
+  };
 
-    // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
+  const [sending, setSending] = useState(false);
+  const handleSendRequests = async () => {
+    if (!range?.from || !range?.to) return alert("Выберите даты маршрута.");
+    const payloads = buildRequests();
+    if (!payloads.length) return alert("Не выбраны провайдеры (гид/транспорт).");
+    setSending(true);
+    try {
+      let ok = 0, fail = 0;
+      for (const p of payloads) {
+        try {
+          await createRequest(p);
+          ok++;
+        } catch (e) {
+          console.error("request failed", e);
+          fail++;
+        }
+      }
+      if (ok && !fail) {
+        alert(`Запросов отправлено: ${ok}. Провайдеры увидят их во вкладке «Запросы», также придёт уведомление в Telegram.`);
+      } else if (ok && fail) {
+        alert(`Часть запросов ушла успешно: ${ok}, ошибок: ${fail}. Проверьте логи/сеть.`);
+      } else {
+        alert("Не удалось отправить запросы. Попробуйте позже или проверьте API /api/requests.");
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+   // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
   useEffect(() => {
     const pax = Math.max(1, toNum(adt) + toNum(chd));
     setByDay((prev) => {
@@ -1536,8 +1632,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
                              fetchHotelBrief(hotel.id).catch(() => null),
                              fetchHotelSeasons(hotel.id).catch(() => []),
                            ]);
-                           console.log('hotel brief =>', brief);
-                           console.log('hotel seasons =>', seasons);
                            setByDay((p) => ({
                              ...p,
                              [k]: { 
@@ -1932,7 +2026,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         servicesCache={servicesCache}
         onRecalc={autoPickForDay}
       />
-        <div className="grid md:grid-cols-5 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-sm">
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div>
           </div>
@@ -1976,7 +2070,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-5 gap-3 text-sm mt-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-sm">
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
           <div>{toUSD(totals.guide).toFixed(2)} USD</div>
@@ -2016,6 +2110,22 @@ const makeTransportLoader = (dateKey) => async (input) => {
               {t('tb.usd_enter_valid_rate')}
             </div>
           )}
+        </div>
+      </div>
+      {/* ===== Кнопка «Бронировать» → создаём ЗАПРОСЫ поставщикам ===== */}
+      <div className="max-w-6xl mx-auto mt-4 mb-8">
+        <button
+          type="button"
+          onClick={handleSendRequests}
+          disabled={sending}
+          className="px-4 py-2 rounded-lg text-white"
+          style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
+          title="Создать запросы поставщикам по выбранным дням"
+        >
+          {sending ? "Отправляю..." : "Бронировать"}
+        </button>
+        <div className="text-xs text-gray-500 mt-1">
+          Кнопка создаёт запросы провайдерам (гид/транспорт) по всем выбранным дням. Запросы попадут во вкладку «Запросы» и дублируются в Telegram (если настроено на бэке).
         </div>
       </div>
       </div>
