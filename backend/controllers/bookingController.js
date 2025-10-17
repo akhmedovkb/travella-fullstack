@@ -468,8 +468,9 @@ const providerQuote = async (req, res) => {
 
     try {
       const bQ = await pool.query(
-        `SELECT id, provider_id, client_id, requester_provider_id
-           FROM bookings WHERE id=$1`, [bookingId]
+        `SELECT id, provider_id, client_id, status
+           FROM bookings WHERE id=$1`,
+        [id]
       );
       const dQ = await pool.query(`SELECT date AS d FROM booking_dates WHERE booking_id=$1`, [bookingId]);
       const booking = {
@@ -865,6 +866,10 @@ const checkAvailability = async (req, res) => {
 
     const bQ = await pool.query(`SELECT provider_id FROM bookings WHERE id=$1`, [id]);
     if (!bQ.rowCount) return res.status(404).json({ message: "Бронь не найдена" });
+    // провайдер может ставить hold только на свою бронь
+    if (req.user?.role === "provider" && bQ.rows[0].provider_id !== req.user.id) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
     const providerId = bQ.rows[0].provider_id;
 
     // собираем даты
