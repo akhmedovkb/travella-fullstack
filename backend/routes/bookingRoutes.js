@@ -21,6 +21,9 @@ const {
   checkAvailability,
   placeHold,
   getBookingDocs,
+  // NEW for payment window
+  getBooking,
+  markPaid,
 } = require("../controllers/bookingController");
 
 function requireProvider(req, res, next) {
@@ -35,6 +38,8 @@ router.post("/", authenticateToken, createBooking);
 router.get("/provider", authenticateToken, requireProvider, getProviderBookings);               // входящие (мои услуги)
 router.get("/provider/outgoing", authenticateToken, requireProvider, getProviderOutgoingBookings); // исходящие (я бронирую как провайдер)
 router.get("/my", authenticateToken, getMyBookings);                                            // мои как клиента
+// Метаданные конкретной брони (любой авторизованный) + автоистечение окна оплаты
+router.get("/:id", authenticateToken, getBooking);
 
 // Действия поставщика по входящим
 router.post("/:id/accept", authenticateToken, requireProvider, acceptBooking);
@@ -45,6 +50,8 @@ router.post("/:id/cancel-by-provider", authenticateToken, requireProvider, cance
 // Действия клиента
 router.post("/:id/cancel", authenticateToken, cancelBooking);
 router.post("/:id/confirm", authenticateToken, confirmBooking);
+// Оплата брони (маркёр после успешного платежа) — без requireProvider
+router.post("/:id/pay", authenticateToken, markPaid);
 
 // Действия провайдера-заказчика по исходящим
 router.post("/:id/confirm-by-requester", authenticateToken, requireProvider, confirmBookingByRequester);
