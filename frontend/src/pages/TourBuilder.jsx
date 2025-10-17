@@ -826,7 +826,7 @@ export default function TourBuilder() {
   const [availability, setAvailability] = useState(null);
   const [holdInfo, setHoldInfo] = useState(null);
   const [docs, setDocs] = useState(null);
-  const [busy, setBusy] = useState({ avail:false, hold:false, docs:false });
+  const [busy, setBusy] = useState({ avail:false, hold:false, docs:false, confirm:false });
   const [holdHours, setHoldHours] = useState(24);
 
   const handleCheckAvailability = async () => {
@@ -845,6 +845,103 @@ export default function TourBuilder() {
       setBusy(b => ({...b, avail:false}));
     }
     // toast?.success?.(data?.overall === "ok" ? "Все даты доступны" : "Есть конфликты");
+  };
+
+  /* ---------- CONFIRMATIONS: запрос и пуллинг ---------- */
+  const [confirmations, setConfirmations] = useState(null); // { batch_id, items:[{date, guide:{status}, transport:{status}}] }
+  const [confirmBatchId, setConfirmBatchId] = useState(null);
+  const pollRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+  useEffect(() => () => stopPolling(), []);
+
+  const combineDayStatus = (row) => {
+    // порядок критичности: rejected > pending > confirmed/ok/empty
+    const parts = [row?.guide?.status, row?.transport?.status].filter(Boolean);
+    if (parts.some(s => String(s).toLowerCase() === "rejected")) return "rejected";
+    if (parts.some(s => String(s).toLowerCase() === "pending")) return "pending";
+    if (parts.some(s => String(s).toLowerCase() === "confirmed")) return "confirmed";
+    return parts.length ? "unknown" : "empty";
+  };
+
+  const computeFlags = (list=[]) => {
+    const statuses = list.map(combineDayStatus);
+    const anyRejected = statuses.includes("rejected");
+    const anyPending  = statuses.includes("pending");
+    const allConfirmed = list.length > 0 && !anyRejected && !anyPending && statuses.every(s => s==="confirmed" || s==="empty");
+    return { anyRejected, anyPending, allConfirmed };
+  };
+
+  const buildConfirmationPayload = () => {
+    // собираем только те дни, где выбран хотя бы один поставщик
+    const items = Object.keys(byDay).map(dateKey => {
+      const st = byDay[dateKey] || {};
+      const guideId = st.guide?.id || null;
+      const transportId = st.transport?.id || null;
+      if (!guideId && !transportId) return null;
+      return {
+        date: dateKey,
+        city: st.city || "",
+        pax: Math.max(1, toNum(adt, 0) + toNum(chd, 0)),
+        language: lang,
+        providers: {
+          guide: guideId ? { id: guideId, service_id: st.guideService?.id || null } : null,
+          transport: transportId ? { id: transportId, service_id: st.transportService?.id || null } : null,
+        },
+      };
+    }).filter(Boolean);
+    return { items };
+  };
+
+  const fetchConfirmations = async (batchId) => {
+    // универсальный GET статус
+    try {
+      const data = await fetchJSON(`/api/bookings/${bookingId}/confirmations`, { batch_id: batchId });
+      if (data?.items) {
+        setConfirmations(prev => ({ ...(prev||{}), ...data }));
+        const { anyPending } = computeFlags(data.items || []);
+        if (!anyPending) stopPolling();
+      }
+    } catch (e) {
+      // не валим UI: просто прекращаем пуллить при ошибке
+      stopPolling();
+    }
+  };
+
+  const handleRequestConfirmations = async () => {
+    if (!bookingId) {
+      toast.error(t('tb.err.not_found','Бронь не найдена'));
+      return;
+    }
+    const payload = buildConfirmationPayload();
+    if (!payload.items?.length) {
+      toast.error(t('tb.pick_providers_first','Выберите гида/транспорт хотя бы в один день'));
+      return;
+    }
+    try {
+      setBusy(b => ({...b, confirm:true}));
+      const res = await postJSON(`/api/bookings/${bookingId}/request-confirmations`, payload);
+      const batchId = res?.batch_id || res?.id || null;
+      setConfirmBatchId(batchId);
+      setConfirmations(res || { batch_id: batchId, items: [] });
+      toast.success(t('tb.confirmation_sent','Запросы отправлены поставщикам'));
+      // стартуем пуллинг
+      stopPolling();
+      pollRef.current = setInterval(() => {
+        if (batchId) fetchConfirmations(batchId);
+      }, 5000);
+      // сразу подтянем первый статус
+      if (batchId) fetchConfirmations(batchId);
+    } catch (e) {
+      const msg = String(e?.message || "");
+      if (/403/.test(msg)) toast.error(t('tb.err.forbidden','Недостаточно прав'));
+      else if (/404/.test(msg)) toast.error(t('tb.err.not_found','Бронь не найдена'));
+      else toast.error(msg || t('tb.err.request_failed','Ошибка запроса'));
+    } finally {
+      setBusy(b => ({...b, confirm:false}));
+    }
   };
   const handlePlaceHold = async (hours = holdHours) => {
     if (!bookingId) return;
@@ -1440,21 +1537,78 @@ const makeTransportLoader = (dateKey) => async (input) => {
               {busy.avail ? t('tb.loading','Загрузка…') : t('tb.check_avail','Проверить доступность')}
             </button>
             <button
+              onClick={handleRequestConfirmations}
+              className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm disabled:opacity-50"
+              disabled={!bookingId || busy.confirm}
+              title={t('tb.confirmation_request','Запросить подтверждение у поставщиков')}
+            >
+              {busy.confirm ? t('tb.loading','Загрузка…') : t('tb.request_confirmations','Запросить подтверждение')}
+            </button>
+            <button
               onClick={() => handlePlaceHold(holdHours)}
               className="px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm disabled:opacity-50"
-              disabled={!bookingId || busy.hold}
+              disabled={
+                !bookingId ||
+                busy.hold ||
+                // запрещаем холд, пока не все подтвердили
+                (confirmations && !computeFlags(confirmations.items||[]).allConfirmed)
+              }
             >
               {busy.hold ? t('tb.loading','Загрузка…') : t('tb.place_hold','Поставить на холд')} ({holdHours}ч)
             </button>
             <button
               onClick={handleGetDocs}
               className="px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
-              disabled={!bookingId || busy.docs}
+              disabled={
+                !bookingId ||
+                busy.docs ||
+                (confirmations && !computeFlags(confirmations.items||[]).allConfirmed)
+              }
             >
               {busy.docs ? t('tb.loading','Загрузка…') : t('tb.docs','Документы')}
             </button>
           </div>
-
+          {/* Confirmations panel */}
+          {confirmations && (
+            <div className="mt-2 rounded-xl border p-3">
+              <div className="font-medium mb-2">
+                {t('tb.confirmations_title','Подтверждения поставщиков')}
+                {confirmBatchId ? ` (#${confirmBatchId})` : ''}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {(confirmations.items || []).map((r) => {
+                  const dayStatus = (combineDayStatus(r) || '').toLowerCase();
+                  const color =
+                    dayStatus === 'rejected' ? 'bg-red-50 border-red-200 text-red-800' :
+                    dayStatus === 'pending'  ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                    'bg-green-50 border-green-200 text-green-800';
+                  return (
+                    <div key={r.date} className={`px-2 py-2 rounded border text-sm ${color}`}>
+                      <div className="font-semibold">{r.date}</div>
+                      <div className="mt-1 flex flex-col gap-1">
+                        {'guide' in (r||{}) && (
+                          <div>Guide: <b>{r.guide?.status || '—'}</b></div>
+                        )}
+                        {'transport' in (r||{}) && (
+                          <div>Transport: <b>{r.transport?.status || '—'}</b></div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(() => {
+                const f = computeFlags(confirmations.items||[]);
+                return (
+                  <div className="mt-2 text-sm">
+                    {f.anyRejected && <div className="text-red-700">{t('tb.confirmations_rejected','Есть отказы — холд и документы недоступны.')}</div>}
+                    {!f.anyRejected && f.anyPending && <div className="text-amber-700">{t('tb.confirmations_wait','Идёт ожидание подтверждений…')}</div>}
+                    {f.allConfirmed && <div className="text-green-700">{t('tb.confirmations_all_ok','Все подтверждены — можно ставить на холд и выпускать документы.')}</div>}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
           {/* Availability panel */}
           {availability && (
             <div className="mt-2 rounded-xl border p-3">
@@ -1511,6 +1665,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
             const k = ymd(d);
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
+            // пер-дневной статус подтверждения (если есть данные)
+            const dayConfirmRow = confirmations?.items?.find?.(x => x.date === k);
+            const dayConfirmStatus = dayConfirmRow ? ( ( (dayConfirmRow.guide?.status||'') || (dayConfirmRow.transport?.status||'') ) ) : "";
+            const dayBadge = (() => {
+              const s = (dayConfirmStatus||"").toLowerCase();
+              if (!s) return null;
+              if (s.includes('rejected')) return { text: 'REJECTED', cls: 'bg-red-100 text-red-700 border-red-300' };
+              if (s.includes('pending'))  return { text: 'PENDING',  cls: 'bg-amber-100 text-amber-800 border-amber-300' };
+              if (s.includes('confirmed'))return { text: 'CONFIRMED',cls: 'bg-green-100 text-green-700 border-green-300' };
+              return { text: s.toUpperCase(), cls: 'bg-gray-100 text-gray-700 border-gray-300' };
+            })();
             return (
               <div
                 key={k}
@@ -1542,6 +1707,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   <div className="text-sm" style={{ color: BRAND.primary }}>
                     {k}
                   </div>
+                  {dayBadge && (
+                    <span className={`ml-auto text-[11px] px-2 py-0.5 rounded border ${dayBadge.cls}`}>
+                      {dayBadge.text}
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
