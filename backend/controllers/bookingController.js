@@ -499,6 +499,56 @@ const providerQuote = async (req, res) => {
   }
 };
 
+/** Возвращает запись брони с минимальным набором полей */
+async function getBookingRow(id) {
+  const q = await pool.query(
+    `SELECT id, provider_id, client_id, status, created_at,
+            (CASE WHEN EXISTS (
+               SELECT 1 FROM information_schema.columns
+                WHERE table_name='bookings' AND column_name='hold_until'
+             ) THEN hold_until ELSE NULL END) AS hold_until
+       FROM bookings
+      WHERE id=$1`,
+    [id]
+  );
+  return q.rows[0] || null;
+}
+
+/** Авто-отмена неоплаченной брони, если окно оплаты истекло. */
+async function autoExpireIfOverdue(bookingId) {
+  const b = await getBookingRow(bookingId);
+  if (!b) return null;
+  if (b.status !== "awaiting_payment") return b;
+  // дедлайн: hold_until если есть, иначе created_at + 30 минут
+  const q = await pool.query(
+    `SELECT
+       COALESCE(
+         (SELECT CASE WHEN EXISTS (
+             SELECT 1 FROM information_schema.columns
+              WHERE table_name='bookings' AND column_name='hold_until'
+           )
+           THEN (SELECT hold_until FROM bookings WHERE id=$1)
+           ELSE NULL END),
+         (SELECT created_at + INTERVAL '30 minutes' FROM bookings WHERE id=$1)
+       ) AS due_at`,
+    [bookingId]
+  );
+  const dueAt = q.rows[0]?.due_at ? new Date(q.rows[0].due_at) : null;
+  if (dueAt && dueAt > new Date()) return b; // ещё не истёк
+
+  const cols = await getExistingColumns("bookings", ["cancelled_by"]);
+  let sql = `
+    UPDATE bookings
+       SET status='cancelled_unpaid',
+           updated_at = NOW()`;
+  if (cols.cancelled_by) sql += `, cancelled_by='system'`;
+  sql += ` WHERE id=$1 RETURNING *`;
+  const upd = await pool.query(sql, [bookingId]);
+  const bb = upd.rows[0];
+  try { await tg.notifyBookingAutoCancelled?.(bb); } catch {}
+  return bb;
+}
+
 // Провайдер подтверждает входящую бронь (теперь именно он финально подтверждает)
 const acceptBooking = async (req, res) => {
   try {
@@ -534,15 +584,20 @@ const acceptBooking = async (req, res) => {
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
-    await pool.query(
-      `UPDATE bookings
-          SET status='confirmed',
-              updated_at = NOW()
-        WHERE id=$1`,
-      [id]
-    );
-
-    res.json({ ok: true, status: "confirmed" });
+    // после принятия ждём оплату 30 минут
+    const cols = await getExistingColumns("bookings", ["hold_until"]);
+    const sql = cols.hold_until
+      ? `UPDATE bookings
+            SET status='awaiting_payment',
+                hold_until = NOW() + INTERVAL '30 minutes',
+                updated_at = NOW()
+          WHERE id=$1`
+      : `UPDATE bookings
+            SET status='awaiting_payment',
+                updated_at = NOW()
+          WHERE id=$1`;
+    await pool.query(sql, [id]);
+    res.json({ ok: true, status: "awaiting_payment" });
 
     // TG уведомление о подтверждении поставщиком
     try {
@@ -557,7 +612,10 @@ const acceptBooking = async (req, res) => {
         ...bQ.rows[0],
         dates: dQ2.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
       };
-      tg.notifyConfirmed({ booking, by: "provider" }).catch(() => {});
+      (tg.notifyBookingAcceptedAwaitingPayment
+        ? tg.notifyBookingAcceptedAwaitingPayment({ booking })
+        : tg.notifyConfirmed?.({ booking, by: "provider" })
+      )?.catch?.(() => {});
     } catch (e) {
       console.error("acceptBooking notify block failed:", e?.message || e);
     }
@@ -963,6 +1021,51 @@ const getBookingDocs = async (req, res) => {
     return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
+/** GET /api/bookings/:id — мета + авто-истечение */
+const getBooking = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const b = await autoExpireIfOverdue(id);
+    if (!b) return res.status(404).json({ message: "Бронь не найдена" });
+    return res.json(b);
+  } catch (err) {
+    console.error("getBooking error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+/** POST /api/bookings/:id/pay — маркёр успешной оплаты */
+const markPaid = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const snap = await autoExpireIfOverdue(id);
+    if (!snap) return res.status(404).json({ message: "Бронь не найдена" });
+    if (snap.status === "cancelled_unpaid") {
+      return res.status(409).json({ message: "Payment window expired" });
+    }
+    if (snap.status !== "awaiting_payment") {
+      return res.json(snap); // уже оплачен/отменён — идемпотентно
+    }
+    const cols = await getExistingColumns("bookings", ["hold_until"]);
+    const clearHold = cols.hold_until ? `, hold_until = NULL` : ``;
+    const up = await pool.query(
+      `UPDATE bookings
+          SET status='confirmed',
+              updated_at = NOW()${clearHold}
+        WHERE id=$1
+      RETURNING *`,
+      [id]
+    );
+    const booking = up.rows[0];
+    try { (tg.notifyBookingPaidConfirmed || tg.notifyConfirmed)?.({ booking, by: "payment" }); } catch {}
+    return res.json(booking);
+  } catch (err) {
+    console.error("markPaid error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
 
 module.exports = {
   createBooking,
@@ -982,4 +1085,6 @@ module.exports = {
   checkAvailability,
   placeHold,
   getBookingDocs,
+  getBooking,
+  markPaid,
 };
