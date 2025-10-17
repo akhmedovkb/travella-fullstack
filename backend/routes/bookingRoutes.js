@@ -50,4 +50,9 @@ router.post("/:id/confirm", authenticateToken, confirmBooking);
 router.post("/:id/confirm-by-requester", authenticateToken, requireProvider, confirmBookingByRequester);
 router.post("/:id/cancel-by-requester", authenticateToken, requireProvider, cancelBookingByRequester);
 
+// === Booking Conveyor ===
+router.post("/:id/check-availability", authenticateToken, checkAvailability);
+router.post("/:id/place-hold", authenticateToken, placeHold);
+router.get("/:id/docs", authenticateToken, getBookingDocs);
+
 module.exports = router;
