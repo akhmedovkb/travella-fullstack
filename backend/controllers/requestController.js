@@ -263,26 +263,81 @@ async function ensureClientIdForUser(userId) {
     throw e;
   }
 }
+// --- создать/вернуть плейсхолдер-услугу для заявок из Конструктора
+async function ensurePlaceholderService(providerId, kindHint = "") {
+  const kind = String(kindHint || "").toLowerCase().includes("transport") ? "transport" : "guide";
+  const title = kind === "transport"
+    ? "[TB] Day service (transport)"
+    : "[TB] Day service (guide)";
+  const category = kind === "transport" ? "city_tour_transport" : "city_tour_guide";
+
+  // уже есть такой плейсхолдер?
+  const q = await db.query(
+    `SELECT id FROM services
+      WHERE provider_id = $1
+        AND title = $2
+        AND (details->>'systemTag') IS NOT DISTINCT FROM 'tb_placeholder'
+      ORDER BY id LIMIT 1`,
+    [providerId, title]
+  );
+  if (q.rowCount) return q.rows[0].id;
+
+  // создаём новый
+  const ins = await db.query(
+    `INSERT INTO services (provider_id, title, category, currency, price, details)
+     VALUES ($1, $2, $3, 'UZS', 0, $4)
+     RETURNING id`,
+    [providerId, title, category, { systemTag: 'tb_placeholder', kind }]
+  );
+  return ins.rows[0].id;
+}
 
 
 
 /* ===================== Controllers ===================== */
 
-/** POST /api/requests — быстрый запрос (клиент/провайдер) */
+/** POST /api/requests — быстрый запрос (клиент/провайдер, поддержка TourBuilder) */
 exports.createQuickRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: "unauthorized" });
 
-    const { service_id, note } = req.body || {};
-    if (!service_id) return res.status(400).json({ error: "service_id_required" });
+    let {
+      service_id,
+      provider_id,         // ← добавлено: можно прислать вместо service_id
+      dates,               // ← массив дат от TourBuilder
+      pax_adult,
+      pax_child,
+      language,
+      city,
+      message,
+      source,
+      note,                // совместимость со старым quick
+    } = req.body || {};
+
+    // Если пришёл только provider_id — создадим/возьмём плейсхолдер-услугу
+    if (!service_id && provider_id) {
+      // запрет самозаявки: провайдер не может слать запрос себе
+      if (Number(provider_id) === Number(userId)) {
+        return res.status(400).json({ error: "self_request_forbidden" });
+      }
+      const kindHint = String(message || "").toLowerCase().includes("transport") ? "transport" : "guide";
+      service_id = await ensurePlaceholderService(Number(provider_id), kindHint);
+    }
+
+    if (!service_id) {
+      return res.status(400).json({ error: "service_id_required" });
+    }
 
     // сервис существует?
-    const svcQ = await db.query(`SELECT id, provider_id FROM services WHERE id = $1`, [service_id]);
+    const svcQ = await db.query(
+      `SELECT id, provider_id FROM services WHERE id = $1`,
+      [service_id]
+    );
     const svc = svcQ.rows[0];
     if (!svc) return res.status(404).json({ error: "service_not_found" });
 
-    // запрет самозаявки (провайдер → свой же сервис)
+    // запрет самозаявки (если зашёл провайдер — на свой же сервис)
     if (Number(svc.provider_id) === Number(userId)) {
       return res.status(400).json({ error: "self_request_forbidden" });
     }
@@ -291,7 +346,23 @@ exports.createQuickRequest = async (req, res) => {
     const clientId = await ensureClientIdForUser(userId);
     if (!clientId) return res.status(403).json({ error: "forbidden" });
 
-    // дубль? вернём существующую запись
+    // Соберём человекочитаемую записку для провайдера
+    const datesStr = Array.isArray(dates) && dates.length ? dates.join(", ") : "";
+    const paxStr = [
+      Number(pax_adult) ? `ADT ${Number(pax_adult)}` : null,
+      Number(pax_child) ? `CHD ${Number(pax_child)}` : null,
+    ].filter(Boolean).join(" / ");
+    const parts = [
+      message || "[TourBuilder]",
+      datesStr ? `Dates: ${datesStr}` : null,
+      city ? `City: ${city}` : null,
+      language ? `Lang: ${language}` : null,
+      paxStr ? `PAX: ${paxStr}` : null,
+      source ? `Source: ${source}` : null,
+    ].filter(Boolean);
+    const composedNote = parts.join(" • ");
+
+    // дубль той же услуги от того же отправителя? (последняя запись)
     const dup = await db.query(
       `SELECT id, service_id, client_id, status, note, created_at
          FROM requests
@@ -300,30 +371,34 @@ exports.createQuickRequest = async (req, res) => {
         LIMIT 1`,
       [service_id, clientId]
     );
-      if (dup.rowCount > 0) {
-    // Уже отправляли запрос на эту услугу этим пользователем (клиент/провайдер)
-    return res.status(409).json({ error: "request_already_sent", id: dup.rows[0].id });
-  }
+    if (dup.rowCount > 0) {
+      // если текст заметки тот же — считаем дублем
+      if ((dup.rows[0].note || "") === (note || composedNote)) {
+        return res.status(409).json({ error: "request_already_sent", id: dup.rows[0].id });
+      }
+    }
 
     // новая заявка
     const ins = await db.query(
       `INSERT INTO requests (service_id, client_id, status, note)
        VALUES ($1, $2, 'new', $3)
        RETURNING id, service_id, client_id, status, note, created_at`,
-      [service_id, clientId, note || null]
+      [service_id, clientId, note || composedNote]
     );
     const newId = ins.rows?.[0]?.id;
-      if (newId) tg.notifyReqNew({ request_id: newId }).catch(e => {
-  console.error("tg.notifyReqNew failed:", e?.response?.data || e?.message || e);
-});
+    if (newId) {
+      tg.notifyReqNew({ request_id: newId }).catch(e => {
+        console.error("tg.notifyReqNew failed:", e?.response?.data || e?.message || e);
+      });
+    }
 
     return res.status(201).json(ins.rows[0]);
   } catch (err) {
-    console.error("quick request error:", err);
-    // без 500 — даём код, который фронт уже обрабатывает
+    console.error("quick request (TB) error:", err);
     return res.status(400).json({ error: "request_create_failed" });
   }
 };
+
 
 /** GET /api/requests/provider */
 exports.getProviderRequests = async (req, res) => {
