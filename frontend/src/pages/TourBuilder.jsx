@@ -175,11 +175,23 @@ const LANGS = [
 
 /* ---------------- fetch helpers ---------------- */
 const fetchJSON = async (path, params = {}) => {
+ const authHeaders = () => {
+   const tok =
+     localStorage.getItem("token") ||
+     localStorage.getItem("providerToken") ||
+     ""; // любой из ваших кейсов
+   return tok ? { Authorization: `Bearer ${tok}` } : {};
+ };
+
+ const fetchJSON = async (path, params = {}) => {
   const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
   });
-  const r = await fetch(u.toString(), { credentials: "include" });
+  const r = await fetch(u.toString(), {
+    credentials: "include",
+    headers: { ...authHeaders() },
+  });
   if (!r.ok) throw new Error("HTTP " + r.status);
   return await r.json();
 };
@@ -197,7 +209,7 @@ const postJSON = async (path, body) => {
   const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
   const r = await fetch(u.toString(), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify(body || {}),
   });
