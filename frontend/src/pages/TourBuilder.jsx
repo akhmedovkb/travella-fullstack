@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { listTemplates, getTemplate, syncTemplates } from "../store/templates"; // [TPL]
-import { toast } from "react-hot-toast";
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { useTranslation } from "react-i18next";
@@ -193,24 +192,57 @@ const fetchJSONLoose = async (path, params = {}) => {
   }
 };
 
-// POST JSON с учётом API_BASE и cookie (JWT)
-const postJSON = async (path, body = {}) => {
+// --- POST JSON с учётом API_BASE и cookie ---
+const postJSON = async (path, body = {}, params = {}) => {
   const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, v);
+  });
   const r = await fetch(u.toString(), {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(body ?? {}),
   });
   if (!r.ok) {
     let msg = `HTTP ${r.status}`;
     try {
-      const j = await r.json();
-      msg = j?.message || msg;
-    } catch (_) {}
+      const t = await r.text();
+      msg = (JSON.parse(t)?.message || t || msg);
+    } catch {}
     throw new Error(msg);
   }
-  return await r.json();
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("application/json") ? r.json() : r.text();
+};
+
+// --- роль пользователя: сперва /api/auth/me, затем JWT в localStorage ---
+const parseJwt = (token) => {
+  try {
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(json);
+  } catch { return null; }
+};
+const getRoleSafe = async () => {
+  try {
+    const me = await fetchJSON("/api/auth/me");
+    if (me?.role) return String(me.role);
+  } catch {}
+  try {
+    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken") || localStorage.getItem("access_token");
+    if (tok) {
+      const p = parseJwt(tok);
+      if (p?.role) return String(p.role);
+    }
+  } catch {}
+  return null;
 };
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
@@ -477,24 +509,6 @@ const isAdminFromJwt = () => {
   }
 };
 
-// провайдер из JWT (по role/roles)
-const isProviderFromJwt = () => {
-  try {
-    const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
-    if (!tok) return false;
-    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-    const json = decodeURIComponent(
-      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
-    );
-    const claims = JSON.parse(json);
-    const roles = []
-      .concat(claims.role || [], claims.roles || [])
-      .flatMap(r => String(r).split(","))
-      .map(s => s.trim().toLowerCase());
-    return roles.includes("provider");
-  } catch { return false; }
-};
 
 /* ---------------- custom option + tooltip ---------------- */
 const ProviderOption = (props) => {
@@ -735,12 +749,15 @@ const HotelOption = (props) => {
 
 export default function TourBuilder() {
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isProvider, setIsProvider] = useState(false);
   useEffect(() => {
     setIsAdmin(isAdminFromJwt());
-    setIsProvider(isProviderFromJwt());
   }, []);
-  
+    // роль (для показа провайдерских кнопок)
+  const [role, setRole] = useState(null); // 'provider' | 'client' | null
+  const isProvider = role === "provider";
+  useEffect(() => {
+    getRoleSafe().then(setRole).catch(() => setRole(null));
+  }, []);
   const { t, i18n } = useTranslation();
   
   const localeMap = {
@@ -806,330 +823,6 @@ export default function TourBuilder() {
     });
   }, [days]);
 
-  /* ---------- BOOKING: быстрые действия (Availability / Hold / Docs) ---------- */
-  // TODO: если у тебя есть bookingId из URL/стора — подставь сюда и убери поле ввода ниже
-  const [bookingId, setBookingId] = useState("");
-  const bookingIdRef = useRef("");
-  useEffect(() => {
-    // из ?booking=… или последнего сегмента пути, если это число/uuid-похоже
-    try {
-      const usp = new URLSearchParams(window.location.search);
-      const q = usp.get("booking") || "";
-      const fromPath = window.location.pathname.split("/").filter(Boolean).pop() || "";
-      const candidate = q || fromPath;
-      if (candidate && candidate !== bookingIdRef.current) {
-        setBookingId(candidate);
-        bookingIdRef.current = candidate;
-      }
-    } catch {}
-  }, []);
-  const [availability, setAvailability] = useState(null); // {overall, results:[{date,status}]}
-  const [holdInfo, setHoldInfo] = useState(null);          // {ok, hold_until_in}
-  const [docs, setDocs] = useState(null);                  // {invoice_pdf, ...}
-  const [busy, setBusy] = useState({
-    avail:false, hold:false, docs:false,
-    accept:false, reject:false,
-    cancelProv:false, cancelReq:false
-  });
-  const [holdHours, setHoldHours] = useState(24);
-
-  const handleCheckAvailability = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, avail:true}));
-      const data = await postJSON(`/api/bookings/${bookingId}/check-availability`, {});
-      setAvailability(data);
-      toast.success((data?.overall === "ok") ? t("tb.avail_ok","Все даты доступны") : t("tb.avail_warn","Есть конфликты"));
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (provider only)"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, avail:false}));
-    }
-  };
-
-  const handlePlaceHold = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, hold:true}));
-      const data = await postJSON(`/api/bookings/${bookingId}/place-hold`, { hours: Number(holdHours)||24, payload:{} });
-      setHoldInfo(data);
-      toast.success(t("tb.hold_set","Холд установлен"));
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, hold:false}));
-    }
-  };
-
-  const handleGetDocs = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, docs:true}));
-      const data = await fetchJSON(`/api/bookings/${bookingId}/docs`);
-      setDocs(data?.docs || null);
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, docs:false}));
-    }
-  };
-
-  // --- входящая бронь: действия поставщика ---
-  const handleAccept = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, accept:true}));
-      await postJSON(`/api/bookings/${bookingId}/accept`, {});
-      toast.success(t("tb.accepted","Заявка подтверждена"));
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, accept:false}));
-    }
-  };
-  const handleReject = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, reject:true}));
-      await postJSON(`/api/bookings/${bookingId}/reject`, { reason: "" });
-      toast.success(t("tb.rejected","Заявка отклонена"));
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, reject:false}));
-    }
-  };
-  const handleCancelByProvider = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, cancelProv:true}));
-      await postJSON(`/api/bookings/${bookingId}/cancel-by-provider`, { reason: "" });
-      toast.success(t("tb.cancelled","Бронь отменена"));
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, cancelProv:false}));
-    }
-  };
-  // --- исходящая (я — провайдер-заявитель) ---
-  /*const handleCancelByRequester = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, cancelReq:true}));
-      await postJSON(`/api/bookings/${bookingId}/cancel-by-requester`, {});
-      toast.success(t("tb.cancelled","Бронь отменена"));
-    } catch (e) {
-      toast.error(String(e?.message||t("tb.err.request_failed","Ошибка запроса")));
-    } finally {
-      setBusy(b => ({...b, cancelReq:false}));
-    }
-  };*/
-
-  /* ---------- CONFIRMATIONS: запрос и пуллинг ---------- */
-  const [confirmations, setConfirmations] = useState(null); // { batch_id, items:[{date, guide:{status}, transport:{status}}] }
-  const [confirmBatchId, setConfirmBatchId] = useState(null);
-  const pollRef = useRef(null);
-
-  const stopPolling = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  };
-  useEffect(() => () => stopPolling(), []);
-
-  const combineDayStatus = (row) => {
-    // порядок критичности: rejected > pending > confirmed/ok/empty
-    const parts = [row?.guide?.status, row?.transport?.status].filter(Boolean);
-    if (parts.some(s => String(s).toLowerCase() === "rejected")) return "rejected";
-    if (parts.some(s => String(s).toLowerCase() === "pending")) return "pending";
-    if (parts.some(s => String(s).toLowerCase() === "confirmed")) return "confirmed";
-    return parts.length ? "unknown" : "empty";
-  };
-
-  const computeFlags = (list=[]) => {
-    const statuses = list.map(combineDayStatus);
-    const anyRejected = statuses.includes("rejected");
-    const anyPending  = statuses.includes("pending");
-    const allConfirmed = list.length > 0 && !anyRejected && !anyPending && statuses.every(s => s==="confirmed" || s==="empty");
-    return { anyRejected, anyPending, allConfirmed };
-  };
-
-  const buildConfirmationPayload = () => {
-    // собираем только те дни, где выбран хотя бы один поставщик
-    const items = Object.keys(byDay).map(dateKey => {
-      const st = byDay[dateKey] || {};
-      const guideId = st.guide?.id || null;
-      const transportId = st.transport?.id || null;
-      if (!guideId && !transportId) return null;
-      return {
-        date: dateKey,
-        city: st.city || "",
-        pax: Math.max(1, toNum(adt, 0) + toNum(chd, 0)),
-        language: lang,
-        providers: {
-          guide: guideId ? { id: guideId, service_id: st.guideService?.id || null } : null,
-          transport: transportId ? { id: transportId, service_id: st.transportService?.id || null } : null,
-        },
-      };
-    }).filter(Boolean);
-    return { items };
-  };
-
-  const fetchConfirmations = async (batchId) => {
-    // универсальный GET статус
-    try {
-      const data = await fetchJSON(`/api/bookings/${bookingId}/confirmations`, { batch_id: batchId });
-      if (data?.items) {
-        setConfirmations(prev => ({ ...(prev||{}), ...data }));
-        const { anyPending } = computeFlags(data.items || []);
-        if (!anyPending) stopPolling();
-      }
-    } catch (e) {
-      // не валим UI: просто прекращаем пуллить при ошибке
-      stopPolling();
-    }
-  };
-
-  const handleRequestConfirmations = async () => {
-    if (!bookingId) {
-      toast.error(t('tb.err.not_found','Бронь не найдена'));
-      return;
-    }
-    const payload = buildConfirmationPayload();
-    if (!payload.items?.length) {
-      toast.error(t('tb.pick_providers_first','Выберите гида/транспорт хотя бы в один день'));
-      return;
-    }
-    try {
-      setBusy(b => ({...b, confirm:true}));
-      const res = await postJSON(`/api/bookings/${bookingId}/request-confirmations`, payload);
-      const batchId = res?.batch_id || res?.id || null;
-      setConfirmBatchId(batchId);
-      setConfirmations(res || { batch_id: batchId, items: [] });
-      toast.success(t('tb.confirmation_sent','Запросы отправлены поставщикам'));
-      // стартуем пуллинг
-      stopPolling();
-      pollRef.current = setInterval(() => {
-        if (batchId) fetchConfirmations(batchId);
-      }, 5000);
-      // сразу подтянем первый статус
-      if (batchId) fetchConfirmations(batchId);
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t('tb.err.forbidden','Недостаточно прав'));
-      else if (/404/.test(msg)) toast.error(t('tb.err.not_found','Бронь не найдена'));
-      else toast.error(msg || t('tb.err.request_failed','Ошибка запроса'));
-    } finally {
-      setBusy(b => ({...b, confirm:false}));
-    }
-  };
-  const handlePlaceHold = async (hours = holdHours) => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, hold:true}));
-      const j = await postJSON(`/api/bookings/${bookingId}/place-hold`, { hours: Number(hours)||24 });
-      const serverUntil = j?.hold_until || j?.hold_until_iso || j?.until; // бэкенд может вернуть дату
-      setHoldInfo({
-        hours: Number(hours)||24,
-        untilAt: serverUntil ? new Date(serverUntil) : new Date(Date.now() + (Number(hours)||24) * 3600 * 1000)
-      });
-      toast.success(t("tb.hold_set","Холд установлен"));
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (provider only)"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, hold:false}));
-    }
-  };
-const handleGetDocs = async () => {
-  if (!bookingId) return;
-  try {
-    setBusy(b => ({...b, docs:true}));
-    const data = await fetchJSON(`/api/bookings/${bookingId}/docs`);
-    setDocs(data?.docs || null);
-    if (!data?.docs) toast(t("tb.no_docs","Документов пока нет"), { icon:"🗒️" });
-  } catch (e) {
-    const msg = String(e?.message || "");
-    if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав"));
-    else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-    else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-  } finally {
-    setBusy(b => ({...b, docs:false}));
-  }
-};
-
-  /* ---------- NEW: accept / reject / cancel ---------- */
-  const handleAcceptBooking = async () => {
-    if (!bookingId) return;
-    try {
-      setBusy(b => ({...b, accept:true}));
-      const res = await postJSON(`/api/bookings/${bookingId}/accept`, {});
-      toast.success(t("tb.accept_ok","Бронь принята"));
-      // можно при желании тут обновить локальный статус
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только провайдер услуги)"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, accept:false}));
-    }
-  };
-
-  const handleRejectBooking = async () => {
-    if (!bookingId) return;
-    const reason = window.prompt(t("tb.reject_reason_ph","Причина отказа (необязательно)")) || null;
-   try {
-      setBusy(b => ({...b, reject:true}));
-      const res = await postJSON(`/api/bookings/${bookingId}/reject`, { reason });
-      toast(t("tb.reject_ok","Бронь отклонена"), { icon:"🚫" });
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только провайдер услуги)"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, reject:false}));
-    }
-  };
-
-  const handleCancelByRequester = async () => {
-    if (!bookingId) return;
-    const reason = window.prompt(t("tb.cancel_reason_ph","Причина отмены (необязательно)")) || null;
-    try {
-      setBusy(b => ({...b, cancelReq:true}));
-      const res = await postJSON(`/api/bookings/${bookingId}/cancel-by-requester`, { reason });
-      toast(t("tb.cancel_req_ok","Заявка отменена (со стороны инициатора)"), { icon:"🛑" });
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, cancelReq:false}));
-    }
-  };
-
-  const handleCancelByProvider = async () => {
-    if (!bookingId) return;
-    const reason = window.prompt(t("tb.cancel_reason_req_if_confirmed","Причина отмены (обязательна, если уже подтверждено)")) || null;
-    try {
-      setBusy(b => ({...b, cancelProv:true}));
-      const res = await postJSON(`/api/bookings/${bookingId}/cancel-by-provider`, { reason });
-      toast(t("tb.cancel_prov_ok","Заявка отменена (со стороны провайдера)"), { icon:"🛑" });
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (/403/.test(msg)) toast.error(t("tb.err.forbidden","Недостаточно прав (только владелец услуги)"));
-      else if (/404/.test(msg)) toast.error(t("tb.err.not_found","Бронь не найдена"));
-      else toast.error(msg || t("tb.err.request_failed","Ошибка запроса"));
-    } finally {
-      setBusy(b => ({...b, cancelProv:false}));
-    }
-  };
-  
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
   const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
@@ -1384,135 +1077,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
-  {/* ===== QUICK BOOKING ACTIONS (панель) ===== */}
-  const QuickActions = (
-    <div className="mb-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm text-gray-600">
-          Booking ID
-          <input
-            className="ml-2 border rounded px-3 py-2 w-[220px]"
-            value={bookingId}
-            onChange={(e) => setBookingId(e.target.value.trim())}
-            placeholder="id"
-          />
-        </label>
-
-        <button
-          className="px-3 py-2 rounded border bg-white hover:bg-gray-50"
-          onClick={handleGetDocs}
-          disabled={!bookingId || busy.docs}
-          title="Список документов"
-        >
-          {busy.docs ? t("tb.loading","Загрузка…") : t("tb.docs","Документы")}
-        </button>
-
-        {isProvider && (
-          <>
-            <button
-              className="px-3 py-2 rounded border bg-green-600 text-white hover:opacity-90 disabled:opacity-60"
-              onClick={handleAccept}
-              disabled={!bookingId || busy.accept}
-            >
-              {busy.accept ? t("tb.processing","Обработка…") : t("tb.accept","Принять")}
-            </button>
-            <button
-              className="px-3 py-2 rounded border bg-red-600 text-white hover:opacity-90 disabled:opacity-60"
-              onClick={handleReject}
-              disabled={!bookingId || busy.reject}
-            >
-              {busy.reject ? t("tb.processing","Обработка…") : t("tb.reject","Отклонить")}
-            </button>
-            <button
-              className="px-3 py-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-60"
-              onClick={handleCancelByProvider}
-              disabled={!bookingId || busy.cancelProv}
-              title="Отменить входящую бронь (я — поставщик)"
-            >
-              {busy.cancelProv ? t("tb.processing","Обработка…") : t("tb.cancel_by_provider","Отменить (провайдер)")}
-            </button>
-          </>
-        )}
-
-        <button
-          className="px-3 py-2 rounded border bg-blue-600 text-white hover:opacity-90 disabled:opacity-60"
-          onClick={handleCheckAvailability}
-          disabled={!bookingId || busy.avail}
-        >
-          {busy.avail ? t("tb.checking","Проверяем…") : t("tb.check_availability","Проверить доступность")}
-        </button>
-
-        {isProvider && (
-          <>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={240}
-                className="border rounded px-2 py-1 w-16 text-center"
-                value={holdHours}
-                onChange={(e) => setHoldHours(Math.max(1, Math.min(240, Number(e.target.value)||24)))}
-                title="Часы холда"
-              />
-              <button
-                className="px-3 py-2 rounded border bg-amber-600 text-white hover:opacity-90 disabled:opacity-60"
-                onClick={handlePlaceHold}
-                disabled={!bookingId || busy.hold}
-              >
-                {busy.hold ? t("tb.processing","Обработка…") : t("tb.place_hold","Поставить на холд")}
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* Для исходящих (я — провайдер-заявитель). Показываем кнопку на всякий случай условно: */}
-        {isProvider && (
-          <button
-            className="px-3 py-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-60"
-            onClick={handleCancelByRequester}
-            disabled={!bookingId || busy.cancelReq}
-            title="Отменить исходящую заявку (я — заявитель)"
-          >
-            {busy.cancelReq ? t("tb.processing","Обработка…") : t("tb.cancel_by_requester","Отменить (заявитель)")}
-          </button>
-        )}
-      </div>
-
-      {/* Availability table */}
-      {availability?.results?.length ? (
-        <div className="mt-2 rounded-xl border p-3">
-          <div className="font-medium mb-1">Availability</div>
-          <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm">
-            {availability.results.map((r) => (
-              <li key={r.date}
-                  className={`px-2 py-1 rounded border text-center ${
-                    r.status === "ok"
-                      ? "bg-green-50 border-green-200 text-green-700"
-                      : "bg-red-50 border-red-200 text-red-700"
-                  }`}
-              >
-                {r.date} — {r.status}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {/* Docs list */}
-      {docs && (
-        <div className="mt-2 rounded-xl border p-3">
-          <div className="font-medium mb-1">Документы</div>
-          <ul className="list-disc pl-5 text-blue-600">
-            {docs.invoice_pdf && <li><a href={docs.invoice_pdf} target="_blank" rel="noreferrer">Invoice (PDF)</a></li>}
-            {docs.voucher_pdf && <li><a href={docs.voucher_pdf} target="_blank" rel="noreferrer">Voucher (PDF)</a></li>}
-            {docs.rooming_list_xlsx && <li><a href={docs.rooming_list_xlsx} target="_blank" rel="noreferrer">Rooming-list (XLSX)</a></li>}
-            {docs.itinerary_pdf && <li><a href={docs.itinerary_pdf} target="_blank" rel="noreferrer">Itinerary (PDF)</a></li>}
-            {docs.share_url && <li><a href={docs.share_url} target="_blank" rel="noreferrer">Поделиться</a></li>}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
 
     // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
   useEffect(() => {
@@ -1635,13 +1199,246 @@ const makeTransportLoader = (dateKey) => async (input) => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [applyOpen]);
-
+  /* ---------- BOOKING: быстрые действия (Availability / Hold / Docs / Accept / Reject / Cancel) ---------- */
+  // bookingId из ?booking=... или последнего сегмента пути
+  const [bookingId, setBookingId] = useState("");
+  const bookingIdRef = useRef("");
+  useEffect(() => {
+    try {
+      const usp = new URLSearchParams(window.location.search);
+      const q = usp.get("booking") || "";
+      const fromPath = window.location.pathname.split("/").filter(Boolean).pop() || "";
+      const candidate = q || fromPath;
+      if (candidate && candidate !== bookingIdRef.current) {
+        setBookingId(candidate);
+        bookingIdRef.current = candidate;
+      }
+    } catch {}
+  }, []);
+  const ensureId = () => {
+    const id = String(bookingId || "").trim();
+    if (!id) throw new Error("Укажите Booking ID");
+    return id;
+  };
+  // стейты результатов и лоадеров
+  const [availability, setAvailability] = useState(null); // { overall, results:[{date,status}] }
+  const [docs, setDocs] = useState(null);                 // { invoice_pdf, ... }
+  const [holdHours, setHoldHours] = useState(24);
+  const [busy, setBusy] = useState({ avail:false, docs:false, hold:false, accept:false, reject:false, cancel:false });
+  // handlers
+  const handleCheckAvailability = async () => {
+    try {
+      setBusy(b => ({...b, avail:true}));
+      const id = ensureId();
+      const j = await postJSON(`/api/bookings/${encodeURIComponent(id)}/check-availability`, {});
+      setAvailability(j || null);
+    } catch (e) {
+      alert(e?.message || "Ошибка проверки доступности");
+    } finally {
+      setBusy(b => ({...b, avail:false}));
+    }
+  };
+  const handlePlaceHold = async () => {
+    try {
+      setBusy(b => ({...b, hold:true}));
+      const id = ensureId();
+      await postJSON(`/api/bookings/${encodeURIComponent(id)}/place-hold`, { hours: Number(holdHours)||24 });
+      alert("Холд установлен");
+    } catch (e) {
+      alert(e?.message || "Не удалось поставить холд");
+    } finally {
+      setBusy(b => ({...b, hold:false}));
+    }
+  };
+  const handleGetDocs = async () => {
+    try {
+      setBusy(b => ({...b, docs:true}));
+      const id = ensureId();
+      const j = await fetchJSON(`/api/bookings/${encodeURIComponent(id)}/docs`);
+      setDocs(j?.docs || null);
+      if (!j?.docs) alert("Документов пока нет");
+    } catch (e) {
+      alert(e?.message || "Не удалось получить документы");
+    } finally {
+      setBusy(b => ({...b, docs:false}));
+    }
+  };
+  const handleAccept = async () => {
+    try {
+      setBusy(b => ({...b, accept:true}));
+      const id = ensureId();
+      await postJSON(`/api/bookings/${encodeURIComponent(id)}/accept`, {});
+      alert("Заявка принята");
+    } catch (e) {
+      alert(e?.message || "Не удалось подтвердить");
+    } finally {
+      setBusy(b => ({...b, accept:false}));
+    }
+  };
+  const handleReject = async () => {
+    const reason = window.prompt("Причина отклонения (необязательно):") || null;
+    try {
+      setBusy(b => ({...b, reject:true}));
+      const id = ensureId();
+      await postJSON(`/api/bookings/${encodeURIComponent(id)}/reject`, { reason });
+      alert("Заявка отклонена");
+    } catch (e) {
+      alert(e?.message || "Не удалось отклонить");
+    } finally {
+      setBusy(b => ({...b, reject:false}));
+    }
+  };
+  const handleCancel = async () => {
+    const reason = window.prompt("Причина отмены (необязательно):") || null;
+    try {
+      setBusy(b => ({...b, cancel:true}));
+      const id = ensureId();
+      if (isProvider) {
+        await postJSON(`/api/bookings/${encodeURIComponent(id)}/cancel-by-provider`, { reason });
+        alert("Отменено провайдером");
+      } else {
+        await postJSON(`/api/bookings/${encodeURIComponent(id)}/cancel`, { reason });
+        alert("Отменено");
+      }
+    } catch (e) {
+      alert(e?.message || "Не удалось отменить");
+    } finally {
+      setBusy(b => ({...b, cancel:false}));
+    }
+  };
 
   /* ---------------- render ---------------- */
   return (
     <div className="p-4 md:p-6 overflow-x-hidden">
-      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">        
         <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
+
+        {/* ---------- Панель быстрых действий по брони ---------- */}
+        <div className="p-3 border rounded-lg bg-white">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Booking ID</span>
+              <input
+                className="px-3 py-2 border rounded w-48"
+                placeholder="id"
+                value={bookingId}
+                onChange={(e) => setBookingId(e.target.value)}
+              />
+            </label>
+            <button
+              className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-60"
+              onClick={handleCheckAvailability}
+              disabled={busy.avail || !bookingId}
+              title="POST /api/bookings/:id/check-availability"
+            >
+              {busy.avail ? "Проверяем…" : "Проверить доступность"}
+            </button>
+            <button
+              className="px-3 py-2 rounded bg-slate-700 text-white disabled:opacity-60"
+              onClick={handleGetDocs}
+              disabled={busy.docs || !bookingId}
+              title="GET /api/bookings/:id/docs"
+            >
+              {busy.docs ? "Загрузка…" : "Документы"}
+            </button>
+            {isProvider && (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={240}
+                    className="border rounded px-2 py-1 w-16 text-center"
+                    value={holdHours}
+                    onChange={(e) => setHoldHours(Math.max(1, Math.min(240, Number(e.target.value)||24)))}
+                    title="Часы холда"
+                  />
+                  <button
+                    className="px-3 py-2 rounded bg-amber-600 text-white disabled:opacity-60"
+                    onClick={handlePlaceHold}
+                    disabled={busy.hold || !bookingId}
+                    title="POST /api/bookings/:id/place-hold"
+                  >
+                    {busy.hold ? "Обработка…" : "Поставить на холд"}
+                  </button>
+                </div>
+                <button
+                  className="px-3 py-2 rounded bg-emerald-600 text-white disabled:opacity-60"
+                  onClick={handleAccept}
+                  disabled={busy.accept || !bookingId}
+                  title="POST /api/bookings/:id/accept"
+                >
+                  {busy.accept ? "Обработка…" : "Принять"}
+                </button>
+                <button
+                  className="px-3 py-2 rounded bg-rose-600 text-white disabled:opacity-60"
+                  onClick={handleReject}
+                  disabled={busy.reject || !bookingId}
+                  title="POST /api/bookings/:id/reject"
+                >
+                  {busy.reject ? "Обработка…" : "Отклонить"}
+                </button>
+                <button
+                  className="px-3 py-2 rounded bg-gray-800 text-white disabled:opacity-60"
+                  onClick={handleCancel}
+                  disabled={busy.cancel || !bookingId}
+                  title="POST /api/bookings/:id/cancel-by-provider"
+                >
+                  {busy.cancel ? "Обработка…" : "Отменить (поставщик)"}
+                </button>
+              </>
+            )}
+            {!isProvider && (
+              <button
+                className="px-3 py-2 rounded bg-orange-600 text-white disabled:opacity-60"
+                onClick={handleCancel}
+                disabled={busy.cancel || !bookingId}
+                title="POST /api/bookings/:id/cancel"
+              >
+                {busy.cancel ? "Обработка…" : "Отменить"}
+              </button>
+            )}
+          </div>
+          {/* вывод результата check-availability */}
+          {availability?.results?.length ? (
+            <div className="mt-3 rounded-xl border p-3">
+              <div className="font-medium mb-1">
+                Итог:{" "}
+                <b className={availability.overall === "ok" ? "text-emerald-600" : "text-rose-600"}>
+                  {availability.overall === "ok" ? "свободно" : "конфликт"}
+                </b>
+              </div>
+              <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm">
+                {availability.results.map((r) => (
+                  <li
+                    key={r.date}
+                    className={`px-2 py-1 rounded border text-center ${
+                      r.status === "ok"
+                        ? "bg-green-50 border-green-200 text-green-700"
+                        : "bg-red-50 border-red-200 text-red-700"
+                    }`}
+                  >
+                    {r.date} — {r.status}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {/* ссылки на документы */}
+          {docs && (
+            <div className="mt-3 rounded-xl border p-3">
+              <div className="font-medium mb-1">Документы</div>
+              <ul className="list-disc pl-5 text-blue-600">
+                {docs.invoice_pdf       && <li><a href={docs.invoice_pdf} target="_blank" rel="noreferrer">Invoice (PDF)</a></li>}
+                {docs.voucher_pdf       && <li><a href={docs.voucher_pdf} target="_blank" rel="noreferrer">Voucher (PDF)</a></li>}
+                {docs.rooming_list_xlsx && <li><a href={docs.rooming_list_xlsx} target="_blank" rel="noreferrer">Rooming-list (XLSX)</a></li>}
+                {docs.itinerary_pdf     && <li><a href={docs.itinerary_pdf} target="_blank" rel="noreferrer">Itinerary (PDF)</a></li>}
+                {docs.share_url         && <li><a href={docs.share_url} target="_blank" rel="noreferrer">Поделиться</a></li>}
+              </ul>
+            </div>
+         )}
+        </div>
+        {/* ---------- /Панель быстрых действий ---------- */}
         {/* [TPL] панель шаблонов — аккордеон по странам */}
         <div className="flex items-start gap-3">
           <div className="text-sm text-gray-700 mt-2 shrink-0">{t('tb.templates')}:</div>
@@ -1788,216 +1585,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
 
         {/* days */}
-                {/* ===== QUICK BOOKING ACTIONS (сверху перед днями) ===== */}
-               {isProvider && (
-        <div className="border rounded-lg p-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm font-medium">Booking ID</label>
-            <input
-              className="h-9 w-48 border rounded px-2 text-sm"
-              placeholder="например, 123"
-              value={bookingId}
-             onChange={(e) => setBookingId(e.target.value)}
-            />
-            <input
-              type="number"
-              min={1}
-              className="h-9 w-28 border rounded px-2 text-sm"
-              title={t('tb.hold_hours','Часы холда')}
-              value={holdHours}
-              onChange={(e)=>setHoldHours(Math.max(1, Number(e.target.value)||24))}
-            />
-            <button
-              onClick={handleCheckAvailability}
-              className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50"
-              disabled={!bookingId || busy.avail}
-            >
-              {busy.avail ? t('tb.loading','Загрузка…') : t('tb.check_avail','Проверить доступность')}
-            </button>
-            <button
-              onClick={handleRequestConfirmations}
-              className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm disabled:opacity-50"
-              disabled={!bookingId || busy.confirm}
-              title={t('tb.confirmation_request','Запросить подтверждение у поставщиков')}
-            >
-              {busy.confirm ? t('tb.loading','Загрузка…') : t('tb.request_confirmations','Запросить подтверждение')}
-            </button>
-            <button
-              onClick={() => handlePlaceHold(holdHours)}
-              className="px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm disabled:opacity-50"
-              disabled={
-                !bookingId ||
-                busy.hold ||
-                // запрещаем холд, пока не все подтвердили
-                (confirmations && !computeFlags(confirmations.items||[]).allConfirmed)
-              }
-            >
-              {busy.hold ? t('tb.loading','Загрузка…') : t('tb.place_hold','Поставить на холд')} ({holdHours}ч)
-            </button>
-            <button
-              onClick={handleGetDocs}
-              className="px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
-              disabled={
-                !bookingId ||
-                busy.docs ||
-                (confirmations && !computeFlags(confirmations.items||[]).allConfirmed)
-              }
-            >
-              {busy.docs ? t('tb.loading','Загрузка…') : t('tb.docs','Документы')}
-            </button>
-            {/* ----- NEW: provider actions ----- */}
-            {isProvider && (
-              <>
-                <span className="mx-1 opacity-50">|</span>
-                <button
-                  onClick={handleAcceptBooking}
-                  className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm disabled:opacity-50"
-                  disabled={!bookingId || busy.accept}
-                  title={t('tb.accept_tt','Подтвердить входящую бронь как провайдер')}
-                >
-                  {busy.accept ? t('tb.loading','Загрузка…') : t('tb.accept','Принять')}
-                </button>
-                <button
-                  onClick={handleRejectBooking}
-                  className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm disabled:opacity-50"
-                  disabled={!bookingId || busy.reject}
-                  title={t('tb.reject_tt','Отклонить входящую бронь как провайдер')}
-                >
-                  {busy.reject ? t('tb.loading','Загрузка…') : t('tb.reject','Отклонить')}
-                </button>
-                <button
-                  onClick={handleCancelByProvider}
-                  className="px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 text-sm disabled:opacity-50"
-                  disabled={!bookingId || busy.cancelProv}
-                  title={t('tb.cancel_prov_tt','Отменить как провайдер услуги')}
-                >
-                  {busy.cancelProv ? t('tb.loading','Загрузка…') : t('tb.cancel_as_provider','Отменить (провайдер)')}
-                </button>
-              </>
-            )}
-            {/* ----- NEW: requester action (для инициатора брони, не обязательно провайдер) ----- */}
-            {!isProvider && (
-              <>
-                <span className="mx-1 opacity-50">|</span>
-                <button
-                  onClick={handleCancelByRequester}
-                  className="px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 text-sm disabled:opacity-50"
-                  disabled={!bookingId || busy.cancelReq}
-                  title={t('tb.cancel_req_tt','Отменить как инициатор заявки')}
-                >
-                  {busy.cancelReq ? t('tb.loading','Загрузка…') : t('tb.cancel_as_requester','Отменить (инициатор)')}
-                </button>
-              </>
-            )}
-          </div>
-          {/* Confirmations panel */}
-          {confirmations && (
-            <div className="mt-2 rounded-xl border p-3">
-              <div className="font-medium mb-2">
-                {t('tb.confirmations_title','Подтверждения поставщиков')}
-                {confirmBatchId ? ` (#${confirmBatchId})` : ''}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {(confirmations.items || []).map((r) => {
-                  const dayStatus = (combineDayStatus(r) || '').toLowerCase();
-                  const color =
-                    dayStatus === 'rejected' ? 'bg-red-50 border-red-200 text-red-800' :
-                    dayStatus === 'pending'  ? 'bg-amber-50 border-amber-200 text-amber-800' :
-                    'bg-green-50 border-green-200 text-green-800';
-                  return (
-                    <div key={r.date} className={`px-2 py-2 rounded border text-sm ${color}`}>
-                      <div className="font-semibold">{r.date}</div>
-                      <div className="mt-1 flex flex-col gap-1">
-                        {'guide' in (r||{}) && (
-                          <div>Guide: <b>{r.guide?.status || '—'}</b></div>
-                        )}
-                        {'transport' in (r||{}) && (
-                          <div>Transport: <b>{r.transport?.status || '—'}</b></div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {(() => {
-                const f = computeFlags(confirmations.items||[]);
-                return (
-                  <div className="mt-2 text-sm">
-                    {f.anyRejected && <div className="text-red-700">{t('tb.confirmations_rejected','Есть отказы — холд и документы недоступны.')}</div>}
-                    {!f.anyRejected && f.anyPending && <div className="text-amber-700">{t('tb.confirmations_wait','Идёт ожидание подтверждений…')}</div>}
-                    {f.allConfirmed && <div className="text-green-700">{t('tb.confirmations_all_ok','Все подтверждены — можно ставить на холд и выпускать документы.')}</div>}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-          {/* Availability panel */}
-          {availability && (
-            <div className="mt-2 rounded-xl border p-3">
-              <div className="font-medium mb-2">
-                Доступность: {availability.overall === "ok" ? "OK" : "Конфликты"}
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {(availability.results || []).map((r) => (
-                  <div
-                    key={r.date}
-                    className={
-                      "px-2 py-1 rounded border text-sm " +
-                      (r.status === "ok" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")
-                    }
-                  >
-                    {r.date} — {r.status === "ok" ? "свободно" : "занято"}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Hold banner */}
-          {holdInfo && (
-            <div className="mt-2 rounded-xl border p-3 bg-amber-50 border-amber-200">
-              <div className="font-medium">
-                Оплатить до:{" "}
-                <span className="font-semibold">
-                  {holdInfo.untilAt.toLocaleString()}
-                </span>
-              </div>
-              <div className="text-xs text-amber-800">Холд действует {holdInfo.hours} ч.</div>
-            </div>
-          )}
-
-          {/* Docs list */}
-          {docs && (
-            <div className="mt-2 rounded-xl border p-3">
-              <div className="font-medium mb-1">Документы</div>
-              <ul className="list-disc pl-5 text-blue-600">
-                {docs.invoice_pdf && <li><a href={docs.invoice_pdf} target="_blank" rel="noreferrer">Invoice (PDF)</a></li>}
-                {docs.voucher_pdf && <li><a href={docs.voucher_pdf} target="_blank" rel="noreferrer">Voucher (PDF)</a></li>}
-                {docs.rooming_list_xlsx && <li><a href={docs.rooming_list_xlsx} target="_blank" rel="noreferrer">Rooming-list (XLSX)</a></li>}
-                {docs.itinerary_pdf && <li><a href={docs.itinerary_pdf} target="_blank" rel="noreferrer">Itinerary (PDF)</a></li>}
-                {docs.share_url && <li><a href={docs.share_url} target="_blank" rel="noreferrer">Поделиться</a></li>}
-              </ul>
-            </div>
-          )}
-        </div>
-        )}
-        {/* days */}
         <div className="space-y-6">
           {days.map((d, i) => {
             const k = ymd(d);
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
-            // пер-дневной статус подтверждения (если есть данные)
-            const dayConfirmRow = confirmations?.items?.find?.(x => x.date === k);
-            const dayConfirmStatus = dayConfirmRow ? ( ( (dayConfirmRow.guide?.status||'') || (dayConfirmRow.transport?.status||'') ) ) : "";
-            const dayBadge = (() => {
-              const s = (dayConfirmStatus||"").toLowerCase();
-              if (!s) return null;
-              if (s.includes('rejected')) return { text: 'REJECTED', cls: 'bg-red-100 text-red-700 border-red-300' };
-              if (s.includes('pending'))  return { text: 'PENDING',  cls: 'bg-amber-100 text-amber-800 border-amber-300' };
-              if (s.includes('confirmed'))return { text: 'CONFIRMED',cls: 'bg-green-100 text-green-700 border-green-300' };
-              return { text: s.toUpperCase(), cls: 'bg-gray-100 text-gray-700 border-gray-300' };
-            })();
             return (
               <div
                 key={k}
@@ -2029,11 +1621,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   <div className="text-sm" style={{ color: BRAND.primary }}>
                     {k}
                   </div>
-                  {dayBadge && (
-                    <span className={`ml-auto text-[11px] px-2 py-0.5 rounded border ${dayBadge.cls}`}>
-                      {dayBadge.text}
-                    </span>
-                  )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
