@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { listTemplates, getTemplate, syncTemplates } from "../store/templates"; // [TPL]
+import { toast } from "react-hot-toast";
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
 import { useTranslation } from "react-i18next";
@@ -190,6 +191,26 @@ const fetchJSONLoose = async (path, params = {}) => {
   } catch {
     return null;               // не падаем на 404/500 — просто идём к следующему варианту
   }
+};
+
+// POST JSON с учётом API_BASE и cookie (JWT)
+const postJSON = async (path, body = {}) => {
+  const u = new URL(path, API_BASE || window.frontend?.API_BASE || "");
+  const r = await fetch(u.toString(), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try {
+      const j = await r.json();
+      msg = j?.message || msg;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await r.json();
 };
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
@@ -765,6 +786,30 @@ export default function TourBuilder() {
     });
   }, [days]);
 
+  /* ---------- BOOKING: быстрые действия (Availability / Hold / Docs) ---------- */
+  // TODO: если у тебя есть bookingId из URL/стора — подставь сюда и убери поле ввода ниже
+  const [bookingId, setBookingId] = useState("");
+  const [availability, setAvailability] = useState(null); // { overall, results:[{date,status}] }
+  const [holdInfo, setHoldInfo] = useState(null);         // { hours, untilAt }
+  const [docs, setDocs] = useState(null);                 // { voucher_pdf, invoice_pdf, ... }
+
+  const handleCheckAvailability = async () => {
+    if (!bookingId) return;
+    const data = await postJSON(`/api/bookings/${bookingId}/check-availability`, {});
+    setAvailability(data);
+    // toast?.success?.(data?.overall === "ok" ? "Все даты доступны" : "Есть конфликты");
+  };
+  const handlePlaceHold = async (hours = 24) => {
+    if (!bookingId) return;
+    await postJSON(`/api/bookings/${bookingId}/place-hold`, { hours });
+    setHoldInfo({ hours, untilAt: new Date(Date.now() + hours * 3600 * 1000) });
+  };
+  const handleGetDocs = async () => {
+    if (!bookingId) return;
+    const data = await fetchJSON(`/api/bookings/${bookingId}/docs`);
+    setDocs(data?.docs || null);
+  };
+  
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
   const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
@@ -1291,6 +1336,90 @@ const makeTransportLoader = (dateKey) => async (input) => {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* days */}
+                {/* ===== QUICK BOOKING ACTIONS (сверху перед днями) ===== */}
+        <div className="border rounded-lg p-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm font-medium">Booking ID</label>
+            <input
+              className="h-9 w-48 border rounded px-2 text-sm"
+              placeholder="например, 123"
+              value={bookingId}
+             onChange={(e) => setBookingId(e.target.value)}
+            />
+            <button
+              onClick={handleCheckAvailability}
+              className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50"
+              disabled={!bookingId}
+            >
+              Проверить доступность
+            </button>
+            <button
+              onClick={() => handlePlaceHold(24)}
+              className="px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm disabled:opacity-50"
+              disabled={!bookingId}
+            >
+              Поставить на холд (24ч)
+            </button>
+            <button
+              onClick={handleGetDocs}
+              className="px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
+              disabled={!bookingId}
+            >
+              Документы
+            </button>
+          </div>
+
+          {/* Availability panel */}
+          {availability && (
+            <div className="mt-2 rounded-xl border p-3">
+              <div className="font-medium mb-2">
+                Доступность: {availability.overall === "ok" ? "OK" : "Конфликты"}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {(availability.results || []).map((r) => (
+                  <div
+                    key={r.date}
+                    className={
+                      "px-2 py-1 rounded border text-sm " +
+                      (r.status === "ok" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")
+                    }
+                  >
+                    {r.date} — {r.status === "ok" ? "свободно" : "занято"}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Hold banner */}
+          {holdInfo && (
+            <div className="mt-2 rounded-xl border p-3 bg-amber-50 border-amber-200">
+              <div className="font-medium">
+                Оплатить до:{" "}
+                <span className="font-semibold">
+                  {holdInfo.untilAt.toLocaleString()}
+                </span>
+              </div>
+              <div className="text-xs text-amber-800">Холд действует {holdInfo.hours} ч.</div>
+            </div>
+          )}
+
+          {/* Docs list */}
+          {docs && (
+            <div className="mt-2 rounded-xl border p-3">
+              <div className="font-medium mb-1">Документы</div>
+              <ul className="list-disc pl-5 text-blue-600">
+                {docs.invoice_pdf && <li><a href={docs.invoice_pdf} target="_blank" rel="noreferrer">Invoice (PDF)</a></li>}
+                {docs.voucher_pdf && <li><a href={docs.voucher_pdf} target="_blank" rel="noreferrer">Voucher (PDF)</a></li>}
+                {docs.rooming_list_xlsx && <li><a href={docs.rooming_list_xlsx} target="_blank" rel="noreferrer">Rooming-list (XLSX)</a></li>}
+                {docs.itinerary_pdf && <li><a href={docs.itinerary_pdf} target="_blank" rel="noreferrer">Itinerary (PDF)</a></li>}
+                {docs.share_url && <li><a href={docs.share_url} target="_blank" rel="noreferrer">Поделиться</a></li>}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* days */}
