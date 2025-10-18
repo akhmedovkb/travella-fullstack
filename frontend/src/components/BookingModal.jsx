@@ -1,3 +1,5 @@
+//frontend/src/components/BookingModal.jsx
+  
 import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
