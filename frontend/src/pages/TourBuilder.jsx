@@ -233,12 +233,13 @@ const postJSON = async (path, body) => {
   return await r.json().catch(() => ({}));
 };
 
-// ------ Requests API (вкладка «Запросы») ------
-// ожидаемый контракт бэкенда:
-// POST /api/requests  { provider_id, service_id?, dates:string[], pax_adult, pax_child, language, city?, message?, source? }
-async function createRequest(payload) {
-  return await postJSON("/api/requests", payload);
+// ------ Bookings API ------
+// POST /api/bookings
+// body: { provider_id, service_id?, dates:[YYYY-MM-DD], message?, attachments?, currency?, source?, group_id? }
+async function createBooking(payload) {
+  return await postJSON("/api/bookings", payload);
 }
+
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
 // starsFilter: '' | 1..7
@@ -1069,8 +1070,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
   }, [byDay, adt, chd, residentType, usdRate]);
   // ===== СБОРКА И ОТПРАВКА ЗАПРОСОВ ПРОВАЙДЕРАМ =====
   // схема: на каждого уникального провайдера (guide/transport) — один запрос с массивом дат.
-  const buildRequests = () => {
-    const buckets = new Map(); // key = `${kind}:${provider_id}` → { provider_id, service_id?, dates[], city }
+  const buildBookings = () => {
+    const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[], city }
     for (const [dateKey, st] of Object.entries(byDay)) {
       if (!st?.city) continue;
       // гид
@@ -1099,14 +1100,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
     for (const b of buckets.values()) {
       payloads.push({
         provider_id: b.provider_id,
-        service_id: b.service_id || undefined,
+        // service_id необязателен — шлём только если есть
+        ...(b.service_id ? { service_id: b.service_id } : {}),
         dates: Array.from(new Set(b.dates)).sort(),
-        pax_adult: Number(adt) || 0,
-        pax_child: Number(chd) || 0,
-        language: String(lang || "en"),
-        city: b.city || undefined,
+        // инфо для сообщения провайдеру
         message: `[TourBuilder] ${b.kind} • ${b.city || ""} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
-        source: "tour-builder",
+        source: "tour_builder",
+        // группируем пачку созданных броней одного тура
+        // (подставится в handleSendRequests)
+        __needs_group_id: true,
       });
     }
     return payloads;
@@ -1115,14 +1117,22 @@ const makeTransportLoader = (dateKey) => async (input) => {
   const [sending, setSending] = useState(false);
   const handleSendRequests = async () => {
     if (!range?.from || !range?.to) return alert("Выберите даты маршрута.");
-    const payloads = buildRequests();
+    const payloads = buildBookings();
     if (!payloads.length) return alert("Не выбраны провайдеры (гид/транспорт).");
     setSending(true);
     try {
       let ok = 0, fail = 0;
+      // общий group_id для всей пачки
+      const groupId = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
       for (const p of payloads) {
         try {
-          await createRequest(p);
+          const body = {
+            ...p,
+            // убираем служебное поле и проставляем group_id один раз на все брони
+            ...(p.__needs_group_id ? { group_id: groupId } : {}),
+          };
+          delete body.__needs_group_id;
+          await createBooking(body);
           ok++;
         } catch (e) {
           console.error("request failed", e);
@@ -1130,11 +1140,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
         }
       }
       if (ok && !fail) {
-        alert(`Запросов отправлено: ${ok}. Провайдеры увидят их во вкладке «Запросы», также придёт уведомление в Telegram.`);
+        alert(`Бронирований создано: ${ok}. Провайдерам придут уведомления (Telegram/кабинет).`);
       } else if (ok && fail) {
-        alert(`Часть запросов ушла успешно: ${ok}, ошибок: ${fail}. Проверьте логи/сеть.`);
+        alert(`Часть броней создана: ${ok}, ошибок: ${fail}. Проверьте логи/сеть.`);
       } else {
-        alert("Не удалось отправить запросы. Попробуйте позже или проверьте API /api/requests.");
+        alert("Не удалось создать бронирования. Попробуйте позже или проверьте API /api/bookings.");
       }
     } finally {
       setSending(false);
@@ -2145,12 +2155,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
           disabled={sending}
           className="px-4 py-2 rounded-lg text-white"
           style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
-          title="Создать запросы поставщикам по выбранным дням"
+          title="Создать бронирования поставщикам по выбранным дням"
         >
-          {sending ? "Отправляю..." : "Бронировать"}
+          {sending ? "Создаю..." : "Бронировать"}
         </button>
         <div className="text-xs text-gray-500 mt-1">
-          Кнопка создаёт запросы провайдерам (гид/транспорт) по всем выбранным дням. Запросы попадут во вкладку «Запросы» и дублируются в Telegram (если настроено на бэке).
+          Кнопка создаёт бронирования провайдерам (гид/транспорт) по всем выбранным дням. Уведомления приходят провайдерам (если настроено на бэке).
         </div>
       </div>
       </div>
