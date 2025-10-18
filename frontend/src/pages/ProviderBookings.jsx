@@ -153,6 +153,8 @@ export default function ProviderBookings() {
   const { t } = useTranslation();
 
   const [tab, setTab] = useState("incoming"); // incoming | outgoing
+  // под-вкладки только для исходящих
+  const [outSubTab, setOutSubTab] = useState("tb"); // tb | rest
   const [filter, setFilter] = useState("all"); // all | pending | confirmed | upcoming | rejected
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
@@ -168,6 +170,10 @@ export default function ProviderBookings() {
   }, []);
   useEffect(() => {
     setFilter("all");
+  }, [tab]);
+  useEffect(() => {
+    // при переключении «исходящие» — по умолчанию показываем пакеты TB
+    if (tab === "outgoing") setOutSubTab((v) => v || "tb");
   }, [tab]);
 
   const load = async () => {
@@ -286,7 +292,30 @@ export default function ProviderBookings() {
     }
   };
 
-  const baseList = tab === "incoming" ? incoming : outgoing;
+  // разрез исходящих
+  const outgoingTB = useMemo(
+    () => outgoing.filter((b) => String(b?.source) === "tour_builder" && !!b?.group_id),
+    [outgoing]
+  );
+  const outgoingRest = useMemo(
+    () => outgoing.filter((b) => !(String(b?.source) === "tour_builder" && !!b?.group_id)),
+    [outgoing]
+  );
+  // сгруппировать TB по group_id
+  const tbGroups = useMemo(() => {
+    const map = new Map();
+    for (const b of outgoingTB) {
+      const gid = b.group_id;
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(b);
+    }
+    // по времени создания пакета — сперва новые
+    return Array.from(map.entries())
+      .map(([group_id, items]) => ({ group_id, items: items.sort((a, b) => (a.id > b.id ? -1 : 1)) }))
+      .sort((a, b) => (a.items[0]?.id > b.items[0]?.id ? -1 : 1));
+  }, [outgoingTB]);
+
+  const baseList = tab === "incoming" ? incoming : outSubTab === "rest" ? outgoingRest : outgoingTB;
 
   // helpers для дат
   const todayStart = useMemo(() => {
@@ -308,7 +337,7 @@ export default function ProviderBookings() {
   const isRejectedLike = (b) => ["rejected", "cancelled"].includes(String(b.status));
   const isUpcoming = (b) => Number.isFinite(lastDateTs(b)) && isConfirmedLike(b) && lastDateTs(b) >= todayStart;
 
-  // счётчики
+  // счётчики (для «остальных исходящих» и любых плоских списков)
   const counts = useMemo(() => {
     const c = { all: baseList.length, pending: 0, confirmed: 0, upcoming: 0, rejected: 0 };
     for (const b of baseList) {
@@ -364,7 +393,8 @@ export default function ProviderBookings() {
     return { groups, singles };
   }, [filtered, tab]);
 
-  const content = useMemo(() => {
+  // контент для «остальных исходящих» или для «входящих»
+  const flatListContent = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!filtered.length) return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
 
@@ -498,6 +528,59 @@ export default function ProviderBookings() {
     );
   }, [filtered, loading, tab, t]);
 
+  // контент для «Пакеты TourBuilder»
+  const tbPackagesContent = useMemo(() => {
+    if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
+    if (!tbGroups.length)
+      return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
+    return (
+      <div className="space-y-6">
+        {tbGroups.map((g) => (
+          <div key={g.group_id} className="rounded-xl border bg-white">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="text-sm text-gray-700">
+                {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
+                <span className="font-mono text-gray-900">{g.group_id}</span>
+              </div>
+              <div className="text-xs text-gray-500">
+                {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
+              </div>
+            </div>
+            <div className="divide-y">
+              {g.items.map((b) => (
+                <div key={b.id} className="p-4">
+                  <BookingRow
+                    booking={b}
+                    viewerRole="client" // исходящие — я заявитель
+                    hideClientCancel={false}
+                    onCancel={cancelOutgoing}
+                  />
+                  {String(b.status) === "quoted" && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => confirmOutgoing(b)}
+                        disabled={!isFiniteNum(Number(b.provider_price))}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                      >
+                        {t("actions.confirm", { defaultValue: "Подтвердить" })}
+                      </button>
+                      <button
+                        onClick={() => cancelOutgoing(b)}
+                        className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
+                      >
+                        {t("actions.cancel", { defaultValue: "Отмена" })}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [tbGroups, loading, t]);
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -531,7 +614,32 @@ export default function ProviderBookings() {
         </button>
       </div>
 
-      {/* Фильтры статуса */}
+      {/* Под-вкладки для исходящих */}
+      {tab === "outgoing" && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => setOutSubTab("tb")}
+            className={"rounded-full px-3 py-1.5 ring-1 " + (outSubTab === "tb" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+          >
+            {t("bookings.tb_tab", { defaultValue: "Пакеты TourBuilder" })}
+            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (outSubTab === "tb" ? "bg-white/20" : "bg-gray-100")}>
+              {tbGroups.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setOutSubTab("rest")}
+            className={"rounded-full px-3 py-1.5 ring-1 " + (outSubTab === "rest" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+          >
+            {t("bookings.rest_tab", { defaultValue: "Остальные исходящие" })}
+            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (outSubTab === "rest" ? "bg-white/20" : "bg-gray-100")}>
+              {outgoingRest.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Фильтры статуса — только для плоских списков (входящие + остальные исходящие) */}
+      {(tab === "incoming" || (tab === "outgoing" && outSubTab === "rest")) && (
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
@@ -553,7 +661,8 @@ export default function ProviderBookings() {
         ))}
       </div>
 
-      {content}
+      {/* Содержимое */}
+      {tab === "outgoing" && outSubTab === "tb" ? tbPackagesContent : flatListContent}
             {/* Модалка отмены поставщиком — через общий ConfirmModal */}
       <ConfirmModal
         open={showCancelModal}
