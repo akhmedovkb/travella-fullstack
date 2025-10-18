@@ -337,12 +337,39 @@ export default function ProviderBookings() {
     }
   }, [baseList, filter]);
 
+   // ==== NEW: группировка исходящих по group_id для заявок из TourBuilder ====
+  const groupedOutgoing = useMemo(() => {
+    if (tab !== "outgoing") return { groups: [], singles: [] };
+    const map = new Map(); // group_id -> items[]
+    const singles = [];
+    for (const b of filtered) {
+      const isTB = String(b?.source || "").toLowerCase() === "tour_builder";
+      const gid = b?.group_id;
+      if (isTB && gid) {
+        if (!map.has(gid)) map.set(gid, []);
+        map.get(gid).push(b);
+      } else {
+        singles.push(b);
+      }
+    }
+    const groups = [...map.entries()].map(([group_id, items]) => {
+      const firstTs = Math.min(
+        ...items
+          .map((x) => new Date(x?.created_at || x?.updated_at || 0).getTime())
+          .filter(Number.isFinite)
+      );
+      return { group_id, items, firstTs: Number.isFinite(firstTs) ? firstTs : 0 };
+    });
+    groups.sort((a, b) => b.firstTs - a.firstTs); // новые сверху
+    return { groups, singles };
+  }, [filtered, tab]);
+
   const content = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!filtered.length) return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
-    return (
-      <div className="space-y-4">
-        {filtered.map((b) => {
+
+    // небольшая функция, чтобы не дублировать отрисовку строки
+    const renderRow = (b) => {
           const isIncoming = tab === "incoming";
           const alreadyQuoted = Number(b?.provider_price) > 0;
           const awaitingRequester = isIncoming && String(b?.status) === "quoted";
@@ -418,7 +445,55 @@ export default function ProviderBookings() {
               )}
             </div>
           );
-        })}
+    };
+
+    // Для вкладки ВХОДЯЩИЕ — старый список без группировки
+    if (tab === "incoming") {
+      return <div className="space-y-4">{filtered.map((b) => renderRow(b))}</div>;
+    }
+
+    // Для ИСХОДЯЩИХ — сначала «Пакеты TourBuilder», затем «Остальные исходящие»
+    return (
+      <div className="space-y-8">
+        {/* Пакеты TourBuilder */}
+        {groupedOutgoing.groups.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <h3 className="text-xl font-semibold">Пакеты TourBuilder</h3>
+              <span className="text-xs rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-violet-700">
+                {groupedOutgoing.groups.length}
+              </span>
+            </div>
+            <div className="space-y-5">
+              {groupedOutgoing.groups.map((g) => (
+                <div key={g.group_id} className="overflow-hidden rounded-xl border bg-white">
+                  <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
+                    <div className="font-medium">
+                      Пакет&nbsp;<span className="font-semibold">{g.group_id}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">бронирований: {g.items.length}</span>
+                  </div>
+                  <div className="space-y-4 p-4">{g.items.map((b) => renderRow(b))}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Остальные исходящие */}
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-xl font-semibold">Остальные исходящие</h3>
+            <span className="text-xs rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-gray-700">
+              {groupedOutgoing.singles.length}
+            </span>
+          </div>
+          {groupedOutgoing.singles.length === 0 ? (
+            <div className="text-sm text-gray-500">Пусто</div>
+          ) : (
+            <div className="space-y-4">{groupedOutgoing.singles.map((b) => renderRow(b))}</div>
+          )}
+        </div>
       </div>
     );
   }, [filtered, loading, tab, t]);
