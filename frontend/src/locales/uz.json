@@ -91,6 +91,7 @@
       "pending": "kutilmoqda",
       "confirmed": "tasdiqlandi",
       "active": "faol",
+      "quoted": "tasdiqlash kutilmoqda",
       "rejected": "rad etilgan",
       "cancelled": "bekor qilindi"
     },
