@@ -2,7 +2,7 @@
 
 const pool = require("../db");
 const tg = require("../utils/telegram");
-
+const { v4: uuidv4 } = require("uuid");
 /* ================= helpers ================= */
 
 // универсально: есть ли такие колонки в таблице
@@ -154,11 +154,16 @@ const createBooking = async (req, res) => {
       "source",
       "group_id"
     ]);
+    // Источник — турбилдер?
+    const isTourBuilder = (req.body?.source === "tour_builder");
+    // Если пришёл заказ из турбилдера и group_id не передали — сгенерируем
+    const autoGroupId = (cols.group_id && isTourBuilder && !req.body?.group_id) ? uuidv4() : null;
 
     // базовые колонки
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
     const values = [
-      service_id ?? null,
+      // Для турбилдера не привязываем бронь к одной услуге, чтобы не падать по FK
+      isTourBuilder ? null : (service_id ?? null),
       providerId,
       userRole === "client" ? userId : null,
       primaryDate,
@@ -179,7 +184,7 @@ const createBooking = async (req, res) => {
     }
     if (cols.group_id) {
       insertCols.push("group_id");
-      values.push(req.body?.group_id ?? null);
+      values.push(req.body?.group_id ?? autoGroupId);
     }
 
     // если бронирует провайдер и в таблице есть requester_* — заполним
@@ -236,7 +241,9 @@ const createBooking = async (req, res) => {
       dates: days,
       client_message: message ?? null,
     };
-    const service = { title: (await pool.query(`SELECT title FROM services WHERE id=$1`, [service_id ?? null])).rows[0]?.title || null };
+    const service = service_id
+      ? { title: (await pool.query(`SELECT title FROM services WHERE id=$1`, [service_id])).rows[0]?.title || null }
+      : { title: null };
     const client = userRole === "client"
       ? (await pool.query(`SELECT name FROM clients WHERE id=$1`, [userId])).rows[0]
       : null;
