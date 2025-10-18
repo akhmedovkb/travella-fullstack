@@ -11,8 +11,13 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
+// ⬆️ мелкие правки: см. ниже — debounce, belongs, валюты отелей, type="button"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const debounce = (fn, ms=300) => {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+};
 
 /* ---------------- brand colors ---------------- */
 const BRAND = {
@@ -968,7 +973,13 @@ export default function TourBuilder() {
     }));
     setEntryOptionsMap((m) => ({ ...m, [dateKey]: opts }));
   };
-
+   // 🔔 ДЕБАУНС для поиска входных билетов (без хуков внутри JSX)
+   const debouncedLoadEntryOptionsRef = useRef(debounce(loadEntryOptionsForDay, 350));
+   useEffect(() => {
+     // если реализация loadEntryOptionsForDay поменяется, переинициализируем дебаунсер
+     debouncedLoadEntryOptionsRef.current = debounce(loadEntryOptionsForDay, 350);
+   }, [loadEntryOptionsForDay]);
+  
   /* ----- loaders per day (guide / transport / hotel) ----- */
   const makeGuideLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
@@ -1171,23 +1182,21 @@ const makeTransportLoader = (dateKey) => async (input) => {
       const errs = [];
       for (const p of payloads) {
         try {
-        // перед формированием body внутри цикла по payloads
-      const belongs = p.service_id && ensureServiceBelongsToProvider(p.provider_id, p.service_id);
-        // формируем финальное тело для /api/bookings
-      const body = {
-       provider_id: String(p.provider_id),
-        // service_id только если валиден и принадлежит провайдеру
-       ...(p.service_id && Number.isFinite(Number(p.service_id))
-         ? { service_id: Number(p.service_id) }
-         : {}),
-       dates: p.dates,
-       pax_adult: Number(p.pax_adult) || 0,
-       pax_child: Number(p.pax_child) || 0,
-       language: p.language || "en",
-       message: p.message || "",
-       source: "tour_builder",
-       ...(p.__needs_group_id ? { group_id: groupId } : {}),
-     };
+           // ✅ аккуратно используем проверку принадлежности услуги провайдеру
+           const belongs =
+             p.service_id && ensureServiceBelongsToProvider(p.provider_id, p.service_id);
+ 
+           const body = {
+             provider_id: String(p.provider_id),
+             ...(belongs ? { service_id: Number(p.service_id) } : {}),
+             dates: p.dates,
+             pax_adult: Number(p.pax_adult) || 0,
+             pax_child: Number(p.pax_child) || 0,
+             language: p.language || "en",
+             message: p.message || "",
+             source: "tour_builder",
+             ...(p.__needs_group_id ? { group_id: groupId } : {}),
+           };
           delete body.__needs_group_id;
           await createBookingCompat(body);
           ok++;
@@ -1763,7 +1772,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           }
                         />
                       )}
-
+           
+                    {/* Валюта отображения: итог всегда в UZS; базовую валюту отеля показываем справочно */}
+                     <div className="text-xs text-gray-600 mt-1">
+                       {t('tb.price_per_night')}:{" "}
+                       <b style={{ color: BRAND.primary }}>
+                         {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} UZS
+                       </b>
+                       {(() => {
+                         const baseCur = st.hotelBrief?.currency || st.hotel?.currency;
+                         return baseCur && baseCur.toUpperCase() !== 'UZS'
+                           ? <span className="ml-1 text-[11px] text-gray-500">
+                               ({t('tb.hotel_base_currency', { defaultValue: 'база:' })} {baseCur})
+                             </span>
+                           : null;
+                       })()}
+                     </div>
+ 
                     {/* Разбивка по отелю за ночь: номера / доп. места / тур. сбор */}
                     {!!st.hotelBreakdown && (
                       <div className="text-xs text-gray-700 mt-2">
@@ -1795,9 +1820,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       </div>
                     )}
 
-                    <div className="text-xs text-gray-600 mt-1">
+                    {/*   <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_night')}: <b style={{ color: BRAND.primary }}>{toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)}</b> {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
-                    </div>
+                    </div>*/}
                   </div>
                   
                   {/* Entry fees */}
@@ -1813,10 +1838,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
                       value={entryQMap[k] || ""}
                       disabled={!cityChosen}
-                      onChange={async (e) => {
-                        const q = e.target.value;
-                        setEntryQMap((m) => ({ ...m, [k]: q }));
-                        await loadEntryOptionsForDay(k, st.city, q);
+                      onChange={(e) => {
+                       const q = e.target.value;
+                       setEntryQMap((m) => ({ ...m, [k]: q }));
+                        // 🔔 используем заранее созданный debouncer
+                        debouncedLoadEntryOptionsRef.current(k, st.city, q);
                       }}
                     />
                     <AsyncSelect
@@ -1937,6 +1963,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             <span>{t('tb.per_pax')}</span>
                           </label>
                           <button
+                            type="button"
                             className="md:col-span-1 text-xs px-2 py-2 rounded border"
                             style={{ borderColor: `${BRAND.accent}88` }}
                             onClick={() =>
@@ -2058,6 +2085,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                         {/* удалить */}
                         <button
+                          type="button"
                           className="md:col-span-1 text-xs px-2 py-2 rounded border"
                           style={{ borderColor: `${BRAND.accent}88` }}
                           onClick={() =>
@@ -2076,6 +2104,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                   <div className="mt-2">
                     <button
+                      type="button"
                       className="text-sm px-3 py-1 rounded border"
                       style={{ color: BRAND.primary, borderColor: BRAND.accent }}
                       onClick={() =>
