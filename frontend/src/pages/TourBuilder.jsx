@@ -261,28 +261,7 @@ async function createBooking(payload) {
 
 // ------ Совместимость: бронирования с фоллбеком на /api/requests ------
 // Если новый эндпоинт не принимает (400/404/405), пробуем старый формат запросов.
-async function createBookingCompat(payload) {
-  try {
-    return await createBooking(payload);
-  } catch (e) {
-    if (e?.status === 400 || e?.status === 404 || e?.status === 405) {
-     // /api/requests — только совместимые поля
-     const legacy = {
-       provider_id: payload.provider_id,
-       ...(payload.service_id ? { service_id: payload.service_id } : {}),
-       dates: payload.dates,
-       pax_adult: Number(payload.pax_adult) || 0,
-       pax_child: Number(payload.pax_child) || 0,
-       language: payload.language || "en",
-       message: payload.message || "",
-       source: payload.source || "tour_builder",
-       type: payload.type || payload.kind,
-     };
-      return await postJSON("/api/requests", legacy);
-    }
-    throw e;
-  }
-}
+const createBookingCompat = createBooking; // временно без фоллбэка
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
 // starsFilter: '' | 1..7
@@ -1196,7 +1175,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
  
            const body = {
              provider_id: String(p.provider_id),
-             ...(belongs ? { service_id: Number(p.service_id) } : {}),
+             ...(belongs ? { service_id: String(p.service_id) } : {}),
              dates: p.dates,
              pax_adult: Number(p.pax_adult) || 0,
              pax_child: Number(p.pax_child) || 0,
