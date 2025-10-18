@@ -276,6 +276,7 @@ async function createBookingCompat(payload) {
        language: payload.language || "en",
        message: payload.message || "",
        source: payload.source || "tour_builder",
+       type: payload.type || payload.kind,
      };
       return await postJSON("/api/requests", legacy);
     }
@@ -1129,16 +1130,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[] }
     for (const [dateKey, st] of Object.entries(byDay)) {
       if (!st?.city) continue;
-      // гид
-      if (st?.guide?.id) {
-        const pid = String(st.guide.id);
-        const key = `guide:${pid}`;
-        const svcId = (st?.guideService?.raw?.id ?? st?.guideService?.id) || null; // ← real
-        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: null, dates: [] });
-        const b = buckets.get(key);
-        if (svcId && !b.service_id) b.service_id = String(svcId);
-        b.dates.push(dateKey);
-      }
+  // гид → смотрим категорию выбранной услуги
+  if (st?.guide?.id) {
+    const pid = String(st.guide.id);
+    const svc = st?.guideService;
+    const svcId = (svc?.raw?.id ?? svc?.id) || null;
+    // если у гида выбрана транспортная услуга — считаем это транспортом
+    const kindForGuide =
+      svc && TRANSPORT_ALLOWED.has(svc.category) ? "transport" : "guide";
+
+    const key = `${kindForGuide}:${pid}`;
+    if (!buckets.has(key)) {
+      buckets.set(key, { kind: kindForGuide, provider_id: pid, service_id: null, dates: [] });
+    }
+    const b = buckets.get(key);
+    if (svcId && !b.service_id) b.service_id = String(svcId);
+    b.dates.push(dateKey);
+  }
       // транспорт
       if (st?.transport?.id) {
         const pid = String(st.transport.id);
@@ -1195,6 +1203,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
              language: p.language || "en",
              message: p.message || "",
              source: "tour_builder",
+              type: p.kind,
              ...(p.__needs_group_id ? { group_id: groupId } : {}),
            };
           delete body.__needs_group_id;
