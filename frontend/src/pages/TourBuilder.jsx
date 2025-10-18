@@ -261,17 +261,17 @@ async function createBookingCompat(payload) {
     return await createBooking(payload);
   } catch (e) {
     if (e?.status === 400 || e?.status === 404 || e?.status === 405) {
-      const legacy = {
-        provider_id: payload.provider_id,
-        service_id: payload.service_id,
-        dates: payload.dates,
-        pax_adult: payload.pax_adult ?? 0,
-        pax_child: payload.pax_child ?? 0,
-        language: payload.language,
-        city: payload.city,
-        message: payload.message,
-        source: payload.source || "tour_builder",
-      };
+     // /api/requests — только совместимые поля
+     const legacy = {
+       provider_id: payload.provider_id,
+       ...(payload.service_id ? { service_id: payload.service_id } : {}),
+       dates: payload.dates,
+       pax_adult: Number(payload.pax_adult) || 0,
+       pax_child: Number(payload.pax_child) || 0,
+       language: payload.language || "en",
+       message: payload.message || "",
+       source: payload.source || "tour_builder",
+     };
       return await postJSON("/api/requests", legacy);
     }
     throw e;
@@ -883,7 +883,12 @@ export default function TourBuilder() {
     const normalized = list.find((s) => String(s.id) === String(picked.id));
     return normalized || null;
   };
-
+ // проверяем, что выбранная услуга реально принадлежит провайдеру
+ const ensureServiceBelongsToProvider = (providerId, serviceId) => {
+   if (!providerId || !serviceId) return false;
+   const list = servicesCache[String(providerId)] || [];
+   return list.some(s => String(s.id) === String(serviceId));
+ };
   // автоподбор по конкретному дню
   const autoPickForDay = (dateKey) => {
     setByDay((prev) => {
@@ -1110,7 +1115,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
   // ===== СБОРКА И ОТПРАВКА ЗАПРОСОВ ПРОВАЙДЕРАМ =====
   // схема: на каждого уникального провайдера (guide/transport) — один запрос с массивом дат.
   const buildBookings = () => {
-    const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[], city }
+    const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[] }
     for (const [dateKey, st] of Object.entries(byDay)) {
       if (!st?.city) continue;
       // гид
@@ -1118,7 +1123,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         const pid = String(st.guide.id);
         const key = `guide:${pid}`;
         const svcId = (st?.guideService?.raw?.id ?? st?.guideService?.id) || null; // ← real
-        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: null, dates: [], city: st.city });
+        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: null, dates: [] });
         const b = buckets.get(key);
         if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
@@ -1128,7 +1133,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         const pid = String(st.transport.id);
         const key = `transport:${pid}`;
         const svcId = (st?.transportService?.raw?.id ?? st?.transportService?.id) || null; // ← real
-        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [], city: st.city });
+        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [] });
         const b = buckets.get(key);
         if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
@@ -1144,9 +1149,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
         pax_adult: Number(adt) || 0,
         pax_child: Number(chd) || 0,
         language: String(lang || "en"),
-        city: b.city || undefined,
-        kind: b.kind,
-        message: `[TourBuilder] ${b.kind} • ${b.city || ""} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
+     // message – просто информационное поле для менеджеров/провайдеров
+        message: `[TourBuilder] ${b.kind} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
         source: "tour_builder",
         __needs_group_id: true,
       });
@@ -1167,11 +1171,21 @@ const makeTransportLoader = (dateKey) => async (input) => {
       const errs = [];
       for (const p of payloads) {
         try {
-          const body = {
-            ...p,
-            // убираем служебное поле и проставляем group_id один раз на все брони
-            ...(p.__needs_group_id ? { group_id: groupId } : {}),
-          };
+        // формируем финальное тело для /api/bookings
+      const body = {
+       provider_id: String(p.provider_id),
+       // service_id только если валиден и принадлежит провайдеру
+       ...(p.service_id && Number.isFinite(Number(p.service_id))
+         ? { service_id: Number(p.service_id) }
+         : {}),
+       dates: p.dates,
+       pax_adult: Number(p.pax_adult) || 0,
+       pax_child: Number(p.pax_child) || 0,
+       language: p.language || "en",
+       message: p.message || "",
+       source: "tour_builder",
+       ...(p.__needs_group_id ? { group_id: groupId } : {}),
+     };
           delete body.__needs_group_id;
           await createBookingCompat(body);
           ok++;
@@ -1181,9 +1195,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
           fail++;
         }
       }
-      if (ok && !fail) {
-        alert(`Бронирований создано: ${ok}. Провайдерам придут уведомления (Telegram/кабинет).`);
-      } else if (ok && fail) {
+       if (ok && !fail) {
+         alert(`Бронирований создано: ${ok}.\nОткройте пакет: /dashboard/bookings?group_id=${groupId}`);
+       } else if (ok && fail) {
         alert(`Часть броней создана: ${ok}, ошибок: ${fail}.\n${errs.slice(0,3).join("\n")}`);
       } else {
         alert(`Не удалось создать бронирования.\n${(errs[0]||"Проверьте API /api/bookings и /api/requests.")}`);
