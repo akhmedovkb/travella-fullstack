@@ -91,6 +91,7 @@
       "pending": "pending",
       "confirmed": "confirmed",
       "active": "active",
+      "quoted": "awaiting confirmation",
       "rejected": "rejected",
       "cancelled": "cancelled"
      },
