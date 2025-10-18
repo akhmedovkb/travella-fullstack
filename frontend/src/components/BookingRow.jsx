@@ -266,7 +266,11 @@ const profileHref = useMemo(() => {
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
         <span className="text-gray-500">#{booking.id}</span>
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
-
+        {booking.source === 'tour_builder' && (
+          <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs text-violet-700 ring-1 ring-violet-200">
+            Tour Builder
+          </span>
+        )}
         {booking.status ? (
           <StatusPill
             status={booking.status}
