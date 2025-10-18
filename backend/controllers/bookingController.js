@@ -452,6 +452,7 @@ const providerQuote = async (req, res) => {
        WHERE id = $1 AND provider_id = $4
        RETURNING id, provider_price, provider_note, status
     `;
+    
     const params = [bookingId, price, note, providerId];
 
     if (cols.currency) {
