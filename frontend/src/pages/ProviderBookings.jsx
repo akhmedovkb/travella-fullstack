@@ -303,7 +303,7 @@ export default function ProviderBookings() {
 };
 
 
-  const isPending = (b) => String(b.status) === "pending";
+  const isPending = (b) => ["pending", "quoted"].includes(String(b.status));
   const isConfirmedLike = (b) => ["confirmed", "active"].includes(String(b.status));
   const isRejectedLike = (b) => ["rejected", "cancelled"].includes(String(b.status));
   const isUpcoming = (b) => Number.isFinite(lastDateTs(b)) && isConfirmedLike(b) && lastDateTs(b) >= todayStart;
@@ -345,7 +345,7 @@ export default function ProviderBookings() {
         {filtered.map((b) => {
           const isIncoming = tab === "incoming";
           const alreadyQuoted = Number(b?.provider_price) > 0;
-          const awaitingRequester = isIncoming && alreadyQuoted && String(b?.status) === "pending";
+          const awaitingRequester = isIncoming && String(b?.status) === "quoted";
 
           // подписи «кем отклонено/кем отменено»
           let rejectedByLabel = null;
@@ -391,7 +391,7 @@ export default function ProviderBookings() {
               )}
 
               {/* Исходящие: действия подтверждения/отмены */}
-              {!isIncoming && String(b.status) === "pending" && (
+              {!isIncoming && String(b.status) === "quoted" && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     onClick={() => confirmOutgoing(b)}
