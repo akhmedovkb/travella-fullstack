@@ -213,7 +213,7 @@ const fetchJSONLoose = async (path, params = {}) => {
   }
 };
 
-// ------ helpers: POST JSON (с куками) ------
+// ------ helpers: POST JSON (с куками) и понятными ошибками ------
 const postJSON = async (path, body) => {
   const base =
     API_BASE ||
@@ -222,16 +222,30 @@ const postJSON = async (path, body) => {
   const u = new URL(path, base);
   const r = await fetch(u.toString(), {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify(body || {}),
   });
   if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`HTTP ${r.status} ${txt}`.trim());
+    // Попробуем вытащить полезный текст/JSON
+    let details = "";
+    try {
+      const data = await r.json();
+      if (data?.message) details = data.message;
+      else if (data?.error) details = data.error;
+      else if (Array.isArray(data?.errors)) details = data.errors.join("; ");
+      else details = JSON.stringify(data);
+    } catch {
+      details = await r.text().catch(() => "");
+    }
+    const msg = [`HTTP ${r.status}`, details].filter(Boolean).join(" ");
+    const err = new Error(msg);
+    err.status = r.status;
+    err.details = details;
+    throw err;
   }
   return await r.json().catch(() => ({}));
-};
+;
 
 // ------ Bookings API ------
 // POST /api/bookings
@@ -240,6 +254,29 @@ async function createBooking(payload) {
   return await postJSON("/api/bookings", payload);
 }
 
+// ------ Совместимость: бронирования с фоллбеком на /api/requests ------
+// Если новый эндпоинт не принимает (400/404/405), пробуем старый формат запросов.
+async function createBookingCompat(payload) {
+  try {
+    return await createBooking(payload);
+  } catch (e) {
+    if (e?.status === 400 || e?.status === 404 || e?.status === 405) {
+      const legacy = {
+        provider_id: payload.provider_id,
+        service_id: payload.service_id,
+        dates: payload.dates,
+        pax_adult: payload.pax_adult ?? 0,
+        pax_child: payload.pax_child ?? 0,
+        language: payload.language,
+        city: payload.city,
+        message: payload.message,
+        source: payload.source || "tour_builder",
+      };
+      return await postJSON("/api/requests", legacy);
+    }
+    throw e;
+  }
+}
 
 // --- Hotels (каскад по городу + бриф + сезоны) ---
 // starsFilter: '' | 1..7
@@ -1103,6 +1140,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
         // service_id необязателен — шлём только если есть
         ...(b.service_id ? { service_id: b.service_id } : {}),
         dates: Array.from(new Set(b.dates)).sort(),
+        // ключевые поля, которые часто валидируются на бэке
+        pax_adult: Number(adt) || 0,
+        pax_child: Number(chd) || 0,
+        language: String(lang || "en"),
+        city: b.city || undefined,
+        kind: b.kind, // 'guide' | 'transport'
         // инфо для сообщения провайдеру
         message: `[TourBuilder] ${b.kind} • ${b.city || ""} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
         source: "tour_builder",
@@ -1124,6 +1167,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
       let ok = 0, fail = 0;
       // общий group_id для всей пачки
       const groupId = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+      const errs = [];
       for (const p of payloads) {
         try {
           const body = {
@@ -1132,19 +1176,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
             ...(p.__needs_group_id ? { group_id: groupId } : {}),
           };
           delete body.__needs_group_id;
-          await createBooking(body);
+          await createBookingCompat(body);
           ok++;
         } catch (e) {
-          console.error("request failed", e);
+          console.error("booking failed", e);
+          errs.push(String(e?.message || e));
           fail++;
         }
       }
       if (ok && !fail) {
         alert(`Бронирований создано: ${ok}. Провайдерам придут уведомления (Telegram/кабинет).`);
       } else if (ok && fail) {
-        alert(`Часть броней создана: ${ok}, ошибок: ${fail}. Проверьте логи/сеть.`);
+        alert(`Часть броней создана: ${ok}, ошибок: ${fail}.\n${errs.slice(0,3).join("\n")}`);
       } else {
-        alert("Не удалось создать бронирования. Попробуйте позже или проверьте API /api/bookings.");
+        alert(`Не удалось создать бронирования.\n${(errs[0]||"Проверьте API /api/bookings и /api/requests.")}`);
       }
     } finally {
       setSending(false);
