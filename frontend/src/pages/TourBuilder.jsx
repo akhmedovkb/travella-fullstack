@@ -1171,10 +1171,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
       const errs = [];
       for (const p of payloads) {
         try {
+        // перед формированием body внутри цикла по payloads
+      const belongs = p.service_id && ensureServiceBelongsToProvider(p.provider_id, p.service_id);
         // формируем финальное тело для /api/bookings
       const body = {
        provider_id: String(p.provider_id),
-       // service_id только если валиден и принадлежит провайдеру
+        // service_id только если валиден и принадлежит провайдеру
        ...(p.service_id && Number.isFinite(Number(p.service_id))
          ? { service_id: Number(p.service_id) }
          : {}),
