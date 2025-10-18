@@ -422,6 +422,7 @@ async function getProviderOutgoingBookings(req, res) {
 // Брони клиента (мой кабинет)
 const getMyBookings = async (req, res) => {
   try {
+    const clientId = req.user?.id;
     const groupId = req.query?.group_id || req.query?.group || null;
     const cols = await getExistingColumns("bookings", ["currency", "rejected_by", "cancelled_by", "group_id"]);
     const selectCurrency = cols.currency ? "b.currency" : `'USD'::text AS currency`;
@@ -483,14 +484,17 @@ const getGroupBookings = async (req, res) => {
     const userId = req.user?.id;
     const role = req.user?.role; // 'client' | 'provider'
 
-    const cols = await getExistingColumns("bookings", ["group_id", "currency"]);
+    const cols = await getExistingColumns("bookings", ["group_id", "currency", "requester_provider_id"]);
     if (!cols.group_id) return res.json([]);
 
     // Проверим, что пользователь причастен к пакету
-    const whoSql =
-      role === "client"
-        ? "b.client_id = $2::int"
-        : "(b.provider_id = $2::int OR b.requester_provider_id = $2::int)";
+    const whoSql = (() => {
+      if (role === "client") return "b.client_id = $2::int";
+      // provider/requester
+      return cols.requester_provider_id
+        ? "(b.provider_id = $2::int OR b.requester_provider_id = $2::int)"
+        : "b.provider_id = $2::int";
+    })();
 
     const q = await pool.query(
       `
