@@ -245,7 +245,7 @@ const postJSON = async (path, body) => {
     throw err;
   }
   return await r.json().catch(() => ({}));
-;
+}
 
 // ------ Bookings API ------
 // POST /api/bookings
