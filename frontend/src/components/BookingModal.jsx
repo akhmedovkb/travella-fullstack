@@ -17,7 +17,7 @@ const readFilesAsDataUrls = (files) =>
     )
   );
 
-export default function BookingModal({ open, onClose, token, providerId, serviceId, dates }) {
+export default function BookingModal({ open, onClose, token, providerId, serviceId, dates, source, groupId }) {
   const { t, i18n } = useTranslation();
   const [message, setMessage] = useState("");
   const [files, setFiles] = useState([]);
@@ -52,6 +52,8 @@ export default function BookingModal({ open, onClose, token, providerId, service
         dates: dates.map(ymd),
         message,
         attachments,
+    ...(source ? { source } : {}),
+    ...(groupId ? { group_id: groupId } : {}),
       };
       await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/bookings`, body, config);
       toast.success(t("messages.booking_created"));
