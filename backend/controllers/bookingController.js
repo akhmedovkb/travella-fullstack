@@ -124,9 +124,9 @@ const createBooking = async (req, res) => {
     if (!providerId) return res.status(400).json({ message: "Не указан provider_id / service_id" });
 
     const pType = await getProviderType(providerId);
-    // теперь допускаем: гид, транспорт, отель (и опционально тур)
-    if (!["guide", "transport", "hotel", "tour", "tour_builder"].includes(pType)) {
-      return res.status(400).json({ message: "Бронирование доступно только для гида, транспорта, отеля или тура" });
+    // допускаем: гид, транспорт, отель, агент
+    if (!["guide", "transport", "hotel", "agent"].includes(pType)) {
+      return res.status(400).json({ message: "Бронирование доступно только для гида, транспорта, отеля или агента" });
     }
 
     const days = toArray(dates).map(toISO).filter(Boolean);
@@ -134,9 +134,9 @@ const createBooking = async (req, res) => {
 
     const primaryDate = [...days].sort()[0];
 
-    // Для отелей фильтра по доступности нет — не блокируем создание.
+   // Для отелей и агентств фильтра по доступности нет — не блокируем создание.
     // Для остальных типов проверяем как раньше.
-    if (pType !== "hotel") {
+    if (!["hotel", "agent"].includes(pType)) {
       const ok = await isDatesFree(providerId, days);
       if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
     }
@@ -611,7 +611,7 @@ const acceptBooking = async (req, res) => {
     }
     if (!days.length) return res.status(400).json({ message: "У брони нет дат" });
 
-    if (type !== "hotel") {
+    if (!["hotel", "agent"].includes(type)) {
       const free = await isDatesFree(providerId, days, id);
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
@@ -665,7 +665,7 @@ const rejectBooking = async (req, res) => {
     const { reason } = req.body || {};
 
     const pType = await getProviderType(providerId);
-    if (!["guide", "transport", "hotel"].includes(pType)) {
+    if (!["guide", "transport", "hotel", "agent"].includes(pType)) {
       return res.status(400).json({ message: "Действие доступно только для гида, транспорта или отеля" });
     }
 
@@ -869,7 +869,7 @@ const confirmBooking = async (req, res) => {
 
     // отель — без проверки; остальные — проверка занятости
     const pType = await getProviderType(b.provider_id);
-    if (pType !== "hotel") {
+    if (!["hotel", "agent"].includes(pType)) {
       const free = await isDatesFree(b.provider_id, days, id);
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
@@ -932,7 +932,7 @@ const confirmBookingByRequester = async (req, res) => {
 
     // отель — без проверки
     const pType = await getProviderType(b.provider_id);
-    if (pType !== "hotel") {
+    if (!["hotel", "agent"].includes(pType)) {
       const free = await isDatesFree(b.provider_id, days, id);
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
@@ -1032,8 +1032,8 @@ const checkAvailability = async (req, res) => {
     }
     if (!days.length) return res.status(400).json({ message: "У брони нет дат" });
 
-    // Для отелей — фильтра нет: считаем всё ok (UI подсветит «без проверки» при желании)
-    if (pType === "hotel") {
+    // Для отелей и агентств — фильтра нет: считаем всё ok
+    if (pType === "hotel" || pType === "agent") {
       const results = days.map(ymd => ({ date: ymd, status: "ok" }));
       return res.json({ ok: true, overall: "ok", results });
     }
@@ -1079,7 +1079,7 @@ const placeHold = async (req, res) => {
     // проверим конфликт только для не-отелей
     const providerId = bQ.rows[0].provider_id;
     const pType = await getProviderType(providerId);
-    if (pType !== "hotel") {
+    if (!["hotel", "agent"].includes(pType)) {
       const free = await isDatesFree(providerId, days, id);
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
