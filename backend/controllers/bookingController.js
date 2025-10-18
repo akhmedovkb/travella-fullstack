@@ -150,6 +150,7 @@ const createBooking = async (req, res) => {
       "requester_email",
       "hold_until",       // <- для конвейера
       "code", "status",   // <- поддержим мягко
+      "source","group_id"
     ]);
 
     // базовые колонки
@@ -262,6 +263,7 @@ async function getProviderBookings(req, res) {
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, ${selectBy}, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
+        b.source, b.group_id,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
 
         ${selectCurrency},
@@ -343,6 +345,7 @@ async function getProviderOutgoingBookings(req, res) {
         b.status, ${selectBy}, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        b.source, b.group_id,
         ${selectCurrency},
         b.requester_provider_id,
         b.requester_name, b.requester_phone, b.requester_telegram, b.requester_email,
@@ -394,6 +397,7 @@ const getMyBookings = async (req, res) => {
         COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
         b.created_at, b.updated_at,
+        b.source, b.group_id,
         ${selectCurrency},
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
