@@ -193,8 +193,22 @@ const createBooking = async (req, res) => {
       if (cols.requester_email)    { insertCols.push("requester_email");    values.push(me?.email ?? null); }
     }
 
+    // Явно приводим типы в плейсхолдерах:
+    // - date        → ::date
+    // - *_id        → ::int
+    // - group_id    → ::uuid
     const placeholders = insertCols
-      .map((name, i) => (name === "date" ? `$${i + 1}::date` : `$${i + 1}`))
+      .map((name, i) => {
+        const p = `$${i + 1}`;
+        if (name === "date") return `${p}::date`;
+        if (name === "group_id") return `${p}::uuid`;
+        if (
+          name === "service_id" ||
+          name === "provider_id" ||
+          name === "client_id"
+        ) return `${p}::int`;
+        return p;
+      })
       .join(",");
 
     const ins = await pool.query(
