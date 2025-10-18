@@ -2,7 +2,7 @@
 
 const pool = require("../db");
 const tg = require("../utils/telegram");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID } = require("crypto");
 /* ================= helpers ================= */
 
 // универсально: есть ли такие колонки в таблице
@@ -157,7 +157,7 @@ const createBooking = async (req, res) => {
     // Источник — турбилдер?
     const isTourBuilder = (req.body?.source === "tour_builder");
     // Если пришёл заказ из турбилдера и group_id не передали — сгенерируем
-    const autoGroupId = (cols.group_id && isTourBuilder && !req.body?.group_id) ? uuidv4() : null;
+    const autoGroupId = (cols.group_id && isTourBuilder && !req.body?.group_id) ? randomUUID() : null;
 
     // базовые колонки
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
