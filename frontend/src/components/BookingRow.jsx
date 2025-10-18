@@ -80,6 +80,7 @@ const statusKey = (s) => String(s || "").toLowerCase();
 const StatusPill = ({ status, text, className = "" }) => {
   const map = {
     pending:   "bg-amber-50  text-amber-700  ring-amber-200",
+    quoted:    "bg-blue-50   text-blue-700   ring-blue-200",
     confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
     rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
@@ -196,6 +197,11 @@ const statusText = React.useMemo(() => {
       : t("bookings.status_by.cancelled.you");      // «Отменено: вами»
   }
 
+  // Оффер отправлен поставщиком — ждём подтверждения заявителя
+ if (s === "quoted") {
+   return t("bookings.status.quoted", { defaultValue: "ожидает подтверждения" });
+ }
+  
   // Базовые статусы
   return t(`bookings.status.${s}`);                  // pending/confirmed/active
 }, [booking?.status, viewerRole, t]);
