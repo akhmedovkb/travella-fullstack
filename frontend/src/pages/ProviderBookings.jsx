@@ -151,8 +151,10 @@ function PriceAgreementCard({ booking, onSent }) {
 /* ================= page ================= */
 export default function ProviderBookings() {
   const { t } = useTranslation();
-
+  // под-вкладки
+  const [inSubTab, setInSubTab] = useState("tb");  // tb | rest  (для входящих)
   const [tab, setTab] = useState("incoming"); // incoming | outgoing
+  
   // под-вкладки только для исходящих
   const [outSubTab, setOutSubTab] = useState("tb"); // tb | rest
   const [filter, setFilter] = useState("all"); // all | pending | confirmed | upcoming | rejected
@@ -174,6 +176,8 @@ export default function ProviderBookings() {
   useEffect(() => {
     // при переключении «исходящие» — по умолчанию показываем пакеты TB
     if (tab === "outgoing") setOutSubTab((v) => v || "tb");
+    // при переключении «входящие» — по умолчанию тоже пакеты TB
+    if (tab === "incoming") setInSubTab((v) => v || "tb");
   }, [tab]);
 
   const load = async () => {
@@ -291,6 +295,27 @@ export default function ProviderBookings() {
       window.dispatchEvent(new Event("provider:counts:refresh"));
     }
   };
+  // разрез входящих
+  const incomingTB = useMemo(
+    () => incoming.filter((b) => String(b?.source) === "tour_builder" && !!b?.group_id),
+    [incoming]
+  );
+  const incomingRest = useMemo(
+    () => incoming.filter((b) => !(String(b?.source) === "tour_builder" && !!b?.group_id)),
+    [incoming]
+  );
+  // сгруппировать входящие TB по group_id
+  const incTbGroups = useMemo(() => {
+    const map = new Map();
+    for (const b of incomingTB) {
+      const gid = b.group_id;
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(b);
+    }
+    return Array.from(map.entries())
+      .map(([group_id, items]) => ({ group_id, items: items.sort((a, b) => (a.id > b.id ? -1 : 1)) }))
+      .sort((a, b) => (a.items[0]?.id > b.items[0]?.id ? -1 : 1));
+  }, [incomingTB]);
 
   // разрез исходящих
   const outgoingTB = useMemo(
@@ -315,7 +340,10 @@ export default function ProviderBookings() {
       .sort((a, b) => (a.items[0]?.id > b.items[0]?.id ? -1 : 1));
   }, [outgoingTB]);
 
-  const baseList = tab === "incoming" ? incoming : outSubTab === "rest" ? outgoingRest : outgoingTB;
+  const baseList =
+    tab === "incoming"
+      ? (inSubTab === "rest" ? incomingRest : incomingTB)
+      : (outSubTab === "rest" ? outgoingRest : outgoingTB);
 
   // helpers для дат
   const todayStart = useMemo(() => {
@@ -337,7 +365,7 @@ export default function ProviderBookings() {
   const isRejectedLike = (b) => ["rejected", "cancelled"].includes(String(b.status));
   const isUpcoming = (b) => Number.isFinite(lastDateTs(b)) && isConfirmedLike(b) && lastDateTs(b) >= todayStart;
 
-  // счётчики (для «остальных исходящих» и любых плоских списков)
+  // счётчики (для плоских списков — входящие/остальные исходящие)
   const counts = useMemo(() => {
     const c = { all: baseList.length, pending: 0, confirmed: 0, upcoming: 0, rejected: 0 };
     for (const b of baseList) {
@@ -393,7 +421,7 @@ export default function ProviderBookings() {
     return { groups, singles };
   }, [filtered, tab]);
 
-  // контент для «остальных исходящих» или для «входящих»
+  // контент для «остальных исходящих» или для «входящих» (плоский список)
   const flatListContent = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
     if (!filtered.length) return <div className="text-gray-500">{t("bookings.empty", { defaultValue: "Пока нет бронирований." })}</div>;
@@ -477,7 +505,7 @@ export default function ProviderBookings() {
           );
     };
 
-    // Для вкладки ВХОДЯЩИЕ — старый список без группировки
+    // Для вкладки ВХОДЯЩИЕ/ОСТАЛЬНЫЕ — плоский список
     if (tab === "incoming") {
       return <div className="space-y-4">{filtered.map((b) => renderRow(b))}</div>;
     }
@@ -580,6 +608,45 @@ export default function ProviderBookings() {
       </div>
     );
   }, [tbGroups, loading, t]);
+  // контент для «Пакеты TourBuilder» во ВХОДЯЩИХ
+  const tbIncomingContent = useMemo(() => {
+    if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
+    if (!incTbGroups.length)
+      return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
+    // используем тот же renderRow (он реагирует на tab === "incoming")
+    const renderRow = (b) => (
+      <div key={b.id} className="p-4">
+        <BookingRow
+          booking={b}
+          viewerRole="provider"
+          needPriceForAccept
+          hideClientCancel
+          onAccept={accept}
+          onReject={reject}
+          onCancelByProvider={openCancelIncoming}
+        />
+        {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} />}
+      </div>
+    );
+    return (
+      <div className="space-y-6">
+        {incTbGroups.map((g) => (
+          <div key={g.group_id} className="rounded-xl border bg-white">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="text-sm text-gray-700">
+                {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
+                <span className="font-mono text-gray-900">{g.group_id}</span>
+              </div>
+              <div className="text-xs text-gray-500">
+                {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
+              </div>
+            </div>
+            <div className="divide-y">{g.items.map(renderRow)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [incTbGroups, loading, t]);
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
@@ -613,6 +680,29 @@ export default function ProviderBookings() {
           </span>
         </button>
       </div>
+      {/* Под-вкладки для входящих */}
+      {tab === "incoming" && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => setInSubTab("tb")}
+            className={"rounded-full px-3 py-1.5 ring-1 " + (inSubTab === "tb" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+          >
+            {t("bookings.tb_tab", { defaultValue: "Пакеты TourBuilder" })}
+            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (inSubTab === "tb" ? "bg-white/20" : "bg-gray-100")}>
+              {incTbGroups.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setInSubTab("rest")}
+            className={"rounded-full px-3 py-1.5 ring-1 " + (inSubTab === "rest" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+          >
+            {t("bookings.rest_tab", { defaultValue: "Остальные входящие" })}
+            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (inSubTab === "rest" ? "bg-white/20" : "bg-gray-100")}>
+              {incomingRest.length}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Под-вкладки для исходящих */}
       {tab === "outgoing" && (
@@ -638,8 +728,8 @@ export default function ProviderBookings() {
         </div>
       )}
 
-      {/* Фильтры статуса — только для плоских списков (входящие + остальные исходящие) */}
-      {(tab === "incoming" || (tab === "outgoing" && outSubTab === "rest")) && (
+      {/* Фильтры статуса — только для плоских списков (входящие/остальные и исходящие/остальные) */}
+      {((tab === "incoming" && inSubTab === "rest") || (tab === "outgoing" && outSubTab === "rest")) && (
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
@@ -661,9 +751,12 @@ export default function ProviderBookings() {
         ))}
       </div>
      )}
-
       {/* Содержимое */}
-      {tab === "outgoing" && outSubTab === "tb" ? tbPackagesContent : flatListContent}
+      {tab === "outgoing" && outSubTab === "tb"
+        ? tbPackagesContent
+        : tab === "incoming" && inSubTab === "tb"
+        ? tbIncomingContent
+        : flatListContent}
             {/* Модалка отмены поставщиком — через общий ConfirmModal */}
       <ConfirmModal
         open={showCancelModal}
