@@ -151,7 +151,8 @@ const createBooking = async (req, res) => {
       "requester_email",
       "hold_until",       // <- для конвейера
       "code", "status",   // <- поддержим мягко
-      "source","group_id"
+      "source",
+      "group_id"
     ]);
 
     // базовые колонки
@@ -170,6 +171,15 @@ const createBooking = async (req, res) => {
     if (cols.currency) {
       insertCols.push("currency");
       values.push(currency ?? null);
+    }
+    // сохраняем источник и группировку, если колонки есть
+    if (cols.source) {
+      insertCols.push("source");
+      values.push(req.body?.source ?? null);
+    }
+    if (cols.group_id) {
+      insertCols.push("group_id");
+      values.push(req.body?.group_id ?? null);
     }
 
     // если бронирует провайдер и в таблице есть requester_* — заполним
