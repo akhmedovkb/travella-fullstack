@@ -9,6 +9,7 @@ const {
   getProviderBookings,
   getProviderOutgoingBookings,
   getMyBookings,
+  getGroupBookings,
   providerQuote,
   acceptBooking,
   rejectBooking,
@@ -41,6 +42,8 @@ router.get("/provider/outgoing", authenticateToken, requireProvider, getProvider
 router.get("/my", authenticateToken, getMyBookings);                                            // мои как клиента
 // Метаданные конкретной брони (любой авторизованный) + автоистечение окна оплаты
 router.get("/:id", authenticateToken, getBooking);
+// пакет по group_id (для клиента или провайдера, имеющего отношение к пакету)
+router.get("/bookings/group/:group_id", authAny, getGroupBookings);
 
 // Действия поставщика по входящим
 router.post("/:id/accept", authenticateToken, requireProvider, acceptBooking);
