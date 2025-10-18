@@ -412,11 +412,13 @@ const normalizeProvider = (row, kind) => ({
 
 const normalizeService = (row) => {
   const details = row?.details || {};
-  const price =
-    Number(details.grossPrice) || Number(row?.price) || 0;
+  const price = Number(details.grossPrice) || Number(row?.price) || 0;
   const currency = details.currency || row?.currency || "UZS";
+
+  const realId = row?.id ?? row?._id ?? null; // ← только реальный id
+
   return {
-    id: row?.id ?? row?._id ?? String(Math.random()),
+    id: realId,
     title: row?.title || CATEGORY_LABELS[row?.category] || "Услуга",
     category: row?.category || "",
     price: toNum(price, 0),
@@ -1115,20 +1117,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
       if (st?.guide?.id) {
         const pid = String(st.guide.id);
         const key = `guide:${pid}`;
-        const svcId = st?.guideService?.id ? String(st.guideService.id) : null;
-        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: svcId, dates: [], city: st.city });
+        const svcId = (st?.guideService?.raw?.id ?? st?.guideService?.id) || null; // ← real
+        if (!buckets.has(key)) buckets.set(key, { kind: "guide", provider_id: pid, service_id: null, dates: [], city: st.city });
         const b = buckets.get(key);
-        if (svcId && !b.service_id) b.service_id = svcId; // первый попавшийся (или можно оставить массив, если нужно)
+        if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
       }
       // транспорт
       if (st?.transport?.id) {
         const pid = String(st.transport.id);
         const key = `transport:${pid}`;
-        const svcId = st?.transportService?.id ? String(st.transportService.id) : null;
-        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: svcId, dates: [], city: st.city });
+        const svcId = (st?.transportService?.raw?.id ?? st?.transportService?.id) || null; // ← real
+        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [], city: st.city });
         const b = buckets.get(key);
-        if (svcId && !b.service_id) b.service_id = svcId;
+        if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
       }
     }
@@ -1137,20 +1139,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
     for (const b of buckets.values()) {
       payloads.push({
         provider_id: b.provider_id,
-        // service_id необязателен — шлём только если есть
-        ...(b.service_id ? { service_id: b.service_id } : {}),
-        dates: Array.from(new Set(b.dates)).sort(),
-        // ключевые поля, которые часто валидируются на бэке
+        ...(b.service_id ? { service_id: b.service_id } : {}), // ← только если есть реальный id
+        dates: [...new Set(b.dates)].sort(),
         pax_adult: Number(adt) || 0,
         pax_child: Number(chd) || 0,
         language: String(lang || "en"),
         city: b.city || undefined,
-        kind: b.kind, // 'guide' | 'transport'
-        // инфо для сообщения провайдеру
+        kind: b.kind,
         message: `[TourBuilder] ${b.kind} • ${b.city || ""} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
         source: "tour_builder",
-        // группируем пачку созданных броней одного тура
-        // (подставится в handleSendRequests)
         __needs_group_id: true,
       });
     }
