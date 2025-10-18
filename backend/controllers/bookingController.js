@@ -261,6 +261,7 @@ const createBooking = async (req, res) => {
 async function getProviderBookings(req, res) {
   try {
     const providerId = req.user?.id;
+    const groupId = req.query?.group_id || req.query?.group || null;
     const cols = await getExistingColumns("bookings", [
       "currency",
       "requester_provider_id",
@@ -270,6 +271,7 @@ async function getProviderBookings(req, res) {
       "requester_email",
       "rejected_by",
       "cancelled_by",
+      "group_id",
     ]);
 
     const selectCurrency = cols.currency ? `b.currency` : `'USD'::text AS currency`;
@@ -338,11 +340,14 @@ async function getProviderBookings(req, res) {
       LEFT JOIN providers rp ON rp.id = b.requester_provider_id
       LEFT JOIN services  s  ON s.id = b.service_id
       WHERE b.provider_id = $1
+        ${cols.group_id && groupId ? "AND b.group_id = $2::uuid" : ""}
       GROUP BY b.id, s.id, c.id, p.id, rp.id
       ORDER BY b.created_at DESC NULLS LAST
     `;
 
-    const q = await pool.query(sql, [providerId]);
+    const params = [providerId];
+    if (cols.group_id && groupId) params.push(groupId);
+    const q = await pool.query(sql, params);
     return res.json(q.rows);
   } catch (err) {
     console.error("getProviderBookings error:", err);
@@ -354,11 +359,13 @@ async function getProviderBookings(req, res) {
 async function getProviderOutgoingBookings(req, res) {
   try {
     const providerId = req.user?.id;
+    const groupId = req.query?.group_id || req.query?.group || null;
     const cols = await getExistingColumns("bookings", [
       "currency",
       "requester_provider_id",
       "rejected_by",
       "cancelled_by",
+      "group_id",
     ]);
 
     if (!cols.requester_provider_id) {
@@ -399,9 +406,12 @@ async function getProviderOutgoingBookings(req, res) {
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
       WHERE b.requester_provider_id = $1
+        ${cols.group_id && groupId ? "AND b.group_id = $2::uuid" : ""}
       ORDER BY b.created_at DESC NULLS LAST
     `;
-    const q = await pool.query(sql, [providerId]);
+    const params = [providerId];
+    if (cols.group_id && groupId) params.push(groupId);
+    const q = await pool.query(sql, params);
     return res.json(q.rows);
   } catch (err) {
     console.error("getProviderOutgoingBookings error:", err);
@@ -412,8 +422,8 @@ async function getProviderOutgoingBookings(req, res) {
 // Брони клиента (мой кабинет)
 const getMyBookings = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    const cols = await getExistingColumns("bookings", ["currency", "rejected_by", "cancelled_by"]);
+    const groupId = req.query?.group_id || req.query?.group || null;
+    const cols = await getExistingColumns("bookings", ["currency", "rejected_by", "cancelled_by", "group_id"]);
     const selectCurrency = cols.currency ? "b.currency" : `'USD'::text AS currency`;
     const selectBy = `
       ${cols.rejected_by ? "b.rejected_by" : "NULL::text AS rejected_by"},
@@ -449,9 +459,10 @@ const getMyBookings = async (req, res) => {
       LEFT JOIN services  s ON s.id = b.service_id
       LEFT JOIN providers p ON p.id = b.provider_id
       WHERE b.client_id = $1
+        ${cols.group_id && groupId ? "AND b.group_id = $2::uuid" : ""}
       ORDER BY b.created_at DESC NULLS LAST
       `,
-      [clientId]
+      (cols.group_id && groupId ? [clientId, groupId] : [clientId])
     );
 
     res.json(q.rows);
@@ -461,6 +472,52 @@ const getMyBookings = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/bookings/group/:group_id
+ * Возвращает все брони пакета (любой роли), если текущий пользователь имеет отношение к пакету.
+ */
+const getGroupBookings = async (req, res) => {
+  try {
+    const groupId = req.params.group_id;
+    if (!groupId) return res.status(400).json({ message: "group_id is required" });
+    const userId = req.user?.id;
+    const role = req.user?.role; // 'client' | 'provider'
+
+    const cols = await getExistingColumns("bookings", ["group_id", "currency"]);
+    if (!cols.group_id) return res.json([]);
+
+    // Проверим, что пользователь причастен к пакету
+    const whoSql =
+      role === "client"
+        ? "b.client_id = $2::int"
+        : "(b.provider_id = $2::int OR b.requester_provider_id = $2::int)";
+
+    const q = await pool.query(
+      `
+      SELECT
+        b.*,
+        COALESCE(
+          (SELECT array_agg(d.date::date ORDER BY d.date)
+             FROM booking_dates d WHERE d.booking_id=b.id),
+          CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+        ) AS dates,
+        s.title AS service_title,
+        p.name  AS provider_name, p.type AS provider_type
+      FROM bookings b
+      LEFT JOIN services  s ON s.id = b.service_id
+      LEFT JOIN providers p ON p.id = b.provider_id
+      WHERE b.group_id = $1::uuid
+        AND ${whoSql}
+      ORDER BY b.created_at ASC
+      `,
+      [groupId, userId]
+    );
+    return res.json(q.rows);
+  } catch (err) {
+    console.error("getGroupBookings error:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
 // Провайдер отправляет цену/комментарий
 const providerQuote = async (req, res) => {
   try {
@@ -1216,6 +1273,7 @@ module.exports = {
   getProviderBookings,
   getProviderOutgoingBookings,
   getMyBookings,
+  getGroupBookings,
   providerQuote,
   acceptBooking,
   rejectBooking,
