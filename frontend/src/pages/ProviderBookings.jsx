@@ -660,6 +660,7 @@ export default function ProviderBookings() {
           </button>
         ))}
       </div>
+     )}
 
       {/* Содержимое */}
       {tab === "outgoing" && outSubTab === "tb" ? tbPackagesContent : flatListContent}
