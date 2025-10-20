@@ -367,6 +367,84 @@ export default function ProviderBookings() {
       .filter(Number.isFinite);
     return ts.length ? Math.min(...ts) : NaN;
   };
+  /* ===== TB: посуточный свод услуг для группы ===== */
+  // Нормализуем дату к ISO YYYY-MM-DD
+  const toISO = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, "0");
+      const d = String(v.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (Number.isFinite(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    }
+    const d2 = new Date(`${s}T00:00:00`);
+    if (Number.isFinite(d2.getTime())) {
+      const y = d2.getFullYear();
+      const m = String(d2.getMonth() + 1).padStart(2, "0");
+      const dd = String(d2.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    }
+    return null;
+  };
+
+  // Вытащить город из брони
+  const pickCity = (b) => {
+    const v =
+      cityFrom(b) ||
+      cityTo(b) ||
+      pickField(b?.attachments || {}, ["city", "cityName"]);
+    return (v || "").toString();
+  };
+
+  // Класс услуги (раздел)
+  const serviceClass = (b) => {
+    const t = String(b?.provider_type || "").toLowerCase();
+    if (t === "hotel") return "HOTEL";
+    if (t === "guide") return "GUIDE";
+    if (t === "transport") return "TRANSPORT";
+    const st = String(b?.service_title || "").toLowerCase();
+    if (st.includes("entry fee") || st.includes("entry") || st.includes("ticket")) return "ENTRY FEES";
+    if (t === "agent") return "ENTRY FEES";
+    return t.toUpperCase() || "SERVICE";
+  };
+
+  // Собираем [{date,label,city,sections:[[klass,[names]]]}]
+  const buildDailyMatrix = (items = []) => {
+    const byDate = new Map(); // date -> {city, sections: Map<class, Set<name>>}
+    for (const b of items) {
+      const dates = Array.isArray(b?.dates) ? b.dates : [];
+      const city = pickCity(b);
+      const klass = serviceClass(b);
+      const name = (b?.provider_name || b?.service_title || "").toString().trim();
+      for (const d of dates) {
+       const iso = toISO(d);
+        if (!iso) continue;
+        if (!byDate.has(iso)) byDate.set(iso, { city, sections: new Map() });
+        const cell = byDate.get(iso);
+        if (!cell.city && city) cell.city = city;
+        if (!cell.sections.has(klass)) cell.sections.set(klass, new Set());
+        if (name) cell.sections.get(klass).add(name);
+      }
+    }
+    const rows = Array.from(byDate.entries())
+      .sort((a, b) => (a[0] > b[0] ? 1 : -1))
+      .map(([date, { city, sections }], i) => ({
+        date,
+        label: `D${i + 1}`,
+        city: (city || "").toUpperCase(),
+        sections: Array.from(sections.entries()).map(([k, set]) => [k, Array.from(set.values())]),
+      }));
+    return rows;
+  };
 
   const fmtShort = (iso) => {
     if (!iso) return "";
@@ -674,6 +752,23 @@ export default function ProviderBookings() {
                     hideClientCancel={false}
                     onCancel={cancelOutgoing}
                   />
+                  {/* Итог по дням для пакета (исходящие) */}
+                  {g.items[0]?.id === b.id && (() => {
+                    const rows = buildDailyMatrix(g.items);
+                    if (!rows.length) return null;
+                    return (
+                      <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm">
+                        {rows.map((r) => (
+                          <div key={r.date} className="mb-3 last:mb-0">
+                            <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                            {r.sections.map(([klass, names]) =>
+                              names.length ? <div key={klass} className="text-gray-700"><span className="font-medium">{klass}:</span> {names.join(", ")}</div> : null
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {String(b.status) === "quoted" && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -744,6 +839,25 @@ export default function ProviderBookings() {
               })()}
             </div>
             <div className="divide-y">{g.items.map(renderRow)}</div>
+            {/* Итог по дням для пакета (входящие) */}
+            {(() => {
+              const rows = buildDailyMatrix(g.items);
+              if (!rows.length) return null;
+              return (
+                <div className="px-4 pb-4">
+                  <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm">
+                    {rows.map((r) => (
+                      <div key={r.date} className="mb-3 last:mb-0">
+                        <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                        {r.sections.map(([klass, names]) =>
+                          names.length ? <div key={klass} className="text-gray-700"><span className="font-medium">{klass}:</span> {names.join(", ")}</div> : null
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ))}
       </div>
