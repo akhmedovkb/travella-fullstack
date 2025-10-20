@@ -867,19 +867,22 @@ export default function ProviderBookings() {
                 );
               })()}
             </div>
-            <div className="divide-y">{g.items.map(renderRow)}</div>
-            {/* Итог по дням для пакета (входящие) */}
+            {/* Итерарий по дням — под шапкой пакета */}
             {(() => {
               const rows = buildDailyMatrix(g.items);
               if (!rows.length) return null;
               return (
-                <div className="px-4 pb-4">
-                  <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm">
+                <div className="px-4 pt-3">
+                  <div className="rounded-lg border bg-gray-50 p-3 text-sm">
                     {rows.map((r) => (
                       <div key={r.date} className="mb-3 last:mb-0">
                         <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
                         {r.sections.map(([klass, names]) =>
-                          names.length ? <div key={klass} className="text-gray-700"><span className="font-medium">{klass}:</span> {names.join(", ")}</div> : null
+                          names.length ? (
+                            <div key={klass} className="text-gray-700">
+                              <span className="font-medium">{klass}:</span> {names.join(", ")}
+                            </div>
+                          ) : null
                         )}
                       </div>
                     ))}
@@ -887,6 +890,7 @@ export default function ProviderBookings() {
                 </div>
               );
             })()}
+            <div className="divide-y">{g.items.map(renderRow)}</div>
           </div>
         ))}
       </div>
