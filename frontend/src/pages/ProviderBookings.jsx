@@ -450,7 +450,7 @@ export default function ProviderBookings() {
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
-                needPriceForAccept={isIncoming} // скрыть «Подтвердить» без цены
+                needPriceForAccept={!isIncoming} // у заявителя скрыть «Подтвердить» до предложения цены
                 hideAcceptIfQuoted={awaitingRequester}
                 hideClientCancel={!isIncoming}
                 rejectedByLabel={rejectedByLabel}
@@ -580,6 +580,8 @@ export default function ProviderBookings() {
                   <BookingRow
                     booking={b}
                     viewerRole="client" // исходящие — я заявитель
+                    /* не показывать «Подтвердить», пока нет цены от поставщика */
+                    needPriceForAccept
                     hideClientCancel={false}
                     onCancel={cancelOutgoing}
                   />
