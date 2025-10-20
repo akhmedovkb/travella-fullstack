@@ -359,6 +359,73 @@ export default function ProviderBookings() {
   return ts.length ? Math.max(...ts) : NaN;
 };
 
+  /* ===== helpers для отображения маршрута пакета (даты + города) ===== */
+  const firstDateTs = (b) => {
+    const arr = Array.isArray(b?.dates) ? b.dates : [];
+    const ts = arr
+      .map((d) => new Date(`${d}T00:00:00`).getTime())
+      .filter(Number.isFinite);
+    return ts.length ? Math.min(...ts) : NaN;
+  };
+
+  const fmtShort = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  };
+
+  const pickField = (obj, keys = []) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return null;
+  };
+
+  const cityFrom = (b) => {
+    // пробуем на верхнем уровне
+    let v =
+      pickField(b, ["from_city", "city_from", "origin", "from", "directionFrom"]) ||
+      // в details (если есть)
+      pickField(b?.details || {}, ["from_city", "city_from", "origin", "from", "directionFrom"]);
+    return v;
+  };
+  const cityTo = (b) => {
+    let v =
+      pickField(b, ["to_city", "city_to", "destination", "to", "directionTo"]) ||
+      pickField(b?.details || {}, ["to_city", "city_to", "destination", "to", "directionTo"]);
+    return v;
+  };
+
+  const buildGroupSummary = (items = []) => {
+    if (!items.length) return null;
+    // упорядочим брони по первой дате
+    const sorted = [...items].sort((a, b) => {
+      const ta = firstDateTs(a), tb = firstDateTs(b);
+      if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+      if (!Number.isFinite(ta)) return 1;
+      if (!Number.isFinite(tb)) return -1;
+      return ta - tb;
+    });
+
+    // соберём список дат (первая/последняя) и цепочку городов
+    const firstB = sorted.find((x) => Number.isFinite(firstDateTs(x)));
+    const lastB  = [...sorted].reverse().find((x) => Number.isFinite(firstDateTs(x)));
+    const firstIso = Array.isArray(firstB?.dates) ? firstB.dates[0] : null;
+    const lastIso  = Array.isArray(lastB?.dates)  ? lastB.dates[lastB.dates.length - 1] : firstIso;
+    const datesStr = firstIso && lastIso ? `${fmtShort(firstIso)} — ${fmtShort(lastIso)}` : null;
+
+    // строим маршрут городов: from -> to для каждой брони, без дублей подряд
+    const hops = [];
+    for (const it of sorted) {
+      const a = cityFrom(it), b = cityTo(it);
+      if (a && !hops.length) hops.push(a);
+      if (b && (!hops.length || hops[hops.length - 1] !== b)) hops.push(b);
+    }
+    const routeStr = hops.length ? hops.join(" → ") : null;
+    return { datesStr, routeStr };
+  };
 
   const isPending = (b) => ["pending", "quoted"].includes(String(b.status));
   const isConfirmedLike = (b) => ["confirmed", "active"].includes(String(b.status));
@@ -525,11 +592,22 @@ export default function ProviderBookings() {
             <div className="space-y-5">
               {groupedOutgoing.groups.map((g) => (
                 <div key={g.group_id} className="overflow-hidden rounded-xl border bg-white">
-                  <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
-                    <div className="font-medium">
-                      Пакет&nbsp;<span className="font-semibold">{g.group_id}</span>
+                  <div className="border-b bg-gray-50 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">
+                        Пакет&nbsp;<span className="font-semibold">{g.group_id}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">бронирований: {g.items.length}</span>
                     </div>
-                    <span className="text-xs text-gray-500">бронирований: {g.items.length}</span>
+                    {(() => {
+                      const s = buildGroupSummary(g.items);
+                      if (!s) return null;
+                      return (
+                        <div className="mt-1 text-xs text-gray-600">
+                          {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-4 p-4">{g.items.map((b) => renderRow(b))}</div>
                 </div>
@@ -565,14 +643,25 @@ export default function ProviderBookings() {
       <div className="space-y-6">
         {tbGroups.map((g) => (
           <div key={g.group_id} className="rounded-xl border bg-white">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="text-sm text-gray-700">
-                {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
-                <span className="font-mono text-gray-900">{g.group_id}</span>
+            <div className="border-b px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
+                  <span className="font-mono text-gray-900">{g.group_id}</span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
+                </div>
               </div>
-              <div className="text-xs text-gray-500">
-                {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
-              </div>
+              {(() => {
+                const s = buildGroupSummary(g.items);
+                if (!s) return null;
+                return (
+                  <div className="mt-1 text-xs text-gray-600">
+                    {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
+                  </div>
+                );
+              })()}
             </div>
             <div className="divide-y">
               {g.items.map((b) => (
@@ -634,14 +723,25 @@ export default function ProviderBookings() {
       <div className="space-y-6">
         {incTbGroups.map((g) => (
           <div key={g.group_id} className="rounded-xl border bg-white">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="text-sm text-gray-700">
-                {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
-                <span className="font-mono text-gray-900">{g.group_id}</span>
+            <div className="border-b px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
+                  <span className="font-mono text-gray-900">{g.group_id}</span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
+                </div>
               </div>
-              <div className="text-xs text-gray-500">
-                {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
-              </div>
+              {(() => {
+                const s = buildGroupSummary(g.items);
+                if (!s) return null;
+                return (
+                  <div className="mt-1 text-xs text-gray-600">
+                    {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
+                  </div>
+                );
+              })()}
             </div>
             <div className="divide-y">{g.items.map(renderRow)}</div>
           </div>
