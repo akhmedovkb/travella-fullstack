@@ -687,6 +687,29 @@ export default function ProviderBookings() {
                       );
                     })()}
                   </div>
+                  {/* Итерарий по дням — под шапкой пакета */}
+                  {(() => {
+                    const rows = buildDailyMatrix(g.items);
+                    if (!rows.length) return null;
+                    return (
+                      <div className="px-4 pt-3">
+                        <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+                          {rows.map((r) => (
+                            <div key={r.date} className="mb-3 last:mb-0">
+                              <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                              {r.sections.map(([klass, names]) =>
+                                names.length ? (
+                                  <div key={klass} className="text-gray-700">
+                                    <span className="font-medium">{klass}:</span> {names.join(", ")}
+                                  </div>
+                                ) : null
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="space-y-4 p-4">{g.items.map((b) => renderRow(b))}</div>
                 </div>
               ))}
@@ -741,6 +764,29 @@ export default function ProviderBookings() {
                 );
               })()}
             </div>
+            {/* Итерарий по дням — под шапкой пакета */}
+            {(() => {
+              const rows = buildDailyMatrix(g.items);
+              if (!rows.length) return null;
+              return (
+                <div className="px-4 pt-3">
+                  <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+                    {rows.map((r) => (
+                      <div key={r.date} className="mb-3 last:mb-0">
+                        <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                        {r.sections.map(([klass, names]) =>
+                          names.length ? (
+                            <div key={klass} className="text-gray-700">
+                              <span className="font-medium">{klass}:</span> {names.join(", ")}
+                            </div>
+                          ) : null
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="divide-y">
               {g.items.map((b) => (
                 <div key={b.id} className="p-4">
@@ -752,23 +798,6 @@ export default function ProviderBookings() {
                     hideClientCancel={false}
                     onCancel={cancelOutgoing}
                   />
-                  {/* Итог по дням для пакета (исходящие) */}
-                  {g.items[0]?.id === b.id && (() => {
-                    const rows = buildDailyMatrix(g.items);
-                    if (!rows.length) return null;
-                    return (
-                      <div className="mt-3 rounded-lg border bg-gray-50 p-3 text-sm">
-                        {rows.map((r) => (
-                          <div key={r.date} className="mb-3 last:mb-0">
-                            <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
-                            {r.sections.map(([klass, names]) =>
-                              names.length ? <div key={klass} className="text-gray-700"><span className="font-medium">{klass}:</span> {names.join(", ")}</div> : null
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
                   {String(b.status) === "quoted" && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
