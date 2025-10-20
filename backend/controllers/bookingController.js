@@ -115,7 +115,17 @@ const createBooking = async (req, res) => {
     const userRole = req.user?.role; // 'client' | 'provider'
     if (!userId) return res.status(401).json({ message: "Требуется авторизация" });
 
-    const { service_id, provider_id: pFromBody, dates, message, attachments, currency } = req.body || {};
+    const {
+      service_id,
+      provider_id: pFromBody,
+      dates,
+      message,
+      // NEW: принимаем attachments/details/legs из TB
+      attachments: attachmentsRaw,
+      details:     detailsRaw,
+      legs,
+      currency
+    } = req.body || {};
     let providerId = pFromBody || null;
 
     if (!providerId && service_id) {
@@ -160,6 +170,44 @@ const createBooking = async (req, res) => {
     const autoGroupId = (cols.group_id && isTourBuilder && !req.body?.group_id) ? randomUUID() : null;
 
     // базовые колонки
+    // NEW: нормализация attachments — пишем ОБЪЕКТ, а не массив
+    const bag = {};
+    const srcObj =
+      (detailsRaw && typeof detailsRaw === "object" ? detailsRaw : null) ??
+      (attachmentsRaw && typeof attachmentsRaw === "object" ? attachmentsRaw : null) ??
+      null;
+    if (srcObj) Object.assign(bag, srcObj);
+
+    // NEW: подхватываем города из разных возможных ключей тела и кладём в attachments.{from_city,to_city}
+    const grab = (obj, keys=[]) => {
+      for (const k of keys) {
+        const v = obj && typeof obj === "object" ? obj[k] : undefined;
+        if (typeof v === "string" && v.trim()) return v.trim();
+      }
+      return null;
+    };
+    const fromCity =
+      grab(req.body, ["from_city","city_from","origin","from","directionFrom","fromCity"]) ||
+      grab(detailsRaw || {}, ["from_city","city_from","origin","from","directionFrom","fromCity"]) ||
+      grab(attachmentsRaw || {}, ["from_city","city_from","origin","from","directionFrom","fromCity"]);
+    const toCity =
+      grab(req.body, ["to_city","city_to","destination","to","directionTo","toCity"]) ||
+      grab(detailsRaw || {}, ["to_city","city_to","destination","to","directionTo","toCity"]) ||
+      grab(attachmentsRaw || {}, ["to_city","city_to","destination","to","directionTo","toCity"]);
+    if (fromCity) bag.from_city = bag.from_city || fromCity;
+    if (toCity)   bag.to_city   = bag.to_city   || toCity;
+
+    // NEW: если TB прислал legs[], сохраняем их как есть
+    if (Array.isArray(legs) && legs.length) {
+      bag.legs = legs
+        .filter(x => x && typeof x === "object")
+        .map((x) => ({
+          from: (x.from || x.from_city || "").trim?.() || undefined,
+          to:   (x.to   || x.to_city   || "").trim?.() || undefined,
+          date: x.date ? toISO(x.date) : undefined
+        }));
+    }
+
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
     const values = [
       // Для турбилдера не привязываем бронь к одной услуге, чтобы не падать по FK
@@ -169,7 +217,7 @@ const createBooking = async (req, res) => {
       primaryDate,
       "pending",
       message ?? null,
-      JSON.stringify(attachments ?? []),
+      JSON.stringify(bag), // <— объект
     ];
 
     // опциональная валюта
@@ -298,7 +346,9 @@ async function getProviderBookings(req, res) {
         b.status, ${selectBy}, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
         b.source, b.group_id,
-        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        /* NEW: отдаём одинаково и details, и attachments как объект */
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS attachments,
 
         ${selectCurrency},
         ${selectRequester},
@@ -383,7 +433,9 @@ async function getProviderOutgoingBookings(req, res) {
         b.id, b.provider_id, b.service_id, b.client_id,
         b.status, ${selectBy}, b.created_at, b.updated_at,
         b.client_message, b.provider_note, b.provider_price,
-        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        /* NEW: alias-ы под фронт */
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS attachments,
         b.source, b.group_id,
         ${selectCurrency},
         b.requester_provider_id,
@@ -437,7 +489,9 @@ const getMyBookings = async (req, res) => {
         b.id, b.service_id, b.provider_id, b.client_id,
         b.status, ${selectBy},
         b.client_message,
-        COALESCE(b.attachments::jsonb, '[]'::jsonb) AS attachments,
+        /* NEW: alias-ы под фронт */
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS attachments,
         b.provider_price, b.provider_note,
         b.created_at, b.updated_at,
         b.source, b.group_id,
@@ -500,6 +554,8 @@ const getGroupBookings = async (req, res) => {
       `
       SELECT
         b.*,
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+        COALESCE(b.attachments::jsonb, '{}'::jsonb) AS attachments,
         COALESCE(
           (SELECT array_agg(d.date::date ORDER BY d.date)
              FROM booking_dates d WHERE d.booking_id=b.id),
