@@ -90,6 +90,30 @@ const daysInclusive = (a, b) => {
 // Нормализованный пустой диапазон (чтобы состояние не становилось undefined)
 const EMPTY_RANGE = { from: undefined, to: undefined };
 
+/* --------- helpers для маршрута (from_city / to_city / legs[]) --------- */
+const sortedDayKeys = (obj = {}) => Object.keys(obj || {}).sort();
+const computeRouteCities = (stateByDay = {}) => {
+  const keys = sortedDayKeys(stateByDay);
+  if (!keys.length) return { from: "", to: "" };
+  const first = keys[0], last = keys[keys.length - 1];
+  const from = (stateByDay[first]?.city || "").trim();
+  const to   = (stateByDay[last]?.city  || "").trim();
+  return { from, to };
+};
+const buildLegsFromByDay = (stateByDay = {}) => {
+  const keys = sortedDayKeys(stateByDay);
+  const legs = [];
+  for (let i = 1; i < keys.length; i++) {
+    const prev = stateByDay[keys[i - 1]] || {};
+    const cur  = stateByDay[keys[i]]     || {};
+    const from = (prev?.city || "").trim();
+    const to   = (cur?.city  || "").trim();
+    if (from && to && from !== to) {
+      legs.push({ from, to, date: keys[i] }); // YYYY-MM-DD
+    }
+  }
+  return legs;
+};
 /* ---------------- categories / labels (для выпадашек услуг) ---------------- */
 const CATEGORY_LABELS = {
   // guide
@@ -1161,6 +1185,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
     if (!range?.from || !range?.to) return alert("Выберите даты маршрута.");
     const payloads = buildBookings();
     if (!payloads.length) return alert("Не выбраны провайдеры (гид/транспорт).");
+    // общий маршрут: города и «переезды» между разными городами
+    const routeCities = computeRouteCities(byDay);
+    const legs = buildLegsFromByDay(byDay);
     setSending(true);
     try {
       let ok = 0, fail = 0;
@@ -1184,6 +1211,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
              source: "tour_builder",
               type: p.kind,
              ...(p.__needs_group_id ? { group_id: groupId } : {}),
+             // ⬇️ новье: прокидываем маршрут и ноги (поддерживается бэком)
+             details: {
+               from_city: routeCities.from || "",
+               to_city:   routeCities.to   || "",
+             },
+             legs,
            };
           delete body.__needs_group_id;
           await createBookingCompat(body);
