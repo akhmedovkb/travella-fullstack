@@ -418,54 +418,6 @@ export default function ProviderBookings() {
     return m ? m[1].toLowerCase() : "";
   };
 
-  // Вытаскиваем выбранный в TourBuilder тип услуги
-  const tbKindFrom = (b) => {
-    const tryVals = [
-      b?.tb_type, b?.tb_kind, b?.tb_service,              // возможные поля от BE
-      b?.details?.tb_type, b?.details?.tb_kind,
-      b?.attachments?.tb_type, b?.attachments?.tb_kind,
-    ].map(v => String(v || "").toLowerCase()).filter(Boolean);
-    if (tryVals.length) return tryVals[0];
-    // fallback: парсим из комментария вида "[TourBuilder] transport ..."
-    const c = String(b?.comment || b?.provider_comment || "");
-    const m = c.match(/\[TourBuilder\]\s*([a-zA-Z]+)/i);
-    return m ? m[1].toLowerCase() : "";
-  };
-
-  // Класс услуги (раздел)
-  const serviceClass = (b) => {
-    const pt = String(b?.provider_type || "").toLowerCase();
-    const st = String(b?.service_title || "").toLowerCase();
-    const tb = String(tbKindFrom(b) || "").toLowerCase();
-
-    // 0) Явный выбор заявителя в TourBuilder — ПРИОРИТЕТ
-    if (tb === "guide")     return "GUIDE";
-    if (tb === "transport") return "TRANSPORT";
-    if (tb === "hotel")     return "HOTEL";
-    if (tb === "entry" || tb === "entryfees" || tb === "entry_fee") return "ENTRY FEES";
-    // 1) пробуем по названию услуги
-    if (/\bhotel\b/.test(st)) return "HOTEL";
-    if (/\bguide\b/.test(st)) return "GUIDE";
-    if (/\b(transport|transfer|car|vehicle)\b/.test(st)) return "TRANSPORT";
-    if (/\b(entry|ticket|fee|museum|monument)\b/.test(st)) return "ENTRY FEES";
-    // 2) иначе — по типу поставщика
-    if (pt === "hotel") return "HOTEL";
-    if (pt === "guide") return "GUIDE";
-    if (pt === "transport") return "TRANSPORT";
-    if (pt === "agent") return "SERVICE"; // не считаем агентом ENTRY FEES по умолчанию
-    return pt.toUpperCase() || "SERVICE";
-  };
-  // Какое имя показывать для класса услуги
-  const displayNameFor = (klass, b) => {
-    if (klass === "ENTRY FEES") {
-      const name = (b?.service_title || "").toString().trim();
-      return name || (b?.provider_name || "").toString().trim(); // fallback
-    }
-    if (klass === "HOTEL" || klass === "GUIDE" || klass === "TRANSPORT") {
-      return (b?.provider_name || b?.service_title || "").toString().trim();
-    }
-    return (b?.provider_name || b?.service_title || "").toString().trim();
-  };
   // Класс услуги (раздел)
   const serviceClass = (b) => {
     const pt = String(b?.provider_type || "").toLowerCase();
@@ -501,6 +453,7 @@ export default function ProviderBookings() {
     }
     return (b?.provider_name || b?.service_title || "").toString().trim();
   };
+  
   const fmtDay = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
