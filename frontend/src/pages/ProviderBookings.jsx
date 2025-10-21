@@ -406,20 +406,27 @@ export default function ProviderBookings() {
   };
 
   // Класс услуги (раздел)
-  const serviceClass = (b) => {
-    const t = String(b?.provider_type || "").toLowerCase();
-    if (t === "hotel") return "HOTEL";
-    if (t === "guide") return "GUIDE";
-    if (t === "transport") return "TRANSPORT";
+    const t  = String(b?.provider_type || "").toLowerCase();
     const st = String(b?.service_title || "").toLowerCase();
-    if (st.includes("entry fee") || st.includes("entry") || st.includes("ticket")) return "ENTRY FEES";
-    if (t === "agent") return "ENTRY FEES";
+    // 1) пробуем по названию услуги
+    if (/\bhotel\b/.test(st))                return "HOTEL";
+    if (/\bguide\b/.test(st))                return "GUIDE";
+    if (/\b(transport|transfer|car|vehicle)\b/.test(st)) return "TRANSPORT";
+    if (/\b(entry|ticket|fee|museum|monument)\b/.test(st)) return "ENTRY FEES";
+    // 2) иначе — по типу поставщика
+    if (t === "hotel")     return "HOTEL";
+    if (t === "guide")     return "GUIDE";
+    if (t === "transport") return "TRANSPORT";
+    if (t === "agent")     return "SERVICE"; // не считаем агентом "ENTRY FEES" по умолчанию
     return t.toUpperCase() || "SERVICE";
   };
   // Какое имя показывать для класса услуги
   const displayNameFor = (klass, b) => {
     // для ENTRY FEES показываем название услуги (service_title)
-    if (klass === "ENTRY FEES") return (b?.service_title || "").toString().trim();
+    if (klass === "ENTRY FEES") {
+      const name = (b?.service_title || "").toString().trim();
+      return name || (b?.provider_name || "").toString().trim(); // fallback, чтобы не пропадало
+    }
     // для HOTEL/GUIDE/TRANSPORT — имя поставщика (или название услуги, если нет)
     if (klass === "HOTEL" || klass === "GUIDE" || klass === "TRANSPORT") {
       return (b?.provider_name || b?.service_title || "").toString().trim();
