@@ -416,6 +416,24 @@ export default function ProviderBookings() {
     if (t === "agent") return "ENTRY FEES";
     return t.toUpperCase() || "SERVICE";
   };
+  // Какое имя показывать для класса услуги
+  const displayNameFor = (klass, b) => {
+    // для ENTRY FEES показываем название услуги (service_title)
+    if (klass === "ENTRY FEES") return (b?.service_title || "").toString().trim();
+    // для HOTEL/GUIDE/TRANSPORT — имя поставщика (или название услуги, если нет)
+    if (klass === "HOTEL" || klass === "GUIDE" || klass === "TRANSPORT") {
+      return (b?.provider_name || b?.service_title || "").toString().trim();
+    }
+    // по умолчанию — что есть
+    return (b?.provider_name || b?.service_title || "").toString().trim();
+  };
+
+  const fmtDay = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  };
 
   // Собираем [{date,label,city,sections:[[klass,[names]]]}]
   const buildDailyMatrix = (items = []) => {
@@ -424,7 +442,6 @@ export default function ProviderBookings() {
       const dates = Array.isArray(b?.dates) ? b.dates : [];
       const city = pickCity(b);
       const klass = serviceClass(b);
-      const name = (b?.provider_name || b?.service_title || "").toString().trim();
       for (const d of dates) {
        const iso = toISO(d);
         if (!iso) continue;
@@ -432,6 +449,7 @@ export default function ProviderBookings() {
         const cell = byDate.get(iso);
         if (!cell.city && city) cell.city = city;
         if (!cell.sections.has(klass)) cell.sections.set(klass, new Set());
+        const name = displayNameFor(klass, b);
         if (name) cell.sections.get(klass).add(name);
       }
     }
@@ -441,6 +459,7 @@ export default function ProviderBookings() {
         date,
         label: `D${i + 1}`,
         city: (city || "").toUpperCase(),
+        dateLabel: fmtDay(date),
         sections: Array.from(sections.entries()).map(([k, set]) => [k, Array.from(set.values())]),
       }));
     return rows;
@@ -687,7 +706,10 @@ export default function ProviderBookings() {
                         <div className="rounded-lg border bg-gray-50 p-3 text-sm">
                           {rows.map((r) => (
                             <div key={r.date} className="mb-3 last:mb-0">
-                              <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                              {/* D1 -> дата -> город */}
+                              <div className="font-semibold">
+                                {r.label} → {r.dateLabel} → {r.city || fmtShort(r.date)}
+                              </div>
                               {r.sections.map(([klass, names]) =>
                                 names.length ? (
                                   <div key={klass} className="text-gray-700">
@@ -755,7 +777,9 @@ export default function ProviderBookings() {
                   <div className="rounded-lg border bg-gray-50 p-3 text-sm">
                     {rows.map((r) => (
                       <div key={r.date} className="mb-3 last:mb-0">
-                        <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                        <div className="font-semibold">
+                          {r.label} → {r.dateLabel} → {r.city || fmtShort(r.date)}
+                        </div>
                         {r.sections.map(([klass, names]) =>
                           names.length ? (
                             <div key={klass} className="text-gray-700">
@@ -849,7 +873,9 @@ export default function ProviderBookings() {
                   <div className="rounded-lg border bg-gray-50 p-3 text-sm">
                     {rows.map((r) => (
                       <div key={r.date} className="mb-3 last:mb-0">
-                        <div className="font-semibold">{r.label} — {r.city || fmtShort(r.date)}</div>
+                        <div className="font-semibold">
+                          {r.label} → {r.dateLabel} → {r.city || fmtShort(r.date)}
+                        </div>
                         {r.sections.map(([klass, names]) =>
                           names.length ? (
                             <div key={klass} className="text-gray-700">
