@@ -1174,6 +1174,14 @@ const makeTransportLoader = (dateKey) => async (input) => {
      // message – просто информационное поле для менеджеров/провайдеров
         message: `[TourBuilder] ${b.kind} • PAX ${Number(adt)+Number(chd)} • ${residentType.toUpperCase()}`,
         source: "tour_builder",
+        // 🔹 Явно прокидываем класс услуги из TB
+        tb_kind: String(b.kind || "").toLowerCase(),         // guide | transport | hotel | entry
+        // 🔹 Минимальная служебная мета (можно расширять при необходимости)
+        tb_meta: {
+          class: String(b.kind || "").toLowerCase(),
+          // подсказка для бэка/отчётов: даты как есть из TB
+          dates: [...new Set(b.dates)].sort()
+        },
         __needs_group_id: true,
       });
     }
