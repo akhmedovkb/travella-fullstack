@@ -677,15 +677,6 @@ export default function ProviderBookings() {
                       </div>
                       <span className="text-xs text-gray-500">бронирований: {g.items.length}</span>
                     </div>
-                    {(() => {
-                      const s = buildGroupSummary(g.items);
-                      if (!s) return null;
-                      return (
-                        <div className="mt-1 text-xs text-gray-600">
-                          {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
-                        </div>
-                      );
-                    })()}
                   </div>
                   {/* Итерарий по дням — под шапкой пакета */}
                   {(() => {
@@ -754,15 +745,6 @@ export default function ProviderBookings() {
                   {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
                 </div>
               </div>
-              {(() => {
-                const s = buildGroupSummary(g.items);
-                if (!s) return null;
-                return (
-                  <div className="mt-1 text-xs text-gray-600">
-                    {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
-                  </div>
-                );
-              })()}
             </div>
             {/* Итерарий по дням — под шапкой пакета */}
             {(() => {
@@ -857,15 +839,6 @@ export default function ProviderBookings() {
                   {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
                 </div>
               </div>
-              {(() => {
-                const s = buildGroupSummary(g.items);
-                if (!s) return null;
-                return (
-                  <div className="mt-1 text-xs text-gray-600">
-                    {(s.datesStr ? s.datesStr : "")}{s.datesStr && s.routeStr ? " · " : ""}{s.routeStr ? s.routeStr : ""}
-                  </div>
-                );
-              })()}
             </div>
             {/* Итерарий по дням — под шапкой пакета */}
             {(() => {
