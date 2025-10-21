@@ -404,11 +404,31 @@ export default function ProviderBookings() {
       pickField(b?.attachments || {}, ["city", "cityName"]);
     return (v || "").toString();
   };
+  // Вытаскиваем выбранный в TourBuilder тип услуги
+  const tbKindFrom = (b) => {
+    const tryVals = [
+      b?.tb_type, b?.tb_kind, b?.tb_service,              // возможные поля от BE
+      b?.details?.tb_type, b?.details?.tb_kind,
+      b?.attachments?.tb_type, b?.attachments?.tb_kind,
+    ].map(v => String(v || "").toLowerCase()).filter(Boolean);
+    if (tryVals.length) return tryVals[0];
+    // fallback: парсим из комментария вида "[TourBuilder] transport ..."
+    const c = String(b?.comment || b?.provider_comment || "");
+    const m = c.match(/\[TourBuilder\]\s*([a-zA-Z]+)/i);
+    return m ? m[1].toLowerCase() : "";
+  };
 
   // Класс услуги (раздел)
   const serviceClass = (b) => {
     const pt = String(b?.provider_type || "").toLowerCase();
     const st = String(b?.service_title || "").toLowerCase();
+    const tb = String(tbKindFrom(b) || "").toLowerCase();
+
+    // 0) Явный выбор заявителя в TourBuilder — ПРИОРИТЕТ
+    if (tb === "guide")     return "GUIDE";
+    if (tb === "transport") return "TRANSPORT";
+    if (tb === "hotel")     return "HOTEL";
+    if (tb === "entry" || tb === "entryfees" || tb === "entry_fee") return "ENTRY FEES";
     // 1) пробуем по названию услуги
     if (/\bhotel\b/.test(st)) return "HOTEL";
     if (/\bguide\b/.test(st)) return "GUIDE";
