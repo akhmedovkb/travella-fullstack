@@ -176,7 +176,7 @@ function parseMoneySafe(v) {
 
 // Главное: единая и безопасная нормализация входа сервиса
 function normalizeServicePayload(body = {}) {
-  const { title, description, price, category, images, availability, details } = body;
+  const { title, description, price, category, images, availability, details, vehicle_model } = body;
 
   const titleStr = String(title ?? "").trim();
   const descStr = typeof description === "string" ? description : "";
@@ -238,6 +238,11 @@ function normalizeServicePayload(body = {}) {
     }
   }
 
+  // vehicle_model — только для транспортных категорий (в таблице services тоже поддерживаем)
+  const vehicleModelStr = isTransportCategory(catStr)
+    ? (String(vehicle_model || "").trim() || null)
+    : null;
+
   return {
     title: titleStr,
     descriptionStr: descStr,
@@ -246,6 +251,7 @@ function normalizeServicePayload(body = {}) {
     imagesArr,
     availabilityArr,
     detailsObj,
+    vehicleModelStr,
   };
 }
 
@@ -629,6 +635,7 @@ const addService = async (req, res) => {
       priceNum,
       descriptionStr,
       detailsObj,
+      vehicleModelStr,
     } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
@@ -647,8 +654,10 @@ const addService = async (req, res) => {
     }
 
     const ins = await pool.query(
-      `INSERT INTO services (provider_id, title, description, price, category, images, availability, details)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb)
+      `INSERT INTO services
+         (provider_id, title, description, price, category, images, availability, details, vehicle_model)
+       VALUES
+         ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9)
        RETURNING *`,
       [
         providerId,
@@ -659,6 +668,7 @@ const addService = async (req, res) => {
         JSON.stringify(imagesArr),
         JSON.stringify(extended ? [] : availabilityArr),
         JSON.stringify(detailsObj ?? {}),
+        vehicleModelStr,
       ]
     );
 
@@ -745,6 +755,7 @@ const updateService = async (req, res) => {
       priceNum,
       descriptionStr,
       detailsObj,
+      vehicleModelStr,
     } = normalizeServicePayload(req.body);
 
     const extended = isExtendedCategory(category);
@@ -771,8 +782,9 @@ const updateService = async (req, res) => {
               images=$5::jsonb,
               availability=$6::jsonb,
               details=$7::jsonb,
+              vehicle_model=$8,
               updated_at=NOW()
-        WHERE id=$8 AND provider_id=$9
+        WHERE id=$9 AND provider_id=$10
         RETURNING *`,
       [
         title,
@@ -782,6 +794,7 @@ const updateService = async (req, res) => {
         JSON.stringify(imagesArr ?? []),
         JSON.stringify(extended ? [] : (availabilityArr ?? [])),
         JSON.stringify(detailsObj ?? {}),
+        vehicleModelStr,
         serviceId,
         providerId,
       ]
