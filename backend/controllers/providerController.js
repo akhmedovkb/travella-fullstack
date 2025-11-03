@@ -1140,26 +1140,46 @@ const patchProviderService = async (req, res) => {
     );
     if (!cur.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
 
-    // применяем только присланные поля
+    // 1) Определяем эффективную категорию: из тела или из текущей строки
+    const current = cur.rows[0];
+    const effectiveCategory =
+      (Object.prototype.hasOwnProperty.call(req.body, "category") && req.body.category)
+        ? String(req.body.category).trim()
+        : String(current.category || "").trim();
+
+    // 2) Нормализуем вход (прочие поля)
     const patch = normalizeProviderServicePayload(req.body);
+
     const sets = [];
     const vals = [];
     const push = (sql, v) => { sets.push(sql); vals.push(v); };
 
-    if (patch.title !== null && req.body.hasOwnProperty("title")) push(`title = $${vals.length+1}`, patch.title);
-    if (req.body.hasOwnProperty("price")) push(`price = $${vals.length+1}`, patch.price);
-    if (req.body.hasOwnProperty("currency")) push(`currency = $${vals.length+1}`, patch.currency);
-    if (req.body.hasOwnProperty("is_active")) push(`is_active = $${vals.length+1}`, patch.is_active);
-    if (req.body.hasOwnProperty("details")) push(`details = $${vals.length+1}::jsonb`, JSON.stringify(patch.details || {}));
-    if (req.body.hasOwnProperty("vehicle_model")) push(`vehicle_model = $${vals.length+1}`, patch.vehicle_model);
+    if (patch.title !== null && Object.prototype.hasOwnProperty.call(req.body, "title"))
+      push(`title = $${vals.length+1}`, patch.title);
+    if (Object.prototype.hasOwnProperty.call(req.body, "price"))
+      push(`price = $${vals.length+1}`, patch.price);
+    if (Object.prototype.hasOwnProperty.call(req.body, "currency"))
+      push(`currency = $${vals.length+1}`, patch.currency);
+    if (Object.prototype.hasOwnProperty.call(req.body, "is_active"))
+      push(`is_active = $${vals.length+1}`, patch.is_active);
+    if (Object.prototype.hasOwnProperty.call(req.body, "details"))
+      push(`details = $${vals.length+1}::jsonb`, JSON.stringify(patch.details || {}));
 
-    // менять category редко нужно из UI, но поддержим
-    if (req.body.hasOwnProperty("category") && patch.category) {
+    // 3) Категория — если пришла в payload
+    if (Object.prototype.hasOwnProperty.call(req.body, "category") && patch.category) {
       push(`category = $${vals.length+1}`, patch.category);
     }
 
+    // 4) vehicle_model — можно менять и без category в body.
+    //    Если эффективная категория не транспортная — обнуляем.
+    if (Object.prototype.hasOwnProperty.call(req.body, "vehicle_model")) {
+      const vm = String(req.body.vehicle_model || "").trim() || null;
+      const vmToSave = isTransportCategory(effectiveCategory) ? vm : null;
+      push(`vehicle_model = $${vals.length+1}`, vmToSave);
+    }
+
     if (!sets.length) {
-      return res.json(cur.rows[0]); // нечего менять
+      return res.json(current); // нечего менять
     }
 
     vals.push(id);        // $n-1
