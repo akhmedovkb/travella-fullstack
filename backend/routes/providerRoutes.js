@@ -27,6 +27,11 @@ const {
   listProviderFavorites,
   toggleProviderFavorite,
   removeProviderFavorite,
+  listProviderServices,
+  createProviderService,
+  patchProviderService,
+  bulkCreateProviderServices,
+  deleteProviderService,
 } = require("../controllers/providerController");
 
 const { notifyModerationNew } = require("../utils/telegram");
@@ -62,6 +67,14 @@ router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.patch("/services/:id/images", authenticateToken, requireProvider, updateServiceImagesOnly);
+
+/* -------------------- PROVIDER SERVICES (каскад в профиле) -------------------- */
+// Важно: ставим ДО маршрута "/:id(\\d+)", чтобы порядок не мешал.
+router.get("/:providerId(\\d+)/services", authenticateToken, requireProvider, listProviderServices);
+router.post("/:providerId(\\d+)/services", authenticateToken, requireProvider, createProviderService);
+router.patch("/:providerId(\\d+)/services/:id(\\d+)", authenticateToken, requireProvider, patchProviderService);
+router.post("/:providerId(\\d+)/services/bulk", authenticateToken, requireProvider, bulkCreateProviderServices);
+router.delete("/:providerId(\\d+)/services/:id(\\d+)", authenticateToken, requireProvider, deleteProviderService);
 
 router.get("/booked-dates", authenticateToken, requireProvider, getBookedDates);
 router.get("/blocked-dates", authenticateToken, requireProvider, getBlockedDates);
