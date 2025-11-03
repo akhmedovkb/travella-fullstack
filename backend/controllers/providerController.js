@@ -256,8 +256,9 @@ function normalizeServicePayload(body = {}) {
 }
 
 // Нормализация payload для provider_services (каскад в профиле)
-function normalizeProviderServicePayload(body = {}) {
-  const category = String(body.category ?? "").trim();
+function normalizeProviderServicePayload(body = {}, fallbackCategory = null) {
+  // если category не прислали, используем текущую (fallbackCategory)
+  const category = String(body.category ?? fallbackCategory ?? "").trim();
   const title = String(body.title ?? "").trim() || null;
 
   // цена
@@ -291,7 +292,7 @@ function normalizeProviderServicePayload(body = {}) {
     }
   }
 
-  // vehicle_model приходит отдельным полем
+  // vehicle_model приходит отдельным полем; только для транспортных категорий
   const vehicle_model = isTransportCategory(category)
     ? (String(body.vehicle_model || "").trim() || null)
     : null;
@@ -1103,7 +1104,7 @@ const createProviderService = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const { category, title, price, currency, details, vehicle_model, is_active } =
+  const { category, title, price, currency, details, vehicle_model, is_active } =
       normalizeProviderServicePayload(req.body);
 
     if (!category) {
@@ -1147,8 +1148,9 @@ const patchProviderService = async (req, res) => {
         ? String(req.body.category).trim()
         : String(current.category || "").trim();
 
-    // 2) Нормализуем вход (прочие поля)
-    const patch = normalizeProviderServicePayload(req.body);
+  // применяем только присланные поля; подставляем текущую категорию, если её не прислали
+  const currentCategory = cur.rows[0].category;
+  const patch = normalizeProviderServicePayload(req.body, currentCategory);
 
     const sets = [];
     const vals = [];
