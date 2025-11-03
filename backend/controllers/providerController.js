@@ -86,6 +86,8 @@ const isExtendedCategory = (cat) => EXT_CATS.has(String(cat || ""));
 const TRANSPORT_CATS = new Set([
   "city_tour_transport",
   "mountain_tour_transport",
+  "desert_tour_transport",
+  "safari_tour_transport",
   "one_way_transfer",
   "dinner_transfer",
   "border_transfer",
@@ -245,6 +247,53 @@ function normalizeServicePayload(body = {}) {
     availabilityArr,
     detailsObj,
   };
+}
+
+// Нормализация payload для provider_services (каскад в профиле)
+function normalizeProviderServicePayload(body = {}) {
+  const category = String(body.category ?? "").trim();
+  const title = String(body.title ?? "").trim() || null;
+
+  // цена
+  let price = null;
+  if (body.price !== undefined && body.price !== null && String(body.price).trim() !== "") {
+    const p = parseMoneySafe(body.price);
+    price = Number.isFinite(p) ? p : null;
+  }
+
+  // валюта (по UI сейчас только UZS)
+  const currency = (String(body.currency || "UZS").trim() || "UZS").toUpperCase();
+
+  // details
+  let details = {};
+  if (body.details) {
+    if (typeof body.details === "string") {
+      try { details = JSON.parse(body.details) || {}; } catch { details = {}; }
+    } else if (typeof body.details === "object") {
+      details = { ...body.details };
+    }
+  }
+
+  // seats только для транспортных категорий
+  if (Object.prototype.hasOwnProperty.call(details, "seats")) {
+    if (isTransportCategory(category)) {
+      const n = Number(details.seats);
+      if (Number.isInteger(n) && n > 0) details.seats = n;
+      else delete details.seats;
+    } else {
+      delete details.seats;
+    }
+  }
+
+  // vehicle_model приходит отдельным полем
+  const vehicle_model = isTransportCategory(category)
+    ? (String(body.vehicle_model || "").trim() || null)
+    : null;
+
+  // is_active
+  const is_active = body.is_active === false ? false : true;
+
+  return { category, title, price, currency, details, vehicle_model, is_active };
 }
 
 // ---------- Auth ----------
@@ -1008,6 +1057,181 @@ const removeProviderFavorite = async (req, res) => {
   }
 };
 
+/* ============================
+ * PROVIDER SERVICES (каскад)
+ * ============================ */
+
+// GET /api/providers/:providerId/services
+const listProviderServices = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const r = await pool.query(
+      `SELECT id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at
+         FROM provider_services
+        WHERE provider_id = $1
+        ORDER BY id DESC`,
+      [providerId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error("listProviderServices error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// POST /api/providers/:providerId/services
+const createProviderService = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const { category, title, price, currency, details, vehicle_model, is_active } =
+      normalizeProviderServicePayload(req.body);
+
+    if (!category) {
+      return res.status(400).json({ message: "category обязателен" });
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO provider_services
+         (provider_id, category, title, price, currency, is_active, details, vehicle_model)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)
+       RETURNING id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at`,
+      [providerId, category, title, price, currency, is_active, JSON.stringify(details||{}), vehicle_model]
+    );
+    res.status(201).json(ins.rows[0]);
+  } catch (err) {
+    console.error("createProviderService error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// PATCH /api/providers/:providerId/services/:id
+const patchProviderService = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    const id = Number(req.params.id);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    // убедимся, что запись принадлежит провайдеру
+    const cur = await pool.query(
+      `SELECT * FROM provider_services WHERE id=$1 AND provider_id=$2`,
+      [id, providerId]
+    );
+    if (!cur.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+
+    // применяем только присланные поля
+    const patch = normalizeProviderServicePayload(req.body);
+    const sets = [];
+    const vals = [];
+    const push = (sql, v) => { sets.push(sql); vals.push(v); };
+
+    if (patch.title !== null && req.body.hasOwnProperty("title")) push(`title = $${vals.length+1}`, patch.title);
+    if (req.body.hasOwnProperty("price")) push(`price = $${vals.length+1}`, patch.price);
+    if (req.body.hasOwnProperty("currency")) push(`currency = $${vals.length+1}`, patch.currency);
+    if (req.body.hasOwnProperty("is_active")) push(`is_active = $${vals.length+1}`, patch.is_active);
+    if (req.body.hasOwnProperty("details")) push(`details = $${vals.length+1}::jsonb`, JSON.stringify(patch.details || {}));
+    if (req.body.hasOwnProperty("vehicle_model")) push(`vehicle_model = $${vals.length+1}`, patch.vehicle_model);
+
+    // менять category редко нужно из UI, но поддержим
+    if (req.body.hasOwnProperty("category") && patch.category) {
+      push(`category = $${vals.length+1}`, patch.category);
+    }
+
+    if (!sets.length) {
+      return res.json(cur.rows[0]); // нечего менять
+    }
+
+    vals.push(id);        // $n-1
+    vals.push(providerId);// $n
+
+    const upd = await pool.query(
+      `UPDATE provider_services
+          SET ${sets.join(", ")}, updated_at = NOW()
+        WHERE id = $${vals.length-1} AND provider_id = $${vals.length}
+        RETURNING id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at`,
+      vals
+    );
+    res.json(upd.rows[0]);
+  } catch (err) {
+    console.error("patchProviderService error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// POST /api/providers/:providerId/services/bulk
+const bulkCreateProviderServices = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.json({ items: [] });
+
+    const rows = [];
+    for (const it of items) {
+      const p = normalizeProviderServicePayload(it);
+      if (!p.category) continue;
+      rows.push(p);
+      if (rows.length >= 200) break; // защитимся от перегруза
+    }
+    if (!rows.length) return res.json({ items: [] });
+
+    const values = [];
+    const params = [];
+    rows.forEach((r, i) => {
+      const base = i * 8;
+      params.push(
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}::jsonb, $${base + 8})`
+      );
+      values.push(
+        providerId, r.category, r.title, r.price, r.currency, r.is_active,
+        JSON.stringify(r.details || {}), r.vehicle_model
+      );
+    });
+
+    const q = await pool.query(
+      `INSERT INTO provider_services
+         (provider_id, category, title, price, currency, is_active, details, vehicle_model)
+       VALUES ${params.join(",")}
+       RETURNING id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at`,
+      values
+    );
+    res.status(201).json({ items: q.rows });
+  } catch (err) {
+    console.error("bulkCreateProviderServices error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+// DELETE /api/providers/:providerId/services/:id
+const deleteProviderService = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    const id = Number(req.params.id);
+    if (!Number.isFinite(providerId) || providerId !== req.user.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const del = await pool.query(
+      `DELETE FROM provider_services WHERE id=$1 AND provider_id=$2`,
+      [id, providerId]
+    );
+    if (!del.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("deleteProviderService error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 module.exports = {
   isExtendedCategory,
   registerProvider,
@@ -1031,6 +1255,12 @@ module.exports = {
   listProviderFavorites,
   toggleProviderFavorite,
   removeProviderFavorite,
+  // provider_services (каскад)
+  listProviderServices,
+  createProviderService,
+  patchProviderService,
+  bulkCreateProviderServices,
+  deleteProviderService,
 };
 
 
