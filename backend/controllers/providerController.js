@@ -1120,7 +1120,7 @@ const getProviderServicesPublic = async (req, res) => {
   }
 };
 
-/ POST /api/providers/:providerId/services
+// POST /api/providers/:providerId/services
 const createProviderService = async (req, res) => {
   try {
     const providerId = Number(req.params.providerId);
