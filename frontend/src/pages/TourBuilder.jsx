@@ -440,14 +440,22 @@ const normalizeService = (row) => {
   const price = Number(details.grossPrice) || Number(row?.price) || 0;
   const currency = details.currency || row?.currency || "UZS";
 
-  const realId = row?.id ?? row?._id ?? null; // ← только реальный id
-
+const realId = row?.id ?? row?._id ?? null; // ← только реальный id
+  // источник модели: provider_services.vehicle_model (приоритет),
+  // затем детали, если вдруг где-то так сохранили
+const vehicleModel =
+    row?.vehicle_model ||
+    details?.vehicle_model ||
+    details?.model ||
+    row?.model ||
+    null;
   return {
     id: realId,
     title: row?.title || CATEGORY_LABELS[row?.category] || "Услуга",
     category: row?.category || "",
     price: toNum(price, 0),
     currency,
+    vehicle_model: vehicleModel,
     raw: row,
   };
 };
@@ -1654,11 +1662,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           return false;
                         })
                         .sort((a,b) => a.price - b.price)
-                        .map(s => (
-                          <option key={s.id} value={s.id}>
-                            {labelForService(s)}
-                          </option>
-                        ))}
+                        .map(s => {
+                          const seats = svcSeats(s); // берёт из s.raw.details.seats
+                          const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
+                          const base = (s.title || CATEGORY_LABELS[s.category] || "Услуга");
+                          const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                            .filter(Boolean)
+                            .join(" — ");
+                          return (
+                            <option key={s.id} value={s.id}>{parts}</option>
+                          );
+                        })}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcGuideForDay(k).toFixed(2)}</b> {(st.guideService?.currency || st.guide?.currency || "UZS")}
@@ -1742,11 +1756,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           );
                         })
                         .sort((a,b) => a.price - b.price)
-                        .map(s => (
-                          <option key={s.id} value={s.id}>
-                            {labelForService(s)}
-                          </option>
-                        ))}
+                        .map(s => {
+                          const seats = svcSeats(s);
+                          const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
+                          const base = (s.title || CATEGORY_LABELS[s.category] || "Услуга");
+                          const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                            .filter(Boolean)
+                            .join(" — ");
+                          return (
+                            <option key={s.id} value={s.id}>{parts}</option>
+                          );
+                        })}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcTransportForDay(k).toFixed(2)}</b> {(st.transportService?.currency || st.transport?.currency || "UZS")}
