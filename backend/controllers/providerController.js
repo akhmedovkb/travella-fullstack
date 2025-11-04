@@ -1096,7 +1096,31 @@ const listProviderServices = async (req, res) => {
   }
 };
 
-// POST /api/providers/:providerId/services
+// GET /api/providers/:providerId/services/public
+// Публичный просмотр каскадных услуг провайдера (без аутентификации владельца).
+// Отдаём только активные позиции, включая vehicle_model.
+const getProviderServicesPublic = async (req, res) => {
+  try {
+    const providerId = Number(req.params.providerId);
+    if (!Number.isFinite(providerId)) {
+      return res.status(400).json({ message: "Bad providerId" });
+    }
+    const r = await pool.query(
+      `SELECT id, provider_id, category, title, price, currency, is_active, details, vehicle_model, created_at, updated_at
+         FROM provider_services
+        WHERE provider_id = $1
+          AND is_active = TRUE
+        ORDER BY id DESC`,
+      [providerId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error("getProviderServicesPublic error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
+/ POST /api/providers/:providerId/services
 const createProviderService = async (req, res) => {
   try {
     const providerId = Number(req.params.providerId);
@@ -1296,6 +1320,8 @@ module.exports = {
   patchProviderService,
   bulkCreateProviderServices,
   deleteProviderService,
+  // public provider_services
+  getProviderServicesPublic,
 };
 
 
