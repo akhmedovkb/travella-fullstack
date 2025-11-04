@@ -145,6 +145,11 @@ const svcSeats = (s) =>
   toNum(s?.raw?.details?.seats ?? s?.details?.seats ?? NaN, NaN);
 const svcCity = (s) =>
   (s?.raw?.details?.city_slug ?? s?.details?.city_slug ?? "").toString().trim().toLowerCase();
+// модель авто хранится наверху записи услуги; оставим fallback через details
+const svcModel = (s) =>
+  (s?.raw?.vehicle_model ?? s?.vehicle_model ?? s?.raw?.details?.vehicle_model ?? "")
+    .toString()
+    .trim();
 const fitsPax = (s, pax) => {
   const n = svcSeats(s);
   // Для транспортных услуг вместимость ОБЯЗАТЕЛЬНА, для чисто гидских — игнорируем
@@ -157,6 +162,17 @@ const fitsCity = (s, citySlug) => {
   return !v || !cs ? true : v === cs;
 };
 
+// Человеческая подпись услуги: добавляем модель и места (pax)
+const labelForService = (s) => {
+  const title = (s.title || CATEGORY_LABELS[s.category] || "Услуга");
+  const model = svcModel(s);
+  const seats = svcSeats(s);
+  const parts = [title];
+  if (model) parts.push(model);
+  if (Number.isFinite(seats)) parts.push(`${seats} pax`);
+  parts.push(`${Number(s.price || 0).toFixed(2)} ${s.currency || "UZS"}`);
+  return parts.join(" — ");
+};
 /**
  * Проверяет, подходит ли провайдер под условия (есть хоть одна услуга с достаточной вместимостью).
  * kind: 'guide' | 'transport'
@@ -1606,12 +1622,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.guide?.id] || [];
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        const citySlug = (byDay[k]?.city || "").trim();
                         // показываем обычные услуги гида + гид+транспорт, но только если вместимость >= PAX
                         const allowed = list
                           .filter(s =>
                             s.price > 0 &&
-                            (GUIDE_ALLOWED.has(s.category) ||
-                             (!st.transport && TRANSPORT_ALLOWED.has(s.category) && fitsPax(s, pax)))
+                            (
+                              GUIDE_ALLOWED.has(s.category) ||
+                              (
+                                !st.transport &&
+                                TRANSPORT_ALLOWED.has(s.category) &&
+                                fitsPax(s, pax) &&
+                                fitsCity(s, citySlug)
+                              )
+                            )
                           );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
@@ -1621,17 +1645,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {(servicesCache[st.guide?.id] || [])
                         .filter(s => {
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
+                          const citySlug = (byDay[k]?.city || "").trim();
                           if (GUIDE_ALLOWED.has(s.category)) return s.price > 0;
                           if (TRANSPORT_ALLOWED.has(s.category)) {
                             // «гид+транспорт» показываем только если НЕ выбран отдельный транспорт
-                            return !st.transport && s.price > 0 && fitsPax(s, pax);
+                            return !st.transport && s.price > 0 && fitsPax(s, pax) && fitsCity(s, citySlug);
                           }
                           return false;
                         })
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
-                            {(s.title || CATEGORY_LABELS[s.category] || "Услуга")} — {s.price.toFixed(2)} {s.currency}
+                            {labelForService(s)}
                           </option>
                         ))}
                     </select>
@@ -1692,8 +1717,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.transport?.id] || [];
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
+                        const citySlug = (byDay[k]?.city || "").trim();
                         const allowed = list.filter(
-                          s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0 && fitsPax(s, pax)
+                          s =>
+                            TRANSPORT_ALLOWED.has(s.category) &&
+                            s.price > 0 &&
+                            fitsPax(s, pax) &&
+                            fitsCity(s, citySlug)
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
@@ -1701,11 +1731,20 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     >
                       <option value="">{t('tb.pick_transport_service_ph')}</option>
                       {(servicesCache[st.transport?.id] || [])
-                        .filter(s => TRANSPORT_ALLOWED.has(s.category) && s.price > 0 && fitsPax(s, Math.max(1, toNum(adt) + toNum(chd))))
+                        .filter(s => {
+                          const pax = Math.max(1, toNum(adt) + toNum(chd));
+                          const citySlug = (byDay[k]?.city || "").trim();
+                          return (
+                            TRANSPORT_ALLOWED.has(s.category) &&
+                            s.price > 0 &&
+                            fitsPax(s, pax) &&
+                            fitsCity(s, citySlug)
+                          );
+                        })
                         .sort((a,b) => a.price - b.price)
                         .map(s => (
                           <option key={s.id} value={s.id}>
-                            {(s.title || CATEGORY_LABELS[s.category] || "Услуга")} — {s.price.toFixed(2)} {s.currency}
+                            {labelForService(s)}
                           </option>
                         ))}
                     </select>
