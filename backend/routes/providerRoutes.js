@@ -32,6 +32,7 @@ const {
   patchProviderService,
   bulkCreateProviderServices,
   deleteProviderService,
+  getProviderServicesPublic,
 } = require("../controllers/providerController");
 
 const { notifyModerationNew } = require("../utils/telegram");
@@ -70,6 +71,9 @@ router.patch("/services/:id/images", authenticateToken, requireProvider, updateS
 
 /* -------------------- PROVIDER SERVICES (каскад в профиле) -------------------- */
 // Важно: ставим ДО маршрута "/:id(\\d+)", чтобы порядок не мешал.
+// Публичный просмотр каскадных услуг провайдера (только активные; включает vehicle_model)
+router.get("/:providerId(\\d+)/services/public", getProviderServicesPublic);
+
 router.get("/:providerId(\\d+)/services", authenticateToken, requireProvider, listProviderServices);
 router.post("/:providerId(\\d+)/services", authenticateToken, requireProvider, createProviderService);
 router.patch("/:providerId(\\d+)/services/:id(\\d+)", authenticateToken, requireProvider, patchProviderService);
