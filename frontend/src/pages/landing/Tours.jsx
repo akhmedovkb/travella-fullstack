@@ -1,3 +1,5 @@
+//frontend/src/pages/landing/Tours.jsx
+
 import { useState } from "react";
 
 export default function Tours() {
