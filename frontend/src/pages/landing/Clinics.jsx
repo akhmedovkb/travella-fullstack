@@ -1,3 +1,5 @@
+//frontend/src/pages/landing/Clinics.jsx
+
 export default function Clinics(){
   // позже подставим реальные клиники из БД/JSON
   const items = [
