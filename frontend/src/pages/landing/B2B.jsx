@@ -1,3 +1,5 @@
+//frontend/src/pages/landing/B2B.jsx
+
 export default function B2B(){
   return (
     <main className="max-w-4xl mx-auto px-4 py-10">
