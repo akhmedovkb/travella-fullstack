@@ -1254,5 +1254,57 @@
 
   "taxes_and_fees": "Taxes & fees",
   "vat_included": "Prices include VAT",
-  "vat_rate": "VAT rate, %"
+  "vat_rate": "VAT rate, %",
+
+  "landing": {
+    "menu": {
+      "tours": "Tours",
+      "ayurveda": "Ayurveda",
+      "checkup": "Check-up",
+      "treatment": "Treatment",
+      "clinics": "Clinics",
+      "b2b": "B2B Agents",
+      "contacts": "Contacts"
+    },
+    "home": {
+      "h1": "Travel & Medical in India — turnkey",
+      "sub": "Tours, Ayurveda, Check-up, Delhi clinics. 24/7 support.",
+      "cta": "Get a quote",
+      "whatsapp": "WhatsApp"
+    },
+    "form": {
+      "name": "Name",
+      "phone": "Phone",
+      "comment": "Comment",
+      "service": "Service",
+      "send": "Send request",
+      "sent": "Request sent. We will contact you.", 
+      "error": "Error. Please try later.",
+      "tour": "Tour selection",
+      "checkup": "Check-up",
+      "ayurveda": "Ayurveda",
+      "treatment": "Treatment",
+      "pax": "PAX",
+      "dates": "Dates / duration",
+      "destination": "City / dates",
+      "program": "Program",
+      "programs": { "base": "Basic", "cardio": "Cardio", "onco": "Onco", "female": "Female", "male": "Male" }
+    },
+    "tours": {
+      "h1": "Tours to India",
+      "sub": "Goa, Kerala, Delhi, Mumbai, Golden Triangle. Packages & tailor-made.",
+      "samples": [
+        { "city": "Goa", "price": "from $350", "desc": "7 nights, flight separately" },
+        { "city": "Kerala (Ayurveda)", "price": "from $690", "desc": "10-day wellness" },
+        { "city": "Delhi (Check-up)", "price": "from $299", "desc": "medical screening programs" }
+      ],
+      "request": "Request an offer"
+    },
+    "ayurveda": { "h1": "Ayurveda & wellness", "sub": "Kerala retreats, detox programs. Clinic selection, transfers & stay.", "get": "Get a program" },
+    "checkup": { "h1": "Check-up in India", "sub": "Packages: basic, cardio, onco, female/male. Delhi partner clinics.", "get": "Get a price" },
+    "treatment": { "h1": "Treatment in India", "sub": "Oncology, cardiology, orthopedics, IVF, transplantation.", "get": "Get a consultation" },
+    "clinics": { "h1": "Partner clinics (Delhi)" },
+    "b2b": { "h1": "Travella B2B for agents", "connect": "Connect to B2B", "company": "Agency" },
+    "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+  }
 }
