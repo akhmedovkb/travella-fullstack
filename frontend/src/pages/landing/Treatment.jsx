@@ -1,3 +1,5 @@
+//frontend/src/pages/landing/Treatment.jsx
+
 export default function Treatment(){
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
