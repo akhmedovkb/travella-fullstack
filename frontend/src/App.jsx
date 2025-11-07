@@ -51,6 +51,16 @@ import TourBuilder from "./pages/TourBuilder";
 //Entry fees form
 import AdminEntryFees from "./pages/AdminEntryFees";
 
+// --- Landing (публичные) ---
+import LandingHome from "./pages/landing/Home";
+import Tours from "./pages/landing/Tours";
+import Ayurveda from "./pages/landing/Ayurveda";
+import Checkup from "./pages/landing/Checkup";
+import Treatment from "./pages/landing/Treatment";
+import Clinics from "./pages/landing/Clinics";
+import B2B from "./pages/landing/B2B";
+import Contacts from "./pages/landing/Contacts";
+
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
   if (!tok) return <Navigate to="/login" replace />;
@@ -90,6 +100,16 @@ export default function App() {
         <Header />
         <main className="flex-1 p-4">
           <Routes>
+          {/* --- Публичный лендинг --- */}
+          <Route path="/" element={<LandingHome />} />
+          <Route path="/tours" element={<Tours />} />
+          <Route path="/ayurveda" element={<Ayurveda />} />
+          <Route path="/checkup" element={<Checkup />} />
+          <Route path="/treatment" element={<Treatment />} />
+          <Route path="/clinics" element={<Clinics />} />
+          <Route path="/b2b" element={<B2B />} />
+          <Route path="/contacts" element={<Contacts />} />
+
           {/* Поставщик */}
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
