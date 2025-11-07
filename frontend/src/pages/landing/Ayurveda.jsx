@@ -1,3 +1,5 @@
+//frontend/src/pages/landing/Ayurveda.jsx
+
 export default function Ayurveda(){
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
