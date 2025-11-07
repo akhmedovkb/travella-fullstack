@@ -1276,5 +1276,57 @@
     "type_more": "Kamida 2 ta harf kiriting",
     "no_options": "Hech narsa topilmadi",
     "loading": "Yuklanmoqda…"
+  },
+
+  "landing": {
+    "menu": {
+      "tours": "Turlar",
+      "ayurveda": "Ayurveda",
+      "checkup": "Check-up",
+      "treatment": "Davolash",
+      "clinics": "Klinikalar",
+      "b2b": "B2B agentlar",
+      "contacts": "Aloqa"
+    },
+    "home": {
+      "h1": "Hindistonda sayohat va davolash — to‘liq xizmat",
+      "sub": "Turlar, Ayurveda, Check-up, Dehlidagi klinikalar. 24/7 qo‘llab-quvvatlash.",
+      "cta": "Tanlov olish",
+      "whatsapp": "WhatsApp"
+    },
+    "form": {
+      "name": "Ism",
+      "phone": "Telefon",
+      "comment": "Izoh",
+      "service": "Xizmat",
+      "send": "Ariza yuborish",
+      "sent": "Yuborildi. Tez orada bog‘lanamiz.",
+      "error": "Xato. Keyinroq urinib ko‘ring.",
+      "tour": "Tur tanlash",
+      "checkup": "Check-up",
+      "ayurveda": "Ayurveda",
+      "treatment": "Davolash",
+      "pax": "Odamlar soni",
+      "dates": "Sana / davomiylik",
+      "destination": "Shahar / sana",
+      "program": "Dastur",
+      "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
+    },
+    "tours": {
+      "h1": "Hindistonga turlar",
+      "sub": "Goa, Kerala, Dehli, Mumbay, \"Oltin uchburchak\". Paketlar va mualliflik dasturlar.",
+      "samples": [
+        { "city": "Goa", "price": "$350 dan", "desc": "7 kecha, parvoz alohida" },
+        { "city": "Kerala (Ayurveda)", "price": "$690 dan", "desc": "10 kun wellness" },
+        { "city": "Dehli (Check-up)", "price": "$299 dan", "desc": "tekshiruv dasturlari" }
+      ],
+      "request": "Taklif so‘rash"
+    },
+    "ayurveda": { "h1": "Ayurveda va wellness", "sub": "Kerala, reabilitatsiya va detox dasturlari. Klinikalar tanlovi, transfer va yashash.", "get": "Dastur olish" },
+    "checkup": { "h1": "Hindistonda Check-up", "sub": "Bazaviy, kardio, onko, ayollar/erkaklar paketlari. Dehlidagi hamkor klinikalar.", "get": "Narx olish" },
+    "treatment": { "h1": "Hindistonda davolash", "sub": "Onkologiya, kardiologiya, ortopediya, IVF, transplantatsiya. Davolashni kelishib, safarni tashkil qilamiz.", "get": "Maslahat olish" },
+    "clinics": { "h1": "Hamkor klinikalar (Dehli)" },
+    "b2b": { "h1": "Travella B2B — agentlar uchun", "connect": "B2B ga ulanish", "company": "Agentlik" },
+    "contacts": { "h1": "Aloqa", "phone": "Telefon", "address": "Manzil" }
   }
 }
