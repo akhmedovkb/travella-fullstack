@@ -1,3 +1,5 @@
+//frontend/src/api/leads.js
+
 export async function createLead(payload) {
   const base = import.meta.env.VITE_API_URL || "";
   const res = await fetch(`${base}/api/leads`, {
