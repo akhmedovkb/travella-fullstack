@@ -17,6 +17,7 @@ import HotelInspections from "./pages/HotelInspections";
 import AdminHotelsTable from "./pages/admin/AdminHotelsTable"; // ← ОСТАВИЛ один импорт
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
+import AdminLeads from "./pages/admin/Leads";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -194,6 +195,17 @@ export default function App() {
               <PrivateRoute>
                 <AdminRoute>
                   <AdminProviders />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          {/* Админ: лиды с лендингов Индии */}
+          <Route
+            path="/admin/leads"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <AdminLeads />
                 </AdminRoute>
               </PrivateRoute>
             }
