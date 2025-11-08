@@ -1,10 +1,13 @@
 // frontend/src/pages/landing/Home.jsx
 
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useState } from "react";
+import LeadModal from "../../components/LeadModal";
 
 export default function LandingHome() {
   const { t } = useTranslation();
+  const [openLead, setOpenLead] = useState(false);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
@@ -15,6 +18,9 @@ export default function LandingHome() {
           <a href="#lead" className="px-5 py-3 bg-[#FF5722] text-white rounded-xl">
             {t("landing.home.cta")}
           </a>
+          <button onClick={()=>setOpenLead(true)} className="px-5 py-3 bg-[#FF5722] text-white rounded-xl">
+            {t("landing.home.cta")}
+          </button>
           <a href="https://wa.me/XXXXXXXXXXX" className="px-5 py-3 border rounded-xl">
             {t("landing.home.whatsapp")}
           </a>
@@ -31,6 +37,12 @@ export default function LandingHome() {
       <section id="lead" className="mt-12">
         <LeadForm />
       </section>
+      <LeadModal
+        open={openLead}
+        onClose={()=>setOpenLead(false)}
+        defaultService="consult"
+        defaultPage="/"
+      />
     </main>
   );
 }
@@ -63,3 +75,4 @@ function LeadForm() {
     </form>
   );
 }
+
