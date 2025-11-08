@@ -1,11 +1,17 @@
 // backend/routes/leadRoutes.js
-const router = require('express').Router();
-router.post('/leads', async (req, res) => {
-  const { name, phone, service, comment, ...rest } = req.body || {};
-  // TODO: сохранить в БД + уведомить Telegram
-  res.json({ ok: true });
-});
-module.exports = router;
 
-// backend/index.js
-app.use('/api', require('./routes/leadRoutes'));
+const express = require("express");
+const router = express.Router();
+const { createLead, listLeads, updateLeadStatus } = require("../controllers/leadController");
+const authenticateToken = require("../middleware/authenticateToken");
+
+// Публичная точка для форм лендинга
+router.post("/", createLead);
+
+// Список лидов — только авторизованные (админ/модератор/провайдер по твоим правилам)
+router.get("/", authenticateToken, listLeads);
+
+// Обновление статуса
+router.patch("/:id", authenticateToken, updateLeadStatus);
+
+module.exports = router;
