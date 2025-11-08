@@ -1,9 +1,12 @@
 //frontend/src/pages/landing/B2B.jsx
 
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
+import LeadModal from "../../components/LeadModal";
 
 export default function B2B() {
   const { t } = useTranslation();
+  const [openLead, setOpenLead] = useState(false);
   return (
     <main className="max-w-4xl mx-auto px-4 py-10">
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.b2b.h1")}</h1>
@@ -12,7 +15,11 @@ export default function B2B() {
         <li>Комиссия по клиникам (check-up / лечение / аюрведа)</li>
         <li>Доступ к отказным турам и спецпредложениям</li>
       </ul>
-
+      <div className="mt-6">
+        <button className="btn" onClick={()=>setOpenLead(true)}>
+          {t("landing.b2b.connect")}
+        </button>
+      </div>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -33,6 +40,12 @@ export default function B2B() {
         <input name="service" value="b2b" readOnly hidden />
         <button className="btn md:col-span-2">{t("landing.b2b.connect")}</button>
       </form>
+      <LeadModal
+        open={openLead}
+        onClose={()=>setOpenLead(false)}
+        defaultService="b2b"
+        defaultPage="/b2b"
+      />
     </main>
   );
 }
