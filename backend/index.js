@@ -157,7 +157,7 @@ const monitorRoutes = require("./routes/monitorRoutes");
 app.use("/api/monitor", monitorRoutes);
 
 // ===== Leads (лендинги: /tours, /ayurveda, /checkup, /treatment, /b2b, /contacts)
-const leadRoutes = require("./routes/leadsRoutes");
+const leadRoutes = require("./routes/leadRoutes");
 app.use("/api/leads", leadRoutes);
 
 /** ===================== Debug ===================== */
