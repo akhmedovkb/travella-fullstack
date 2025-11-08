@@ -2,10 +2,12 @@
 
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
+import LeadModal from "../../components/LeadModal";
 
 export default function Tours() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [openLead, setOpenLead] = useState(false);
 
   async function onLead(e) {
     e.preventDefault();
@@ -28,6 +30,11 @@ export default function Tours() {
     <main className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.tours.h1")}</h1>
       <p className="mt-3 text-lg">{t("landing.tours.sub")}</p>
+      <div className="mt-5">
+        <button className="btn" onClick={()=>setOpenLead(true)}>
+          {t("landing.tours.request")}
+        </button>
+      </div>
 
       <div className="grid md:grid-cols-3 gap-4 mt-8">
         {samples.map((x, i) => (
@@ -50,6 +57,13 @@ export default function Tours() {
           {loading ? "..." : t("landing.tours.request")}
         </button>
       </form>
+
+      <LeadModal
+        open={openLead}
+        onClose={()=>setOpenLead(false)}
+        defaultService="tour"
+        defaultPage="/tours"
+      />
     </main>
   );
 }
