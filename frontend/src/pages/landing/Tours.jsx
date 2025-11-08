@@ -1,8 +1,10 @@
 //frontend/src/pages/landing/Tours.jsx
 
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 
 export default function Tours() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   async function onLead(e) {
@@ -16,22 +18,19 @@ export default function Tours() {
       body: JSON.stringify(payload),
     });
     setLoading(false);
-    alert(r.ok ? "Отправлено" : "Ошибка");
+    alert(r.ok ? t("landing.form.sent") : t("landing.form.error"));
     if (r.ok) e.currentTarget.reset();
   }
 
+  const samples = t("landing.tours.samples", { returnObjects: true });
+
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <h1 className="text-3xl md:text-5xl font-bold">Туры в Индию</h1>
-      <p className="mt-3 text-lg">Гоа, Керала, Дели, Мумбаи, Золотой треугольник. Пакеты и авторские программы.</p>
+      <h1 className="text-3xl md:text-5xl font-bold">{t("landing.tours.h1")}</h1>
+      <p className="mt-3 text-lg">{t("landing.tours.sub")}</p>
 
-      {/* Примеры (заглушки) */}
       <div className="grid md:grid-cols-3 gap-4 mt-8">
-        {[
-          {city:"Гоа", price:"от $350", desc:"7 ночей, перелёт отдельно"},
-          {city:"Керала (Аюрведа)", price:"от $690", desc:"10 дней wellness"},
-          {city:"Дели (Check-up)", price:"от $299", desc:"программы обследования"},
-        ].map((x,i)=>(
+        {samples.map((x, i) => (
           <div key={i} className="card">
             <div className="text-xl font-semibold">{x.city}</div>
             <div className="text-[#FF5722] font-bold mt-1">{x.price}</div>
@@ -41,13 +40,15 @@ export default function Tours() {
       </div>
 
       <form onSubmit={onLead} className="grid md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl mt-10">
-        <input name="name" placeholder="Имя" required className="input" />
-        <input name="phone" placeholder="Телефон" required className="input" />
-        <input name="destination" placeholder="Город / даты" className="input" />
-        <input name="pax" placeholder="Кол-во человек" className="input" />
-        <input name="service" value="tour" hidden readOnly />
-        <textarea name="comment" placeholder="Комментарий" className="input md:col-span-2" />
-        <button disabled={loading} className="btn md:col-span-2">{loading ? "Отправка…" : "Запросить предложение"}</button>
+        <input name="name" placeholder={t("landing.form.name")} required className="input" />
+        <input name="phone" placeholder={t("landing.form.phone")} required className="input" />
+        <input name="destination" placeholder={t("landing.form.destination")} className="input" />
+        <input name="pax" placeholder={t("landing.form.pax")} className="input" />
+        <input name="service" value="tour" readOnly hidden />
+        <textarea name="comment" placeholder={t("landing.form.comment")} className="input md:col-span-2" />
+        <button disabled={loading} className="btn md:col-span-2">
+          {loading ? "..." : t("landing.tours.request")}
+        </button>
       </form>
     </main>
   );
