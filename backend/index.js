@@ -156,6 +156,9 @@ app.use("/api/moderation", moderationRoutes);
 const monitorRoutes = require("./routes/monitorRoutes");
 app.use("/api/monitor", monitorRoutes);
 
+// ===== Leads (лендинги: /tours, /ayurveda, /checkup, /treatment, /b2b, /contacts)
+const leadRoutes = require("./routes/leadsRoutes");
+app.use("/api/leads", leadRoutes);
 
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
