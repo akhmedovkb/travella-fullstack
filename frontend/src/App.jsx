@@ -60,6 +60,7 @@ import Treatment from "./pages/landing/Treatment";
 import Clinics from "./pages/landing/Clinics";
 import B2B from "./pages/landing/B2B";
 import Contacts from "./pages/landing/Contacts";
+import LayoutIndia from "./pages/india/LayoutIndia";
 
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -102,14 +103,28 @@ export default function App() {
           <Routes>
           {/* --- Публичный лендинг --- */}
           <Route path="/" element={<LandingHome />} />
-          <Route path="/tours" element={<Tours />} />
-          <Route path="/ayurveda" element={<Ayurveda />} />
-          <Route path="/checkup" element={<Checkup />} />
-          <Route path="/treatment" element={<Treatment />} />
-          <Route path="/clinics" element={<Clinics />} />
-          <Route path="/b2b" element={<B2B />} />
-          <Route path="/contacts" element={<Contacts />} />
 
+          {/* --- INDIA namespace --- */}
+          <Route path="/india" element={<LayoutIndia />}>
+            <Route index element={<Navigate to="/india/treatment" replace />} />
+            <Route path="tours" element={<Tours />} />
+            <Route path="ayurveda" element={<Ayurveda />} />
+            <Route path="checkup" element={<Checkup />} />
+            <Route path="treatment" element={<Treatment />} />
+            <Route path="clinics" element={<Clinics />} />
+            <Route path="b2b" element={<B2B />} />
+            <Route path="contacts" element={<Contacts />} />
+          </Route>
+
+          {/* --- Редиректы со старых путей на /india/* --- */}
+          <Route path="/tours" element={<Navigate to="/india/tours" replace />} />
+          <Route path="/ayurveda" element={<Navigate to="/india/ayurveda" replace />} />
+          <Route path="/checkup" element={<Navigate to="/india/checkup" replace />} />
+          <Route path="/treatment" element={<Navigate to="/india/treatment" replace />} />
+          <Route path="/clinics" element={<Navigate to="/india/clinics" replace />} />
+          <Route path="/b2b" element={<Navigate to="/india/b2b" replace />} />
+          <Route path="/contacts" element={<Navigate to="/india/contacts" replace />} />
+            
           {/* Поставщик */}
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
