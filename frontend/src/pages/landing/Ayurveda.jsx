@@ -1,31 +1,39 @@
 //frontend/src/pages/landing/Ayurveda.jsx
 
-export default function Ayurveda(){
+import { useTranslation } from "react-i18next";
+
+export default function Ayurveda() {
+  const { t } = useTranslation();
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <h1 className="text-3xl md:text-5xl font-bold">Аюрведа и wellness</h1>
-      <p className="mt-3 text-lg">Керала, ретриты, detox-программы. Подбор клиник и центров, трансфер и проживание.</p>
-      <Form preset="ayurveda" />
+      <h1 className="text-3xl md:text-5xl font-bold">{t("landing.ayurveda.h1")}</h1>
+      <p className="mt-3 text-lg">{t("landing.ayurveda.sub")}</p>
+      <Form />
     </main>
   );
 }
 
-function Form({preset}) {
-  async function onSubmit(e){
+function Form() {
+  const { t } = useTranslation();
+  async function onSubmit(e) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const payload = Object.fromEntries(fd.entries());
-    await fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-    alert("Отправлено"); e.currentTarget.reset();
+    await fetch("/api/leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.fromEntries(fd.entries())),
+    });
+    alert(t("landing.form.sent"));
+    e.currentTarget.reset();
   }
   return (
     <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl mt-8">
-      <input name="name" placeholder="Имя" required className="input"/>
-      <input name="phone" placeholder="Телефон" required className="input"/>
-      <input name="dates" placeholder="Даты / длительность" className="input"/>
-      <input name="service" value={preset} hidden readOnly/>
-      <textarea name="comment" placeholder="Пожелания" className="input md:col-span-2"/>
-      <button className="btn md:col-span-2">Получить программу</button>
+      <input name="name" placeholder={t("landing.form.name")} required className="input" />
+      <input name="phone" placeholder={t("landing.form.phone")} required className="input" />
+      <input name="dates" placeholder={t("landing.form.dates")} className="input" />
+      <input name="service" value="ayurveda" readOnly hidden />
+      <textarea name="comment" placeholder={t("landing.form.comment")} className="input md:col-span-2" />
+      <button className="btn md:col-span-2">{t("landing.ayurveda.get")}</button>
     </form>
   );
 }
