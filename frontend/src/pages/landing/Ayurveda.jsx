@@ -1,14 +1,28 @@
 //frontend/src/pages/landing/Ayurveda.jsx
 
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
+import LeadModal from "../../components/LeadModal";
 
 export default function Ayurveda() {
   const { t } = useTranslation();
+  const [openLead, setOpenLead] = useState(false);
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.ayurveda.h1")}</h1>
       <p className="mt-3 text-lg">{t("landing.ayurveda.sub")}</p>
+      <div className="mt-5">
+        <button className="btn" onClick={()=>setOpenLead(true)}>
+          {t("landing.ayurveda.get")}
+        </button>
+      </div>
       <Form />
+      <LeadModal
+        open={openLead}
+        onClose={()=>setOpenLead(false)}
+        defaultService="ayurveda"
+        defaultPage="/ayurveda"
+      />
     </main>
   );
 }
