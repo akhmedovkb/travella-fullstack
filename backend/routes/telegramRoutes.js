@@ -6,7 +6,8 @@ const pool = require("../db");
 const {
   tgSend,
   tgAnswerCallbackQuery,       // ← убедись, что эти две функции экспортируются из utils/telegram
-  tgEditMessageReplyMarkup,    // (я давал патч ранее)
+  tgEditMessageReplyMarkup,
+  buildLeadKB,
   linkProviderChat,
   linkClientChat,
   buildLeadKB,
@@ -74,6 +75,52 @@ async function handleWebhook(req, res) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
       }
+      /* --- Назначение/снятие ответственного --- */
+      let mAssign = data.match(/^lead:(\d+):assign:self$/);
+      let mUn = data.match(/^lead:(\d+):unassign$/);
+      if (mAssign || mUn) {
+        const leadId = Number((mAssign || mUn)[1]);
+        // кто нажал кнопку: попробуем найти его провайдера по telegram_chat_id
+        const who = cq.from?.id;
+        let prov = null;
+        try {
+          const r = await pool.query(
+            `SELECT id, name FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+            [who]
+          );
+          prov = r.rows[0] || null;
+        } catch {}
+        if (!prov && mAssign) {
+          await tgAnswerCallbackQuery(cq.id, "Привяжите бота к профилю провайдера (/start p_<id>)", { show_alert: true });
+          return res.json({ ok: true });
+        }
+        await pool.query(
+          `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
+          [leadId, mUn ? null : prov.id]
+        );
+        await tgAnswerCallbackQuery(cq.id, mUn ? "Ответственный снят" : `Назначено: ${prov.name}`);
+
+        // подтянем телефон и текущее состояние статуса для клавиатуры
+        const row = (await pool.query(
+          `SELECT phone, status FROM leads WHERE id = $1`,
+          [leadId]
+        )).rows[0] || {};
+        const kb = buildLeadKB({
+          state: row.status || "new",
+          id: leadId,
+          phone: row.phone || "",
+          adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/,"")}/admin/leads`,
+          assigneeName: mUn ? null : prov.name,
+        });
+        await tgEditMessageReplyMarkup({
+          chat_id: cq.message.chat.id,
+          message_id: cq.message.message_id,
+          reply_markup: kb,
+        });
+        return res.json({ ok: true });
+      }
+
+      /* --- Смена статуса --- */
       const m = data.match(/^lead:(\d+):(working|closed)$/);
       if (!m) {
         await tgAnswerCallbackQuery(cq.id, "Неизвестное действие");
@@ -88,11 +135,18 @@ async function handleWebhook(req, res) {
         newStatus === "working" ? `Лид #${leadId} взят в работу` : `Лид #${leadId} закрыт`
       );
 
-      // подтянем телефон для контактных кнопок (не критично, если не найдём)
-      let phone = "";
+      // подтянем телефон и имя ответственного
+      let phone = "", assigneeName = null;
       try {
-        const r = await pool.query(`SELECT phone FROM leads WHERE id=$1 LIMIT 1`, [leadId]);
+        const r = await pool.query(
+          `SELECT l.phone, p.name AS assignee_name
+             FROM leads l
+        LEFT JOIN providers p ON p.id = l.assignee_provider_id
+            WHERE l.id=$1 LIMIT 1`,
+          [leadId]
+        );
         phone = r.rows[0]?.phone || "";
+        assigneeName = r.rows[0]?.assignee_name || null;
       } catch {}
 
       // заменяем клавиатуру на «итоговую» (одна инертная кнопка + контакты + админка)
@@ -101,6 +155,7 @@ async function handleWebhook(req, res) {
         id: leadId,
         phone,
         adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/,"")}/admin/leads`,
+        assigneeName,
       });
 
       await tgEditMessageReplyMarkup({
