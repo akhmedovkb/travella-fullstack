@@ -46,7 +46,7 @@ exports.createLead = async (req, res) => {
 // GET /api/leads  (под админ/модератором)
 exports.listLeads = async (req, res) => {
   try {
-    const { status, q = "", page = "" } = req.query || {};
+    const { status, q = "", page = "", lang = "" } = req.query || {};
 
     const where = [];
     const vals = [];
@@ -59,6 +59,11 @@ exports.listLeads = async (req, res) => {
     if (page && page !== "any") {
       where.push(`page = $${i++}`);
       vals.push(page);
+    }
+    if (lang) {
+      // точное совпадение кода языка (ru/uz/en)
+      where.push(`lang = $${i++}`);
+      vals.push(lang);
     }
     if (q) {
       where.push(
