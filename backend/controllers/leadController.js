@@ -1,5 +1,6 @@
 // backend/controllers/leadController.js
 const pool = require("../db");
+const { notifyLeadNew } = require("../utils/telegram");
 
 // POST /api/leads  (публично с лендингов)
 exports.createLead = async (req, res) => {
@@ -11,7 +12,8 @@ exports.createLead = async (req, res) => {
       pax = null,
       comment = "",
       page = "",
-      lang = "",
+      // может приходить из лендинга, в БД может и не быть такой колонки — в уведомлении пригодится
+      service = ""
     } = req.body || {};
 
     const q = await pool.query(
@@ -20,6 +22,18 @@ exports.createLead = async (req, res) => {
        RETURNING id, created_at, status`,
       [name, phone, city, pax, comment, page, lang]
     );
+    // телеграм-уведомление админам (не влияет на ответ API)
+    try {
+      const lead = {
+        id: q.rows[0]?.id,
+        created_at: q.rows[0]?.created_at,
+        status: q.rows[0]?.status,
+        name, phone, city, pax, comment, page, lang, service,
+      };
+      await notifyLeadNew({ lead });
+    } catch (e) {
+      console.warn("[tg] lead notify failed:", e?.message || e);
+    }
 
     return res.json({ ok: true, id: q.rows[0].id });
   } catch (e) {
