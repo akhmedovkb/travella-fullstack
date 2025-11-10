@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import LeadModal from "../../components/LeadModal";
 import { createLead } from "../../api/leads";
+import { useState, useMemo } from "react";
 
 export default function Tours() {
   const { t } = useTranslation();
