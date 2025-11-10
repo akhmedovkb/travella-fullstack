@@ -3,10 +3,12 @@
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import LeadModal from "../../components/LeadModal";
+import { createLead } from "../../api/leads";
 
 export default function Treatment() {
   const { t } = useTranslation();
-  const [openLead, setOpenLead] = useState(false);
+  const lang = (typeof navigator !== "undefined" && (navigator.language||"ru"))?.slice(0,2) || "ru";
+   const [openLead, setOpenLead] = useState(false);
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.treatment.h1")}</h1>
@@ -32,14 +34,22 @@ function Form() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    await fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(fd.entries())),
-    });
-    alert(t("landing.form.sent"));
-    e.currentTarget.reset();
+    const raw = Object.fromEntries(fd.entries());
+    try {
+      await createLead({
+        name: raw.name || "",
+        phone: raw.phone || "",
+        comment: raw.comment || "",
+        page: "/treatment",
+        lang,
+        service: "treatment",
+      });
+      alert(t("landing.form.sent"));
+      e.currentTarget.reset();
+    } catch (err) {
+      console.error(err);
+      alert(t("landing.form.error"));
+    }
   }
 
   return (
