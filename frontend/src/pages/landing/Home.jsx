@@ -11,7 +11,9 @@ export default function LandingHome() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs items={[{ label: "India" }]} />
+      <Breadcrumbs items={[
+      { label: t("landing.menu.home"), to: "/india" },
+    ]} />
 
       <section className="rounded-3xl bg-[#FFE4D2] p-8 md:p-12">
         <h1 className="text-3xl md:text-5xl font-bold">{t("landing.home.h1")}</h1>
