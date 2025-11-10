@@ -38,6 +38,32 @@ async function tgSend(chatId, text, extra = {}) {
   }
 }
 
+async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}) {
+  if (!enabled || !cbQueryId) return;
+  try {
+    await axios.post(`${API}/answerCallbackQuery`, {
+      callback_query_id: cbQueryId,
+      text,
+      show_alert: Boolean(opts.show_alert),
+    });
+  } catch (e) {
+    console.error("[tg] answerCallbackQuery error:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
+  if (!enabled || !chat_id || !message_id) return;
+  try {
+    await axios.post(`${API}/editMessageReplyMarkup`, {
+      chat_id,
+      message_id,
+      reply_markup,
+    });
+  } catch (e) {
+    console.error("[tg] editMessageReplyMarkup error:", e?.response?.data || e?.message || e);
+  }
+}
+
 // very small cache to avoid frequent getChat calls
 const __chatUserCache = new Map(); // chatId -> username (without @)
 async function tgGetUsername(chatId) {
@@ -590,32 +616,36 @@ async function notifyLeadNew({ lead }) {
     if (lead.phone) who.push(esc(lead.phone));
     lines.push(`👤 Контакт: ${who.length ? who.join(" · ") : "—"}`);
 
-    // детали
-    if (lead.city)     lines.push(`📍 Город/даты: ${esc(lead.city)}`);
+    if (lead.city)        lines.push(`📍 Город/даты: ${esc(lead.city)}`);
     if (lead.pax != null) lines.push(`👥 Кол-во: <b>${esc(String(lead.pax))}</b>`);
-    if (lead.comment)  lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
+    if (lead.comment)     lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
 
     lines.push("");
     lines.push(`🔗 Открыть: ${urlAdmin("leads")}`);
 
     const text = lines.join("\n");
-    // inline-кнопки
+
+    // inline-кнопки: «В работу», «Закрыт» + ссылочная «Админка»
+    const id = lead.id; // важно: передаём реальный id
     const digits = (lead.phone || "").replace(/[^\d+]/g, "");
     const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
-    const reply_markup =
-      (digits || SITE) ? {
-        inline_keyboard: [
-          [
-            ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
-            ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
-          ],
-          ...(SITE ? [[{ text: "Админка: Лиды", url: urlAdmin("leads") }]] : []),
-        ],
-      } : undefined;
 
-    // отправляем всем админам с кнопками
+    const reply_markup = {
+      inline_keyboard: [
+        [
+          { text: "🟦 В работу", callback_data: `lead:${id}:working` },
+          { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
+        ],
+        [
+          ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
+          ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
+        ],
+        [{ text: "Админка: Лиды", url: urlAdmin("leads") }],
+      ],
+    };
+
     const ids = await getAdminChatIds();
-    await Promise.all(ids.map((id) => tgSend(id, text, { reply_markup })));
+    await Promise.all(ids.map((chatId) => tgSend(chatId, text, { reply_markup })));
   } catch (e) {
     console.error("[tg] notifyLeadNew failed:", e?.message || e);
   }
@@ -624,6 +654,8 @@ async function notifyLeadNew({ lead }) {
 module.exports = {
   enabled,
   tgSend,
+  tgAnswerCallbackQuery,
+  tgEditMessageReplyMarkup,
   linkProviderChat,
   linkClientChat,
     // ADMIN / MODERATION:
