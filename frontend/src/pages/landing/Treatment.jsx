@@ -1,3 +1,4 @@
+//frontend/src/pages/landing/Treatment.jsx
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import LeadModal from "../../components/LeadModal";
