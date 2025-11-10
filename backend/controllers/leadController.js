@@ -105,3 +105,21 @@ exports.updateLeadStatus = async (req, res) => {
     return res.status(500).json({ ok: false, error: "update_failed" });
   }
 };
+
+// GET /api/leads/pages  — список уникальных страниц с лидами
+exports.listLeadPages = async (_req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT page, COUNT(*)::int AS cnt
+         FROM leads
+        WHERE coalesce(page,'') <> ''
+        GROUP BY page
+        ORDER BY cnt DESC, page ASC
+        LIMIT 500`
+    );
+    return res.json({ ok: true, items: q.rows });
+  } catch (e) {
+    console.error("listLeadPages error:", e);
+    return res.status(500).json({ ok: false, items: [] });
+  }
+}
