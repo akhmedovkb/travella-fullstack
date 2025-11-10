@@ -1,13 +1,14 @@
-//frontend/src/api/leads.js
+export const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== "undefined" && window.frontend && window.frontend.API_BASE) ||
+  "";
 
-export async function createLead(payload) {
-  const base = import.meta.env.VITE_API_URL || "";
-  const res = await fetch(`${base}/api/leads`, {
-    method: "POST",
+export async function apiGet(path, { params } = {}) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  const res = await fetch(`${API_BASE}${path}${qs}`, {
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    credentials: "include",
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || "Lead submit error");
-  return json.lead || json;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
