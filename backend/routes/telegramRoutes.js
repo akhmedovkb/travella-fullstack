@@ -7,7 +7,6 @@ const {
   tgSend,
   tgAnswerCallbackQuery,       // ← убедись, что эти две функции экспортируются из utils/telegram
   tgEditMessageReplyMarkup,
-  buildLeadKB,
   linkProviderChat,
   linkClientChat,
   buildLeadKB,
