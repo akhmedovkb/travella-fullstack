@@ -28,6 +28,7 @@ export default function Tours() {
   async function onLead(e) {
     e.preventDefault();
     setLoading(true);
+
     const fd = new FormData(e.currentTarget);
     const raw = Object.fromEntries(fd.entries());
 
@@ -57,7 +58,8 @@ export default function Tours() {
     if (ok) e.currentTarget.reset();
   }
 
-  const samples = t("landing.tours.samples", { returnObjects: true });
+  const samplesRaw = t("landing.tours.samples", { returnObjects: true });
+  const samples = Array.isArray(samplesRaw) ? samplesRaw : [];
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
@@ -84,23 +86,9 @@ export default function Tours() {
         onSubmit={onLead}
         className="grid md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl mt-10"
       >
-        <input
-          name="name"
-          placeholder={t("landing.form.name")}
-          required
-          className="input"
-        />
-        <input
-          name="phone"
-          placeholder={t("landing.form.phone")}
-          required
-          className="input"
-        />
-        <input
-          name="destination"
-          placeholder={t("landing.form.destination")}
-          className="input"
-        />
+        <input name="name" placeholder={t("landing.form.name")} required className="input" />
+        <input name="phone" placeholder={t("landing.form.phone")} required className="input" />
+        <input name="destination" placeholder={t("landing.form.destination")} className="input" />
         <input name="pax" placeholder={t("landing.form.pax")} className="input" />
         <textarea
           name="comment"
