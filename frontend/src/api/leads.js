@@ -65,3 +65,12 @@ export async function updateLeadStatus(id, status) {
   });
   return json(res);
 }
+
+/** Список уникальных страниц с лидами (для фильтра) */
+export async function listLeadPages() {
+  const res = await fetch(`${API_BASE}/api/leads/pages`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  return json(res);
+}
