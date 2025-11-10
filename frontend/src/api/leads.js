@@ -6,6 +6,13 @@ const API_BASE = (
   ""
 ).replace(/\/+$/, "");
 
+function authHeader() {
+  const tok =
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken");
+  return tok ? { Authorization: `Bearer ${tok}` } : {};
+}
+
 const json = async (res) => {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -37,7 +44,10 @@ export async function createLead(payload) {
 export async function listLeads(filters = {}) {
   const res = await fetch(`${API_BASE}/api/leads${qs(filters)}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(),
+    },
   });
   return json(res);
 }
@@ -47,7 +57,10 @@ export async function updateLeadStatus(id, status) {
   const res = await fetch(`${API_BASE}/api/leads/${id}`, {
     method: "PATCH",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(),
+    },
     body: JSON.stringify({ status }),
   });
   return json(res);
