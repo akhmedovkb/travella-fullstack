@@ -239,7 +239,7 @@ export default function AdminLeads() {
             ))}
             {!loading && !filtered.length && (
               <tr>
-                <td className="py-6 text-gray-500" colSpan={9}>
+                <td className="py-6 text-gray-500" colSpan={10}>
                   Ничего не найдено.
                 </td>
               </tr>
@@ -250,6 +250,7 @@ export default function AdminLeads() {
     </main>
   );
 }
+
 
 
 
