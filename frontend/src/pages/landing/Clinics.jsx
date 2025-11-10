@@ -9,7 +9,13 @@ export default function Clinics() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs items={[{ label: "India", to: "/india" }, { label: t("landing.clinics.h1", { defaultValue: "Clinics" }) }]} />
+      <Breadcrumbs
+        items={[
+          { label: t("landing.menu.home"), to: "/india" },
+          { label: t("landing.clinics.h1") }
+        ]}
+      />
+
 
       <h1 className="text-3xl md:text-5xl font-bold">
         {t("landing.clinics.h1", { defaultValue: "Clinics" })}
