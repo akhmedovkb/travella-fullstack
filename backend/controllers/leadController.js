@@ -12,6 +12,7 @@ exports.createLead = async (req, res) => {
       pax = null,
       comment = "",
       page = "",
+      lang = "",
       // может приходить из лендинга, в БД может и не быть такой колонки — в уведомлении пригодится
       service = ""
     } = req.body || {};
