@@ -7,8 +7,12 @@ export default function Contacts() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs items={[{ label: "India", to: "/india" }, { label: t("landing.contacts.h1", { defaultValue: "Contacts" }) }]} />
-
+      <Breadcrumbs
+        items={[
+          { label: t("landing.menu.home"), to: "/india" },
+          { label: t("landing.Contacts.h1") }
+        ]}
+      />
       <h1 className="text-3xl md:text-5xl font-bold">
         {t("landing.contacts.h1", { defaultValue: "Contacts" })}
       </h1>
