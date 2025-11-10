@@ -9,7 +9,7 @@ export default function LeadModal({
   open,
   onClose,
   defaultService = "tour",          // 'tour' | 'checkup' | 'ayurveda' | 'treatment' | 'b2b'
-  defaultPage = window.location.pathname,
+  defaultPage = (typeof window !== "undefined" ? window.location.pathname : "/"),
   preset = {},                      // { name, phone, city, pax, comment }
   onSuccess,                        // (lead) => void
 }) {
