@@ -598,7 +598,24 @@ async function notifyLeadNew({ lead }) {
     lines.push("");
     lines.push(`🔗 Открыть: ${urlAdmin("leads")}`);
 
-    await _sendToAdmins(lines.join("\n"));
+    const text = lines.join("\n");
+    // inline-кнопки
+    const digits = (lead.phone || "").replace(/[^\d+]/g, "");
+    const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
+    const reply_markup =
+      (digits || SITE) ? {
+        inline_keyboard: [
+          [
+            ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
+            ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
+          ],
+          ...(SITE ? [[{ text: "Админка: Лиды", url: urlAdmin("leads") }]] : []),
+        ],
+      } : undefined;
+
+    // отправляем всем админам с кнопками
+    const ids = await getAdminChatIds();
+    await Promise.all(ids.map((id) => tgSend(id, text, { reply_markup })));
   } catch (e) {
     console.error("[tg] notifyLeadNew failed:", e?.message || e);
   }
