@@ -1,3 +1,4 @@
+//frontend/src/pages/landing/Checkup.jsx
 import { useTranslation } from "react-i18next";
 import { useState, useMemo } from "react";
 import LeadModal from "../../components/LeadModal";
