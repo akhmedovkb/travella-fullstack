@@ -1,36 +1,29 @@
 // frontend/src/pages/landing/B2B.jsx
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import LeadModal from "../../components/LeadModal";
+import Breadcrumbs from "../../components/Breadcrumbs";
 
 export default function B2B() {
   const { t } = useTranslation();
-  const [openLead, setOpenLead] = useState(false);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <h1 className="text-3xl md:text-5xl font-bold">{t("landing.b2b.h1")}</h1>
-      <p className="mt-3 text-lg">{t("landing.b2b.sub")}</p>
+      <Breadcrumbs items={[{ label: "India", to: "/india" }, { label: "B2B" }]} />
 
-      {/* Информативный контент */}
-      <section className="prose max-w-none mt-6">
-        <p>{t("landing.b2b.text1")}</p>
-        <p>{t("landing.b2b.text2")}</p>
+      <h1 className="text-3xl md:text-5xl font-bold">B2B</h1>
+      <p className="mt-3 text-lg">
+        {t("landing.b2b.sub", { defaultValue: "Information for travel partners and agencies." })}
+      </p>
+
+      <section className="grid md:grid-cols-2 gap-4 mt-8">
+        <div className="card">
+          <h3 className="font-semibold text-lg mb-1">{t("landing.b2b.block1.title", { defaultValue: "Programs" })}</h3>
+          <p className="text-sm opacity-80">{t("landing.b2b.block1.text", { defaultValue: "Curated itineraries and wholesale rates." })}</p>
+        </div>
+        <div className="card">
+          <h3 className="font-semibold text-lg mb-1">{t("landing.b2b.block2.title", { defaultValue: "Support" })}</h3>
+          <p className="text-sm opacity-80">{t("landing.b2b.block2.text", { defaultValue: "Dedicated manager and SLA." })}</p>
+        </div>
       </section>
-
-      {/* По желанию: одна кнопка, которая открывает общий поп-ап */}
-      <div className="mt-6">
-        <button className="btn" onClick={() => setOpenLead(true)}>
-          {t("landing.b2b.cta")}
-        </button>
-      </div>
-
-      <LeadModal
-        open={openLead}
-        onClose={() => setOpenLead(false)}
-        defaultService="b2b"
-        defaultPage="/b2b"
-      />
     </main>
   );
 }
