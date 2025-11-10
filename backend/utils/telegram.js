@@ -63,6 +63,47 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
     console.error("[tg] editMessageReplyMarkup error:", e?.response?.data || e?.message || e);
   }
 }
+// ===== LEADS: keyboard builder (B-variant) =====
+function buildLeadKB({ state = "new", id, phone, adminUrl }) {
+  const digits = (phone || "").replace(/[^\d+]/g, "");
+  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
+
+  const contactRow = [
+    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
+    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
+  ];
+  const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
+
+  if (state === "working") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Принято в работу", callback_data: `noop:${id}` }],
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  if (state === "closed") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Закрыт (готово)", callback_data: `noop:${id}` }],
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  // state === "new"
+  return {
+    inline_keyboard: [
+      [
+        { text: "🟦 В работу", callback_data: `lead:${id}:working` },
+        { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
+      ],
+      contactRow.length ? contactRow : undefined,
+      adminRow.length ? adminRow : undefined,
+    ].filter(Boolean),
+  };
+}
 
 // very small cache to avoid frequent getChat calls
 const __chatUserCache = new Map(); // chatId -> username (without @)
@@ -625,24 +666,13 @@ async function notifyLeadNew({ lead }) {
 
     const text = lines.join("\n");
 
-    // inline-кнопки: «В работу», «Закрыт» + ссылочная «Админка»
-    const id = lead.id; // важно: передаём реальный id
-    const digits = (lead.phone || "").replace(/[^\d+]/g, "");
-    const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
-
-    const reply_markup = {
-      inline_keyboard: [
-        [
-          { text: "🟦 В работу", callback_data: `lead:${id}:working` },
-          { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
-        ],
-        [
-          ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
-          ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
-        ],
-        [{ text: "Админка: Лиды", url: urlAdmin("leads") }],
-      ],
-    };
+    // клавиатура формируем билдером (state=new)
+    const reply_markup = buildLeadKB({
+      state: "new",
+      id: lead.id,
+      phone: lead.phone,
+      adminUrl: urlAdmin("leads"),
+    });
 
     const ids = await getAdminChatIds();
     await Promise.all(ids.map((chatId) => tgSend(chatId, text, { reply_markup })));
@@ -656,6 +686,7 @@ module.exports = {
   tgSend,
   tgAnswerCallbackQuery,
   tgEditMessageReplyMarkup,
+  buildLeadKB,
   linkProviderChat,
   linkClientChat,
     // ADMIN / MODERATION:
