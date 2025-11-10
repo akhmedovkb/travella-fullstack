@@ -1,4 +1,5 @@
 // backend/utils/telegram.js
+
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
 const axios = require("axios");
@@ -561,6 +562,48 @@ async function notifyReqDeletedByProvider({ request_id }) {
 
 }
 
+/* ================== LEADS ================== */
+function _leadServiceLabel(svc) {
+  const map = {
+    tour: "Туры",
+    checkup: "Check-up",
+    ayurveda: "Аюрведа",
+    treatment: "Лечение",
+    b2b: "B2B",
+  };
+  return map[svc] || (svc ? String(svc) : "—");
+}
+
+async function notifyLeadNew({ lead }) {
+  try {
+    if (!lead) return;
+
+    const lines = [];
+    lines.push(`<b>🔔 Новый лид</b>`);
+    lines.push(`🏷️ Сервис: <b>${esc(_leadServiceLabel(lead.service))}</b>`);
+    if (lead.page)   lines.push(`🧭 Страница: ${esc(lead.page)}`);
+    if (lead.lang)   lines.push(`🌐 Язык: ${esc(lead.lang)}`);
+
+    // контакты
+    const who = [];
+    if (lead.name)  who.push(`<b>${esc(lead.name)}</b>`);
+    if (lead.phone) who.push(esc(lead.phone));
+    lines.push(`👤 Контакт: ${who.length ? who.join(" · ") : "—"}`);
+
+    // детали
+    if (lead.city)     lines.push(`📍 Город/даты: ${esc(lead.city)}`);
+    if (lead.pax != null) lines.push(`👥 Кол-во: <b>${esc(String(lead.pax))}</b>`);
+    if (lead.comment)  lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
+
+    lines.push("");
+    lines.push(`🔗 Открыть: ${urlAdmin("leads")}`);
+
+    await _sendToAdmins(lines.join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyLeadNew failed:", e?.message || e);
+  }
+}
+
 module.exports = {
   enabled,
   tgSend,
@@ -583,6 +626,8 @@ module.exports = {
   notifyReqStatusChanged,
   notifyReqCancelledByRequester,
   notifyReqDeletedByProvider,
+  // LEADS:
+  notifyLeadNew,
 };
 
 
