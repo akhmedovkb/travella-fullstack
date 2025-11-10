@@ -27,13 +27,8 @@ export default function Checkup() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs
-        items={[
-          { label: t("landing.menu.home"), to: "/" },
-          { label: "India", to: "/india" },
-          { label: t("landing.menu.checkup") },
-        ]}
-      />
+      <Breadcrumbs items={[{ label: "India", to: "/india" }, { label: t("landing.checkup.h1") }]} />
+
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.checkup.h1")}</h1>
       <p className="mt-3 text-lg">{t("landing.checkup.sub")}</p>
 
@@ -64,8 +59,6 @@ function Form({ lang, utm }) {
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     const raw = Object.fromEntries(fd.entries());
-
-    // Программу добавим в комментарий, т.к. отдельного поля в leads нет
     const program = raw.program ? `\nProgram: ${raw.program}` : "";
 
     try {
