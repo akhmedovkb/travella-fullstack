@@ -9,6 +9,7 @@ const {
   tgEditMessageReplyMarkup,    // (я давал патч ранее)
   linkProviderChat,
   linkClientChat,
+  buildLeadKB,
 } = require("../utils/telegram");
 
 // ---------- ENV / секреты ----------
@@ -69,6 +70,10 @@ async function handleWebhook(req, res) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+      if (/^noop:\d+$/.test(data)) {
+        await tgAnswerCallbackQuery(cq.id, "Готово ✅");
+        return res.json({ ok: true });
+      }
       const m = data.match(/^lead:(\d+):(working|closed)$/);
       if (!m) {
         await tgAnswerCallbackQuery(cq.id, "Неизвестное действие");
@@ -78,27 +83,31 @@ async function handleWebhook(req, res) {
       const newStatus = m[2];
 
       await pool.query(`UPDATE leads SET status = $2 WHERE id = $1`, [leadId, newStatus]);
-      await tgAnswerCallbackQuery(cq.id, `Статус лида #${leadId}: ${newStatus}`);
+      await tgAnswerCallbackQuery(
+        cq.id,
+        newStatus === "working" ? `Лид #${leadId} взят в работу` : `Лид #${leadId} закрыт`
+      );
 
-      // подсветим выбранную кнопку «• »
+      // подтянем телефон для контактных кнопок (не критично, если не найдём)
+      let phone = "";
       try {
-        const kb = {
-          inline_keyboard: [[
-            { text: "🟦 В работу", callback_data: `lead:${leadId}:working` },
-            { text: "✅ Закрыт",   callback_data: `lead:${leadId}:closed`  },
-          ]],
-        };
-        if (newStatus === "working") kb.inline_keyboard[0][0].text = "• 🟦 В работу";
-        if (newStatus === "closed")  kb.inline_keyboard[0][1].text = "• ✅ Закрыт";
+        const r = await pool.query(`SELECT phone FROM leads WHERE id=$1 LIMIT 1`, [leadId]);
+        phone = r.rows[0]?.phone || "";
+      } catch {}
 
-        await tgEditMessageReplyMarkup({
-          chat_id: cq.message.chat.id,
-          message_id: cq.message.message_id,
-          reply_markup: kb,
-        });
-      } catch (e) {
-        // не критично
-      }
+      // заменяем клавиатуру на «итоговую» (одна инертная кнопка + контакты + админка)
+      const kb = buildLeadKB({
+        state: newStatus,
+        id: leadId,
+        phone,
+        adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/,"")}/admin/leads`,
+      });
+
+      await tgEditMessageReplyMarkup({
+        chat_id: cq.message.chat.id,
+        message_id: cq.message.message_id,
+        reply_markup: kb,
+      });
 
       return res.json({ ok: true });
     }
