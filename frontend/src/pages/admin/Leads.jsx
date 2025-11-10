@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { listLeads, updateLeadStatus as apiUpdateStatus } from "../../api/leads";
 
 // Базовый URL бэкенда берем из .env (VITE_API_BASE_URL) или из window.frontend.API_BASE,
 // который мы уже вставляем в index.html на проде
@@ -59,16 +60,8 @@ export default function AdminLeads() {
     try {
       setLoading(true);
       setErr("");
-      const qs = new URLSearchParams();
-      if (status) qs.set("status", status);
-      if (lang) qs.set("lang", lang);
-      const res = await fetch(`${API_BASE}/api/leads?${qs.toString()}`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setItems(data.items || []);
+    const data = await listLeads({ status, lang });
+    setItems(data.items || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -82,14 +75,7 @@ export default function AdminLeads() {
       arr.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
     );
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // ok
+      await apiUpdateStatus(id, newStatus);
     } catch (e) {
       // откат UI, если не получилось
       setItems(prev);
@@ -216,4 +202,5 @@ export default function AdminLeads() {
     </main>
   );
 }
+
 
