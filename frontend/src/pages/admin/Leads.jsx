@@ -1,16 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { listLeads, updateLeadStatus as apiUpdateStatus } from "../../api/leads";
-
-// Базовый URL бэкенда берем из .env (VITE_API_BASE_URL) или из window.frontend.API_BASE,
-// который мы уже вставляем в index.html на проде
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "") ||
-  ((typeof window !== "undefined" &&
-    window.frontend &&
-    window.frontend.API_BASE &&
-    String(window.frontend.API_BASE).replace(/\/+$/, "")) ||
-    "");
+import { listLeads, updateLeadStatus as apiUpdateStatus, listLeadPages } from "../../api/leads";
 
 const STATUSES = [
   { val: "", label: "— все статусы —" },
@@ -28,7 +18,7 @@ const LANGS = [
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState([]);
-  const [pages, setPages] = useState([]);
+  const [pages, setPages] = useState([]); // варианты страниц-источников
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
@@ -73,17 +63,13 @@ export default function AdminLeads() {
 
   async function fetchPages() {
     try {
-      const res = await fetch(`${API_BASE}/api/leads/pages`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await listLeadPages();
       setPages(data.items || []);
     } catch {
       /* no-op */
     }
   }
+
   async function updateStatus(id, newStatus) {
     const prev = items.slice();
     setItems((arr) =>
@@ -262,6 +248,7 @@ export default function AdminLeads() {
     </main>
   );
 }
+
 
 
 
