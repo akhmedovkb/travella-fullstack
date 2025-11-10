@@ -63,6 +63,54 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
     console.error("[tg] editMessageReplyMarkup error:", e?.response?.data || e?.message || e);
   }
 }
+
+/* ===== LEADS: клавиатуры (назначение и статусы) ===== */
+function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
+  const digits = (phone || "").replace(/[^\d+]/g, "");
+  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
+  const contactRow = [
+    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
+    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
+  ];
+  const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
+  const assignRow = assigneeName
+    ? [{ text: `👤 Ответственный: ${assigneeName}`, callback_data: `noop:${id}` },
+       { text: "↩️ Снять", callback_data: `lead:${id}:unassign` }]
+    : [{ text: "👤 Назначить мне", callback_data: `lead:${id}:assign:self` }];
+
+  if (state === "working") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Принято в работу", callback_data: `noop:${id}` }],
+        assignRow,
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  if (state === "closed") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Закрыт (готово)", callback_data: `noop:${id}` }],
+        assignRow,
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  return {
+    inline_keyboard: [
+      [
+        { text: "🟦 В работу", callback_data: `lead:${id}:working` },
+        { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
+      ],
+      assignRow,
+      contactRow.length ? contactRow : undefined,
+      adminRow.length ? adminRow : undefined,
+    ].filter(Boolean),
+  };
+}
+
 // ===== LEADS: keyboard builder (B-variant) =====
 function buildLeadKB({ state = "new", id, phone, adminUrl }) {
   const digits = (phone || "").replace(/[^\d+]/g, "");
@@ -666,12 +714,13 @@ async function notifyLeadNew({ lead }) {
 
     const text = lines.join("\n");
 
-    // клавиатура формируем билдером (state=new)
+    // клавиатура state=new (ответственный ещё не выбран)
     const reply_markup = buildLeadKB({
       state: "new",
       id: lead.id,
       phone: lead.phone,
       adminUrl: urlAdmin("leads"),
+      assigneeName: null,
     });
 
     const ids = await getAdminChatIds();
