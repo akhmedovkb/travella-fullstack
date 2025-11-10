@@ -13,15 +13,27 @@ exports.createLead = async (req, res) => {
       comment = "",
       page = "",
       lang = "",
-      // может приходить из лендинга, в БД может и не быть такой колонки — в уведомлении пригодится
-      service = ""
+      service = "",
+      utm_source = "",
+      utm_medium = "",
+      utm_campaign = "",
+      utm_content = "",
+      utm_term = "",
     } = req.body || {};
 
+   const utm = {
+      source: utm_source || undefined,
+      medium: utm_medium || undefined,
+      campaign: utm_campaign || undefined,
+      content: utm_content || undefined,
+      term: utm_term || undefined,
+    };
+
     const q = await pool.query(
-      `INSERT INTO leads(name, phone, city, pax, comment, page, lang)
-       VALUES($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO leads(name, phone, city, pax, comment, page, lang, service, utm)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING id, created_at, status`,
-      [name, phone, city, pax, comment, page, lang]
+      [name, phone, city, pax, comment, page, lang, service, utm]
     );
     // телеграм-уведомление админам (не влияет на ответ API)
     try {
@@ -75,8 +87,12 @@ exports.listLeads = async (req, res) => {
 
     const sqlWhere = where.length ? `WHERE ${where.join(" AND ")}` : "";
     const sql =
-      `SELECT id, created_at, name, phone, city, pax, comment, page, lang, status
-         FROM leads
+      `SELECT l.id, l.created_at, l.name, l.phone, l.city, l.pax, l.comment,
+              l.page, l.lang, l.status, l.service, l.utm,
+              l.assignee_provider_id,
+              p.name AS assignee_name
+         FROM leads l
+    LEFT JOIN providers p ON p.id = l.assignee_provider_id
          ${sqlWhere}
         ORDER BY created_at DESC
         LIMIT 200`;
@@ -123,3 +139,21 @@ exports.listLeadPages = async (_req, res) => {
     return res.status(500).json({ ok: false, items: [] });
   }
 }
+// PATCH /api/leads/:id/assignee { assignee_provider_id: number|null }
+exports.updateLeadAssignee = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { assignee_provider_id } = req.body || {};
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ ok: false, error: "bad_request" });
+    }
+    await pool.query(
+      `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
+      [id, Number.isFinite(assignee_provider_id) ? assignee_provider_id : null]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("updateLeadAssignee error:", e);
+    return res.status(500).json({ ok: false, error: "update_failed" });
+  }
+};
