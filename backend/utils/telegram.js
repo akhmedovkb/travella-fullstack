@@ -1,4 +1,5 @@
 // backend/utils/telegram.js
+
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
 const axios = require("axios");
@@ -35,6 +36,79 @@ async function tgSend(chatId, text, extra = {}) {
     console.error("[tg] sendMessage error:", e?.response?.data || e?.message || e);
     return false;
   }
+}
+
+async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}) {
+  if (!enabled || !cbQueryId) return;
+  try {
+    await axios.post(`${API}/answerCallbackQuery`, {
+      callback_query_id: cbQueryId,
+      text,
+      show_alert: Boolean(opts.show_alert),
+    });
+  } catch (e) {
+    console.error("[tg] answerCallbackQuery error:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
+  if (!enabled || !chat_id || !message_id) return;
+  try {
+    await axios.post(`${API}/editMessageReplyMarkup`, {
+      chat_id,
+      message_id,
+      reply_markup,
+    });
+  } catch (e) {
+    console.error("[tg] editMessageReplyMarkup error:", e?.response?.data || e?.message || e);
+  }
+}
+
+/* ===== LEADS: клавиатуры (назначение и статусы) ===== */
+function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
+  const digits = (phone || "").replace(/[^\d+]/g, "");
+  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
+  const contactRow = [
+    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
+    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
+  ];
+  const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
+  const assignRow = assigneeName
+    ? [{ text: `👤 Ответственный: ${assigneeName}`, callback_data: `noop:${id}` },
+       { text: "↩️ Снять", callback_data: `lead:${id}:unassign` }]
+    : [{ text: "👤 Назначить мне", callback_data: `lead:${id}:assign:self` }];
+
+  if (state === "working") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Принято в работу", callback_data: `noop:${id}` }],
+        assignRow,
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  if (state === "closed") {
+    return {
+      inline_keyboard: [
+        [{ text: "✅ Закрыт (готово)", callback_data: `noop:${id}` }],
+        assignRow,
+        contactRow.length ? contactRow : undefined,
+        adminRow.length ? adminRow : undefined,
+      ].filter(Boolean),
+    };
+  }
+  return {
+    inline_keyboard: [
+      [
+        { text: "🟦 В работу", callback_data: `lead:${id}:working` },
+        { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
+      ],
+      assignRow,
+      contactRow.length ? contactRow : undefined,
+      adminRow.length ? adminRow : undefined,
+    ].filter(Boolean),
+  };
 }
 
 // very small cache to avoid frequent getChat calls
@@ -561,9 +635,65 @@ async function notifyReqDeletedByProvider({ request_id }) {
 
 }
 
+/* ================== LEADS ================== */
+function _leadServiceLabel(svc) {
+  const map = {
+    tour: "Туры",
+    checkup: "Check-up",
+    ayurveda: "Аюрведа",
+    treatment: "Лечение",
+    b2b: "B2B",
+  };
+  return map[svc] || (svc ? String(svc) : "—");
+}
+
+async function notifyLeadNew({ lead }) {
+  try {
+    if (!lead) return;
+
+    const lines = [];
+    lines.push(`<b>🔔 Новый лид</b>`);
+    lines.push(`🏷️ Сервис: <b>${esc(_leadServiceLabel(lead.service))}</b>`);
+    if (lead.page)   lines.push(`🧭 Страница: ${esc(lead.page)}`);
+    if (lead.lang)   lines.push(`🌐 Язык: ${esc(lead.lang)}`);
+
+    // контакты
+    const who = [];
+    if (lead.name)  who.push(`<b>${esc(lead.name)}</b>`);
+    if (lead.phone) who.push(esc(lead.phone));
+    lines.push(`👤 Контакт: ${who.length ? who.join(" · ") : "—"}`);
+
+    if (lead.city)        lines.push(`📍 Город/даты: ${esc(lead.city)}`);
+    if (lead.pax != null) lines.push(`👥 Кол-во: <b>${esc(String(lead.pax))}</b>`);
+    if (lead.comment)     lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
+
+    lines.push("");
+    lines.push(`🔗 Открыть: ${urlAdmin("leads")}`);
+
+    const text = lines.join("\n");
+
+    // клавиатура state=new (ответственный ещё не выбран)
+    const reply_markup = buildLeadKB({
+      state: "new",
+      id: lead.id,
+      phone: lead.phone,
+      adminUrl: urlAdmin("leads"),
+      assigneeName: null,
+    });
+
+    const ids = await getAdminChatIds();
+    await Promise.all(ids.map((chatId) => tgSend(chatId, text, { reply_markup })));
+  } catch (e) {
+    console.error("[tg] notifyLeadNew failed:", e?.message || e);
+  }
+}
+
 module.exports = {
   enabled,
   tgSend,
+  tgAnswerCallbackQuery,
+  tgEditMessageReplyMarkup,
+  buildLeadKB,
   linkProviderChat,
   linkClientChat,
     // ADMIN / MODERATION:
@@ -583,6 +713,8 @@ module.exports = {
   notifyReqStatusChanged,
   notifyReqCancelledByRequester,
   notifyReqDeletedByProvider,
+  // LEADS:
+  notifyLeadNew,
 };
 
 

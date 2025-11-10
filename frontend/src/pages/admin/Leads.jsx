@@ -1,16 +1,11 @@
+// frontend/src/pages/admin/Leads.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { listLeads, updateLeadStatus as apiUpdateStatus } from "../../api/leads";
-
-// Базовый URL бэкенда берем из .env (VITE_API_BASE_URL) или из window.frontend.API_BASE,
-// который мы уже вставляем в index.html на проде
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "") ||
-  ((typeof window !== "undefined" &&
-    window.frontend &&
-    window.frontend.API_BASE &&
-    String(window.frontend.API_BASE).replace(/\/+$/, "")) ||
-    "");
+import {
+  listLeads,
+  updateLeadStatus as apiUpdateStatus,
+  listLeadPages,
+} from "../../api/leads";
 
 const STATUSES = [
   { val: "", label: "— все статусы —" },
@@ -18,6 +13,7 @@ const STATUSES = [
   { val: "working", label: "working" },
   { val: "closed", label: "closed" },
 ];
+
 const LANGS = [
   { val: "", label: "— любой —" },
   { val: "ru", label: "ru" },
@@ -27,31 +23,40 @@ const LANGS = [
 
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
+
   const [items, setItems] = useState([]);
+  const [pages, setPages] = useState([]); // варианты страниц-источников
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   const status = params.get("status") || "";
   const lang = params.get("lang") || "";
+  const page = params.get("page") || "";
   const q = params.get("q") || "";
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return items.filter((r) => {
       if (!needle) return true;
-      const hay =
-        [
-          r.name,
-          r.phone,
-          r.city,
-          r.comment,
-          r.page,
-          r.lang,
-          r.status,
-          new Date(r.created_at).toLocaleString(),
-        ]
-          .join(" ")
-          .toLowerCase();
+      const u = r.utm || {};
+      const hay = [
+        r.name,
+        r.phone,
+        r.city,
+        r.comment,
+        r.page,
+        r.lang,
+        r.status,
+        r.service,
+        u.source,
+        u.medium,
+        u.campaign,
+        u.content,
+        u.term,
+        new Date(r.created_at).toLocaleString(),
+      ]
+        .join(" ")
+        .toLowerCase();
       return hay.includes(needle);
     });
   }, [items, q]);
@@ -60,8 +65,8 @@ export default function AdminLeads() {
     try {
       setLoading(true);
       setErr("");
-    const data = await listLeads({ status, lang });
-    setItems(data.items || []);
+      const data = await listLeads({ status, lang, page });
+      setItems(data.items || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -69,16 +74,22 @@ export default function AdminLeads() {
     }
   }
 
+  async function fetchPages() {
+    try {
+      const data = await listLeadPages();
+      setPages(data.items || []);
+    } catch {
+      /* no-op */
+    }
+  }
+
   async function updateStatus(id, newStatus) {
     const prev = items.slice();
-    setItems((arr) =>
-      arr.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-    );
+    setItems((arr) => arr.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
     try {
       await apiUpdateStatus(id, newStatus);
     } catch (e) {
-      // откат UI, если не получилось
-      setItems(prev);
+      setItems(prev); // откат UI
       alert("Не удалось обновить статус: " + (e.message || ""));
     }
   }
@@ -86,7 +97,12 @@ export default function AdminLeads() {
   useEffect(() => {
     fetchLeads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, lang]);
+  }, [status, lang, page]);
+
+  useEffect(() => {
+    fetchPages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onChangeParam = (key, val) => {
     const next = new URLSearchParams(params);
@@ -94,6 +110,58 @@ export default function AdminLeads() {
     else next.delete(key);
     setParams(next, { replace: true });
   };
+
+  function exportCSV() {
+    const header = [
+      "Дата",
+      "Имя",
+      "Телефон",
+      "Город/даты",
+      "Кол-во",
+      "Комментарий",
+      "Страница",
+      "Язык",
+      "Сервис",
+      "UTM source",
+      "UTM medium",
+      "UTM campaign",
+      "UTM content",
+      "UTM term",
+      "Ответственный",
+      "Статус",
+    ];
+    const rows = filtered.map((r) => {
+      const u = r.utm || {};
+      return [
+        new Date(r.created_at).toLocaleString().replace(",", ""),
+        r.name || "",
+        r.phone || "",
+        r.city || "",
+        r.pax ?? "",
+        (r.comment || "").replace(/\r?\n/g, " "),
+        r.page || "",
+        r.lang || "",
+        r.service || "",
+        u.source || "",
+        u.medium || "",
+        u.campaign || "",
+        u.content || "",
+        u.term || "",
+        r.assignee_name || "",
+        r.status || "",
+      ];
+    });
+    const csv = [header, ...rows]
+      .map((cols) => cols.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-6">
@@ -124,18 +192,38 @@ export default function AdminLeads() {
           ))}
         </select>
 
+        <select
+          value={page}
+          onChange={(e) => onChangeParam("page", e.target.value)}
+          className="border rounded px-3 py-2 min-w-[240px]"
+          title="Страница"
+        >
+          <option value="">{`— любая страница —`}</option>
+          {pages
+            .filter((p) => p.page)
+            .map((p) => (
+              <option key={p.page} value={p.page}>
+                {p.page} {p.cnt ? `(${p.cnt})` : ""}
+              </option>
+            ))}
+        </select>
+
         <input
           value={q}
           onChange={(e) => onChangeParam("q", e.target.value)}
-          placeholder="Поиск (имя/телефон/коммент/страница)"
+          placeholder="Поиск (имя/телефон/коммент/страница/UTM)"
           className="border rounded px-3 py-2 min-w-[260px] flex-1"
         />
 
-        <button
-          onClick={fetchLeads}
-          className="px-4 py-2 rounded bg-gray-800 text-white"
-        >
+        <button onClick={fetchLeads} className="px-4 py-2 rounded bg-gray-800 text-white">
           Обновить
+        </button>
+        <button
+          onClick={exportCSV}
+          className="px-4 py-2 rounded border"
+          title="Скачать CSV текущей выборки"
+        >
+          CSV
         </button>
 
         {loading && <span className="text-sm text-gray-500">Загрузка…</span>}
@@ -143,7 +231,7 @@ export default function AdminLeads() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+        <table className="min-w-[1200px] text-sm">
           <thead>
             <tr className="text-left border-b">
               <th className="py-2 pr-4">Дата</th>
@@ -154,44 +242,59 @@ export default function AdminLeads() {
               <th className="py-2 pr-4">Комментарий</th>
               <th className="py-2 pr-4">Страница</th>
               <th className="py-2 pr-4">Яз.</th>
+              <th className="py-2 pr-4">Сервис</th>
+              <th className="py-2 pr-4">UTM source</th>
+              <th className="py-2 pr-4">UTM medium</th>
+              <th className="py-2 pr-4">UTM campaign</th>
+              <th className="py-2 pr-4">UTM content</th>
+              <th className="py-2 pr-4">UTM term</th>
+              <th className="py-2 pr-4">Ответственный</th>
               <th className="py-2 pr-4">Статус</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-b align-top">
-                <td className="py-2 pr-4 whitespace-nowrap">
-                  {new Date(r.created_at).toLocaleString()}
-                </td>
-                <td className="py-2 pr-4">{r.name || "—"}</td>
-                <td className="py-2 pr-4">{r.phone || "—"}</td>
-                <td className="py-2 pr-4">{r.city || "—"}</td>
-                <td className="py-2 pr-4">{r.pax ?? "—"}</td>
-                <td className="py-2 pr-4 max-w-[360px]">
-                  <div className="whitespace-pre-wrap break-words">
-                    {r.comment || "—"}
-                  </div>
-                </td>
-                <td className="py-2 pr-4">{r.page || "—"}</td>
-                <td className="py-2 pr-4">{r.lang || "—"}</td>
-                <td className="py-2 pr-4">
-                  <select
-                    value={r.status || "new"}
-                    onChange={(e) => updateStatus(r.id, e.target.value)}
-                    className="border rounded px-2 py-1"
-                  >
-                    {STATUSES.slice(1).map((o) => (
-                      <option key={o.val} value={o.val}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((r) => {
+              const u = r.utm || {};
+              return (
+                <tr key={r.id} className="border-b align-top">
+                  <td className="py-2 pr-4 whitespace-nowrap">
+                    {new Date(r.created_at).toLocaleString()}
+                  </td>
+                  <td className="py-2 pr-4">{r.name || "—"}</td>
+                  <td className="py-2 pr-4">{r.phone || "—"}</td>
+                  <td className="py-2 pr-4">{r.city || "—"}</td>
+                  <td className="py-2 pr-4">{r.pax ?? "—"}</td>
+                  <td className="py-2 pr-4 max-w-[360px]">
+                    <div className="whitespace-pre-wrap break-words">{r.comment || "—"}</div>
+                  </td>
+                  <td className="py-2 pr-4">{r.page || "—"}</td>
+                  <td className="py-2 pr-4">{r.lang || "—"}</td>
+                  <td className="py-2 pr-4">{r.service || "—"}</td>
+                  <td className="py-2 pr-4">{u.source || "—"}</td>
+                  <td className="py-2 pr-4">{u.medium || "—"}</td>
+                  <td className="py-2 pr-4">{u.campaign || "—"}</td>
+                  <td className="py-2 pr-4">{u.content || "—"}</td>
+                  <td className="py-2 pr-4">{u.term || "—"}</td>
+                  <td className="py-2 pr-4">{r.assignee_name || "—"}</td>
+                  <td className="py-2 pr-4">
+                    <select
+                      value={r.status || "new"}
+                      onChange={(e) => updateStatus(r.id, e.target.value)}
+                      className="border rounded px-2 py-1"
+                    >
+                      {STATUSES.slice(1).map((o) => (
+                        <option key={o.val} value={o.val}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
             {!loading && !filtered.length && (
               <tr>
-                <td className="py-6 text-gray-500" colSpan={9}>
+                <td className="py-6 text-gray-500" colSpan={16}>
                   Ничего не найдено.
                 </td>
               </tr>
@@ -202,5 +305,3 @@ export default function AdminLeads() {
     </main>
   );
 }
-
-
