@@ -28,11 +28,13 @@ const LANGS = [
 export default function AdminLeads() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState([]);
+  const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   const status = params.get("status") || "";
   const lang = params.get("lang") || "";
+  const page = params.get("page") || "";
   const q = params.get("q") || "";
 
   const filtered = useMemo(() => {
@@ -60,8 +62,8 @@ export default function AdminLeads() {
     try {
       setLoading(true);
       setErr("");
-    const data = await listLeads({ status, lang });
-    setItems(data.items || []);
+      const data = await listLeads({ status, lang, page });
+      setItems(data.items || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -69,6 +71,19 @@ export default function AdminLeads() {
     }
   }
 
+  async function fetchPages() {
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/pages`, {
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setPages(data.items || []);
+    } catch {
+      /* no-op */
+    }
+  }
   async function updateStatus(id, newStatus) {
     const prev = items.slice();
     setItems((arr) =>
@@ -86,7 +101,12 @@ export default function AdminLeads() {
   useEffect(() => {
     fetchLeads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, lang]);
+  }, [status, lang, page]);
+
+  useEffect(() => {
+    fetchPages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onChangeParam = (key, val) => {
     const next = new URLSearchParams(params);
@@ -95,6 +115,27 @@ export default function AdminLeads() {
     setParams(next, { replace: true });
   };
 
+  function exportCSV() {
+    const header = [
+      "Дата","Имя","Телефон","Город/даты","Кол-во","Комментарий","Страница","Язык","Статус"
+    ];
+    const rows = filtered.map(r => ([
+      new Date(r.created_at).toLocaleString().replace(",",""),
+      r.name || "", r.phone || "", r.city || "", r.pax ?? "",
+      (r.comment || "").replace(/\r?\n/g, " "),
+      r.page || "", r.lang || "", r.status || ""
+    ]));
+    const csv = [header, ...rows]
+      .map(cols => cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
   return (
     <main className="max-w-7xl mx-auto px-4 py-6">
       <h1 className="text-2xl font-bold mb-4">Leads</h1>
@@ -123,6 +164,19 @@ export default function AdminLeads() {
             </option>
           ))}
         </select>
+        <select
+          value={page}
+          onChange={(e) => onChangeParam("page", e.target.value)}
+          className="border rounded px-3 py-2 min-w-[240px]"
+          title="Страница"
+        >
+          <option value="">{`— любая страница —`}</option>
+          {pages.filter(p => p.page).map(p => (
+            <option key={p.page} value={p.page}>
+              {p.page} {p.cnt ? `(${p.cnt})` : ""}
+            </option>
+          ))}
+        </select>
 
         <input
           value={q}
@@ -137,7 +191,13 @@ export default function AdminLeads() {
         >
           Обновить
         </button>
-
+        <button
+          onClick={exportCSV}
+          className="px-4 py-2 rounded border"
+          title="Скачать CSV текущей выборки"
+        >
+          CSV
+        </button>
         {loading && <span className="text-sm text-gray-500">Загрузка…</span>}
         {err && <span className="text-sm text-red-600">Ошибка: {err}</span>}
       </div>
@@ -202,5 +262,6 @@ export default function AdminLeads() {
     </main>
   );
 }
+
 
 
