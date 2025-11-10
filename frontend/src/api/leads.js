@@ -31,11 +31,11 @@ const qs = (obj = {}) => {
 };
 
 /** Создать лид (публичные формы) */
-export async function createLead(payload) {
+export async function createLead(payload = {}) {
   const res = await fetch(`${API_BASE}/api/leads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(payload),
   });
   return json(res);
 }
@@ -70,7 +70,10 @@ export async function updateLeadStatus(id, status) {
 export async function listLeadPages() {
   const res = await fetch(`${API_BASE}/api/leads/pages`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(),            // ← добавили авторизацию как и в listLeads
+    },
   });
   return json(res);
 }
