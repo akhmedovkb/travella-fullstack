@@ -9,8 +9,12 @@ export default function Treatment() {
   const [openLead, setOpenLead] = useState(false);
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs items={[{ label: "India", to: "/india" }, { label: t("landing.treatment.h1") }]} />
-
+      <Breadcrumbs
+          items={[
+            { label: t("landing.menu.home"), to: "/india" },
+            { label: t("landing.treatment.h1") }
+          ]}
+        />
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.treatment.h1")}</h1>
       <p className="mt-3 text-lg">{t("landing.treatment.sub")}</p>
 
