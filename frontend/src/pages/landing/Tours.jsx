@@ -3,25 +3,51 @@
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import LeadModal from "../../components/LeadModal";
+import { createLead } from "../../api/leads";
 
 export default function Tours() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [openLead, setOpenLead] = useState(false);
-
+  const lang = (typeof navigator !== "undefined" && (navigator.language||"ru"))?.slice(0,2) || "ru";
+  const utm = useMemo(() => {
+    const sp = new URLSearchParams(window.location.search);
+    return {
+      utm_source: sp.get("utm_source") || "",
+      utm_medium: sp.get("utm_medium") || "",
+      utm_campaign: sp.get("utm_campaign") || "",
+      utm_content: sp.get("utm_content") || "",
+      utm_term: sp.get("utm_term") || "",
+    };
+  }, []);
   async function onLead(e) {
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const payload = Object.fromEntries(fd.entries());
-    const r = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const raw = Object.fromEntries(fd.entries());
+    // normalize fields
+    const payload = {
+      name: raw.name || "",
+      phone: raw.phone || "",
+      city: raw.destination || "",
+      pax: raw.pax ? Number(raw.pax) : null,
+      comment: raw.comment || "",
+      page: "/tours",
+      lang,
+      service: "tour",
+      ...utm,
+    };
+    let ok = false;
+    try {
+      await createLead(payload);
+      ok = true;
+    } catch (err) {
+      ok = false;
+      console.error(err);
+    }
     setLoading(false);
-    alert(r.ok ? t("landing.form.sent") : t("landing.form.error"));
-    if (r.ok) e.currentTarget.reset();
+    alert(ok ? t("landing.form.sent") : t("landing.form.error"));
+    if (ok) e.currentTarget.reset();
   }
 
   const samples = t("landing.tours.samples", { returnObjects: true });
