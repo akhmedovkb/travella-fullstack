@@ -80,9 +80,11 @@ export default function LeadModal({
       });
       onSuccess?.(lead);
       setOk(true);
-      // авто-закрытие через 1.2с, если нужно
-      // setTimeout(() => onClose?.(), 1200);
-    } catch (err) {
+      setTimeout(() => {
+        onClose?.();
+        setName(""); setPhone(""); setCity(""); setPax(""); setComment("");
+      }, 1200);
+   } catch (err) {
       console.error(err);
       setErr(err?.message || "Failed");
     } finally {
@@ -137,9 +139,13 @@ export default function LeadModal({
             />
             <input
               className="input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               placeholder={t("landing.form.phone")}
               required
-              value={phone} onChange={(e)=>setPhone(e.target.value)}
+              value={phone}
+              onChange={(e)=>setPhone(e.target.value)}
             />
           </div>
 
