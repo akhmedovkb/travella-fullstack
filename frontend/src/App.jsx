@@ -2,6 +2,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Register from "./pages/Register";
 import Login from "./pages/Login";
@@ -52,16 +53,16 @@ import TourBuilder from "./pages/TourBuilder";
 //Entry fees form
 import AdminEntryFees from "./pages/AdminEntryFees";
 
-// --- Landing (публичные) ---
+// Landing
+import IndiaLayout from "./pages/landing/IndiaLayout";
 import LandingHome from "./pages/landing/Home";
 import Tours from "./pages/landing/Tours";
 import Ayurveda from "./pages/landing/Ayurveda";
 import Checkup from "./pages/landing/Checkup";
 import Treatment from "./pages/landing/Treatment";
-import Clinics from "./pages/landing/Clinics";
 import B2B from "./pages/landing/B2B";
+import Clinics from "./pages/landing/Clinics";
 import Contacts from "./pages/landing/Contacts";
-import LayoutIndia from "./pages/india/LayoutIndia";
 
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -106,16 +107,17 @@ export default function App() {
           <Route path="/" element={<LandingHome />} />
 
           {/* --- INDIA namespace --- */}
-          <Route path="/india" element={<LayoutIndia />}>
-            <Route index element={<Navigate to="/india/treatment" replace />} />
-            <Route path="tours" element={<Tours />} />
-            <Route path="ayurveda" element={<Ayurveda />} />
-            <Route path="checkup" element={<Checkup />} />
-            <Route path="treatment" element={<Treatment />} />
-            <Route path="clinics" element={<Clinics />} />
-            <Route path="b2b" element={<B2B />} />
-            <Route path="contacts" element={<Contacts />} />
-          </Route>
+        <Route path="/india" element={<IndiaLayout />}>
+          <Route index element={<LandingHome />} />
+          <Route path="tours" element={<Tours />} />
+          <Route path="ayurveda" element={<Ayurveda />} />
+          <Route path="checkup" element={<Checkup />} />
+          <Route path="treatment" element={<Treatment />} />
+          {/* информативные страницы без кнопок/форм */}
+          <Route path="b2b" element={<B2B />} />
+          <Route path="clinics" element={<Clinics />} />
+          <Route path="contacts" element={<Contacts />} />
+        </Route>
 
           {/* --- Редиректы со старых путей на /india/* --- */}
           <Route path="/tours" element={<Navigate to="/india/tours" replace />} />
