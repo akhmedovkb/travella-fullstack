@@ -1,6 +1,6 @@
 //frontend/src/components/LeadModal.jsx
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import useLockBodyScroll from "../hooks/useLockBodyScroll";
 import { createLead } from "../api/leads";
@@ -22,8 +22,24 @@ export default function LeadModal({
   const [pax, setPax] = useState(preset.pax || "");
   const [comment, setComment] = useState(preset.comment || "");
   const [loading, setLoading] = useState(false);
+  const [ok, setOk] = useState(false);
+  const [err, setErr] = useState("");
   const dialogRef = useRef(null);
-
+  // UTM из query-параметров – один раз на маунт
+  const utm = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return {
+        utm_source: sp.get("utm_source") || "",
+        utm_medium: sp.get("utm_medium") || "",
+        utm_campaign: sp.get("utm_campaign") || "",
+        utm_content: sp.get("utm_content") || "",
+        utm_term: sp.get("utm_term") || "",
+      };
+    } catch {
+      return {};
+    }
+  }, []);
   // сброс при открытии
   useEffect(() => {
     if (open) {
@@ -32,6 +48,8 @@ export default function LeadModal({
       setCity(preset.city || "");
       setPax(preset.pax || "");
       setComment(preset.comment || "");
+      setOk(false);
+      setErr("");
       setTimeout(() => dialogRef.current?.focus(), 0);
     }
   }, [open]);
@@ -58,14 +76,15 @@ export default function LeadModal({
         page: defaultPage || "/",
         lang,
         service: defaultService,
+        ...utm,
       });
       onSuccess?.(lead);
-      // базовый UX
-      alert(t("landing.form.sent"));
-      onClose?.();
+      setOk(true);
+      // авто-закрытие через 1.2с, если нужно
+      // setTimeout(() => onClose?.(), 1200);
     } catch (err) {
       console.error(err);
-      alert(t("landing.form.error"));
+      setErr(err?.message || "Failed");
     } finally {
       setLoading(false);
     }
@@ -104,6 +123,12 @@ export default function LeadModal({
 
         {/* Body */}
         <form onSubmit={submit} className="p-4 space-y-3">
+          {ok ? (
+            <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+              {t("landing.form.sent")}
+            </div>
+          ) : (
+            <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               className="input"
@@ -138,7 +163,9 @@ export default function LeadModal({
             placeholder={t("landing.form.comment")}
             value={comment} onChange={(e)=>setComment(e.target.value)}
           />
-
+              
+     {err && <div className="text-sm text-red-600">{t("landing.form.error")}: {err}</div>}
+              
           {/* Footer */}
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border">
@@ -152,6 +179,8 @@ export default function LeadModal({
               {loading ? "…" : t("landing.form.send")}
             </button>
           </div>
+          </>
+          )}
         </form>
       </div>
     </div>
