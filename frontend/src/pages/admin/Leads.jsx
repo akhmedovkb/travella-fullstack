@@ -200,6 +200,7 @@ export default function AdminLeads() {
               <th className="py-2 pr-4">Комментарий</th>
               <th className="py-2 pr-4">Страница</th>
               <th className="py-2 pr-4">Яз.</th>
+              <th className="py-2 pr-4">Ответственный</th>
               <th className="py-2 pr-4">Статус</th>
             </tr>
           </thead>
@@ -220,6 +221,7 @@ export default function AdminLeads() {
                 </td>
                 <td className="py-2 pr-4">{r.page || "—"}</td>
                 <td className="py-2 pr-4">{r.lang || "—"}</td>
+                <td className="py-2 pr-4">{r.assignee_name || "—"}</td>
                 <td className="py-2 pr-4">
                   <select
                     value={r.status || "new"}
@@ -248,6 +250,7 @@ export default function AdminLeads() {
     </main>
   );
 }
+
 
 
 
