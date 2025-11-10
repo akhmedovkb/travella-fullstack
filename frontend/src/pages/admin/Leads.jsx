@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+// Базовый URL бэкенда берем из .env (VITE_API_BASE_URL) или из window.frontend.API_BASE,
+// который мы уже вставляем в index.html на проде
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "") ||
+  ((typeof window !== "undefined" &&
+    window.frontend &&
+    window.frontend.API_BASE &&
+    String(window.frontend.API_BASE).replace(/\/+$/, "")) ||
+    "");
+
 const STATUSES = [
   { val: "", label: "— все статусы —" },
   { val: "new", label: "new" },
@@ -52,7 +62,7 @@ export default function AdminLeads() {
       const qs = new URLSearchParams();
       if (status) qs.set("status", status);
       if (lang) qs.set("lang", lang);
-      const res = await fetch(`/api/leads?${qs.toString()}`, {
+      const res = await fetch(`${API_BASE}/api/leads?${qs.toString()}`, {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
@@ -72,7 +82,7 @@ export default function AdminLeads() {
       arr.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
     );
     try {
-      const res = await fetch(`/api/leads/${id}`, {
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -206,3 +216,4 @@ export default function AdminLeads() {
     </main>
   );
 }
+
