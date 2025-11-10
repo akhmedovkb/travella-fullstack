@@ -245,6 +245,3 @@ app.use("/api/cms", cmsRoutes);
 const adminProvidersRoutes = require("./routes/adminProvidersRoutes");
 app.use("/api/admin", adminProvidersRoutes);
 
-// Leads
-const leadRoutes = require("./routes/leadRoutes");
-app.use("/api/leads", leadRoutes);
