@@ -111,48 +111,6 @@ function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
   };
 }
 
-// ===== LEADS: keyboard builder (B-variant) =====
-function buildLeadKB({ state = "new", id, phone, adminUrl }) {
-  const digits = (phone || "").replace(/[^\d+]/g, "");
-  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
-
-  const contactRow = [
-    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
-    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
-  ];
-  const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
-
-  if (state === "working") {
-    return {
-      inline_keyboard: [
-        [{ text: "✅ Принято в работу", callback_data: `noop:${id}` }],
-        contactRow.length ? contactRow : undefined,
-        adminRow.length ? adminRow : undefined,
-      ].filter(Boolean),
-    };
-  }
-  if (state === "closed") {
-    return {
-      inline_keyboard: [
-        [{ text: "✅ Закрыт (готово)", callback_data: `noop:${id}` }],
-        contactRow.length ? contactRow : undefined,
-        adminRow.length ? adminRow : undefined,
-      ].filter(Boolean),
-    };
-  }
-  // state === "new"
-  return {
-    inline_keyboard: [
-      [
-        { text: "🟦 В работу", callback_data: `lead:${id}:working` },
-        { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
-      ],
-      contactRow.length ? contactRow : undefined,
-      adminRow.length ? adminRow : undefined,
-    ].filter(Boolean),
-  };
-}
-
 // very small cache to avoid frequent getChat calls
 const __chatUserCache = new Map(); // chatId -> username (without @)
 async function tgGetUsername(chatId) {
