@@ -2,7 +2,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Register from "./pages/Register";
 import Login from "./pages/Login";
@@ -15,7 +14,7 @@ import ClientProfile from "./pages/ClientProfile";
 import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
 import HotelInspections from "./pages/HotelInspections";
-import AdminHotelsTable from "./pages/admin/AdminHotelsTable"; // ← ОСТАВИЛ один импорт
+import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
 import AdminLeads from "./pages/admin/Leads";
@@ -35,22 +34,17 @@ import Footer from "./components/Footer";
 import CmsPage from "./pages/CmsPage";
 import CmsEditor from "./pages/admin/CmsEditor";
 
-
 // Отели
 import Hotels from "./pages/Hotels";
 import AdminHotelForm from "./pages/admin/AdminHotelForm";
+
 // Конструктор шаблонов
 import TemplateCreator from "./pages/TemplateCreator";
-
-function ClientPrivateRoute({ children }) {
-  const token = localStorage.getItem("clientToken");
-  return token ? children : <Navigate to="/client/login" replace />;
-}
 
 // TourBuilder - Тур конструктор
 import TourBuilder from "./pages/TourBuilder";
 
-//Entry fees form
+// Entry fees form
 import AdminEntryFees from "./pages/AdminEntryFees";
 
 // Landing
@@ -64,6 +58,11 @@ import B2B from "./pages/landing/B2B";
 import Clinics from "./pages/landing/Clinics";
 import Contacts from "./pages/landing/Contacts";
 
+function ClientPrivateRoute({ children }) {
+  const token = localStorage.getItem("clientToken");
+  return token ? children : <Navigate to="/client/login" replace />;
+}
+
 function AdminRoute({ children }) {
   const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
   if (!tok) return <Navigate to="/login" replace />;
@@ -71,23 +70,27 @@ function AdminRoute({ children }) {
     const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
     const json = decodeURIComponent(
-      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
     );
     const claims = JSON.parse(json);
 
     const roles = []
       .concat(claims.role || [])
       .concat(claims.roles || [])
-      .flatMap(r => String(r).split(","))
-      .map(s => s.trim().toLowerCase());
+      .flatMap((r) => String(r).split(","))
+      .map((s) => s.trim().toLowerCase());
     const perms = []
       .concat(claims.permissions || claims.perms || [])
       .map((x) => String(x).toLowerCase());
 
     const isAdmin =
-      claims.is_admin === true || claims.moderator === true ||
-      roles.some(r => ["admin","moderator","super","root"].includes(r)) ||
-      perms.some(x => ["moderation","admin:moderation"].includes(x));
+      claims.is_admin === true ||
+      claims.moderator === true ||
+      roles.some((r) => ["admin", "moderator", "super", "root"].includes(r)) ||
+      perms.some((x) => ["moderation", "admin:moderation"].includes(x));
 
     return isAdmin ? children : <Navigate to="/marketplace" replace />;
   } catch {
@@ -103,194 +106,177 @@ export default function App() {
         <Header />
         <main className="flex-1 p-4">
           <Routes>
-          {/* --- Публичный лендинг --- */}
-          <Route path="/" element={<LandingHome />} />
+            {/* --- Публичный лендинг --- */}
+            <Route path="/" element={<LandingHome />} />
 
-          {/* --- INDIA namespace --- */}
-        <Route path="/india" element={<IndiaLayout />}>
-          <Route index element={<LandingHome />} />
-          <Route path="tours" element={<Tours />} />
-          <Route path="ayurveda" element={<Ayurveda />} />
-          <Route path="checkup" element={<Checkup />} />
-          <Route path="treatment" element={<Treatment />} />
-          {/* информативные страницы без кнопок/форм */}
-          <Route path="b2b" element={<B2B />} />
-          <Route path="clinics" element={<Clinics />} />
-          <Route path="contacts" element={<Contacts />} />
-        </Route>
+            {/* --- INDIA namespace --- */}
+            <Route path="/india" element={<IndiaLayout />}>
+              <Route index element={<LandingHome />} />
+              <Route path="tours" element={<Tours />} />
+              <Route path="ayurveda" element={<Ayurveda />} />
+              <Route path="checkup" element={<Checkup />} />
+              <Route path="treatment" element={<Treatment />} />
+              {/* информативные страницы без кнопок/форм */}
+              <Route path="b2b" element={<B2B />} />
+              <Route path="clinics" element={<Clinics />} />
+              <Route path="contacts" element={<Contacts />} />
+            </Route>
 
-          {/* --- Редиректы со старых путей на /india/* --- */}
-          <Route path="/tours" element={<Navigate to="/india/tours" replace />} />
-          <Route path="/ayurveda" element={<Navigate to="/india/ayurveda" replace />} />
-          <Route path="/checkup" element={<Navigate to="/india/checkup" replace />} />
-          <Route path="/treatment" element={<Navigate to="/india/treatment" replace />} />
-          <Route path="/clinics" element={<Navigate to="/india/clinics" replace />} />
-          <Route path="/b2b" element={<Navigate to="/india/b2b" replace />} />
-          <Route path="/contacts" element={<Navigate to="/india/contacts" replace />} />
-            
-          {/* Поставщик */}
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/dashboard/requests"
-            element={
-              <PrivateRoute>
-                <ProviderRequests />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/dashboard/bookings"
-            element={
-              <PrivateRoute>
-                <ProviderBookings />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/dashboard/favorites"
-            element={
-              <PrivateRoute>
-                <ProviderFavorites />
-              </PrivateRoute>
-            }
-          />
-          <Route path="/profile/provider/:id" element={<ProviderProfile />} />
-          <Route path="/marketplace" element={<Marketplace />} />
+            {/* --- Редиректы со старых путей на /india/* --- */}
+            <Route path="/tours" element={<Navigate to="/india/tours" replace />} />
+            <Route path="/ayurveda" element={<Navigate to="/india/ayurveda" replace />} />
+            <Route path="/checkup" element={<Navigate to="/india/checkup" replace />} />
+            <Route path="/treatment" element={<Navigate to="/india/treatment" replace />} />
+            <Route path="/clinics" element={<Navigate to="/india/clinics" replace />} />
+            <Route path="/b2b" element={<Navigate to="/india/b2b" replace />} />
+            <Route path="/contacts" element={<Navigate to="/india/contacts" replace />} />
 
-          {/* Клиент */}
-          <Route path="/client/register" element={<ClientRegister />} />
-          <Route path="/client/login" element={<ClientLogin />} />
-          <Route
-            path="/client/dashboard"
-            element={
-              <ClientPrivateRoute>
-                <ClientDashboard />
-              </ClientPrivateRoute>
-            }
-          />
-          <Route path="/profile/client/:id" element={<ClientProfile />} />
-          <Route path="/admin/moderation" element={<AdminModeration />} />
-           {/* Публичные CMS-страницы (подвал) */}
-          <Route path="/page/:slug" element={<CmsPage />} />
+            {/* Поставщик */}
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/requests"
+              element={
+                <PrivateRoute>
+                  <ProviderRequests />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/bookings"
+              element={
+                <PrivateRoute>
+                  <ProviderBookings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/favorites"
+              element={
+                <PrivateRoute>
+                  <ProviderFavorites />
+                </PrivateRoute>
+              }
+            />
+            <Route path="/profile/provider/:id" element={<ProviderProfile />} />
+            <Route path="/marketplace" element={<Marketplace />} />
 
+            {/* Клиент */}
+            <Route path="/client/register" element={<ClientRegister />} />
+            <Route path="/client/login" element={<ClientLogin />} />
+            <Route
+              path="/client/dashboard"
+              element={
+                <ClientPrivateRoute>
+                  <ClientDashboard />
+                </ClientPrivateRoute>
+              }
+            />
+            <Route path="/profile/client/:id" element={<ClientProfile />} />
 
-          {/* Отели (публичные) */}
-          <Route path="/hotels" element={<Hotels />} />
-          <Route path="/hotels/:hotelId" element={<HotelDetails />} />
-          <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
+            {/* Админ и CMS */}
+            <Route path="/admin/moderation" element={<AdminModeration />} />
+            <Route path="/page/:slug" element={<CmsPage />} />
+            <Route
+              path="/admin/providers"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminProviders />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/leads"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminLeads />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/hotels"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelsTable />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/pages"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <CmsEditor />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/entry-fees"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminEntryFees />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/hotels/new"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelForm />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/hotels/:id/edit"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelForm />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/hotels/:id/seasons"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelSeasons />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
 
-          {/* Админ: список/форма отелей */}
-                      
-          {/* Админ: список провайдеров */}
-          <Route
-            path="/admin/providers"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminProviders />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-          {/* Админ: лиды с лендингов Индии */}
-          <Route
-            path="/admin/leads"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminLeads />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/hotels"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminHotelsTable />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-          {/* Админ: редактор CMS страниц подвала */}
-          <Route
-            path="/admin/pages"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <CmsEditor />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
+            {/* Отели (публичные) */}
+            <Route path="/hotels" element={<Hotels />} />
+            <Route path="/hotels/:hotelId" element={<HotelDetails />} />
+            <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
 
+            {/* Инструменты */}
+            <Route path="/tour-builder" element={<TourBuilder />} />
+            <Route path="/templates" element={<TemplateCreator />} />
 
-          {/* Админ: база входных билетов */}
-           <Route
-             path="/admin/entry-fees"
-             element={
-               <PrivateRoute>
-                 <AdminRoute>
-                   <AdminEntryFees />
-                 </AdminRoute>
-               </PrivateRoute>
-             }
-           />
-
-          <Route
-            path="/admin/hotels/new"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminHotelForm />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/hotels/:id/edit"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminHotelForm />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-
-          {/* 404 / fallback — держим в самом конце */}
-          <Route path="/tour-builder" element={<TourBuilder />} />
-
-          {/* Страница конструктора шаблонов:
-              - доступна всем авторизованным
-              - внутри самой страницы действия ограничены ролями */}
-
-          <Route path="/templates" element={<TemplateCreator />} />
-
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/marketplace" replace />} />
-
-          <Route
-            path="/admin/hotels/:id/seasons"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminHotelSeasons />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
-
+            {/* Fallback — всегда последним */}
+            <Route path="*" element={<Navigate to="/marketplace" replace />} />
           </Routes>
         </main>
         <Footer />
