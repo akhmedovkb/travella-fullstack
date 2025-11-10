@@ -11,8 +11,8 @@ export default function LandingHome() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      {/* Breadcrumbs */}
       <Breadcrumbs items={[{ label: "India" }]} />
+
       <section className="rounded-3xl bg-[#FFE4D2] p-8 md:p-12">
         <h1 className="text-3xl md:text-5xl font-bold">{t("landing.home.h1")}</h1>
         <p className="mt-3 text-lg">{t("landing.home.sub")}</p>
@@ -28,7 +28,6 @@ export default function LandingHome() {
           >
             {t("landing.home.cta")}
           </a>
-
           <a
             href="https://wa.me/XXXXXXXXXXXX"
             className="px-5 py-3 border rounded-xl"
@@ -38,7 +37,6 @@ export default function LandingHome() {
         </div>
       </section>
 
-      {/* Навигация по India-разделам */}
       <section className="grid md:grid-cols-4 gap-4 mt-10">
         <Link to="/india/tours" className="card">{t("landing.menu.tours")}</Link>
         <Link to="/india/ayurveda" className="card">{t("landing.menu.ayurveda")}</Link>
@@ -46,12 +44,11 @@ export default function LandingHome() {
         <Link to="/india/treatment" className="card">{t("landing.menu.treatment")}</Link>
       </section>
 
-      {/* Модалка лида (общая форма) */}
       <LeadModal
         open={openLead}
         onClose={() => setOpenLead(false)}
         defaultService="consult"
-        defaultPage="/"
+        defaultPage="/india"
       />
     </main>
   );
