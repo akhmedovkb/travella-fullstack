@@ -7,7 +7,7 @@ export default function B2B() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <<Breadcrumbs
+      <Breadcrumbs
         items={[
           { label: t("landing.menu.home"), to: "/india" },
           { label: t("landing.B2B.h1") }
