@@ -1,7 +1,7 @@
 // frontend/src/pages/landing/IndiaLayout.jsx
 import { Outlet } from "react-router-dom";
 import IndiaNav from "../../components/IndiaNav";
-import FloatingLeadButton from "../../components/FloatingLeadButton";
+import FloatingLeadButton from "../../components/LeadModal";
 
 export default function IndiaLayout() {
   return (
