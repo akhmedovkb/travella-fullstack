@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import LeadModal from "../../components/LeadModal";
+import Breadcrumbs from "../../components/Breadcrumbs";
 
 export default function LandingHome() {
   const { t } = useTranslation();
@@ -10,6 +11,8 @@ export default function LandingHome() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
+      {/* Breadcrumbs */}
+      <Breadcrumbs items={[{ label: "India" }]} />
       <section className="rounded-3xl bg-[#FFE4D2] p-8 md:p-12">
         <h1 className="text-3xl md:text-5xl font-bold">{t("landing.home.h1")}</h1>
         <p className="mt-3 text-lg">{t("landing.home.sub")}</p>
