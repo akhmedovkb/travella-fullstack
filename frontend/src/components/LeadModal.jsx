@@ -30,6 +30,7 @@ export default function LeadModal({
   const [loading, setLoading] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState("");
+  const [touchedPhone, setTouchedPhone] = useState(false);
   const dialogRef = useRef(null);
 
   // UTM из query-параметров – один раз на маунт
@@ -93,6 +94,10 @@ export default function LeadModal({
   function handlePhoneChange(v) {
     setPhone(formatUzPhone(v));
   }
+  
+  // валидность телефона: ровно 9 цифр после +998
+  const phoneDigits = (() => { let d = onlyDigits(phone); if (d.startsWith("998")) d = d.slice(3); return d; })();
+  const isPhoneValid = phoneDigits.length === 9;
 
   // Аналитика (безопасные вызовы)
   function sendAnalytics(payload) {
@@ -278,10 +283,14 @@ export default function LeadModal({
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
+                    name="phone"
                     placeholder=" "
                     required
                     value={phone}
-                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    onChange={(e) => { setTouchedPhone(true); handlePhoneChange(e.target.value); }}
+                    onBlur={() => setTouchedPhone(true)}
+                    aria-invalid={touchedPhone && !isPhoneValid}
+                    aria-describedby="phoneHelp"
                   />
                   <label
                     className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
@@ -291,6 +300,14 @@ export default function LeadModal({
                   >
                     {t("landing.form.phone")}
                   </label>
+                  {touchedPhone && !isPhoneValid && (
+                    <div id="phoneHelp" className="mt-1 text-xs text-red-600">
+                      Введите номер в формате <span className="font-medium">+998 (__) ___-__-__</span>
+                    </div>
+                  )}
+                  {touchedPhone && isPhoneValid && (
+                    <div className="mt-1 text-[11px] text-emerald-600">Номер выглядит корректно ✓</div>
+                  )}
                 </div>
               </div>
 
@@ -373,7 +390,7 @@ export default function LeadModal({
               <div className="flex items-center justify-end pt-2">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !isPhoneValid}
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition inline-flex items-center gap-2"
                 >
                   {loading ? (
