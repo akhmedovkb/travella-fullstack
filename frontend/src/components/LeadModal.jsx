@@ -50,11 +50,12 @@ export default function LeadModal({
     }
   }, []);
 
-  // сброс при открытии + фокус на имя
+  // сброс при открытии + фокус на имя (не завися от ссылочной смены preset)
   useEffect(() => {
     if (open) {
       setName(preset.name || "");
-      setPhone(preset.phone || "");
+      // если в preset.phone есть сырые цифры — сразу маскируем
+      setPhone(preset.phone ? formatUzPhone(preset.phone) : "");
       setCity(preset.city || "");
       setPax(preset.pax || "");
       setComment(preset.comment || "");
@@ -62,7 +63,7 @@ export default function LeadModal({
       setErr("");
       setTimeout(() => nameInputRef.current?.focus(), 0);
     }
-  }, [open, preset]);
+   }, [open]);
 
   // esc закрытие
   useEffect(() => {
