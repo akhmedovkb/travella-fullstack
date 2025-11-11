@@ -194,7 +194,7 @@ export default function LeadModal({
   return (
     <div
       className="fixed inset-0 z-[1000] bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm flex items-center justify-center p-4"
-      onMouseDown={onBackdrop}
+      onClick={onBackdrop}
     >
       <div
         ref={dialogRef}
@@ -251,11 +251,12 @@ export default function LeadModal({
                     👤
                   </span>
                   <input
-                    className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
-                    placeholder=" "
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoFocus
+                   type="text"
+                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                   placeholder=" "
+                   value={name}
+                   onChange={(e) => setName(e.target.value)}
+                   autoFocus
                   />
                   <label
                     className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
@@ -273,7 +274,7 @@ export default function LeadModal({
                     📞
                   </span>
                   <input
-                    className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
@@ -301,7 +302,8 @@ export default function LeadModal({
                     📍
                   </span>
                   <input
-                    className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
++                   type="text"
++                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
                     placeholder=" "
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
@@ -322,9 +324,10 @@ export default function LeadModal({
                     👥
                   </span>
                   <input
-                    className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
-                    placeholder=" "
+                    type="text"
                     inputMode="numeric"
+                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                    placeholder=" "
                     value={pax}
                     onChange={(e) => setPax(e.target.value)}
                   />
