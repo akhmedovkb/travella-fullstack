@@ -1255,162 +1255,159 @@
   "taxes_and_fees": "Taxes & fees",
   "vat_included": "Prices include VAT",
   "vat_rate": "VAT rate, %",
-"landing": {
-  "menu": {
-    "tours": "Tours",
-    "indiaInside": "India Inside",
-    "ayurveda": "Ayurveda",
-    "checkup": "Check-up",
-    "treatment": "Treatment",
-    "clinics": "Clinics",
-    "b2b": "B2B for agents",
-    "contacts": "Contacts"
-  },
-  "home": {
-    "h1": "Travel & Medical Services in India — turnkey",
-    "sub": "Tours, Ayurveda, Check-up, hospitals in Delhi. 24/7 support.",
-    "cta": "Get a quote",
-    "whatsapp": "WhatsApp"
-  },
-  "form": {
-    "name": "Name",
-    "phone": "Phone",
-    "comment": "Comment",
-    "service": "Service",
-    "send": "Send request",
-    "sent": "Request sent. We will contact you.",
-    "error": "Error. Please try again later.",
-    "tour": "Tour selection",
-    "checkup": "Check-up",
-    "ayurveda": "Ayurveda",
-    "treatment": "Treatment",
-    "pax": "Passengers",
-    "dates": "Dates / duration",
-    "destination": "City / dates",
-    "program": "Program",
-    "programs": {
-      "base": "Basic",
-      "cardio": "Cardio",
-      "onco": "Onco",
-      "female": "Female",
-      "male": "Male"
-    }
-  },
-
-  "tours": {
-    "h1": "Tours to India",
-    "sub": "Goa, Kerala, Delhi, Mumbai, Golden Triangle. Packages & tailor-made programs.",
-    "from": "from {{price}}",
-    "cta": "View details",
-    "nights": "{{count}} night",
-    "nights_plural_2": "{{count}} nights",
-    "nights_plural_5": "{{count}} nights",
-
-    "program": {
-      "badge": "TRAVELLA × INDIA",
-      "title": "India Inside — Become an India Guru",
-      "desc": "4 trips: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Become a certified India Guru.",
-      "trailer": "Watch trailer",
-      "cta": "Open program"
+{
+  "landing": {
+    "menu": {
+      "tours": "Tours",
+      "indiaInside": "India Inside",
+      "ayurveda": "Ayurveda",
+      "checkup": "Check-up",
+      "treatment": "Treatment",
+      "clinics": "Clinics",
+      "b2b": "B2B for agents",
+      "contacts": "Contacts"
     },
-
-    "offers": [
-      {
-        "id": "golden-triangle",
-        "title": "Golden Triangle",
-        "desc": "Delhi — Agra — Jaipur. History, palaces, Taj Mahal.",
-        "priceFrom": 590,
-        "currency": "USD",
-        "nights": 6,
-        "slug": "/india/tours/golden-triangle",
-        "image": "/gti.jpeg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "rajasthan",
-        "title": "Rajasthan Adventure",
-        "desc": "Desert dunes, royal palaces, blue cities.",
-        "priceFrom": 790,
-        "currency": "USD",
-        "nights": 8,
-        "slug": "/india/tours/rajasthan",
-        "image": "/rj_01.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "mumbai-goa",
-        "title": "Mumbai + Goa = Best memories",
-        "desc": "Cosmopolitan city + tropical beaches.",
-        "priceFrom": 350,
-        "currency": "USD",
-        "nights": 7,
-        "slug": "/india/tours/mumbai-goa",
-        "image": "/mg.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "kerala",
-        "title": "Kerala — Heaven on Earth",
-        "desc": "Tea plantations, backwaters & wellness programs.",
-        "priceFrom": 690,
-        "currency": "USD",
-        "nights": 9,
-        "slug": "/india/tours/kerala",
-        "image": "/kerala_01.jpg",
-        "tag": "India Inside"
+    "home": {
+      "h1": "Travel & Medical Services in India — turnkey",
+      "sub": "Tours, Ayurveda, Check-up, hospitals in Delhi. 24/7 support.",
+      "cta": "Get a quote",
+      "whatsapp": "WhatsApp"
+    },
+    "form": {
+      "name": "Name",
+      "phone": "Phone",
+      "comment": "Comment",
+      "service": "Service",
+      "send": "Send request",
+      "sent": "Request sent. We will contact you.",
+      "error": "Error. Please try again later.",
+      "tour": "Tour selection",
+      "checkup": "Check-up",
+      "ayurveda": "Ayurveda",
+      "treatment": "Treatment",
+      "pax": "Passengers",
+      "dates": "Dates / duration",
+      "destination": "City / dates",
+      "program": "Program",
+      "programs": {
+        "base": "Basic",
+        "cardio": "Cardio",
+        "onco": "Onco",
+        "female": "Female",
+        "male": "Male"
       }
-    ]
-  },
-
-  "inside": {
-    "badge": "TRAVELLA • INDIA",
-    "title": "India Inside — luxury travel",
-    "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan serenity.",
-    "cta_trailer": "Watch trailer",
-    "cta_join": "Apply to join",
-
-    "steps_title": "Chapters of India Inside",
-    "steps_sub": "Pick the chapter that resonates — we’ll tailor your route.",
-    "view": "Request program",
-
-    "chapters": {
-      "royal":  { "title": "Royal Chapters", "desc": "Udaipur & Jaipur palaces, closed rituals." },
-      "silence":{"title": "Path of Silence", "desc": "Himalayas, Ayurveda, monks, tea estates." },
-      "modern": { "title": "Modern India", "desc": "Mumbai style, film studio, yacht, gala night." },
-      "kerala": { "title": "Kerala: reboot", "desc": "Backwaters, tea, wellness, private houseboat." }
     },
-
-    "guru": {
-      "title": "India Guru program",
-      "lead": "Complete all 4 chapters to earn your personal “India Inside: Guru” status.",
-      "bullets": {
-        "one": "Bespoke itineraries with a dedicated curator",
-        "two": "Access to closed rituals & normally private locations",
-        "three": "“Guru” certificate & entry to the Travella club",
-        "four": "By application only"
+    "tours": {
+      "h1": "Tours to India",
+      "sub": "Goa, Kerala, Delhi, Mumbai, Golden Triangle. Packages & tailor-made programs.",
+      "from": "from {{price}}",
+      "cta": "View details",
+      "nights": "{{count}} night",
+      "nights_plural_2": "{{count}} nights",
+      "nights_plural_5": "{{count}} nights",
+      "program": {
+        "badge": "TRAVELLA × INDIA",
+        "title": "India Inside — Become an India Guru",
+        "desc": "4 trips: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Certified India Guru.",
+        "trailer": "Watch trailer",
+        "cta": "Open program"
       },
-      "cta_apply": "Apply to participate",
-      "cta_chapters": "Explore chapters"
-    }
-  },
-
-  "ayurveda": {
-    "h1": "Ayurveda & wellness",
-    "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
-    "get": "Request program"
-  },
-  "checkup": {
-    "h1": "Check-up in India",
-    "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
-    "get": "Get price"
-  },
-  "treatment": {
-    "h1": "Medical treatment in India",
-    "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
-    "get": "Get consultation"
-  },
-  "clinics": { "h1": "Partner clinics (Delhi)" },
-  "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
-  "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+      "offers": [
+        {
+          "id": "golden-triangle",
+          "title": "Golden Triangle",
+          "desc": "Delhi — Agra — Jaipur. History, palaces, Taj Mahal.",
+          "priceFrom": 590,
+          "currency": "USD",
+          "nights": 6,
+          "slug": "/india/tours/golden-triangle",
+          "image": "/gti.jpeg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "rajasthan",
+          "title": "Rajasthan Adventure",
+          "desc": "Desert dunes, royal palaces, blue cities.",
+          "priceFrom": 790,
+          "currency": "USD",
+          "nights": 8,
+          "slug": "/india/tours/rajasthan",
+          "image": "/rj_01.jpg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "mumbai-goa",
+          "title": "Mumbai + Goa = Best memories",
+          "desc": "Cosmopolitan city + tropical beaches.",
+          "priceFrom": 350,
+          "currency": "USD",
+          "nights": 7,
+          "slug": "/india/tours/mumbai-goa",
+          "image": "/mg.jpg",
+          "tag": "India Inside"
+        },
+        {
+          "id": "kerala",
+          "title": "Kerala — Heaven on Earth",
+          "desc": "Tea plantations, backwaters & wellness programs.",
+          "priceFrom": 690,
+          "currency": "USD",
+          "nights": 9,
+          "slug": "/india/tours/kerala",
+          "image": "/kerala_01.jpg",
+          "tag": "India Inside"
+        }
+      ]
+    },
+    "inside": {
+      "badge": "TRAVELLA • INDIA",
+      "title": "India Inside — luxury travel",
+      "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan serenity.",
+      "cta_trailer": "Watch trailer",
+      "cta_join": "Apply to join",
+      "steps_title": "Chapters of India Inside",
+      "steps_sub": "Pick the chapter that resonates — we’ll tailor your route.",
+      "view": "Request program",
+      "chapters": {
+        "royal":  { "title": "Royal Chapters", "desc": "Udaipur & Jaipur palaces, closed rituals.", "days": "8–9 days", "from": "from $8,900" },
+        "silence":{ "title": "Path of Silence", "desc": "Himalayas, Ayurveda, monks, tea estates.", "days": "7–8 days", "from": "from $6,200" },
+        "modern": { "title": "Modern India", "desc": "Mumbai style, film studio, yacht, gala night.", "days": "7 days", "from": "from $7,400" },
+        "kerala": { "title": "Kerala: reboot", "desc": "Backwaters, tea, wellness, private houseboat.", "days": "8–9 days", "from": "from $6,900" }
+      },
+      "guru": {
+        "title": "India Guru program",
+        "lead": "Complete all 4 chapters to earn your personal “India Inside: Guru” status.",
+        "bullets": {
+          "one": "Bespoke itineraries with a dedicated curator",
+          "two": "Access to closed rituals & normally private locations",
+          "three": "“Guru” certificate & entry to the Travella club",
+          "four": "By application only"
+        },
+        "cta_apply": "Apply to participate",
+        "cta_chapters": "Explore chapters",
+        "certificate_label": "Certificate",
+        "certificate_meta": "Holder name • Date • Program ID"
+      }
+    },
+    "ayurveda": {
+      "h1": "Ayurveda & wellness",
+      "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
+      "get": "Request program"
+    },
+    "checkup": {
+      "h1": "Check-up in India",
+      "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
+      "get": "Get price"
+    },
+    "treatment": {
+      "h1": "Medical treatment in India",
+      "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
+      "get": "Get consultation"
+    },
+    "clinics": { "h1": "Partner clinics (Delhi)" },
+    "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
+    "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+  }
 }
+
 }
