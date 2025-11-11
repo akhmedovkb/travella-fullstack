@@ -1338,7 +1338,7 @@
         "currency": "USD",
         "nights": 6,
         "slug": "/india/tours/golden-triangle",
-        "image": "/img/india/golden-triangle.jpg",
+        "image": "/gti.jpeg",
         "tag": "India Inside"
       },
       {
@@ -1349,7 +1349,7 @@
         "currency": "USD",
         "nights": 8,
         "slug": "/india/tours/rajasthan",
-        "image": "/img/india/rajasthan.jpg",
+        "image": "/rj_01.jpg",
         "tag": "India Inside"
       },
       {
@@ -1370,8 +1370,8 @@
         "priceFrom": 690,
         "currency": "USD",
         "nights": 9,
-        "slug": "/india/tours/kerala",
-        "image": "/img/india/kerala.jpg",
+        "slug": "/india/tours/kerala_01.jpg",
+        "image": "/kerala_01.jpg",
         "tag": "India Inside"
       }
     ]
