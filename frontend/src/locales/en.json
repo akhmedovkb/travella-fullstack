@@ -1255,7 +1255,6 @@
   "taxes_and_fees": "Taxes & fees",
   "vat_included": "Prices include VAT",
   "vat_rate": "VAT rate, %",
-
 "landing": {
   "menu": {
     "tours": "Tours",
@@ -1289,12 +1288,12 @@
     "dates": "Dates / duration",
     "destination": "City / dates",
     "program": "Program",
-    "programs": { 
-      "base": "Basic", 
-      "cardio": "Cardio", 
-      "onco": "Onco", 
-      "female": "Female", 
-      "male": "Male" 
+    "programs": {
+      "base": "Basic",
+      "cardio": "Cardio",
+      "onco": "Onco",
+      "female": "Female",
+      "male": "Male"
     }
   },
 
@@ -1351,7 +1350,7 @@
       },
       {
         "id": "kerala",
-        "title": "Kerala : Heaven on Earth",
+        "title": "Kerala — Heaven on Earth",
         "desc": "Tea plantations, backwaters & wellness programs.",
         "priceFrom": 690,
         "currency": "USD",
@@ -1363,12 +1362,55 @@
     ]
   },
 
-  "ayurveda": { "h1": "Ayurveda & wellness", "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.", "get": "Request program" },
-  "checkup": { "h1": "Check-up in India", "sub": "Basic, cardio, oncology, women/men packages in Delhi.", "get": "Get price" },
-  "treatment": { "h1": "Medical treatment in India", "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.", "get": "Get consultation" },
+  "inside": {
+    "badge": "TRAVELLA • INDIA",
+    "title": "India Inside — luxury travel",
+    "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan serenity.",
+    "cta_trailer": "Watch trailer",
+    "cta_join": "Apply to join",
+
+    "steps_title": "Chapters of India Inside",
+    "steps_sub": "Pick the chapter that resonates — we’ll tailor your route.",
+    "view": "Request program",
+
+    "chapters": {
+      "royal":  { "title": "Royal Chapters", "desc": "Udaipur & Jaipur palaces, closed rituals." },
+      "silence":{"title": "Path of Silence", "desc": "Himalayas, Ayurveda, monks, tea estates." },
+      "modern": { "title": "Modern India", "desc": "Mumbai style, film studio, yacht, gala night." },
+      "kerala": { "title": "Kerala: reboot", "desc": "Backwaters, tea, wellness, private houseboat." }
+    },
+
+    "guru": {
+      "title": "India Guru program",
+      "lead": "Complete all 4 chapters to earn your personal “India Inside: Guru” status.",
+      "bullets": {
+        "one": "Bespoke itineraries with a dedicated curator",
+        "two": "Access to closed rituals & normally private locations",
+        "three": "“Guru” certificate & entry to the Travella club",
+        "four": "By application only"
+      },
+      "cta_apply": "Apply to participate",
+      "cta_chapters": "Explore chapters"
+    }
+  },
+
+  "ayurveda": {
+    "h1": "Ayurveda & wellness",
+    "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
+    "get": "Request program"
+  },
+  "checkup": {
+    "h1": "Check-up in India",
+    "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
+    "get": "Get price"
+  },
+  "treatment": {
+    "h1": "Medical treatment in India",
+    "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
+    "get": "Get consultation"
+  },
   "clinics": { "h1": "Partner clinics (Delhi)" },
   "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
   "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
 }
-
 }
