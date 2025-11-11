@@ -1304,8 +1304,8 @@
         "priceFrom": 690,
         "currency": "USD",
         "nights": 9,
-        "slug": "/india/tours/kerala",
-        "image": "/img/india/kerala.jpg",
+        "slug": "/public/kerala_01.jpg",
+        "image": "/kerala_01.jpg",
         "tag": "India Inside"
       }
     ]
