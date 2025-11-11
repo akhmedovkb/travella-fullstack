@@ -1376,37 +1376,37 @@
     ]
   },
 
-  "inside": {
-    "badge": "TRAVELLA • INDIA",
-    "title": "India Inside — hashamatli sayohat",
-    "sub": "Shaxsiy dasturlar, maharajalar saroylari, yopiq marosimlar va Himolay tinchligi.",
-    "cta_trailer": "Treylerni ko‘rish",
-    "cta_join": "Dasturga ariza berish",
+"inside": {
+  "badge": "TRAVELLA • INDIA",
+  "title": "India Inside — hashamatli sayohat",
+  "sub": "Shaxsiy dasturlar, maharajalar saroylari, yopiq marosimlar va Himolay tinchligi.",
+  "cta_trailer": "Treylerni ko‘rish",
+  "cta_join": "Dasturga ariza berish",
 
-    "steps_title": "India Inside boblari",
-    "steps_sub": "O‘zingizga mos bobni tanlang — biz shaxsiy marshrut tuzamiz.",
-    "view": "Dastur so‘rash",
+  "steps_title": "India Inside boblari",
+  "steps_sub": "Bobni tanlang — biz sizga shaxsiy marshrut tuzamiz.",
+  "view": "Dastur so‘rash",
 
-    "chapters": {
-      "royal":  { "title": "Qirollik boblari", "desc": "Udaypur va Jaypur saroylari, yopiq marosimlar." },
-      "silence":{ "title": "Sukunat yo‘li",   "desc": "Himolaylar, ayurveda, rohiblar, choytepaliklar." },
-      "modern": { "title": "Zamonaviy Hindiston", "desc": "Mumbay uslubi, kinostudiya, yaxta, gala kechasi." },
-      "kerala": { "title": "Kerala: qayta yuklanish", "desc": "Backwaters, choy, wellness, shaxsiy hausbot." }
-    },
-
-    "guru": {
-      "title": "India Guru dasturi",
-      "lead": "India Inside’ning 4 bobini yakunlab, shaxsiy «India Inside: Guru» maqomini oling.",
-      "bullets": {
-        "one": "Individual marshrutlar va shaxsiy kurator",
-        "two": "Yopiq marosimlar va odatda yopiq lokatsiyalar",
-        "three": "«Guru» sertifikati va Travella klubiga kirish",
-        "four": "Faqat ariza bo‘yicha"
-      },
-      "cta_apply": "Ishtirokga ariza berish",
-      "cta_chapters": "Dastur boblarini ko‘rish"
-    }
+  "chapters": {
+    "royal":  { "title": "Qirollik Hindistoni", "desc": "Udaypur va Jaypur saroylari, yopiq marosimlar." },
+    "silence":{ "title": "Sukunat yo‘li", "desc": "Himolaylar, ayurveda, rohiblar, choy tepaliklari." },
+    "modern": { "title": "Zamonaviy Hindiston", "desc": "Mumbay uslubi, kinostudiya, yaxta, gala kechasi." },
+    "kerala": { "title": "Kerala: qayta yuklanish", "desc": "Backwaters, choy, wellness, shaxsiy hausbot." }
   },
+
+  "guru": {
+    "title": "India Guru dasturi",
+    "lead": "4 bobni yakunlang — Qirollik Hindistoni, Sukunat yo‘li, Zamonaviy Hindiston va Kerala — va shaxsiy «India Inside: Guru» maqomini oling.",
+    "bullets": {
+      "one": "Individual marshrutlar va shaxsiy kurator",
+      "two": "Yopiq marosimlar va odatda yopiq lokatsiyalar",
+      "three": "«Guru» sertifikati va Travella klubiga kirish",
+      "four": "Faqat ariza bo‘yicha"
+    },
+    "cta_apply": "Ishtirok uchun ariza",
+    "cta_chapters": "Boblarni ko‘rish"
+  }
+},
 
   "ayurveda": {
     "h1": "Ayurveda va wellness",
