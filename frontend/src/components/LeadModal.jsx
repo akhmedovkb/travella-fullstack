@@ -165,25 +165,23 @@ export default function LeadModal({
 
       setOk(true);
 
-      // Авто-открытие WhatsApp с предзаполненным сообщением
-      try {
-        const msg = [
-          "Здравствуйте! Хочу подбор по Индии",
-          `Имя: ${name || "-"}`,
-          `Телефон: ${phoneNormalized}`,
-          `Услуга: ${defaultService}`,
-          city ? `Город/даты: ${city}` : "",
-          pax ? `Кол-во человек: ${pax}` : "",
-          comment ? `Комментарий: ${comment}` : "",
-          `Страница: ${defaultPage}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
-        const wa = `https://wa.me/${onlyDigits(WHATSAPP_NUMBER)}?text=${encodeURIComponent(
-          msg
-        )}`;
-        window.open(wa, "_blank", "noopener,noreferrer");
-      } catch {}
+      // (опционально) Авто-открытие WhatsApp — только если явно включено через ENV
+      if (AUTOLAUNCH_WHATSAPP) {
+        try {
+          const msg = [
+            "Здравствуйте! Хочу подбор по Индии",
+            `Имя: ${name || "-"}`,
+            `Телефон: ${phoneNormalized}`,
+            `Услуга: ${defaultService}`,
+            city ? `Город/даты: ${city}` : "",
+            pax ? `Кол-во человек: ${pax}` : "",
+            comment ? `Комментарий: ${comment}` : "",
+            `Страница: ${defaultPage}`,
+          ].filter(Boolean).join("\n");
+          const wa = `https://wa.me/${onlyDigits(WHATSAPP_NUMBER)}?text=${encodeURIComponent(msg)}`;
+          window.open(wa, "_blank", "noopener,noreferrer");
+        } catch {}
+      }
 
       setTimeout(() => {
         onClose?.();
