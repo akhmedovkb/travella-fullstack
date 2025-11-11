@@ -9,7 +9,7 @@ export default function IndiaNav() {
 
   const tabs = [
     { to: "/india/tours",     label: t("landing.menu.tours") },
-    { name: "India Inside", to: "/india/inside" },
+    { to: "/india/inside", label: t("landing.menu.indiaInside") },
     { to: "/india/ayurveda",  label: t("landing.menu.ayurveda") },
     { to: "/india/checkup",   label: "Check-up" }, // обычно в ключах без дефиса; текст оставляем как бренд
     { to: "/india/treatment", label: t("landing.menu.treatment") },
