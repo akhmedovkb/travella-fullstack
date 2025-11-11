@@ -64,24 +64,26 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
   }
 }
 
-/* ===== LEADS: клавиатуры (назначение и статусы) ===== */
+/* ================== helpers: phone → WA ================== */
+function _toIntlDigitsForWA(phone) {
+  // Возвращает только цифры без "+", если длина 10–15 (международный формат). Иначе "".
+  const d = String(phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  // допускаем любые страны: 10–15 цифр
+  if (d.length >= 10 && d.length <= 15) return d;
+  // допускаем локальный UZ: 9 цифр → добавим код страны
+  if (d.length === 9) return `998${d}`;
+  // допускаем уже с 998 и 12 цифр
+  if (d.startsWith("998") && d.length === 12) return d;
+  return "";
+}
+
+/* ================== LEADS: клавиатуры (назначение и статусы) ===== */
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
-  const raw = String(phone || "").replace(/\D/g, "");
-  let intl = "";
-  if (!raw) {
-    intl = "";
-  } else if (raw.startsWith("998")) {
-    intl = raw;
-  } else if (raw.length === 9) {
-    intl = `998${raw}`;     // локальный UZ номер → делаем международным
-  } else if (raw.length >= 10 && raw.length <= 15) {
-    intl = raw;             // уже международный — оставляем как есть
-  } else {
-    intl = "";              // неуверенный формат — не делаем кнопку
-  }
+  const intl = _toIntlDigitsForWA(phone);
   const wa = intl ? `https://wa.me/${intl}` : null;
-  // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
-  const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
+ // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
+ const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
 
   const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
   const assignRow = assigneeName
