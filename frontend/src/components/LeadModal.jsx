@@ -252,9 +252,15 @@ export default function LeadModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Имя (floating label) */}
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">
-                    👤
-                  </span>
+                  {/* user icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Z" />
+                    <path d="M3.5 20.5a8.5 8.5 0 0 1 17 0" strokeLinecap="round" />
+                  </svg>
                   <input
                    type="text"
                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
@@ -275,9 +281,14 @@ export default function LeadModal({
 
                 {/* Телефон (floating label + mask) */}
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">
-                    📞
-                  </span>
+                  {/* phone icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M21 16.5v2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.63A2 2 0 0 1 3.5 0h2A2 2 0 0 1 7.5 1.72l1 2a2 2 0 0 1-.45 2.23L6.9 7.1a16 16 0 0 0 6 6l1.15-1.15a2 2 0 0 1 2.23-.45l2 1A2 2 0 0 1 21 16.5Z"/>
+                  </svg>
                   <input
                     className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
                     type="tel"
@@ -315,9 +326,15 @@ export default function LeadModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Город/даты */}
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">
-                    📍
-                  </span>
+                  {/* map-pin icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M12 22s7-6.2 7-12A7 7 0 1 0 5 10c0 5.8 7 12 7 12Z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
                   <input
                    type="text"
                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
@@ -337,9 +354,16 @@ export default function LeadModal({
 
                 {/* Кол-во человек */}
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">
-                    👥
-                  </span>
+                  {/* users icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M22 21v-1a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -361,9 +385,15 @@ export default function LeadModal({
 
               {/* Комментарий */}
               <div className="relative">
-                <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">
-                  📝
-                </span>
+                {/* note icon */}
+                <svg
+                  aria-hidden="true"
+                  className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                  <path d="M14 2v6h6"/>
+                </svg>
                 <textarea
                   className="peer input min-h-[110px] !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                   placeholder=" "
@@ -391,7 +421,9 @@ export default function LeadModal({
                 <button
                   type="submit"
                   disabled={loading || !isPhoneValid}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition inline-flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition inline-flex items-center gap-2
+                             animate-[glow_1.8s_ease-in-out_infinite] disabled:animate-none"
+
                 >
                   {loading ? (
                     <>
