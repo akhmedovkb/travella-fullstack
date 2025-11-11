@@ -4,58 +4,63 @@ import { Link } from "react-router-dom";
 
 function pluralNights(t, n) {
   if (n == null) return "";
-  // i18n-плюрали через ключи выше
   if (n % 10 === 1 && n % 100 !== 11) return t("landing.tours.nights", { count: n });
-  if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return t("landing.tours.nights_plural_2", { count: n });
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) {
+    return t("landing.tours.nights_plural_2", { count: n });
+  }
   return t("landing.tours.nights_plural_5", { count: n });
 }
 
 export default function Tours() {
   const { t } = useTranslation();
-  const offers = t("landing.tours.offers", { returnObjects: true }) || [];
+
+  // В некоторых локалях может прийти объект, а не массив → нормализуем
+  const raw = t("landing.tours.offers", { returnObjects: true }) || [];
+  const offers = Array.isArray(raw) ? raw : Object.values(raw);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.tours.h1")}</h1>
       <p className="mt-3 text-lg text-gray-700">{t("landing.tours.sub")}</p>
 
-      {/* Promo “India Inside” */}
-<div className="mt-8 rounded-2xl bg-gradient-to-r from-[#FF5722]/10 to-amber-100/60 p-6 ring-1 ring-black/5">
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-    <div>
-      <div className="text-[11px] uppercase tracking-wide font-semibold text-[#FF5722]/80">
-        Travella × India
+      {/* Promo “India Inside — стань Гуру по Индии” */}
+      <div className="mt-8 rounded-2xl bg-gradient-to-r from-[#FF5722]/10 to-amber-100/60 p-6 ring-1 ring-black/5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div>
+            <div className="text-[11px] uppercase tracking-wide font-semibold text-[#FF5722]/80">
+              Travella × India
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold mt-1">
+              India Inside — стань Гуру по Индии
+            </h2>
+            <p className="mt-2 text-gray-600 text-sm md:text-base">
+              4 путешествия: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Пройди путь и
+              получи статус <b>India Guru</b>.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to="/india/inside#trailer"
+              className="px-4 py-2 rounded-xl ring-1 ring-black/10 hover:bg-white transition flex items-center gap-2 text-sm"
+            >
+              <span>▶</span> Смотреть трейлер
+            </Link>
+            <Link
+              to="/india/inside"
+              className="px-4 py-2.5 rounded-xl bg-[#FF5722] text-white shadow hover:brightness-95 text-sm"
+            >
+              Перейти к программе
+            </Link>
+          </div>
+        </div>
       </div>
-      <h2 className="text-2xl md:text-3xl font-bold mt-1">
-        India Inside — стань Гуру по Индии
-      </h2>
-      <p className="mt-2 text-gray-600 text-sm md:text-base">
-        4 путешествия: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. 
-        Пройди путь и получи статус <b>India Guru</b>.
-      </p>
-    </div>
 
-    <div className="flex flex-wrap gap-3">
-      <Link
-        to="/india/inside#trailer"
-        className="px-4 py-2 rounded-xl ring-1 ring-black/10 hover:bg-white transition flex items-center gap-2 text-sm"
-      >
-        <span>▶</span> Смотреть трейлер
-      </Link>
-      <Link
-        to="/india/inside"
-        className="px-4 py-2.5 rounded-xl bg-[#FF5722] text-white shadow hover:brightness-95 text-sm"
-      >
-        Перейти к программе
-      </Link>
-    </div>
-  </div>
-</div>
-
+      {/* Карточки предложений */}
       <div className="grid md:grid-cols-3 gap-6 mt-8">
         {offers.map((o) => (
           <article
-            key={o.id}
+            key={o.id || o.slug || o.title}
             className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 hover:ring-[#FF5722]/30 transition"
           >
             {o.image && (
