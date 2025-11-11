@@ -245,3 +245,5 @@ export default function IndiaInside({ onLeadOpen }) {
     </div>
   );
 }
+
+этот мы делали. ингорируем его?
