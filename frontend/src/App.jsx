@@ -52,7 +52,7 @@ import AdminEntryFees from "./pages/AdminEntryFees";
 // Landing
 import IndiaLayout from "./pages/landing/IndiaLayout";
 import LandingHome from "./pages/landing/Home";
-import Tours from "./pages/landing/Tours";
+//import Tours from "./pages/landing/Tours";
 import Ayurveda from "./pages/landing/Ayurveda";
 import Checkup from "./pages/landing/Checkup";
 import Treatment from "./pages/landing/Treatment";
@@ -114,20 +114,27 @@ export default function App() {
 
             {/* --- INDIA namespace --- */}
             <Route path="/india" element={<IndiaLayout />}>
-              <Route index element={<LandingHome />} />
-              <Route path="tours" element={<Tours />} />
+              {/* по адресу /india сразу отправляем в /india/inside */}
+              <Route index element={<Navigate to="inside" replace />} />
+            
+              {/* /india/inside — единственная главная страница Индии */}
+              <Route path="inside" element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />} />
+            
+              {/* легаси: /india/tours → /india/inside */}
+              <Route path="tours" element={<Navigate to="/india/inside" replace />} />
+            
+              {/* остальные разделы Индии без изменений */}
               <Route path="ayurveda" element={<Ayurveda />} />
               <Route path="checkup" element={<Checkup />} />
               <Route path="treatment" element={<Treatment />} />
-              <Route path="inside" element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />} />
-              {/* информативные страницы без кнопок/форм */}
               <Route path="b2b" element={<B2B />} />
               <Route path="clinics" element={<Clinics />} />
               <Route path="contacts" element={<Contacts />} />
             </Route>
 
+
             {/* --- Редиректы со старых путей на /india/* --- */}
-            <Route path="/tours" element={<Navigate to="/india/tours" replace />} />
+            <Route path="/tours" element={<Navigate to="/india/inside" replace />} />
             <Route path="/ayurveda" element={<Navigate to="/india/ayurveda" replace />} />
             <Route path="/checkup" element={<Navigate to="/india/checkup" replace />} />
             <Route path="/treatment" element={<Navigate to="/india/treatment" replace />} />
