@@ -66,12 +66,14 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
 
 /* ===== LEADS: клавиатуры (назначение и статусы) ===== */
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
-  const digits = (phone || "").replace(/[^\d+]/g, "");
-  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
-  const contactRow = [
-    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
-    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
-  ];
+  // нормализуем номер в цифры и собираем корректную wa.me ссылку
+  const raw = String(phone || "").replace(/\D/g, "");       // только цифры
+  // если номер без кода страны — подставим 998 (Узбекистан), иначе используем как есть
+  const intl = raw.startsWith("998") ? raw : (raw ? `998${raw}` : "");
+  const wa = intl ? `https://wa.me/${intl}` : null;
+  // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
+  const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
+
   const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
   const assignRow = assigneeName
     ? [{ text: `👤 Ответственный: ${assigneeName}`, callback_data: `noop:${id}` },
