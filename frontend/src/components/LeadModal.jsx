@@ -103,7 +103,7 @@ export default function LeadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[1000] bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm flex items-center justify-center p-4"
       onMouseDown={onBackdrop}
     >
       <div
@@ -111,7 +111,7 @@ export default function LeadModal({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/95 shadow-2xl ring-1 ring-black/5 focus:outline-none"
+        className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -119,7 +119,9 @@ export default function LeadModal({
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FF5722]/10 text-[#FF5722]">★</span>
             <div>
               <h3 className="text-base md:text-lg font-semibold leading-none">{t("landing.home.cta")}</h3>
-              <p className="text-xs text-gray-500 mt-1">{t("landing.form.comment") ? t("landing.form.comment") : "Мы свяжемся в ближайшее время"}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {t("landing.form.subtitle", "Мы свяжемся в ближайшее время")}
+              </p>
             </div>
           </div>
           <button
@@ -140,57 +142,93 @@ export default function LeadModal({
             </div>
           ) : (
             <>
+          {/* row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="space-y-1">
-              <span className="text-xs text-gray-600">{t("landing.form.name")}</span>
+            {/* Имя (floating label) */}
+            <div className="relative">
               <input
-                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
-                placeholder={t("landing.form.name")}
-                value={name} onChange={(e)=>setName(e.target.value)}
+                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                placeholder=" "
+                value={name}
+                onChange={(e)=>setName(e.target.value)}
+                autoFocus
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-gray-600">{t("landing.form.phone")}</span>
+              <label className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
+                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
+                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
+                                 bg-white/90 px-1 rounded">
+                {t("landing.form.name")}
+              </label>
+            </div>
+            {/* Телефон (floating label) */}
+            <div className="relative">
               <input
-                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel"
-                placeholder={t("landing.form.phone")}
+                placeholder=" "
                 required
                 value={phone}
                 onChange={(e)=>setPhone(e.target.value)}
               />
-            </label>
+              <label className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
+                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
+                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
+                                 bg-white/90 px-1 rounded">
+                {t("landing.form.phone")}
+              </label>
+            </div>
           </div>
-          {/* Для туров удобно спросить город/даты и pax */}
+          {/* row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="space-y-1">
-              <span className="text-xs text-gray-600">{t("landing.form.destination")}</span>
+            {/* Город/даты */}
+            <div className="relative">
               <input
-                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
-                placeholder={t("landing.form.destination")}
-                value={city} onChange={(e)=>setCity(e.target.value)}
+                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                placeholder=" "
+                value={city}
+                onChange={(e)=>setCity(e.target.value)}
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-gray-600">{t("landing.form.pax")}</span>
+              <label className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
+                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
+                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
+                                 bg-white/90 px-1 rounded">
+                {t("landing.form.destination")}
+              </label>
+            </div>
+            {/* Кол-во человек */}
+            <div className="relative">
               <input
-                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
-                placeholder={t("landing.form.pax")}
+                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                placeholder=" "
                 inputMode="numeric"
-                value={pax} onChange={(e)=>setPax(e.target.value)}
+                value={pax}
+                onChange={(e)=>setPax(e.target.value)}
               />
+              <label className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
+                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
+                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
+                                 bg-white/90 px-1 rounded">
+                {t("landing.form.pax")}
+              </label>
+            </div>
+          </div>
+          {/* Комментарий */}
+          <div className="relative">
+            <textarea
+              className="peer input min-h-[110px] !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+              placeholder=" "
+              value={comment}
+              onChange={(e)=>setComment(e.target.value)}
+            />
+            <label className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
+                               peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
+                               peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
+                               bg-white/90 px-1 rounded">
+              {t("landing.form.comment")}
             </label>
           </div>
-          <label className="space-y-1 block">
-            <span className="text-xs text-gray-600">{t("landing.form.comment")}</span>
-            <textarea
-              className="input min-h-[110px] !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
-              placeholder={t("landing.form.comment")}
-              value={comment} onChange={(e)=>setComment(e.target.value)}
-            />
-          </label>
              
      {err && <div className="text-sm text-red-600">{t("landing.form.error")}: {err}</div>}
               
@@ -201,12 +239,12 @@ export default function LeadModal({
               onClick={onClose}
               className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
             >
-              {t("landing.form.cancel") ?? "Отмена"}
+              {t("landing.form.cancel", "Отмена")}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2.5 rounded-xl bg-[#FF5722] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition"
             >
               {loading ? "…" : t("landing.form.send")}
             </button>
