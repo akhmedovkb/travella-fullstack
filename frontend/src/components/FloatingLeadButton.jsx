@@ -1,6 +1,6 @@
 //frontend/src/components/FloatingLeadButton.jsx
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import LeadModal from "./LeadModal";
 
@@ -15,11 +15,25 @@ function mapService(pathname = "/") {
 export default function FloatingLeadButton() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
-
+  const [leadSent, setLeadSent] = useState(false);
   const defaults = useMemo(() => ({
     service: mapService(pathname),
     page: pathname || "/",
   }), [pathname]);
+
+  // Слушаем событие успешной отправки лида, чтобы показать бейдж
+  useEffect(() => {
+    let timer;
+    const onSubmitted = () => {
+      setLeadSent(true);
+      timer = setTimeout(() => setLeadSent(false), 6000);
+    };
+    window.addEventListener("travella:lead-submitted", onSubmitted);
+    return () => {
+      window.removeEventListener("travella:lead-submitted", onSubmitted);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   return (
     <>
@@ -30,8 +44,26 @@ export default function FloatingLeadButton() {
       >
         Получить подбор
       </button>
-
-      <LeadModal
+      <div className="fixed bottom-6 right-6 z-50">
+        {/* Бейдж поверх кнопки */}
+        {leadSent && (
+          <div
+            className="absolute -top-2 right-0 translate-y-[-100%] mb-2 px-3 py-1 rounded-full bg-emerald-600 text-white text-xs shadow-lg whitespace-nowrap"
+            role="status"
+            aria-live="polite"
+          >
+            ✓ Заявка отправлена
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="px-5 py-3 rounded-full shadow-xl bg-[#FF5722] text-white hover:opacity-95 active:scale-[0.98]"
+        >
+          Получить подбор
+        </button>
+      </div>
+     <LeadModal
         open={open}
         onClose={() => setOpen(false)}
         defaultService={defaults.service}
