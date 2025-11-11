@@ -209,8 +209,9 @@ export default function LeadModal({
         aria-modal="true"
         tabIndex={-1}
         className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
-        onMouseDown={(e)=>e.stopPropagation()}  {/* любое нажатие внутри панели не всплывает */}
+        onMouseDown={(e)=>e.stopPropagation()}
        >
+        {/* любое нажатие внутри панели не всплывает */}
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
