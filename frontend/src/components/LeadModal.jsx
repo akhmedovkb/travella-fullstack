@@ -103,7 +103,7 @@ export default function LeadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[1000] bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4"
       onMouseDown={onBackdrop}
     >
       <div
@@ -111,16 +111,20 @@ export default function LeadModal({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="w-full max-w-lg rounded-2xl bg-white shadow-xl focus:outline-none"
+        className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/95 shadow-2xl ring-1 ring-black/5 focus:outline-none"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">
-            {t("landing.home.cta")}
-          </h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FF5722]/10 text-[#FF5722]">★</span>
+            <div>
+              <h3 className="text-base md:text-lg font-semibold leading-none">{t("landing.home.cta")}</h3>
+              <p className="text-xs text-gray-500 mt-1">{t("landing.form.comment") ? t("landing.form.comment") : "Мы свяжемся в ближайшее время"}</p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 hover:bg-gray-100"
+            className="rounded-lg p-2 hover:bg-gray-100 text-gray-500"
             aria-label="Close"
           >
             ✕
@@ -128,63 +132,81 @@ export default function LeadModal({
         </div>
 
         {/* Body */}
-        <form onSubmit={submit} className="p-4 space-y-3">
+        <form onSubmit={submit} className="px-6 py-5 space-y-4">
           {ok ? (
-            <div className="p-4 rounded-lg bg-green-50 border border-green-200">
-              {t("landing.form.sent")}
+            <div className="p-6 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">✓</span>
+              <span className="font-semibold">{t("landing.form.sent")}</span>
             </div>
           ) : (
             <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              className="input"
-              placeholder={t("landing.form.name")}
-              value={name} onChange={(e)=>setName(e.target.value)}
-            />
-            <input
-              className="input"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder={t("landing.form.phone")}
-              required
-              value={phone}
-              onChange={(e)=>setPhone(e.target.value)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="space-y-1">
+              <span className="text-xs text-gray-600">{t("landing.form.name")}</span>
+              <input
+                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+                placeholder={t("landing.form.name")}
+                value={name} onChange={(e)=>setName(e.target.value)}
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-gray-600">{t("landing.form.phone")}</span>
+              <input
+                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder={t("landing.form.phone")}
+                required
+                value={phone}
+                onChange={(e)=>setPhone(e.target.value)}
+              />
+            </label>
           </div>
-
           {/* Для туров удобно спросить город/даты и pax */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              className="input"
-              placeholder={t("landing.form.destination")}
-              value={city} onChange={(e)=>setCity(e.target.value)}
-            />
-            <input
-              className="input"
-              placeholder={t("landing.form.pax")}
-              inputMode="numeric"
-              value={pax} onChange={(e)=>setPax(e.target.value)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="space-y-1">
+              <span className="text-xs text-gray-600">{t("landing.form.destination")}</span>
+              <input
+                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+                placeholder={t("landing.form.destination")}
+                value={city} onChange={(e)=>setCity(e.target.value)}
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-gray-600">{t("landing.form.pax")}</span>
+              <input
+                className="input !h-11 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+                placeholder={t("landing.form.pax")}
+                inputMode="numeric"
+                value={pax} onChange={(e)=>setPax(e.target.value)}
+              />
+            </label>
           </div>
-
-          <textarea
-            className="input min-h-[100px]"
-            placeholder={t("landing.form.comment")}
-            value={comment} onChange={(e)=>setComment(e.target.value)}
-          />
-              
+          <label className="space-y-1 block">
+            <span className="text-xs text-gray-600">{t("landing.form.comment")}</span>
+            <textarea
+              className="input min-h-[110px] !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60"
+              placeholder={t("landing.form.comment")}
+              value={comment} onChange={(e)=>setComment(e.target.value)}
+            />
+          </label>
+             
      {err && <div className="text-sm text-red-600">{t("landing.form.error")}: {err}</div>}
               
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border">
-              Отмена
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
+            >
+              {t("landing.form.cancel") ?? "Отмена"}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 rounded-xl bg-[#FF5722] text-white disabled:opacity-60"
+              className="px-5 py-2.5 rounded-xl bg-[#FF5722] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition"
             >
               {loading ? "…" : t("landing.form.send")}
             </button>
@@ -196,3 +218,10 @@ export default function LeadModal({
     </div>
   );
 }
+/* tailwind animation keyframes (используются utility-классом animate-[pop_.18s_ease-out]) */
+/* Добавьте один раз в ваш globals.css, если ещё нет: 
+@keyframes pop { 
+  0% { transform: scale(.96); opacity: 0 }
+  100% { transform: scale(1); opacity: 1 }
+}
+*/
