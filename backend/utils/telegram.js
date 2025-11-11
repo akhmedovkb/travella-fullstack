@@ -66,21 +66,19 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
 
 /* ===== LEADS: клавиатуры (назначение и статусы) ===== */
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
-const raw = String(phone || "").replace(/\D/g, "");
-let intl = "";
-if (!raw) {
-  intl = "";
-} else if (raw.startsWith("998")) {
-  intl = raw;
-} else if (raw.length === 9) {
-  intl = `998${raw}`;     // локальный UZ номер → делаем международным
-} else if (raw.length >= 10 && raw.length <= 15) {
-  intl = raw;             // уже международный — оставляем как есть
-} else {
-  intl = "";              // неуверенный формат — не делаем кнопку
-}
-const wa = intl ? `https://wa.me/${intl}` : null;
-
+  const raw = String(phone || "").replace(/\D/g, "");
+  let intl = "";
+  if (!raw) {
+    intl = "";
+  } else if (raw.startsWith("998")) {
+    intl = raw;
+  } else if (raw.length === 9) {
+    intl = `998${raw}`;     // локальный UZ номер → делаем международным
+  } else if (raw.length >= 10 && raw.length <= 15) {
+    intl = raw;             // уже международный — оставляем как есть
+  } else {
+    intl = "";              // неуверенный формат — не делаем кнопку
+  }
   const wa = intl ? `https://wa.me/${intl}` : null;
   // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
   const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
