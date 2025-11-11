@@ -1255,7 +1255,6 @@
   "taxes_and_fees": "Taxes & fees",
   "vat_included": "Prices include VAT",
   "vat_rate": "VAT rate, %",
-{
   "landing": {
     "menu": {
       "tours": "Tours",
@@ -1410,4 +1409,3 @@
   }
 }
 
-}
