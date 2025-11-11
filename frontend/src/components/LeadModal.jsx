@@ -1,30 +1,49 @@
-//frontend/src/components/LeadModal.jsx
+// frontend/src/components/LeadModal.jsx
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import useLockBodyScroll from "../hooks/useLockBodyScroll";
 import { createLead } from "../api/leads";
 
+// ↑ рядом с импортами / в начале компонента
+const FLOAT_LABEL =
+  "pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all bg-white/90 px-1 rounded " +
+  // поднимаем при фокусе
+  "peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722] " +
+  // и когда поле НЕ пустое (важно!)
+  "peer-[&:not(:placeholder-shown)]:-top-2 peer-[&:not(:placeholder-shown)]:left-2.5 peer-[&:not(:placeholder-shown)]:text-xs";
+
+// === Config: номер WhatsApp получателя (без +). Лучше прокинуть через .env (VITE_WHATSAPP_NUMBER) ===
+const WHATSAPP_NUMBER = import.meta?.env?.VITE_WHATSAPP_NUMBER || "998901234567";
+const AUTOLAUNCH_WHATSAPP = (import.meta?.env?.VITE_AUTOLAUNCH_WHATSAPP === "1");
+
+// Утилита: оставить только цифры
+const onlyDigits = (s = "") => s.replace(/\D/g, "");
+// Мягкий лимит длины ввода для телефонов
+const MAX_PHONE_LEN = 20;
 export default function LeadModal({
   open,
   onClose,
-  defaultService = "tour",          // 'tour' | 'checkup' | 'ayurveda' | 'treatment' | 'b2b'
-  defaultPage = window.location.pathname,
-  preset = {},                      // { name, phone, city, pax, comment }
-  onSuccess,                        // (lead) => void
+  defaultService = "tour", // 'tour' | 'checkup' | 'ayurveda' | 'treatment' | 'b2b'
+  defaultPage = (typeof window !== "undefined" ? window.location.pathname : "/"),
+  preset = {}, // { name, phone, city, pax, comment }
+  onSuccess, // (lead) => void
 }) {
   const { t, i18n } = useTranslation();
   useLockBodyScroll(open);
 
   const [name, setName] = useState(preset.name || "");
-  const [phone, setPhone] = useState(preset.phone || "");
+  const [phone, setPhone] = useState(preset.phone || ""); // маскированное отображение
   const [city, setCity] = useState(preset.city || "");
   const [pax, setPax] = useState(preset.pax || "");
   const [comment, setComment] = useState(preset.comment || "");
   const [loading, setLoading] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState("");
+  const [touchedPhone, setTouchedPhone] = useState(false);
   const dialogRef = useRef(null);
+  const nameInputRef = useRef(null);
+  
   // UTM из query-параметров – один раз на маунт
   const utm = useMemo(() => {
     try {
@@ -40,26 +59,93 @@ export default function LeadModal({
       return {};
     }
   }, []);
-  // сброс при открытии
+
+  // сброс при открытии + фокус на имя (не завися от ссылочной смены preset)
   useEffect(() => {
     if (open) {
       setName(preset.name || "");
-      setPhone(preset.phone || "");
+      // если в preset.phone есть сырые цифры — сразу форматируем «умно»
+      setPhone(preset.phone ? formatPhoneSmart(preset.phone) : "");
       setCity(preset.city || "");
       setPax(preset.pax || "");
       setComment(preset.comment || "");
       setOk(false);
       setErr("");
-      setTimeout(() => dialogRef.current?.focus(), 0);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
     }
-  }, [open]);
+   }, [open]);
 
   // esc закрытие
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape" && open) onClose?.(); };
+    const onKey = (e) => {
+      if (e.key === "Escape" && open) onClose?.();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // ----- «Умная» маска телефона -----
+  // Правила:
+  // 1) Если есть "+" → показываем как международный: +<до 15 цифр>, без маски.
+  // 2) Без "+":
+  //    - если начинается с 998 → маска UZ
+  //    - если ровно 9 цифр     → маска UZ (локальный)
+  //    - иначе показываем просто цифры (без автодобавления 998)
+  function formatPhoneSmart(view) {
+    const s = String(view);
+    const hasPlus = s.trim().startsWith("+");
+    const d = onlyDigits(s);
+    const limit = (x) => x.slice(0, 15);
+
+    if (hasPlus) {
+      return d ? `+${limit(d)}` : "+";
+    }
+
+    const showUzMask = d.startsWith("998") || d.length === 9;
+    if (showUzMask) {
+      const core = d.startsWith("998") ? d.slice(3).slice(0, 9) : d.slice(0, 9);
+      const a = core.slice(0, 2);
+      const b = core.slice(2, 5);
+      const c = core.slice(5, 7);
+      const e = core.slice(7, 9);
+      let out = "+998";
+      if (a) out += ` (${a}`;
+      if (a && a.length === 2) out += `)`;
+      if (b) out += ` ${b}`;
+      if (c) out += `-${c}`;
+      if (e) out += `-${e}`;
+      return out;
+    }
+    // неопределённая страна без "+": просто показываем цифры
+    return limit(d);
+  }
+
+  function handlePhoneChange(v) {
+    setPhone(formatPhoneSmart(v));
+  }
+
+  // Валидность:
+  // - UZ: начинается с 998 и ровно 12 цифр (включая код) ИЛИ без "+" ровно 9 цифр
+  // - Intl: 10–15 цифр, если пользователь ввёл номер с "+" или без него
+  const rawDigits = onlyDigits(phone);
+  const hasPlus = String(phone).trim().startsWith("+");
+  const isUzLike = rawDigits.startsWith("998") || (!hasPlus && rawDigits.length === 9);
+  const isPhoneValid = isUzLike
+    ? (rawDigits.startsWith("998") ? rawDigits.length === 12 : rawDigits.length === 9)
+    : (rawDigits.length >= 10 && rawDigits.length <= 15);
+
+  // Аналитика (безопасные вызовы)
+  function sendAnalytics(payload) {
+    try {
+      window.gtag && window.gtag("event", "lead_submit", payload);
+    } catch {}
+    try {
+      window.fbq && window.fbq("track", "Lead", { ...payload });
+    } catch {}
+    try {
+      window.ttq && window.ttq.track("SubmitForm", payload);
+    } catch {}
+  }
 
   if (!open) return null;
 
@@ -68,8 +154,29 @@ export default function LeadModal({
     setLoading(true);
     try {
       const lang = i18n.language || "ru";
+
+      // Нормализация телефона:
+      // 1) если начинается с "+" и не 998 → оставить как +<digits>
+      // 2) если начинается с 998 → +998XXXXXXXXX
+      // 3) если 9 цифр → узбекский: +998XXXXXXXXX
+      // 4) если 10–15 цифр без "+" → международный: +<digits>
+      let d = onlyDigits(phone);
+      let phoneNormalized = "";
+      if (String(phone).trim().startsWith("+") && !d.startsWith("998")) {
+        phoneNormalized = `+${d}`;
+      } else if (d.startsWith("998")) {
+        phoneNormalized = `+${d.slice(0, 12)}`;
+      } else if (d.length === 9) {
+        phoneNormalized = `+998${d}`;
+      } else if (d.length >= 10 && d.length <= 15) {
+        phoneNormalized = `+${d}`;
+      } else {
+        phoneNormalized = `+${d}`; // fallback, но кнопка submit будет задизейблена при невалидности
+      }
+
       const lead = await createLead({
-        name, phone,
+        name,
+        phone: phoneNormalized,
         city: city || null,
         pax: pax ? Number(pax) : null,
         comment: comment || null,
@@ -78,45 +185,95 @@ export default function LeadModal({
         service: defaultService,
         ...utm,
       });
+
       onSuccess?.(lead);
+
+      // Сообщаем приложению (для бейджа у плавающей кнопки)
+      try {
+        window.dispatchEvent(new CustomEvent("travella:lead-submitted"));
+      } catch {}
+
+      // GA4 / Meta / TikTok
+      sendAnalytics({
+        service: defaultService,
+        page_location: defaultPage || "/",
+        lang,
+        city,
+        pax: pax ? Number(pax) : null,
+      });
+
       setOk(true);
+
+      // (опционально) Авто-запуск WhatsApp только если включили через .env
+      if (AUTOLAUNCH_WHATSAPP) {
+        try {
+          const msg = [
+            "Здравствуйте! Хочу подбор по Индии",
+            `Имя: ${name || "-"}`,
+            `Телефон: ${phoneNormalized}`,
+            `Услуга: ${defaultService}`,
+            city ? `Город/даты: ${city}` : "",
+            pax ? `Кол-во человек: ${pax}` : "",
+            comment ? `Комментарий: ${comment}` : "",
+            `Страница: ${defaultPage}`,
+          ].filter(Boolean).join("\n");
+          const wa = `https://wa.me/${onlyDigits(WHATSAPP_NUMBER)}?text=${encodeURIComponent(msg)}`;
+          window.open(wa, "_blank", "noopener,noreferrer");
+        } catch {}
+      }
+
+      // Закрываем через 6 секунд, после показа "Заявка отправлена"
       setTimeout(() => {
         onClose?.();
         setName(""); setPhone(""); setCity(""); setPax(""); setComment("");
-      }, 1200);
+      }, 6000);
    } catch (err) {
-      console.error(err);
-      setErr(err?.message || "Failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // backdrop клик
+     console.error(err);
+     setErr(err?.message || "Failed");
+   } finally {
+     setLoading(false);
+   }
+ }   // <-- ЭТА СКОБКА ЗАКРЫВАЕТ submit
+  
+      // backdrop клик
   function onBackdrop(e) {
     if (e.target === e.currentTarget) onClose?.();
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4"
-      onMouseDown={onBackdrop}
-    >
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+      {/* Бэкдроп отдельным слоем под модалкой */}
+      <div
+        className="absolute inset-0 bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm"
+        onClick={onBackdrop}
+      />
+      {/* Панель модалки поверх бэкдропа */}
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="w-full max-w-lg rounded-2xl bg-white shadow-xl focus:outline-none"
+        className="relative z-10 w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
       >
+        {/* любое нажатие внутри панели не всплывает */}
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">
-            {t("landing.home.cta")}
-          </h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FF5722]/10 text-[#FF5722]">
+              ★
+            </span>
+            <div>
+              <h3 className="text-base md:text-lg font-semibold leading-none">
+                {t("landing.home.cta")}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {t("landing.form.subtitle", "Мы свяжемся в ближайшее время")}
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 hover:bg-gray-100"
+            className="rounded-lg p-2 hover:bg-gray-100 text-gray-500"
             aria-label="Close"
           >
             ✕
@@ -124,71 +281,227 @@ export default function LeadModal({
         </div>
 
         {/* Body */}
-        <form onSubmit={submit} className="p-4 space-y-3">
+        <form
+          onSubmit={submit}
+          className={`px-6 py-5 space-y-5 ${
+            err ? "animate-[shake_.3s_ease-in-out]" : ""
+          }`}
+        >
           {ok ? (
-            <div className="p-4 rounded-lg bg-green-50 border border-green-200">
-              {t("landing.form.sent")}
+            <div className="p-6 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
+                ✓
+              </span>
+              <span className="font-semibold">{t("landing.form.sent")}</span>
             </div>
           ) : (
             <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              className="input"
-              placeholder={t("landing.form.name")}
-              value={name} onChange={(e)=>setName(e.target.value)}
-            />
-            <input
-              className="input"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder={t("landing.form.phone")}
-              required
-              value={phone}
-              onChange={(e)=>setPhone(e.target.value)}
-            />
-          </div>
+              {/* row 1 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Имя (floating label) */}
+                <div className="relative">
+                  {/* user icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Z" />
+                    <path d="M3.5 20.5a8.5 8.5 0 0 1 17 0" strokeLinecap="round" />
+                  </svg>
+                  <input
+                   type="text"
+                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                   placeholder=" "
+                   value={name}
+                   onChange={(e) => setName(e.target.value)}
+                   ref={nameInputRef}
+                  />
+                  <label className={FLOAT_LABEL}>
+                    {t("landing.form.name")}
+                  </label>
+                </div>
 
-          {/* Для туров удобно спросить город/даты и pax */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              className="input"
-              placeholder={t("landing.form.destination")}
-              value={city} onChange={(e)=>setCity(e.target.value)}
-            />
-            <input
-              className="input"
-              placeholder={t("landing.form.pax")}
-              inputMode="numeric"
-              value={pax} onChange={(e)=>setPax(e.target.value)}
-            />
-          </div>
+                {/* Телефон (floating label + mask) */}
+                <div className="relative">
+                  {/* phone icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M21 16.5v2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.63A2 2 0 0 1 3.5 0h2A2 2 0 0 1 7.5 1.72l1 2a2 2 0 0 1-.45 2.23L6.9 7.1a16 16 0 0 0 6 6l1.15-1.15a2 2 0 0 1 2.23-.45l2 1A2 2 0 0 1 21 16.5Z"/>
+                  </svg>
+                  <input
+                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    name="phone"
+                    placeholder=" "
+                    required
+                    value={phone}
+                    maxLength={MAX_PHONE_LEN}
+                    onChange={(e) => { setTouchedPhone(true); handlePhoneChange(e.target.value); }}
+                    onPaste={(e) => {
+                      try {
+                        e.preventDefault();
+                        const text = (e.clipboardData?.getData("text") || "");
+                        setTouchedPhone(true);
+                        handlePhoneChange(text);
+                      } catch {}
+                    }}
+                    onBlur={() => setTouchedPhone(true)}
+                    aria-invalid={touchedPhone && !isPhoneValid}
+                    aria-describedby="phoneHelp"
+                  />
+                  <label className={FLOAT_LABEL}>
+                    {t("landing.form.phone")}
+                  </label>
+                  {touchedPhone && !isPhoneValid && (
+                    <div id="phoneHelp" className="mt-1 text-xs text-red-600">
+                      Введите корректный номер. Примеры:{" "}
+                      <span className="font-medium">+91XXXXXXXXXX</span>{" "}
+                      или <span className="font-medium">+998 (__) ___-__-__</span>
+                    </div>
+                  )}
+                  {touchedPhone && isPhoneValid && (
+                    <div className="mt-1 text-[11px] text-emerald-600">Номер выглядит корректно ✓</div>
+                  )}
+                </div>
+              </div>
 
-          <textarea
-            className="input min-h-[100px]"
-            placeholder={t("landing.form.comment")}
-            value={comment} onChange={(e)=>setComment(e.target.value)}
-          />
-              
-     {err && <div className="text-sm text-red-600">{t("landing.form.error")}: {err}</div>}
-              
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border">
-              Отмена
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2 rounded-xl bg-[#FF5722] text-white disabled:opacity-60"
-            >
-              {loading ? "…" : t("landing.form.send")}
-            </button>
-          </div>
-          </>
+              {/* row 2 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Город/даты */}
+                <div className="relative">
+                  {/* map-pin icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M12 22s7-6.2 7-12A7 7 0 1 0 5 10c0 5.8 7 12 7 12Z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <input
+                   type="text"
+                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                    placeholder=" "
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                  />
+                  <label className={FLOAT_LABEL}>
+                    {t("landing.form.destination")}
+                  </label>
+                </div>
+
+                {/* Кол-во человек */}
+                <div className="relative">
+                  {/* users icon */}
+                  <svg
+                    aria-hidden="true"
+                    className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  >
+                    <path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M22 21v-1a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                    placeholder=" "
+                    value={pax}
+                    onChange={(e) => setPax(e.target.value)}
+                  />
+                  <label className={FLOAT_LABEL}>
+                    {t("landing.form.pax")}
+                  </label>
+                </div>
+              </div>
+
+              {/* Комментарий */}
+              <div className="relative">
+                {/* note icon */}
+                <svg
+                  aria-hidden="true"
+                  className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                  <path d="M14 2v6h6"/>
+                </svg>
+                <textarea
+                  className="peer input min-h-[110px] !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                  placeholder=" "
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+                <label className={FLOAT_LABEL}>
+                  {t("landing.form.comment")}
+                </label>
+              </div>
+
+              {err && (
+                <div className="text-sm text-red-600">
+                  {t("landing.form.error")}: {err}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="flex items-center justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={loading || !isPhoneValid}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] text-white shadow-md hover:brightness-95 active:scale-[0.99] disabled:opacity-60 transition inline-flex items-center gap-2
+                             animate-[glow_1.8s_ease-in-out_infinite] disabled:animate-none"
+
+                >
+                  {loading ? (
+                    <>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 animate-spin"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          strokeWidth="2"
+                          className="opacity-30"
+                        ></circle>
+                        <path d="M21 12a9 9 0 0 0-9-9" strokeWidth="2"></path>
+                      </svg>
+                      <span>{t("landing.form.sending", "Отправка…")}</span>
+                    </>
+                  ) : (
+                    t("landing.form.send")
+                  )}
+                </button>
+              </div>
+            </>
           )}
         </form>
       </div>
     </div>
   );
 }
+
+/* tailwind keyframes для появления/ошибки (добавьте в globals/index.css, если ещё нет)
+@keyframes pop {
+  0% { transform: scale(.96); opacity: 0 }
+  100% { transform: scale(1); opacity: 1 }
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0) }
+  20% { transform: translateX(-4px) }
+  40% { transform: translateX(4px) }
+  60% { transform: translateX(-3px) }
+  80% { transform: translateX(3px) }
+}
+*/

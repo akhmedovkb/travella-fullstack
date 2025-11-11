@@ -18,6 +18,8 @@ import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
 import AdminLeads from "./pages/admin/Leads";
+import IndiaInside from "./pages/landing/IndiaInside";
+import LeadModal from "./components/LeadModal";
 
 // Клиентские
 import ClientRegister from "./pages/ClientRegister";
@@ -99,6 +101,7 @@ function AdminRoute({ children }) {
 }
 
 export default function App() {
+  const [leadOpen, setLeadOpen] = React.useState(false);
   return (
     <Router>
       <ToastMount />
@@ -116,6 +119,7 @@ export default function App() {
               <Route path="ayurveda" element={<Ayurveda />} />
               <Route path="checkup" element={<Checkup />} />
               <Route path="treatment" element={<Treatment />} />
+              <Route path="inside" element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />} />
               {/* информативные страницы без кнопок/форм */}
               <Route path="b2b" element={<B2B />} />
               <Route path="clinics" element={<Clinics />} />
@@ -281,6 +285,11 @@ export default function App() {
         </main>
         <Footer />
       </div>
+      <LeadModal
+        open={leadOpen}
+        onClose={() => setLeadOpen(false)}
+        defaultService="india_inside"
+      />
     </Router>
   );
 }

@@ -64,14 +64,27 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
   }
 }
 
-/* ===== LEADS: клавиатуры (назначение и статусы) ===== */
+/* ================== helpers: phone → WA ================== */
+function _toIntlDigitsForWA(phone) {
+  // Возвращает только цифры без "+", если длина 10–15 (международный формат). Иначе "".
+  const d = String(phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  // допускаем любые страны: 10–15 цифр
+  if (d.length >= 10 && d.length <= 15) return d;
+  // допускаем локальный UZ: 9 цифр → добавим код страны
+  if (d.length === 9) return `998${d}`;
+  // допускаем уже с 998 и 12 цифр
+  if (d.startsWith("998") && d.length === 12) return d;
+  return "";
+}
+
+/* ================== LEADS: клавиатуры (назначение и статусы) ===== */
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
-  const digits = (phone || "").replace(/[^\d+]/g, "");
-  const wa = digits ? `https://wa.me/${digits.replace(/^\+/, "")}` : null;
-  const contactRow = [
-    ...(digits ? [{ text: "Позвонить", url: `tel:${digits}` }] : []),
-    ...(wa ? [{ text: "WhatsApp", url: wa }] : []),
-  ];
+  const intl = _toIntlDigitsForWA(phone);
+  const wa = intl ? `https://wa.me/${intl}` : null;
+ // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
+ const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
+
   const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
   const assignRow = assigneeName
     ? [{ text: `👤 Ответственный: ${assigneeName}`, callback_data: `noop:${id}` },

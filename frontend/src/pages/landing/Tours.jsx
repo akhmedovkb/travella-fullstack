@@ -1,118 +1,119 @@
 // frontend/src/pages/landing/Tours.jsx
 import { useTranslation } from "react-i18next";
-import { useState, useMemo } from "react";
-import LeadModal from "../../components/LeadModal";
-import { createLead } from "../../api/leads";
-import Breadcrumbs from "../../components/Breadcrumbs";
+import { Link } from "react-router-dom";
+
+function pluralNights(t, n) {
+  if (n == null) return "";
+  if (n % 10 === 1 && n % 100 !== 11) return t("landing.tours.nights", { count: n });
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) {
+    return t("landing.tours.nights_plural_2", { count: n });
+  }
+  return t("landing.tours.nights_plural_5", { count: n });
+}
 
 export default function Tours() {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
-  const [openLead, setOpenLead] = useState(false);
 
-  const lang =
-    (typeof navigator !== "undefined" && (navigator.language || "ru"))?.slice(0, 2) ||
-    "ru";
-
-  const utm = useMemo(() => {
-    const search = typeof window !== "undefined" ? window.location.search : "";
-    const sp = new URLSearchParams(search);
-    return {
-      utm_source: sp.get("utm_source") || "",
-      utm_medium: sp.get("utm_medium") || "",
-      utm_campaign: sp.get("utm_campaign") || "",
-      utm_content: sp.get("utm_content") || "",
-      utm_term: sp.get("utm_term") || "",
-    };
-  }, []);
-
-  async function onLead(e) {
-    e.preventDefault();
-    setLoading(true);
-
-    const fd = new FormData(e.currentTarget);
-    const raw = Object.fromEntries(fd.entries());
-
-    const payload = {
-      name: raw.name || "",
-      phone: raw.phone || "",
-      city: raw.destination || "",
-      pax: raw.pax ? Number(raw.pax) : null,
-      comment: raw.comment || "",
-      page: "/tours",
-      lang,
-      service: "tour",
-      ...utm,
-    };
-
-    let ok = false;
-    try {
-      await createLead(payload);
-      ok = true;
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-
-    alert(ok ? t("landing.form.sent") : t("landing.form.error"));
-    if (ok) e.currentTarget.reset();
-  }
-
-  const samplesRaw = t("landing.tours.samples", { returnObjects: true });
-  const samples = Array.isArray(samplesRaw) ? samplesRaw : [];
+  // В некоторых локалях может прийти объект, а не массив → нормализуем
+  const raw = t("landing.tours.offers", { returnObjects: true }) || [];
+  const offers = Array.isArray(raw) ? raw : Object.values(raw);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
-      <Breadcrumbs
-        items={[
-          { label: t("landing.menu.home"), to: "/india" },
-          { label: t("landing.tours.h1") }
-        ]}
-      />
       <h1 className="text-3xl md:text-5xl font-bold">{t("landing.tours.h1")}</h1>
-      <p className="mt-3 text-lg">{t("landing.tours.sub")}</p>
+      <p className="mt-3 text-lg text-gray-700">{t("landing.tours.sub")}</p>
 
-      <div className="mt-5">
-        <button className="btn" onClick={() => setOpenLead(true)}>
-          {t("landing.tours.request")}
-        </button>
+      {/* Promo “India Inside — стань Гуру по Индии” */}
+      <div className="mt-8 rounded-2xl bg-gradient-to-r from-[#FF5722]/10 to-amber-100/60 p-6 ring-1 ring-black/5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div>
+            <div className="text-[11px] uppercase tracking-wide font-semibold text-[#FF5722]/80">
+              Travella × India
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold mt-1">
+              India Inside — стань Гуру по Индии
+            </h2>
+            <p className="mt-2 text-gray-600 text-sm md:text-base">
+              4 путешествия: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Пройди путь и
+              получи статус <b>India Guru</b>.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to="/india/inside#trailer"
+              className="px-4 py-2 rounded-xl ring-1 ring-black/10 hover:bg-white transition flex items-center gap-2 text-sm"
+            >
+              <span>▶</span> Смотреть трейлер
+            </Link>
+            <Link
+              to="/india/inside"
+              className="px-4 py-2.5 rounded-xl bg-[#FF5722] text-white shadow hover:brightness-95 text-sm"
+            >
+              Перейти к программе
+            </Link>
+          </div>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4 mt-8">
-        {samples.map((x, i) => (
-          <div key={i} className="card">
-            <div className="text-xl font-semibold">{x.city}</div>
-            <div className="text-[#FF5722] font-bold mt-1">{x.price}</div>
-            <div className="text-sm mt-2 opacity-80">{x.desc}</div>
-          </div>
+      {/* Карточки предложений */}
+      <div className="grid md:grid-cols-3 gap-6 mt-8">
+        {offers.map((o) => (
+          <article
+            key={o.id || o.slug || o.title}
+            className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 hover:ring-[#FF5722]/30 transition"
+          >
+            {o.image && (
+              <Link to={o.slug || "#"} className="block aspect-[16/9] overflow-hidden">
+                <img
+                  src={o.image}
+                  alt={o.title || o.city}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  loading="lazy"
+                />
+              </Link>
+            )}
+
+            <div className="p-5">
+              {o.tag && (
+                <span className="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-[#FF5722]">
+                  {o.tag}
+                </span>
+              )}
+              <h3 className="mt-2 text-xl font-semibold tracking-tight">
+                {o.title || o.city}
+              </h3>
+
+              <div className="mt-1 text-[#FF5722] font-bold">
+                {t("landing.tours.from", { price: `${o.priceFrom} ${o.currency || "USD"}` })}
+              </div>
+
+              <p className="mt-2 text-sm text-gray-600">
+                {o.desc}
+                {o.nights ? ` · ${pluralNights(t, Number(o.nights))}` : ""}
+              </p>
+
+              <div className="mt-4 flex items-center justify-between">
+                <Link
+                  to={o.slug || "#"}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FF5722] to-[#FF7A45] px-4 py-2 text-white shadow hover:brightness-95 active:scale-[0.99] transition"
+                >
+                  {t("landing.tours.cta")}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                </Link>
+
+                {o.priceFrom && (
+                  <div className="text-sm text-gray-500">
+                    {o.currency || "USD"}
+                  </div>
+                )}
+              </div>
+            </div>
+          </article>
         ))}
       </div>
-
-      <form
-        onSubmit={onLead}
-        className="grid md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl mt-10"
-      >
-        <input name="name" placeholder={t("landing.form.name")} required className="input" />
-        <input name="phone" placeholder={t("landing.form.phone")} required className="input" />
-        <input name="destination" placeholder={t("landing.form.destination")} className="input" />
-        <input name="pax" placeholder={t("landing.form.pax")} className="input" />
-        <textarea
-          name="comment"
-          placeholder={t("landing.form.comment")}
-          className="input md:col-span-2"
-        />
-        <button disabled={loading} className="btn md:col-span-2">
-          {loading ? "..." : t("landing.tours.request")}
-        </button>
-      </form>
-
-      <LeadModal
-        open={openLead}
-        onClose={() => setOpenLead(false)}
-        defaultService="tour"
-        defaultPage="/tours"
-      />
     </main>
   );
 }

@@ -1278,55 +1278,123 @@
     "loading": "Yuklanmoqda…"
   },
 
-  "landing": {
-    "menu": {
-      "tours": "Turlar",
-      "ayurveda": "Ayurveda",
-      "checkup": "Check-up",
-      "treatment": "Davolash",
-      "clinics": "Klinikalar",
-      "b2b": "B2B agentlar",
-      "contacts": "Aloqa"
+"landing": {
+  "menu": {
+    "tours": "Turlar",
+    "indiaInside": "India Inside",
+    "ayurveda": "Ayurveda",
+    "checkup": "Check-up",
+    "treatment": "Davolash",
+    "clinics": "Klinikalar",
+    "b2b": "B2B agentlar",
+    "contacts": "Aloqa"
+  },
+  "home": {
+    "h1": "Hindistonda sayohat va davolash — to‘liq xizmat",
+    "sub": "Turlar, Ayurveda, Check-up, Dehlidagi klinikalar. 24/7 qo‘llab-quvvatlash.",
+    "cta": "Taklif olish",
+    "whatsapp": "WhatsApp"
+  },
+  "form": {
+    "name": "Ism",
+    "phone": "Telefon",
+    "comment": "Izoh",
+    "service": "Xizmat",
+    "send": "Ariza yuborish",
+    "sent": "Yuborildi. Tez orada bog‘lanamiz.",
+    "error": "Xato. Keyinroq urinib ko‘ring.",
+    "tour": "Tur tanlash",
+    "checkup": "Check-up",
+    "ayurveda": "Ayurveda",
+    "treatment": "Davolash",
+    "pax": "Odamlar soni",
+    "dates": "Sana / davomiylik",
+    "destination": "Shahar / sana",
+    "program": "Dastur",
+    "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
+  },
+
+  "tours": {
+    "h1": "Hindistonga turlar",
+    "sub": "Goa, Kerala, Dehli, Mumbay, Oltin uchburchak. Paketlar va mualliflik dasturlari.",
+    "from": "{{price}} dan",
+    "cta": "Batafsil",
+    "nights": "{{count}} kecha",
+
+    "program": {
+      "badge": "TRAVELLA × INDIA",
+      "title": "India Inside — Hindiston bo‘yicha mutaxassis bo‘ling",
+      "desc": "4 sayohat: Oltin uchburchak · Rajastxon · Mumbay+Goa · Kerala. Sertifikatlangan India Guru bo‘ling.",
+      "trailer": "Treylerni ko‘rish",
+      "cta": "Dasturga o‘tish"
     },
-    "home": {
-      "h1": "Hindistonda sayohat va davolash — to‘liq xizmat",
-      "sub": "Turlar, Ayurveda, Check-up, Dehlidagi klinikalar. 24/7 qo‘llab-quvvatlash.",
-      "cta": "Tanlov olish",
-      "whatsapp": "WhatsApp"
-    },
-    "form": {
-      "name": "Ism",
-      "phone": "Telefon",
-      "comment": "Izoh",
-      "service": "Xizmat",
-      "send": "Ariza yuborish",
-      "sent": "Yuborildi. Tez orada bog‘lanamiz.",
-      "error": "Xato. Keyinroq urinib ko‘ring.",
-      "tour": "Tur tanlash",
-      "checkup": "Check-up",
-      "ayurveda": "Ayurveda",
-      "treatment": "Davolash",
-      "pax": "Odamlar soni",
-      "dates": "Sana / davomiylik",
-      "destination": "Shahar / sana",
-      "program": "Dastur",
-      "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
-    },
-    "tours": {
-      "h1": "Hindistonga turlar",
-      "sub": "Goa, Kerala, Dehli, Mumbay, \"Oltin uchburchak\". Paketlar va mualliflik dasturlar.",
-      "samples": [
-        { "city": "Goa", "price": "$350 dan", "desc": "7 kecha, parvoz alohida" },
-        { "city": "Kerala (Ayurveda)", "price": "$690 dan", "desc": "10 kun wellness" },
-        { "city": "Dehli (Check-up)", "price": "$299 dan", "desc": "tekshiruv dasturlari" }
-      ],
-      "request": "Taklif so‘rash"
-    },
-    "ayurveda": { "h1": "Ayurveda va wellness", "sub": "Kerala, reabilitatsiya va detox dasturlari. Klinikalar tanlovi, transfer va yashash.", "get": "Dastur olish" },
-    "checkup": { "h1": "Hindistonda Check-up", "sub": "Bazaviy, kardio, onko, ayollar/erkaklar paketlari. Dehlidagi hamkor klinikalar.", "get": "Narx olish" },
-    "treatment": { "h1": "Hindistonda davolash", "sub": "Onkologiya, kardiologiya, ortopediya, IVF, transplantatsiya. Davolashni kelishib, safarni tashkil qilamiz.", "get": "Maslahat olish" },
-    "clinics": { "h1": "Hamkor klinikalar (Dehli)" },
-    "b2b": { "h1": "Travella B2B — agentlar uchun", "connect": "B2B ga ulanish", "company": "Agentlik" },
-    "contacts": { "h1": "Aloqa", "phone": "Telefon", "address": "Manzil" }
-  }
+
+    "offers": [
+      {
+        "id": "golden-triangle",
+        "title": "Oltin uchburchak",
+        "desc": "Dehli — Agra — Jaypur. Tarix, saroylar, Toj Mahal.",
+        "priceFrom": 590,
+        "currency": "USD",
+        "nights": 6,
+        "slug": "/india/tours/golden-triangle",
+        "image": "/img/india/golden-triangle.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "rajasthan",
+        "title": "Rajastxon sarguzashtlari",
+        "desc": "Cho‘l qumlari, qirollik saroylari, ko‘k shaharlar.",
+        "priceFrom": 790,
+        "currency": "USD",
+        "nights": 8,
+        "slug": "/india/tours/rajasthan",
+        "image": "/img/india/rajasthan.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "mumbai-goa",
+        "title": "Mumbay + Goa",
+        "desc": "Megapolis ruhi va tropik plyajlar.",
+        "priceFrom": 350,
+        "currency": "USD",
+        "nights": 7,
+        "slug": "/india/tours/mumbai-goa",
+        "image": "/img/india/mumbai-goa.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "kerala",
+        "title": "Kerala & Ayurveda",
+        "desc": "Choy plantatsiyalari, backwaters va wellness dasturlar.",
+        "priceFrom": 690,
+        "currency": "USD",
+        "nights": 9,
+        "slug": "/india/tours/kerala",
+        "image": "/img/india/kerala.jpg",
+        "tag": "India Inside"
+      }
+    ]
+  },
+
+  "ayurveda": {
+    "h1": "Ayurveda va wellness",
+    "sub": "Kerala, reabilitatsiya va detox dasturlari. Klinik tanlash, transfer va joylashish.",
+    "get": "Dastur olish"
+  },
+  "checkup": {
+    "h1": "Hindistonda Check-up",
+    "sub": "Bazaviy, kardio, onko, ayollar/erkaklar paketlari. Dehlidagi hamkor klinikalar.",
+    "get": "Narx olish"
+  },
+  "treatment": {
+    "h1": "Hindistonda davolash",
+    "sub": "Onkologiya, kardiologiya, ortopediya, IVF, transplantatsiya.",
+    "get": "Maslahat olish"
+  },
+  "clinics": { "h1": "Hamkor klinikalar (Dehli)" },
+  "b2b": { "h1": "Travella B2B — agentlar uchun", "connect": "B2B ga ulanish", "company": "Agentlik" },
+  "contacts": { "h1": "Aloqa", "phone": "Telefon", "address": "Manzil" }
+}
+
 }
