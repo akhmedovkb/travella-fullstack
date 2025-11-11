@@ -1277,7 +1277,6 @@
     "no_options": "Hech narsa topilmadi",
     "loading": "Yuklanmoqda…"
   },
-
 "landing": {
   "menu": {
     "tours": "Turlar",
@@ -1324,7 +1323,7 @@
     "program": {
       "badge": "TRAVELLA × INDIA",
       "title": "India Inside — Hindiston bo‘yicha mutaxassis bo‘ling",
-      "desc": "4 sayohat: Oltin uchburchak · Rajastan · Mumbay · Goa · Kerala. Sertifikatlangan India Guru bo‘ling.",
+      "desc": "4 sayohat: Oltin uchburchak · Rajastan · Mumbay+Goa · Kerala. «India Guru» sertifikatini oling.",
       "trailer": "Treylerni ko‘rish",
       "cta": "Dasturga o‘tish"
     },
@@ -1365,16 +1364,48 @@
       },
       {
         "id": "kerala",
-        "title": "Kerala - Jannatmakon o`lka",
+        "title": "Kerala — Jannatmakon o‘lka",
         "desc": "Choy plantatsiyalari, backwaters va wellness dasturlar.",
         "priceFrom": 690,
         "currency": "USD",
         "nights": 9,
-        "slug": "/india/tours/kerala_01.jpg",
+        "slug": "/india/tours/kerala",
         "image": "/kerala_01.jpg",
         "tag": "India Inside"
       }
     ]
+  },
+
+  "inside": {
+    "badge": "TRAVELLA • INDIA",
+    "title": "India Inside — hashamatli sayohat",
+    "sub": "Shaxsiy dasturlar, maharajalar saroylari, yopiq marosimlar va Himolay tinchligi.",
+    "cta_trailer": "Treylerni ko‘rish",
+    "cta_join": "Dasturga ariza berish",
+
+    "steps_title": "India Inside boblari",
+    "steps_sub": "O‘zingizga mos bobni tanlang — biz shaxsiy marshrut tuzamiz.",
+    "view": "Dastur so‘rash",
+
+    "chapters": {
+      "royal":  { "title": "Qirollik boblari", "desc": "Udaypur va Jaypur saroylari, yopiq marosimlar." },
+      "silence":{ "title": "Sukunat yo‘li",   "desc": "Himolaylar, ayurveda, rohiblar, choytepaliklar." },
+      "modern": { "title": "Zamonaviy Hindiston", "desc": "Mumbay uslubi, kinostudiya, yaxta, gala kechasi." },
+      "kerala": { "title": "Kerala: qayta yuklanish", "desc": "Backwaters, choy, wellness, shaxsiy hausbot." }
+    },
+
+    "guru": {
+      "title": "India Guru dasturi",
+      "lead": "India Inside’ning 4 bobini yakunlab, shaxsiy «India Inside: Guru» maqomini oling.",
+      "bullets": {
+        "one": "Individual marshrutlar va shaxsiy kurator",
+        "two": "Yopiq marosimlar va odatda yopiq lokatsiyalar",
+        "three": "«Guru» sertifikati va Travella klubiga kirish",
+        "four": "Faqat ariza bo‘yicha"
+      },
+      "cta_apply": "Ishtirokga ariza berish",
+      "cta_chapters": "Dastur boblarini ko‘rish"
+    }
   },
 
   "ayurveda": {
