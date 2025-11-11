@@ -1324,7 +1324,7 @@
     "program": {
       "badge": "TRAVELLA × INDIA",
       "title": "India Inside — Hindiston bo‘yicha mutaxassis bo‘ling",
-      "desc": "4 sayohat: Oltin uchburchak · Rajastxon · Mumbay+Goa · Kerala. Sertifikatlangan India Guru bo‘ling.",
+      "desc": "4 sayohat: Oltin uchburchak · Rajastan · Mumbay+Goa · Kerala. Sertifikatlangan India Guru bo‘ling.",
       "trailer": "Treylerni ko‘rish",
       "cta": "Dasturga o‘tish"
     },
@@ -1343,7 +1343,7 @@
       },
       {
         "id": "rajasthan",
-        "title": "Rajastxon sarguzashtlari",
+        "title": "Rajastandagi sarguzashtlar",
         "desc": "Cho‘l qumlari, qirollik saroylari, ko‘k shaharlar.",
         "priceFrom": 790,
         "currency": "USD",
