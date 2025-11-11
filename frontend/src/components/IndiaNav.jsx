@@ -1,43 +1,31 @@
-//frontend/src/components/IndiaNav.jsx
-
-import { Link, useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+// frontend/src/components/IndiaNav.jsx
+import { NavLink } from "react-router-dom";
 
 export default function IndiaNav() {
-  const { t } = useTranslation();
-  const { pathname } = useLocation();
-
   const tabs = [
-    { to: "/india/tours",     label: t("landing.menu.tours") },
-    { to: "/india/inside", label: t("landing.menu.indiaInside") },
-    { to: "/india/ayurveda",  label: t("landing.menu.ayurveda") },
-    { to: "/india/checkup",   label: "Check-up" }, // обычно в ключах без дефиса; текст оставляем как бренд
-    { to: "/india/treatment", label: t("landing.menu.treatment") },
-    { to: "/india/clinics",   label: t("landing.menu.clinics") },
-    { to: "/india/b2b",       label: "B2B" },
+    { id: "inside",   label: "India Inside", to: "/india/inside" },
+    { id: "ayurveda", label: "Ayurveda",     to: "/india/ayurveda" },
+    { id: "checkup",  label: "Check-up",     to: "/india/checkup" },
+    { id: "treatment",label: "Treatment",    to: "/india/treatment" },
+    { id: "clinics",  label: "Clinics",      to: "/india/clinics" },
+    { id: "b2b",      label: "B2B",          to: "/india/b2b" },
   ];
 
   return (
-    <div className="w-full mt-4 mb-6">
-      <div className="grid md:grid-cols-6 gap-2 border rounded-2xl bg-white">
-        {tabs.map((tab) => {
-          const active = pathname.startsWith(tab.to);
-          return (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              className={
-                "text-center py-3 rounded-2xl transition " +
-                (active
-                  ? "bg-[#FF5722] text-white font-medium"
-                  : "hover:bg-gray-50")
-              }
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+    <div className="mx-auto mb-6 flex gap-2 rounded-2xl bg-white p-2 shadow">
+      {tabs.map(t => (
+        <NavLink
+          key={t.id}
+          to={t.to}
+          className={({ isActive }) =>
+            `px-4 py-2 rounded-xl text-sm font-medium ${
+              isActive ? "bg-orange-500 text-white" : "text-gray-700 hover:bg-gray-100"
+            }`
+          }
+        >
+          {t.label}
+        </NavLink>
+      ))}
     </div>
   );
 }
