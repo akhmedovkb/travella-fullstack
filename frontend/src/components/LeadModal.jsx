@@ -198,19 +198,20 @@ export default function LeadModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[1000] bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm flex items-center justify-center p-4"
-      onMouseDown={onBackdrop}
-    >
-      {/* закрываем по клику/тапу по фону */}
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+      {/* Бэкдроп отдельным слоем под модалкой */}
+      <div
+        className="absolute inset-0 bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm"
+        onClick={onBackdrop}
+      />
+      {/* Панель модалки поверх бэкдропа */}
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
-        onMouseDown={(e)=>e.stopPropagation()}
-       >
+        className="relative z-10 w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
+      >
         {/* любое нажатие внутри панели не всплывает */}
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
