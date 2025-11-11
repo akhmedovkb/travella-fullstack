@@ -3,6 +3,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 
 function GuruBlock({ onOpenLead }) {
+  const { t } = useTranslation("landing");
   return (
     <section id="guru" className="mt-12 overflow-hidden rounded-3xl bg-black text-white">
       <div className="relative">
@@ -14,45 +15,49 @@ function GuruBlock({ onOpenLead }) {
         />
         <div className="relative z-10 p-8 sm:p-12 lg:p-16">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            <span>TRAVELLA • INDIA</span>
+            <span>{t("inside.badge", "TRAVELLA • INDIA")}</span>
             <span className="h-1 w-1 rounded-full bg-amber-500" />
             <span>INSIDE</span>
           </div>
 
           <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
-            Программа <span className="text-amber-400">Guru по Индии</span>
+            {t("inside.guru.title", "Программа Guru по Индии")}
           </h2>
           <p className="mt-3 max-w-2xl text-white/80">
-            Пройди 4 главы India Inside — королевская Индия, Путь Тишины, современная Индия и Южная перезагрузка — и получи персональный статус{" "}
-            <span className="text-amber-400">India Inside: Guru</span> с сертификатом и доступом в закрытый клуб.
+            {t(
+              "inside.guru.lead",
+              "Пройди 4 главы India Inside — королевская Индия, Путь Тишины, современная Индия и Южная перезагрузка — и получи персональный статус «India Inside: Guru» с сертификатом и доступом в закрытый клуб."
+            )}
           </p>
 
           <div className="mt-6 grid gap-6 sm:grid-cols-2">
             <ul className="space-y-3 text-sm text-zinc-200">
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
-                Индивидуальные маршруты и личный куратор
+                {t("inside.guru.bullets.one", "Индивидуальные маршруты и личный куратор")}
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
-                Приватные церемонии и недоступные локации
+                {t("inside.guru.bullets.two", "Приватные церемонии и недоступные локации")}
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
-                Сертификат «Guru по Индии» и клуб Travella
+                {t("inside.guru.bullets.three", "Сертификат «Guru по Индии» и клуб Travella")}
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
-                Доступно только по заявке
+                {t("inside.guru.bullets.four", "Доступно только по заявке")}
               </li>
             </ul>
 
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
-                <div className="text-xs uppercase tracking-wider text-zinc-500">Сертификат</div>
+                <div className="text-xs uppercase tracking-wider text-zinc-500">
+                  {t("inside.guru.certificate_label", "Сертификат")}
+                </div>
                 <div className="mt-1 text-lg font-semibold">India Inside: Guru</div>
                 <div className="mt-2 text-xs text-zinc-600">
-                  Имя владельца • Дата • Идентификатор программы
+                  {t("inside.guru.certificate_meta", "Имя владельца • Дата • Идентификатор программы")}
                 </div>
                 <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
                 <div className="mt-3 text-right text-[10px] text-zinc-500">Travella • India Inside</div>
@@ -65,13 +70,13 @@ function GuruBlock({ onOpenLead }) {
               onClick={() => onOpenLead?.()}
               className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
             >
-              Запросить участие
+              {t("inside.guru.cta_apply", "Запросить участие")}
             </button>
             <a
               href="#chapters"
               className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
             >
-              Посмотреть главы программы
+              {t("inside.guru.cta_chapters", "Посмотреть главы программы")}
             </a>
           </div>
         </div>
@@ -81,40 +86,44 @@ function GuruBlock({ onOpenLead }) {
 }
 
 export default function IndiaInside({ onOpenLead }) {
-  const { t } = useTranslation(["landing"]);
+  const { t } = useTranslation("landing");
 
   const chapters = [
     {
       key: "royal",
-      title: t("landing.inside.chapters.royal.title", "Королевские главы"),
-      desc: t("landing.inside.chapters.royal.desc", "Дворцы Удайпура и Джайпура, закрытые церемонии."),
-      days: "8–9 дней",
-      from: "от $8 900",
-      image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
+      title: t("inside.chapters.royal.title", "Королевские главы"),
+      desc: t("inside.chapters.royal.desc", "Дворцы Удайпура и Джайпура, закрытые церемонии."),
+      days: t("inside.chapters.royal.days", "8–9 дней"),
+      from: t("inside.chapters.royal.from", "от $8 900"),
+      image:
+        "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "silence",
-      title: t("landing.inside.chapters.silence.title", "Путь Тишины"),
-      desc: t("landing.inside.chapters.silence.desc", "Гималаи, аюрведа, монахи, чайные холмы."),
-      days: "7–8 дней",
-      from: "от $6 200",
-      image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
+      title: t("inside.chapters.silence.title", "Путь Тишины"),
+      desc: t("inside.chapters.silence.desc", "Гималаи, аюрведа, монахи, чайные холмы."),
+      days: t("inside.chapters.silence.days", "7–8 дней"),
+      from: t("inside.chapters.silence.from", "от $6 200"),
+      image:
+        "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "modern",
-      title: t("landing.inside.chapters.modern.title", "Современная Индия"),
-      desc: t("landing.inside.chapters.modern.desc", "Мумбаи, стиль, киностудия, яхта, гала-ужин."),
-      days: "7 дней",
-      from: "от $7 400",
-      image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
+      title: t("inside.chapters.modern.title", "Современная Индия"),
+      desc: t("inside.chapters.modern.desc", "Мумбаи, стиль, киностудия, яхта, гала-ужин."),
+      days: t("inside.chapters.modern.days", "7 дней"),
+      from: t("inside.chapters.modern.from", "от $7 400"),
+      image:
+        "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "kerala",
-      title: t("landing.inside.chapters.kerala.title", "Керала: перезагрузка"),
-      desc: t("landing.inside.chapters.kerala.desc", "Бэквотеры, чай, wellness, частный хаусбоат."),
-      days: "8–9 дней",
-      from: "от $6 900",
-      image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
+      title: t("inside.chapters.kerala.title", "Керала: перезагрузка"),
+      desc: t("inside.chapters.kerala.desc", "Бэквотеры, чай, wellness, частный хаусбоат."),
+      days: t("inside.chapters.kerala.days", "8–9 дней"),
+      from: t("inside.chapters.kerala.from", "от $6 900"),
+      image:
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
     },
   ];
 
@@ -129,13 +138,16 @@ export default function IndiaInside({ onOpenLead }) {
         />
         <div className="relative z-10 p-10 sm:p-16 lg:p-24">
           <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            TRAVELLA • INDIA
+            {t("inside.badge", "TRAVELLA • INDIA")}
           </div>
           <h1 className="text-3xl font-semibold sm:text-5xl">
-            {t("landing.inside.title", "India Inside — роскошное путешествие")}
+            {t("inside.title", "India Inside — роскошное путешествие")}
           </h1>
           <p className="mt-4 max-w-2xl text-white/80">
-            {t("landing.inside.sub", "Частные программы, дворцы махараджей, закрытые ритуалы и тишина Гималаев.")}
+            {t(
+              "inside.sub",
+              "Частные программы, дворцы махараджей, закрытые ритуалы и тишина Гималаев."
+            )}
           </p>
           <div className="mt-8 flex gap-3">
             <button
@@ -145,7 +157,7 @@ export default function IndiaInside({ onOpenLead }) {
                 el?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
-              {t("landing.inside.cta_trailer", "Смотреть трейлер")}
+              {t("inside.cta_trailer", "Смотреть трейлер")}
             </button>
             <a
               href="#guru"
@@ -156,7 +168,7 @@ export default function IndiaInside({ onOpenLead }) {
                 el?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
-              {t("landing.inside.cta_join", "Запросить программу")}
+              {t("inside.cta_join", "Запросить программу")}
             </a>
           </div>
         </div>
@@ -165,20 +177,17 @@ export default function IndiaInside({ onOpenLead }) {
       {/* Section heading */}
       <div id="chapters" className="mt-10">
         <h2 className="text-2xl font-semibold">
-          {t("landing.inside.steps_title", "Главы India Inside")}
+          {t("inside.steps_title", "Главы India Inside")}
         </h2>
         <p className="mt-1 text-gray-600">
-          {t("landing.inside.steps_sub", "Выберите свою главу — мы соберём частный маршрут.")}
+          {t("inside.steps_sub", "Выберите свою главу — мы соберём частный маршрут.")}
         </p>
       </div>
 
       {/* Cards */}
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {chapters.map((c) => (
-          <article
-            key={c.key}
-            className="overflow-hidden rounded-2xl bg-white shadow"
-          >
+          <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
             <div className="h-40 w-full overflow-hidden">
               <img src={c.image} alt="" className="h-full w-full object-cover" />
             </div>
@@ -193,7 +202,7 @@ export default function IndiaInside({ onOpenLead }) {
                 className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
                 onClick={() => onOpenLead?.()}
               >
-                {t("landing.inside.view", "Запросить программу")}
+                {t("inside.view", "Запросить программу")}
               </button>
             </div>
           </article>
