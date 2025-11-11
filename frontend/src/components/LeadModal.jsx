@@ -84,40 +84,54 @@ export default function LeadModal({
   }, [open, onClose]);
 
   // ----- «Умная» маска телефона -----
-  // Если ввод начинается с "+" и это не узбекский номер — показываем как есть (+<digits>).
-  // Иначе форматируем как UZ: +998 (__) ___-__-__ при вводе 9 локальных цифр.
+  // Правила:
+  // 1) Если есть "+" → показываем как международный: +<до 15 цифр>, без маски.
+  // 2) Без "+":
+  //    - если начинается с 998 → маска UZ
+  //    - если ровно 9 цифр     → маска UZ (локальный)
+  //    - иначе показываем просто цифры (без автодобавления 998)
   function formatPhoneSmart(view) {
-    const trimmed = String(view).trim();
-    const hasPlus = trimmed.startsWith("+");
-    const d = onlyDigits(view);
-    if (hasPlus && !d.startsWith("998")) {
-      return `+${d}`;
+    const s = String(view);
+    const hasPlus = s.trim().startsWith("+");
+    const d = onlyDigits(s);
+    const limit = (x) => x.slice(0, 15);
+
+    if (hasPlus) {
+      return d ? `+${limit(d)}` : "+";
     }
-    const core = d.startsWith("998") ? d.slice(3) : d; // 9 цифр после кода страны
-    const p = core.slice(0, 9);
-    const a = p.slice(0, 2);
-    const b = p.slice(2, 5);
-    const c = p.slice(5, 7);
-    const e = p.slice(7, 9);
-    let out = "+998";
-    if (a) out += ` (${a}`;
-    if (a && a.length === 2) out += `)`;
-    if (b) out += ` ${b}`;
-    if (c) out += `-${c}`;
-    if (e) out += `-${e}`;
-    return out;
+
+    const showUzMask = d.startsWith("998") || d.length === 9;
+    if (showUzMask) {
+      const core = d.startsWith("998") ? d.slice(3).slice(0, 9) : d.slice(0, 9);
+      const a = core.slice(0, 2);
+      const b = core.slice(2, 5);
+      const c = core.slice(5, 7);
+      const e = core.slice(7, 9);
+      let out = "+998";
+      if (a) out += ` (${a}`;
+      if (a && a.length === 2) out += `)`;
+      if (b) out += ` ${b}`;
+      if (c) out += `-${c}`;
+      if (e) out += `-${e}`;
+      return out;
+    }
+    // неопределённая страна без "+": просто показываем цифры
+    return limit(d);
   }
 
   function handlePhoneChange(v) {
     setPhone(formatPhoneSmart(v));
   }
 
-  // Валидность: intl «+» и 10–15 цифр ИЛИ локально 9 цифр (узбекский)
+  // Валидность:
+  // - UZ: начинается с 998 и ровно 12 цифр (включая код) ИЛИ без "+" ровно 9 цифр
+  // - Intl: 10–15 цифр, если пользователь ввёл номер с "+" или без него
   const rawDigits = onlyDigits(phone);
-  const isIntl = String(phone).trim().startsWith("+") && !rawDigits.startsWith("998");
-  const isPhoneValid = isIntl
-    ? rawDigits.length >= 10 && rawDigits.length <= 15
-    : (rawDigits.startsWith("998") ? rawDigits.slice(3).length : rawDigits.length) === 9;
+  const hasPlus = String(phone).trim().startsWith("+");
+  const isUzLike = rawDigits.startsWith("998") || (!hasPlus && rawDigits.length === 9);
+  const isPhoneValid = isUzLike
+    ? (rawDigits.startsWith("998") ? rawDigits.length === 12 : rawDigits.length === 9)
+    : (rawDigits.length >= 10 && rawDigits.length <= 15);
 
   // Аналитика (безопасные вызовы)
   function sendAnalytics(payload) {
@@ -336,7 +350,9 @@ export default function LeadModal({
                   </label>
                   {touchedPhone && !isPhoneValid && (
                     <div id="phoneHelp" className="mt-1 text-xs text-red-600">
-                      Введите корректный номер. Пример для UZ: <span className="font-medium">+998 (__) ___-__-__</span>
+                      Введите корректный номер. Примеры:{" "}
+                      <span className="font-medium">+91XXXXXXXXXX</span>{" "}
+                      или <span className="font-medium">+998 (__) ___-__-__</span>
                     </div>
                   )}
                   {touchedPhone && isPhoneValid && (
