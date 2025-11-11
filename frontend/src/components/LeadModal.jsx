@@ -5,6 +5,14 @@ import { useTranslation } from "react-i18next";
 import useLockBodyScroll from "../hooks/useLockBodyScroll";
 import { createLead } from "../api/leads";
 
+// ↑ рядом с импортами / в начале компонента
+const FLOAT_LABEL =
+  "pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all bg-white/90 px-1 rounded " +
+  // поднимаем при фокусе
+  "peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722] " +
+  // и когда поле НЕ пустое (важно!)
+  "peer-[&:not(:placeholder-shown)]:-top-2 peer-[&:not(:placeholder-shown)]:left-2.5 peer-[&:not(:placeholder-shown)]:text-xs";
+
 // === Config: номер WhatsApp получателя (без +). Лучше прокинуть через .env (VITE_WHATSAPP_NUMBER) ===
 const WHATSAPP_NUMBER = import.meta?.env?.VITE_WHATSAPP_NUMBER || "998901234567";
 
@@ -275,12 +283,7 @@ export default function LeadModal({
                    onChange={(e) => setName(e.target.value)}
                    ref={nameInputRef}
                   />
-                  <label
-                    className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
-                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
-                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
-                                 bg-white/90 px-1 rounded"
-                  >
+                  <label className={FLOAT_LABEL}>
                     {t("landing.form.name")}
                   </label>
                 </div>
@@ -309,12 +312,7 @@ export default function LeadModal({
                     aria-invalid={touchedPhone && !isPhoneValid}
                     aria-describedby="phoneHelp"
                   />
-                  <label
-                    className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
-                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
-                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
-                                 bg-white/90 px-1 rounded"
-                  >
+                  <label className={FLOAT_LABEL}>
                     {t("landing.form.phone")}
                   </label>
                   {touchedPhone && !isPhoneValid && (
@@ -348,12 +346,7 @@ export default function LeadModal({
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                   />
-                  <label
-                    className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
-                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
-                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
-                                 bg-white/90 px-1 rounded"
-                  >
+                  <label className={FLOAT_LABEL}>
                     {t("landing.form.destination")}
                   </label>
                 </div>
@@ -378,12 +371,7 @@ export default function LeadModal({
                     value={pax}
                     onChange={(e) => setPax(e.target.value)}
                   />
-                  <label
-                    className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
-                                 peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
-                                 peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
-                                 bg-white/90 px-1 rounded"
-                  >
+                  <label className={FLOAT_LABEL}>
                     {t("landing.form.pax")}
                   </label>
                 </div>
@@ -406,12 +394,7 @@ export default function LeadModal({
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                 />
-                <label
-                  className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
-                               peer-focus:-top-2 peer-focus:left-2.5 peer-focus:text-xs peer-focus:text-[#FF5722]
-                               peer-placeholder-shown:top-3 peer-placeholder-shown:text-gray-400
-                               bg-white/90 px-1 rounded"
-                >
+                <label className={FLOAT_LABEL}>
                   {t("landing.form.comment")}
                 </label>
               </div>
