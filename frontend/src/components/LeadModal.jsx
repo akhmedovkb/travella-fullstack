@@ -302,8 +302,8 @@ export default function LeadModal({
                     📍
                   </span>
                   <input
-+                   type="text"
-+                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
+                   type="text"
+                   className="peer w-full h-12 rounded-xl border border-gray-200 pl-9 pr-3 outline-none focus:ring-2 focus:ring-[#FF5722]/60 placeholder-transparent"
                     placeholder=" "
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
