@@ -63,8 +63,8 @@ export default function LeadModal({
   useEffect(() => {
     if (open) {
       setName(preset.name || "");
-      // если в preset.phone есть сырые цифры — сразу маскируем
-      setPhone(preset.phone ? formatUzPhone(preset.phone) : "");
+      // если в preset.phone есть сырые цифры — сразу форматируем «умно»
+      setPhone(preset.phone ? formatPhoneSmart(preset.phone) : "");
       setCity(preset.city || "");
       setPax(preset.pax || "");
       setComment(preset.comment || "");
@@ -83,12 +83,18 @@ export default function LeadModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // ----- Маска телефона Узбекистан: +998 (__) ___-__-__ -----
-  function formatUzPhone(view) {
+  // ----- «Умная» маска телефона -----
+  // Если ввод начинается с "+" и это не узбекский номер — показываем как есть (+<digits>).
+  // Иначе форматируем как UZ: +998 (__) ___-__-__ при вводе 9 локальных цифр.
+  function formatPhoneSmart(view) {
+    const trimmed = String(view).trim();
+    const hasPlus = trimmed.startsWith("+");
     const d = onlyDigits(view);
-    // Всегда приводим к формату с префиксом 998
-    const core = d.startsWith("998") ? d.slice(3) : d;
-    const p = core.slice(0, 9); // 9 цифр после кода страны
+    if (hasPlus && !d.startsWith("998")) {
+      return `+${d}`;
+    }
+    const core = d.startsWith("998") ? d.slice(3) : d; // 9 цифр после кода страны
+    const p = core.slice(0, 9);
     const a = p.slice(0, 2);
     const b = p.slice(2, 5);
     const c = p.slice(5, 7);
@@ -103,12 +109,15 @@ export default function LeadModal({
   }
 
   function handlePhoneChange(v) {
-    setPhone(formatUzPhone(v));
+    setPhone(formatPhoneSmart(v));
   }
-  
-  // валидность телефона: ровно 9 цифр после +998
-  const phoneDigits = (() => { let d = onlyDigits(phone); if (d.startsWith("998")) d = d.slice(3); return d; })();
-  const isPhoneValid = phoneDigits.length === 9;
+
+  // Валидность: intl «+» и 10–15 цифр ИЛИ локально 9 цифр (узбекский)
+  const rawDigits = onlyDigits(phone);
+  const isIntl = String(phone).trim().startsWith("+") && !rawDigits.startsWith("998");
+  const isPhoneValid = isIntl
+    ? rawDigits.length >= 10 && rawDigits.length <= 15
+    : (rawDigits.startsWith("998") ? rawDigits.slice(3).length : rawDigits.length) === 9;
 
   // Аналитика (безопасные вызовы)
   function sendAnalytics(payload) {
@@ -131,10 +140,24 @@ export default function LeadModal({
     try {
       const lang = i18n.language || "ru";
 
-      // Нормализация телефона к формату +998XXXXXXXXX
+      // Нормализация телефона:
+      // 1) если начинается с "+" и не 998 → оставить как +<digits>
+      // 2) если начинается с 998 → +998XXXXXXXXX
+      // 3) если 9 цифр → узбекский: +998XXXXXXXXX
+      // 4) если 10–15 цифр без "+" → международный: +<digits>
       let d = onlyDigits(phone);
-      if (d.startsWith("998")) d = d.slice(3);
-      const phoneNormalized = `+998${d.slice(0, 9)}`;
+      let phoneNormalized = "";
+      if (String(phone).trim().startsWith("+") && !d.startsWith("998")) {
+        phoneNormalized = `+${d}`;
+      } else if (d.startsWith("998")) {
+        phoneNormalized = `+${d.slice(0, 12)}`;
+      } else if (d.length === 9) {
+        phoneNormalized = `+998${d}`;
+      } else if (d.length >= 10 && d.length <= 15) {
+        phoneNormalized = `+${d}`;
+      } else {
+        phoneNormalized = `+${d}`; // fallback, но кнопка submit будет задизейблена при невалидности
+      }
 
       const lead = await createLead({
         name,
@@ -313,7 +336,7 @@ export default function LeadModal({
                   </label>
                   {touchedPhone && !isPhoneValid && (
                     <div id="phoneHelp" className="mt-1 text-xs text-red-600">
-                      Введите номер в формате <span className="font-medium">+998 (__) ___-__-__</span>
+                      Введите корректный номер. Пример для UZ: <span className="font-medium">+998 (__) ___-__-__</span>
                     </div>
                   )}
                   {touchedPhone && isPhoneValid && (
