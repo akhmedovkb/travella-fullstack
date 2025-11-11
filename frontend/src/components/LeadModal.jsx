@@ -146,8 +146,9 @@ export default function LeadModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Имя (floating label) */}
             <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">👤</span>
               <input
-                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                 placeholder=" "
                 value={name}
                 onChange={(e)=>setName(e.target.value)}
@@ -162,8 +163,9 @@ export default function LeadModal({
             </div>
             {/* Телефон (floating label) */}
             <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">📞</span>
               <input
-                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel"
@@ -184,8 +186,9 @@ export default function LeadModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Город/даты */}
             <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">📍</span>
               <input
-                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                 placeholder=" "
                 value={city}
                 onChange={(e)=>setCity(e.target.value)}
@@ -199,8 +202,9 @@ export default function LeadModal({
             </div>
             {/* Кол-во человек */}
             <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">👥</span>
               <input
-                className="peer input !h-12 !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+                className="peer input !h-12 !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
                 placeholder=" "
                 inputMode="numeric"
                 value={pax}
@@ -216,8 +220,9 @@ export default function LeadModal({
           </div>
           {/* Комментарий */}
           <div className="relative">
+            <span className="absolute left-3 top-3 text-gray-400 pointer-events-none">📝</span>
             <textarea
-              className="peer input min-h-[110px] !rounded-xl !border-gray-200 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
+              className="peer input min-h-[110px] !rounded-xl !border-gray-200 pl-9 focus:!ring-2 focus:!ring-[#FF5722]/60 placeholder-transparent"
               placeholder=" "
               value={comment}
               onChange={(e)=>setComment(e.target.value)}
@@ -233,14 +238,7 @@ export default function LeadModal({
      {err && <div className="text-sm text-red-600">{t("landing.form.error")}: {err}</div>}
               
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition"
-            >
-              {t("landing.form.cancel", "Отмена")}
-            </button>
+          <div className="flex items-center justify-end pt-2">
             <button
               type="submit"
               disabled={loading}
