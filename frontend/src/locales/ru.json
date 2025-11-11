@@ -1210,121 +1210,112 @@
     "generate": "Сформировать программу",
     "programText": "Текстовая программа"
   },
+"landing": {
+  "menu": {
+    "tours": "Туры",
+    "ayurveda": "Аюрведа",
+    "checkup": "Check-up",
+    "treatment": "Лечение",
+    "clinics": "Клиники",
+    "b2b": "B2B для агентов",
+    "contacts": "Контакты"
+  },
+  "home": {
+    "h1": "Путешествия и лечение в Индии под ключ",
+    "sub": "Туры, Аюрведа, Check-up, клиники Дели. Поддержка 24/7.",
+    "cta": "Получить подбор",
+    "whatsapp": "WhatsApp"
+  },
+  "form": {
+    "name": "Имя",
+    "phone": "Телефон",
+    "comment": "Комментарий",
+    "service": "Услуга",
+    "send": "Отправить заявку",
+    "sent": "Заявка отправлена. Мы свяжемся с вами.",
+    "error": "Ошибка. Попробуйте позже.",
+    "tour": "Подбор тура",
+    "checkup": "Check-up",
+    "ayurveda": "Аюрведа",
+    "treatment": "Лечение",
+    "pax": "Кол-во человек",
+    "dates": "Даты / длительность",
+    "destination": "Город / даты",
+    "program": "Программа",
+    "programs": { "base": "Базовый", "cardio": "Кардио", "onco": "Онко", "female": "Женский", "male": "Мужской" }
+  },
 
-  "landing": {
-    "menu": {
-      "tours": "Туры",
-      "ayurveda": "Аюрведа",
-      "checkup": "Check-up",
-      "treatment": "Лечение",
-      "clinics": "Клиники",
-      "b2b": "B2B для агентов",
-      "contacts": "Контакты"
-    },
-    "home": {
-      "h1": "Путешествия и лечение в Индии под ключ",
-      "sub": "Туры, Аюрведа, Check-up, клиники Дели. Поддержка 24/7.",
-      "cta": "Получить подбор",
-      "whatsapp": "WhatsApp"
-    },
-    "form": {
-      "name": "Имя",
-      "phone": "Телефон",
-      "comment": "Комментарий",
-      "service": "Услуга",
-      "send": "Отправить заявку",
-      "sent": "Заявка отправлена. Мы свяжемся с вами.",
-      "error": "Ошибка. Попробуйте позже.",
-      "tour": "Подбор тура",
-      "checkup": "Check-up",
-      "ayurveda": "Аюрведа",
-      "treatment": "Лечение",
-      "pax": "Кол-во человек",
-      "dates": "Даты / длительность",
-      "destination": "Город / даты",
-      "program": "Программа",
-      "programs": { "base": "Базовый", "cardio": "Кардио", "onco": "Онко", "female": "Женский", "male": "Мужской" }
-    },
-    "tours": {
-      "h1": "Туры в Индию",
-      "sub": "Гоа, Керала, Дели, Мумбаи, Золотой треугольник. Пакеты и авторские программы.",
-      "samples": [
-        { "city": "Гоа", "price": "от $350", "desc": "7 ночей, перелёт отдельно" },
-        { "city": "Керала (Аюрведа)", "price": "от $690", "desc": "10 дней wellness" },
-        { "city": "Дели (Check-up)", "price": "от $299", "desc": "программы обследования" }
-      ],
-      "request": "Запросить предложение"
-    },
-    "ayurveda": { "h1": "Аюрведа и wellness", "sub": "Керала, ретриты, detox-программы. Подбор клиник и центров, трансфер и проживание.", "get": "Получить программу" },
-    "checkup": { "h1": "Check-up в Индии", "sub": "Пакеты обследований: базовый, кардио, онко, женский/мужской. Партнёрские клиники Дели.", "get": "Получить стоимость" },
-    "treatment": { "h1": "Лечение в Индии", "sub": "Онкология, кардиология, ортопедия, IVF, трансплантация. Согласуем лечение и организуем поездку.", "get": "Получить консультацию" },
-    "clinics": { "h1": "Клиники-партнёры (Дели)" },
-    "b2b": { "h1": "Travella B2B для турагентов", "connect": "Подключиться к B2B", "company": "Агентство" },
-    "contacts": { "h1": "Контакты", "phone": "Телефон", "address": "Адрес" }
-      "tours": {
-      "h1": "Туры в Индию",
-      "sub": "Гоа, Керала, Дели, Мумбаи, Золотой треугольник. Пакеты и авторские программы.",
-      "from": "от {{price}}",
-      "cta": "Подробнее",
-      "nights": "{{count}} ночь",
-      "nights_plural_2": "{{count}} ночи",
-      "nights_plural_5": "{{count}} ночей",
+  "tours": {
+    "h1": "Туры в Индию",
+    "sub": "Гоа, Керала, Дели, Мумбаи, Золотой треугольник. Пакеты и авторские программы.",
+    "from": "от {{price}}",
+    "cta": "Подробнее",
+    "nights": "{{count}} ночь",
+    "nights_plural_2": "{{count}} ночи",
+    "nights_plural_5": "{{count}} ночей",
 
-      "program": {
-        "badge": "TRAVELLA × INDIA",
-        "title": "India Inside — стань Гуру по Индии",
-        "desc": "4 путешествия: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Пройди путь и получи статус India Guru.",
-        "trailer": "Смотреть трейлер",
-        "cta": "Перейти к программе"
+    "program": {
+      "badge": "TRAVELLA × INDIA",
+      "title": "India Inside — стань Гуру по Индии",
+      "desc": "4 путешествия: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Пройди путь и получи статус India Guru.",
+      "trailer": "Смотреть трейлер",
+      "cta": "Перейти к программе"
+    },
+
+    "offers": [
+      {
+        "id": "golden-triangle",
+        "title": "Золотой треугольник",
+        "desc": "Дели — Агра — Джайпур. История, форты и чудо света.",
+        "priceFrom": 590,
+        "currency": "USD",
+        "nights": 6,
+        "slug": "/india/tours/golden-triangle",
+        "image": "/img/india/golden-triangle.jpg",
+        "tag": "India Inside"
       },
+      {
+        "id": "rajasthan",
+        "title": "Приключения Раджастхана",
+        "desc": "Пустыня Тар, дворцы махараджей и синие города.",
+        "priceFrom": 790,
+        "currency": "USD",
+        "nights": 8,
+        "slug": "/india/tours/rajasthan",
+        "image": "/img/india/rajasthan.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "mumbai-goa",
+        "title": "Мумбаи + Гоа = лучшие воспоминания",
+        "desc": "Большой город, кино Болливуда и океанский релакс.",
+        "priceFrom": 350,
+        "currency": "USD",
+        "nights": 7,
+        "slug": "/india/tours/mumbai-goa",
+        "image": "/img/india/mumbai-goa.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "kerala",
+        "title": "Керала: калейдоскоп",
+        "desc": "Аюрведа, хаусботы и чайные плантации Муннара.",
+        "priceFrom": 690,
+        "currency": "USD",
+        "nights": 9,
+        "slug": "/india/tours/kerala",
+        "image": "/img/india/kerala.jpg",
+        "tag": "India Inside"
+      }
+    ]
+  },
 
-      "offers": [
-        {
-          "id": "golden-triangle",
-          "title": "Золотой треугольник",
-          "desc": "Дели — Агра — Джайпур. История, форты и чудо света.",
-          "priceFrom": 590,
-          "currency": "USD",
-          "nights": 6,
-          "slug": "/india/tours/golden-triangle",
-          "image": "/img/india/golden-triangle.jpg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "rajasthan",
-          "title": "Приключения Раджастхана",
-          "desc": "Пустыня Тар, дворцы махараджей и синие города.",
-          "priceFrom": 790,
-          "currency": "USD",
-          "nights": 8,
-          "slug": "/india/tours/rajasthan",
-          "image": "/img/india/rajasthan.jpg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "mumbai-goa",
-          "title": "Мумбаи + Гоа = лучшие воспоминания",
-          "desc": "Большой город, кино Болливуда и океанский релакс.",
-          "priceFrom": 350,
-          "currency": "USD",
-          "nights": 7,
-          "slug": "/india/tours/mumbai-goa",
-          "image": "/img/india/mumbai-goa.jpg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "kerala",
-          "title": "Керала: калейдоскоп",
-          "desc": "Аюрведа, хаусботы и чайные плантации Муннара.",
-          "priceFrom": 690,
-          "currency": "USD",
-          "nights": 9,
-          "slug": "/india/tours/kerala",
-          "image": "/img/india/kerala.jpg",
-          "tag": "India Inside"
-        }
-      ]
-    }
-  }
-  
+  "ayurveda": { "h1": "Аюрведа и wellness", "sub": "Керала, ретриты, detox-программы. Подбор клиник и центров, трансфер и проживание.", "get": "Получить программу" },
+  "checkup": { "h1": "Check-up в Индии", "sub": "Пакеты обследований: базовый, кардио, онко, женский/мужской. Партнёрские клиники Дели.", "get": "Получить стоимость" },
+  "treatment": { "h1": "Лечение в Индии", "sub": "Онкология, кардиология, ортопедия, IVF, трансплантация. Согласуем лечение и организуем поездку.", "get": "Получить консультацию" },
+  "clinics": { "h1": "Клиники-партнёры (Дели)" },
+  "b2b": { "h1": "Travella B2B для турагентов", "connect": "Подключиться к B2B", "company": "Агентство" },
+  "contacts": { "h1": "Контакты", "phone": "Телефон", "address": "Адрес" }
+}
+
 }
