@@ -1324,7 +1324,7 @@
         "currency": "USD",
         "nights": 6,
         "slug": "/india/tours/golden-triangle",
-        "image": "/img/india/golden-triangle.jpg",
+        "image": "/gti.jpeg",
         "tag": "India Inside"
       },
       {
@@ -1357,7 +1357,7 @@
         "currency": "USD",
         "nights": 9,
         "slug": "/india/tours/kerala",
-        "image": "/img/india/kerala.jpg",
+        "image": "/kerala_01.jpg",
         "tag": "India Inside"
       }
     ]
