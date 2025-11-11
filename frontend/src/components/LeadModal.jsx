@@ -79,6 +79,10 @@ export default function LeadModal({
         ...utm,
       });
       onSuccess?.(lead);
+      // Сообщаем приложению, что лид успешно отправлен (для бейджа у плавающей кнопки)
+      try {
+        window.dispatchEvent(new CustomEvent("travella:lead-submitted"));
+      } catch {}
       setOk(true);
       setTimeout(() => {
         onClose?.();
