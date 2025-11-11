@@ -32,7 +32,8 @@ export default function LeadModal({
   const [err, setErr] = useState("");
   const [touchedPhone, setTouchedPhone] = useState(false);
   const dialogRef = useRef(null);
-
+  const nameInputRef = useRef(null);
+  
   // UTM из query-параметров – один раз на маунт
   const utm = useMemo(() => {
     try {
@@ -49,7 +50,7 @@ export default function LeadModal({
     }
   }, []);
 
-  // сброс при открытии
+  // сброс при открытии + фокус на имя
   useEffect(() => {
     if (open) {
       setName(preset.name || "");
@@ -59,7 +60,7 @@ export default function LeadModal({
       setComment(preset.comment || "");
       setOk(false);
       setErr("");
-      setTimeout(() => dialogRef.current?.focus(), 0);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
     }
   }, [open, preset]);
 
@@ -199,7 +200,7 @@ export default function LeadModal({
   return (
     <div
       className="fixed inset-0 z-[1000] bg-black/45 supports-[backdrop-filter]:backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onBackdrop}
+      onMouseDown={onBackdrop}   {/* закрываем по клику/тапу по фону */}
     >
       <div
         ref={dialogRef}
@@ -207,6 +208,8 @@ export default function LeadModal({
         aria-modal="true"
         tabIndex={-1}
         className="w-full max-w-xl origin-center animate-[pop_.18s_ease-out] rounded-3xl bg-white/90 supports-[backdrop-filter]:backdrop-blur-md shadow-2xl ring-1 ring-black/5 focus:outline-none"
+        onMouseDown={(e)=>e.stopPropagation()}  {/* любое нажатие внутри панели не всплывает */}
+       >
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -267,7 +270,7 @@ export default function LeadModal({
                    placeholder=" "
                    value={name}
                    onChange={(e) => setName(e.target.value)}
-                   autoFocus
+                   ref={nameInputRef}
                   />
                   <label
                     className="pointer-events-none absolute left-3 top-3 text-gray-400 text-sm transition-all
