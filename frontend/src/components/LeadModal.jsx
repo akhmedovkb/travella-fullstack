@@ -19,7 +19,8 @@ const AUTOLAUNCH_WHATSAPP = (import.meta?.env?.VITE_AUTOLAUNCH_WHATSAPP === "1")
 
 // Утилита: оставить только цифры
 const onlyDigits = (s = "") => s.replace(/\D/g, "");
-
+// Мягкий лимит длины ввода для телефонов
+const MAX_PHONE_LEN = 20;
 export default function LeadModal({
   open,
   onClose,
@@ -340,7 +341,16 @@ export default function LeadModal({
                     placeholder=" "
                     required
                     value={phone}
+                    maxLength={MAX_PHONE_LEN}
                     onChange={(e) => { setTouchedPhone(true); handlePhoneChange(e.target.value); }}
+                    onPaste={(e) => {
+                      try {
+                        e.preventDefault();
+                        const text = (e.clipboardData?.getData("text") || "");
+                        setTouchedPhone(true);
+                        handlePhoneChange(text);
+                      } catch {}
+                    }}
                     onBlur={() => setTouchedPhone(true)}
                     aria-invalid={touchedPhone && !isPhoneValid}
                     aria-describedby="phoneHelp"
