@@ -1,202 +1,95 @@
-import { Link } from "react-router-dom";
+// frontend/src/pages/landing/IndiaInside.jsx
+import React from "react";
 import { useTranslation } from "react-i18next";
 
 export default function IndiaInside() {
-  const { t } = useTranslation();
+  const { t } = useTranslation(["landing"]); // ns: landing
 
-  // настроим, какие изображения использовать (ты писал: Hero Desktop: 5, Hero Mobile: 2)
-  // просто положи файлы в /public/india/inside/ с этими именами
-  const heroDesktop = "/india/inside/hero-desktop-5.jpg";
-  const heroMobile  = "/india/inside/hero-mobile-2.jpg";
-
-  const steps = [
+  const chapters = [
     {
-      key: "gt",
-      title: t("landing.inside.steps.gt.title"),
-      desc: t("landing.inside.steps.gt.desc"),
-      img: "/india/tours/golden-triangle.jpg",
-      to: "/india/tours#golden-triangle",
-      badge: t("landing.inside.levels.start"),
+      key: "royal",
+      title: t("inside.chapters.royal.title", "Королевские главы"),
+      desc: t("inside.chapters.royal.desc", "Дворцы Удайпура и Джайпура, закрытые церемонии."),
+      days: "8–9 дней",
+      from: "от $8 900",
+      image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop"
     },
     {
-      key: "raj",
-      title: t("landing.inside.steps.raj.title"),
-      desc: t("landing.inside.steps.raj.desc"),
-      img: "/india/tours/rajasthan.jpg", // РАДЖАСТАН (без «х») — проверь картинку и подпись в ru.json
-      to: "/india/tours#rajasthan",
-      badge: t("landing.inside.levels.levelup"),
+      key: "silence",
+      title: t("inside.chapters.silence.title", "Путь Тишины"),
+      desc: t("inside.chapters.silence.desc", "Гималаи, аюрведа, монахи, чайные холмы."),
+      days: "7–8 дней",
+      from: "от $6 200",
+      image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop"
     },
     {
-      key: "mmg",
-      title: t("landing.inside.steps.mmg.title"),
-      desc: t("landing.inside.steps.mmg.desc"),
-      img: "/india/tours/mumbai-goa.jpg",
-      to: "/india/tours#mumbai-goa",
-      badge: t("landing.inside.levels.vibes"),
+      key: "modern",
+      title: t("inside.chapters.modern.title", "Современная Индия"),
+      desc: t("inside.chapters.modern.desc", "Мумбаи, стиль, киностудия, яхта, гала-ужин."),
+      days: "7 дней",
+      from: "от $7 400",
+      image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop"
     },
     {
-      key: "ker",
-      title: t("landing.inside.steps.ker.title"),
-      desc: t("landing.inside.steps.ker.desc"),
-      img: "/india/tours/kerala.jpg",
-      to: "/india/tours#kerala",
-      badge: t("landing.inside.levels.mastery"),
-    },
+      key: "kerala",
+      title: t("inside.chapters.kerala.title", "Керала: перезагрузка"),
+      desc: t("inside.chapters.kerala.desc", "Бэквотеры, чай, wellness, частный хаусбоат."),
+      days: "8–9 дней",
+      from: "от $6 900",
+      image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop"
+    }
   ];
 
   return (
-    <main className="w-full">
+    <div className="mx-auto max-w-7xl px-4 pb-16">
       {/* HERO */}
-      <section className="relative h-[56vw] max-h-[640px] min-h-[420px] overflow-hidden">
-        <picture>
-          {/* mobile first */}
-          <source media="(max-width: 767px)" srcSet={heroMobile} />
-          <img
-            src={heroDesktop}
-            alt="India Inside — Luxury journey"
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="eager"
-          />
-        </picture>
+      <section className="relative overflow-hidden rounded-3xl bg-black text-white">
+        <img src="https://images.unsplash.com/photo-1519125263344-35456d2937b4?q=80&w=2000&auto=format&fit=crop"
+             alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+        <div className="relative z-10 p-10 sm:p-16 lg:p-24">
+          <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">TRAVELLA • INDIA</div>
+          <h1 className="text-3xl font-semibold sm:text-5xl">
+            {t("inside.title", "India Inside — роскошное путешествие")}
+          </h1>
+          <p className="mt-4 max-w-2xl text-white/80">
+            {t("inside.sub", "Частные программы, дворцы махараджей, закрытые ритуалы и тишина Гималаев.")}
+          </p>
+          <div className="mt-8 flex gap-3">
+            <button className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black">
+              {t("inside.cta_trailer", "Смотреть трейлер")}
+            </button>
+            <a href="#chapters" className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium">
+              {t("inside.cta_join", "Запросить программу")}
+            </a>
+          </div>
+        </div>
+      </section>
 
-        {/* luxury-вуаль + золотой градиент */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-black/35 to-transparent" />
-        <div className="absolute inset-0 pointer-events-none"
-             style={{ background: "radial-gradient(60% 60% at 80% 10%, rgba(197,157,95,0.25) 0%, rgba(197,157,95,0.00) 70%)" }} />
+      {/* Заголовок раздела */}
+      <div id="chapters" className="mt-10">
+        <h2 className="text-2xl font-semibold">{t("inside.steps_title", "Главы India Inside")}</h2>
+        <p className="mt-1 text-gray-600">{t("inside.steps_sub", "Выберите свою главу — мы соберём частный маршрут.")}</p>
+      </div>
 
-        <div className="relative z-10 h-full flex items-end">
-          <div className="max-w-7xl mx-auto w-full px-4 pb-8 md:pb-12">
-            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold"
-                 style={{ backgroundColor: "rgba(197,157,95,0.15)", color: "#C59D5F", border: "1px solid rgba(197,157,95,0.35)" }}>
-              Travella · India Inside
+      {/* Карточки глав */}
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {chapters.map(c => (
+          <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
+            <div className="h-40 w-full overflow-hidden">
+              <img src={c.image} alt="" className="h-full w-full object-cover" />
             </div>
-
-            <h1 className="mt-3 text-3xl md:text-5xl font-bold text-white leading-tight">
-              {t("landing.inside.title")}
-            </h1>
-            <p className="mt-2 text-white/85 max-w-2xl">
-              {t("landing.inside.sub")}
-            </p>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                to="/india/inside#trailer"
-                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white ring-1 ring-white/30 backdrop-blur transition flex items-center gap-2"
-              >
-                <span>▶</span> {t("landing.inside.cta_trailer")}
-              </Link>
-
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("lead:open", { detail: { context: "india_inside" } }))}
-                className="px-5 py-2.5 rounded-xl text-white shadow hover:brightness-95 active:scale-[0.99] transition"
-                style={{ backgroundImage: "linear-gradient(90deg,#C59D5F,#E8C78F)" }}
-              >
-                {t("landing.inside.cta_join")}
+            <div className="p-4">
+              <div className="mb-1 text-xs text-amber-600">India Inside</div>
+              <h3 className="text-lg font-semibold">{c.title}</h3>
+              <p className="mt-1 line-clamp-2 text-sm text-gray-600">{c.desc}</p>
+              <div className="mt-3 text-sm text-gray-500">{c.days} · {c.from}</div>
+              <button className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white">
+                {t("inside.view", "Запросить программу")}
               </button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ШАГИ / 4 тура */}
-      <section className="max-w-7xl mx-auto px-4 py-10">
-        <h2 className="text-2xl md:text-3xl font-bold">{t("landing.inside.steps_title")}</h2>
-        <p className="mt-2 text-gray-600">{t("landing.inside.steps_sub")}</p>
-
-        <div className="grid md:grid-cols-4 gap-5 mt-6">
-          {steps.map(s => (
-            <article
-              key={s.key}
-              className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 hover:ring-[#C59D5F]/40 transition"
-            >
-              <Link to={s.to} className="block aspect-[5/4] overflow-hidden bg-gray-100">
-                <img
-                  src={s.img}
-                  alt={s.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                  loading="lazy"
-                />
-              </Link>
-
-              <div className="p-4">
-                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                      style={{ backgroundColor: "rgba(197,157,95,0.12)", color: "#8A6E3A" }}>
-                  {s.badge}
-                </span>
-
-                <h3 className="mt-2 text-lg font-semibold tracking-tight">{s.title}</h3>
-                <p className="mt-1 text-sm text-gray-600">{s.desc}</p>
-
-                <div className="mt-3">
-                  <Link
-                    to={s.to}
-                    className="inline-flex items-center gap-2 rounded-xl text-white px-3 py-2 shadow hover:brightness-95 transition"
-                    style={{ backgroundImage: "linear-gradient(90deg,#C59D5F,#E8C78F)" }}
-                  >
-                    {t("landing.inside.view")}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
-                  </Link>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {/* Trailer */}
-      <section id="trailer" className="max-w-7xl mx-auto px-4 pb-14">
-        <div className="rounded-2xl overflow-hidden ring-1 ring-gray-200 bg-white">
-          <div className="aspect-video relative bg-black">
-            {/* заглушка до реального видео */}
-            <button
-              onClick={() => window.alert(t("landing.inside.trailer_coming"))}
-              className="absolute inset-0 m-auto h-16 w-16 rounded-full flex items-center justify-center text-white hover:scale-105 transition"
-              style={{ backgroundImage: "linear-gradient(90deg,#C59D5F,#E8C78F)" }}
-              aria-label="Play trailer"
-              title="Play trailer"
-            >
-              ▶
-            </button>
-          </div>
-          <div className="p-5 flex items-center justify-between">
-            <div>
-              <div className="text-sm uppercase tracking-wide text-[#8A6E3A] font-semibold">
-                India Inside
-              </div>
-              <div className="text-lg font-medium">{t("landing.inside.trailer_title")}</div>
-            </div>
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("lead:open", { detail: { context: "india_inside_trailer" } }))}
-              className="px-4 py-2 rounded-xl text-white shadow hover:brightness-95 transition"
-              style={{ backgroundImage: "linear-gradient(90deg,#C59D5F,#E8C78F)" }}
-            >
-              {t("landing.inside.cta_join")}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA footer */}
-      <section className="px-4 pb-16">
-        <div className="max-w-5xl mx-auto rounded-2xl p-6 md:p-10 text-center text-white"
-             style={{
-               background: "linear-gradient(135deg, rgba(0,0,0,0.88), rgba(0,0,0,0.80)), url('/india/inside/pattern.jpg') center/cover"
-             }}>
-          <h3 className="text-2xl md:text-3xl font-bold">{t("landing.inside.footer_title")}</h3>
-          <p className="mt-2 text-white/85">{t("landing.inside.footer_sub")}</p>
-          <div className="mt-5">
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("lead:open", { detail: { context: "india_inside_footer" } }))}
-              className="px-6 py-3 rounded-xl text-white shadow hover:brightness-95 transition"
-              style={{ backgroundImage: "linear-gradient(90deg,#C59D5F,#E8C78F)" }}
-            >
-              {t("landing.inside.cta_join")}
-            </button>
-          </div>
-        </div>
-      </section>
-    </main>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
