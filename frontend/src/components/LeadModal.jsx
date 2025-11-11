@@ -15,6 +15,7 @@ const FLOAT_LABEL =
 
 // === Config: номер WhatsApp получателя (без +). Лучше прокинуть через .env (VITE_WHATSAPP_NUMBER) ===
 const WHATSAPP_NUMBER = import.meta?.env?.VITE_WHATSAPP_NUMBER || "998901234567";
+const AUTOLAUNCH_WHATSAPP = (import.meta?.env?.VITE_AUTOLAUNCH_WHATSAPP === "1");
 
 // Утилита: оставить только цифры
 const onlyDigits = (s = "") => s.replace(/\D/g, "");
@@ -165,7 +166,7 @@ export default function LeadModal({
 
       setOk(true);
 
-      // (опционально) Авто-открытие WhatsApp — только если явно включено через ENV
+      // (опционально) Авто-запуск WhatsApp только если включили через .env
       if (AUTOLAUNCH_WHATSAPP) {
         try {
           const msg = [
@@ -183,23 +184,20 @@ export default function LeadModal({
         } catch {}
       }
 
+      // Закрываем через 6 секунд, после показа "Заявка отправлена"
       setTimeout(() => {
         onClose?.();
-        setName("");
-        setPhone("");
-        setCity("");
-        setPax("");
-        setComment("");
-      }, 1200);
-    } catch (err) {
-      console.error(err);
-      setErr(err?.message || "Failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // backdrop клик
+        setName(""); setPhone(""); setCity(""); setPax(""); setComment("");
+      }, 6000);
+   } catch (err) {
+     console.error(err);
+     setErr(err?.message || "Failed");
+   } finally {
+     setLoading(false);
+   }
+ }   // <-- ЭТА СКОБКА ЗАКРЫВАЕТ submit
+  
+      // backdrop клик
   function onBackdrop(e) {
     if (e.target === e.currentTarget) onClose?.();
   }
