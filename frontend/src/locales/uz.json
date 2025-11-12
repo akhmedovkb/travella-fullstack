@@ -1388,11 +1388,31 @@
   "view": "Dasturga so‘rov qoldirish",
 
   "chapters": {
-    "royal":   { "title": "Qirollik boblari",        "desc": "Udaypur va Jaypur saroylari, yopiq marosimlar.",             "days": "8–9 kun", "from": "$8 900 dan" },
-    "silence": { "title": "Sukunat yo‘li",            "desc": "Himolay, ayurveda, rohiblar, choy tog‘lari.",                "days": "7–8 kun", "from": "$6 200 dan" },
-    "modern":  { "title": "Zamonaviy Hindiston",      "desc": "Mumbay, uslub, kinostudiya, yaxta, gala-kechki ovqat.",      "days": "7 kun",   "from": "$7 400 dan" },
-    "kerala":  { "title": "Kerala: qayta yuklash",    "desc": "Backwaters, choy, wellness, shaxsiy houseboat.",             "days": "8–9 kun", "from": "$6 900 dan" }
+  "royal": {
+    "title": "Oltin Uchburchak",
+    "desc": "Dehli — Agra — Jaypur",
+    "days": "7–8 kun",
+    "from": "dan $699"
   },
+  "silence": {
+    "title": "Rajasthonda sarguzashtlar",
+    "desc": "Jodhpur — Udaypur — Jaysalmer",
+    "days": "8–9 kun",
+    "from": "dan $890"
+  },
+  "modern": {
+    "title": "Mumbay + Goa — eng yaxshi xotiralar",
+    "desc": "Shahar va okean dami",
+    "days": "7 kun",
+    "from": "dan $490"
+  },
+  "kerala": {
+    "title": "Kerala: Yer yuzidagi jannat",
+    "desc": "Ayurveda, choy tepaliklari, xususiy hausbot",
+    "days": "8–9 kun",
+    "from": "dan $790"
+  }
+},
 
   "guru": {
     "title": "Hindiston bo‘yicha Guru dasturi",
