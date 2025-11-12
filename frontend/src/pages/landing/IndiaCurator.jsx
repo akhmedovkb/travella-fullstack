@@ -2,7 +2,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-export default function IndiaCurator({ photo, onLeadOpen }) {
+export default function IndiaCurator({ photo, onOpenLead }) {
   const { t } = useTranslation();
 
   return (
