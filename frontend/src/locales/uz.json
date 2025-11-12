@@ -1377,6 +1377,49 @@
   },
 
 "inside": {
+      "steps_title": "Qanday qatnashish",
+      "steps_sub": "To‘rt oddiy qadam — kurator har bosqichda yo‘l-yo‘riq beradi.",
+      "steps": {
+        "apply": {
+          "title": "Ariza qoldiring",
+          "desc": "Aloqa va sanalarni yozing. WhatsApp/Telegram orqali bog‘lanamiz."
+        },
+        "call": {
+          "title": "Kurator bilan qo‘ng‘iroq",
+          "desc": "Maqsadlaringizni tushunib, mos bo‘lim va marshrutni tanlaymiz."
+        },
+        "chapter": {
+          "title": "Sayohat — tanlangan bo‘lim",
+          "desc": "Individual yoki kichik guruh, 24/7 qo‘llab-quvvatlash."
+        },
+        "certificate": {
+          "title": "Sertifikat va Guru maqomi",
+          "desc": "4 bo‘limdan so‘ng — raqamli sertifikat va Travella klubi."
+        }
+      },
+      "chapters_title": "India Inside bo‘limlari",
+      "experience": {
+        "title": "Sizni nimalar kutadi",
+        "sub": "Xususiy marshrutlar, yopiq marosimlar va nafis servis.",
+        "cards": {
+          "palaces": {
+            "title": "Saroylar va meros",
+            "desc": "Rajasthan, hunarmandchilik va qirollik me’morchiligi."
+          },
+          "rituals": {
+            "title": "Marosimlar va rituallar",
+            "desc": "Maxfiy amaliyotlar va kamyob joylarga kirish."
+          },
+          "wellness": {
+            "title": "Wellness va ayurveda",
+            "desc": "Ishonchli shifokorlar bilan shaxsiy sog‘lomlashtirish dasturlari."
+          },
+          "yacht": {
+            "title": "Yaxtalar va quyosh botishi",
+            "desc": "Arab dengizi sohilida sayr va kechki taomlar."
+          }
+        }
+      },
       "curated_badge": "Boshchilik ostidagi madaniy sayohat",
       "cta_get_program": "Dastur olish",
       "cta_ask": "Savol berish",
