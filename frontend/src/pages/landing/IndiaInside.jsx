@@ -111,47 +111,79 @@ function InsideProgramModal() {
 export default function IndiaInside({ onOpenLead }) {
   const { t } = useTranslation();
 
-  const chapters = [
-    {
-      key: "royal",
-      title: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
-      desc: t("landing.inside.chapters.royal.desc", "Дели — Агра — Джайпур"),
-      days: t("landing.inside.chapters.royal.days", "7–8 дней"),
-      from: t("landing.inside.chapters.royal.from", "от $699"),
-      image:
-        "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
-    },
-    {
-      key: "silence",
-      title: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
-      desc: t("landing.inside.chapters.silence.desc", "Джодпур — Удайпур — Джайсалмер"),
-      days: t("landing.inside.chapters.silence.days", "8–9 дней"),
-      from: t("landing.inside.chapters.silence.from", "от $890"),
-      image:
-        "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
-    },
-    {
-      key: "modern",
-      title: t(
-        "landing.inside.chapters.modern.title",
-        "Мумбаи + Гоа — лучшие воспоминания"
-      ),
-      desc: t("landing.inside.chapters.modern.desc", "Город & океан"),
-      days: t("landing.inside.chapters.modern.days", "7 дней"),
-      from: t("landing.inside.chapters.modern.from", "от $490"),
-      image:
-        "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
-    },
-    {
-      key: "kerala",
-      title: t("landing.inside.chapters.kerala.title", "Керала: Рай на Земле"),
-      desc: t("landing.inside.chapters.kerala.desc", "Аюрведа, чайные холмы, хаусбоат"),
-      days: t("landing.inside.chapters.kerala.days", "8–9 дней"),
-      from: t("landing.inside.chapters.kerala.from", "от $790"),
-      image:
-        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
-    },
-  ];
+const chapters = [
+  {
+    key: "royal",
+    title: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
+    desc: t("landing.inside.chapters.royal.desc", "Дели — Агра — Джайпур"),
+    days: t("landing.inside.chapters.royal.days", "7–8 дней"),
+    from: t("landing.inside.chapters.royal.from", "от $699"),
+    image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
+    program: [
+      t("landing.inside.program.royal.d1", "Дели: прилёт, трансфер, вечерний брифинг"),
+      t("landing.inside.program.royal.d2", "Агра: Тадж-Махал на рассвете, форт Агры"),
+      t("landing.inside.program.royal.d3", "Джайпур: Амбер-форт, Дворец ветров"),
+      t("landing.inside.program.royal.d4", "Джайпур: городской тур, ремёсла, шопинг"),
+      t("landing.inside.program.royal.d5", "Дели: современная Индия — арт/мода/гастро"),
+      t("landing.inside.program.royal.d6", "Свободный день / дополнительные опции"),
+      t("landing.inside.program.royal.d7", "Вылет"),
+    ],
+  },
+  {
+    key: "silence",
+    title: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
+    desc: t("landing.inside.chapters.silence.desc", "Джодпур — Удайпур — Джайсалмер"),
+    days: t("landing.inside.chapters.silence.days", "8–9 дней"),
+    from: t("landing.inside.chapters.silence.from", "от $890"),
+    image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
+    program: [
+      t("landing.inside.program.rajasthan.d1","Прилёт в Джодпур, синяя старая часть города"),
+      t("landing.inside.program.rajasthan.d2","Мехрангарх, башни, ремёсла, закаты"),
+      t("landing.inside.program.rajasthan.d3","Переезд в Джайсалмер, песчаные дюны"),
+      t("landing.inside.program.rajasthan.d4","Сафари в пустыне Тар, ужин у костра"),
+      t("landing.inside.program.rajasthan.d5","Удайпур: озёра, дворцы"),
+      t("landing.inside.program.rajasthan.d6","Удайпур: частные церемонии/мастер-классы"),
+      t("landing.inside.program.rajasthan.d7","Резерв/отдых"),
+      t("landing.inside.program.rajasthan.d8","Вылет"),
+    ],
+  },
+  {
+    key: "modern",
+    title: t("landing.inside.chapters.modern.title","Мумбаи + Гоа — лучшие воспоминания"),
+    desc: t("landing.inside.chapters.modern.desc","Город & океан"),
+    days: t("landing.inside.chapters.modern.days","7 дней"),
+    from: t("landing.inside.chapters.modern.from","от $490"),
+    image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
+    program: [
+      t("landing.inside.program.mumbaiGoa.d1","Мумбаи: полудневной тур, вечер на набережной"),
+      t("landing.inside.program.mumbaiGoa.d2","Студии Болливуда/арт-кварталы"),
+      t("landing.inside.program.mumbaiGoa.d3","Перелёт в Гоа, океан"),
+      t("landing.inside.program.mumbaiGoa.d4","Пляжи, старый Гоа, португальское наследие"),
+      t("landing.inside.program.mumbaiGoa.d5","Яхта/закат, гастрономический вечер"),
+      t("landing.inside.program.mumbaiGoa.d6","Свободный день / wellness"),
+      t("landing.inside.program.mumbaiGoa.d7","Вылет"),
+    ],
+  },
+  {
+    key: "kerala",
+    title: t("landing.inside.chapters.kerala.title","Керала: Рай на Земле"),
+    desc: t("landing.inside.chapters.kerala.desc","Аюрведа, чайные холмы, хаусбоат"),
+    days: t("landing.inside.chapters.kerala.days","8–9 дней"),
+    from: t("landing.inside.chapters.kerala.from","от $790"),
+    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
+    program: [
+      t("landing.inside.program.kerala.d1","Кочи: город, китайские сети, колониальная часть"),
+      t("landing.inside.program.kerala.d2","Муннар: чайные плантации, viewpoints"),
+      t("landing.inside.program.kerala.d3","Муннар: треккинг / фотодень"),
+      t("landing.inside.program.kerala.d4","Аллеппи: заселение на хаусбоат"),
+      t("landing.inside.program.kerala.d5","Backwaters, деревни, локальная кухня"),
+      t("landing.inside.program.kerala.d6","Аюрведический центр, индивидуальная программа"),
+      t("landing.inside.program.kerala.d7","Свободный день / море"),
+      t("landing.inside.program.kerala.d8","Вылет"),
+    ],
+  },
+];
+
 
 
   return (
