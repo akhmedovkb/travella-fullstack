@@ -1359,6 +1359,49 @@
       ]
     },
 "inside": {
+      "steps_title": "How to join",
+      "steps_sub": "Four simple steps — your curator will guide you through.",
+      "steps": {
+        "apply": {
+          "title": "Submit a request",
+          "desc": "Leave your contacts and dates. We’ll reach out via WhatsApp/Telegram."
+        },
+        "call": {
+          "title": "Curator call",
+          "desc": "We clarify your goals and pick the right chapter and route."
+        },
+        "chapter": {
+          "title": "Trip — selected chapter",
+          "desc": "Private or small group journey with 24/7 support."
+        },
+        "certificate": {
+          "title": "Certificate & Guru status",
+          "desc": "After 4 chapters — digital certificate and Travella Club."
+        }
+      },
+      "chapters_title": "India Inside chapters",
+      "experience": {
+        "title": "What awaits you",
+        "sub": "Private routes, closed-door ceremonies and seamless service.",
+        "cards": {
+          "palaces": {
+            "title": "Palaces & heritage",
+            "desc": "Rajasthan, crafts, architecture and royal stories."
+          },
+          "rituals": {
+            "title": "Ceremonies & rituals",
+            "desc": "Private practices with access to rare locations."
+          },
+          "wellness": {
+            "title": "Wellness & Ayurveda",
+            "desc": "Personal recovery programs with trusted doctors."
+          },
+          "yacht": {
+            "title": "Yachts & sunsets",
+            "desc": "Sea cruises and dinner on the Arabian coast."
+          }
+        }
+      },
       "curated_badge": "Curated Cultural Journey",
       "cta_get_program": "Request the program",
       "cta_ask": "Ask a question",
