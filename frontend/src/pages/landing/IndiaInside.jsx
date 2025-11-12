@@ -114,8 +114,8 @@ export default function IndiaInside({ onOpenLead }) {
           <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
             {t("landing.inside.badge")}
           </div>
-          <h1 className="text-3xl font-semibold sm:text-5xl">{t("inside.title")}</h1>
-          <p className="mt-4 max-w-2xl text-white/80">{t("inside.sub")}</p>
+          <h1 className="text-3xl font-semibold sm:text-5xl">{t("landing.inside.title")}</h1>
+          <p className="mt-4 max-w-2xl text-white/80">{t("landing.inside.sub")}</p>
 
           <div className="mt-8 flex gap-3">
             <button className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black"
@@ -132,8 +132,8 @@ export default function IndiaInside({ onOpenLead }) {
       </section>
 
       <div id="chapters" className="mt-10">
-        <h2 className="text-2xl font-semibold">{t("inside.steps_title")}</h2>
-        <p className="mt-1 text-gray-600">{t("inside.steps_sub")}</p>
+        <h2 className="text-2xl font-semibold">{t("landing.inside.steps_title")}</h2>
+        <p className="mt-1 text-gray-600">{t("landing.inside.steps_sub")}</p>
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
