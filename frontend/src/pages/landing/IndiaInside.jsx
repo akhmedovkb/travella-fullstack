@@ -1,6 +1,7 @@
 // frontend/src/pages/landing/IndiaInside.jsx
 import React from "react";
 import { useTranslation } from "react-i18next";
+import IndiaCurator from "./IndiaCurator";
 
 function GuruBlock({ onOpenLead }) {
   const { t } = useTranslation();
@@ -343,7 +344,10 @@ const chapters = [
     ))}
   </div>
 </section>
-
+<IndiaCurator
+  photo="/images/komil_curator.jpg"   // ← положите фотку рядом с ассетами или используйте прямой URL
+  onLeadOpen={onLeadOpen}             // ← ваш уже существующий LeadModal колбэк
+/>
 {/* Program Modal */}
 <InsideProgramModal />
 {/* Chapter Program Modal */}
