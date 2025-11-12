@@ -198,8 +198,10 @@ export default function IndiaInside({ onOpenLead }) {
               <h3 className="text-lg font-semibold">{c.title}</h3>
               <p className="mt-1 line-clamp-2 text-sm text-gray-600">{c.desc}</p>
               <div className="mt-3 text-sm text-gray-500">{c.days} · {c.from}</div>
-              <button className="mt-auto w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
-                      onClick={() => onOpenLead?.()}>
+              <button
+                className="mt-auto w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
+                onClick={() => onOpenLead?.({ chapterKey: c.key, chapterTitle: c.title })}
+              >
                 {t("landing.inside.view")}
               </button>
             </div>
