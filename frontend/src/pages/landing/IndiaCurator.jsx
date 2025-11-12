@@ -15,7 +15,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
   const copy = {
     ru: {
       title: "Ведущий программы India Inside",
-      role: "Основатель Travella, куратор India Inside",
+      role: "Основатель Travella.uz, куратор India Inside",
       name: "Комил Ахмедов",
       lead:
         "Более 12 лет изучаю Индию: её культуру, современные города, наследие и wellness-традиции.",
@@ -33,7 +33,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
     },
     en: {
       title: "Curator of India Inside",
-      role: "Founder of Travella, Curator of India Inside",
+      role: "Founder of Travella.uz, Curator of India Inside",
       name: "Komil Akhmedov",
       lead:
         "Over 12 years exploring India — its culture, modern cities, heritage and wellness traditions.",
@@ -51,7 +51,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
     },
     uz: {
       title: "India Inside dasturi kuratori",
-      role: "Travella asoschisi, India Inside kuratori",
+      role: "Travella.uz asoschisi, India Inside kuratori",
       name: "Komil Akhmedov",
       lead:
         "12 yildan ortiq Hindistonni o‘rganib kelaman — madaniyat, zamonaviy shaharlar, meros va wellness an’analar.",
@@ -61,7 +61,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
         "Hindistonda 12+ yillik tajriba",
         "Dehli, Agra, Rasjastan, Mumbai, Goa, Kerala",
         "Wellness va madaniy dasturlar",
-        "Ishonchli mahalliy ustozlar",
+        "Ishonchli hamkorlar",
         "Shaxsiy ko‘mak va hamrohlik",
       ],
       cta: "Kuratorga savol berish",
