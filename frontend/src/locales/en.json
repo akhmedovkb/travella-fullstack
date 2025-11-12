@@ -1470,6 +1470,29 @@
     "clinics": { "h1": "Partner clinics (Delhi)" },
     "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
     "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+  },
+"experience": {
+  "title": "What Awaits You in India Inside",
+  "sub": "Journeys crafted with love for India, its people, culture, and beauty.",
+
+  "cards": {
+    "palaces": {
+      "title": "Palaces & Heritage",
+      "desc": "Heritage stays, private historical venues."
+    },
+    "rituals": {
+      "title": "Rituals & Traditions",
+      "desc": "Authentic ceremonies with local masters."
+    },
+    "wellness": {
+      "title": "Wellness & Ayurveda",
+      "desc": "Personalised healing & rejuvenation programs."
+    },
+    "yacht": {
+      "title": "Yacht & Gastronomy",
+      "desc": "Sunset cruise, curated dining, atmosphere."
+    }
   }
+}
 }
 
