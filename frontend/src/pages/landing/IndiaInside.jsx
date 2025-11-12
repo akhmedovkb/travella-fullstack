@@ -65,6 +65,7 @@ function GuruBlock({ onOpenLead }) {
     </section>
   );
 }
+
 function InsideProgramModal() {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
@@ -108,6 +109,7 @@ function InsideProgramModal() {
     </div>
   );
 }
+
 function ChapterProgramModal({ open, chapter, onClose, onOpenLead }) {
   if (!open || !chapter) return null;
 
@@ -173,89 +175,87 @@ function ChapterProgramModal({ open, chapter, onClose, onOpenLead }) {
 }
 
 export default function IndiaInside({ onOpenLead }) {
-const { t } = useTranslation();
-const [programOpen, setProgramOpen] = React.useState(false);
-const [chapterForProgram, setChapterForProgram] = React.useState(null);
+  const { t } = useTranslation();
+  const [programOpen, setProgramOpen] = React.useState(false);
+  const [chapterForProgram, setChapterForProgram] = React.useState(null);
 
-const openProgram = (c) => {
-  setChapterForProgram(c);
-  setProgramOpen(true);
-};
+  const openProgram = (c) => {
+    setChapterForProgram(c);
+    setProgramOpen(true);
+  };
 
-const chapters = [
-  {
-    key: "royal",
-    title: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
-    desc: t("landing.inside.chapters.royal.desc", "Дели — Агра — Джайпур"),
-    days: t("landing.inside.chapters.royal.days", "7–8 дней"),
-    from: t("landing.inside.chapters.royal.from", "от $699"),
-    image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
-    program: [
-      t("landing.inside.program.royal.d1", "Дели: прилёт, трансфер, вечерний брифинг"),
-      t("landing.inside.program.royal.d2", "Агра: Тадж-Махал на рассвете, форт Агры"),
-      t("landing.inside.program.royal.d3", "Джайпур: Амбер-форт, Дворец ветров"),
-      t("landing.inside.program.royal.d4", "Джайпур: городской тур, ремёсла, шопинг"),
-      t("landing.inside.program.royal.d5", "Дели: современная Индия — арт/мода/гастро"),
-      t("landing.inside.program.royal.d6", "Свободный день / дополнительные опции"),
-      t("landing.inside.program.royal.d7", "Вылет"),
-    ],
-  },
-  {
-  key: "silence",
-  title: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
-  desc: t("landing.inside.chapters.silence.desc", "Удайпур — Джодпур — Джайсалмер"),
-  days: t("landing.inside.chapters.silence.days", "8–9 дней"),
-  from: t("landing.inside.chapters.silence.from", "от $890"),
-  image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
-  program: [
-    t("landing.inside.program.rajasthan.d1","Удайпур: прилёт, озеро Пичола, City Palace"),
-    t("landing.inside.program.rajasthan.d2","Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз"),
-    t("landing.inside.program.rajasthan.d3","Переезд в Джодпур, прогулка по «синему» старому городу"),
-    t("landing.inside.program.rajasthan.d4","Джодпур: форт Мехрангарх, башни, закат на крыше"),
-    t("landing.inside.program.rajasthan.d5","Переезд в Джайсалмер, Золотой форт, хавели"),
-    t("landing.inside.program.rajasthan.d6","Пустыня Тар: сафари на дюнах, ужин у костра"),
-    t("landing.inside.program.rajasthan.d7","Резерв/отдых или мастер-класс"),
-    t("landing.inside.program.rajasthan.d8","Вылет"),
-  ],
-  },
-  {
-    key: "modern",
-    title: t("landing.inside.chapters.modern.title","Мумбаи + Гоа — лучшие воспоминания"),
-    desc: t("landing.inside.chapters.modern.desc","Город & океан"),
-    days: t("landing.inside.chapters.modern.days","7 дней"),
-    from: t("landing.inside.chapters.modern.from","от $490"),
-    image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
-    program: [
-      t("landing.inside.program.mumbaiGoa.d1","Мумбаи: полудневной тур, вечер на набережной"),
-      t("landing.inside.program.mumbaiGoa.d2","Студии Болливуда/арт-кварталы"),
-      t("landing.inside.program.mumbaiGoa.d3","Перелёт в Гоа, океан"),
-      t("landing.inside.program.mumbaiGoa.d4","Пляжи, старый Гоа, португальское наследие"),
-      t("landing.inside.program.mumbaiGoa.d5","Яхта/закат, гастрономический вечер"),
-      t("landing.inside.program.mumbaiGoa.d6","Свободный день / wellness"),
-      t("landing.inside.program.mumbaiGoa.d7","Вылет"),
-    ],
-  },
-  {
-    key: "kerala",
-    title: t("landing.inside.chapters.kerala.title","Керала: Рай на Земле"),
-    desc: t("landing.inside.chapters.kerala.desc","Аюрведа, чайные холмы, хаусбоат"),
-    days: t("landing.inside.chapters.kerala.days","8–9 дней"),
-    from: t("landing.inside.chapters.kerala.from","от $790"),
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
-    program: [
-      t("landing.inside.program.kerala.d1","Кочи: город, китайские сети, колониальная часть"),
-      t("landing.inside.program.kerala.d2","Муннар: чайные плантации, viewpoints"),
-      t("landing.inside.program.kerala.d3","Муннар: треккинг / фотодень"),
-      t("landing.inside.program.kerala.d4","Аллеппи: заселение на хаусбоат"),
-      t("landing.inside.program.kerala.d5","Backwaters, деревни, локальная кухня"),
-      t("landing.inside.program.kerala.d6","Аюрведический центр, индивидуальная программа"),
-      t("landing.inside.program.kerala.d7","Свободный день / море"),
-      t("landing.inside.program.kerala.d8","Вылет"),
-    ],
-  },
-];
-
-
+  const chapters = [
+    {
+      key: "royal",
+      title: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
+      desc: t("landing.inside.chapters.royal.desc", "Дели — Агра — Джайпур"),
+      days: t("landing.inside.chapters.royal.days", "7–8 дней"),
+      from: t("landing.inside.chapters.royal.from", "от $699"),
+      image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
+      program: [
+        t("landing.inside.program.royal.d1", "Дели: прилёт, трансфер, вечерний брифинг"),
+        t("landing.inside.program.royal.d2", "Агра: Тадж-Махал на рассвете, форт Агры"),
+        t("landing.inside.program.royal.d3", "Джайпур: Амбер-форт, Дворец ветров"),
+        t("landing.inside.program.royal.d4", "Джайпур: городской тур, ремёсла, шопинг"),
+        t("landing.inside.program.royal.d5", "Дели: современная Индия — арт/мода/гастро"),
+        t("landing.inside.program.royal.d6", "Свободный день / дополнительные опции"),
+        t("landing.inside.program.royal.d7", "Вылет"),
+      ],
+    },
+    {
+      key: "silence",
+      title: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
+      desc: t("landing.inside.chapters.silence.desc", "Удайпур — Джодпур — Джайсалмер"),
+      days: t("landing.inside.chapters.silence.days", "8–9 дней"),
+      from: t("landing.inside.chapters.silence.from", "от $890"),
+      image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
+      program: [
+        t("landing.inside.program.rajasthan.d1","Удайпур: прилёт, озеро Пичола, City Palace"),
+        t("landing.inside.program.rajasthan.d2","Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз"),
+        t("landing.inside.program.rajasthan.d3","Переезд в Джодпур, прогулка по «синему» старому городу"),
+        t("landing.inside.program.rajasthan.d4","Джодпур: форт Мехрангарх, башни, закат на крыше"),
+        t("landing.inside.program.rajasthan.d5","Переезд в Джайсалмер, Золотой форт, хавели"),
+        t("landing.inside.program.rajasthan.d6","Пустыня Тар: сафари на дюнах, ужин у костра"),
+        t("landing.inside.program.rajasthan.d7","Резерв/отдых или мастер-класс"),
+        t("landing.inside.program.rajasthan.d8","Вылет"),
+      ],
+    },
+    {
+      key: "modern",
+      title: t("landing.inside.chapters.modern.title","Мумбаи + Гоа — лучшие воспоминания"),
+      desc: t("landing.inside.chapters.modern.desc","Город & океан"),
+      days: t("landing.inside.chapters.modern.days","7 дней"),
+      from: t("landing.inside.chapters.modern.from","от $490"),
+      image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
+      program: [
+        t("landing.inside.program.mumbaiGoa.d1","Мумбаи: полудневной тур, вечер на набережной"),
+        t("landing.inside.program.mumbaiGoa.d2","Студии Болливуда/арт-кварталы"),
+        t("landing.inside.program.mumbaiGoa.d3","Перелёт в Гоа, океан"),
+        t("landing.inside.program.mumbaiGoa.d4","Пляжи, старый Гоа, португальское наследие"),
+        t("landing.inside.program.mumbaiGoa.d5","Яхта/закат, гастрономический вечер"),
+        t("landing.inside.program.mumbaiGoa.d6","Свободный день / wellness"),
+        t("landing.inside.program.mumbaiGoa.d7","Вылет"),
+      ],
+    },
+    {
+      key: "kerala",
+      title: t("landing.inside.chapters.kerala.title","Керала: Рай на Земле"),
+      desc: t("landing.inside.chapters.kerala.desc","Аюрведа, чайные холмы, хаусбоат"),
+      days: t("landing.inside.chapters.kerala.days","8–9 дней"),
+      from: t("landing.inside.chapters.kerala.from","от $790"),
+      image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
+      program: [
+        t("landing.inside.program.kerala.d1","Кочи: город, китайские сети, колониальная часть"),
+        t("landing.inside.program.kerala.d2","Муннар: чайные плантации, viewpoints"),
+        t("landing.inside.program.kerala.d3","Муннар: треккинг / фотодень"),
+        t("landing.inside.program.kerala.d4","Аллеппи: заселение на хаусбоат"),
+        t("landing.inside.program.kerala.d5","Backwaters, деревни, локальная кухня"),
+        t("landing.inside.program.kerala.d6","Аюрведический центр, индивидуальная программа"),
+        t("landing.inside.program.kerala.d7","Свободный день / море"),
+        t("landing.inside.program.kerala.d8","Вылет"),
+      ],
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16">
@@ -290,6 +290,59 @@ const chapters = [
         <p className="mt-1 text-gray-600">{t("landing.inside.steps_sub")}</p>
       </div>
 
+      {/* ✅ ВСТАВЛЕННАЯ СЕКЦИЯ: КАК СТАТЬ УЧАСТНИКОМ (4 шага) */}
+      <section className="mt-6">
+        <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { k: "apply",    n: 1 },
+            { k: "call",     n: 2 },
+            { k: "chapter",  n: 3 },
+            { k: "certificate", n: 4 },
+          ].map((s) => (
+            <li key={s.k} className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black text-white text-sm font-semibold">
+                  {s.n}
+                </span>
+                <h3 className="text-base font-semibold">
+                  {t(`landing.inside.steps.${s.k}.title`, {
+                    defaultValue:
+                      s.k === "apply" ? "Оставьте заявку" :
+                      s.k === "call" ? "Созвон с куратором" :
+                      s.k === "chapter" ? "Поездка — выбранная глава" :
+                      "Сертификат и статус Guru"
+                  })}
+                </h3>
+              </div>
+              <p className="mt-3 text-sm text-gray-600">
+                {t(`landing.inside.steps.${s.k}.desc`, {
+                  defaultValue:
+                    s.k === "apply" ? "Укажите контакты и желаемые даты. Свяжемся в WhatsApp/Telegram." :
+                    s.k === "call" ? "Поймём цели и подберём главу/маршрут под вас." :
+                    s.k === "chapter" ? "Индивидуально или в малой группе, поддержка 24/7." :
+                    "После 4 глав — цифровой сертификат и клуб Travella."
+                })}
+              </p>
+              {s.k === "apply" && (
+                <button
+                  onClick={() => window.dispatchEvent(new Event("dummy")) || (typeof onOpenLead === "function" && onOpenLead())}
+                  className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white text-sm font-medium hover:opacity-90"
+                >
+                  {t("landing.inside.guru.cta_apply", "Запросить участие")}
+                </button>
+              )}
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* небольшой заголовок для карточек глав (ничего не ломает) */}
+      <div className="mt-10">
+        <h2 className="text-xl font-semibold">
+          {t("landing.inside.chapters_title", "Главы India Inside")}
+        </h2>
+      </div>
+
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {chapters.map((c) => (
           <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow flex flex-col">
@@ -312,52 +365,54 @@ const chapters = [
         ))}
       </div>
 
-<GuruBlock onOpenLead={onOpenLead} />
+      <GuruBlock onOpenLead={onOpenLead} />
 
-{/* What Awaits Section */}
-<section id="experience" className="mt-24">
-  <h2 className="text-2xl font-semibold">
-    {t("landing.inside.experience.title")}
-  </h2>
-  <p className="mt-1 text-gray-600">
-    {t("landing.inside.experience.sub")}
-  </p>
+      {/* What Awaits Section */}
+      <section id="experience" className="mt-24">
+        <h2 className="text-2xl font-semibold">
+          {t("landing.inside.experience.title")}
+        </h2>
+        <p className="mt-1 text-gray-600">
+          {t("landing.inside.experience.sub")}
+        </p>
 
-  <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-    {[
-      { key: "palaces",  img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80" },
-      { key: "rituals",  img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80" },
-      { key: "wellness", img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80" },
-      { key: "yacht",    img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80" },
-    ].map((c) => (
-      <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
-        <img src={c.img} alt="" className="h-32 w-full object-cover" />
-        <div className="p-4">
-          <div className="font-semibold text-lg">
-            {t(`landing.inside.experience.cards.${c.key}.title`)}
-          </div>
-          <p className="mt-2 text-sm text-gray-600">
-            {t(`landing.inside.experience.cards.${c.key}.desc`)}
-          </p>
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { key: "palaces",  img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80" },
+            { key: "rituals",  img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80" },
+            { key: "wellness", img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80" },
+            { key: "yacht",    img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80" },
+          ].map((c) => (
+            <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
+              <img src={c.img} alt="" className="h-32 w-full object-cover" />
+              <div className="p-4">
+                <div className="font-semibold text-lg">
+                  {t(`landing.inside.experience.cards.${c.key}.title`)}
+                </div>
+                <p className="mt-2 text-sm text-gray-600">
+                  {t(`landing.inside.experience.cards.${c.key}.desc`)}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
-    ))}
-  </div>
-</section>
-<IndiaCurator
-  photo="/komil.jpg"   // ← положите фотку рядом с ассетами или используйте прямой URL
-  onOpenLead={onOpenLead}            // ← ваш уже существующий LeadModal колбэк
-/>
-{/* Program Modal */}
-<InsideProgramModal />
-{/* Chapter Program Modal */}
-<ChapterProgramModal
-  open={programOpen}
-  chapter={chapterForProgram}
-  onClose={() => setProgramOpen(false)}
-  onOpenLead={onOpenLead}
-/>
+      </section>
 
+      <IndiaCurator
+        photo="/komil.jpg"   // ← положите фотку рядом с ассетами или используйте прямой URL
+        onOpenLead={onOpenLead}            // ← ваш уже существующий LeadModal колбэк
+      />
+
+      {/* Program Modal */}
+      <InsideProgramModal />
+
+      {/* Chapter Program Modal */}
+      <ChapterProgramModal
+        open={programOpen}
+        chapter={chapterForProgram}
+        onClose={() => setProgramOpen(false)}
+        onOpenLead={onOpenLead}
+      />
     </div>
   );
 }
