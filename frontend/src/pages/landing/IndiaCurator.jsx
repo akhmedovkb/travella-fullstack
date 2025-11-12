@@ -23,7 +23,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
         "India Inside — авторская программа, собранная на основе личных путешествий, знакомств и погружения в культуру. Мы показываем Индию не как туристическое направление, а как живое пространство людей, идей, вкусов и смыслов.",
       bullets: [
         "12+ лет маршрутов по Индии",
-        "Джайпур, Удайпур, Дели, Гоа, Керала",
+        "Дели, Агра, Раджастан, Мумбаи, Гоа, Керала",
         "Wellness, ремёсла, культурные практики",
         "Локальные эксперты и мастера",
         "Индивидуальное сопровождение",
@@ -41,7 +41,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
         "India Inside is a hand-crafted journey built on personal routes, meaningful encounters and a deep love for India. We show India not as a tourist destination but as a living culture of people, ideas and tastes.",
       bullets: [
         "12+ years of routes across India",
-        "Jaipur, Udaipur, Delhi, Goa, Kerala",
+        "Delhi, Agra, Rajastan, Mumbai, Goa, Kerala",
         "Wellness & cultural programs",
         "Trusted local experts and artisans",
         "Tailored guidance throughout",
@@ -59,7 +59,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
         "India Inside — shaxsiy safarlar va chuqur tajribalarga asoslangan mualliflik yo‘li. Biz Hindistonni oddiy turistik yo‘nalish emas, balki odamlar, g‘oyalar va ta’mlar yashaydigan madaniy makon sifatida ochamiz.",
       bullets: [
         "Hindistonda 12+ yillik tajriba",
-        "Jaipur, Udaypur, Dehli, Goa, Kerala",
+        "Dehli, Agra, Rasjastan, Mumbai, Goa, Kerala",
         "Wellness va madaniy dasturlar",
         "Ishonchli mahalliy ustozlar",
         "Shaxsiy ko‘mak va hamrohlik",
