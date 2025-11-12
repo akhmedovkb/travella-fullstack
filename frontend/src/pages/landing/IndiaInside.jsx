@@ -189,11 +189,11 @@ export default function IndiaInside({ onOpenLead }) {
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {chapters.map((c) => (
-          <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
+          <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow flex flex-col">
             <div className="h-40 w-full overflow-hidden">
               <img src={c.image} alt="" className="h-full w-full object-cover" />
             </div>
-            <div className="p-4 flex flex-col h-full">
+            <div className="p-4 flex flex-col grow">
               <div className="mb-1 text-xs text-amber-600">India Inside</div>
               <h3 className="text-lg font-semibold">{c.title}</h3>
               <p className="mt-1 line-clamp-2 text-sm text-gray-600">{c.desc}</p>
@@ -248,7 +248,7 @@ export default function IndiaInside({ onOpenLead }) {
     ].map((c) => (
       <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
         <img src={c.img} className="h-32 w-full object-cover" />
-        <div className="p-4">
+        <div className="p-4 flex flex-col h-full">
           <div className="font-semibold text-lg">
             {t(`landing.inside.exp.cards.${c.key}.title`)}
           </div>
