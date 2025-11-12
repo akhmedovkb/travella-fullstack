@@ -346,7 +346,7 @@ const chapters = [
 </section>
 <IndiaCurator
   photo="/komil.jpg"   // ← положите фотку рядом с ассетами или используйте прямой URL
-  onLeadOpen={onLeadOpen}             // ← ваш уже существующий LeadModal колбэк
+  onOpenLead={onOpenLead}            // ← ваш уже существующий LeadModal колбэк
 />
 {/* Program Modal */}
 <InsideProgramModal />
