@@ -314,7 +314,7 @@ const chapters = [
 <GuruBlock onOpenLead={onOpenLead} />
 
 {/* What Awaits Section */}
-<section id="awaits" className="mt-24">
+<section id="experience" className="mt-24">
   <h2 className="text-2xl font-semibold">
     {t("landing.inside.experience.title")}
   </h2>
@@ -330,7 +330,7 @@ const chapters = [
       { key: "yacht",    img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80" },
     ].map((c) => (
       <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
-        <img src={c.img} className="h-32 w-full object-cover" alt="" />
+        <img src={c.img} alt="" className="h-32 w-full object-cover" />
         <div className="p-4">
           <div className="font-semibold text-lg">
             {t(`landing.inside.experience.cards.${c.key}.title`)}
@@ -354,18 +354,6 @@ const chapters = [
   </div>
 </section>
 
-
-  {/* CTA */}
-  <div className="mt-8 text-center">
-    <button
-      onClick={() => document.dispatchEvent(new Event("openInsideModal"))}
-      className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-medium text-white"
-    >
-      {t("landing.inside.exp.cta")}
-    </button>
-  </div>
-</section>
-      
 {/* Program Modal */}
 <InsideProgramModal />
 {/* Chapter Program Modal */}
@@ -375,6 +363,7 @@ const chapters = [
   onClose={() => setProgramOpen(false)}
   onOpenLead={onOpenLead}
 />
+
     </div>
   );
 }
