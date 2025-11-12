@@ -2,15 +2,17 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-export default function IndiaCurator({ photo, onOpenLead }) {
+export default function IndiaCurator({ photo, onOpenLead, onLeadOpen }) {
   const { t } = useTranslation();
+  // совместимость: поддерживаем и onOpenLead, и onLeadOpen
+  const openLead = onOpenLead ?? onLeadOpen;
 
   return (
     <section
       id="curator"
       className="mt-16 rounded-3xl bg-white shadow-sm ring-1 ring-black/5 overflow-hidden"
     >
-      {/* Мобильный hero: полноширинная фотка + оверлей */}
+      {/* Мобильный hero */}
       <div className="block md:hidden relative">
         <img
           src={photo}
@@ -31,7 +33,7 @@ export default function IndiaCurator({ photo, onOpenLead }) {
       </div>
 
       <div className="grid md:grid-cols-2 gap-0">
-        {/* Фото — на десктопе слева */}
+        {/* Фото — слева на десктопе */}
         <div className="hidden md:block">
           <img
             src={photo}
@@ -43,7 +45,7 @@ export default function IndiaCurator({ photo, onOpenLead }) {
 
         {/* Текст */}
         <div className="p-6 sm:p-10">
-          {/* Заголовок + золотая линия (п.2) */}
+          {/* Заголовок + золотая линия */}
           <div className="hidden md:block">
             <h3 className="text-2xl font-semibold">
               {t("landing.inside.curator.title")}
@@ -79,7 +81,7 @@ export default function IndiaCurator({ photo, onOpenLead }) {
             </ul>
           </div>
 
-          {/* Бейдж под дисклеймером (п.1) */}
+          {/* Дисклеймер + бейдж */}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span className="text-xs text-gray-500">
               {t("landing.inside.curator.disclaimer")}
@@ -89,23 +91,24 @@ export default function IndiaCurator({ photo, onOpenLead }) {
             </span>
           </div>
 
-          {/* CTA: «Получить программу» + «Задать вопрос» (п.3) */}
-          <div className="mt-6 flex flex-col sm:flex-row items-start gap-3 relative z-10">
+          {/* CTA */}
+          <div className="mt-6 flex flex-col sm:flex-row items-start gap-3">
             <button
-              type="button"
-              onClick={() => onOpenLead?.("program")}
+              onClick={() => openLead?.("program")}
               className="inline-flex items-center justify-center rounded-xl bg-[#FF8A00] px-5 py-3 text-white font-medium shadow hover:brightness-95 active:brightness-90"
             >
               {t("landing.inside.cta_get_program")}
             </button>
 
-            <button
-              type="button"
-              onClick={() => onOpenLead?.("question")}
+            {/* Задать вопрос → Telegram */}
+            <a
+              href="https://t.me/akhmedovkb"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-[#FF8A00] font-medium ring-1 ring-[#FF8A00]/30 hover:bg-[#FF8A00]/5"
             >
               {t("landing.inside.cta_ask")}
-            </button>
+            </a>
           </div>
         </div>
       </div>
