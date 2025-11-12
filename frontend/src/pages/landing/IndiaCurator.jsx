@@ -52,7 +52,7 @@ export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
     uz: {
       title: "India Inside dasturi kuratori",
       role: "Travella asoschisi, India Inside kuratori",
-      name: "Komil Ahmedov",
+      name: "Komil Akhmedov",
       lead:
         "12 yildan ortiq Hindistonni o‘rganib kelaman — madaniyat, zamonaviy shaharlar, meros va wellness an’analar.",
       body:
