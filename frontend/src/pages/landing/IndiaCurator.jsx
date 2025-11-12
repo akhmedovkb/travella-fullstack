@@ -1,119 +1,109 @@
-// frontend/src/pages/landing/IndiaCurator.jsx
+// frontend/src/components/IndiaCurator.jsx
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-/**
- * Props:
- *  - photo (string)    обязательный: путь/URL фото куратора
- *  - onLeadOpen        необязательный: колбэк открыть вашу LeadModal
- *  - className         необязательный: доп. классы контейнера
- */
-export default function IndiaCurator({ photo, onLeadOpen, className = "" }) {
-  const { i18n } = useTranslation();
-  const lang = (i18n?.language || "ru").split("-")[0];
-
-  const copy = {
-    ru: {
-      title: "Ведущий программы India Inside",
-      role: "Основатель Travella.uz, куратор India Inside",
-      name: "Комил Ахмедов",
-      lead:
-        "Более 12 лет изучаю Индию: её культуру, современные города, наследие и wellness-традиции.",
-      body:
-        "India Inside — авторская программа, собранная на основе личных путешествий, знакомств и погружения в культуру. Мы показываем Индию не как туристическое направление, а как живое пространство людей, идей, вкусов и смыслов.",
-      bullets: [
-        "12+ лет маршрутов по Индии",
-        "Дели, Агра, Раджастан, Мумбаи, Гоа, Керала",
-        "Wellness, ремёсла, культурные практики",
-        "Локальные эксперты и мастера",
-        "Индивидуальное сопровождение",
-      ],
-      cta: "Задать вопрос куратору",
-      note: "Это не тур. Это культурный проект.",
-    },
-    en: {
-      title: "Curator of India Inside",
-      role: "Founder of Travella.uz, Curator of India Inside",
-      name: "Komil Akhmedov",
-      lead:
-        "Over 12 years exploring India — its culture, modern cities, heritage and wellness traditions.",
-      body:
-        "India Inside is a hand-crafted journey built on personal routes, meaningful encounters and a deep love for India. We show India not as a tourist destination but as a living culture of people, ideas and tastes.",
-      bullets: [
-        "12+ years of routes across India",
-        "Delhi, Agra, Rajastan, Mumbai, Goa, Kerala",
-        "Wellness & cultural programs",
-        "Trusted local experts and artisans",
-        "Tailored guidance throughout",
-      ],
-      cta: "Ask the curator",
-      note: "Not a tour. A cultural project.",
-    },
-    uz: {
-      title: "India Inside dasturi kuratori",
-      role: "Travella.uz asoschisi, India Inside kuratori",
-      name: "Komil Akhmedov",
-      lead:
-        "12 yildan ortiq Hindistonni o‘rganib kelaman — madaniyat, zamonaviy shaharlar, meros va wellness an’analar.",
-      body:
-        "India Inside — shaxsiy safarlar va chuqur tajribalarga asoslangan mualliflik yo‘li. Biz Hindistonni oddiy turistik yo‘nalish emas, balki odamlar, g‘oyalar va ta’mlar yashaydigan madaniy makon sifatida ochamiz.",
-      bullets: [
-        "Hindistonda 12+ yillik tajriba",
-        "Dehli, Agra, Rasjastan, Mumbai, Goa, Kerala",
-        "Wellness va madaniy dasturlar",
-        "Ishonchli hamkorlar",
-        "Shaxsiy ko‘mak va hamrohlik",
-      ],
-      cta: "Kuratorga savol berish",
-      note: "Bu shunchaki tur emas. Bu madaniy loyiha.",
-    },
-  }[lang] || copy.ru;
+export default function IndiaCurator({ photo, onLeadOpen }) {
+  const { t } = useTranslation();
 
   return (
-    <section className={`w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 mt-8 ${className}`}>
-      <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
-        {/* Фото */}
-        <div className="md:col-span-2">
-          <div className="aspect-[4/5] w-full overflow-hidden rounded-2xl ring-1 ring-gray-200">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo}
-              alt={`${copy.name} — ${copy.title}`}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          </div>
+    <section
+      id="curator"
+      className="mt-16 rounded-3xl bg-white shadow-sm ring-1 ring-black/5 overflow-hidden"
+    >
+      {/* Мобильный hero: полноширинная фотка + оверлей */}
+      <div className="block md:hidden relative">
+        <img
+          src={photo}
+          alt={t("landing.inside.curator.photo_alt")}
+          className="h-[320px] w-full object-cover"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        <div className="absolute bottom-4 left-4 right-4 text-white">
+          <h3 className="text-xl font-semibold">
+            {t("landing.inside.curator.title")}
+          </h3>
+          <div className="mt-1 h-[2px] w-14 bg-[#DAA520] rounded" />
+          <p className="mt-2 text-sm opacity-90">
+            {t("landing.inside.curator.subtitle")}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-0">
+        {/* Фото — на десктопе слева */}
+        <div className="hidden md:block">
+          <img
+            src={photo}
+            alt={t("landing.inside.curator.photo_alt")}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
         </div>
 
         {/* Текст */}
-        <div className="md:col-span-3">
-          <p className="text-sm font-medium text-amber-600 tracking-wide">{copy.title}</p>
-          <h3 className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900">
-            {copy.name}
-          </h3>
-          <p className="text-gray-600">{copy.role}</p>
+        <div className="p-6 sm:p-10">
+          {/* Заголовок + золотая линия (п.2) */}
+          <div className="hidden md:block">
+            <h3 className="text-2xl font-semibold">
+              {t("landing.inside.curator.title")}
+            </h3>
+            <div className="mt-1 h-[2px] w-14 bg-[#DAA520] rounded" />
+            <p className="mt-3 text-sm text-gray-600">
+              {t("landing.inside.curator.subtitle")}
+            </p>
+          </div>
 
-          <p className="mt-4 text-gray-800 leading-relaxed">{copy.lead}</p>
-          <p className="mt-2 text-gray-700 leading-relaxed">{copy.body}</p>
+          {/* Описание */}
+          <div className="mt-4 space-y-3 text-[15px] leading-6 text-gray-800">
+            <p>{t("landing.inside.curator.p1")}</p>
+            <p>{t("landing.inside.curator.p2")}</p>
 
-          <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
-            {copy.bullets.map((b, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-amber-500 flex-shrink-0" />
-                <span>{b}</span>
+            <ul className="mt-2 grid gap-2 text-gray-800 sm:grid-cols-2">
+              <li className="flex items-start gap-2">
+                <span className="mt-1 size-2 rounded-full bg-emerald-500" />
+                <span>{t("landing.inside.curator.bullets.one")}</span>
               </li>
-            ))}
-          </ul>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 size-2 rounded-full bg-amber-500" />
+                <span>{t("landing.inside.curator.bullets.two")}</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 size-2 rounded-full bg-sky-500" />
+                <span>{t("landing.inside.curator.bullets.three")}</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 size-2 rounded-full bg-fuchsia-500" />
+                <span>{t("landing.inside.curator.bullets.four")}</span>
+              </li>
+            </ul>
+          </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          {/* Бейдж под дисклеймером (п.1) */}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="text-xs text-gray-500">
+              {t("landing.inside.curator.disclaimer")}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-xs ring-1 ring-emerald-200">
+              🌿 {t("landing.inside.curated_badge")}
+            </span>
+          </div>
+
+          {/* CTA: «Получить программу» + «Задать вопрос» (п.3) */}
+          <div className="mt-6 flex flex-col sm:flex-row items-start gap-3">
             <button
-              onClick={onLeadOpen}
-              className="px-4 py-2 rounded-xl bg-amber-500 text-white font-medium hover:bg-amber-600 active:bg-amber-700 transition"
-              type="button"
+              onClick={() => onLeadOpen?.("program")}
+              className="inline-flex items-center justify-center rounded-xl bg-[#FF8A00] px-5 py-3 text-white font-medium shadow hover:brightness-95 active:brightness-90"
             >
-              {copy.cta}
+              {t("landing.inside.cta_get_program")}
             </button>
-            <span className="text-sm text-gray-500">{copy.note}</span>
+
+            <button
+              onClick={() => onLeadOpen?.("question")}
+              className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-[#FF8A00] font-medium ring-1 ring-[#FF8A00]/30 hover:bg-[#FF8A00]/5"
+            >
+              {t("landing.inside.cta_ask")}
+            </button>
           </div>
         </div>
       </div>
