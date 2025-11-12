@@ -14,24 +14,24 @@ function GuruBlock({ onOpenLead }) {
         />
         <div className="relative z-10 p-8 sm:p-12 lg:p-16">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            <span>{t("inside.badge")}</span>
+            <span>{t("landing.inside.badge")}</span>
             <span className="h-1 w-1 rounded-full bg-amber-500" />
             <span>INSIDE</span>
           </div>
 
           <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
-            {t("inside.guru.title")}
+            {t("landing.inside.guru.title")}
           </h2>
           <p className="mt-3 max-w-2xl text-white/80">
-            {t("inside.guru.lead")}
+            {t("landing.inside.guru.lead")}
           </p>
 
           <div className="mt-6 grid gap-6 sm:grid-cols-2">
             <ul className="space-y-3 text-sm text-zinc-200">
-              <li><span className="dot" />{t("inside.guru.bullets.one")}</li>
-              <li><span className="dot" />{t("inside.guru.bullets.two")}</li>
-              <li><span className="dot" />{t("inside.guru.bullets.three")}</li>
-              <li><span className="dot" />{t("inside.guru.bullets.four")}</li>
+              <li><span className="dot" />{t("landing.inside.guru.bullets.one")}</li>
+              <li><span className="dot" />{t("landing.inside.guru.bullets.two")}</li>
+              <li><span className="dot" />{t("landing.inside.guru.bullets.three")}</li>
+              <li><span className="dot" />{t("landing.inside.guru.bullets.four")}</li>
             </ul>
 
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
