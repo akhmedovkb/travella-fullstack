@@ -1493,6 +1493,29 @@
       "desc": "Sunset cruise, curated dining, atmosphere."
     }
   }
+},
+"experience": {
+  "title": "India Inside — sizni nimalar kutadi",
+  "sub": "Hindiston, uning odamlari, madaniyati va go‘zalligiga muhabbat bilan yaratilgan sayohatlar.",
+
+  "cards": {
+    "palaces": {
+      "title": "Saroylar va meros",
+      "desc": "Heritage mehmonxonalar, yopiq tarixiy joylar."
+    },
+    "rituals": {
+      "title": "Ritual va an’analar",
+      "desc": "Mahalliy ustozlar bilan haqiqiy marosimlar."
+    },
+    "wellness": {
+      "title": "Wellness & Ayurveda",
+      "desc": "Shaxsiy sog‘lomlashtirish dasturlari."
+    },
+    "yacht": {
+      "title": "Yax̆ta va gastronomiya",
+      "desc": "Quyosh botishi, maxsus kechki ovqat, muhit."
+    }
+  }
 }
 }
 
