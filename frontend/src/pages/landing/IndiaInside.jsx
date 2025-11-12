@@ -56,7 +56,7 @@ function GuruBlock({ onOpenLead }) {
             <a href="#chapters"
                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
             >
-              {t("inside.guru.cta_chapters")}
+              {t("landing.inside.guru.cta_chapters")}
             </a>
           </div>
         </div>
