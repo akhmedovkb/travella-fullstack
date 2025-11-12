@@ -377,7 +377,13 @@ const chapters = [
       
 {/* Program Modal */}
 <InsideProgramModal />
-
+{/* Chapter Program Modal */}
+<ChapterProgramModal
+  open={programOpen}
+  chapter={chapterForProgram}
+  onClose={() => setProgramOpen(false)}
+  onOpenLead={onOpenLead}
+/>
     </div>
   );
 }
