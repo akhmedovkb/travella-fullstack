@@ -356,7 +356,6 @@ const chapters = [
   </div>
 </section>
 
-
   {/* CTA */}
   <div className="mt-8 text-center">
     <button
