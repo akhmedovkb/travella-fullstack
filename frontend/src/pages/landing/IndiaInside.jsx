@@ -114,37 +114,45 @@ export default function IndiaInside({ onOpenLead }) {
   const chapters = [
     {
       key: "royal",
-      title: t("landing.inside.chapters.royal.title"),
-      desc: t("landing.inside.chapters.royal.desc"),
-      days: t("landing.inside.chapters.royal.days", "8–9 days"),
-      from: t("landing.inside.chapters.royal.from", "from $8 900"),
-      image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
+      title: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
+      desc: t("landing.inside.chapters.royal.desc", "Дели — Агра — Джайпур"),
+      days: t("landing.inside.chapters.royal.days", "7–8 дней"),
+      from: t("landing.inside.chapters.royal.from", "от $699"),
+      image:
+        "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "silence",
-      title: t("landing.inside.chapters.silence.title"),
-      desc: t("landing.inside.chapters.silence.desc"),
-      days: t("landing.inside.chapters.silence.days", "7–8 days"),
-      from: t("landing.inside.chapters.silence.from", "from $6 200"),
-      image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
+      title: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
+      desc: t("landing.inside.chapters.silence.desc", "Джодпур — Удайпур — Джайсалмер"),
+      days: t("landing.inside.chapters.silence.days", "8–9 дней"),
+      from: t("landing.inside.chapters.silence.from", "от $890"),
+      image:
+        "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "modern",
-      title: t("landing.inside.chapters.modern.title"),
-      desc: t("landing.inside.chapters.modern.desc"),
-      days: t("landing.inside.chapters.modern.days", "7 days"),
-      from: t("landing.inside.chapters.modern.from", "from $7 400"),
-      image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
+      title: t(
+        "landing.inside.chapters.modern.title",
+        "Мумбаи + Гоа — лучшие воспоминания"
+      ),
+      desc: t("landing.inside.chapters.modern.desc", "Город & океан"),
+      days: t("landing.inside.chapters.modern.days", "7 дней"),
+      from: t("landing.inside.chapters.modern.from", "от $490"),
+      image:
+        "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "kerala",
-      title: t("landing.inside.chapters.kerala.title"),
-      desc: t("landing.inside.chapters.kerala.desc"),
-      days: t("landing.inside.chapters.kerala.days", "8–9 days"),
-      from: t("landing.inside.chapters.kerala.from", "from $6 900"),
-      image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
+      title: t("landing.inside.chapters.kerala.title", "Керала: Рай на Земле"),
+      desc: t("landing.inside.chapters.kerala.desc", "Аюрведа, чайные холмы, хаусбоат"),
+      days: t("landing.inside.chapters.kerala.days", "8–9 дней"),
+      from: t("landing.inside.chapters.kerala.from", "от $790"),
+      image:
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
     },
   ];
+
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16">
