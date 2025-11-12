@@ -1377,10 +1377,10 @@
     "from": "from $699"
   },
   "silence": {
-    "title": "Adventures in Rajasthan",
-    "desc": "Jodhpur — Udaipur — Jaisalmer",
-    "days": "8–9 days",
-    "from": "from $890"
+          "title": "Adventures in Rajasthan",
+          "desc": "Udaipur — Jodhpur — Jaisalmer",
+          "days": "8–9 days",
+          "from": "from $890"
   },
   "modern": {
     "title": "Mumbai + Goa — Best Memories",
