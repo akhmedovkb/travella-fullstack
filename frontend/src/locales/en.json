@@ -1370,11 +1370,31 @@
   "view": "Request the program",
 
   "chapters": {
-    "royal":   { "title": "Royal Chapters",        "desc": "Udaipur & Jaipur palaces, private ceremonies.",          "days": "8–9 days", "from": "from $8,900" },
-    "silence": { "title": "Path of Silence",       "desc": "Himalayas, ayurveda, monks, tea hills.",                 "days": "7–8 days", "from": "from $6,200" },
-    "modern":  { "title": "Modern India",          "desc": "Mumbai, style, film studio, yacht, gala dinner.",        "days": "7 days",   "from": "from $7,400" },
-    "kerala":  { "title": "Kerala: Reset",         "desc": "Backwaters, tea, wellness, private houseboat.",          "days": "8–9 days", "from": "from $6,900" }
+  "royal": {
+    "title": "Golden Triangle",
+    "desc": "Delhi — Agra — Jaipur",
+    "days": "7–8 days",
+    "from": "from $699"
   },
+  "silence": {
+    "title": "Adventures in Rajasthan",
+    "desc": "Jodhpur — Udaipur — Jaisalmer",
+    "days": "8–9 days",
+    "from": "from $890"
+  },
+  "modern": {
+    "title": "Mumbai + Goa — Best Memories",
+    "desc": "City & ocean escape",
+    "days": "7 days",
+    "from": "from $490"
+  },
+  "kerala": {
+    "title": "Kerala: Paradise on Earth",
+    "desc": "Ayurveda, tea hills, private houseboat",
+    "days": "8–9 days",
+    "from": "from $790"
+  }
+},
 
   "guru": {
     "title": "India Guru program",
