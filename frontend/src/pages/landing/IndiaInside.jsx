@@ -64,6 +64,49 @@ function GuruBlock({ onOpenLead }) {
     </section>
   );
 }
+function InsideProgramModal() {
+  const { t } = useTranslation();
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setOpen(true);
+    document.addEventListener("openInsideModal", handler);
+    return () => document.removeEventListener("openInsideModal", handler);
+  }, []);
+
+  if (!open) return null;
+
+  const days = [
+    t("landing.inside.modal.d1"),
+    t("landing.inside.modal.d2"),
+    t("landing.inside.modal.d3"),
+    t("landing.inside.modal.d4"),
+    t("landing.inside.modal.d5"),
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2000] flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
+        <h3 className="text-xl font-semibold mb-4">
+          {t("landing.inside.modal.title")}
+        </h3>
+
+        <ul className="space-y-3 text-sm text-gray-700">
+          {days.map((d, i) => (
+            <li key={i}>• {d}</li>
+          ))}
+        </ul>
+
+        <button
+          onClick={() => setOpen(false)}
+          className="mt-6 w-full rounded-xl bg-black text-white py-3 text-sm font-medium"
+        >
+          {t("landing.inside.modal.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function IndiaInside({ onOpenLead }) {
   const { t } = useTranslation();
@@ -157,6 +200,72 @@ export default function IndiaInside({ onOpenLead }) {
       </div>
 
       <GuruBlock onOpenLead={onOpenLead} />
+      {/* Experience Timeline */}
+<section id="experience" className="mt-16">
+  <h2 className="text-2xl font-semibold">
+    {t("landing.inside.exp.title")}
+  </h2>
+  <p className="mt-1 text-gray-600">
+    {t("landing.inside.exp.sub")}
+  </p>
+
+  {/* Timeline */}
+  <div className="mt-8 space-y-6 border-l pl-6">
+    {[
+      { day: 1, text: t("landing.inside.exp.d1") },
+      { day: 2, text: t("landing.inside.exp.d2") },
+      { day: 3, text: t("landing.inside.exp.d3") },
+      { day: 4, text: t("landing.inside.exp.d4") },
+      { day: 5, text: t("landing.inside.exp.d5") },
+    ].map((it) => (
+      <div key={it.day} className="relative">
+        <span className="absolute -left-[0.4rem] h-3 w-3 rounded-full bg-amber-500" />
+        <div className="ml-4">
+          <div className="font-medium text-sm text-amber-600">
+            {t("landing.inside.exp.day")} {it.day}
+          </div>
+          <div className="text-gray-800 text-sm">{it.text}</div>
+        </div>
+      </div>
+    ))}
+  </div>
+
+  {/* Experience Cards */}
+  <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    {[
+      { key: "palace", img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80" },
+      { key: "ritual", img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80" },
+      { key: "wellness", img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80" },
+      { key: "yacht", img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80" },
+    ].map((c) => (
+      <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
+        <img src={c.img} className="h-32 w-full object-cover" />
+        <div className="p-4">
+          <div className="font-semibold text-lg">
+            {t(`landing.inside.exp.cards.${c.key}.title`)}
+          </div>
+          <p className="mt-2 text-sm text-gray-600">
+            {t(`landing.inside.exp.cards.${c.key}.desc`)}
+          </p>
+        </div>
+      </div>
+    ))}
+  </div>
+
+  {/* CTA */}
+  <div className="mt-8 text-center">
+    <button
+      onClick={() => document.dispatchEvent(new Event("openInsideModal"))}
+      className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-medium text-white"
+    >
+      {t("landing.inside.exp.cta")}
+    </button>
+  </div>
+</section>
+      
+{/* Program Modal */}
+<InsideProgramModal />
+
     </div>
   );
 }
