@@ -107,9 +107,79 @@ function InsideProgramModal() {
     </div>
   );
 }
+function ChapterProgramModal({ open, chapter, onClose, onOpenLead }) {
+  if (!open || !chapter) return null;
+
+  const days = Array.isArray(chapter.program) ? chapter.program : [];
+
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6">
+        {/* Header */}
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-amber-600">India Inside</div>
+            <h3 className="mt-1 text-xl font-semibold">{chapter.title}</h3>
+            <div className="mt-1 text-sm text-gray-500">
+              {chapter.desc} • {chapter.days} • {chapter.from}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Program by days */}
+        <ol className="space-y-3 text-sm text-gray-800">
+          {days.length === 0 ? (
+            <li>Программа обновляется…</li>
+          ) : (
+            days.map((d, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="mt-1 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-semibold text-white">
+                  {i + 1}
+                </span>
+                <span>{d}</span>
+              </li>
+            ))
+          )}
+        </ol>
+
+        {/* Actions */}
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm hover:bg-gray-50 sm:w-auto"
+          >
+            Закрыть
+          </button>
+          <button
+            onClick={() => {
+              onOpenLead?.({ chapterKey: chapter.key, chapterTitle: chapter.title });
+              onClose();
+            }}
+            className="w-full rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-white sm:w-auto"
+          >
+            Запросить программу
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function IndiaInside({ onOpenLead }) {
-  const { t } = useTranslation();
+const { t } = useTranslation();
+const [programOpen, setProgramOpen] = React.useState(false);
+const [chapterForProgram, setChapterForProgram] = React.useState(null);
+
+const openProgram = (c) => {
+  setChapterForProgram(c);
+  setProgramOpen(true);
+};
 
 const chapters = [
   {
@@ -232,7 +302,7 @@ const chapters = [
               <div className="mt-3 text-sm text-gray-500">{c.days} · {c.from}</div>
               <button
                 className="mt-auto w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
-                onClick={() => onOpenLead?.({ chapterKey: c.key, chapterTitle: c.title })}
+                onClick={() => openProgram(c)}
               >
                 {t("landing.inside.view")}
               </button>
