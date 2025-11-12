@@ -1395,6 +1395,46 @@
     "from": "from $790"
   }
 },
+"program": {
+  "royal": {
+    "d1": "Delhi: arrival, transfer, evening briefing",
+    "d2": "Agra: Taj Mahal at sunrise, Agra Fort",
+    "d3": "Jaipur: Amber Fort, Hawa Mahal",
+    "d4": "Jaipur: city tour, crafts",
+    "d5": "Delhi: modern India — art/fashion/gastro",
+    "d6": "Free day / optional experiences",
+    "d7": "Departure"
+  },
+  "rajasthan": {
+    "d1": "Udaipur: arrival, Lake Pichola, City Palace",
+    "d2": "Udaipur: Jagdish/Eklingji temples, crafts, evening cruise",
+    "d3": "Drive to Jodhpur, Old Blue City walk",
+    "d4": "Jodhpur: Mehrangarh Fort, viewpoints, rooftop sunset",
+    "d5": "Drive to Jaisalmer, Golden Fort, havelis",
+    "d6": "Thar Desert: dune safari, dinner by the fire",
+    "d7": "Free day / master-class",
+    "d8": "Departure"
+  },
+  "mumbaiGoa": {
+    "d1": "Mumbai: half-day tour, evening on the promenade",
+    "d2": "Bollywood studios / art districts",
+    "d3": "Flight to Goa, ocean",
+    "d4": "Beaches, Old Goa, Portuguese heritage",
+    "d5": "Yacht/sunset, gourmet dinner",
+    "d6": "Free day / wellness",
+    "d7": "Departure"
+  },
+  "kerala": {
+    "d1": "Kochi: city tour, Chinese fishing nets, colonial quarter",
+    "d2": "Munnar: tea plantations, viewpoints",
+    "d3": "Munnar: trekking / photo day",
+    "d4": "Alleppey: check-in on houseboat",
+    "d5": "Backwaters, villages, local cuisine",
+    "d6": "Ayurveda center, personal program",
+    "d7": "Free day / beach",
+    "d8": "Departure"
+  }
+},
 
   "guru": {
     "title": "India Guru program",
