@@ -1377,6 +1377,23 @@
   },
 
 "inside": {
+      "curated_badge": "Kuratsiyadan o‘tgan madaniy sayohat",
+      "cta_get_program": "Dastur olish",
+      "cta_ask": "Savol berish",
+      "curator": {
+        "photo_alt": "India Inside kuratori",
+        "title": "Komil Axmedov",
+        "subtitle": "Travella asoschisi, India Inside kuratori",
+        "p1": "12+ yildan beri Hindistonni — madaniyat, zamonaviy shaharlar, meros va wellnessni o‘rganaman.",
+        "p2": "India Inside — shaxsiy sayohatlar va madaniyatga chuqur sho‘ng‘ish asosidagi mualliflik dasturi.",
+        "bullets": {
+          "one": "Hindistonda 12+ yil marshrutlar",
+          "two": "Wellness, hunarmandchilik, madaniy amaliyotlar",
+          "three": "Mahalliy ekspertlar va ustozlar",
+          "four": "Individual hamrohlik"
+        },
+        "disclaimer": "Bu tur emas. Bu — madaniy loyiha.",
+        
   "badge": "TRAVELLA • INDIA",
   "title": "India Inside — hashamatli sayohat",
   "sub": "Shaxsiy dasturlar, maharaja saroylari, yopiq marosimlar va Himolay sokinligi.",
