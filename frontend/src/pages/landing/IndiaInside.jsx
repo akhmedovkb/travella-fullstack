@@ -311,38 +311,9 @@ const chapters = [
         ))}
       </div>
 
-      <GuruBlock onOpenLead={onOpenLead} />
-      {/* Experience Timeline */}
-<section id="experience" className="mt-16">
-  <h2 className="text-2xl font-semibold">
-    {t("landing.inside.exp.title")}
-  </h2>
-  <p className="mt-1 text-gray-600">
-    {t("landing.inside.exp.sub")}
-  </p>
+<GuruBlock onOpenLead={onOpenLead} />
 
-  {/* Timeline */}
-  <div className="mt-8 space-y-6 border-l pl-6">
-    {[
-      { day: 1, text: t("landing.inside.exp.d1") },
-      { day: 2, text: t("landing.inside.exp.d2") },
-      { day: 3, text: t("landing.inside.exp.d3") },
-      { day: 4, text: t("landing.inside.exp.d4") },
-      { day: 5, text: t("landing.inside.exp.d5") },
-    ].map((it) => (
-      <div key={it.day} className="relative">
-        <span className="absolute -left-[0.4rem] h-3 w-3 rounded-full bg-amber-500" />
-        <div className="ml-4">
-          <div className="font-medium text-sm text-amber-600">
-            {t("landing.inside.exp.day")} {it.day}
-          </div>
-          <div className="text-gray-800 text-sm">{it.text}</div>
-        </div>
-      </div>
-    ))}
-  </div>
-
-{/* What Awaits Section */}
+      {/* What Awaits Section */}
 <section id="experience" className="mt-24">
   <h2 className="text-2xl font-semibold">
     {t("landing.inside.experience.title")}
