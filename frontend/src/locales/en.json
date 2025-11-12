@@ -1449,29 +1449,8 @@
     "certificate_meta": "Owner name • Date • Program ID",
     "cta_apply": "Apply to join",
     "cta_chapters": "View program chapters"
-  }
-}
-,
-    "ayurveda": {
-      "h1": "Ayurveda & wellness",
-      "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
-      "get": "Request program"
-    },
-    "checkup": {
-      "h1": "Check-up in India",
-      "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
-      "get": "Get price"
-    },
-    "treatment": {
-      "h1": "Medical treatment in India",
-      "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
-      "get": "Get consultation"
-    },
-    "clinics": { "h1": "Partner clinics (Delhi)" },
-    "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
-    "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
   },
-"experience": {
+  "experience": {
   "title": "What Awaits You in India Inside",
   "sub": "Journeys crafted with love for India, its people, culture, and beauty.",
 
@@ -1493,29 +1472,26 @@
       "desc": "Sunset cruise, curated dining, atmosphere."
     }
   }
-},
-"experience": {
-  "title": "India Inside — sizni nimalar kutadi",
-  "sub": "Hindiston, uning odamlari, madaniyati va go‘zalligiga muhabbat bilan yaratilgan sayohatlar.",
-
-  "cards": {
-    "palaces": {
-      "title": "Saroylar va meros",
-      "desc": "Heritage mehmonxonalar, yopiq tarixiy joylar."
-    },
-    "rituals": {
-      "title": "Ritual va an’analar",
-      "desc": "Mahalliy ustozlar bilan haqiqiy marosimlar."
-    },
-    "wellness": {
-      "title": "Wellness & Ayurveda",
-      "desc": "Shaxsiy sog‘lomlashtirish dasturlari."
-    },
-    "yacht": {
-      "title": "Yax̆ta va gastronomiya",
-      "desc": "Quyosh botishi, maxsus kechki ovqat, muhit."
-    }
-  }
 }
+},
+    "ayurveda": {
+      "h1": "Ayurveda & wellness",
+      "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
+      "get": "Request program"
+    },
+    "checkup": {
+      "h1": "Check-up in India",
+      "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
+      "get": "Get price"
+    },
+    "treatment": {
+      "h1": "Medical treatment in India",
+      "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
+      "get": "Get consultation"
+    },
+    "clinics": { "h1": "Partner clinics (Delhi)" },
+    "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
+    "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+  },
 }
 
