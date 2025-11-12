@@ -37,11 +37,11 @@ function GuruBlock({ onOpenLead }) {
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
                 <div className="text-xs uppercase tracking-wider text-zinc-500">
-                  {t("inside.guru.certificate_label")}
+                  {t("landing.inside.guru.certificate_label")}
                 </div>
                 <div className="mt-1 text-lg font-semibold">India Inside: Guru</div>
                 <div className="mt-2 text-xs text-zinc-600">
-                  {t("inside.guru.certificate_meta")}
+                  {t("landing.inside.guru.certificate_meta")}
                 </div>
                 <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
                 <div className="mt-3 text-right text-[10px] text-zinc-500">Travella • India Inside</div>
@@ -51,7 +51,7 @@ function GuruBlock({ onOpenLead }) {
 
           <div className="mt-8 flex flex-wrap gap-3">
             <button onClick={() => onOpenLead?.()} className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black">
-              {t("inside.guru.cta_apply")}
+              {t("landing.inside.guru.cta_apply")}
             </button>
             <a href="#chapters"
                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
@@ -71,34 +71,34 @@ export default function IndiaInside({ onOpenLead }) {
   const chapters = [
     {
       key: "royal",
-      title: t("inside.chapters.royal.title"),
-      desc: t("inside.chapters.royal.desc"),
-      days: t("inside.chapters.royal.days", "8–9 days"),
-      from: t("inside.chapters.royal.from", "from $8 900"),
+      title: t("landing.inside.chapters.royal.title"),
+      desc: t("landing.inside.chapters.royal.desc"),
+      days: t("landing.inside.chapters.royal.days", "8–9 days"),
+      from: t("landing.inside.chapters.royal.from", "from $8 900"),
       image: "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "silence",
-      title: t("inside.chapters.silence.title"),
-      desc: t("inside.chapters.silence.desc"),
-      days: t("inside.chapters.silence.days", "7–8 days"),
-      from: t("inside.chapters.silence.from", "from $6 200"),
+      title: t("landing.inside.chapters.silence.title"),
+      desc: t("landing.inside.chapters.silence.desc"),
+      days: t("landing.inside.chapters.silence.days", "7–8 days"),
+      from: t("landing.inside.chapters.silence.from", "from $6 200"),
       image: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "modern",
-      title: t("inside.chapters.modern.title"),
-      desc: t("inside.chapters.modern.desc"),
-      days: t("inside.chapters.modern.days", "7 days"),
-      from: t("inside.chapters.modern.from", "from $7 400"),
+      title: t("landing.inside.chapters.modern.title"),
+      desc: t("landing.inside.chapters.modern.desc"),
+      days: t("landing.inside.chapters.modern.days", "7 days"),
+      from: t("landing.inside.chapters.modern.from", "from $7 400"),
       image: "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "kerala",
-      title: t("inside.chapters.kerala.title"),
-      desc: t("inside.chapters.kerala.desc"),
-      days: t("inside.chapters.kerala.days", "8–9 days"),
-      from: t("inside.chapters.kerala.from", "from $6 900"),
+      title: t("landing.inside.chapters.kerala.title"),
+      desc: t("landing.inside.chapters.kerala.desc"),
+      days: t("landing.inside.chapters.kerala.days", "8–9 days"),
+      from: t("landing.inside.chapters.kerala.from", "from $6 900"),
       image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
     },
   ];
@@ -112,7 +112,7 @@ export default function IndiaInside({ onOpenLead }) {
         />
         <div className="relative z-10 p-10 sm:p-16 lg:p-24">
           <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            {t("inside.badge")}
+            {t("landing.inside.badge")}
           </div>
           <h1 className="text-3xl font-semibold sm:text-5xl">{t("inside.title")}</h1>
           <p className="mt-4 max-w-2xl text-white/80">{t("inside.sub")}</p>
@@ -120,12 +120,12 @@ export default function IndiaInside({ onOpenLead }) {
           <div className="mt-8 flex gap-3">
             <button className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black"
                     onClick={() => document.getElementById("chapters")?.scrollIntoView({ behavior: "smooth"})}>
-              {t("inside.cta_trailer")}
+              {t("landing.inside.cta_trailer")}
             </button>
             <a href="#guru"
                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium"
                onClick={(e)=>{e.preventDefault(); document.getElementById("guru")?.scrollIntoView({behavior:"smooth"});}}>
-              {t("inside.cta_join")}
+              {t("landing.inside.cta_join")}
             </a>
           </div>
         </div>
@@ -149,7 +149,7 @@ export default function IndiaInside({ onOpenLead }) {
               <div className="mt-3 text-sm text-gray-500">{c.days} · {c.from}</div>
               <button className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
                       onClick={() => onOpenLead?.()}>
-                {t("inside.view")}
+                {t("landing.inside.view")}
               </button>
             </div>
           </article>
