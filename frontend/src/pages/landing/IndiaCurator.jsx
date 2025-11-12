@@ -93,7 +93,7 @@ export default function IndiaCurator({ photo, onLeadOpen }) {
           <div className="mt-6 flex flex-col sm:flex-row items-start gap-3 relative z-10">
             <button
               type="button"
-              onClick={() => onLeadOpen?.("program")}
+              onClick={() => onOpenLead?.("program")}
               className="inline-flex items-center justify-center rounded-xl bg-[#FF8A00] px-5 py-3 text-white font-medium shadow hover:brightness-95 active:brightness-90"
             >
               {t("landing.inside.cta_get_program")}
@@ -101,7 +101,7 @@ export default function IndiaCurator({ photo, onLeadOpen }) {
 
             <button
               type="button"
-              onClick={() => onLeadOpen?.("question")}
+              onClick={() => onOpenLead?.("question")}
               className="inline-flex items-center justify-center rounded-xl px-5 py-3 text-[#FF8A00] font-medium ring-1 ring-[#FF8A00]/30 hover:bg-[#FF8A00]/5"
             >
               {t("landing.inside.cta_ask")}
