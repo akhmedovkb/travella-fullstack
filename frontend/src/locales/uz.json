@@ -1466,9 +1466,30 @@
     "certificate_meta": "Egasining ismi • Sana • Dastur identifikatori",
     "cta_apply": "Ishtirok etishga ariza",
     "cta_chapters": "Dastur boblarini ko‘rish"
+  },
+  "experience": {
+  "title": "India Inside bilan sizni nimalar kutadi",
+  "sub": "Hindistonga — uning ruhiga, odamlari va go‘zalligiga muhabbat bilan yaratilgan nafis yo‘nalishlar.",
+  "cards": {
+    "palaces": {
+      "title": "Saroylar va meros",
+      "desc": "Heritage mehmonxonalarda yashash, tarix nafas olgan maskanlar, yopiq maxsus joylar."
+    },
+    "rituals": {
+      "title": "Marosimlar va an’analar",
+      "desc": "Haqiqiy marosimlar, ma’rifat ahli, madaniyatga chuqur sho‘ng‘ish."
+    },
+    "wellness": {
+      "title": "Wellness & Ayurveda",
+      "desc": "Shaxsiy sog‘lomlashtirish dasturlari, qadimiy shifo amaliyotlari va ustoz-terapevtlar."
+    },
+    "yacht": {
+      "title": "Yaxta va gastro-kecha",
+      "desc": "Quyosh botishi, sokin muhit, nafis taomlar va xotirjam suhbatlar."
+    }
   }
 }
-,
+},
 
   "ayurveda": {
     "h1": "Ayurveda va wellness",
