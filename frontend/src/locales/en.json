@@ -1358,36 +1358,40 @@
         }
       ]
     },
-    "inside": {
-      "badge": "TRAVELLA • INDIA",
-      "title": "India Inside — luxury travel",
-      "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan serenity.",
-      "cta_trailer": "Watch trailer",
-      "cta_join": "Apply to join",
-      "steps_title": "Chapters of India Inside",
-      "steps_sub": "Pick the chapter that resonates — we’ll tailor your route.",
-      "view": "Request program",
-      "chapters": {
-        "royal":  { "title": "Royal Chapters", "desc": "Udaipur & Jaipur palaces, closed rituals.", "days": "8–9 days", "from": "from $8,900" },
-        "silence":{ "title": "Path of Silence", "desc": "Himalayas, Ayurveda, monks, tea estates.", "days": "7–8 days", "from": "from $6,200" },
-        "modern": { "title": "Modern India", "desc": "Mumbai style, film studio, yacht, gala night.", "days": "7 days", "from": "from $7,400" },
-        "kerala": { "title": "Kerala: reboot", "desc": "Backwaters, tea, wellness, private houseboat.", "days": "8–9 days", "from": "from $6,900" }
-      },
-      "guru": {
-        "title": "India Guru program",
-        "lead": "Complete all 4 chapters to earn your personal “India Inside: Guru” status.",
-        "bullets": {
-          "one": "Bespoke itineraries with a dedicated curator",
-          "two": "Access to closed rituals & normally private locations",
-          "three": "“Guru” certificate & entry to the Travella club",
-          "four": "By application only"
-        },
-        "cta_apply": "Apply to participate",
-        "cta_chapters": "Explore chapters",
-        "certificate_label": "Certificate",
-        "certificate_meta": "Holder name • Date • Program ID"
-      }
+"inside": {
+  "badge": "TRAVELLA • INDIA",
+  "title": "India Inside — a luxury journey",
+  "sub": "Private programs, maharaja palaces, closed rituals and Himalayan silence.",
+  "cta_trailer": "Watch trailer",
+  "cta_join": "Request the program",
+
+  "steps_title": "India Inside chapters",
+  "steps_sub": "Pick your chapter — we’ll craft a private itinerary.",
+  "view": "Request the program",
+
+  "chapters": {
+    "royal":   { "title": "Royal Chapters",        "desc": "Udaipur & Jaipur palaces, private ceremonies.",          "days": "8–9 days", "from": "from $8,900" },
+    "silence": { "title": "Path of Silence",       "desc": "Himalayas, ayurveda, monks, tea hills.",                 "days": "7–8 days", "from": "from $6,200" },
+    "modern":  { "title": "Modern India",          "desc": "Mumbai, style, film studio, yacht, gala dinner.",        "days": "7 days",   "from": "from $7,400" },
+    "kerala":  { "title": "Kerala: Reset",         "desc": "Backwaters, tea, wellness, private houseboat.",          "days": "8–9 days", "from": "from $6,900" }
+  },
+
+  "guru": {
+    "title": "India Guru program",
+    "lead": "Complete all 4 India Inside chapters and earn the personal status «India Inside: Guru».",
+    "bullets": {
+      "one": "Tailor-made routes and a personal curator",
+      "two": "Private ceremonies and off-limits locations",
+      "three": "“Guru of India” certificate and Travella club",
+      "four": "By application only"
     },
+    "certificate_label": "Certificate",
+    "certificate_meta": "Owner name • Date • Program ID",
+    "cta_apply": "Apply to join",
+    "cta_chapters": "View program chapters"
+  }
+}
+,
     "ayurveda": {
       "h1": "Ayurveda & wellness",
       "sub": "Kerala retreats, detox programs. Clinic & hotel assistance, transfers.",
