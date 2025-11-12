@@ -342,16 +342,6 @@ const chapters = [
       </div>
     ))}
   </div>
-
-  {/* CTA */}
-  <div className="mt-8 text-center">
-    <button
-      onClick={() => document.dispatchEvent(new Event("openInsideModal"))}
-      className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-medium text-white"
-    >
-      {t("landing.inside.exp.cta")}
-    </button>
-  </div>
 </section>
 
 {/* Program Modal */}
