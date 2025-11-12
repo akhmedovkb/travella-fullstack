@@ -342,27 +342,49 @@ const chapters = [
     ))}
   </div>
 
-  {/* Experience Cards */}
+{/* What Awaits Section */}
+<section id="experience" className="mt-24">
+  <h2 className="text-2xl font-semibold">
+    {t("landing.inside.experience.title")}
+  </h2>
+  <p className="mt-1 text-gray-600">
+    {t("landing.inside.experience.sub")}
+  </p>
+
   <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
     {[
-      { key: "palace", img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80" },
-      { key: "ritual", img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80" },
-      { key: "wellness", img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80" },
-      { key: "yacht", img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80" },
+      {
+        key: "palaces",
+        img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80",
+      },
+      {
+        key: "rituals",
+        img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80",
+      },
+      {
+        key: "wellness",
+        img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80",
+      },
+      {
+        key: "yacht",
+        img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80",
+      },
     ].map((c) => (
       <div key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
         <img src={c.img} className="h-32 w-full object-cover" />
-        <div className="p-4 flex flex-col h-full">
+        <div className="p-4">
           <div className="font-semibold text-lg">
-            {t(`landing.inside.exp.cards.${c.key}.title`)}
+            {t(`landing.inside.experience.cards.${c.key}.title`)}
           </div>
           <p className="mt-2 text-sm text-gray-600">
-            {t(`landing.inside.exp.cards.${c.key}.desc`)}
+            {t(`landing.inside.experience.cards.${c.key}.desc`)}
           </p>
         </div>
       </div>
     ))}
   </div>
+</section>
+
 
   {/* CTA */}
   <div className="mt-8 text-center">
