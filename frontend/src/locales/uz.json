@@ -1413,7 +1413,46 @@
     "from": "dan $790"
   }
 },
-
+"program": {
+  "royal": {
+    "d1": "Dehli: kelish, transfer, kechki tanishtirish",
+    "d2": "Agra: Tongda Taj Mahal, Agra qal’asi",
+    "d3": "Jaypur: Amber qal’asi, Shamollar saroyi",
+    "d4": "Jaypur: shahar bo‘ylab sayohat, hunarmandchilik",
+    "d5": "Dehli: zamonaviy Hindiston — art/moda/gastro",
+    "d6": "Bo‘sh kun / qo‘shimcha dasturlar",
+    "d7": "Jo‘nab ketish / parvoz"
+  },
+  "rajasthan": {
+    "d1": "Udaypur: kelish, Pichola ko‘li, City Palace",
+    "d2": "Udaypur: Jagdish/Eklingji ibodatxonalari, hunarmandchilik, kechki qayiq sayri",
+    "d3": "Jodhpurni yo‘lga chiqish, ‘Ko‘k shahar’ eski qismida sayr",
+    "d4": "Jodhpur: Mehrangarh qal’asi, manzaralar, tomda quyosh botishi",
+    "d5": "Jaysalmerga yo‘l, Oltin qal’a, haveli lar",
+    "d6": "Tar cho‘li: qumtepalar safari, gulxan yonida kechki ovqat",
+    "d7": "Bo‘sh kun / master-klass",
+    "d8": "Jo‘nab ketish"
+  },
+  "mumbaiGoa": {
+    "d1": "Mumbay: yarim kunlik sayohat, sohil bo‘ylab kechki sayr",
+    "d2": "Bollivud studiyalari / art-mahallalar",
+    "d3": "Goaga parvoz, okean",
+    "d4": "Plyajlar, Eski Goa, portugal merosi",
+    "d5": "Yaxta/Quyosh botishi, gurme kechki ovqat",
+    "d6": "Bo‘sh kun / wellness",
+    "d7": "Jo‘nab ketish"
+  },
+  "kerala": {
+    "d1": "Ko‘chi: shahar, Xitoy baliqchi to‘rlari, kolonial hudud",
+    "d2": "Munnar: choy plantatsiyalari, manzaralar",
+    "d3": "Munnar: trekking / foto-kun",
+    "d4": "Alleppi: hausbotga joylashish",
+    "d5": "Backwaters, qishloqlar, mahalliy oshxona",
+    "d6": "Ayurveda markazi, individual dastur",
+    "d7": "Bo‘sh kun / dengiz",
+    "d8": "Jo‘nab ketish"
+  }
+},
   "guru": {
     "title": "Hindiston bo‘yicha Guru dasturi",
     "lead": "India Inside’ning 4 bobini yakunlab, «India Inside: Guru» maqomiga ega bo‘ling.",
