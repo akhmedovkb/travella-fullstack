@@ -493,7 +493,7 @@ function FavoritesList({
   );
 }
 // --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-function MyInsideCard({ inside, loading, t }) {
+function MyInsideCard({ inside, loading, t, onJoined }) {
   // заголовки глав по ключам
   const chapterTitle = (key) => {
     const map = {
@@ -517,6 +517,29 @@ function MyInsideCard({ inside, loading, t }) {
 
   // если пользователь ещё не участник — показываем приглашение
   if (!inside) {
+    async function handleJoin() {
+      try {
+        const res = await apiPost("/api/inside/join");
+        // успешный ответ от бэка
+        if (res && (res.ok || res.status === "ok" || res.joined)) {
+          const me = await apiGet("/api/inside/me");
+          onJoined?.(me?.data ?? me ?? null);
+          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          return;
+        }
+        // если join ничего не вернул — пробуем всё равно перечитать состояние
+        const me = await apiGet("/api/inside/me");
+        if (me && (me.status && me.status !== "none")) {
+          onJoined?.(me);
+          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          return;
+        }
+        tError(t("inside.toast.join_failed") || "Не удалось присоединиться");
+      } catch (e) {
+        // фолбэк: открываем лендинг
+        window.open("/landing/india-inside", "_blank", "noreferrer");
+      }
+    }
     return (
       <div className="bg-white rounded-xl shadow p-6 border">
         <div className="text-xl font-semibold">
@@ -525,12 +548,22 @@ function MyInsideCard({ inside, loading, t }) {
         <p className="mt-2 text-gray-600">
           {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
         </p>
-        <a
-          href="/landing/india-inside"
-          className="inline-flex mt-4 items-center rounded-lg bg-orange-500 px-4 py-2 text-white font-medium"
-        >
-          {t("inside.invite.cta", { defaultValue: "Узнать больше" })}
-        </a>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleJoin}
+            className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-white font-semibold"
+          >
+            {t("inside.invite.join_now", { defaultValue: "Присоединиться" })}
+          </button>
+          <a
+            href="/landing/india-inside"
+            className="inline-flex items-center rounded-lg border px-4 py-2 font-medium hover:bg-gray-50"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("inside.invite.cta", { defaultValue: "Узнать больше" })}
+          </a>
+        </div>
       </div>
     );
   }
@@ -1560,7 +1593,12 @@ useEffect(() => {
 
         {/* Right: Stats + Tabs */}
         <div className="md:col-span-2">
-        <MyInsideCard inside={inside} loading={loadingInside} t={t} />
+        <MyInsideCard
+          inside={inside}
+          loading={loadingInside}
+          t={t}
+          onJoined={(data) => setInside(data && data.status === "none" ? null : data)}
+        />
         <div className="mt-6" />
           {loadingStats ? (
             <div className="bg-white rounded-xl shadow p-6 border text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>
