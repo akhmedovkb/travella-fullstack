@@ -31,9 +31,9 @@ router.get("/me", authenticateToken, ctrl.getInsideMe);
 router.get("/user/:userId", authenticateToken, ctrl.getInsideById);
 router.get("/", ctrl.getInsideStatus);
 router.post("/request-completion", authenticateToken, ctrl.requestCompletion);
-
 router.post("/join", authenticateToken, ctrl.joinInside);
-router.get("/my-request", authenticateToken, inside.getMyLastRequest);
 
+// ✅ Исправлено: используем ctrl, а не inside
+router.get("/my-request", authenticateToken, ctrl.getMyLastRequest);
 
 module.exports = router;
