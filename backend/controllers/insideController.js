@@ -224,40 +224,46 @@ async function adminListRequests(req, res) {
 // POST /api/admin/inside/requests/:id/approve { next_chapter? }
 async function adminApproveRequest(req, res) {
   try {
-    if (!req.user?.is_admin && !req.user?.is_moderator)
+    if (!req.user?.is_admin && !req.user?.is_moderator) {
       return res.status(403).json({ error: "Forbidden" });
+    }
 
     const id = Number(req.params.id);
-    const { next_chapter } = req.body || {};
+    const { next_chapter, curator_id, curator_note } = req.body || {};
     if (!id) return res.status(400).json({ error: "Bad id" });
 
-    // прочитаем заявку
+    // читаем заявку
     const rq = await pool.query(
-      `SELECT id, user_id, chapter, status FROM inside_completion_requests WHERE id=$1 LIMIT 1`,
+      `SELECT id, user_id, chapter, status
+         FROM inside_completion_requests
+        WHERE id = $1
+        LIMIT 1`,
       [id]
     );
     if (!rq.rowCount) return res.status(404).json({ error: "Not found" });
     const r = rq.rows[0];
 
-    // Обновляем участника: +1 прогресс, глава → next_chapter (если задан) или авто
+    // участник должен существовать
     await ensureParticipant(r.user_id);
 
+    // продвигаем участника
     const upd = await pool.query(
       `UPDATE inside_participants
-         SET progress_current = LEAST(progress_current + 1, progress_total),
-             current_chapter  = COALESCE($2,
+          SET progress_current = LEAST(progress_current + 1, progress_total),
+              current_chapter  = COALESCE($2,
                                    CASE
                                      WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
                                      ELSE $4
                                    END
                                  ),
-             status = CASE
-                        WHEN LEAST(progress_current + 1, progress_total) >= progress_total THEN 'completed'
-                        ELSE status
-                      END,
-             updated_at = NOW()
-       WHERE user_id = $1
-       RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+              status = CASE
+                         WHEN LEAST(progress_current + 1, progress_total) >= progress_total
+                           THEN 'completed'
+                         ELSE status
+                       END,
+              updated_at = NOW()
+        WHERE user_id = $1
+      RETURNING user_id, current_chapter, progress_current, progress_total, status`,
       [
         r.user_id,
         next_chapter || null,
@@ -266,16 +272,26 @@ async function adminApproveRequest(req, res) {
       ]
     );
 
-    // Закрываем заявку
-    const rqDone = await pool.query(
+    // закрываем заявку (без resolved_at!)
+    const done = await pool.query(
       `UPDATE inside_completion_requests
-         SET status='approved', resolved_at=NOW()
-       WHERE id=$1
-       RETURNING *`,
-      [id]
+          SET status = 'approved',
+              approved_at = NOW(),
+              curator_id = COALESCE($2, curator_id),
+              curator_note = COALESCE($3, curator_note)
+        WHERE id = $1
+      RETURNING
+        id, user_id, chapter, status, requested_at, approved_at, rejected_at,
+        curator_id, curator_note,
+        CASE
+          WHEN status = 'approved' THEN approved_at
+          WHEN status = 'rejected' THEN rejected_at
+          ELSE NULL
+        END AS resolved_at`,
+      [id, curator_id || null, curator_note || null]
     );
 
-    return res.json(ok({ request: rqDone.rows[0], participant: upd.rows[0] }));
+    return res.json(ok({ request: done.rows[0], participant: upd.rows[0] }));
   } catch (e) {
     console.error("adminApproveRequest error:", e);
     return res.status(500).json({ error: "Failed to approve request" });
@@ -284,26 +300,30 @@ async function adminApproveRequest(req, res) {
 
 // POST /api/admin/inside/requests/:id/reject { reason? }
 async function adminRejectRequest(req, res) {
+  const { id } = req.params;
+  const { curator_id, curator_note } = req.body || {};
   try {
-    if (!req.user?.is_admin && !req.user?.is_moderator)
-      return res.status(403).json({ error: "Forbidden" });
-
-    const id = Number(req.params.id);
-    const { reason } = req.body || {};
-    if (!id) return res.status(400).json({ error: "Bad id" });
-
-    const rqDone = await pool.query(
-      `UPDATE inside_completion_requests
-         SET status='rejected', resolved_at=NOW()
-       WHERE id=$1
-       RETURNING *`,
-      [id]
-    );
-
-    return res.json(ok({ request: rqDone.rows[0] }));
-  } catch (e) {
-    console.error("adminRejectRequest error:", e);
-    return res.status(500).json({ error: "Failed to reject request" });
+    const q = `
+      UPDATE inside_completion_requests
+      SET status = 'rejected',
+          rejected_at = NOW(),
+          curator_id = COALESCE($2, curator_id),
+          curator_note = COALESCE($3, curator_note)
+      WHERE id = $1
+      RETURNING
+        id, user_id, chapter, status, requested_at, approved_at, rejected_at,
+        curator_id, curator_note,
+        CASE
+          WHEN status = 'approved' THEN approved_at
+          WHEN status = 'rejected' THEN rejected_at
+          ELSE NULL
+        END AS resolved_at
+    `;
+    const { rows } = await pool.query(q, [id, curator_id || null, curator_note || null]);
+    return res.json(rows[0] || {});
+  } catch (err) {
+    console.error("adminRejectRequest error:", err);
+    return res.status(500).json({ error: "admin_reject_failed" });
   }
 }
 // GET /api/inside/admin/requests?status=pending|approved|rejected|all
