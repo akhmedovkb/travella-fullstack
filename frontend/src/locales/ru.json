@@ -1315,6 +1315,12 @@
   },
 
 "inside": {
+    "errors": {
+      "request_failed": "Не удалось отправить запрос на завершение",
+      "ask_open_telegram": "Открыть чат куратора в Telegram?"
+    }
+  },
+  "auth": { "login_required": "Войдите заново и повторите попытку" }
       "toast": {
       "requested": "Bo‘limni yakunlash so‘rovi yuborildi",
       "joined": "Siz India Inside dasturiga qo‘shildingiz!",
