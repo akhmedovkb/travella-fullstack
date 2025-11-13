@@ -180,51 +180,44 @@ async function joinInside(req, res) {
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
 async function adminListRequests(req, res) {
   try {
-    if (!req.user?.is_admin && !req.user?.is_moderator)
-      return res.status(403).json({ error: "Forbidden" });
-
-    const status = String(req.query.status || "pending").toLowerCase();
-    const q = String(req.query.q || "").trim();
-
-    const params = [];
-    let where = "1=1";
-    if (["pending", "approved", "rejected"].includes(status)) {
-      params.push(status);
-      where += ` AND r.status = $${params.length}`;
-    }
-    if (q) {
-      params.push(`%${q}%`);
-      where += ` AND (CAST(r.user_id AS TEXT) ILIKE $${params.length} OR COALESCE(r.chapter,'') ILIKE $${params.length})`;
-    }
-
-    const { rows } = await pool.query(
-      `SELECT
-         r.id,
-         r.user_id,
-         r.chapter,
-         r.status,
-         r.created_at,
-         r.resolved_at,
-         /* resolution как вычисляемый алиас, колонки в БД нет */
-         CASE
-           WHEN r.status = 'approved' THEN 'approved'
-           WHEN r.status = 'rejected' THEN 'rejected'
-           ELSE NULL
-         END::text AS resolution,
-         COALESCE(c.name, CONCAT('user_id: ', r.user_id)) AS client_name,
-         c.telegram AS user_telegram
-       FROM inside_completion_requests r
-       LEFT JOIN clients c ON c.id = r.user_id
-       WHERE ${where}
-       ORDER BY r.created_at DESC
-       LIMIT 500`,
-      params
-    );
-
-    return res.json({ items: rows });
-  } catch (e) {
-    console.error("adminListRequests error:", e);
-    return res.status(500).json({ error: "Failed to list requests" });
+    const q = `
+      SELECT
+        r.id,
+        r.user_id,
+        r.chapter,
+        r.status,
+        r.requested_at,
+        r.approved_at,
+        r.rejected_at,
+        -- вычисляемое "resolved_at"
+        CASE
+          WHEN r.status = 'approved' THEN r.approved_at
+          WHEN r.status = 'rejected' THEN r.rejected_at
+          ELSE NULL
+        END AS resolved_at,
+        u.name       AS user_name,
+        u.phone      AS user_phone,
+        u.telegram   AS user_telegram
+      FROM inside_completion_requests r
+      LEFT JOIN clients u ON u.id = r.user_id
+      /* при необходимости фильтры по статусу/чаптеру */
+      ORDER BY COALESCE(
+        CASE
+          WHEN r.status = 'approved' THEN r.approved_at
+          WHEN r.status = 'rejected' THEN r.rejected_at
+          ELSE NULL
+        END,
+        r.requested_at
+      ) DESC
+      LIMIT $1 OFFSET $2
+    `;
+    const limit  = Number(req.query.limit || 50);
+    const offset = Number(req.query.offset || 0);
+    const { rows } = await pool.query(q, [limit, offset]);
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('adminListRequests error:', err);
+    res.status(500).json({ error: 'admin_list_failed' });
   }
 }
 
