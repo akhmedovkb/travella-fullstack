@@ -32,4 +32,6 @@ router.get("/user/:userId", authenticateToken, ctrl.getInsideById);
 router.get("/", ctrl.getInsideStatus);
 router.post("/request-completion", authenticateToken, ctrl.requestCompletion);
 
+router.post("/join", authenticateToken, ctrl.joinInside);
+
 module.exports = router;
