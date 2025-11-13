@@ -1375,14 +1375,12 @@
       }
     ]
   },
-
+"auth": { "login_required": "Qaytadan kiring va yana urinib ko‘ring" },
 "inside": {
       "errors": {
       "request_failed": "Bo‘limni yakunlash so‘rovi yuborilmadi",
       "ask_open_telegram": "Telegram’da kurator bilan yozishishni ochamizmi?"
-    }
-  },
-  "auth": { "login_required": "Qaytadan kiring va yana urinib ko‘ring" },
+    }, 
       "steps_title": "Qanday qatnashish",
       "steps_sub": "To‘rt oddiy qadam — kurator har bosqichda yo‘l-yo‘riq beradi.",
       "steps": {
