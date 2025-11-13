@@ -245,3 +245,6 @@ app.use("/api/cms", cmsRoutes);
 const adminProvidersRoutes = require("./routes/adminProvidersRoutes");
 app.use("/api/admin", adminProvidersRoutes);
 
+/** ===================== IndiaInside ===================== */
+const insideRoutes = require("./routes/insideRoutes");
+app.use("/api/inside", insideRoutes);
