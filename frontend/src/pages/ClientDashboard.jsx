@@ -492,6 +492,126 @@ function FavoritesList({
     </div>
   );
 }
+// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
+function MyInsideCard({ inside, loading, t }) {
+  // заголовки глав по ключам
+  const chapterTitle = (key) => {
+    const map = {
+      royal: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
+      silence: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
+      modern: t("landing.inside.chapters.modern.title", "Мумбаи + Гоа — лучшие воспоминания"),
+      kerala: t("landing.inside.chapters.kerala.title", "Керала: Рай на Земле"),
+    };
+    return map[key] || key || "Глава";
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
+        <div className="h-5 w-48 bg-gray-200 rounded" />
+        <div className="mt-4 h-4 w-80 bg-gray-200 rounded" />
+        <div className="mt-6 h-3 w-full bg-gray-200 rounded" />
+      </div>
+    );
+  }
+
+  // если пользователь ещё не участник — показываем приглашение
+  if (!inside) {
+    return (
+      <div className="bg-white rounded-xl shadow p-6 border">
+        <div className="text-xl font-semibold">
+          {t("inside.invite.title", { defaultValue: "Присоединиться к India Inside" })}
+        </div>
+        <p className="mt-2 text-gray-600">
+          {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
+        </p>
+        <a
+          href="/landing/india-inside"
+          className="inline-flex mt-4 items-center rounded-lg bg-orange-500 px-4 py-2 text-white font-medium"
+        >
+          {t("inside.invite.cta", { defaultValue: "Узнать больше" })}
+        </a>
+      </div>
+    );
+  }
+
+  const cur = Number(inside.progress_current ?? 0);
+  const total = Number(inside.progress_total ?? 4);
+  const pct = Math.max(0, Math.min(100, Math.round((cur / (total || 1)) * 100)));
+  const curator = inside.curator_telegram || "@akhmedovkb";
+  const chapterKey = inside.current_chapter || "royal";
+
+  async function requestCompletion() {
+    try {
+      await apiPost("/api/inside/request-completion", { chapter: chapterKey });
+      tSuccess(t("inside.toast.requested") || "Запрос на завершение отправлен", { autoClose: 1600 });
+    } catch {
+      // фолбэк: откроем чат куратора
+      window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl shadow p-6 border">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm text-gray-500">India Inside</div>
+          <h2 className="text-xl font-semibold">
+            {t("inside.my.title", { defaultValue: "Моя программа" })}
+          </h2>
+        </div>
+        <span className="text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
+          {t("inside.status", { defaultValue: "Активна" })}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="text-gray-700">
+          <div className="text-sm text-gray-500">{t("inside.current_chapter", { defaultValue: "Текущая глава" })}</div>
+          <div className="font-medium">{chapterTitle(chapterKey)}</div>
+        </div>
+        <div className="text-gray-700">
+          <div className="text-sm text-gray-500">{t("inside.progress", { defaultValue: "Прогресс" })}</div>
+          <div className="font-medium">{cur} / {total}</div>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="h-2 bg-orange-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="mt-1 text-xs text-gray-500">{pct}%</div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <a
+          href={`/landing/india-inside?chapter=${encodeURIComponent(chapterKey)}#chapters`}
+          className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+          target="_blank" rel="noreferrer"
+        >
+          {t("inside.actions.view_program", { defaultValue: "Смотреть программу" })}
+        </a>
+        <a
+          href={`https://t.me/${curator.replace(/^@/, "")}`}
+          target="_blank" rel="noreferrer"
+          className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+        >
+          {t("inside.actions.contact_curator", { defaultValue: "Связаться с куратором" })}
+        </a>
+        <button
+          onClick={requestCompletion}
+          className="rounded-lg bg-black text-white px-4 py-2 text-sm"
+        >
+          {t("inside.actions.request_completion", { defaultValue: "Запросить завершение" })}
+        </button>
+      </div>
+
+      <div className="mt-2 text-xs text-gray-500">
+        {t("inside.note.by_curator", { defaultValue: "Завершение главы подтверждает куратор." })}
+      </div>
+    </section>
+  );
+}
 
 /* ===================== Main Page ===================== */
 
@@ -564,6 +684,10 @@ export default function ClientDashboard() {
 
   // рефреш для вкладки «Мои бронирования»
   const [bookingsRefreshKey, setBookingsRefreshKey] = useState(0);
+  
+  // India Inside
+  const [inside, setInside] = useState(null);
+  const [loadingInside, setLoadingInside] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -676,6 +800,34 @@ const tgDeepLink = useMemo(() => {
       }
     })();
   }, []);
+
+// ✅ useEffect загрузки статуса участия в India Inside
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    if (!me) return;
+    setLoadingInside(true);
+    const tryGet = async (url) => {
+      try {
+        const r = await apiGet(url);
+        return r?.data ?? r?.item ?? r ?? null;
+      } catch { return null; }
+    };
+
+    // разные бэкенд-варианты
+    const userId = me?.id || me?._id || me?.client_id || me?.user_id;
+    const attempt =
+      (await tryGet("/api/inside/me")) ||
+      (userId && (await tryGet(`/api/inside/${userId}`))) ||
+      (await tryGet("/api/inside/status"));
+
+    if (!cancelled) {
+      setInside(attempt && attempt.status !== "none" ? attempt : null);
+      setLoadingInside(false);
+    }
+  })();
+  return () => { cancelled = true; };
+}, [me]);
 
   // загрузка данных табов (+черновики), без «bookings»
   useEffect(() => {
@@ -1408,6 +1560,8 @@ const tgDeepLink = useMemo(() => {
 
         {/* Right: Stats + Tabs */}
         <div className="md:col-span-2">
+        <MyInsideCard inside={inside} loading={loadingInside} t={t} />
+        <div className="mt-6" />
           {loadingStats ? (
             <div className="bg-white rounded-xl shadow p-6 border text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>
           ) : (
