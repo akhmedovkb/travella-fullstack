@@ -574,32 +574,32 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
   const curator = inside.curator_telegram || "@akhmedovkb";
   const chapterKey = inside.current_chapter || "royal";
 
+  const [reqSending, setReqSending] = useState(false);
   async function requestCompletion() {
+    if (reqSending) return;
+    setReqSending(true);
     try {
-      await apiPost("/api/inside/request-completion", { chapter: chapterKey });
-      tSuccess(t("inside.toast.requested") || "Запрос на завершение отправлен", { autoClose: 1600 });
+      const resp = await apiPost("/api/inside/request-completion", { chapter: chapterKey });
+      const already = !!(resp?.already);
+      (already ? tInfo : tSuccess)(
+        already
+          ? (t("inside.toast.already_requested") || "Запрос уже отправлен")
+          : (t("inside.toast.requested") || "Запрос на завершение отправлен"),
+        { autoClose: 1600 }
+      );
     } catch (e) {
-      // Больше не уходим автоматом в Telegram
-      // Покажем понятный тост, и предложим перейти вручную
-      const msg =
-        (e?.response?.data?.error || e?.message || "")
-          .toString()
-          .toLowerCase();
-      // частые случаи: 401/403 — не авторизован (или истёк токен)
-      if (e?.response?.status === 401 || e?.response?.status === 403 || msg.includes("unauthorized")) {
+      const status = e?.response?.status;
+      const msg = String(e?.response?.data?.error || e?.message || "").toLowerCase();
+      if (status === 401 || status === 403 || msg.includes("unauthorized")) {
         tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
       } else {
         tError(t("inside.errors.request_failed") || "Не удалось отправить запрос на завершение", { autoClose: 2200 });
       }
-      // необязательное предложение открыть Telegram
-      const wantTg = window.confirm(
-        t("inside.errors.ask_open_telegram", {
-          defaultValue: "Открыть чат куратора в Telegram?",
-        })
-      );
-      if (wantTg) {
+      if (window.confirm(t("inside.confirm.open_telegram", { defaultValue: "Открыть чат куратора в Telegram?" }))) {
         window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
       }
+    } finally {
+      setReqSending(false);
     }
   }
 
@@ -652,7 +652,8 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
         </a>
         <button
           onClick={requestCompletion}
-          className="rounded-lg bg-black text-white px-4 py-2 text-sm"
+          disabled={reqSending}
+          className="rounded-lg bg-black text-white px-4 py-2 text-sm disabled:opacity-60"
         >
           {t("inside.actions.request_completion", { defaultValue: "Запросить завершение" })}
         </button>
