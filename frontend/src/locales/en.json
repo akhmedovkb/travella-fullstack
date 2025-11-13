@@ -1358,14 +1358,13 @@
         }
       ]
     },
+
+"auth": { "login_required": "Please log in again and retry" },
 "inside": {
       "errors": {
       "request_failed": "Failed to send completion request",
       "ask_open_telegram": "Open curator chat in Telegram?"
-    }
-  },
-  "auth": { "login_required": "Please log in again and retry" },
-    
+    },    
       "toast": {
       "requested": "Completion request sent",
       "joined": "You’ve joined India Inside!",
