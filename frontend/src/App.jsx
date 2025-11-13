@@ -61,7 +61,7 @@ import Clinics from "./pages/landing/Clinics";
 import Contacts from "./pages/landing/Contacts";
 
 //IndiaInside
-import AdminInside from "./pages/admin/AdminInside";
+import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -280,11 +280,11 @@ export default function App() {
               }
             />
             <Route
-              path="/admin/inside"
+              path="/admin/inside-requests"
               element={
                 <PrivateRoute>
                   <AdminRoute>
-                    <AdminInside />
+                    <AdminInsideRequests  />
                   </AdminRoute>
                 </PrivateRoute>
               }
