@@ -577,13 +577,29 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
   async function requestCompletion() {
     try {
       await apiPost("/api/inside/request-completion", { chapter: chapterKey });
-      tSuccess(
-        t("inside.toast.requested", { defaultValue: "Запрос на завершение отправлен" }),
-        { autoClose: 1600 }
+      tSuccess(t("inside.toast.requested") || "Запрос на завершение отправлен", { autoClose: 1600 });
+    } catch (e) {
+      // Больше не уходим автоматом в Telegram
+      // Покажем понятный тост, и предложим перейти вручную
+      const msg =
+        (e?.response?.data?.error || e?.message || "")
+          .toString()
+          .toLowerCase();
+      // частые случаи: 401/403 — не авторизован (или истёк токен)
+      if (e?.response?.status === 401 || e?.response?.status === 403 || msg.includes("unauthorized")) {
+        tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
+      } else {
+        tError(t("inside.errors.request_failed") || "Не удалось отправить запрос на завершение", { autoClose: 2200 });
+      }
+      // необязательное предложение открыть Telegram
+      const wantTg = window.confirm(
+        t("inside.errors.ask_open_telegram", {
+          defaultValue: "Открыть чат куратора в Telegram?",
+        })
       );
-    } catch {
-      // фолбэк: откроем чат куратора
-      window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
+      if (wantTg) {
+        window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
+      }
     }
   }
 
