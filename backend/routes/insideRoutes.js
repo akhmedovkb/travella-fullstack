@@ -1,21 +1,24 @@
 // backend/routes/insideRoutes.js
 const express = require("express");
 const router = express.Router();
-
-// ВАЖНО: путь до контроллера проверь, у тебя сейчас /app/routes/...
-// Если структура backend/{controllers,routes}, то так:
 const ctrl = require("../controllers/insideController");
+const { authenticateToken } = require("../middleware/authenticateToken");
+
+// ---------- Client routes ----------
 
 // GET /api/inside/me — статус текущего пользователя
-router.get("/me", ctrl.getInsideMe);
-
-// GET /api/inside/:userId — статус по явному id
-router.get("/:userId", ctrl.getInsideById);
-
-// GET /api/inside/status — универсальный статус (можно использовать там, где нет auth)
-router.get("/", ctrl.getInsideStatus);
+router.get("/inside/me", authenticateToken, ctrl.getMe);
 
 // POST /api/inside/request-completion — запросить завершение главы у куратора
-router.post("/request-completion", ctrl.requestCompletion);
+router.post("/inside/request-completion", authenticateToken, ctrl.requestCompletion);
+
+// ---------- Admin routes ----------
+router.get("/admin/inside/participants", authenticateToken, ctrl.adminListParticipants);
+router.post("/admin/inside/participants", authenticateToken, ctrl.adminCreateParticipant);
+router.put("/admin/inside/participants/:id", authenticateToken, ctrl.adminUpdateParticipant);
+
+router.get("/admin/inside/requests", authenticateToken, ctrl.adminListRequests);
+router.post("/admin/inside/requests/:id/approve", authenticateToken, ctrl.adminApproveRequest);
+router.post("/admin/inside/requests/:id/reject", authenticateToken, ctrl.adminRejectRequest);
 
 module.exports = router;
