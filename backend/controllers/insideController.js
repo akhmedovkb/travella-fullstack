@@ -175,6 +175,37 @@ async function joinInside(req, res) {
     return res.status(500).json({ error: "Failed to join Inside" });
   }
 }
+
+// GET /api/inside/my-request  — вернуть последнюю заявку текущего клиента
+async function getMyLastRequest(req, res) {
+  try {
+    const userId =
+      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { rows } = await pool.query(
+      `SELECT id, user_id, chapter, status, requested_at, approved_at, rejected_at
+         FROM inside_completion_requests
+        WHERE user_id = $1
+        ORDER BY requested_at DESC
+        LIMIT 1`,
+      [userId]
+    );
+
+    const r = rows[0] || null;
+    if (!r) return res.json(null);
+
+    const resolved_at =
+      r.status === "approved" ? r.approved_at :
+      r.status === "rejected" ? r.rejected_at : null;
+
+    return res.json({ ...r, resolved_at });
+  } catch (e) {
+    console.error("getMyLastRequest error:", e);
+    return res.status(500).json({ error: "Failed to get last request" });
+  }
+}
+
 /** -------- admin -------- */
 
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
