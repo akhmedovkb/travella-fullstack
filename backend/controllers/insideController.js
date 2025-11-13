@@ -252,6 +252,57 @@ async function adminRejectRequest(req, res) {
     return res.status(500).json({ error: "Failed to reject request" });
   }
 }
+// GET /api/inside/admin/requests?status=pending|approved|rejected|all
+async function adminListRequests(req, res) {
+  try {
+    const status = String(req.query.status || "pending").toLowerCase();
+    const { rows } = await pool.query(
+      `
+      SELECT
+        r.id,
+        r.user_id,
+        r.chapter,
+        r.status,
+        r.created_at,
+        r.resolution,
+        r.next_chapter,
+        COALESCE(c.name, CONCAT('user_id: ', r.user_id))    AS user_name,
+        c.telegram                                           AS user_telegram,
+        p.curator_telegram                                   AS curator_telegram
+      FROM inside_completion_requests r
+      LEFT JOIN clients            c ON c.id = r.user_id
+      LEFT JOIN inside_participants p ON p.user_id = r.user_id
+      WHERE ($1 = 'all' OR r.status = $1)
+      ORDER BY r.created_at DESC
+      `,
+      [status]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error("adminListRequests error:", e);
+    return res.status(500).json({ error: "Failed to list inside requests" });
+  }
+}
+
+// (необязательно, но заодно сделаем участников «человекочитаемыми»)
+// GET /api/inside/admin/participants
+async function adminListParticipants(_req, res) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        p.*,
+        COALESCE(c.name, CONCAT('user_id: ', p.user_id)) AS user_name,
+        c.telegram AS user_telegram
+      FROM inside_participants p
+      LEFT JOIN clients c ON c.id = p.user_id
+      ORDER BY p.created_at DESC
+    `);
+    return res.json(rows);
+  } catch (e) {
+    console.error("adminListParticipants error:", e);
+    return res.status(500).json({ error: "Failed to list participants" });
+  }
+}
 
 module.exports = {
   // client/public
@@ -263,4 +314,5 @@ module.exports = {
   adminListRequests,
   adminApproveRequest,
   adminRejectRequest,
+  adminListParticipants,
 };
