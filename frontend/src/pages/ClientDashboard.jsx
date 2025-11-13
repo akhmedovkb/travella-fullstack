@@ -494,16 +494,56 @@ function FavoritesList({
 }
 // --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
 function MyInsideCard({ inside, loading, t, onJoined }) {
-  // заголовки глав по ключам
+  const [lastReq, setLastReq] = useState(null);   // ⬅️ последняя заявка на завершение главы
+  const [loadingReq, setLoadingReq] = useState(true);
+
+  // заголовки глав по ключам (оставляю как у тебя)
   const chapterTitle = (key) => {
     const map = {
-      royal: t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
+      royal:   t("landing.inside.chapters.royal.title", "Золотой Треугольник"),
       silence: t("landing.inside.chapters.silence.title", "Приключения в Раджастане"),
-      modern: t("landing.inside.chapters.modern.title", "Мумбаи + Гоа — лучшие воспоминания"),
-      kerala: t("landing.inside.chapters.kerala.title", "Керала: Рай на Земле"),
+      modern:  t("landing.inside.chapters.modern.title", "Мумбаи + Гоа — лучшие воспоминания"),
+      kerala:  t("landing.inside.chapters.kerala.title", "Керала: Рай на Земле"),
     };
     return map[key] || key || "Глава";
   };
+
+  // метка статуса заявки
+  const statusPill = (st) => {
+    const map = {
+      pending:  t("inside.status_pending",  { defaultValue: "Ожидает подтверждения" }),
+      approved: t("inside.status_approved", { defaultValue: "Подтверждено" }),
+      rejected: t("inside.status_rejected", { defaultValue: "Отклонено" }),
+    };
+    const cls =
+      st === "pending"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : st === "approved"
+        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+        : st === "rejected"
+        ? "bg-rose-50 text-rose-800 border-rose-200"
+        : "bg-slate-50 text-slate-700 border-slate-200";
+
+    return <span className={`text-xs px-2 py-1 rounded-full border ${cls}`}>{map[st] ?? st}</span>;
+  };
+
+  // загрузка последней заявки (когда inside есть)
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      if (!inside) { setLastReq(null); setLoadingReq(false); return; }
+      try {
+        setLoadingReq(true);
+        const r = await apiGet("/api/inside/my-request");
+        if (!cancel) setLastReq(r || null);
+      } catch {
+        if (!cancel) setLastReq(null);
+      } finally {
+        if (!cancel) setLoadingReq(false);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [inside]);
 
   if (loading) {
     return (
@@ -515,19 +555,17 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
     );
   }
 
-  // если пользователь ещё не участник — показываем приглашение
+  // если пользователь ещё не участник — показываем приглашение (как у тебя)
   if (!inside) {
     async function handleJoin() {
       try {
         const res = await apiPost("/api/inside/join");
-        // успешный ответ от бэка
         if (res && (res.ok || res.status === "ok" || res.joined)) {
           const me = await apiGet("/api/inside/me");
           onJoined?.(me?.data ?? me ?? null);
           tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
           return;
         }
-        // если join ничего не вернул — пробуем всё равно перечитать состояние
         const me = await apiGet("/api/inside/me");
         if (me && (me.status && me.status !== "none")) {
           onJoined?.(me);
@@ -536,10 +574,10 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
         }
         tError(t("inside.toast.join_failed") || "Не удалось присоединиться");
       } catch (e) {
-        // фолбэк: открываем лендинг
         window.open("/landing/india-inside", "_blank", "noreferrer");
       }
     }
+
     return (
       <div className="bg-white rounded-xl shadow p-6 border">
         <div className="text-xl font-semibold">
@@ -574,32 +612,44 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
   const curator = inside.curator_telegram || "@akhmedovkb";
   const chapterKey = inside.current_chapter || "royal";
 
-  const [reqSending, setReqSending] = useState(false);
   async function requestCompletion() {
-    if (reqSending) return;
-    setReqSending(true);
     try {
-      const resp = await apiPost("/api/inside/request-completion", { chapter: chapterKey });
-      const already = !!(resp?.already);
-      (already ? tInfo : tSuccess)(
-        already
-          ? (t("inside.toast.already_requested") || "Запрос уже отправлен")
-          : (t("inside.toast.requested") || "Запрос на завершение отправлен"),
-        { autoClose: 1600 }
-      );
+      const res = await apiPost("/api/inside/request-completion", { chapter: chapterKey });
+
+      if (res?.already) {
+        // уже есть «pending» — фиксируем локально
+        setLastReq((prev) =>
+          prev?.status === "pending"
+            ? prev
+            : {
+                id: prev?.id || undefined,
+                chapter: chapterKey,
+                status: "pending",
+                requested_at: new Date().toISOString(),
+              }
+        );
+        tInfo(
+          t("inside.toast.already_pending") || "Заявка уже отправлена и ожидает подтверждения",
+          { autoClose: 2200 }
+        );
+        return;
+      }
+
+      if (res?.item) {
+        setLastReq(res.item);
+      }
+      tSuccess(t("inside.toast.requested") || "Запрос на завершение отправлен", { autoClose: 1600 });
     } catch (e) {
-      const status = e?.response?.status;
-      const msg = String(e?.response?.data?.error || e?.message || "").toLowerCase();
-      if (status === 401 || status === 403 || msg.includes("unauthorized")) {
+      const msg = (e?.response?.data?.error || e?.message || "").toString().toLowerCase();
+      if (e?.response?.status === 401 || e?.response?.status === 403 || msg.includes("unauthorized")) {
         tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
       } else {
         tError(t("inside.errors.request_failed") || "Не удалось отправить запрос на завершение", { autoClose: 2200 });
       }
-      if (window.confirm(t("inside.confirm.open_telegram", { defaultValue: "Открыть чат куратора в Telegram?" }))) {
-        window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
-      }
-    } finally {
-      setReqSending(false);
+      const wantTg = window.confirm(
+        t("inside.errors.ask_open_telegram", { defaultValue: "Открыть чат куратора в Telegram?" })
+      );
+      if (wantTg) window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
     }
   }
 
@@ -652,16 +702,32 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
         </a>
         <button
           onClick={requestCompletion}
-          disabled={reqSending}
-          className="rounded-lg bg-black text-white px-4 py-2 text-sm disabled:opacity-60"
+          disabled={lastReq?.status === "pending"}
+          className={`rounded-lg px-4 py-2 text-sm text-white ${
+            lastReq?.status === "pending" ? "bg-gray-400 cursor-not-allowed" : "bg-black"
+          }`}
         >
-          {t("inside.actions.request_completion", { defaultValue: "Запросить завершение" })}
+          {lastReq?.status === "pending"
+            ? (t("inside.actions.request_sent", { defaultValue: "Запрос отправлен" }))
+            : (t("inside.actions.request_completion", { defaultValue: "Запросить завершение" }))}
         </button>
       </div>
 
       <div className="mt-2 text-xs text-gray-500">
         {t("inside.note.by_curator", { defaultValue: "Завершение главы подтверждает куратор." })}
       </div>
+
+      {/* Статус последней заявки */}
+      {lastReq && (
+        <div className="mt-2 text-sm flex items-center gap-2">
+          {statusPill(lastReq.status)}
+          <span className="text-gray-500">
+            {lastReq.status === "pending"  && t("inside.msg.waiting_curator", { defaultValue: "Заявка ожидает подтверждения куратором" })}
+            {lastReq.status === "approved" && t("inside.msg.approved", { defaultValue: "Глава засчитана" })}
+            {lastReq.status === "rejected" && t("inside.msg.rejected", { defaultValue: "Заявка отклонена" })}
+          </span>
+        </div>
+      )}
     </section>
   );
 }
