@@ -60,6 +60,9 @@ import B2B from "./pages/landing/B2B";
 import Clinics from "./pages/landing/Clinics";
 import Contacts from "./pages/landing/Contacts";
 
+//IndiaInside
+import AdminInside from "./pages/admin/AdminInside";
+
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
   return token ? children : <Navigate to="/client/login" replace />;
@@ -272,6 +275,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminHotelSeasons />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/inside"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminInside />
                   </AdminRoute>
                 </PrivateRoute>
               }
