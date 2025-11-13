@@ -387,6 +387,7 @@ module.exports = {
   getInsideStatus,
   requestCompletion,
   joinInside,
+  getMyLastRequest,
   // admin
   adminListRequests,
   adminApproveRequest,
