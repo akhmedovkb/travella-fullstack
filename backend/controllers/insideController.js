@@ -1,109 +1,57 @@
 // backend/controllers/insideController.js
 const pool = require("../db");
 
-// Порядок глав — для повышения прогресса
-const CHAPTERS = ["royal", "silence", "modern", "kerala"];
+/** -------- helpers -------- */
+const CHAPTERS_ORDER = ["royal", "gold_triangle", "jaipur", "guru"]; // при желании под себя
+const PROGRESS_TOTAL_DEFAULT = 4;
 
-// Опциональная отправка в Telegram
-async function sendTg(text) {
-  try {
-    const token = process.env.TELEGRAM_BOT_TOKEN || "";
-    const chat = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CURATOR_CHAT_ID || "";
-    if (!token || !chat) {
-      console.log("[Inside][TG skipped] ", text);
-      return;
-    }
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true }),
-    });
-  } catch (e) {
-    console.error("[Inside][TG error]", e);
-  }
-}
+function ok(data = {}) { return { ok: true, ...data }; }
+function none() { return { status: "none" }; }
 
-// Универсальный ответ "ничего не найдено"
-function none() {
-  return { status: "none" };
-}
-
-// ---------- HELPERS ----------
-function rowToParticipant(p) {
-  if (!p) return null;
-  return {
-    status: p.status || "active",
-    progress_current: Number(p.progress_current || 0),
-    progress_total: Number(p.progress_total || 4),
-    current_chapter: p.current_chapter || CHAPTERS[0],
-    curator_telegram: p.curator_telegram || "@akhmedovkb",
-    user_id: Number(p.user_id),
-    program_key: p.program_key || "india_inside",
-  };
-}
-
-async function getParticipantByUserId(userId) {
-  const { rows } = await pool.query(
-    "select * from inside_participants where user_id = $1 limit 1",
+async function ensureParticipant(userId) {
+  // создаем участника, если его нет
+  await pool.query(
+    `INSERT INTO inside_participants (user_id)
+     SELECT $1
+     WHERE NOT EXISTS (SELECT 1 FROM inside_participants WHERE user_id = $1)`,
     [userId]
   );
-  return rowToParticipant(rows[0]);
 }
 
-async function upsertParticipantProgress(userId, nextIdx /* 0-based index */) {
-  const nextChapter = CHAPTERS[nextIdx] || CHAPTERS[CHAPTERS.length - 1];
-  const total = CHAPTERS.length;
-  const current = Math.min(nextIdx + 1, total);
-  const isCompleted = current >= total;
-
-  const sql = `
-    insert into inside_participants (user_id, program_key, current_chapter, progress_current, progress_total, status)
-    values ($1, 'india_inside', $2, $3, $4, $5)
-    on conflict (user_id) do update
-      set current_chapter = excluded.current_chapter,
-          progress_current = excluded.progress_current,
-          progress_total = excluded.progress_total,
-          status = excluded.status,
-          updated_at = now()
-    returning *;
-  `;
-  const { rows } = await pool.query(sql, [
-    userId,
-    nextChapter,
-    current,
-    total,
-    isCompleted ? "completed" : "active",
-  ]);
-  return rowToParticipant(rows[0]);
+function nextChapterKey(current) {
+  const i = CHAPTERS_ORDER.indexOf(String(current || "").toLowerCase());
+  if (i < 0) return CHAPTERS_ORDER[0] || null;
+  return CHAPTERS_ORDER[i + 1] || CHAPTERS_ORDER[i] || null;
 }
 
-// ---------- PUBLIC (Client) ----------
+/** -------- client/public -------- */
 
 // GET /api/inside/me
 async function getInsideMe(req, res) {
   try {
     const userId =
-      req.user?.id ||
-      req.user?._id ||
-      req.user?.client_id ||
-      req.user?.user_id ||
-      null;
-
+      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
     if (!userId) return res.json(none());
 
-    // сначала пробуем БД
-    const p = await getParticipantByUserId(userId);
-    if (p) return res.json(p);
+    const { rows } = await pool.query(
+      `SELECT user_id, program_key, current_chapter, progress_current, progress_total,
+              curator_telegram, status
+       FROM inside_participants
+       WHERE user_id = $1
+       LIMIT 1`,
+      [userId]
+    );
+    if (!rows.length) return res.json(none());
 
-    // мягкая заглушка (как было)
+    const p = rows[0];
     return res.json({
-      status: "active",
-      progress_current: 1,
-      progress_total: 4,
-      current_chapter: "royal",
-      curator_telegram: "@akhmedovkb",
-      user_id: userId,
+      status: p.status || "active",
+      progress_current: Number(p.progress_current || 0),
+      progress_total: Number(p.progress_total || PROGRESS_TOTAL_DEFAULT),
+      current_chapter: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+      curator_telegram: p.curator_telegram || "@akhmedovkb",
+      user_id: p.user_id,
+      program_key: p.program_key || "india_inside",
     });
   } catch (e) {
     console.error("getInsideMe error:", e);
@@ -111,26 +59,31 @@ async function getInsideMe(req, res) {
   }
 }
 
-// GET /api/inside/user/:userId
+// GET /api/inside/:userId
 async function getInsideById(req, res) {
   try {
-    const { userId } = req.params;
+    const userId = Number(req.params.userId);
     if (!userId) return res.json(none());
 
-    const numeric = Number(userId);
-    const uid = Number.isFinite(numeric) ? numeric : userId;
+    const { rows } = await pool.query(
+      `SELECT user_id, program_key, current_chapter, progress_current, progress_total,
+              curator_telegram, status
+       FROM inside_participants
+       WHERE user_id = $1
+       LIMIT 1`,
+      [userId]
+    );
+    if (!rows.length) return res.json(none());
 
-    const p = await getParticipantByUserId(uid);
-    if (p) return res.json(p);
-
-    // как и выше — мягкая заглушка
+    const p = rows[0];
     return res.json({
-      status: "active",
-      progress_current: 1,
-      progress_total: 4,
-      current_chapter: "royal",
-      curator_telegram: "@akhmedovkb",
-      user_id: uid,
+      status: p.status || "active",
+      progress_current: Number(p.progress_current || 0),
+      progress_total: Number(p.progress_total || PROGRESS_TOTAL_DEFAULT),
+      current_chapter: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+      curator_telegram: p.curator_telegram || "@akhmedovkb",
+      user_id: p.user_id,
+      program_key: p.program_key || "india_inside",
     });
   } catch (e) {
     console.error("getInsideById error:", e);
@@ -151,201 +104,163 @@ async function getInsideStatus(_req, res) {
 // POST /api/inside/request-completion
 async function requestCompletion(req, res) {
   try {
-    const { chapter } = req.body || {};
     const userId =
-      req.user?.id ||
-      req.user?._id ||
-      req.user?.client_id ||
-      req.user?.user_id ||
-      null;
+      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    if (!userId) return res.status(401).json({ error: "unauthorized" });
-    if (!chapter) return res.status(400).json({ error: "chapter_required" });
+    const { chapter } = req.body || {};
+    await ensureParticipant(userId);
 
-    // создаём pending-заявку, если аналогичная не висит
-    await pool.query(
-      `insert into inside_completion_requests (user_id, chapter, status)
-       values ($1,$2,'pending')
-       on conflict (user_id, chapter) where status='pending'
-       do nothing`,
-      [userId, chapter]
+    const { rows } = await pool.query(
+      `INSERT INTO inside_completion_requests (user_id, chapter, status)
+       VALUES ($1, $2, 'pending')
+       RETURNING id, user_id, chapter, status, created_at`,
+      [userId, chapter || null]
     );
 
-    // уведомление куратору (опционально)
-    await sendTg(
-      `🧭 <b>India Inside</b>\nЗаявка на завершение главы <b>${chapter}</b>\nuser_id: <code>${userId}</code>`
-    );
-
-    return res.json({ ok: true, requested: true });
+    return res.json(ok({ request: rows[0] }));
   } catch (e) {
     console.error("requestCompletion error:", e);
     return res.status(500).json({ error: "Failed to request completion" });
   }
 }
 
-// ---------- ADMIN ----------
+/** -------- admin -------- */
 
-// GET /api/inside/admin/requests?status=pending|approved|rejected
+// GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
 async function adminListRequests(req, res) {
   try {
-    const status = (req.query.status || "pending").toLowerCase();
+    if (!req.user?.is_admin && !req.user?.is_moderator)
+      return res.status(403).json({ error: "Forbidden" });
+
+    const status = String(req.query.status || "pending").toLowerCase();
+    const q = String(req.query.q || "").trim();
+
+    const params = [];
+    let where = "1=1";
+    if (["pending", "approved", "rejected"].includes(status)) {
+      params.push(status);
+      where += ` AND r.status = $${params.length}`;
+    }
+    if (q) {
+      params.push(`%${q}%`);
+      where += ` AND (CAST(r.user_id AS TEXT) ILIKE $${params.length} OR COALESCE(r.chapter,'') ILIKE $${params.length})`;
+    }
+
     const { rows } = await pool.query(
-      `select * from inside_completion_requests
-       where ($1 = 'all' or status = $1)
-       order by created_at desc
-       limit 500`,
-      [status === "all" ? "all" : status]
+      `SELECT r.id, r.user_id, r.chapter, r.status, r.created_at, r.resolved_at, r.resolution,
+              c.name   AS client_name,
+              p.name   AS provider_name
+       FROM inside_completion_requests r
+       LEFT JOIN clients   c ON c.id = r.user_id
+       LEFT JOIN providers p ON p.id = r.user_id
+       WHERE ${where}
+       ORDER BY r.created_at DESC
+       LIMIT 500`,
+      params
     );
-    res.json(rows);
+
+    return res.json({ items: rows });
   } catch (e) {
     console.error("adminListRequests error:", e);
-    res.status(500).json({ error: "Failed to list requests" });
+    return res.status(500).json({ error: "Failed to list requests" });
   }
 }
 
-// POST /api/inside/admin/requests/:id/approve  { next_chapter?: "silence" }
+// POST /api/admin/inside/requests/:id/approve { next_chapter? }
 async function adminApproveRequest(req, res) {
-  const client = await pool.connect();
   try {
+    if (!req.user?.is_admin && !req.user?.is_moderator)
+      return res.status(403).json({ error: "Forbidden" });
+
     const id = Number(req.params.id);
     const { next_chapter } = req.body || {};
-    await client.query("begin");
+    if (!id) return res.status(400).json({ error: "Bad id" });
 
-    const { rows } = await client.query(
-      "select * from inside_completion_requests where id=$1 for update",
+    // прочитаем заявку
+    const rq = await pool.query(
+      `SELECT id, user_id, chapter, status FROM inside_completion_requests WHERE id=$1 LIMIT 1`,
       [id]
     );
-    const reqRow = rows[0];
-    if (!reqRow) {
-      await client.query("rollback");
-      return res.status(404).json({ error: "request_not_found" });
-    }
-    if (reqRow.status !== "pending") {
-      await client.query("rollback");
-      return res.status(409).json({ error: "already_decided" });
-    }
+    if (!rq.rowCount) return res.status(404).json({ error: "Not found" });
+    const r = rq.rows[0];
 
-    // помечаем как approved
-    await client.query(
-      "update inside_completion_requests set status='approved', decided_at=now() where id=$1",
+    // Обновляем участника: +1 прогресс, глава → next_chapter (если задан) или авто
+    await ensureParticipant(r.user_id);
+
+    const upd = await pool.query(
+      `UPDATE inside_participants
+         SET progress_current = LEAST(progress_current + 1, progress_total),
+             current_chapter  = COALESCE($2,
+                                   CASE
+                                     WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
+                                     ELSE $4
+                                   END
+                                 ),
+             status = CASE
+                        WHEN LEAST(progress_current + 1, progress_total) >= progress_total THEN 'completed'
+                        ELSE status
+                      END,
+             updated_at = NOW()
+       WHERE user_id = $1
+       RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+      [
+        r.user_id,
+        next_chapter || null,
+        CHAPTERS_ORDER[0] || "royal",
+        nextChapterKey(r.chapter),
+      ]
+    );
+
+    // Закрываем заявку
+    const rqDone = await pool.query(
+      `UPDATE inside_completion_requests
+         SET status='approved', resolved_at=NOW(), resolution=NULL
+       WHERE id=$1
+       RETURNING *`,
       [id]
     );
 
-    // двигаем прогресс пользователя
-    const userId = reqRow.user_id;
-    const participant = await getParticipantByUserId(userId);
-    const currentIdx = Math.max(
-      0,
-      CHAPTERS.indexOf(participant?.current_chapter || "royal")
-    );
-
-    // если явно указали next_chapter — используем его индекс
-    let nextIdx =
-      typeof next_chapter === "string" && CHAPTERS.includes(next_chapter)
-        ? CHAPTERS.indexOf(next_chapter)
-        : currentIdx + 1;
-
-    if (nextIdx >= CHAPTERS.length) nextIdx = CHAPTERS.length - 1;
-
-    const updated = await upsertParticipantProgress(userId, nextIdx);
-
-    await client.query("commit");
-
-    // уведомление (опционально)
-    await sendTg(
-      `✅ <b>Глава подтверждена</b>\nuser_id: <code>${userId}</code>\ncurrent: <b>${updated.current_chapter}</b>\nprogress: ${updated.progress_current}/${updated.progress_total}\nstatus: ${updated.status}`
-    );
-
-    res.json({ ok: true, participant: updated });
+    return res.json(ok({ request: rqDone.rows[0], participant: upd.rows[0] }));
   } catch (e) {
-    await pool.query("rollback");
     console.error("adminApproveRequest error:", e);
-    res.status(500).json({ error: "Failed to approve request" });
-  } finally {
-    try { client.release(); } catch {}
+    return res.status(500).json({ error: "Failed to approve request" });
   }
 }
 
-// POST /api/inside/admin/requests/:id/reject
+// POST /api/admin/inside/requests/:id/reject { reason? }
 async function adminRejectRequest(req, res) {
   try {
-    const id = Number(req.params.id);
-    const { rowCount } = await pool.query(
-      "update inside_completion_requests set status='rejected', decided_at=now() where id=$1 and status='pending'",
-      [id]
-    );
-    if (rowCount === 0) return res.status(409).json({ error: "already_decided_or_missing" });
+    if (!req.user?.is_admin && !req.user?.is_moderator)
+      return res.status(403).json({ error: "Forbidden" });
 
-    await sendTg(`⛔️ Заявка отклонена\nid: ${id}`);
-    res.json({ ok: true });
+    const id = Number(req.params.id);
+    const { reason } = req.body || {};
+    if (!id) return res.status(400).json({ error: "Bad id" });
+
+    const rqDone = await pool.query(
+      `UPDATE inside_completion_requests
+         SET status='rejected', resolved_at=NOW(), resolution = COALESCE($2,'')
+       WHERE id=$1
+       RETURNING *`,
+      [id, reason || null]
+    );
+
+    return res.json(ok({ request: rqDone.rows[0] }));
   } catch (e) {
     console.error("adminRejectRequest error:", e);
-    res.status(500).json({ error: "Failed to reject request" });
-  }
-}
-
-// (опционально) — если понадобится админ-CRUD по участникам
-async function adminListParticipants(_req, res) {
-  try {
-    const { rows } = await pool.query(
-      "select * from inside_participants order by created_at desc limit 500"
-    );
-    res.json(rows);
-  } catch (e) {
-    console.error("adminListParticipants error:", e);
-    res.status(500).json({ error: "Failed to list participants" });
-  }
-}
-async function adminCreateParticipant(req, res) {
-  try {
-    const { user_id, current_chapter = CHAPTERS[0] } = req.body || {};
-    if (!user_id) return res.status(400).json({ error: "user_id_required" });
-
-    const idx = Math.max(0, CHAPTERS.indexOf(current_chapter));
-    const p = await upsertParticipantProgress(user_id, idx);
-    res.json(p);
-  } catch (e) {
-    console.error("adminCreateParticipant error:", e);
-    res.status(500).json({ error: "Failed to create participant" });
-  }
-}
-async function adminUpdateParticipant(req, res) {
-  try {
-    const id = Number(req.params.id); // row id, не user_id
-    const { rows: byRow } = await pool.query(
-      "select * from inside_participants where id=$1",
-      [id]
-    );
-    const row = byRow[0];
-    if (!row) return res.status(404).json({ error: "not_found" });
-
-    const { current_chapter } = req.body || {};
-    const idx =
-      typeof current_chapter === "string" && CHAPTERS.includes(current_chapter)
-        ? CHAPTERS.indexOf(current_chapter)
-        : Math.max(0, CHAPTERS.indexOf(row.current_chapter || CHAPTERS[0]));
-
-    const p = await upsertParticipantProgress(row.user_id, idx);
-    res.json(p);
-  } catch (e) {
-    console.error("adminUpdateParticipant error:", e);
-    res.status(500).json({ error: "Failed to update participant" });
+    return res.status(500).json({ error: "Failed to reject request" });
   }
 }
 
 module.exports = {
-  // client
+  // client/public
   getInsideMe,
   getInsideById,
   getInsideStatus,
   requestCompletion,
-
   // admin
   adminListRequests,
   adminApproveRequest,
   adminRejectRequest,
-
-  adminListParticipants,
-  adminCreateParticipant,
-  adminUpdateParticipant,
 };
