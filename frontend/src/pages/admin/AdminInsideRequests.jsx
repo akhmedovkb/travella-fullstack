@@ -61,6 +61,9 @@ export default function AdminInsideRequests() {
     const s = q.toLowerCase();
     return items.filter((r) =>
       String(r.user_id).toLowerCase().includes(s) ||
+      String(r.user_name || "").toLowerCase().includes(s) ||
+      String(r.user_telegram || "").toLowerCase().includes(s) ||
+      String(r.curator_telegram || "").toLowerCase().includes(s) ||
       String(r.chapter || "").toLowerCase().includes(s) ||
       String(r.status || "").toLowerCase().includes(s)
     );
@@ -133,6 +136,7 @@ export default function AdminInsideRequests() {
               <th className="text-left px-4 py-2">Глава</th>
               <th className="text-left px-4 py-2">Статус</th>
               <th className="text-left px-4 py-2">Создано</th>
+              <th className="text-left px-4 py-2">Куратор</th>
               <th className="text-left px-4 py-2">Решение</th>
               <th className="text-left px-4 py-2">Действия</th>
             </tr>
@@ -147,12 +151,29 @@ export default function AdminInsideRequests() {
                 <tr key={r.id} className="border-t">
                   <td className="px-4 py-2">{r.id}</td>
                   <td className="px-4 py-2">
-                    <div className="font-medium">user_id: {r.user_id}</div>
+                    <div className="font-medium">
+                      {r.user_name ? r.user_name : `user_id: ${r.user_id}`}
+                    </div>
+                    {r.user_telegram && (
+                      <div className="text-xs text-gray-500">{r.user_telegram}</div>
+                    )}
                   </td>
                   <td className="px-4 py-2"><ChapterBadge chapter={r.chapter} /></td>
                   <td className="px-4 py-2">{r.status}</td>
                   <td className="px-4 py-2">
                     {r.created_at ? new Date(r.created_at).toLocaleString() : "—"}
+                  </td>
+                  <td className="px-4 py-2">
+                    {r.curator_telegram ? (
+                      <a
+                        href={`https://t.me/${String(r.curator_telegram).replace(/^@/, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {r.curator_telegram}
+                      </a>
+                    ) : "—"}
                   </td>
                   <td className="px-4 py-2">
                     {r.decided_at ? new Date(r.decided_at).toLocaleString() : "—"}
