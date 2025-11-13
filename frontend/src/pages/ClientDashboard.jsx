@@ -621,7 +621,7 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
 
       <div className="mt-4 flex flex-wrap gap-2">
         <a
-          href={`/landing/india-inside?chapter=${encodeURIComponent(chapterKey)}#chapters`}
+          href={`/india/inside?chapter=${encodeURIComponent(chapterKey)}#chapters`}
           className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
           target="_blank" rel="noreferrer"
         >
