@@ -8,6 +8,14 @@ import { apiProviderFavorites } from "../api/providerFavorites";
 import AdminQuickTools from "./admin/AdminQuickTools";
 
 /* --- Inline SVG icons --- */
+const IconChecklist = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+    <path d="M8 8h8M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M7 4.5l1 1 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
 const IconModeration = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
@@ -313,7 +321,8 @@ export default function Header() {
               {/* Админ */}
               {isAdmin && (
                 <nav className="flex items-center gap-1">
-                  <NavItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                  <NavItem to="/ label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                  <NavItem to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
                   <NavItem to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
                   <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                   <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
@@ -364,7 +373,8 @@ export default function Header() {
             {/* Админ */}
             {isAdmin && (
               <RowGroup title={t("nav.admin","Админ")}>
-                <NavItemMobile to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobile to="/ label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobile to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobile to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                 <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
