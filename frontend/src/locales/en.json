@@ -1359,6 +1359,11 @@
       ]
     },
 "inside": {
+      "toast": {
+      "requested": "Completion request sent",
+      "joined": "You’ve joined India Inside!",
+      "join_failed": "Failed to join"
+    },
       "steps_title": "How to join",
       "steps_sub": "Four simple steps — your curator will guide you through.",
       "steps": {
