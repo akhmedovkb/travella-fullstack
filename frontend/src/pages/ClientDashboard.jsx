@@ -577,7 +577,10 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
   async function requestCompletion() {
     try {
       await apiPost("/api/inside/request-completion", { chapter: chapterKey });
-      tSuccess(t("inside.toast.requested") || "Запрос на завершение отправлен", { autoClose: 1600 });
+      tSuccess(
+        t("inside.toast.requested", { defaultValue: "Запрос на завершение отправлен" }),
+        { autoClose: 1600 }
+      );
     } catch {
       // фолбэк: откроем чат куратора
       window.open(`https://t.me/${curator.replace(/^@/, "")}`, "_blank", "noreferrer");
