@@ -1,24 +1,43 @@
 // backend/routes/insideRoutes.js
 const express = require("express");
 const router = express.Router();
+
 const ctrl = require("../controllers/insideController");
 const { authenticateToken } = require("../middleware/authenticateToken");
 
-// ---------- Client routes ----------
+// ---------- Клиентские эндпоинты (совпадают с фронтом) ----------
 
 // GET /api/inside/me — статус текущего пользователя
-router.get("/inside/me", authenticateToken, ctrl.getMe);
+router.get("/me", authenticateToken, ctrl.getInsideMe);
 
-// POST /api/inside/request-completion — запросить завершение главы у куратора
-router.post("/inside/request-completion", authenticateToken, ctrl.requestCompletion);
+// GET /api/inside/:userId — статус по явному id (можно тоже защитить)
+router.get("/:userId", authenticateToken, ctrl.getInsideById);
 
-// ---------- Admin routes ----------
-router.get("/admin/inside/participants", authenticateToken, ctrl.adminListParticipants);
-router.post("/admin/inside/participants", authenticateToken, ctrl.adminCreateParticipant);
-router.put("/admin/inside/participants/:id", authenticateToken, ctrl.adminUpdateParticipant);
+// GET /api/inside/ — универсальный статус (можно без auth)
+router.get("/", ctrl.getInsideStatus);
 
-router.get("/admin/inside/requests", authenticateToken, ctrl.adminListRequests);
-router.post("/admin/inside/requests/:id/approve", authenticateToken, ctrl.adminApproveRequest);
-router.post("/admin/inside/requests/:id/reject", authenticateToken, ctrl.adminRejectRequest);
+// POST /api/inside/request-completion — запросить завершение главы
+router.post("/request-completion", authenticateToken, ctrl.requestCompletion);
+
+// ---------- Админ (подключаем ТОЛЬКО если функции есть, чтобы не падало) ----------
+if (typeof ctrl.adminListParticipants === "function") {
+  router.get("/admin/participants", authenticateToken, ctrl.adminListParticipants);
+}
+if (typeof ctrl.adminCreateParticipant === "function") {
+  router.post("/admin/participants", authenticateToken, ctrl.adminCreateParticipant);
+}
+if (typeof ctrl.adminUpdateParticipant === "function") {
+  router.put("/admin/participants/:id", authenticateToken, ctrl.adminUpdateParticipant);
+}
+
+if (typeof ctrl.adminListRequests === "function") {
+  router.get("/admin/requests", authenticateToken, ctrl.adminListRequests);
+}
+if (typeof ctrl.adminApproveRequest === "function") {
+  router.post("/admin/requests/:id/approve", authenticateToken, ctrl.adminApproveRequest);
+}
+if (typeof ctrl.adminRejectRequest === "function") {
+  router.post("/admin/requests/:id/reject", authenticateToken, ctrl.adminRejectRequest);
+}
 
 module.exports = router;
