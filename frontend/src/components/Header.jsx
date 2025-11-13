@@ -318,17 +318,43 @@ export default function Header() {
               </nav>
               {/* разделитель */}
               <div className="mx-2 h-5 w-px bg-gray-200" />
+              
               {/* Админ */}
               {isAdmin && (
                 <nav className="flex items-center gap-1">
-                  <NavItem to="/ label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                  <NavItem to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
-                  <NavItem to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
-                  <NavItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-                  <NavItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
-                  <NavItem to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
+                  <NavItem
+                    to="/admin/moderation"
+                    label={t("moderation.title", "Модерация")}
+                    icon={<IconModeration />}
+                  />
+                  <NavItem
+                    to="/admin/inside-requests"
+                    label={t("nav.inside_requests","Inside заявки")}
+                    icon={<IconChecklist />}
+                  />
+                  <NavItem
+                    to="/admin/providers"
+                    label={t("nav.providers_admin","Провайдеры")}
+                    icon={<IconUsers />}
+                  />
+                  <NavItem
+                    to="/admin/entry-fees"
+                    label={t("nav.entry_fees_admin","Entry fees")}
+                    icon={<IconTicket />}
+                  />
+                  <NavItem
+                    to="/admin/hotels"
+                    label={t("nav.hotels_admin","Отели (админ)")}
+                    icon={<IconHotel />}
+                  />
+                  <NavItem
+                    to="/admin/pages"
+                    label={t("nav.cms_pages","Подвал")}
+                    icon={<IconDoc />}
+                  />
                 </nav>
               )}
+
               {/* быстрый сет пароля справа */}
               {isAdmin && <AdminQuickTools />}
             </div>
@@ -373,8 +399,16 @@ export default function Header() {
             {/* Админ */}
             {isAdmin && (
               <RowGroup title={t("nav.admin","Админ")}>
-                <NavItemMobile to="/ label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                <NavItemMobile to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
+                <NavItemMobile
+                  to="/admin/moderation"
+                  label={t("moderation.title", "Модерация")}
+                  icon={<IconModeration />}
+                />
+                <NavItemMobile
+                  to="/admin/inside-requests"
+                  label={t("nav.inside_requests","Inside заявки")}
+                  icon={<IconChecklist />}
+                />
                 <NavItemMobile to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobile to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
                 <NavItemMobile to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
