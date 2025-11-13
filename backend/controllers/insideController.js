@@ -103,53 +103,48 @@ async function getInsideStatus(_req, res) {
 
 // POST /api/inside/request-completion
 async function requestCompletion(req, res) {
+  const userId = req.user.id;                  // как вы сейчас берёте id
+  const { chapter } = req.body;                // 'royal' | 'silence' | ...
   try {
-    const userId =
-      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const q = `
+      INSERT INTO inside_completion_requests (user_id, chapter, status)
+      VALUES ($1, $2, 'pending')
+      ON CONFLICT ON CONSTRAINT uniq_inside_req_user_chapter_pending
+      DO NOTHING
+      RETURNING id, user_id, chapter, status, requested_at
+    `;
+    const { rows } = await pool.query(q, [userId, chapter]);
 
-    const { chapter } = req.body || {};
-    await ensureParticipant(userId);
+    // если ничего не вернулось — конфликт с существующей PENDING записью
+    if (!rows.length) {
+      return res.json({ ok: true, already: true });
+    }
+    return res.json({ ok: true, item: rows[0] });
+  } catch (err) {
+    // Если индекс ещё не создан (42704) — мягкий фолбэк:
+    if (err.code === '42704') {
+      // проверяем, есть ли уже pending
+      const chk = await pool.query(
+        `SELECT 1 FROM inside_completion_requests
+         WHERE user_id = $1 AND chapter = $2 AND status = 'pending' LIMIT 1`,
+        [userId, chapter]
+      );
+      if (chk.rowCount > 0) return res.json({ ok: true, already: true });
 
-    // Идемпотентный апсерт: если есть pending-дубликат — возвращаем существующую запись
-    const ins = await pool.query(
-      `INSERT INTO inside_completion_requests (user_id, chapter, status)
-       VALUES ($1, $2, 'pending')
-       ON CONFLICT ON CONSTRAINT uniq_inside_req_user_chapter_pending
-       DO UPDATE SET created_at = inside_completion_requests.created_at
-       RETURNING id, user_id, chapter, status, created_at`,
-      [userId, chapter || null]
-    );
-
-    if (ins.rowCount) {
-      // inserted or no-op updated — заявка есть
-      return res.json(ok({ request: ins.rows[0], already: false }));
+      const ins = await pool.query(
+        `INSERT INTO inside_completion_requests (user_id, chapter, status)
+         VALUES ($1, $2, 'pending')
+         RETURNING id, user_id, chapter, status, requested_at`,
+        [userId, chapter]
+      );
+      return res.json({ ok: true, item: ins.rows[0] });
     }
 
-    // на крайний случай (теоретически не понадобится): доберём существующую pending
-    const ex = await pool.query(
-      `SELECT id, user_id, chapter, status, created_at
-         FROM inside_completion_requests
-        WHERE user_id = $1 AND (chapter IS NOT DISTINCT FROM $2) AND status = 'pending'
-        ORDER BY created_at DESC
-        LIMIT 1`,
-      [userId, chapter || null]
-    );
-    if (ex.rowCount) {
-      return res.json(ok({ request: ex.rows[0], already: true }));
-    }
-
-    // если вообще ничего — считаем ошибкой
-    return res.status(500).json({ error: "Failed to upsert request" });
-  } catch (e) {
-    console.error("requestCompletion error:", e);
-    // аккуратно отдадим конфликт как «уже отправлено», чтобы фронт не считал это фатальной ошибкой
-    if (String(e?.code) === "23505") {
-      return res.status(200).json(ok({ already: true }));
-    }
-    return res.status(500).json({ error: "Failed to request completion" });
+    console.error('requestCompletion error:', err);
+    return res.status(500).json({ error: 'request_failed' });
   }
 }
+
 
 // POST /api/inside/join — клиент вручную присоединяется к программе
 async function joinInside(req, res) {
