@@ -148,12 +148,23 @@ async function adminListRequests(req, res) {
     }
 
     const { rows } = await pool.query(
-      `SELECT r.id, r.user_id, r.chapter, r.status, r.created_at, r.resolved_at, r.resolution,
-              c.name   AS client_name,
-              p.name   AS provider_name
+      `SELECT
+         r.id,
+         r.user_id,
+         r.chapter,
+         r.status,
+         r.created_at,
+         r.resolved_at,
+         /* resolution как вычисляемый алиас, колонки в БД нет */
+         CASE
+           WHEN r.status = 'approved' THEN 'approved'
+           WHEN r.status = 'rejected' THEN 'rejected'
+           ELSE NULL
+         END::text AS resolution,
+         COALESCE(c.name, CONCAT('user_id: ', r.user_id)) AS client_name,
+         c.telegram AS user_telegram
        FROM inside_completion_requests r
-       LEFT JOIN clients   c ON c.id = r.user_id
-       LEFT JOIN providers p ON p.id = r.user_id
+       LEFT JOIN clients c ON c.id = r.user_id
        WHERE ${where}
        ORDER BY r.created_at DESC
        LIMIT 500`,
@@ -215,7 +226,7 @@ async function adminApproveRequest(req, res) {
     // Закрываем заявку
     const rqDone = await pool.query(
       `UPDATE inside_completion_requests
-         SET status='approved', resolved_at=NOW(), resolution=NULL
+         SET status='approved', resolved_at=NOW()
        WHERE id=$1
        RETURNING *`,
       [id]
@@ -240,10 +251,10 @@ async function adminRejectRequest(req, res) {
 
     const rqDone = await pool.query(
       `UPDATE inside_completion_requests
-         SET status='rejected', resolved_at=NOW(), resolution = COALESCE($2,'')
+         SET status='rejected', resolved_at=NOW()
        WHERE id=$1
        RETURNING *`,
-      [id, reason || null]
+      [id]
     );
 
     return res.json(ok({ request: rqDone.rows[0] }));
@@ -253,36 +264,7 @@ async function adminRejectRequest(req, res) {
   }
 }
 // GET /api/inside/admin/requests?status=pending|approved|rejected|all
-async function adminListRequests(req, res) {
-  try {
-    const status = String(req.query.status || "pending").toLowerCase();
-    const { rows } = await pool.query(
-      `
-      SELECT
-        r.id,
-        r.user_id,
-        r.chapter,
-        r.status,
-        r.created_at,
-        r.resolution,
-        r.next_chapter,
-        COALESCE(c.name, CONCAT('user_id: ', r.user_id))    AS user_name,
-        c.telegram                                           AS user_telegram,
-        p.curator_telegram                                   AS curator_telegram
-      FROM inside_completion_requests r
-      LEFT JOIN clients            c ON c.id = r.user_id
-      LEFT JOIN inside_participants p ON p.user_id = r.user_id
-      WHERE ($1 = 'all' OR r.status = $1)
-      ORDER BY r.created_at DESC
-      `,
-      [status]
-    );
-    return res.json(rows);
-  } catch (e) {
-    console.error("adminListRequests error:", e);
-    return res.status(500).json({ error: "Failed to list inside requests" });
-  }
-}
+// (оставляем только одну реализацию adminListRequests)
 
 // (необязательно, но заодно сделаем участников «человекочитаемыми»)
 // GET /api/inside/admin/participants
