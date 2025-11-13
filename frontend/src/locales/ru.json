@@ -1316,6 +1316,11 @@
 
 "inside": {
       "toast": {
+      "requested": "Bo‘limni yakunlash so‘rovi yuborildi",
+      "joined": "Siz India Inside dasturiga qo‘shildingiz!",
+      "join_failed": "Qo‘shilish muvaffaqiyatsiz tugadi"
+    },
+      "toast": {
       "requested": "Запрос на завершение отправлен",
       "joined": "Вы присоединились к India Inside!",
       "join_failed": "Не удалось присоединиться"
