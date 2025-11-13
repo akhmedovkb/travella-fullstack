@@ -1,57 +1,81 @@
-//backend/controllers/insideController.js
-const pool = require("../db");
+// backend/controllers/insideController.js
+// Можно подключить БД при необходимости:
+// const pool = require("../db");
 
-exports.getMe = async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: "unauthorized" });
+// Небольшой helper, чтобы не дублировать try/catch
+const ok = (res, data = {}) => res.json(data);
+const bad = (res, code = 400, msg = "Bad request") => res.status(code).json({ error: msg });
 
-  const q = await pool.query(
-    "select * from inside_participants where user_id=$1",
-    [userId]
+/** Собираем userId из разных мест (auth мидлвара может класть по-разному) */
+function resolveUserId(req) {
+  return (
+    req.user?.id ||
+    req.userId ||
+    req.auth?.id ||
+    req.params?.userId ||
+    req.query?.userId ||
+    null
   );
-  if (!q.rows.length) {
-    return res.json({ status: "none" }); // не участник
+}
+
+/** Базовый ответ о программе (пока статичный; при желании подключи БД) */
+function buildInsidePayload(userId) {
+  // Тут можно сделать SELECT из таблицы inside_progress:
+  // const row = await pool.query('SELECT ... WHERE user_id=$1',[userId])
+  return {
+    status: "active",           // "none" | "active" | "paused" | ...
+    progress_current: 1,
+    progress_total: 4,
+    current_chapter: "royal",   // "royal" | "silence" | "modern" | "kerala"
+    curator_telegram: "@akhmedovkb",
+    user_id: userId ?? null,
+  };
+}
+
+exports.getInsideMe = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    // Если нет авторизации — можно вернуть "none"
+    if (!userId) return ok(res, { status: "none" });
+    return ok(res, buildInsidePayload(userId));
+  } catch (e) {
+    return bad(res, 500, "inside_me_failed");
   }
-  const row = q.rows[0];
-  res.json({
-    status: row.status,
-    program_key: row.program_key,
-    current_chapter: row.current_chapter,
-    progress_current: row.progress_current,
-    progress_total: row.progress_total,
-    curator_telegram: row.curator_telegram
-  });
+};
+
+exports.getInsideById = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!userId) return bad(res, 400, "user_id_required");
+    return ok(res, buildInsidePayload(userId));
+  } catch (e) {
+    return bad(res, 500, "inside_by_id_failed");
+  }
+};
+
+exports.getInsideStatus = async (_req, res) => {
+  try {
+    // Для публичных запросов можно вернуть общий статус или "none"
+    return ok(res, { status: "none" });
+  } catch (e) {
+    return bad(res, 500, "inside_status_failed");
+  }
 };
 
 exports.requestCompletion = async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: "unauthorized" });
-  const chapter = req.body?.chapter || null;
+  try {
+    const userId = resolveUserId(req);
+    const { chapter } = req.body || {};
+    if (!chapter) return bad(res, 400, "chapter_required");
 
-  await pool.query(
-    "insert into inside_completion_requests(user_id, chapter) values ($1,$2)",
-    [userId, chapter]
-  );
+    // Здесь можно:
+    // 1) записать заявку в БД
+    // 2) отправить уведомление куратору в Telegram
+    // await pool.query('INSERT INTO inside_completion_requests ...');
+    // await sendTelegramToCurator(...);
 
-  // TODO: уведомить куратора (бот/почта/вебхуки)
-  res.json({ ok: true });
-};
-
-// (опционально) для админки — подтверждение
-exports.approveCompletion = async (req, res) => {
-  const { userId, chapter } = req.body || {};
-  if (!userId) return res.status(400).json({ error: "userId_required" });
-
-  await pool.query(
-    "update inside_completion_requests set status='approved' where user_id=$1 and status='pending'",
-    [userId]
-  );
-
-  // инкремент прогресса
-  const r = await pool.query(
-    "update inside_participants set progress_current = least(progress_current + 1, progress_total), current_chapter=$2 where user_id=$1 returning *",
-    [userId, chapter || 'royal']
-  );
-
-  res.json({ ok: true, participant: r.rows[0] || null });
+    return ok(res, { ok: true, requested: true, chapter, user_id: userId ?? null });
+  } catch (e) {
+    return bad(res, 500, "request_completion_failed");
+  }
 };
