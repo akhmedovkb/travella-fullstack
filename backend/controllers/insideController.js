@@ -125,6 +125,35 @@ async function requestCompletion(req, res) {
   }
 }
 
+// POST /api/inside/join — клиент вручную присоединяется к программе
+async function joinInside(req, res) {
+  try {
+    const userId =
+      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // если уже есть участник — просто вернуть статус
+    const exists = await pool.query(
+      `SELECT * FROM inside_participants WHERE user_id=$1 LIMIT 1`,
+      [userId]
+    );
+    if (exists.rowCount > 0)
+      return res.json(ok({ participant: exists.rows[0], message: "already_joined" }));
+
+    const { rows } = await pool.query(
+      `INSERT INTO inside_participants
+         (user_id, program_key, current_chapter, progress_current, progress_total, status, curator_telegram)
+       VALUES ($1, 'india_inside', $2, 0, $3, 'active', '@akhmedovkb')
+       RETURNING *`,
+      [userId, CHAPTERS_ORDER[0] || 'royal', PROGRESS_TOTAL_DEFAULT]
+    );
+
+    return res.json(ok({ participant: rows[0], message: "joined" }));
+  } catch (e) {
+    console.error("joinInside error:", e);
+    return res.status(500).json({ error: "Failed to join Inside" });
+  }
+}
 /** -------- admin -------- */
 
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
@@ -292,6 +321,7 @@ module.exports = {
   getInsideById,
   getInsideStatus,
   requestCompletion,
+  joinInside,
   // admin
   adminListRequests,
   adminApproveRequest,
