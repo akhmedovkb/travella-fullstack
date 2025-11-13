@@ -1,13 +1,21 @@
-//backend/routes/insideRoutes.js
+// backend/routes/insideRoutes.js
 const express = require("express");
 const router = express.Router();
-const { authenticateToken } = require("../middleware/authenticateToken");
-const inside = require("../controllers/insideController");
 
-router.get("/me", authenticateToken, inside.getMe);
-router.post("/request-completion", authenticateToken, inside.requestCompletion);
+// ВАЖНО: путь до контроллера проверь, у тебя сейчас /app/routes/...
+// Если структура backend/{controllers,routes}, то так:
+const ctrl = require("../controllers/insideController");
 
-// опционально для админки:
-// router.post("/approve-completion", authenticateToken, inside.approveCompletion);
+// GET /api/inside/me — статус текущего пользователя
+router.get("/me", ctrl.getInsideMe);
+
+// GET /api/inside/:userId — статус по явному id
+router.get("/:userId", ctrl.getInsideById);
+
+// GET /api/inside/status — универсальный статус (можно использовать там, где нет auth)
+router.get("/", ctrl.getInsideStatus);
+
+// POST /api/inside/request-completion — запросить завершение главы у куратора
+router.post("/request-completion", ctrl.requestCompletion);
 
 module.exports = router;
