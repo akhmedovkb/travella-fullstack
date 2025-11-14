@@ -32,6 +32,9 @@ export const listChapters = (params = {}) =>
 export const upsertChapter = (payload) =>
   apiPost(`/api/inside/admin/chapters`, payload);
 
+export const getNextChapter = () =>
+  apiGet("/api/inside/chapters/next");
+
 // ---------- helper ----------
 
 function toQuery(obj) {
