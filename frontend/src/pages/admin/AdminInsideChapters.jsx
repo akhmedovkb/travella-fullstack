@@ -40,25 +40,14 @@ export default function AdminInsideChapters() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingKey, setEditingKey] = useState(null); // chapter_key или null
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
   async function loadChapters() {
     try {
       setLoading(true);
       setError("");
-      const res = await fetch("/api/inside/admin/chapters", {
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setChapters(Array.isArray(data) ? data : []);
+      const data = await listChapters();
+      // backend возвращает просто массив
+      setChapters(Array.isArray(data) ? data : data?.items || []);
     } catch (e) {
       console.error("loadChapters error", e);
       setError("Не удалось загрузить главы");
@@ -79,7 +68,8 @@ export default function AdminInsideChapters() {
       title: ch.title || "",
       starts_at: toLocalInputValue(ch.starts_at),
       capacity: ch.capacity != null ? String(ch.capacity) : "",
-      enrolled_count: ch.enrolled_count != null ? String(ch.enrolled_count) : "",
+      enrolled_count:
+        ch.enrolled_count != null ? String(ch.enrolled_count) : "",
       status: ch.status || "draft",
     });
     setFormError("");
@@ -131,22 +121,7 @@ export default function AdminInsideChapters() {
         status: form.status || null,
       };
 
-      const res = await fetch("/api/inside/admin/chapters", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("save chapter error:", text);
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
+      const data = await upsertChapter(body);
       console.log("chapter saved:", data);
 
       await loadChapters();
