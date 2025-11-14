@@ -493,9 +493,14 @@ function FavoritesList({
   );
 }
 // --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-function MyInsideCard({ inside, loading, t, onJoined }) {
+// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
+function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const [lastReq, setLastReq] = useState(null);   // ⬅️ последняя заявка на завершение главы
   const [loadingReq, setLoadingReq] = useState(true);
+
+  // ⬇️ НОВОЕ: ближайшая глава (для всех клиентов, у кого есть кабинет)
+  const [nextChapter, setNextChapter] = useState(null);
+  const [loadingNext, setLoadingNext] = useState(true);
 
   // заголовки глав по ключам (оставляю как у тебя)
   const chapterTitle = (key) => {
@@ -527,6 +532,60 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
     return <span className={`text-xs px-2 py-1 rounded-full border ${cls}`}>{map[st] ?? st}</span>;
   };
 
+  // ⬇️ НОВОЕ: мини-компонент баннера ближайшей главы с обратным отсчётом и местами
+  const NextChapterBanner = () => {
+    if (!nextChapter) return null;
+
+    const startsAt = nextChapter.starts_at ? new Date(nextChapter.starts_at) : null;
+    const nowMs = typeof now === "number" ? now : Date.now();
+    const diffMs = startsAt ? startsAt.getTime() - nowMs : null;
+    const placesLeft = Number(nextChapter.places_left ?? 0);
+
+    return (
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
+            </div>
+            <div className="font-medium">
+              {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
+            </div>
+            {startsAt && (
+              <div className="text-xs text-slate-500">
+                {t("inside.next_chapter.starts_at", { defaultValue: "Старт:" })}{" "}
+                {startsAt.toLocaleString()}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            {diffMs != null && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-mono ${
+                  diffMs > 0 ? "bg-black text-white" : "bg-emerald-600 text-white"
+                }`}
+              >
+                {diffMs > 0
+                  ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
+                  : t("inside.next_chapter.enrollment_open", {
+                      defaultValue: "Набор идёт",
+                    })}
+                {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
+              </span>
+            )}
+            <span className="text-xs text-slate-700">
+              {t("inside.next_chapter.places_left", {
+                defaultValue: "Свободных мест: {{count}}",
+                count: placesLeft,
+              })}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // загрузка последней заявки (когда inside есть)
   useEffect(() => {
     let cancel = false;
@@ -545,6 +604,25 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
     return () => { cancel = true; };
   }, [inside]);
 
+  // ⬇️ НОВОЕ: загрузка ближайшей главы (общая для всех клиентов)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingNext(true);
+        const res = await apiGet("/api/inside/chapters/next");
+        if (!cancelled) {
+          setNextChapter(res || null);
+        }
+      } catch {
+        if (!cancelled) setNextChapter(null);
+      } finally {
+        if (!cancelled) setLoadingNext(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
@@ -555,7 +633,7 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
     );
   }
 
-  // если пользователь ещё не участник — показываем приглашение (как у тебя)
+  // если пользователь ещё не участник — показываем приглашение
   if (!inside) {
     async function handleJoin() {
       try {
@@ -586,6 +664,10 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
         <p className="mt-2 text-gray-600">
           {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
         </p>
+
+        {/* 🔔 Баннер ближайшей главы виден даже до вступления */}
+        {!loadingNext && <NextChapterBanner />}
+
         <div className="mt-4 flex gap-2">
           <button
             onClick={handleJoin}
@@ -667,6 +749,9 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
         </span>
       </div>
 
+      {/* 🔔 Баннер ближайшей главы под шапкой */}
+      {!loadingNext && <NextChapterBanner />}
+
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <div className="text-gray-700">
           <div className="text-sm text-gray-500">{t("inside.current_chapter", { defaultValue: "Текущая глава" })}</div>
@@ -731,6 +816,7 @@ function MyInsideCard({ inside, loading, t, onJoined }) {
     </section>
   );
 }
+
 
 /* ===================== Main Page ===================== */
 
@@ -1679,10 +1765,11 @@ useEffect(() => {
 
         {/* Right: Stats + Tabs */}
         <div className="md:col-span-2">
-        <MyInsideCard
+         <MyInsideCard
           inside={inside}
           loading={loadingInside}
           t={t}
+          now={now} // 👈 пробрасываем "текущее время" для таймера
           onJoined={(data) => setInside(data && data.status === "none" ? null : data)}
         />
         <div className="mt-6" />
