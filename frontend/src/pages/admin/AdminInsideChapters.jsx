@@ -391,7 +391,7 @@ export default function AdminInsideChapters() {
               <p className="mt-1 text-xs text-gray-500">
                 Когда участники возвращаются домой / программа завершена.
               </p>
-            </div>>
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Лимит мест (capacity)
