@@ -211,7 +211,49 @@ async function getMyLastRequest(req, res) {
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
 async function adminListRequests(req, res) {
   try {
-    const q = `
+    const limit  = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+    const offset = Math.max(0, Number(req.query.offset || 0));
+
+    // нормализуем статус
+    let status = String(req.query.status || "").trim().toLowerCase();
+    if (["wait","waiting","expected","ожидают","ожидание"].includes(status)) status = "pending";
+    if (!["pending","approved","rejected","all",""].includes(status)) status = ""; // неизвестное → не фильтруем
+
+    const q = String(req.query.q || "").trim();
+    const chapter = String(req.query.chapter || "").trim();
+
+    const where = [];
+    const params = [];
+
+    if (status && status !== "all") {
+      params.push(status);
+      where.push(`r.status = $${params.length}`);
+    }
+
+    if (chapter) {
+      params.push(chapter.toLowerCase());
+      where.push(`LOWER(r.chapter) = $${params.length}`);
+    }
+
+    if (q) {
+      // ищем по user_id, имени, телефону, телеграму, главе и статусу
+      params.push(`%${q}%`);
+      const p = `$${params.length}`;
+      where.push(`
+        (
+          CAST(r.user_id AS TEXT) ILIKE ${p}
+          OR COALESCE(u.name,'') ILIKE ${p}
+          OR COALESCE(u.phone,'') ILIKE ${p}
+          OR COALESCE(u.telegram,'') ILIKE ${p}
+          OR COALESCE(r.chapter,'') ILIKE ${p}
+          OR COALESCE(r.status,'') ILIKE ${p}
+        )
+      `);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const sql = `
       SELECT
         r.id,
         r.user_id,
@@ -220,37 +262,52 @@ async function adminListRequests(req, res) {
         r.requested_at,
         r.approved_at,
         r.rejected_at,
-        -- вычисляемое "resolved_at"
         CASE
           WHEN r.status = 'approved' THEN r.approved_at
           WHEN r.status = 'rejected' THEN r.rejected_at
           ELSE NULL
         END AS resolved_at,
-        u.name       AS user_name,
-        u.phone      AS user_phone,
-        u.telegram   AS user_telegram
+        u.name     AS user_name,
+        u.phone    AS user_phone,
+        u.telegram AS user_telegram
       FROM inside_completion_requests r
       LEFT JOIN clients u ON u.id = r.user_id
-      /* при необходимости фильтры по статусу/чаптеру */
-      ORDER BY COALESCE(
-        CASE
-          WHEN r.status = 'approved' THEN r.approved_at
-          WHEN r.status = 'rejected' THEN r.rejected_at
-          ELSE NULL
+      ${whereSql}
+      ORDER BY
+        CASE r.status
+          WHEN 'pending'  THEN 1
+          WHEN 'approved' THEN 2
+          WHEN 'rejected' THEN 3
+          ELSE 4
         END,
-        r.requested_at
-      ) DESC
-      LIMIT $1 OFFSET $2
+        COALESCE(
+          CASE
+            WHEN r.status = 'approved' THEN r.approved_at
+            WHEN r.status = 'rejected' THEN r.rejected_at
+            ELSE NULL
+          END,
+          r.requested_at
+        ) DESC
+      LIMIT $${params.push(limit)} OFFSET $${params.push(offset)}
     `;
-    const limit  = Number(req.query.limit || 50);
-    const offset = Number(req.query.offset || 0);
-    const { rows } = await pool.query(q, [limit, offset]);
-    res.json({ items: rows });
+
+    const { rows } = await pool.query(sql, params);
+
+    // total для пагинации (опционально, но полезно)
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM inside_completion_requests r
+      LEFT JOIN clients u ON u.id = r.user_id
+      ${whereSql}
+    `;
+    const { rows: countRows } = await pool.query(countSql, params.slice(0, params.length - 2));
+    res.json({ items: rows, total: countRows[0]?.total ?? rows.length });
   } catch (err) {
-    console.error('adminListRequests error:', err);
-    res.status(500).json({ error: 'admin_list_failed' });
+    console.error("adminListRequests error:", err);
+    res.status(500).json({ error: "admin_list_failed" });
   }
 }
+
 
 // POST /api/admin/inside/requests/:id/approve { next_chapter? }
 async function adminApproveRequest(req, res) {
