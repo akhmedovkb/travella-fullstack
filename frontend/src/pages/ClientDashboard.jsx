@@ -531,59 +531,73 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     return <span className={`text-xs px-2 py-1 rounded-full border ${cls}`}>{map[st] ?? st}</span>;
   };
 
-  // ⬇️ НОВОЕ: мини-компонент баннера ближайшей главы с обратным отсчётом и местами
-  const NextChapterBanner = () => {
-    if (!nextChapter) return null;
+// ⬇️ НОВОЕ: мини-компонент баннера ближайшей главы с обратным отсчётом и местами
+const NextChapterBanner = () => {
+  if (!nextChapter) return null;
 
-    const startsAt = nextChapter.starts_at ? new Date(nextChapter.starts_at) : null;
-    const nowMs = typeof now === "number" ? now : Date.now();
-    const diffMs = startsAt ? startsAt.getTime() - nowMs : null;
-    const placesLeft = Number(nextChapter.places_left ?? 0);
+  const startsAt = nextChapter.starts_at ? new Date(nextChapter.starts_at) : null;
+  const nowMs = typeof now === "number" ? now : Date.now();
+  const diffMs = startsAt ? startsAt.getTime() - nowMs : null;
 
-    return (
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
-            </div>
-            <div className="font-medium">
-              {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
-            </div>
-            {startsAt && (
-              <div className="text-xs text-slate-500">
-                {t("inside.next_chapter.starts_at", { defaultValue: "Старт:" })}{" "}
-                {startsAt.toLocaleString()}
-              </div>
-            )}
+  // ✅ правильно считаем свободные места
+  const capacityRaw = nextChapter.capacity ?? nextChapter.chapter_capacity;
+  const enrolledRaw = nextChapter.enrolled_count ?? nextChapter.chapter_enrolled;
+  let placesLeft;
+
+  if (capacityRaw != null) {
+    const cap = Number(capacityRaw) || 0;
+    const enrolled = Number(enrolledRaw ?? 0) || 0;
+    placesLeft = Math.max(0, cap - enrolled);
+  } else {
+    // fallback, если бэк сам отдаёт готовое поле
+    placesLeft = Number(nextChapter.places_left ?? 0);
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            {t("inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
           </div>
+          <div className="font-medium">
+            {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
+          </div>
+          {startsAt && (
+            <div className="text-xs text-slate-500">
+              {t("inside.next_chapter.starts_at", { defaultValue: "Старт:" })}{" "}
+              {startsAt.toLocaleString()}
+            </div>
+          )}
+        </div>
 
-          <div className="flex flex-col items-end gap-1">
-            {diffMs != null && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-mono ${
-                  diffMs > 0 ? "bg-black text-white" : "bg-emerald-600 text-white"
-                }`}
-              >
-                {diffMs > 0
-                  ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
-                  : t("inside.next_chapter.enrollment_open", {
-                      defaultValue: "Набор идёт",
-                    })}
-                {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
-              </span>
-            )}
-            <span className="text-xs text-slate-700">
-              {t("inside.next_chapter.places_left", {
-                defaultValue: "Свободных мест: {{count}}",
-                count: placesLeft,
-              })}
+        <div className="flex flex-col items-end gap-1">
+          {diffMs != null && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-mono ${
+                diffMs > 0 ? "bg-black text-white" : "bg-emerald-600 text-white"
+              }`}
+            >
+              {diffMs > 0
+                ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
+                : t("inside.next_chapter.enrollment_open", {
+                    defaultValue: "Набор идёт",
+                  })}
+              {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
             </span>
-          </div>
+          )}
+          <span className="text-xs text-slate-700">
+            {t("inside.next_chapter.places_left", {
+              defaultValue: "Свободных мест: {{count}}",
+              count: placesLeft,
+            })}
+          </span>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
+
 
   // загрузка последней заявки (когда inside есть)
   useEffect(() => {
