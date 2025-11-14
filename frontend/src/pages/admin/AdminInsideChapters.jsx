@@ -63,20 +63,16 @@ export default function AdminInsideChapters() {
       setLoading(true);
       setError("");
 
-      const res = await fetch("/api/inside/admin/chapters", {
+      // ts в query нужен, чтобы обойти 304/кэш
+      const url = `/api/inside/admin/chapters?ts=${Date.now()}`;
+      const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
 
-      // 304 Not Modified — не считаем ошибкой
-      if (res.status === 304) {
-        // оставляем уже загруженные главы (если были)
-        return;
-      }
-
-      if (res.status < 200 || res.status >= 300) {
+      if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
 
