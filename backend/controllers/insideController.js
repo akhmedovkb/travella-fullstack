@@ -338,27 +338,28 @@ async function adminApproveRequest(req, res) {
 const upd = await pool.query(
   `UPDATE inside_participants
       SET progress_current = LEAST(progress_current + 1, progress_total),
-          current_chapter  = COALESCE($2,
-                               CASE
-                                 WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
-                                 ELSE $4
-                               END
-                             ),
+          current_chapter  = CASE
+                               -- если куратор выбрал next_chapter в селекте → ставим его
+                               WHEN $2 IS NOT NULL AND $2 <> '' THEN $2
+                               -- если это самый первый раз и current_chapter пустой → ставим первую главу
+                               WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
+                               -- иначе главу не трогаем, остаётся та, что была активна
+                               ELSE current_chapter
+                             END,
           status = CASE
                      WHEN LEAST(progress_current + 1, progress_total) >= progress_total
                        THEN 'completed'
                      ELSE status
-                   END
+                   END,
+          updated_at = NOW()
     WHERE user_id = $1
-  RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+    RETURNING user_id, current_chapter, progress_current, progress_total, status`,
   [
     r.user_id,
     next_chapter || null,
     CHAPTERS_ORDER[0] || "royal",
-    nextChapterKey(r.chapter),
   ]
 );
-
 
     // закрываем заявку (без resolved_at!)
     const done = await pool.query(
