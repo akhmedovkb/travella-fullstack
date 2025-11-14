@@ -478,9 +478,9 @@ async function adminApproveRequest(req, res) {
           SET progress_current = LEAST(progress_current + 1, progress_total),
               current_chapter  = CASE
                                    -- если куратор выбрал next_chapter в селекте → ставим его
-                                   WHEN $2 IS NOT NULL AND $2 <> '' THEN $2
+                                   WHEN $2::text IS NOT NULL AND $2::text <> '' THEN $2::text
                                    -- если это самый первый раз и current_chapter пустой → ставим первую главу
-                                   WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
+                                   WHEN current_chapter IS NULL OR current_chapter = '' THEN $3::text
                                    -- иначе главу не трогаем, остаётся та, что была активна
                                    ELSE current_chapter
                                  END,
@@ -494,6 +494,7 @@ async function adminApproveRequest(req, res) {
         RETURNING user_id, current_chapter, progress_current, progress_total, status`,
       [r.user_id, next_chapter || null, CHAPTERS_ORDER[0] || "royal"]
     );
+
 
     // закрываем заявку (без resolved_at!)
     const done = await pool.query(
