@@ -10,8 +10,8 @@ export const createParticipant = (payload) =>
 export const updateParticipant = (id, payload) =>
   apiPut(`/api/inside/admin/participants/${id}`, payload);
 
-export const listCompletionRequests = (status = "pending") =>
-  apiGet(`/api/inside/admin/requests?status=${encodeURIComponent(status)}`);
+export const listCompletionRequests = (params = { status: "pending" }) =>
+  apiGet(`/api/inside/admin/requests${toQuery(params)}`);
 
 export const approveRequest = (id, next_chapter) =>
   apiPost(`/api/inside/admin/requests/${id}/approve`, next_chapter ? { next_chapter } : {});
