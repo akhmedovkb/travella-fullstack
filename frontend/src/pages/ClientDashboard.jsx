@@ -493,7 +493,6 @@ function FavoritesList({
   );
 }
 // --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
 function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const [lastReq, setLastReq] = useState(null);   // ⬅️ последняя заявка на завершение главы
   const [loadingReq, setLoadingReq] = useState(true);
@@ -693,6 +692,26 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const pct = Math.max(0, Math.min(100, Math.round((cur / (total || 1)) * 100)));
   const curator = inside.curator_telegram || "@akhmedovkb";
   const chapterKey = inside.current_chapter || "royal";
+  const chapterMeta = inside?.chapter || {};
+  const capacity = Number(chapterMeta.capacity || 0);
+  const enrolled = Number(chapterMeta.enrolled_count || 0);
+  const remaining = Math.max(0, capacity - enrolled);
+
+  const startsAtRaw =
+    chapterMeta.starts_at ||
+    inside.chapter_starts_at ||
+    null;
+
+  let countdown = null;
+  if (startsAtRaw) {
+    const ts = Date.parse(startsAtRaw);
+    if (!Number.isNaN(ts)) {
+      const diff = ts - (now ?? Date.now());
+      if (diff > 0) {
+        countdown = formatLeft(diff);
+      }
+    }
+  }
 
   async function requestCompletion() {
     try {
@@ -769,7 +788,35 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         </div>
         <div className="mt-1 text-xs text-gray-500">{pct}%</div>
       </div>
-
+      {/* Новый блок: дата старта + обратный отсчёт + места */}
+      {(startsAtRaw || capacity > 0) && (
+        <div className="mt-3 space-y-1 text-sm text-gray-700">
+          {startsAtRaw && (
+            <div>
+              {t("inside.chapter_start_at", { defaultValue: "Старт набора:" })}{" "}
+              <span className="font-medium">
+                {new Date(startsAtRaw).toLocaleString()}
+              </span>
+            </div>
+          )}
+          {countdown && (
+            <div>
+              {t("inside.chapter_countdown", { defaultValue: "До старта главы осталось:" })}{" "}
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs">
+                {countdown}
+              </span>
+            </div>
+          )}
+          {capacity > 0 && (
+            <div>
+              {t("inside.chapter_seats_left", { defaultValue: "Свободных мест:" })}{" "}
+              <span className="font-medium">
+                {remaining} / {capacity}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap gap-2">
         <a
           href={`/india/inside?chapter=${encodeURIComponent(chapterKey)}#chapters`}
@@ -1765,11 +1812,11 @@ useEffect(() => {
 
         {/* Right: Stats + Tabs */}
         <div className="md:col-span-2">
-         <MyInsideCard
+        <MyInsideCard
           inside={inside}
           loading={loadingInside}
           t={t}
-          now={now} // 👈 пробрасываем "текущее время" для таймера
+          now={now}
           onJoined={(data) => setInside(data && data.status === "none" ? null : data)}
         />
         <div className="mt-6" />
