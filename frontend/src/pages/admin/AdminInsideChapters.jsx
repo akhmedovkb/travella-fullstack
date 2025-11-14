@@ -1,5 +1,6 @@
 // frontend/src/pages/admin/AdminInsideChapters.jsx
 import React, { useEffect, useState } from "react";
+import { listChapters, upsertChapter } from "../../api/inside";
 
 function formatDate(dt) {
   if (!dt) return "—";
