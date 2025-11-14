@@ -1,12 +1,25 @@
 // frontend/src/pages/admin/AdminInsideChapters.jsx
 import React, { useEffect, useState } from "react";
-import { listChapters, upsertChapter } from "../../api/inside";
 
 function formatDate(dt) {
   if (!dt) return "—";
   const d = new Date(dt);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString();
+}
+
+function formatDateShort(dt) {
+  if (!dt) return "—";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString();
+}
+
+function formatRange(a, b) {
+  if (!a && !b) return "—";
+  if (a && !b) return formatDateShort(a);
+  if (!a && b) return formatDateShort(b);
+  return `${formatDateShort(a)} — ${formatDateShort(b)}`;
 }
 
 function toLocalInputValue(iso) {
@@ -26,6 +39,8 @@ const EMPTY_FORM = {
   chapter_key: "",
   title: "",
   starts_at: "",
+  tour_starts_at: "",
+  tour_ends_at: "",
   capacity: "",
   enrolled_count: "",
   status: "draft",
@@ -40,14 +55,26 @@ export default function AdminInsideChapters() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingKey, setEditingKey] = useState(null); // chapter_key или null
 
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
   async function loadChapters() {
     try {
       setLoading(true);
       setError("");
+      const res = await fetch("/api/inside/admin/chapters", {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
 
-      const data = await listChapters();
-      // backend возвращает просто массив
-      setChapters(Array.isArray(data) ? data : data?.items || []);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setChapters(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("loadChapters error", e);
       setError("Не удалось загрузить главы");
@@ -67,6 +94,8 @@ export default function AdminInsideChapters() {
       chapter_key: ch.chapter_key || "",
       title: ch.title || "",
       starts_at: toLocalInputValue(ch.starts_at),
+      tour_starts_at: toLocalInputValue(ch.tour_starts_at),
+      tour_ends_at: toLocalInputValue(ch.tour_ends_at),
       capacity: ch.capacity != null ? String(ch.capacity) : "",
       enrolled_count:
         ch.enrolled_count != null ? String(ch.enrolled_count) : "",
@@ -95,21 +124,26 @@ export default function AdminInsideChapters() {
       return;
     }
 
+    const parseLocal = (val) => {
+      if (!val) return null;
+      const d = new Date(val);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString();
+    };
+
     try {
       setSaving(true);
 
-      let startsAtIso = null;
-      if (form.starts_at) {
-        const d = new Date(form.starts_at);
-        if (!Number.isNaN(d.getTime())) {
-          startsAtIso = d.toISOString();
-        }
-      }
+      const startsAtIso = parseLocal(form.starts_at);
+      const tourStartsIso = parseLocal(form.tour_starts_at);
+      const tourEndsIso = parseLocal(form.tour_ends_at);
 
       const body = {
         chapter_key: form.chapter_key.trim(),
         title: form.title.trim() || null,
         starts_at: startsAtIso,
+        tour_starts_at: tourStartsIso,
+        tour_ends_at: tourEndsIso,
         capacity:
           form.capacity !== "" && form.capacity != null
             ? Number(form.capacity)
@@ -121,11 +155,25 @@ export default function AdminInsideChapters() {
         status: form.status || null,
       };
 
-      const data = await upsertChapter(body);
+      const res = await fetch("/api/inside/admin/chapters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("save chapter error:", text);
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
       console.log("chapter saved:", data);
 
       await loadChapters();
-      // остаёмся в режиме редактирования этой же главы
       setEditingKey(body.chapter_key);
     } catch (err) {
       console.error("handleSubmit error", err);
@@ -148,7 +196,6 @@ export default function AdminInsideChapters() {
         </button>
       </div>
 
-      {/* Ошибка загрузки */}
       {error && (
         <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">
           {error}
@@ -167,7 +214,10 @@ export default function AdminInsideChapters() {
                 Название
               </th>
               <th className="px-4 py-2 text-left font-medium text-gray-600">
-                Старт
+                Старт набора
+              </th>
+              <th className="px-4 py-2 text-left font-medium text-gray-600">
+                Даты тура
               </th>
               <th className="px-4 py-2 text-right font-medium text-gray-600">
                 Лимит
@@ -187,7 +237,7 @@ export default function AdminInsideChapters() {
           <tbody className="divide-y divide-gray-100">
             {loading && (
               <tr>
-                <td colSpan={8} className="px-4 py-4 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-4 text-center text-gray-500">
                   Загрузка...
                 </td>
               </tr>
@@ -195,7 +245,7 @@ export default function AdminInsideChapters() {
 
             {!loading && chapters.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-4 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-4 text-center text-gray-500">
                   Пока нет ни одной записи о главах.
                 </td>
               </tr>
@@ -218,6 +268,9 @@ export default function AdminInsideChapters() {
                     <td className="px-4 py-2 text-gray-800">{ch.title}</td>
                     <td className="px-4 py-2 text-gray-700">
                       {formatDate(ch.starts_at)}
+                    </td>
+                    <td className="px-4 py-2 text-gray-700">
+                      {formatRange(ch.tour_starts_at, ch.tour_ends_at)}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-700">
                       {capacity != null ? capacity : "—"}
@@ -248,7 +301,9 @@ export default function AdminInsideChapters() {
       {/* Форма создания/редактирования */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
         <h2 className="mb-4 text-lg font-semibold">
-          {editingKey ? `Редактирование главы "${editingKey}"` : "Новая глава"}
+          {editingKey
+            ? `Редактирование главы "${editingKey}"`
+            : "Новая глава"}
         </h2>
 
         {formError && (
@@ -268,7 +323,7 @@ export default function AdminInsideChapters() {
                 type="text"
                 value={form.chapter_key}
                 onChange={handleChange}
-                disabled={!!editingKey} // ключ нельзя менять при редактировании
+                disabled={!!editingKey}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
                 placeholder="royal / silence / modern / kerala"
               />
@@ -290,7 +345,7 @@ export default function AdminInsideChapters() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Дата и время старта (по Ташкенту)
+                Дата и время старта набора (по Ташкенту)
               </label>
               <input
                 name="starts_at"
@@ -302,6 +357,35 @@ export default function AdminInsideChapters() {
               <p className="mt-1 text-xs text-gray-500">
                 Можно оставить пустым, если набор ещё не планируется.
               </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Дата начала тура
+              </label>
+              <input
+                name="tour_starts_at"
+                type="datetime-local"
+                value={form.tour_starts_at}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Реальная дата выезда / начала путешествия.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Дата окончания тура
+              </label>
+              <input
+                name="tour_ends_at"
+                type="datetime-local"
+                value={form.tour_ends_at}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
 
             <div>
@@ -333,7 +417,8 @@ export default function AdminInsideChapters() {
                 placeholder="0"
               />
               <p className="mt-1 text-xs text-gray-500">
-                Можно править вручную, либо позже сделать авто-счётчик от заявок.
+                Можно править вручную, либо позже сделать авто-счётчик от
+                заявок.
               </p>
             </div>
 
