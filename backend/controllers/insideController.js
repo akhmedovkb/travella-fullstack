@@ -335,29 +335,30 @@ async function adminApproveRequest(req, res) {
     await ensureParticipant(r.user_id);
 
     // продвигаем участника
-    const upd = await pool.query(
-      `UPDATE inside_participants
-          SET progress_current = LEAST(progress_current + 1, progress_total),
-              current_chapter  = COALESCE($2,
-                                   CASE
-                                     WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
-                                     ELSE $4
-                                   END
-                                 ),
-              status = CASE
-                         WHEN LEAST(progress_current + 1, progress_total) >= progress_total
-                           THEN 'completed'
-                         ELSE status
-                       END,
-        WHERE user_id = $1
-      RETURNING user_id, current_chapter, progress_current, progress_total, status`,
-      [
-        r.user_id,
-        next_chapter || null,
-        CHAPTERS_ORDER[0] || "royal",
-        nextChapterKey(r.chapter),
-      ]
-    );
+const upd = await pool.query(
+  `UPDATE inside_participants
+      SET progress_current = LEAST(progress_current + 1, progress_total),
+          current_chapter  = COALESCE($2,
+                               CASE
+                                 WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
+                                 ELSE $4
+                               END
+                             ),
+          status = CASE
+                     WHEN LEAST(progress_current + 1, progress_total) >= progress_total
+                       THEN 'completed'
+                     ELSE status
+                   END
+    WHERE user_id = $1
+  RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+  [
+    r.user_id,
+    next_chapter || null,
+    CHAPTERS_ORDER[0] || "royal",
+    nextChapterKey(r.chapter),
+  ]
+);
+
 
     // закрываем заявку (без resolved_at!)
     const done = await pool.query(
