@@ -387,7 +387,9 @@ export default function AdminInsideChapters() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
-
+              <p className="mt-1 text-xs text-gray-500">
+                Когда участники возвращаются домой / программа завершена.
+              </p>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Лимит мест (capacity)
