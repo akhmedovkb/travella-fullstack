@@ -54,12 +54,25 @@ export default function AdminInsideRequests() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   const filtered = useMemo(() => {
-    if (!q) return items;
+    // 1) фильтр по статусу (на всякий случай, даже если бэкенд уже фильтрует)
+    let base = items;
+    if (status && status !== "all") {
+      base = base.filter(
+        (r) => String(r.status || "").toLowerCase() === status
+      );
+    }
+
+    // 2) текстовый поиск
+    if (!q) return base;
     const s = q.toLowerCase();
-    return items.filter((r) =>
+
+    return base.filter((r) =>
       String(r.user_id).toLowerCase().includes(s) ||
       String(r.user_name || "").toLowerCase().includes(s) ||
       String(r.user_telegram || "").toLowerCase().includes(s) ||
@@ -67,7 +80,7 @@ export default function AdminInsideRequests() {
       String(r.chapter || "").toLowerCase().includes(s) ||
       String(r.status || "").toLowerCase().includes(s)
     );
-  }, [items, q]);
+  }, [items, q, status]);
 
   async function onApprove(row) {
     try {
@@ -143,9 +156,17 @@ export default function AdminInsideRequests() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-6 text-gray-500" colSpan={8}>Загрузка…</td></tr>
+              <tr>
+                <td className="px-4 py-6 text-gray-500" colSpan={8}>
+                  Загрузка…
+                </td>
+              </tr>
             ) : filtered.length === 0 ? (
-              <tr><td className="px-4 py-6 text-gray-500" colSpan={8}>Нет данных</td></tr>
+              <tr>
+                <td className="px-4 py-6 text-gray-500" colSpan={8}>
+                  Нет данных
+                </td>
+              </tr>
             ) : (
               filtered.map((r) => (
                 <tr key={r.id} className="border-t">
@@ -155,28 +176,41 @@ export default function AdminInsideRequests() {
                       {r.user_name ? r.user_name : `user_id: ${r.user_id}`}
                     </div>
                     {r.user_telegram && (
-                      <div className="text-xs text-gray-500">{r.user_telegram}</div>
+                      <div className="text-xs text-gray-500">
+                        {r.user_telegram}
+                      </div>
                     )}
                   </td>
-                  <td className="px-4 py-2"><ChapterBadge chapter={r.chapter} /></td>
+                  <td className="px-4 py-2">
+                    <ChapterBadge chapter={r.chapter} />
+                  </td>
                   <td className="px-4 py-2">{r.status}</td>
                   <td className="px-4 py-2">
-                    {r.requested_at ? new Date(r.requested_at).toLocaleString() : "—"}
+                    {r.requested_at
+                      ? new Date(r.requested_at).toLocaleString()
+                      : "—"}
                   </td>
                   <td className="px-4 py-2">
-                    {r.user_telegram ? (
+                    {r.curator_telegram ? (
                       <a
-                        href={`https://t.me/${String(r.user_telegram).replace(/^@/, "")}`}
+                        href={`https://t.me/${String(r.curator_telegram).replace(
+                          /^@/,
+                          ""
+                        )}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-blue-600 hover:underline"
                       >
-                        {r.user_telegram}
+                        {r.curator_telegram}
                       </a>
-                    ) : "—"}
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-2">
-                    {r.resolved_at ? new Date(r.resolved_at).toLocaleString() : "—"}
+                    {r.resolved_at
+                      ? new Date(r.resolved_at).toLocaleString()
+                      : "—"}
                   </td>
                   <td className="px-4 py-2">
                     {r.status === "pending" ? (
@@ -189,7 +223,9 @@ export default function AdminInsideRequests() {
                         >
                           <option value="">следующая автоматически</option>
                           {CHAPTERS.map((c) => (
-                            <option key={c.key} value={c.key}>{c.label}</option>
+                            <option key={c.key} value={c.key}>
+                              {c.label}
+                            </option>
                           ))}
                         </select>
                         <button
@@ -219,8 +255,8 @@ export default function AdminInsideRequests() {
       </div>
 
       <div className="mt-3 text-xs text-gray-500">
-        Подсказка: если не выбрана «Следующая глава», система возьмёт следующую по порядку.
-        При достижении 4/4 статус участника становится <b>completed</b>.
+        Подсказка: если не выбрана «Следующая глава», система возьмёт следующую по
+        порядку. При достижении 4/4 статус участника становится <b>completed</b>.
       </div>
     </div>
   );
