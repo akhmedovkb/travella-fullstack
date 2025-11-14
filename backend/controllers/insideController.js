@@ -103,8 +103,8 @@ async function getInsideStatus(_req, res) {
 
 // POST /api/inside/request-completion
 async function requestCompletion(req, res) {
-  const userId = req.user.id;                  // как вы сейчас берёте id
-  const { chapter } = req.body;                // 'royal' | 'silence' | ...
+  const userId = req.user.id;
+  const { chapter } = req.body; // 'royal' | 'silence' | ...
   try {
     const q = `
       INSERT INTO inside_completion_requests (user_id, chapter, status)
@@ -122,7 +122,7 @@ async function requestCompletion(req, res) {
     return res.json({ ok: true, item: rows[0] });
   } catch (err) {
     // Если индекс ещё не создан (42704) — мягкий фолбэк:
-    if (err.code === '42704') {
+    if (err.code === "42704") {
       // проверяем, есть ли уже pending
       const chk = await pool.query(
         `SELECT 1 FROM inside_completion_requests
@@ -140,11 +140,10 @@ async function requestCompletion(req, res) {
       return res.json({ ok: true, item: ins.rows[0] });
     }
 
-    console.error('requestCompletion error:', err);
-    return res.status(500).json({ error: 'request_failed' });
+    console.error("requestCompletion error:", err);
+    return res.status(500).json({ error: "request_failed" });
   }
 }
-
 
 // POST /api/inside/join — клиент вручную присоединяется к программе
 async function joinInside(req, res) {
@@ -166,7 +165,7 @@ async function joinInside(req, res) {
          (user_id, program_key, current_chapter, progress_current, progress_total, status, curator_telegram)
        VALUES ($1, 'india_inside', $2, 0, $3, 'active', '@akhmedovkb')
        RETURNING *`,
-      [userId, CHAPTERS_ORDER[0] || 'royal', PROGRESS_TOTAL_DEFAULT]
+      [userId, CHAPTERS_ORDER[0] || "royal", PROGRESS_TOTAL_DEFAULT]
     );
 
     return res.json(ok({ participant: rows[0], message: "joined" }));
@@ -196,8 +195,11 @@ async function getMyLastRequest(req, res) {
     if (!r) return res.json(null);
 
     const resolved_at =
-      r.status === "approved" ? r.approved_at :
-      r.status === "rejected" ? r.rejected_at : null;
+      r.status === "approved"
+        ? r.approved_at
+        : r.status === "rejected"
+        ? r.rejected_at
+        : null;
 
     return res.json({ ...r, resolved_at });
   } catch (e) {
@@ -205,111 +207,49 @@ async function getMyLastRequest(req, res) {
     return res.status(500).json({ error: "Failed to get last request" });
   }
 }
-/** Получить список всех глав с их статусом (даты, оставшиеся места) */
-async function listChapters(_req, res) {
-  try {
-    const sql = `
-      SELECT 
-        c.chapter_key,
-        c.title,
-        c.starts_at,
-        c.capacity,
-        COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')) AS enrolled_count,
-        GREATEST(c.capacity - COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')), 0) AS places_left
-      FROM inside_chapters c
-      LEFT JOIN inside_chapter_enrollments e
-        ON e.chapter_key = c.chapter_key
-      GROUP BY c.chapter_key, c.title, c.starts_at, c.capacity
-      ORDER BY c.starts_at ASC NULLS LAST
-    `;
-    const { rows } = await pool.query(sql);
-    res.json({ items: rows });
-  } catch (err) {
-    console.error("listChapters error:", err);
-    res.status(500).json({ error: "failed_list_chapters" });
-  }
-}
 
-/** Получить самую ближайшую главу */
-async function getNextChapter(_req, res) {
+/** -------- Ближайшая глава (public) -------- */
+
+// GET /api/inside/chapters/next
+async function getNextChapterPublic(_req, res) {
   try {
-    const sql = `
-      SELECT 
-        c.chapter_key,
-        c.title,
-        c.starts_at,
-        c.capacity,
-        COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')) AS enrolled_count,
-        GREATEST(c.capacity - COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')), 0) AS places_left
-      FROM inside_chapters c
-      LEFT JOIN inside_chapter_enrollments e
-        ON e.chapter_key = c.chapter_key
-      WHERE c.starts_at IS NOT NULL
-      GROUP BY c.chapter_key, c.title, c.starts_at, c.capacity
-      ORDER BY c.starts_at ASC
+    const { rows } = await pool.query(
+      `
+      SELECT
+        chapter_key,
+        title,
+        starts_at,
+        capacity,
+        enrolled_count,
+        status
+      FROM inside_chapters
+      WHERE starts_at IS NOT NULL
+        AND (status IS NULL OR status IN ('scheduled','open'))
+      ORDER BY starts_at ASC
       LIMIT 1
-    `;
-    const { rows } = await pool.query(sql);
-    res.json(rows[0] || null);
-  } catch (err) {
-    console.error("getNextChapter error:", err);
-    res.status(500).json({ error: "failed_next_chapter" });
-  }
-}
-
-/** Клиент отправляет “Запросить участие в главе” */
-async function enrollRequest(req, res) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-    const { chapter_key } = req.body;
-    if (!chapter_key) return res.status(400).json({ error: "bad_chapter_key" });
-
-    // Проверяем наличие записи
-    const existing = await pool.query(
-      `SELECT * FROM inside_chapter_enrollments 
-       WHERE user_id=$1 AND chapter_key=$2 LIMIT 1`,
-      [userId, chapter_key]
+    `
     );
 
-    if (existing.rowCount > 0) {
-      return res.json({ ok: true, already: true, enrollment: existing.rows[0] });
-    }
+    if (!rows.length) return res.json(null);
 
-    const ins = await pool.query(
-      `INSERT INTO inside_chapter_enrollments
-        (user_id, chapter_key, status)
-       VALUES ($1, $2, 'pending')
-       RETURNING *`,
-      [userId, chapter_key]
-    );
+    const r = rows[0];
+    const capacity = r.capacity != null ? Number(r.capacity) : null;
+    const enrolled = r.enrolled_count != null ? Number(r.enrolled_count) : 0;
+    const places_left =
+      capacity != null ? Math.max(0, capacity - enrolled) : null;
 
-    return res.json({ ok: true, enrollment: ins.rows[0] });
-  } catch (err) {
-    console.error("enrollRequest error:", err);
-    res.status(500).json({ error: "failed_enroll" });
-  }
-}
-
-/** Статус участия клиента по всем главам */
-async function getMyEnrollments(req, res) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-    const sql = `
-      SELECT chapter_key, status, requested_at, approved_at, rejected_at
-      FROM inside_chapter_enrollments
-      WHERE user_id=$1
-      ORDER BY requested_at ASC
-    `;
-    const { rows } = await pool.query(sql);
-
-    res.json({ items: rows });
-  } catch (err) {
-    console.error("getMyEnrollments error:", err);
-    res.status(500).json({ error: "failed_my_enrolls" });
+    return res.json({
+      chapter_key: r.chapter_key,
+      title: r.title,
+      starts_at: r.starts_at,
+      capacity,
+      enrolled_count: enrolled,
+      places_left,
+      status: r.status || "scheduled",
+    });
+  } catch (e) {
+    console.error("getNextChapterPublic error:", e);
+    return res.status(500).json({ error: "Failed to get next chapter" });
   }
 }
 
@@ -318,13 +258,15 @@ async function getMyEnrollments(req, res) {
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
 async function adminListRequests(req, res) {
   try {
-    const limit  = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
     const offset = Math.max(0, Number(req.query.offset || 0));
 
     // нормализуем статус
     let status = String(req.query.status || "").trim().toLowerCase();
-    if (["wait","waiting","expected","ожидают","ожидание"].includes(status)) status = "pending";
-    if (!["pending","approved","rejected","all",""].includes(status)) status = ""; // неизвестное → не фильтруем
+    if (["wait", "waiting", "expected", "ожидают", "ожидание"].includes(status))
+      status = "pending";
+    if (!["pending", "approved", "rejected", "all", ""].includes(status))
+      status = ""; // неизвестное → не фильтруем
 
     const q = String(req.query.q || "").trim();
     const chapter = String(req.query.chapter || "").trim();
@@ -407,14 +349,16 @@ async function adminListRequests(req, res) {
       LEFT JOIN clients u ON u.id = r.user_id
       ${whereSql}
     `;
-    const { rows: countRows } = await pool.query(countSql, params.slice(0, params.length - 2));
+    const { rows: countRows } = await pool.query(
+      countSql,
+      params.slice(0, params.length - 2)
+    );
     res.json({ items: rows, total: countRows[0]?.total ?? rows.length });
   } catch (err) {
     console.error("adminListRequests error:", err);
     res.status(500).json({ error: "admin_list_failed" });
   }
 }
-
 
 // POST /api/admin/inside/requests/:id/approve { next_chapter? }
 async function adminApproveRequest(req, res) {
@@ -442,31 +386,27 @@ async function adminApproveRequest(req, res) {
     await ensureParticipant(r.user_id);
 
     // продвигаем участника
-const upd = await pool.query(
-  `UPDATE inside_participants
-      SET progress_current = LEAST(progress_current + 1, progress_total),
-          current_chapter  = CASE
-                               -- если куратор выбрал next_chapter в селекте → ставим его
-                               WHEN $2 IS NOT NULL AND $2 <> '' THEN $2
-                               -- если это самый первый раз и current_chapter пустой → ставим первую главу
-                               WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
-                               -- иначе главу не трогаем, остаётся та, что была активна
-                               ELSE current_chapter
-                             END,
-          status = CASE
-                     WHEN LEAST(progress_current + 1, progress_total) >= progress_total
-                       THEN 'completed'
-                     ELSE status
-                   END,
-          updated_at = NOW()
-    WHERE user_id = $1
-    RETURNING user_id, current_chapter, progress_current, progress_total, status`,
-  [
-    r.user_id,
-    next_chapter || null,
-    CHAPTERS_ORDER[0] || "royal",
-  ]
-);
+    const upd = await pool.query(
+      `UPDATE inside_participants
+          SET progress_current = LEAST(progress_current + 1, progress_total),
+              current_chapter  = CASE
+                                   -- если куратор выбрал next_chapter в селекте → ставим его
+                                   WHEN $2 IS NOT NULL AND $2 <> '' THEN $2
+                                   -- если это самый первый раз и current_chapter пустой → ставим первую главу
+                                   WHEN current_chapter IS NULL OR current_chapter = '' THEN $3
+                                   -- иначе главу не трогаем, остаётся та, что была активна
+                                   ELSE current_chapter
+                                 END,
+              status = CASE
+                         WHEN LEAST(progress_current + 1, progress_total) >= progress_total
+                           THEN 'completed'
+                         ELSE status
+                       END,
+              updated_at = NOW()
+        WHERE user_id = $1
+        RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+      [r.user_id, next_chapter || null, CHAPTERS_ORDER[0] || "royal"]
+    );
 
     // закрываем заявку (без resolved_at!)
     const done = await pool.query(
@@ -522,10 +462,7 @@ async function adminRejectRequest(req, res) {
     return res.status(500).json({ error: "admin_reject_failed" });
   }
 }
-// GET /api/inside/admin/requests?status=pending|approved|rejected|all
-// (оставляем только одну реализацию adminListRequests)
 
-// (необязательно, но заодно сделаем участников «человекочитаемыми»)
 // GET /api/inside/admin/participants
 async function adminListParticipants(_req, res) {
   try {
@@ -545,6 +482,80 @@ async function adminListParticipants(_req, res) {
   }
 }
 
+/** -------- admin главы (расписание) -------- */
+
+// GET /api/inside/admin/chapters
+async function adminListChapters(req, res) {
+  try {
+    if (!req.user?.is_admin && !req.user?.is_moderator) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT id, chapter_key, title, starts_at, capacity, enrolled_count, status,
+             created_at, updated_at
+      FROM inside_chapters
+      ORDER BY starts_at NULLS LAST, chapter_key
+    `
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error("adminListChapters error:", e);
+    return res.status(500).json({ error: "Failed to list chapters" });
+  }
+}
+
+// POST /api/inside/admin/chapters  (upsert по chapter_key)
+async function adminUpsertChapter(req, res) {
+  try {
+    if (!req.user?.is_admin && !req.user?.is_moderator) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const {
+      chapter_key,
+      title,
+      starts_at,
+      capacity,
+      enrolled_count,
+      status,
+    } = req.body || {};
+
+    if (!chapter_key) {
+      return res.status(400).json({ error: "chapter_key_required" });
+    }
+
+    const sql = `
+      INSERT INTO inside_chapters (chapter_key, title, starts_at, capacity, enrolled_count, status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (chapter_key)
+      DO UPDATE SET
+        title          = COALESCE(EXCLUDED.title, inside_chapters.title),
+        starts_at      = COALESCE(EXCLUDED.starts_at, inside_chapters.starts_at),
+        capacity       = COALESCE(EXCLUDED.capacity, inside_chapters.capacity),
+        enrolled_count = COALESCE(EXCLUDED.enrolled_count, inside_chapters.enrolled_count),
+        status         = COALESCE(EXCLUDED.status, inside_chapters.status),
+        updated_at     = NOW()
+      RETURNING *
+    `;
+
+    const { rows } = await pool.query(sql, [
+      chapter_key,
+      title || null,
+      starts_at || null,
+      capacity != null ? Number(capacity) : null,
+      enrolled_count != null ? Number(enrolled_count) : null,
+      status || null,
+    ]);
+
+    return res.json(ok({ chapter: rows[0] }));
+  } catch (e) {
+    console.error("adminUpsertChapter error:", e);
+    return res.status(500).json({ error: "Failed to save chapter" });
+  }
+}
+
 module.exports = {
   // client/public
   getInsideMe,
@@ -553,13 +564,13 @@ module.exports = {
   requestCompletion,
   joinInside,
   getMyLastRequest,
-  listChapters,
-  getNextChapter,
-  enrollRequest,
-  getMyEnrollments,
+  getNextChapterPublic,
+
   // admin
   adminListRequests,
   adminApproveRequest,
   adminRejectRequest,
   adminListParticipants,
+  adminListChapters,
+  adminUpsertChapter,
 };
