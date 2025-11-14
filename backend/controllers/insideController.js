@@ -51,6 +51,8 @@ async function getInsideMe(req, res) {
          p.curator_telegram,
          p.status,
          c.starts_at      AS chapter_starts_at,
+         c.tour_starts_at AS chapter_tour_starts_at,
+         c.tour_ends_at   AS chapter_tour_ends_at,
          c.capacity       AS chapter_capacity,
          c.enrolled_count AS chapter_enrolled_count,
          c.status         AS chapter_status
@@ -79,7 +81,11 @@ async function getInsideMe(req, res) {
       program_key: p.program_key || "india_inside",
       chapter: {
         key: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+        // дата старта набора
         starts_at: p.chapter_starts_at,
+        // отдельные даты самого тура (могут быть null)
+        tour_starts_at: p.chapter_tour_starts_at,
+        tour_ends_at: p.chapter_tour_ends_at,
         capacity,
         enrolled_count: enrolled,
         remaining,
@@ -108,6 +114,8 @@ async function getInsideById(req, res) {
          p.curator_telegram,
          p.status,
          c.starts_at      AS chapter_starts_at,
+         c.tour_starts_at AS chapter_tour_starts_at,
+         c.tour_ends_at   AS chapter_tour_ends_at,
          c.capacity       AS chapter_capacity,
          c.enrolled_count AS chapter_enrolled_count,
          c.status         AS chapter_status
@@ -136,7 +144,11 @@ async function getInsideById(req, res) {
       program_key: p.program_key || "india_inside",
       chapter: {
         key: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+        // дата старта набора
         starts_at: p.chapter_starts_at,
+        // даты тура
+        tour_starts_at: p.chapter_tour_starts_at,
+        tour_ends_at: p.chapter_tour_ends_at,
         capacity,
         enrolled_count: enrolled,
         remaining,
@@ -289,6 +301,8 @@ async function getNextChapterPublic(_req, res) {
         chapter_key,
         title,
         starts_at,
+        tour_starts_at,
+        tour_ends_at,
         capacity,
         enrolled_count,
         status
@@ -312,6 +326,8 @@ async function getNextChapterPublic(_req, res) {
       chapter_key: r.chapter_key,
       title: r.title,
       starts_at: r.starts_at,
+      tour_starts_at: r.tour_starts_at,
+      tour_ends_at: r.tour_ends_at,
       capacity,
       enrolled_count: enrolled,
       places_left,
@@ -568,7 +584,9 @@ async function adminListChapters(req, res) {
 
     const { rows } = await pool.query(
       `
-      SELECT id, chapter_key, title, starts_at, capacity, enrolled_count, status,
+      SELECT id, chapter_key, title,
+             starts_at, tour_starts_at, tour_ends_at,
+             capacity, enrolled_count, status,
              created_at, updated_at
       FROM inside_chapters
       ORDER BY starts_at NULLS LAST, chapter_key
@@ -592,6 +610,8 @@ async function adminUpsertChapter(req, res) {
       chapter_key,
       title,
       starts_at,
+      tour_starts_at,
+      tour_ends_at,
       capacity,
       enrolled_count,
       status,
@@ -600,14 +620,26 @@ async function adminUpsertChapter(req, res) {
     if (!chapter_key) {
       return res.status(400).json({ error: "chapter_key_required" });
     }
+    // пустые строки приводим к NULL, чтобы не ломать тип timestamptz
+    const normalizeDate = (v) => {
+      if (!v) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    };
 
     const sql = `
-      INSERT INTO inside_chapters (chapter_key, title, starts_at, capacity, enrolled_count, status)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO inside_chapters (
+        chapter_key, title,
+        starts_at, tour_starts_at, tour_ends_at,
+        capacity, enrolled_count, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (chapter_key)
       DO UPDATE SET
         title          = COALESCE(EXCLUDED.title, inside_chapters.title),
         starts_at      = COALESCE(EXCLUDED.starts_at, inside_chapters.starts_at),
+        tour_starts_at = COALESCE(EXCLUDED.tour_starts_at, inside_chapters.tour_starts_at),
+        tour_ends_at   = COALESCE(EXCLUDED.tour_ends_at, inside_chapters.tour_ends_at),
         capacity       = COALESCE(EXCLUDED.capacity, inside_chapters.capacity),
         enrolled_count = COALESCE(EXCLUDED.enrolled_count, inside_chapters.enrolled_count),
         status         = COALESCE(EXCLUDED.status, inside_chapters.status),
@@ -618,7 +650,9 @@ async function adminUpsertChapter(req, res) {
     const { rows } = await pool.query(sql, [
       chapter_key,
       title || null,
-      starts_at || null,
+      normalizeDate(starts_at),
+      normalizeDate(tour_starts_at),
+      normalizeDate(tour_ends_at),
       capacity != null ? Number(capacity) : null,
       enrolled_count != null ? Number(enrolled_count) : null,
       status || null,
