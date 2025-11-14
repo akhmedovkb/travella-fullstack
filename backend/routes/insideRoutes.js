@@ -26,22 +26,26 @@ if (typeof ctrl.adminRejectRequest === "function") {
   router.post("/admin/requests/:id/reject", authenticateToken, ctrl.adminRejectRequest);
 }
 
+// 👇 Админские маршруты для глав
+if (typeof ctrl.adminListChapters === "function") {
+  router.get("/admin/chapters", authenticateToken, ctrl.adminListChapters);
+}
+if (typeof ctrl.adminUpsertChapter === "function") {
+  router.post("/admin/chapters", authenticateToken, ctrl.adminUpsertChapter);
+}
+
 // ---------- Клиентские эндпоинты ----------
 router.get("/me", authenticateToken, ctrl.getInsideMe);
 router.get("/user/:userId", authenticateToken, ctrl.getInsideById);
 router.get("/", ctrl.getInsideStatus);
+
+// ближайшая глава (публичный, только чтение)
+router.get("/chapters/next", ctrl.getNextChapterPublic);
+
 router.post("/request-completion", authenticateToken, ctrl.requestCompletion);
 router.post("/join", authenticateToken, ctrl.joinInside);
 
-// ✅ Исправлено: используем ctrl, а не inside
+// последний запрос на завершение
 router.get("/my-request", authenticateToken, ctrl.getMyLastRequest);
-// Chapters (public)
-router.get("/chapters", ctrl.listChapters);
-router.get("/chapters/next", ctrl.getNextChapter);
-
-// Enrollment (client)
-router.post("/enroll", authenticateToken, ctrl.enrollRequest);
-router.get("/enroll/status", authenticateToken, ctrl.getMyEnrollments);
-
 
 module.exports = router;
