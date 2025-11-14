@@ -7,6 +7,7 @@ import {
   rejectRequest,
 } from "../../api/inside";
 import { tError, tInfo, tSuccess } from "../../shared/toast";
+import AdminInsideChapters from "./AdminInsideChapters";
 
 const CHAPTERS = [
   { key: "royal",   label: "Золотой Треугольник" },
@@ -32,7 +33,7 @@ function ChapterBadge({ chapter }) {
 }
 
 export default function AdminInsideRequests() {
-  const { t } = useTranslation();
+  const { t } = useTranslation(); // пока не используется, но оставим на будущее
   const [status, setStatus] = useState("pending"); // pending|approved|rejected|all
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,152 +112,157 @@ export default function AdminInsideRequests() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-semibold">Inside → Заявки на завершение</h1>
-        <div className="ml-auto flex gap-2">
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="border rounded-lg px-3 py-2 bg-white"
-          >
-            <option value="pending">Ожидают</option>
-            <option value="approved">Подтверждено</option>
-            <option value="rejected">Отклонено</option>
-            <option value="all">Все</option>
-          </select>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Поиск (user_id/глава/статус)"
-            className="border rounded-lg px-3 py-2 w-64"
-          />
-          <button
-            onClick={load}
-            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-          >
-            Обновить
-          </button>
-        </div>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-10">
+      {/* Блок расписания глав сверху */}
+      <AdminInsideChapters />
 
-      <div className="bg-white rounded-xl shadow border overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr>
-              <th className="text-left px-4 py-2">ID</th>
-              <th className="text-left px-4 py-2">Пользователь</th>
-              <th className="text-left px-4 py-2">Глава</th>
-              <th className="text-left px-4 py-2">Статус</th>
-              <th className="text-left px-4 py-2">Создано</th>
-              <th className="text-left px-4 py-2">Куратор</th>
-              <th className="text-left px-4 py-2">Решение</th>
-              <th className="text-left px-4 py-2">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {/* Ниже — заявки на завершение глав */}
+      <div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold">Inside → Заявки на завершение</h1>
+          <div className="ml-auto flex gap-2">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="border rounded-lg px-3 py-2 bg-white"
+            >
+              <option value="pending">Ожидают</option>
+              <option value="approved">Подтверждено</option>
+              <option value="rejected">Отклонено</option>
+              <option value="all">Все</option>
+            </select>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Поиск (user_id/глава/статус)"
+              className="border rounded-lg px-3 py-2 w-64"
+            />
+            <button
+              onClick={load}
+              className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            >
+              Обновить
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow border overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <td className="px-4 py-6 text-gray-500" colSpan={8}>
-                  Загрузка…
-                </td>
+                <th className="text-left px-4 py-2">ID</th>
+                <th className="text-left px-4 py-2">Пользователь</th>
+                <th className="text-left px-4 py-2">Глава</th>
+                <th className="text-left px-4 py-2">Статус</th>
+                <th className="text-left px-4 py-2">Создано</th>
+                <th className="text-left px-4 py-2">Куратор</th>
+                <th className="text-left px-4 py-2">Решение</th>
+                <th className="text-left px-4 py-2">Действия</th>
               </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td className="px-4 py-6 text-gray-500" colSpan={8}>
-                  Нет данных
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-4 py-2">{r.id}</td>
-                  <td className="px-4 py-2">
-                    <div className="font-medium">
-                      {r.user_name ? r.user_name : `user_id: ${r.user_id}`}
-                    </div>
-                    {r.user_telegram && (
-                      <div className="text-xs text-gray-500">
-                        {r.user_telegram}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <ChapterBadge chapter={r.chapter} />
-                  </td>
-                  <td className="px-4 py-2">{r.status}</td>
-                  <td className="px-4 py-2">
-                    {r.requested_at
-                      ? new Date(r.requested_at).toLocaleString()
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.curator_telegram ? (
-                      <a
-                        href={`https://t.me/${String(r.curator_telegram).replace(
-                          /^@/,
-                          ""
-                        )}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        {r.curator_telegram}
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.resolved_at
-                      ? new Date(r.resolved_at).toLocaleString()
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.status === "pending" ? (
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={nextChapter}
-                          onChange={(e) => setNextChapter(e.target.value)}
-                          className="border rounded-lg px-2 py-1 text-xs bg-white"
-                          title="Следующая глава (опционально)"
-                        >
-                          <option value="">следующая автоматически</option>
-                          {CHAPTERS.map((c) => (
-                            <option key={c.key} value={c.key}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => onApprove(r)}
-                          disabled={busyId === r.id}
-                          className="px-2 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-60"
-                        >
-                          {busyId === r.id ? "..." : "Подтвердить"}
-                        </button>
-                        <button
-                          onClick={() => onReject(r)}
-                          disabled={busyId === r.id}
-                          className="px-2 py-1 rounded border text-xs hover:bg-gray-50 disabled:opacity-60"
-                        >
-                          Отклонить
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400 text-xs">—</span>
-                    )}
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="px-4 py-6 text-gray-500" colSpan={8}>
+                    Загрузка…
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-gray-500" colSpan={8}>
+                    Нет данных
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="px-4 py-2">{r.id}</td>
+                    <td className="px-4 py-2">
+                      <div className="font-medium">
+                        {r.user_name ? r.user_name : `user_id: ${r.user_id}`}
+                      </div>
+                      {r.user_telegram && (
+                        <div className="text-xs text-gray-500">
+                          {r.user_telegram}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      <ChapterBadge chapter={r.chapter} />
+                    </td>
+                    <td className="px-4 py-2">{r.status}</td>
+                    <td className="px-4 py-2">
+                      {r.requested_at
+                        ? new Date(r.requested_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      {r.curator_telegram ? (
+                        <a
+                          href={`https://t.me/${String(
+                            r.curator_telegram
+                          ).replace(/^@/, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          {r.curator_telegram}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {r.resolved_at
+                        ? new Date(r.resolved_at).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      {r.status === "pending" ? (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={nextChapter}
+                            onChange={(e) => setNextChapter(e.target.value)}
+                            className="border rounded-lg px-2 py-1 text-xs bg-white"
+                            title="Следующая глава (опционально)"
+                          >
+                            <option value="">следующая автоматически</option>
+                            {CHAPTERS.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => onApprove(r)}
+                            disabled={busyId === r.id}
+                            className="px-2 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-60"
+                          >
+                            {busyId === r.id ? "..." : "Подтвердить"}
+                          </button>
+                          <button
+                            onClick={() => onReject(r)}
+                            disabled={busyId === r.id}
+                            className="px-2 py-1 rounded border text-xs hover:bg-gray-50 disabled:opacity-60"
+                          >
+                            Отклонить
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <div className="mt-3 text-xs text-gray-500">
-        Подсказка: если не выбрана «Следующая глава», система возьмёт следующую по
-        порядку. При достижении 4/4 статус участника становится <b>completed</b>.
+        <div className="mt-3 text-xs text-gray-500">
+          Подсказка: если не выбрана «Следующая глава», система возьмёт следующую по
+          порядку. При достижении 4/4 статус участника становится <b>completed</b>.
+        </div>
       </div>
     </div>
   );
