@@ -62,6 +62,7 @@ export default function AdminInsideChapters() {
     try {
       setLoading(true);
       setError("");
+
       const res = await fetch("/api/inside/admin/chapters", {
         headers: {
           "Content-Type": "application/json",
@@ -69,7 +70,13 @@ export default function AdminInsideChapters() {
         },
       });
 
-      if (!res.ok) {
+      // 304 Not Modified — не считаем ошибкой
+      if (res.status === 304) {
+        // оставляем уже загруженные главы (если были)
+        return;
+      }
+
+      if (res.status < 200 || res.status >= 300) {
         throw new Error(`HTTP ${res.status}`);
       }
 
@@ -82,7 +89,6 @@ export default function AdminInsideChapters() {
       setLoading(false);
     }
   }
-
   useEffect(() => {
     loadChapters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
