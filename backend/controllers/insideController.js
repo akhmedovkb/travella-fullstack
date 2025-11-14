@@ -576,8 +576,13 @@ async function adminListParticipants(_req, res) {
 /** -------- admin главы (расписание) -------- */
 
 // GET /api/inside/admin/chapters
-async function adminListChapters(_req, res) {
+async function adminListChapters(req, res) {
   try {
+    // доступ только админу / модератору
+    if (!req.user?.is_admin && !req.user?.is_moderator) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const { rows } = await pool.query(
       `
       SELECT id, chapter_key, title,
@@ -588,6 +593,14 @@ async function adminListChapters(_req, res) {
       ORDER BY starts_at NULLS LAST, chapter_key
     `
     );
+
+    // жёстко отключаем кэширование этого ответа
+    res.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, max-age=0"
+    );
+    res.set("Pragma", "no-cache");
+
     return res.json(rows);
   } catch (e) {
     console.error("adminListChapters error:", e);
