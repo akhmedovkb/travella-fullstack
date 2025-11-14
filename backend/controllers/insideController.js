@@ -2,7 +2,7 @@
 const pool = require("../db");
 
 /** -------- helpers -------- */
-const CHAPTERS_ORDER = ["royal", "gold_triangle", "jaipur", "guru"]; // при желании под себя
+const CHAPTERS_ORDER = ["royal", "silence", "modern", "kerala"];
 const PROGRESS_TOTAL_DEFAULT = 4;
 
 function ok(data = {}) { return { ok: true, ...data }; }
@@ -349,7 +349,6 @@ async function adminApproveRequest(req, res) {
                            THEN 'completed'
                          ELSE status
                        END,
-              updated_at = NOW()
         WHERE user_id = $1
       RETURNING user_id, current_chapter, progress_current, progress_total, status`,
       [
