@@ -576,12 +576,8 @@ async function adminListParticipants(_req, res) {
 /** -------- admin главы (расписание) -------- */
 
 // GET /api/inside/admin/chapters
-async function adminListChapters(req, res) {
+async function adminListChapters(_req, res) {
   try {
-    if (!req.user?.is_admin && !req.user?.is_moderator) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
     const { rows } = await pool.query(
       `
       SELECT id, chapter_key, title,
@@ -602,10 +598,6 @@ async function adminListChapters(req, res) {
 // POST /api/inside/admin/chapters  (upsert по chapter_key)
 async function adminUpsertChapter(req, res) {
   try {
-    if (!req.user?.is_admin && !req.user?.is_moderator) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
     const {
       chapter_key,
       title,
