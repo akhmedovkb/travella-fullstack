@@ -143,9 +143,9 @@ export default function AdminInsideRequests() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-6 text-gray-500" colSpan={7}>Загрузка…</td></tr>
+              <tr><td className="px-4 py-6 text-gray-500" colSpan={8}>Загрузка…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td className="px-4 py-6 text-gray-500" colSpan={7}>Нет данных</td></tr>
+              <tr><td className="px-4 py-6 text-gray-500" colSpan={8}>Нет данных</td></tr>
             ) : (
               filtered.map((r) => (
                 <tr key={r.id} className="border-t">
@@ -161,22 +161,22 @@ export default function AdminInsideRequests() {
                   <td className="px-4 py-2"><ChapterBadge chapter={r.chapter} /></td>
                   <td className="px-4 py-2">{r.status}</td>
                   <td className="px-4 py-2">
-                    {r.created_at ? new Date(r.created_at).toLocaleString() : "—"}
+                    {r.requested_at ? new Date(r.requested_at).toLocaleString() : "—"}
                   </td>
                   <td className="px-4 py-2">
-                    {r.curator_telegram ? (
+                    {r.user_telegram ? (
                       <a
-                        href={`https://t.me/${String(r.curator_telegram).replace(/^@/, "")}`}
+                        href={`https://t.me/${String(r.user_telegram).replace(/^@/, "")}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-blue-600 hover:underline"
                       >
-                        {r.curator_telegram}
+                        {r.user_telegram}
                       </a>
                     ) : "—"}
                   </td>
                   <td className="px-4 py-2">
-                    {r.decided_at ? new Date(r.decided_at).toLocaleString() : "—"}
+                    {r.resolved_at ? new Date(r.resolved_at).toLocaleString() : "—"}
                   </td>
                   <td className="px-4 py-2">
                     {r.status === "pending" ? (
