@@ -205,6 +205,113 @@ async function getMyLastRequest(req, res) {
     return res.status(500).json({ error: "Failed to get last request" });
   }
 }
+/** Получить список всех глав с их статусом (даты, оставшиеся места) */
+async function listChapters(_req, res) {
+  try {
+    const sql = `
+      SELECT 
+        c.chapter_key,
+        c.title,
+        c.starts_at,
+        c.capacity,
+        COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')) AS enrolled_count,
+        GREATEST(c.capacity - COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')), 0) AS places_left
+      FROM inside_chapters c
+      LEFT JOIN inside_chapter_enrollments e
+        ON e.chapter_key = c.chapter_key
+      GROUP BY c.chapter_key, c.title, c.starts_at, c.capacity
+      ORDER BY c.starts_at ASC NULLS LAST
+    `;
+    const { rows } = await pool.query(sql);
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("listChapters error:", err);
+    res.status(500).json({ error: "failed_list_chapters" });
+  }
+}
+
+/** Получить самую ближайшую главу */
+async function getNextChapter(_req, res) {
+  try {
+    const sql = `
+      SELECT 
+        c.chapter_key,
+        c.title,
+        c.starts_at,
+        c.capacity,
+        COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')) AS enrolled_count,
+        GREATEST(c.capacity - COUNT(e.*) FILTER (WHERE e.status IN ('pending','approved')), 0) AS places_left
+      FROM inside_chapters c
+      LEFT JOIN inside_chapter_enrollments e
+        ON e.chapter_key = c.chapter_key
+      WHERE c.starts_at IS NOT NULL
+      GROUP BY c.chapter_key, c.title, c.starts_at, c.capacity
+      ORDER BY c.starts_at ASC
+      LIMIT 1
+    `;
+    const { rows } = await pool.query(sql);
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error("getNextChapter error:", err);
+    res.status(500).json({ error: "failed_next_chapter" });
+  }
+}
+
+/** Клиент отправляет “Запросить участие в главе” */
+async function enrollRequest(req, res) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { chapter_key } = req.body;
+    if (!chapter_key) return res.status(400).json({ error: "bad_chapter_key" });
+
+    // Проверяем наличие записи
+    const existing = await pool.query(
+      `SELECT * FROM inside_chapter_enrollments 
+       WHERE user_id=$1 AND chapter_key=$2 LIMIT 1`,
+      [userId, chapter_key]
+    );
+
+    if (existing.rowCount > 0) {
+      return res.json({ ok: true, already: true, enrollment: existing.rows[0] });
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO inside_chapter_enrollments
+        (user_id, chapter_key, status)
+       VALUES ($1, $2, 'pending')
+       RETURNING *`,
+      [userId, chapter_key]
+    );
+
+    return res.json({ ok: true, enrollment: ins.rows[0] });
+  } catch (err) {
+    console.error("enrollRequest error:", err);
+    res.status(500).json({ error: "failed_enroll" });
+  }
+}
+
+/** Статус участия клиента по всем главам */
+async function getMyEnrollments(req, res) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const sql = `
+      SELECT chapter_key, status, requested_at, approved_at, rejected_at
+      FROM inside_chapter_enrollments
+      WHERE user_id=$1
+      ORDER BY requested_at ASC
+    `;
+    const { rows } = await pool.query(sql);
+
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("getMyEnrollments error:", err);
+    res.status(500).json({ error: "failed_my_enrolls" });
+  }
+}
 
 /** -------- admin -------- */
 
@@ -446,6 +553,10 @@ module.exports = {
   requestCompletion,
   joinInside,
   getMyLastRequest,
+  listChapters,
+  getNextChapter,
+  enrollRequest,
+  getMyEnrollments,
   // admin
   adminListRequests,
   adminApproveRequest,
