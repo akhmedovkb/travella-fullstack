@@ -611,6 +611,11 @@ async function adminListChapters(req, res) {
 // POST /api/inside/admin/chapters  (upsert по chapter_key)
 async function adminUpsertChapter(req, res) {
   try {
+    // доступ только админу / модератору
+    if (!req.user?.is_admin && !req.user?.is_moderator) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const {
       chapter_key,
       title,
@@ -625,7 +630,7 @@ async function adminUpsertChapter(req, res) {
     if (!chapter_key) {
       return res.status(400).json({ error: "chapter_key_required" });
     }
-    // пустые строки приводим к NULL, чтобы не ломать тип timestamptz
+
     const normalizeDate = (v) => {
       if (!v) return null;
       const s = String(v).trim();
@@ -669,6 +674,7 @@ async function adminUpsertChapter(req, res) {
     return res.status(500).json({ error: "Failed to save chapter" });
   }
 }
+
 
 module.exports = {
   // client/public
