@@ -5,8 +5,12 @@ const pool = require("../db");
 const CHAPTERS_ORDER = ["royal", "silence", "modern", "kerala"];
 const PROGRESS_TOTAL_DEFAULT = 4;
 
-function ok(data = {}) { return { ok: true, ...data }; }
-function none() { return { status: "none" }; }
+function ok(data = {}) {
+  return { ok: true, ...data };
+}
+function none() {
+  return { status: "none" };
+}
 
 async function ensureParticipant(userId) {
   // создаем участника, если его нет
@@ -30,20 +34,41 @@ function nextChapterKey(current) {
 async function getInsideMe(req, res) {
   try {
     const userId =
-      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+      req.user?.id ??
+      req.user?._id ??
+      req.user?.client_id ??
+      req.user?.user_id ??
+      null;
     if (!userId) return res.json(none());
 
     const { rows } = await pool.query(
-      `SELECT user_id, program_key, current_chapter, progress_current, progress_total,
-              curator_telegram, status
-       FROM inside_participants
-       WHERE user_id = $1
+      `SELECT
+         p.user_id,
+         p.program_key,
+         p.current_chapter,
+         p.progress_current,
+         p.progress_total,
+         p.curator_telegram,
+         p.status,
+         c.starts_at      AS chapter_starts_at,
+         c.capacity       AS chapter_capacity,
+         c.enrolled_count AS chapter_enrolled_count,
+         c.status         AS chapter_status
+       FROM inside_participants p
+       LEFT JOIN inside_chapters c
+              ON c.chapter_key = p.current_chapter
+       WHERE p.user_id = $1
        LIMIT 1`,
       [userId]
     );
+
     if (!rows.length) return res.json(none());
 
     const p = rows[0];
+    const capacity = Number(p.chapter_capacity || 0);
+    const enrolled = Number(p.chapter_enrolled_count || 0);
+    const remaining = Math.max(0, capacity - enrolled);
+
     return res.json({
       status: p.status || "active",
       progress_current: Number(p.progress_current || 0),
@@ -52,6 +77,14 @@ async function getInsideMe(req, res) {
       curator_telegram: p.curator_telegram || "@akhmedovkb",
       user_id: p.user_id,
       program_key: p.program_key || "india_inside",
+      chapter: {
+        key: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+        starts_at: p.chapter_starts_at,
+        capacity,
+        enrolled_count: enrolled,
+        remaining,
+        status: p.chapter_status || "draft",
+      },
     });
   } catch (e) {
     console.error("getInsideMe error:", e);
@@ -59,23 +92,40 @@ async function getInsideMe(req, res) {
   }
 }
 
-// GET /api/inside/:userId
+// GET /api/inside/user/:userId
 async function getInsideById(req, res) {
   try {
     const userId = Number(req.params.userId);
     if (!userId) return res.json(none());
 
     const { rows } = await pool.query(
-      `SELECT user_id, program_key, current_chapter, progress_current, progress_total,
-              curator_telegram, status
-       FROM inside_participants
-       WHERE user_id = $1
+      `SELECT
+         p.user_id,
+         p.program_key,
+         p.current_chapter,
+         p.progress_current,
+         p.progress_total,
+         p.curator_telegram,
+         p.status,
+         c.starts_at      AS chapter_starts_at,
+         c.capacity       AS chapter_capacity,
+         c.enrolled_count AS chapter_enrolled_count,
+         c.status         AS chapter_status
+       FROM inside_participants p
+       LEFT JOIN inside_chapters c
+              ON c.chapter_key = p.current_chapter
+       WHERE p.user_id = $1
        LIMIT 1`,
       [userId]
     );
+
     if (!rows.length) return res.json(none());
 
     const p = rows[0];
+    const capacity = Number(p.chapter_capacity || 0);
+    const enrolled = Number(p.chapter_enrolled_count || 0);
+    const remaining = Math.max(0, capacity - enrolled);
+
     return res.json({
       status: p.status || "active",
       progress_current: Number(p.progress_current || 0),
@@ -84,10 +134,20 @@ async function getInsideById(req, res) {
       curator_telegram: p.curator_telegram || "@akhmedovkb",
       user_id: p.user_id,
       program_key: p.program_key || "india_inside",
+      chapter: {
+        key: p.current_chapter || CHAPTERS_ORDER[0] || "royal",
+        starts_at: p.chapter_starts_at,
+        capacity,
+        enrolled_count: enrolled,
+        remaining,
+        status: p.chapter_status || "draft",
+      },
     });
   } catch (e) {
     console.error("getInsideById error:", e);
-    return res.status(500).json({ error: "Failed to get Inside status by id" });
+    return res
+      .status(500)
+      .json({ error: "Failed to get Inside status by id" });
   }
 }
 
@@ -97,7 +157,9 @@ async function getInsideStatus(_req, res) {
     return res.json(none());
   } catch (e) {
     console.error("getInsideStatus error:", e);
-    return res.status(500).json({ error: "Failed to get Inside status (public)" });
+    return res
+      .status(500)
+      .json({ error: "Failed to get Inside status (public)" });
   }
 }
 
@@ -149,7 +211,11 @@ async function requestCompletion(req, res) {
 async function joinInside(req, res) {
   try {
     const userId =
-      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+      req.user?.id ??
+      req.user?._id ??
+      req.user?.client_id ??
+      req.user?.user_id ??
+      null;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     // если уже есть участник — просто вернуть статус
@@ -179,7 +245,11 @@ async function joinInside(req, res) {
 async function getMyLastRequest(req, res) {
   try {
     const userId =
-      req.user?.id ?? req.user?._id ?? req.user?.client_id ?? req.user?.user_id ?? null;
+      req.user?.id ??
+      req.user?._id ??
+      req.user?.client_id ??
+      req.user?.user_id ??
+      null;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { rows } = await pool.query(
@@ -300,7 +370,8 @@ async function adminListRequests(req, res) {
       `);
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}`
+                                  : "";
 
     const sql = `
       SELECT
@@ -342,7 +413,7 @@ async function adminListRequests(req, res) {
 
     const { rows } = await pool.query(sql, params);
 
-    // total для пагинации (опционально, но полезно)
+    // total для пагинации
     const countSql = `
       SELECT COUNT(*)::int AS total
       FROM inside_completion_requests r
@@ -455,7 +526,11 @@ async function adminRejectRequest(req, res) {
           ELSE NULL
         END AS resolved_at
     `;
-    const { rows } = await pool.query(q, [id, curator_id || null, curator_note || null]);
+    const { rows } = await pool.query(q, [
+      id,
+      curator_id || null,
+      curator_note || null,
+    ]);
     return res.json(rows[0] || {});
   } catch (err) {
     console.error("adminRejectRequest error:", err);
