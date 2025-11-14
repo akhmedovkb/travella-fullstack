@@ -35,5 +35,13 @@ router.post("/join", authenticateToken, ctrl.joinInside);
 
 // ✅ Исправлено: используем ctrl, а не inside
 router.get("/my-request", authenticateToken, ctrl.getMyLastRequest);
+// Chapters (public)
+router.get("/chapters", ctrl.listChapters);
+router.get("/chapters/next", ctrl.getNextChapter);
+
+// Enrollment (client)
+router.post("/enroll", authenticateToken, ctrl.enrollRequest);
+router.get("/enroll/status", authenticateToken, ctrl.getMyEnrollments);
+
 
 module.exports = router;
