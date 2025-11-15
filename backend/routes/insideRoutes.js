@@ -71,6 +71,11 @@ if (typeof ctrl.getNextChapterPublic === "function") {
   router.get("/chapters/next", ctrl.getNextChapterPublic);
 }
 
+// Публичный список всех глав (для MyInsideCard)
+if (typeof ctrl.listChaptersPublic === "function") {
+  router.get("/chapters", ctrl.listChaptersPublic);
+}
+
 // Общий публичный статус (пока заглушка)
 router.get("/", ctrl.getInsideStatus);
 
