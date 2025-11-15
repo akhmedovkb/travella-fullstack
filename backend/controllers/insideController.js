@@ -377,6 +377,67 @@ async function getNextChapterPublic(_req, res) {
   }
 }
 
+// GET /api/inside/chapters — список всех глав для клиента
+async function getChaptersPublic(_req, res) {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        chapter_key,
+        title,
+        starts_at,
+        tour_starts_at,
+        tour_ends_at,
+        capacity,
+        enrolled_count,
+        status
+      FROM inside_chapters
+      ORDER BY starts_at NULLS LAST, chapter_key
+      `
+    );
+
+    // нормализуем и сортируем по CHAPTERS_ORDER
+    const ordered = rows
+      .map((r) => {
+        const capacity =
+          r.capacity !== null && r.capacity !== undefined
+            ? Number(r.capacity)
+            : null;
+        const enrolled =
+          r.enrolled_count !== null && r.enrolled_count !== undefined
+            ? Number(r.enrolled_count)
+            : 0;
+        const remaining =
+          capacity !== null ? Math.max(0, capacity - enrolled) : null;
+
+        return {
+          id: r.id,
+          chapter_key: r.chapter_key,
+          title: r.title,
+          starts_at: r.starts_at,
+          tour_starts_at: r.tour_starts_at,
+          tour_ends_at: r.tour_ends_at,
+          capacity,
+          enrolled_count: enrolled,
+          remaining,
+          status: r.status || "draft",
+        };
+      })
+      .sort((a, b) => {
+        const ia = CHAPTERS_ORDER.indexOf(String(a.chapter_key));
+        const ib = CHAPTERS_ORDER.indexOf(String(b.chapter_key));
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+
+    // фронт уже умеет понимать и { items: [...] }, и просто массив
+    return res.json({ items: ordered });
+  } catch (e) {
+    console.error("getChaptersPublic error:", e);
+    return res.status(500).json({ error: "Failed to get chapters" });
+  }
+}
+
 // GET /api/inside/chapters — публичный список всех глав
 async function listChaptersPublic(_req, res) {
   try {
@@ -869,7 +930,7 @@ module.exports = {
   joinInside,
   getMyLastRequest,
   getNextChapterPublic,
-
+  getChaptersPublic,
   // admin
   adminListRequests,
   adminApproveRequest,
