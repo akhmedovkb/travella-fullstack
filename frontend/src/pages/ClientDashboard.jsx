@@ -500,16 +500,30 @@ const INSIDE_CHAPTERS = [
   { key: "kerala",  title: "Керала — Рай на Земле" },
 ];
 
-// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
+// --- MyInsideCard: карточка статуса India Inside + выбор главы сверху ---
 function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const [lastReq, setLastReq] = useState(null);
   const [loadingReq, setLoadingReq] = useState(true);
 
-  // ближайшая открытая глава по расписанию
-  const [nextChapter, setNextChapter] = useState(null);
-  const [loadingNext, setLoadingNext] = useState(true);
+  // список глав в фиксированном порядке
+  const CHAPTERS = [
+    { key: "royal",   index: 1 },
+    { key: "silence", index: 2 },
+    { key: "modern",  index: 3 },
+    { key: "kerala",  index: 4 },
+  ];
 
+  // выбранная глава (по клику сверху / снизу)
+  const [selectedKey, setSelectedKey] = useState(
+    inside?.current_chapter || "royal"
+  );
+  useEffect(() => {
+    if (inside?.current_chapter) {
+      setSelectedKey(inside.current_chapter);
+    }
+  }, [inside?.current_chapter]);
+
+  // название главы по ключу
   const chapterTitle = (key) => {
     const map = {
       royal:   t("landing.inside.chapters.royal.title",   "Золотой Треугольник"),
@@ -520,6 +534,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     return map[key] || key || "Глава";
   };
 
+  // статусная плашка для заявки
   const statusPill = (st) => {
     const map = {
       pending:  t("inside.status_pending",  { defaultValue: "Ожидает подтверждения" }),
@@ -542,7 +557,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   };
 
-  // Загрузка последней заявки на завершение
+  // загрузка последней заявки (на завершение главы), только если клиент уже в программе
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -566,131 +581,54 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     };
   }, [inside]);
 
-  // Загрузка ближайшей главы по расписанию (для верхней полосы и таймера)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingNext(true);
-        const res = await apiGet("/api/inside/chapters/next");
-        if (!cancelled) setNextChapter(res || null);
-      } catch {
-        if (!cancelled) setNextChapter(null);
-      } finally {
-        if (!cancelled) setLoadingNext(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const isParticipant = !!inside;
-
-  // Текущий ключ главы: либо из inside, либо ближайшая, либо по умолчанию
-  const currentKey =
-    (inside && inside.current_chapter) ||
-    (nextChapter && nextChapter.chapter_key) ||
-    "royal";
-
-  // Прогресс участника
-  const progressCurrent = Number(inside?.progress_current ?? 0);
-  const progressTotal = Number(inside?.progress_total ?? 4);
-  const progressPct = Math.max(
-    0,
-    Math.min(100, Math.round((progressCurrent / (progressTotal || 1)) * 100))
-  );
-
-  // Даты / места / таймер по ближайшей главе (для не-участников)
-  const tourStartsRaw =
-    nextChapter?.tour_starts_at ||
-    nextChapter?.tour_start_at ||
-    nextChapter?.starts_at ||
-    null;
-
-  const tourStarts =
-    tourStartsRaw && !Number.isNaN(Date.parse(tourStartsRaw))
-      ? new Date(tourStartsRaw)
-      : null;
-
-  const nowMs = typeof now === "number" ? now : Date.now();
-  const diffMs =
-    tourStarts && tourStarts.getTime() > nowMs
-      ? tourStarts.getTime() - nowMs
-      : null;
-
-  // свободные места: capacity - enrolled (если есть)
-  const capacityRaw =
-    nextChapter?.capacity ?? nextChapter?.chapter_capacity ?? null;
-  const enrolledRaw =
-    nextChapter?.enrolled_count ?? nextChapter?.chapter_enrolled ?? null;
-
-  let placesLeft = null;
-  if (capacityRaw != null) {
-    const cap = Number(capacityRaw) || 0;
-    const en = Number(enrolledRaw ?? 0) || 0;
-    placesLeft = Math.max(0, cap - en);
-  } else if (nextChapter?.places_left != null) {
-    placesLeft = Number(nextChapter.places_left) || 0;
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
+        <div className="h-5 w-48 bg-gray-200 rounded" />
+        <div className="mt-4 h-4 w-80 bg-gray-200 rounded" />
+        <div className="mt-6 h-3 w-full bg-gray-200 rounded" />
+      </div>
+    );
   }
 
-  // Данные по текущей главе участника (для блока "Завершение")
-  const chapterMeta = inside?.chapter || {};
-  const startsAtRaw =
-    chapterMeta.starts_at || inside?.chapter_starts_at || null;
-  const chapterCapacity = Number(chapterMeta.capacity || 0);
-  const chapterEnrolled = Number(chapterMeta.enrolled_count || 0);
-  const chapterRemaining = Math.max(0, chapterCapacity - chapterEnrolled);
-
-  let chapterCountdown = null;
-  if (startsAtRaw && !Number.isNaN(Date.parse(startsAtRaw))) {
-    const ts = Date.parse(startsAtRaw);
-    const diff = ts - nowMs;
-    if (diff > 0) chapterCountdown = formatLeft(diff);
-  }
-
-  // --- JOIN (запрос на участие) ---
-  const handleJoin = async () => {
+  // 👇 если пользователь ещё не участник – будем использовать ту же схему,
+  // но правая карточка станет «Запрос на участие»
+  async function handleJoin() {
     try {
       const res = await apiPost("/api/inside/join");
       if (res && (res.ok || res.status === "ok" || res.joined)) {
         const me = await apiGet("/api/inside/me");
         onJoined?.(me?.data ?? me ?? null);
         tSuccess(
-          t("inside.toast.joined") ||
-            "Вы присоединились к India Inside!",
+          t("inside.toast.joined") || "Запрос на участие отправлен",
           { autoClose: 1600 }
         );
         return;
       }
-
       const me = await apiGet("/api/inside/me");
       if (me && me.status && me.status !== "none") {
         onJoined?.(me);
         tSuccess(
-          t("inside.toast.joined") ||
-            "Вы присоединились к India Inside!",
+          t("inside.toast.joined") || "Запрос на участие отправлен",
           { autoClose: 1600 }
         );
         return;
       }
       tError(
-        t("inside.toast.join_failed") ||
-          "Не удалось присоединиться"
+        t("inside.toast.join_failed") || "Не удалось отправить запрос на участие"
       );
-    } catch (e) {
-      // если что-то пошло не так — открываем лендинг
+    } catch {
       window.open("/landing/india-inside", "_blank", "noreferrer");
     }
-  };
+  }
 
-  // --- запрос на завершение главы ---
+  // запрос на завершение текущей главы (как было раньше)
   async function requestCompletion() {
-    const curator = inside?.curator_telegram || "@akhmedovkb";
-
+    if (!inside) return;
+    const chapterKey = inside.current_chapter || selectedKey;
     try {
       const res = await apiPost("/api/inside/request-completion", {
-        chapter: currentKey,
+        chapter: chapterKey,
       });
 
       if (res?.already) {
@@ -699,7 +637,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             ? prev
             : {
                 id: prev?.id || undefined,
-                chapter: currentKey,
+                chapter: chapterKey,
                 status: "pending",
                 requested_at: new Date().toISOString(),
               }
@@ -714,17 +652,16 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
       if (res?.item) setLastReq(res.item);
       tSuccess(
-        t("inside.toast.requested") ||
-          "Запрос на завершение отправлен",
+        t("inside.toast.requested") || "Запрос на завершение отправлен",
         { autoClose: 1600 }
       );
     } catch (e) {
+      const curator = inside?.curator_telegram || "@akhmedovkb";
       const msg = (
         e?.response?.data?.error || e?.message || ""
       )
         .toString()
         .toLowerCase();
-
       if (
         e?.response?.status === 401 ||
         e?.response?.status === 403 ||
@@ -742,306 +679,272 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           { autoClose: 2200 }
         );
       }
-
       const wantTg = window.confirm(
         t("inside.errors.ask_open_telegram", {
           defaultValue: "Открыть чат куратора в Telegram?",
         })
       );
-      if (wantTg)
+      if (wantTg) {
         window.open(
           `https://t.me/${curator.replace(/^@/, "")}`,
           "_blank",
           "noreferrer"
         );
+      }
     }
   }
 
-  if (loading) {
-    return (
-      <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
-        <div className="h-5 w-48 bg-gray-200 rounded" />
-        <div className="mt-4 h-4 w-80 bg-gray-200 rounded" />
-        <div className="mt-6 h-3 w-full bg-gray-200 rounded" />
-      </div>
-    );
+  // прогресс по главам
+  const cur = Number(inside?.progress_current ?? 0);
+  const total = Number(inside?.progress_total ?? 4);
+  const pct = Math.max(
+    0,
+    Math.min(100, Math.round((cur / (total || 1)) * 100))
+  );
+
+  // мета по главам. Если бэк начнет отдавать массив всех глав – подхватим его:
+  const chaptersList =
+    (inside && Array.isArray(inside.chapters) && inside.chapters) ||
+    (inside &&
+      Array.isArray(inside.chapters_list) &&
+      inside.chapters_list) ||
+    null;
+  const chaptersMap = {};
+  if (chaptersList) {
+    chaptersList.forEach((ch) => {
+      if (ch && ch.chapter_key) chaptersMap[ch.chapter_key] = ch;
+    });
+  }
+  const selectedMeta =
+    (inside &&
+      (chaptersMap[selectedKey] ||
+        (selectedKey === inside.current_chapter
+          ? inside.chapter
+          : null))) ||
+    (inside && inside.chapter) ||
+    {};
+
+  const capacity = Number(
+    selectedMeta.capacity ?? selectedMeta.limit ?? 0
+  );
+  const enrolled = Number(
+    selectedMeta.enrolled_count ?? selectedMeta.enrolled ?? 0
+  );
+  const remaining = Math.max(0, capacity - enrolled);
+
+  const enrollStartRaw =
+    selectedMeta.starts_at ||
+    selectedMeta.enroll_start_at ||
+    selectedMeta.start_enroll_at ||
+    inside?.chapter_starts_at ||
+    null;
+  const tourStartRaw =
+    selectedMeta.tour_start_date ||
+    selectedMeta.tour_start ||
+    selectedMeta.tour_date_from ||
+    null;
+  const tourEndRaw =
+    selectedMeta.tour_end_date ||
+    selectedMeta.tour_end ||
+    selectedMeta.tour_date_to ||
+    null;
+
+  const curator = inside?.curator_telegram || "@akhmedovkb";
+
+  const startTs = enrollStartRaw ? Date.parse(enrollStartRaw) : null;
+  let countdown = null;
+  if (startTs && !Number.isNaN(startTs)) {
+    const diff = startTs - (now ?? Date.now());
+    if (diff > 0) countdown = formatLeft(diff);
   }
 
-  /* ====================== Вариант: ещё не участник ====================== */
-  if (!isParticipant) {
-    return (
-      <section className="bg-white rounded-xl shadow p-6 border">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-sm text-gray-500">India Inside</div>
-            <h2 className="text-xl font-semibold">
-              {t("inside.invite.title", {
-                defaultValue: "Программа India Inside",
-              })}
-            </h2>
-          </div>
-          <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-            {t("inside.status_invite", {
-              defaultValue: "Набор открыт",
-            })}
-          </span>
-        </div>
+  const formatDateTime = (v) => {
+    if (!v) return "—";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleString();
+  };
+  const formatDate = (v) => {
+    if (!v) return "";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleDateString();
+  };
 
-        {/* Верхняя оранжевая полоса с главами */}
-        <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50/60 px-3 py-3">
-          <div className="flex flex-wrap gap-3">
-            {INSIDE_CHAPTERS.map((ch) => {
-              const isCurrent = ch.key === currentKey;
-              return (
-                <div
-                  key={ch.key}
-                  className={[
-                    "min-w-[160px] rounded-xl border px-3 py-2 text-sm shadow-sm",
-                    isCurrent
-                      ? "border-orange-500 bg-white text-gray-900"
-                      : "border-gray-200 bg-white/80 text-gray-700",
-                  ].join(" ")}
-                >
-                  <div className="font-medium">
-                    {chapterTitle(ch.key)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Средний ряд: 3 блока */}
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {/* Программа по дням */}
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <div className="text-sm font-semibold text-gray-900 mb-2">
-              {t("inside.blocks.program_by_days", {
-                defaultValue: "Программа по дням",
-              })}
-            </div>
-            <p className="text-xs text-gray-600">
-              {t("inside.blocks.program_hint", {
-                defaultValue:
-                  "После подтверждения участия вы сможете видеть подробный план по дням.",
-              })}
-            </p>
-          </div>
-
-          {/* Даты туров */}
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <div className="text-sm font-semibold text-gray-900 mb-2">
-              {t("inside.blocks.tour_dates", {
-                defaultValue: "Даты туров",
-              })}
-            </div>
-            <div className="space-y-1 text-xs text-gray-700">
-              {loadingNext && (
-                <p>
-                  {t("common.loading", {
-                    defaultValue: "Загрузка...",
-                  })}
-                </p>
-              )}
-              {!loadingNext && !tourStarts && (
-                <p>
-                  {t("inside.blocks.dates_tba", {
-                    defaultValue:
-                      "Даты ближайшего выезда будут объявлены позже.",
-                  })}
-                </p>
-              )}
-              {!loadingNext && tourStarts && (
-                <p>
-                  {tourStarts.toLocaleDateString("ru-RU")}{" "}
-                  {placesLeft != null &&
-                    `— мест: ${placesLeft}`}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Таймер + зелёная кнопка "Запрос на участие" */}
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 flex flex-col justify-between">
-            <div>
-              <div className="text-sm font-semibold text-gray-900 mb-1">
-                {t("inside.blocks.time_left", {
-                  defaultValue: "Осталось до начала тура",
-                })}
-              </div>
-              <p className="text-xs text-gray-600 mb-3">
-                {diffMs
-                  ? formatLeft(diffMs)
-                  : t("inside.blocks.time_unknown", {
-                      defaultValue: "Дата уточняется",
-                    })}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleJoin}
-              className="mt-1 inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-            >
-              {t("inside.invite.join_now", {
-                defaultValue: "Запрос на участие",
-              })}
-            </button>
-          </div>
-        </div>
-      </section>
-    );
+  // статус программы (плашка справа вверху)
+  let statusText = "";
+  let statusCls =
+    "bg-slate-100 text-slate-700 border border-slate-200";
+  if (!inside) {
+    statusText = t("inside.status_not_joined", {
+      defaultValue: "Не участвуете",
+    });
+  } else if (inside.status === "expelled") {
+    statusText = t("inside.status_expelled", {
+      defaultValue: "Отчислен",
+    });
+    statusCls = "bg-rose-50 text-rose-700 border border-rose-200";
+  } else if (inside.status === "completed") {
+    statusText = t("inside.status_completed", {
+      defaultValue: "Завершена",
+    });
+    statusCls =
+      "bg-emerald-50 text-emerald-700 border border-emerald-200";
+  } else {
+    statusText = t("inside.status_active", {
+      defaultValue: "Активна",
+    });
+    statusCls =
+      "bg-emerald-50 text-emerald-700 border border-emerald-200";
   }
 
-  /* ====================== Вариант: уже участник программы ====================== */
-
-  const curator = inside.curator_telegram || "@akhmedovkb";
+  const selectedIsCurrent =
+    inside && selectedKey === inside.current_chapter;
+  const buttonPending =
+    inside && lastReq?.status === "pending";
 
   return (
     <section className="bg-white rounded-xl shadow p-6 border">
-      {/* Заголовок + статус */}
+      {/* Шапка */}
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="text-sm text-gray-500">India Inside</div>
           <h2 className="text-xl font-semibold">
-            {t("inside.my.title", {
-              defaultValue: "Моя программа",
-            })}
+            {t("inside.my.title", { defaultValue: "Моя программа" })}
           </h2>
         </div>
-        <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-          {inside.status === "completed"
-            ? t("inside.status_completed", {
-                defaultValue: "Программа завершена",
-              })
-            : inside.status === "expelled"
-            ? t("inside.status_expelled", {
-                defaultValue: "Отчислен",
-              })
-            : t("inside.status", { defaultValue: "Активна" })}
+        <span className={`text-xs px-2 py-1 rounded-full ${statusCls}`}>
+          {statusText}
         </span>
       </div>
 
-      {/* Верхняя оранжевая полоса с главами */}
-      <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50/60 px-3 py-3">
-        <div className="flex flex-wrap gap-3">
-          {INSIDE_CHAPTERS.map((ch, idx) => {
-            const step = idx + 1;
-            const isDone = step <= progressCurrent;
-            const isCurrent = ch.key === currentKey;
-
-            let cls =
-              "min-w-[160px] rounded-xl border px-3 py-2 text-sm shadow-sm";
-            if (isDone) {
-              cls += " border-emerald-500 bg-white text-emerald-900";
-            } else if (isCurrent) {
-              cls += " border-orange-500 bg-white text-orange-900";
-            } else {
-              cls += " border-gray-200 bg-white/80 text-gray-700";
-            }
-
-            return (
-              <div key={ch.key} className={cls}>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                  {t("inside.chapter_label", {
-                    defaultValue: "Глава {{num}}",
-                    num: step,
-                  })}
-                </div>
-                <div className="font-medium">
-                  {chapterTitle(ch.key)}
-                </div>
+      {/* ВЕРХНИЙ БЛОК: все главы (кнопки) */}
+      <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 flex flex-wrap gap-3">
+        {CHAPTERS.map((ch) => {
+          const active = selectedKey === ch.key;
+          const done = cur >= ch.index;
+          const base =
+            "rounded-xl border px-4 py-2 text-left min-w-[180px] transition-colors";
+          const border = active
+            ? "border-orange-500 bg-white"
+            : done
+            ? "border-emerald-500 bg-emerald-50"
+            : "border-emerald-500 bg-white";
+          return (
+            <button
+              key={ch.key}
+              type="button"
+              onClick={() => setSelectedKey(ch.key)}
+              className={`${base} ${border}`}
+            >
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                ГЛАВА {ch.index}
               </div>
-            );
-          })}
-        </div>
+              <div className="mt-1 text-sm font-medium leading-snug">
+                {chapterTitle(ch.key)}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Средний ряд: текущая глава / даты / завершение */}
+      {/* СРЕДНИЙ РЯД: три карточки, которые «выкатываются» при выборе главы */}
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* Текущая глава + прогресс */}
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="text-sm font-semibold text-gray-900">
-            {t("inside.current_chapter", {
-              defaultValue: "Текущая глава",
-            })}
-          </div>
-          <div className="mt-1 text-sm text-gray-800 font-medium">
-            {chapterTitle(currentKey)}
+        {/* 1. Левая: Текущая/выбранная глава + прогресс */}
+        <div className="rounded-2xl border bg-slate-50 p-4 flex flex-col justify-between">
+          <div>
+            <div className="text-xs uppercase text-slate-500">
+              {selectedIsCurrent
+                ? t("inside.current_chapter", {
+                    defaultValue: "Текущая глава",
+                  })
+                : t("inside.selected_chapter", {
+                    defaultValue: "Выбранная глава",
+                  })}
+            </div>
+            <div className="mt-1 text-sm font-semibold leading-snug">
+              {chapterTitle(selectedKey)}
+            </div>
           </div>
 
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-              <span>
-                {t("inside.progress", {
-                  defaultValue: "Прогресс",
-                })}
-              </span>
-              <span>
-                {progressCurrent} / {progressTotal}
-              </span>
+          {inside && (
+            <div className="mt-4">
+              <div className="text-xs text-slate-500">
+                {t("inside.progress", { defaultValue: "Прогресс" })}
+              </div>
+              <div className="mt-1 h-1.5 w-full rounded-full bg-slate-200">
+                <div
+                  className="h-1.5 rounded-full bg-orange-500 transition-all"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {cur} / {total} ({pct}%)
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="h-2 bg-orange-500 rounded-full transition-all"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-gray-500">
-              {progressPct}%
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Даты и места по текущей главе */}
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="text-sm font-semibold text-gray-900">
-            {t("inside.chapter_dates", {
+        {/* 2. Центр: Даты и набор */}
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs uppercase text-slate-500">
+            {t("inside.dates_title", {
               defaultValue: "Даты и набор",
             })}
           </div>
-
-          <div className="mt-2 space-y-1 text-sm text-gray-700">
-            {startsAtRaw && (
+          <div className="mt-2 space-y-1 text-sm text-slate-700">
+            {enrollStartRaw && (
               <div>
                 {t("inside.chapter_start_at", {
                   defaultValue: "Старт главы:",
                 })}{" "}
                 <span className="font-medium">
-                  {new Date(startsAtRaw).toLocaleString()}
+                  {formatDateTime(enrollStartRaw)}
                 </span>
               </div>
             )}
 
-            {chapterCountdown && (
+            {(tourStartRaw || tourEndRaw) && (
+              <div>
+                {t("inside.tour_dates", {
+                  defaultValue: "Даты тура:",
+                })}{" "}
+                <span className="font-medium">
+                  {formatDate(tourStartRaw)}
+                  {tourEndRaw && " – " + formatDate(tourEndRaw)}
+                </span>
+              </div>
+            )}
+
+            {countdown && (
               <div>
                 {t("inside.chapter_countdown", {
                   defaultValue: "До старта главы осталось:",
                 })}{" "}
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs">
-                  {chapterCountdown}
+                  {countdown}
                 </span>
               </div>
             )}
 
-            {chapterCapacity > 0 && (
+            {capacity > 0 && (
               <div>
                 {t("inside.chapter_seats_left", {
                   defaultValue: "Свободных мест:",
                 })}{" "}
                 <span className="font-medium">
-                  {chapterRemaining} / {chapterCapacity}
+                  {remaining} / {capacity}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">
+          <div className="mt-4 flex flex-col gap-2">
             <a
               href={`/india/inside?chapter=${encodeURIComponent(
-                currentKey
-              )}#chapters`}
-              className="rounded-lg border px-3 py-1.5 hover:bg-gray-100"
+                selectedKey
+              )}#program`}
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
               target="_blank"
               rel="noreferrer"
             >
@@ -1053,7 +956,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               href={`https://t.me/${curator.replace(/^@/, "")}`}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg border px-3 py-1.5 hover:bg-gray-100"
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
             >
               {t("inside.actions.contact_curator", {
                 defaultValue: "Связаться с куратором",
@@ -1062,26 +965,35 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           </div>
         </div>
 
-        {/* Завершение главы */}
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 flex flex-col justify-between">
+        {/* 3. Правая: либо «Запрос на участие», либо «Завершение главы» */}
+        <div className="rounded-2xl border bg-white p-4 flex flex-col justify-between">
           <div>
-            <div className="text-sm font-semibold text-gray-900">
-              {t("inside.actions.request_completion_block", {
-                defaultValue: "Завершение главы",
-              })}
+            <div className="text-xs uppercase text-slate-500">
+              {inside
+                ? t("inside.finish_card_title", {
+                    defaultValue: "Завершение главы",
+                  })
+                : t("inside.join_card_title", {
+                    defaultValue: "Участие в программе",
+                  })}
             </div>
-            <p className="mt-2 text-xs text-gray-600">
-              {t("inside.note.by_curator", {
-                defaultValue:
-                  "Завершение главы подтверждает куратор.",
-              })}
-            </p>
 
-            {/* Статус последней заявки */}
-            {lastReq && (
+            <div className="mt-2 text-xs text-slate-600">
+              {inside
+                ? t("inside.note.by_curator", {
+                    defaultValue:
+                      "Завершение главы подтверждает куратор.",
+                  })
+                : t("inside.note.join_by_curator", {
+                    defaultValue:
+                      "Заявки на участие подтверждает куратор программы.",
+                  })}
+            </div>
+
+            {inside && lastReq && (
               <div className="mt-3 flex items-center gap-2 text-sm">
                 {statusPill(lastReq.status)}
-                <span className="text-gray-500">
+                <span className="text-slate-600">
                   {lastReq.status === "pending" &&
                     t("inside.msg.waiting_curator", {
                       defaultValue:
@@ -1100,67 +1012,84 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             )}
           </div>
 
-          <button
-            onClick={requestCompletion}
-            disabled={lastReq?.status === "pending" || loadingReq}
-            className={`mt-4 rounded-lg px-4 py-2 text-sm text-white ${
-              lastReq?.status === "pending"
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-black hover:bg-gray-900"
-            }`}
-          >
-            {lastReq?.status === "pending"
-              ? t("inside.actions.request_sent", {
-                  defaultValue: "Запрос отправлен",
-                })
-              : t("inside.actions.request_completion", {
-                  defaultValue: "Запросить завершение",
+          <div className="mt-4">
+            {inside ? (
+              <button
+                onClick={requestCompletion}
+                disabled={buttonPending}
+                className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
+                  buttonPending
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-black hover:bg-black/90"
+                }`}
+              >
+                {buttonPending
+                  ? t("inside.actions.request_sent", {
+                      defaultValue: "Запрос отправлен",
+                    })
+                  : t("inside.actions.request_completion", {
+                      defaultValue: "Запросить завершение",
+                    })}
+              </button>
+            ) : (
+              <button
+                onClick={handleJoin}
+                className="w-full rounded-lg px-4 py-2 text-sm text-white bg-emerald-600 hover:bg-emerald-700"
+              >
+                {t("inside.invite.join_now", {
+                  defaultValue: "Запрос на участие",
                 })}
-          </button>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Нижняя полоса прогресса по главам */}
-      <div className="mt-5">
-        <div className="text-sm text-gray-800 font-medium mb-2">
-          {t("inside.progress_overview", {
-            defaultValue: "Ваш прогресс в программе",
-          })}
+      {/* НИЖНИЙ РЯД: Ваш прогресс в программе */}
+      {inside && (
+        <div className="mt-6">
+          <div className="mb-3 text-sm font-medium text-slate-700">
+            {t("inside.program_progress_title", {
+              defaultValue: "Ваш прогресс в программе",
+            })}
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            {CHAPTERS.map((ch) => {
+              const done = cur >= ch.index;
+              const isCurrent = inside.current_chapter === ch.key;
+              const active = selectedKey === ch.key;
+              let bg = "bg-white";
+              let border = "border-slate-200";
+              if (done) {
+                bg = "bg-emerald-50";
+                border = "border-emerald-500";
+              }
+              if (isCurrent) {
+                border = "border-orange-500";
+              }
+              return (
+                <button
+                  key={ch.key}
+                  type="button"
+                  onClick={() => setSelectedKey(ch.key)}
+                  className={`rounded-xl px-3 py-3 text-left text-sm border ${bg} ${border} transition-colors`}
+                >
+                  <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                    ГЛАВА {ch.index}
+                  </div>
+                  <div
+                    className={`mt-1 font-medium leading-snug ${
+                      active ? "text-slate-900" : "text-slate-800"
+                    }`}
+                  >
+                    {chapterTitle(ch.key)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {INSIDE_CHAPTERS.map((ch, idx) => {
-            const step = idx + 1;
-            const isDone = step <= progressCurrent;
-            const isCurrent = ch.key === currentKey;
-
-            let cls =
-              "flex-1 min-w-[120px] rounded-xl border px-3 py-2 text-xs text-center";
-            if (isDone) {
-              cls +=
-                " border-emerald-500 bg-emerald-50 text-emerald-900";
-            } else if (isCurrent) {
-              cls +=
-                " border-orange-500 bg-orange-50 text-orange-900";
-            } else {
-              cls += " border-gray-200 bg-white text-gray-700";
-            }
-
-            return (
-              <div key={ch.key} className={cls}>
-                <div className="text-[11px] uppercase tracking-wide mb-1">
-                  {t("inside.chapter_label", {
-                    defaultValue: "Глава {{num}}",
-                    num: step,
-                  })}
-                </div>
-                <div className="text-sm font-semibold">
-                  {chapterTitle(ch.key)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
     </section>
   );
 }
