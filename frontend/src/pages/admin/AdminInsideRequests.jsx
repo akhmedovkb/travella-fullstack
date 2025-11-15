@@ -8,6 +8,7 @@ import {
 } from "../../api/inside";
 import { tError, tInfo, tSuccess } from "../../shared/toast";
 import AdminInsideChapters from "./AdminInsideChapters";
+import InsideParticipantsBlock from "../../components/admin/InsideParticipantsBlock";
 
 const CHAPTERS = [
   { key: "royal",   label: "Золотой Треугольник" },
@@ -264,6 +265,7 @@ export default function AdminInsideRequests() {
           порядку. При достижении 4/4 статус участника становится <b>completed</b>.
         </div>
       </div>
+      <InsideParticipantsBlock />
     </div>
   );
 }
