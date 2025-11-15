@@ -637,7 +637,6 @@ async function adminListParticipants(req, res) {
 
     const { rows } = await pool.query(`
       SELECT
-        p.id,
         p.user_id,
         p.program_key,
         p.current_chapter,
@@ -645,13 +644,13 @@ async function adminListParticipants(req, res) {
         p.progress_total,
         p.curator_telegram,
         p.status,
-        p.created_at,
+        p.started_at,
         p.updated_at,
         COALESCE(c.name, 'user_id: ' || p.user_id::text) AS user_name,
         c.telegram AS user_telegram
       FROM inside_participants p
       LEFT JOIN clients c ON c.id = p.user_id
-      ORDER BY p.created_at DESC
+      ORDER BY p.started_at DESC NULLS LAST, p.user_id
     `);
 
     return res.json(rows);
@@ -662,6 +661,7 @@ async function adminListParticipants(req, res) {
       .json({ error: "Failed to list participants" });
   }
 }
+
 
 // POST /api/inside/admin/participants/:userId/expel
 async function adminExpelParticipant(req, res) {
