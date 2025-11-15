@@ -500,36 +500,34 @@ const INSIDE_CHAPTERS = [
   { key: "kerala",  title: "Керала — Рай на Земле" },
 ];
 
-// --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-// Карточка "Моя программа" для India Inside
-// Требует:
-// - apiGet, apiPost
-// - tSuccess, tError
-// - formatLeft(diffMs)
-// - React: useState, useEffect
 function MyInsideCard({ inside, loading, t, onJoined, now }) {
-  // ===== ХУКИ =====
-  const [requests, setRequests] = useState([]);    // все заявки по главам
+  const [requests, setRequests] = useState([]);
   const [loadingReq, setLoadingReq] = useState(true);
 
-  const [nextChapter, setNextChapter] = useState(null);  // ближайшая глава (для тех, кто ещё не в программе)
+  const [nextChapter, setNextChapter] = useState(null);
   const [loadingNext, setLoadingNext] = useState(true);
 
-  // текущая глава и статус программы
+  // список глав (из БД)
+  const [chapters, setChapters] = useState(null);
+  const [loadingChapters, setLoadingChapters] = useState(true);
+
   const currentChapterKey = inside?.current_chapter || "royal";
   const programStatus = inside?.status || "active";
 
-  // выбранная глава в верхнем ряду
   const [selectedKey, setSelectedKey] = useState(currentChapterKey);
 
-  // если на сервере поменялась current_chapter — подтягиваем её
+  const chaptersOrder = [
+    { key: "royal",   order: 1 },
+    { key: "silence", order: 2 },
+    { key: "modern",  order: 3 },
+    { key: "kerala",  order: 4 },
+  ];
+
   useEffect(() => {
     if (inside?.current_chapter) {
       setSelectedKey(inside.current_chapter);
     }
   }, [inside?.current_chapter]);
-
-  // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 
   const chapterTitle = (key) => {
     const map = {
@@ -652,7 +650,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   };
 
-  // ===== ЗАГРУЗКА ЗАЯВОК ПОЛЬЗОВАТЕЛЯ =====
+  // === Загрузить заявки ===
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -678,13 +676,12 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         if (!cancel) setLoadingReq(false);
       }
     })();
-
     return () => {
       cancel = true;
     };
   }, [inside]);
 
-  // ===== ЗАГРУЗКА БЛИЖАЙШЕЙ ГЛАВЫ ДЛЯ ИНВАЙТА =====
+  // === Загрузить ближайшую главу для инвайта ===
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -703,7 +700,45 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     };
   }, []);
 
-  // ===== СКЕЛЕТОН =====
+  // === Загрузить список всех глав (inside_chapters) ===
+  useEffect(() => {
+    let cancelled = false;
+
+    // если inside уже содержит массив глав — используем его
+    const fromInside =
+      (Array.isArray(inside?.chapters) && inside.chapters) ||
+      (Array.isArray(inside?.chapters_list) && inside.chapters_list) ||
+      (inside?.chapters_map && Object.values(inside.chapters_map));
+
+    if (fromInside && fromInside.length) {
+      setChapters(fromInside);
+      setLoadingChapters(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        setLoadingChapters(true);
+        const res = await apiGet("/api/inside/chapters"); // список из inside_chapters
+        if (cancelled) return;
+        const items =
+          (Array.isArray(res?.items) && res.items) ||
+          (Array.isArray(res) && res) ||
+          [];
+        setChapters(items);
+      } catch {
+        if (!cancelled) setChapters(null);
+      } finally {
+        if (!cancelled) setLoadingChapters(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inside]);
+
+  // === Скелетон ===
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
@@ -714,7 +749,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
-  // ===== 1. ПОЛЬЗОВАТЕЛЬ ЕЩЁ НЕ В ПРОГРАММЕ =====
+  // === 1. ещё не в программе ===
   if (!inside) {
     async function handleJoinProgram() {
       try {
@@ -776,21 +811,22 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
-  // ===== 2. ПОЛЬЗОВАТЕЛЬ УЖЕ В ПРОГРАММЕ =====
+  // === 2. пользователь уже в программе ===
 
   const curator = inside.curator_telegram || "@akhmedovkb";
 
-  // meta по главам — как прилетает из backend
   const chapterMeta = inside.chapter || {};
-  const chaptersFromBackend =
+
+  const effectiveChapters =
+    (chapters && chapters.length && chapters) ||
     (Array.isArray(inside?.chapters) && inside.chapters) ||
     (Array.isArray(inside?.chapters_list) && inside.chapters_list) ||
     (inside?.chapters_map && Object.values(inside.chapters_map)) ||
-    null;
+    [];
 
   const getChapterMeta = (key) => {
-    if (chaptersFromBackend) {
-      const found = chaptersFromBackend.find(
+    if (effectiveChapters.length) {
+      const found = effectiveChapters.find(
         (c) => c.chapter_key === key || c.key === key
       );
       if (found) return found;
@@ -810,10 +846,10 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     (x) => x && String(x).trim() !== ""
   );
 
-  // === даты и места по выбранной главе (ровно таблица inside_chapters) ===
-  const enrollmentStartRaw = selectedMeta?.starts_at || null;        // старт набора
-  const tourStartRaw       = selectedMeta?.tour_starts_at || null;   // начало тура
-  const tourEndRaw         = selectedMeta?.tour_ends_at || null;     // конец тура
+  // Даты/места по выбранной главе
+  const enrollmentStartRaw = selectedMeta?.starts_at || null;
+  const tourStartRaw       = selectedMeta?.tour_starts_at || null;
+  const tourEndRaw         = selectedMeta?.tour_ends_at || null;
 
   const tourStartDate = tourStartRaw ? new Date(tourStartRaw) : null;
   const tourEndDate   = tourEndRaw   ? new Date(tourEndRaw)   : null;
@@ -834,7 +870,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     }
   }
 
-  // === заявки по главам ===
+  // заявки по главам
   const requestsForSelected = requests.filter((req) => {
     const k = req.chapter || req.chapter_key || req.chapterKey;
     return String(k) === String(selectedKey);
@@ -886,8 +922,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         msg.includes("unauthorized")
       ) {
         tError(
-          t("auth.login_required") ||
-            "Войдите заново и повторите попытку",
+          t("auth.login_required") || "Войдите заново и повторите попытку",
           { autoClose: 2200 }
         );
       } else {
@@ -919,14 +954,17 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
-  const chaptersOrder = [
-    { key: "royal",   order: 1 },
-    { key: "silence", order: 2 },
-    { key: "modern",  order: 3 },
-    { key: "kerala",  order: 4 },
-  ];
+  // прогресс для батареек
+  const rawCur   = Number(inside.progress_current ?? 0);
+  const totalCh  = chaptersOrder.length || 4;
+  const rawTotal = Number(inside.progress_total ?? totalCh);
+  const normalizedTotal = rawTotal || totalCh;
+  const completedChapters = Math.max(
+    0,
+    Math.min(normalizedTotal, rawCur)
+  );
 
-  // ====== РЕНДЕР ======
+  // ===== Рендер =====
   return (
     <section className="bg-white rounded-xl shadow p-6 border">
       {/* шапка */}
@@ -940,7 +978,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         {renderProgramStatusPill(programStatus)}
       </div>
 
-      {/* ВЕРХНИЙ РЯД: выбор главы */}
+      {/* верхний ряд */}
       <div className="mt-4 rounded-2xl bg-orange-50 border border-orange-100 p-4">
         <div className="flex flex-wrap gap-3">
           {chaptersOrder.map(({ key, order }) => {
@@ -978,9 +1016,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         </div>
       </div>
 
-      {/* НИЖНИЙ РЯД: три карточки */}
+      {/* три карточки */}
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* 1. Выбранная глава + программа по дням (без прогресса) */}
+        {/* 1. выбранная глава */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -1015,7 +1053,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           </div>
         </div>
 
-        {/* 2. ДАТЫ ТУРОВ + МЕСТА ПО ЭТОЙ ГЛАВЕ */}
+        {/* 2. даты туров */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div className="text-xs uppercase tracking-wide text-slate-500">
             {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
@@ -1095,31 +1133,10 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             </div>
           )}
 
-          <div className="mt-4 flex flex-col gap-2">
-            <a
-              href={`/india/inside?chapter=${encodeURIComponent(selectedKey)}#chapters`}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("inside.actions.view_program", {
-                defaultValue: "Смотреть программу",
-              })}
-            </a>
-            <a
-              href={`https://t.me/${curator.replace(/^@/, "")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
-            >
-              {t("inside.actions.contact_curator", {
-                defaultValue: "Связаться с куратором",
-              })}
-            </a>
-          </div>
+          {/* КНОПКИ ВНИЗУ УБРАЛИ */}
         </div>
 
-        {/* 3. ЗАПРОС НА УЧАСТИЕ ПО ВЫБРАННОЙ ГЛАВЕ */}
+        {/* 3. запрос на участие */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div className="text-xs uppercase tracking-wide text-slate-500">
             {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
@@ -1174,6 +1191,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           )}
         </div>
       </div>
+
+      {/* блок с батарейками оставил без изменений */}
+      {/* ... если нужно, могу прислать его ещё раз, но он у тебя уже есть выше */}
     </section>
   );
 }
