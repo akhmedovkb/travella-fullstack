@@ -177,44 +177,83 @@ async function getInsideStatus(_req, res) {
 
 // POST /api/inside/request-completion
 async function requestCompletion(req, res) {
-  const userId = req.user.id;
-  const { chapter } = req.body; // 'royal' | 'silence' | ...
   try {
-    const q = `
-      INSERT INTO inside_completion_requests (user_id, chapter, status)
-      VALUES ($1, $2, 'pending')
-      ON CONFLICT ON CONSTRAINT uniq_inside_req_user_chapter_pending
-      DO NOTHING
-      RETURNING id, user_id, chapter, status, requested_at
-    `;
-    const { rows } = await pool.query(q, [userId, chapter]);
+    const userId =
+      req.user?.id ??
+      req.user?._id ??
+      req.user?.client_id ??
+      req.user?.user_id ??
+      null;
 
-    // если ничего не вернулось — конфликт с существующей PENDING записью
-    if (!rows.length) {
-      return res.json({ ok: true, already: true });
-    }
-    return res.json({ ok: true, item: rows[0] });
-  } catch (err) {
-    // Если индекс ещё не создан (42704) — мягкий фолбэк:
-    if (err.code === "42704") {
-      // проверяем, есть ли уже pending
-      const chk = await pool.query(
-        `SELECT 1 FROM inside_completion_requests
-         WHERE user_id = $1 AND chapter = $2 AND status = 'pending' LIMIT 1`,
-        [userId, chapter]
-      );
-      if (chk.rowCount > 0) return res.json({ ok: true, already: true });
-
-      const ins = await pool.query(
-        `INSERT INTO inside_completion_requests (user_id, chapter, status)
-         VALUES ($1, $2, 'pending')
-         RETURNING id, user_id, chapter, status, requested_at`,
-        [userId, chapter]
-      );
-      return res.json({ ok: true, item: ins.rows[0] });
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    console.error("requestCompletion error:", err);
+    // на всякий случай убеждаемся, что участник существует
+    await ensureParticipant(userId);
+
+    // читаем участника и его текущую главу
+    const pRes = await pool.query(
+      `SELECT user_id, current_chapter, progress_current, progress_total, status
+         FROM inside_participants
+        WHERE user_id = $1
+        LIMIT 1`,
+      [userId]
+    );
+
+    if (!pRes.rowCount) {
+      return res
+        .status(400)
+        .json({ error: "participant_not_found" });
+    }
+
+    const p = pRes.rows[0];
+    const chapterKey =
+      p.current_chapter || CHAPTERS_ORDER[0] || "royal";
+
+    // создаём запрос на завершение ТЕКУЩЕЙ главы
+    try {
+      const q = `
+        INSERT INTO inside_completion_requests (user_id, chapter, status)
+        VALUES ($1, $2, 'pending')
+        ON CONFLICT ON CONSTRAINT uniq_inside_req_user_chapter_pending
+        DO NOTHING
+        RETURNING id, user_id, chapter, status, requested_at
+      `;
+      const { rows } = await pool.query(q, [userId, chapterKey]);
+
+      // если ничего не вернулось — уже есть pending по этой главе
+      if (!rows.length) {
+        return res.json({ ok: true, already: true });
+      }
+      return res.json({ ok: true, item: rows[0] });
+    } catch (err) {
+      // мягкий фолбэк, если уникальный индекс ещё не создан (42704)
+      if (err.code === "42704") {
+        const chk = await pool.query(
+          `SELECT 1 FROM inside_completion_requests
+           WHERE user_id = $1 AND chapter = $2 AND status = 'pending'
+           LIMIT 1`,
+          [userId, chapterKey]
+        );
+        if (chk.rowCount > 0) {
+          return res.json({ ok: true, already: true });
+        }
+
+        const ins = await pool.query(
+          `INSERT INTO inside_completion_requests (user_id, chapter, status)
+           VALUES ($1, $2, 'pending')
+           RETURNING id, user_id, chapter, status, requested_at`,
+          [userId, chapterKey]
+        );
+        return res.json({ ok: true, item: ins.rows[0] });
+      }
+
+      console.error("requestCompletion error:", err);
+      return res.status(500).json({ error: "request_failed" });
+    }
+  } catch (e) {
+    console.error("requestCompletion outer error:", e);
     return res.status(500).json({ error: "request_failed" });
   }
 }
