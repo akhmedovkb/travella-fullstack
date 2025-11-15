@@ -497,7 +497,7 @@ async function adminApproveRequest(req, res) {
     const { next_chapter, curator_id, curator_note } = req.body || {};
     if (!id) return res.status(400).json({ error: "Bad id" });
 
-    // читаем заявку
+    // 1. читаем заявку
     const rq = await pool.query(
       `SELECT id, user_id, chapter, status
          FROM inside_completion_requests
@@ -506,51 +506,84 @@ async function adminApproveRequest(req, res) {
       [id]
     );
     if (!rq.rowCount) return res.status(404).json({ error: "Not found" });
+
     const r = rq.rows[0];
 
-    // участник должен существовать
+    // Не даём повторно approve уже обработанную заявку
+    if (r.status !== "pending") {
+      return res.status(400).json({ error: "already_resolved" });
+    }
+
+    // 2. участник должен существовать
     await ensureParticipant(r.user_id);
 
-    // продвигаем участника
-    const upd = await pool.query(
-      `UPDATE inside_participants
-          SET progress_current = LEAST(progress_current + 1, progress_total),
-              current_chapter  = CASE
-                                   -- если куратор выбрал next_chapter в селекте → ставим его
-                                   WHEN $2::text IS NOT NULL AND $2::text <> '' THEN $2::text
-                                   -- если это самый первый раз и current_chapter пустой → ставим первую главу
-                                   WHEN current_chapter IS NULL OR current_chapter = '' THEN $3::text
-                                   -- иначе главу не трогаем, остаётся та, что была активна
-                                   ELSE current_chapter
-                                 END,
-              status = CASE
-                         WHEN LEAST(progress_current + 1, progress_total) >= progress_total
-                           THEN 'completed'
-                         ELSE status
-                       END,
-              updated_at = NOW()
+    // 3. читаем участника
+    const pRes = await pool.query(
+      `SELECT user_id, current_chapter, progress_current, progress_total, status
+         FROM inside_participants
         WHERE user_id = $1
-        RETURNING user_id, current_chapter, progress_current, progress_total, status`,
-      [r.user_id, next_chapter || null, CHAPTERS_ORDER[0] || "royal"]
+        LIMIT 1`,
+      [r.user_id]
     );
 
+    if (!pRes.rowCount) {
+      return res
+        .status(400)
+        .json({ error: "participant_not_found" });
+    }
 
-    // закрываем заявку (без resolved_at!)
+    const p = pRes.rows[0];
+
+    const prevProgress = Number(p.progress_current || 0);
+    const total = Number(p.progress_total || PROGRESS_TOTAL_DEFAULT);
+    const newProgress = Math.min(prevProgress + 1, total);
+
+    let newStatus = p.status || "active";
+    if (newProgress >= total) {
+      newStatus = "completed";
+    }
+
+    let newCurrentChapter =
+      p.current_chapter || CHAPTERS_ORDER[0] || "royal";
+
+    // ВАЖНО:
+    // НЕ переключаем главу автоматически.
+    // Меняем current_chapter ТОЛЬКО если админ ЯВНО выбрал next_chapter.
+    if (next_chapter && String(next_chapter).trim()) {
+      newCurrentChapter = String(next_chapter).trim();
+    }
+
+    // 4. обновляем участника
+    const upd = await pool.query(
+      `UPDATE inside_participants
+          SET progress_current = $1,
+              progress_total   = $2,
+              current_chapter  = $3,
+              status           = $4,
+              updated_at       = NOW()
+        WHERE user_id = $5
+        RETURNING user_id, current_chapter, progress_current, progress_total, status`,
+      [newProgress, total, newCurrentChapter, newStatus, r.user_id]
+    );
+
+    // 5. закрываем заявку (чиним типы через явный каст)
     const done = await pool.query(
-      `UPDATE inside_completion_requests
-          SET status = 'approved',
-              approved_at = NOW(),
-              curator_id = COALESCE($2, curator_id),
-              curator_note = COALESCE($3, curator_note)
-        WHERE id = $1
-      RETURNING
-        id, user_id, chapter, status, requested_at, approved_at, rejected_at,
-        curator_id, curator_note,
-        CASE
-          WHEN status = 'approved' THEN approved_at
-          WHEN status = 'rejected' THEN rejected_at
-          ELSE NULL
-        END AS resolved_at`,
+      `
+      UPDATE inside_completion_requests
+         SET status      = 'approved',
+             approved_at = NOW(),
+             curator_id  = COALESCE($2::int, curator_id),
+             curator_note = COALESCE($3::text, curator_note)
+       WHERE id = $1
+       RETURNING
+         id, user_id, chapter, status, requested_at, approved_at, rejected_at,
+         curator_id, curator_note,
+         CASE
+           WHEN status = 'approved' THEN approved_at
+           WHEN status = 'rejected' THEN rejected_at
+           ELSE NULL
+         END AS resolved_at
+      `,
       [id, curator_id || null, curator_note || null]
     );
 
@@ -560,6 +593,7 @@ async function adminApproveRequest(req, res) {
     return res.status(500).json({ error: "Failed to approve request" });
   }
 }
+
 
 // POST /api/admin/inside/requests/:id/reject { reason? }
 async function adminRejectRequest(req, res) {
