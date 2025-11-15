@@ -75,10 +75,7 @@ if (typeof ctrl.getChaptersPublic === "function") {
   // можно и без auth, но в личном кабинете у нас уже есть токен — пусть будет защищённый
   router.get("/chapters", authenticateToken, ctrl.getChaptersPublic);
 }
-// Публичный список всех глав (для MyInsideCard)
-if (typeof ctrl.listChaptersPublic === "function") {
-  router.get("/chapters", ctrl.listChaptersPublic);
-}
+
 
 // Общий публичный статус (пока заглушка)
 router.get("/", ctrl.getInsideStatus);
