@@ -1,6 +1,8 @@
 // frontend/src/pages/admin/AdminInsideChapters.jsx
 import React, { useEffect, useState } from "react";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
 function formatDate(dt) {
   if (!dt) return "—";
   const d = new Date(dt);
@@ -63,8 +65,9 @@ export default function AdminInsideChapters() {
       setLoading(true);
       setError("");
 
-      // ts в query нужен, чтобы обойти 304/кэш
-      const url = `/api/inside/admin/chapters?ts=${Date.now()}`;
+      // обязательно ходим на бэкенд по API_BASE_URL,
+      // иначе Vercel отдаёт HTML и ломает JSON.parse
+      const url = `${API_BASE_URL}/inside/admin/chapters?ts=${Date.now()}`;
       const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
@@ -85,6 +88,7 @@ export default function AdminInsideChapters() {
       setLoading(false);
     }
   }
+
   useEffect(() => {
     loadChapters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,7 +161,7 @@ export default function AdminInsideChapters() {
         status: form.status || null,
       };
 
-      const res = await fetch("/api/inside/admin/chapters", {
+      const res = await fetch(`${API_BASE_URL}/inside/admin/chapters`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -392,6 +396,7 @@ export default function AdminInsideChapters() {
                 Когда участники возвращаются домой / программа завершена.
               </p>
             </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Лимит мест (capacity)
