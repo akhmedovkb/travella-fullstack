@@ -70,7 +70,11 @@ if (typeof ctrl.adminUpsertChapter === "function") {
 if (typeof ctrl.getNextChapterPublic === "function") {
   router.get("/chapters/next", ctrl.getNextChapterPublic);
 }
-
+// Список всех глав для клиента (даты тура, лимиты и т.п.)
+if (typeof ctrl.getChaptersPublic === "function") {
+  // можно и без auth, но в личном кабинете у нас уже есть токен — пусть будет защищённый
+  router.get("/chapters", authenticateToken, ctrl.getChaptersPublic);
+}
 // Публичный список всех глав (для MyInsideCard)
 if (typeof ctrl.listChaptersPublic === "function") {
   router.get("/chapters", ctrl.listChaptersPublic);
