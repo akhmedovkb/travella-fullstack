@@ -501,30 +501,36 @@ const INSIDE_CHAPTERS = [
 ];
 
 // --- MyInsideCard: карточка статуса India Inside (клиент не завершает сам)
-// --- MyInsideCard: карточка статуса India Inside (запрос на участие в главах)
+// Карточка "Моя программа" для India Inside
+// Требует:
+// - apiGet, apiPost
+// - tSuccess, tError
+// - formatLeft(diffMs)
+// - React: useState, useEffect
 function MyInsideCard({ inside, loading, t, onJoined, now }) {
-  // хуки ВСЕГДА в начале
-  const [lastReq, setLastReq] = useState(null);   // последняя заявка (на участие)
+  // ===== ХУКИ =====
+  const [requests, setRequests] = useState([]);    // все заявки по главам
   const [loadingReq, setLoadingReq] = useState(true);
 
-  const [nextChapter, setNextChapter] = useState(null);  // ближайшая глава (для invite)
+  const [nextChapter, setNextChapter] = useState(null);  // ближайшая глава (для тех, кто ещё не в программе)
   const [loadingNext, setLoadingNext] = useState(true);
 
   // текущая глава и статус программы
   const currentChapterKey = inside?.current_chapter || "royal";
   const programStatus = inside?.status || "active";
 
-  // выбранная в верхнем ряду глава (по умолчанию — текущая)
+  // выбранная глава в верхнем ряду
   const [selectedKey, setSelectedKey] = useState(currentChapterKey);
 
-  // если сервер поменял current_chapter — синхронизируем выбор
+  // если на сервере поменялась current_chapter — подтягиваем её
   useEffect(() => {
     if (inside?.current_chapter) {
       setSelectedKey(inside.current_chapter);
     }
   }, [inside?.current_chapter]);
 
-  // заголовки глав по ключам
+  // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+
   const chapterTitle = (key) => {
     const map = {
       royal:   t("landing.inside.chapters.royal.title",   { defaultValue: "Золотой Треугольник" }),
@@ -535,7 +541,6 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     return map[key] || key || "Глава";
   };
 
-  // мини-«база» программ по дням (royal расписал, остальные — заглушки, можно дописать позже)
   const programDaysMap = {
     royal: [
       t("inside.program.royal.day1", { defaultValue: "Дели: прилёт, трансфер, вечерний брифинг" }),
@@ -575,7 +580,6 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     ],
   };
 
-  // хэлпер: пилюля статуса программы (справа сверху)
   const renderProgramStatusPill = (st) => {
     const map = {
       active:    t("inside.status_active",    { defaultValue: "Активна" }),
@@ -593,7 +597,6 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   };
 
-  // баннер ближайшей главы (для тех, кто ещё НЕ в программе)
   const NextChapterBanner = () => {
     if (!nextChapter) return null;
 
@@ -603,14 +606,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
     const capacityRaw = nextChapter.capacity ?? nextChapter.chapter_capacity;
     const enrolledRaw = nextChapter.enrolled_count ?? nextChapter.chapter_enrolled;
-    let placesLeft;
-    if (capacityRaw != null) {
-      const cap = Number(capacityRaw) || 0;
-      const enrolled = Number(enrolledRaw ?? 0) || 0;
-      placesLeft = Math.max(0, cap - enrolled);
-    } else {
-      placesLeft = Number(nextChapter.places_left ?? 0);
-    }
+    const cap = Number(capacityRaw ?? 0) || 0;
+    const enrolled = Number(enrolledRaw ?? 0) || 0;
+    const placesLeft = Math.max(0, cap - enrolled);
 
     return (
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -654,29 +652,39 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   };
 
-  // загрузка последней заявки
+  // ===== ЗАГРУЗКА ЗАЯВОК ПОЛЬЗОВАТЕЛЯ =====
   useEffect(() => {
     let cancel = false;
     (async () => {
       if (!inside) {
-        setLastReq(null);
+        setRequests([]);
         setLoadingReq(false);
         return;
       }
       try {
         setLoadingReq(true);
         const r = await apiGet("/api/inside/my-request");
-        if (!cancel) setLastReq(r || null);
+        if (cancel) return;
+
+        let list = [];
+        if (Array.isArray(r)) list = r;
+        else if (Array.isArray(r?.items)) list = r.items;
+        else if (r) list = [r];
+
+        setRequests(list.filter(Boolean));
       } catch {
-        if (!cancel) setLastReq(null);
+        if (!cancel) setRequests([]);
       } finally {
         if (!cancel) setLoadingReq(false);
       }
     })();
-    return () => { cancel = true; };
+
+    return () => {
+      cancel = true;
+    };
   }, [inside]);
 
-  // ближайшая глава (для invite-блока)
+  // ===== ЗАГРУЗКА БЛИЖАЙШЕЙ ГЛАВЫ ДЛЯ ИНВАЙТА =====
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -690,10 +698,12 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         if (!cancelled) setLoadingNext(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // ======== состояния загрузки ========
+  // ===== СКЕЛЕТОН =====
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
@@ -704,7 +714,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
-  // ======== 1. Пользователь ещё НЕ участвует в программе ========
+  // ===== 1. ПОЛЬЗОВАТЕЛЬ ЕЩЁ НЕ В ПРОГРАММЕ =====
   if (!inside) {
     async function handleJoinProgram() {
       try {
@@ -712,15 +722,23 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         if (res && (res.ok || res.status === "ok" || res.joined)) {
           const me = await apiGet("/api/inside/me");
           onJoined?.(me?.data ?? me ?? null);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          tSuccess(
+            t("inside.toast.joined") || "Вы присоединились к India Inside!",
+            { autoClose: 1600 }
+          );
           return;
         }
+
         const me = await apiGet("/api/inside/me");
-        if (me && (me.status && me.status !== "none")) {
+        if (me && me.status && me.status !== "none") {
           onJoined?.(me);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          tSuccess(
+            t("inside.toast.joined") || "Вы присоединились к India Inside!",
+            { autoClose: 1600 }
+          );
           return;
         }
+
         tError(t("inside.toast.join_failed") || "Не удалось присоединиться");
       } catch {
         window.open("/landing/india-inside", "_blank", "noreferrer");
@@ -733,7 +751,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           {t("inside.invite.title", { defaultValue: "Присоединиться к India Inside" })}
         </div>
         <p className="mt-2 text-gray-600">
-          {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
+          {t("inside.invite.sub", {
+            defaultValue: "Личный куратор, главы и статус Guru после 4 глав.",
+          })}
         </p>
         {!loadingNext && <NextChapterBanner />}
         <div className="mt-4 flex gap-2">
@@ -756,14 +776,12 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
-  // ======== 2. Пользователь уже в программе ========
-  const cur = Number(inside.progress_current ?? 0);
-  const total = Number(inside.progress_total ?? 4);
-  const pct = Math.max(0, Math.min(100, Math.round((cur / (total || 1)) * 100)));
+  // ===== 2. ПОЛЬЗОВАТЕЛЬ УЖЕ В ПРОГРАММЕ =====
+
   const curator = inside.curator_telegram || "@akhmedovkb";
 
+  // meta по главам — как прилетает из backend
   const chapterMeta = inside.chapter || {};
-
   const chaptersFromBackend =
     (Array.isArray(inside?.chapters) && inside.chapters) ||
     (Array.isArray(inside?.chapters_list) && inside.chapters_list) ||
@@ -772,8 +790,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
   const getChapterMeta = (key) => {
     if (chaptersFromBackend) {
-      const found =
-        chaptersFromBackend.find((c) => c.chapter_key === key || c.key === key) || null;
+      const found = chaptersFromBackend.find(
+        (c) => c.chapter_key === key || c.key === key
+      );
       if (found) return found;
     }
     if (
@@ -791,62 +810,20 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     (x) => x && String(x).trim() !== ""
   );
 
-  // даты туров по выбранной главе
-  const toursByChapter = (() => {
-    const all = []
-      .concat(inside?.chapter_runs || [])
-      .concat(inside?.runs || [])
-      .concat(inside?.slots || [])
-      .concat(inside?.tours || [])
-      .concat(inside?.schedules || [])
-      .concat(selectedMeta?.runs || [])
-      .concat(selectedMeta?.slots || [])
-      .concat(selectedMeta?.tours || []);
+  // === даты и места по выбранной главе (ровно таблица inside_chapters) ===
+  const enrollmentStartRaw = selectedMeta?.starts_at || null;        // старт набора
+  const tourStartRaw       = selectedMeta?.tour_starts_at || null;   // начало тура
+  const tourEndRaw         = selectedMeta?.tour_ends_at || null;     // конец тура
 
-    return all
-      .filter((r) => {
-        const k = r.chapter_key || r.chapter || r.key;
-        return !k || String(k) === String(selectedKey);
-      })
-      .map((r) => {
-        const dateRaw =
-          r.start_date || r.date || r.starts_at || r.departure_date || r.start_at || r.day;
-        const capRaw =
-          r.capacity ?? r.places_total ?? r.total_places ?? r.seats_total;
-        const enrolledRaw =
-          r.enrolled_count ?? r.booked_count ?? r.places_used ?? r.seats_taken;
-        const capacity = Number(capRaw ?? 0) || 0;
-        const enrolled = Number(enrolledRaw ?? 0) || 0;
-        const left = Math.max(0, capacity - enrolled);
+  const tourStartDate = tourStartRaw ? new Date(tourStartRaw) : null;
+  const tourEndDate   = tourEndRaw   ? new Date(tourEndRaw)   : null;
 
-        return {
-          id: r.id || `${dateRaw || "date"}_${capacity}_${enrolled}`,
-          date: dateRaw,
-          capacity,
-          left,
-        };
-      })
-      .filter((x) => x.date);
-  })();
+  const chapterCapacity = Number(selectedMeta?.capacity ?? 0) || 0;
+  const chapterEnrolled = Number(selectedMeta?.enrolled_count ?? 0) || 0;
+  const chapterLeft     = Math.max(0, chapterCapacity - chapterEnrolled);
 
-  const nowTs = now ?? Date.now();
-  const nearestTour = toursByChapter.length
-    ? [...toursByChapter].sort((a, b) => {
-        const ta = Date.parse(a.date) || 0;
-        const tb = Date.parse(b.date) || 0;
-        const da = ta >= nowTs ? ta - nowTs : Number.MAX_SAFE_INTEGER;
-        const db = tb >= nowTs ? tb - nowTs : Number.MAX_SAFE_INTEGER;
-        return da - db;
-      })[0]
-    : null;
-
-  const startsAtRaw =
-    (nearestTour && nearestTour.date) ||
-    selectedMeta?.starts_at ||
-    selectedMeta?.start_date ||
-    chapterMeta.starts_at ||
-    inside.chapter_starts_at ||
-    null;
+  const nowTs = typeof now === "number" ? now : Date.now();
+  const startsAtRaw = enrollmentStartRaw || tourStartRaw || null;
 
   let countdown = null;
   if (startsAtRaw) {
@@ -857,14 +834,24 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     }
   }
 
-  const hasRequestForSelected =
-    lastReq &&
-    (lastReq.chapter === selectedKey ||
-      lastReq.chapter_key === selectedKey ||
-      lastReq.chapterKey === selectedKey);
+  // === заявки по главам ===
+  const requestsForSelected = requests.filter((req) => {
+    const k = req.chapter || req.chapter_key || req.chapterKey;
+    return String(k) === String(selectedKey);
+  });
 
-  const isPendingForSelected  = hasRequestForSelected && lastReq.status === "pending";
-  const isApprovedForSelected = hasRequestForSelected && lastReq.status === "approved";
+  const chapterReq =
+    requestsForSelected.sort((a, b) => {
+      const ta =
+        Date.parse(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0) || 0;
+      const tb =
+        Date.parse(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0) || 0;
+      return tb - ta;
+    })[0] || null;
+
+  const hasRequestForSelected = !!chapterReq;
+  const isPendingForSelected  = chapterReq?.status === "pending";
+  const isApprovedForSelected = chapterReq?.status === "approved";
   const enrollButtonDisabled  = isPendingForSelected || isApprovedForSelected;
 
   async function requestJoinChapter() {
@@ -877,7 +864,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     const endpoints = [
       "/api/inside/request-join",
       "/api/inside/request-enroll",
-      "/api/inside/request-completion", // fallback
+      "/api/inside/request-completion",
     ];
 
     for (const url of endpoints) {
@@ -898,10 +885,15 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         lastError?.response?.status === 403 ||
         msg.includes("unauthorized")
       ) {
-        tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
+        tError(
+          t("auth.login_required") ||
+            "Войдите заново и повторите попытку",
+          { autoClose: 2200 }
+        );
       } else {
         tError(
-          t("inside.errors.request_failed") || "Не удалось отправить запрос на участие",
+          t("inside.errors.request_failed") ||
+            "Не удалось отправить запрос на участие",
           { autoClose: 2200 }
         );
       }
@@ -909,7 +901,17 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     }
 
     const item = res?.item || res?.data || res.request || res;
-    if (item) setLastReq(item);
+    if (item) {
+      setRequests((prev) => {
+        const chapterKey =
+          item.chapter || item.chapter_key || item.chapterKey || payload.chapter;
+        const without = prev.filter((r) => {
+          const k = r.chapter || r.chapter_key || r.chapterKey;
+          return String(k) !== String(chapterKey);
+        });
+        return [item, ...without];
+      });
+    }
 
     tSuccess(
       t("inside.toast.request_joined") || "Запрос на участие отправлен",
@@ -924,6 +926,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     { key: "kerala",  order: 4 },
   ];
 
+  // ====== РЕНДЕР ======
   return (
     <section className="bg-white rounded-xl shadow p-6 border">
       {/* шапка */}
@@ -937,7 +940,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         {renderProgramStatusPill(programStatus)}
       </div>
 
-      {/* ВЕРХ: список глав */}
+      {/* ВЕРХНИЙ РЯД: выбор главы */}
       <div className="mt-4 rounded-2xl bg-orange-50 border border-orange-100 p-4">
         <div className="flex flex-wrap gap-3">
           {chaptersOrder.map(({ key, order }) => {
@@ -975,9 +978,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         </div>
       </div>
 
-      {/* НИЗ: три карточки */}
+      {/* НИЖНИЙ РЯД: три карточки */}
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* 1. Выбранная глава + программа по дням (БЕЗ прогресса) */}
+        {/* 1. Выбранная глава + программа по дням (без прогресса) */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -1010,42 +1013,23 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               </div>
             )}
           </div>
-
-          {/* блок прогресса убран — добавим ниже страницы отдельным виджетом */}
         </div>
 
-        {/* 2. Даты туров + оставшиеся места */}
+        {/* 2. ДАТЫ ТУРОВ + МЕСТА ПО ЭТОЙ ГЛАВЕ */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div className="text-xs uppercase tracking-wide text-slate-500">
             {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
           </div>
 
-          {toursByChapter.length ? (
-            <div className="mt-2 space-y-1.5 text-sm text-slate-800">
-              {toursByChapter.map((r) => (
-                <div key={r.id} className="flex items-baseline justify-between gap-3">
-                  <div>
-                    <span className="font-medium">
-                      {new Date(r.date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-600 text-right">
-                    {t("inside.dates_block.capacity", {
-                      defaultValue: "Мест всего: {{total}}",
-                      total: r.capacity,
-                    })}
-                    {r.capacity > 0 && (
-                      <>
-                        <br />
-                        {t("inside.dates_block.left", {
-                          defaultValue: "Свободно: {{left}}",
-                          left: r.left,
-                        })}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {tourStartDate || tourEndDate ? (
+            <div className="mt-2 text-sm text-slate-800">
+              <div className="text-xs text-slate-500 mb-1">
+                {t("inside.dates_block.range_label", { defaultValue: "Даты тура:" })}
+              </div>
+              <div className="font-medium">
+                {tourStartDate && tourStartDate.toLocaleDateString()}
+                {tourEndDate && <> — {tourEndDate.toLocaleDateString()}</>}
+              </div>
             </div>
           ) : (
             <div className="mt-2 text-xs text-slate-500">
@@ -1055,12 +1039,41 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             </div>
           )}
 
+          {chapterCapacity > 0 && (
+            <div className="mt-3 text-sm text-slate-800">
+              <div className="text-xs text-slate-500 mb-1">
+                {t("inside.dates_block.capacity_header", {
+                  defaultValue: "Места по главе:",
+                })}
+              </div>
+              <div>
+                {t("inside.dates_block.capacity_total", {
+                  defaultValue: "Лимит: {{total}}",
+                  total: chapterCapacity,
+                })}
+              </div>
+              <div className="text-xs text-slate-600">
+                {t("inside.dates_block.capacity_enrolled", {
+                  defaultValue: "Зачислено: {{count}}",
+                  count: chapterEnrolled,
+                })}
+                <br />
+                {t("inside.dates_block.capacity_left", {
+                  defaultValue: "Свободно: {{left}}",
+                  left: chapterLeft,
+                })}
+              </div>
+            </div>
+          )}
+
           {(startsAtRaw || countdown) && (
             <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-800">
               {startsAtRaw && (
                 <div>
                   <span className="text-xs text-slate-500">
-                    {t("inside.chapter_start_at", { defaultValue: "Ближайший старт:" })}{" "}
+                    {t("inside.chapter_start_at", {
+                      defaultValue: "Старт набора:",
+                    })}{" "}
                   </span>
                   <span className="font-medium">
                     {new Date(startsAtRaw).toLocaleString()}
@@ -1070,7 +1083,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               {countdown && (
                 <div className="mt-1">
                   <span className="text-xs text-slate-500">
-                    {t("inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
+                    {t("inside.chapter_countdown", {
+                      defaultValue: "До старта осталось:",
+                    })}{" "}
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs font-mono">
                     {countdown}
@@ -1087,7 +1102,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               target="_blank"
               rel="noreferrer"
             >
-              {t("inside.actions.view_program", { defaultValue: "Смотреть программу" })}
+              {t("inside.actions.view_program", {
+                defaultValue: "Смотреть программу",
+              })}
             </a>
             <a
               href={`https://t.me/${curator.replace(/^@/, "")}`}
@@ -1095,12 +1112,14 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               rel="noreferrer"
               className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
             >
-              {t("inside.actions.contact_curator", { defaultValue: "Связаться с куратором" })}
+              {t("inside.actions.contact_curator", {
+                defaultValue: "Связаться с куратором",
+              })}
             </a>
           </div>
         </div>
 
-        {/* 3. Запрос на участие */}
+        {/* 3. ЗАПРОС НА УЧАСТИЕ ПО ВЫБРАННОЙ ГЛАВЕ */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div className="text-xs uppercase tracking-wide text-slate-500">
             {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
@@ -1117,30 +1136,39 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               onClick={requestJoinChapter}
               disabled={enrollButtonDisabled}
               className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
-                enrollButtonDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-black/90"
+                enrollButtonDisabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-black hover:bg-black/90"
               }`}
             >
               {isPendingForSelected
-                ? t("inside.actions.request_sent", { defaultValue: "Заявка отправлена" })
+                ? t("inside.actions.request_sent", {
+                    defaultValue: "Заявка отправлена",
+                  })
                 : isApprovedForSelected
-                ? t("inside.actions.request_approved", { defaultValue: "Участие одобрено" })
-                : t("inside.actions.request_join", { defaultValue: "Запросить участие" })}
+                ? t("inside.actions.request_approved", {
+                    defaultValue: "Участие одобрено",
+                  })
+                : t("inside.actions.request_join", {
+                    defaultValue: "Запросить участие",
+                  })}
             </button>
           </div>
 
           {hasRequestForSelected && (
             <div className="mt-2 text-xs text-slate-500">
-              {lastReq?.status === "pending" &&
+              {chapterReq?.status === "pending" &&
                 t("inside.enroll_block.pending", {
                   defaultValue: "Заявка по этой главе ожидает одобрения.",
                 })}
-              {lastReq?.status === "approved" &&
+              {chapterReq?.status === "approved" &&
                 t("inside.enroll_block.approved", {
                   defaultValue: "Участие по этой главе подтверждено.",
                 })}
-              {lastReq?.status === "rejected" &&
+              {chapterReq?.status === "rejected" &&
                 t("inside.enroll_block.rejected", {
-                  defaultValue: "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
+                  defaultValue:
+                    "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
                 })}
             </div>
           )}
@@ -1149,7 +1177,6 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     </section>
   );
 }
-
 
 /* ===================== Main Page ===================== */
 
