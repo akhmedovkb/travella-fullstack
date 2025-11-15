@@ -1,7 +1,11 @@
 // frontend/src/pages/admin/AdminInsideChapters.jsx
 import React, { useEffect, useState } from "react";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+// Гарантируем, что в ROOT есть /api
+const API_ROOT = RAW_API_BASE_URL.endsWith("/api")
+  ? RAW_API_BASE_URL
+  : `${RAW_API_BASE_URL}/api`;
 
 function formatDate(dt) {
   if (!dt) return "—";
@@ -65,9 +69,8 @@ export default function AdminInsideChapters() {
       setLoading(true);
       setError("");
 
-      // обязательно ходим на бэкенд по API_BASE_URL,
-      // иначе Vercel отдаёт HTML и ломает JSON.parse
-      const url = `${API_BASE_URL}/inside/admin/chapters?ts=${Date.now()}`;
+      // ts в query нужен, чтобы обойти 304/кэш
+      const url = `${API_ROOT}/inside/admin/chapters?ts=${Date.now()}`;
       const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
@@ -161,7 +164,7 @@ export default function AdminInsideChapters() {
         status: form.status || null,
       };
 
-      const res = await fetch(`${API_BASE_URL}/inside/admin/chapters`, {
+      const res = await fetch(`${API_ROOT}/inside/admin/chapters`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
