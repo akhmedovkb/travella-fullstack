@@ -377,6 +377,34 @@ async function getNextChapterPublic(_req, res) {
   }
 }
 
+// GET /api/inside/chapters — публичный список всех глав
+async function listChaptersPublic(_req, res) {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        chapter_key,
+        title,
+        starts_at,
+        tour_starts_at,
+        tour_ends_at,
+        capacity,
+        enrolled_count,
+        status
+      FROM inside_chapters
+      ORDER BY starts_at NULLS LAST, chapter_key
+      `
+    );
+
+    // фронту удобнее работать с items
+    return res.json({ items: rows });
+  } catch (e) {
+    console.error("listChaptersPublic error:", e);
+    return res.status(500).json({ error: "Failed to load chapters" });
+  }
+}
+
 /** -------- admin — заявки -------- */
 
 // GET /api/admin/inside/requests?status=pending|approved|rejected|all&q=...
