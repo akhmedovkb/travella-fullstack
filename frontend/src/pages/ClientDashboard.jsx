@@ -977,7 +977,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
       {/* НИЗ: три карточки */}
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* 1. Выбранная глава + программа по дням */}
+        {/* 1. Выбранная глава + программа по дням (БЕЗ прогресса) */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -1011,20 +1011,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-200">
-            <div className="text-xs text-gray-500 mb-1">
-              {t("inside.progress", { defaultValue: "Прогресс" })}
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="h-2 bg-orange-500 rounded-full transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-gray-500">
-              {cur} / {total} ({pct}%)
-            </div>
-          </div>
+          {/* блок прогресса убран — добавим ниже страницы отдельным виджетом */}
         </div>
 
         {/* 2. Даты туров + оставшиеся места */}
@@ -1162,6 +1149,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     </section>
   );
 }
+
 
 /* ===================== Main Page ===================== */
 
