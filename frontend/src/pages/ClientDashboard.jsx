@@ -501,7 +501,6 @@ const INSIDE_CHAPTERS = [
 ];
 
 // --- MyInsideCard: карточка статуса India Inside (запрос на участие в главах)
-// --- MyInsideCard: карточка статуса India Inside (запрос на участие в главах)
 function MyInsideCard({ inside, loading, t, onJoined, now }) {
   // хуки ВСЕГДА в начале
   const [lastReq, setLastReq] = useState(null);   // последняя заявка (на участие)
@@ -513,6 +512,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   // все главы из публичного эндпоинта (tour_starts_at / tour_ends_at и т.п.)
   const [chaptersPublic, setChaptersPublic] = useState(null);
   const [loadingChapters, setLoadingChapters] = useState(true);
+
+  // сворачивание/разворачивание блока деталей (3 карточки)
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
   // текущая глава и статус программы
   const currentChapterKey = inside?.current_chapter || "royal";
@@ -1021,7 +1023,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     }
   }
 
-// порядок глав (для верхнего ряда и нижнего прогресс-блока)
+  // порядок глав (для верхнего ряда и нижнего прогресс-блока)
   const chaptersOrder = [
     { key: "royal",   order: 1 },
     { key: "silence", order: 2 },
@@ -1080,224 +1082,248 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         </div>
       </div>
 
-      {/* НИЗ: три карточки */}
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* 1. Выбранная глава + программа по дням */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("inside.selected_chapter", { defaultValue: "Выбранная глава" })}
-            </div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">
-              {selectedTitle}
-            </div>
+      {/* НИЗ: три карточки — сворачиваемый блок */}
+      <div className="mt-4">
+        {/* Кнопка сворачивания/разворачивания */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 hover:bg-slate-100"
+        >
+          <span className="font-medium">
+            {t("inside.details.toggle_label", {
+              defaultValue: "Детали по выбранной главе",
+            })}
+          </span>
+          <span
+            className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[10px] transition-transform transform ${
+              detailsOpen ? "rotate-90" : ""
+            }`}
+          >
+            ›
+          </span>
+        </button>
 
-            <div className="mt-3 text-sm font-medium text-slate-700">
-              {t("inside.program_by_days", { defaultValue: "Программа по дням:" })}
-            </div>
+        {detailsOpen && (
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            {/* 1. Выбранная глава + программа по дням */}
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {t("inside.selected_chapter", { defaultValue: "Выбранная глава" })}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedTitle}
+                </div>
 
-            {programDays.length ? (
-              <ol className="mt-2 space-y-1.5 text-sm text-slate-800">
-                {programDays.map((txt, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-semibold text-white">
-                      {idx + 1}
-                    </span>
-                    <span className="leading-snug">{txt}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="mt-2 text-xs text-slate-500">
-                {t("inside.program_empty", {
-                  defaultValue: "Программа по дням будет опубликована позже.",
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+                <div className="mt-3 text-sm font-medium text-slate-700">
+                  {t("inside.program_by_days", { defaultValue: "Программа по дням:" })}
+                </div>
 
-        {/* 2. Даты туров + места */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
-          </div>
-
-          {selectedChapterMeta && (tourStartsRaw || tourEndsRaw) ? (
-            <>
-              <div className="mt-2 text-xs text-slate-500">
-                {t("inside.dates_block.tour_dates_label", {
-                  defaultValue: "Даты тура:",
-                })}
-              </div>
-              <div className="text-sm text-slate-800 font-medium">
-                {formatDateRange(tourStartsRaw, tourEndsRaw)}
-              </div>
-
-              <div className="mt-3 text-xs text-slate-500">
-                {t("inside.dates_block.places_label", {
-                  defaultValue: "Места по главе:",
-                })}
-              </div>
-              <div className="text-xs text-slate-700 space-y-0.5">
-                {capacity != null && (
-                  <div>
-                    {t("inside.dates_block.limit", {
-                      defaultValue: "Лимит: {{value}}",
-                      value: capacity,
+                {programDays.length ? (
+                  <ol className="mt-2 space-y-1.5 text-sm text-slate-800">
+                    {programDays.map((txt, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-semibold text-white">
+                          {idx + 1}
+                        </span>
+                        <span className="leading-snug">{txt}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="mt-2 text-xs text-slate-500">
+                    {t("inside.program_empty", {
+                      defaultValue: "Программа по дням будет опубликована позже.",
                     })}
                   </div>
                 )}
-                <div>
-                  {t("inside.dates_block.enrolled", {
-                    defaultValue: "Зачислено: {{value}}",
-                    value: enrolled,
+              </div>
+            </div>
+
+            {/* 2. Даты туров + места */}
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
+              <div className="text-xs uppercase tracking-wide text-slate-500">
+                {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
+              </div>
+
+              {selectedChapterMeta && (tourStartsRaw || tourEndsRaw) ? (
+                <>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {t("inside.dates_block.tour_dates_label", {
+                      defaultValue: "Даты тура:",
+                    })}
+                  </div>
+                  <div className="text-sm text-slate-800 font-medium">
+                    {formatDateRange(tourStartsRaw, tourEndsRaw)}
+                  </div>
+
+                  <div className="mt-3 text-xs text-slate-500">
+                    {t("inside.dates_block.places_label", {
+                      defaultValue: "Места по главе:",
+                    })}
+                  </div>
+                  <div className="text-xs text-slate-700 space-y-0.5">
+                    {capacity != null && (
+                      <div>
+                        {t("inside.dates_block.limit", {
+                          defaultValue: "Лимит: {{value}}",
+                          value: capacity,
+                        })}
+                      </div>
+                    )}
+                    <div>
+                      {t("inside.dates_block.enrolled", {
+                        defaultValue: "Зачислено: {{value}}",
+                        value: enrolled,
+                      })}
+                    </div>
+                    {remaining != null && (
+                      <div>
+                        {t("inside.dates_block.left", {
+                          defaultValue: "Свободно: {{value}}",
+                          value: remaining,
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {(startsAtRaw || countdown) && (
+                    <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-800">
+                      {startsAtRaw && (
+                        <div>
+                          <span className="text-xs text-slate-500">
+                            {t("inside.chapter_start_at", { defaultValue: "Старт набора:" })}{" "}
+                          </span>
+                          <span className="font-medium">
+                            {new Date(startsAtRaw).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {countdown && (
+                        <div className="mt-1">
+                          <span className="text-xs text-slate-500">
+                            {t("inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs font-mono">
+                            {countdown}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="mt-2 text-xs text-slate-500">
+                  {t("inside.dates_block.empty", {
+                    defaultValue: "Даты туров по этой главе появятся здесь.",
                   })}
                 </div>
-                {remaining != null && (
-                  <div>
-                    {t("inside.dates_block.left", {
-                      defaultValue: "Свободно: {{value}}",
-                      value: remaining,
-                    })}
-                  </div>
-                )}
+              )}
+
+              {/* нижние кнопки мы убрали по твоему ТЗ */}
+            </div>
+
+            {/* 3. Запрос на участие + оплата */}
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
+              <div className="text-xs uppercase tracking-wide text-slate-500">
+                {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
+              </div>
+              <div className="mt-2 text-xs text-slate-600">
+                {t("inside.enroll_block.desc", {
+                  defaultValue:
+                    "После одобрения заявки у вас будет ограниченное время, чтобы оплатить турпакет и получить документы.",
+                })}
               </div>
 
-              {(startsAtRaw || countdown) && (
-                <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-800">
-                  {startsAtRaw && (
-                    <div>
-                      <span className="text-xs text-slate-500">
-                        {t("inside.chapter_start_at", { defaultValue: "Старт набора:" })}{" "}
-                      </span>
-                      <span className="font-medium">
-                        {new Date(startsAtRaw).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {countdown && (
-                    <div className="mt-1">
-                      <span className="text-xs text-slate-500">
-                        {t("inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
-                      </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs font-mono">
-                        {countdown}
-                      </span>
-                    </div>
-                  )}
+              {/* Кнопка «Запросить участие» / «Участие одобрено» и т.п. */}
+              <div className="mt-4">
+                <button
+                  onClick={requestJoinChapter}
+                  disabled={enrollButtonDisabled}
+                  className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
+                    enrollButtonDisabled
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-black hover:bg-black/90"
+                  }`}
+                >
+                  {enrollButtonLabel}
+                </button>
+              </div>
+
+              {hasRequestForSelected && (
+                <div className="mt-2 text-xs text-slate-500">
+                  {lastReq?.status === "pending" &&
+                    t("inside.enroll_block.pending", {
+                      defaultValue: "Заявка по этой главе ожидает одобрения.",
+                    })}
+                  {lastReq?.status === "rejected" &&
+                    t("inside.enroll_block.rejected", {
+                      defaultValue:
+                        "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
+                    })}
                 </div>
               )}
-            </>
-          ) : (
-            <div className="mt-2 text-xs text-slate-500">
-              {t("inside.dates_block.empty", {
-                defaultValue: "Даты туров по этой главе появятся здесь.",
-              })}
+
+              {canShowApprovedLabel && approvalWindowHours != null && (
+                <div className="mt-2 text-[11px] text-slate-500">
+                  {t("inside.pay_block.window_hint", {
+                    defaultValue:
+                      "Участие одобрено. Оплатите в течение {{hours}} часов, чтобы получить документы по турпакету.",
+                    hours: approvalWindowHours,
+                  })}
+                </div>
+              )}
+
+              {isApprovalExpired && (
+                <div className="mt-2 text-[11px] text-rose-500">
+                  {t("inside.pay_block.window_expired", {
+                    defaultValue:
+                      "Срок на оплату по этой заявке истёк. Отправьте новый запрос или свяжитесь с куратором.",
+                  })}
+                </div>
+              )}
+
+              {/* Блок оплаты + кнопка куратора */}
+              <div className="mt-4 pt-3 border-t border-slate-200">
+                <div className="text-xs text-slate-600 mb-2">
+                  {t("inside.pay_block.desc", {
+                    defaultValue:
+                      "Для того чтобы получить документы по турпакету нажмите кнопку «Оплатить».",
+                  })}
+                </div>
+
+                <button
+                  onClick={handlePay}
+                  disabled={!canPayNow}
+                  className={`w-full rounded-lg px-4 py-2 text-sm font-semibold ${
+                    canPayNow
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  {t("inside.actions.pay", { defaultValue: "Оплатить" })}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.open(
+                      `https://t.me/${curator.replace(/^@/, "")}`,
+                      "_blank"
+                    )
+                  }
+                  className="mt-3 w-full rounded-lg border px-4 py-2 text-xs hover:bg-gray-50 text-center"
+                >
+                  {t("inside.actions.contact_curator", {
+                    defaultValue: "Связаться с куратором",
+                  })}
+                </button>
+              </div>
             </div>
-          )}
-
-          {/* нижние кнопки мы убрали по твоему ТЗ */}
-        </div>
-
-        {/* 3. Запрос на участие + оплата */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
           </div>
-          <div className="mt-2 text-xs text-slate-600">
-            {t("inside.enroll_block.desc", {
-              defaultValue:
-                "После одобрения заявки у вас будет ограниченное время, чтобы оплатить турпакет и получить документы.",
-            })}
-          </div>
-
-          {/* Кнопка «Запросить участие» / «Участие одобрено» и т.п. */}
-          <div className="mt-4">
-            <button
-              onClick={requestJoinChapter}
-              disabled={enrollButtonDisabled}
-              className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
-                enrollButtonDisabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-black hover:bg-black/90"
-              }`}
-            >
-              {enrollButtonLabel}
-            </button>
-          </div>
-
-          {hasRequestForSelected && (
-            <div className="mt-2 text-xs text-slate-500">
-              {lastReq?.status === "pending" &&
-                t("inside.enroll_block.pending", {
-                  defaultValue: "Заявка по этой главе ожидает одобрения.",
-                })}
-              {lastReq?.status === "rejected" &&
-                t("inside.enroll_block.rejected", {
-                  defaultValue:
-                    "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
-                })}
-            </div>
-          )}
-
-          {canShowApprovedLabel && approvalWindowHours != null && (
-            <div className="mt-2 text-[11px] text-slate-500">
-              {t("inside.pay_block.window_hint", {
-                defaultValue:
-                  "Участие одобрено. Оплатите в течение {{hours}} часов, чтобы получить документы по турпакету.",
-                hours: approvalWindowHours,
-              })}
-            </div>
-          )}
-
-          {isApprovalExpired && (
-            <div className="mt-2 text-[11px] text-rose-500">
-              {t("inside.pay_block.window_expired", {
-                defaultValue:
-                  "Срок на оплату по этой заявке истёк. Отправьте новый запрос или свяжитесь с куратором.",
-              })}
-            </div>
-          )}
-
-          {/* Блок оплаты + кнопка куратора */}
-          <div className="mt-4 pt-3 border-t border-slate-200">
-            <div className="text-xs text-slate-600 mb-2">
-              {t("inside.pay_block.desc", {
-                defaultValue:
-                  "Для того чтобы получить документы по турпакету нажмите кнопку «Оплатить».",
-              })}
-            </div>
-
-            <button
-              onClick={handlePay}
-              disabled={!canPayNow}
-              className={`w-full rounded-lg px-4 py-2 text-sm font-semibold ${
-                canPayNow
-                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                  : "bg-slate-200 text-slate-500 cursor-not-allowed"
-              }`}
-            >
-              {t("inside.actions.pay", { defaultValue: "Оплатить" })}
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                window.open(
-                  `https://t.me/${curator.replace(/^@/, "")}`,
-                  "_blank"
-                )
-              }
-              className="mt-3 w-full rounded-lg border px-4 py-2 text-xs hover:bg-gray-50 text-center"
-            >
-              {t("inside.actions.contact_curator", {
-                defaultValue: "Связаться с куратором",
-              })}
-            </button>
-          </div>
-        </div>
-     </div>
+        )}
+      </div>
 
       {/* НИЖНИЙ БЛОК: прогресс по главам в виде батареек */}
       <div className="mt-6 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
@@ -1305,9 +1331,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           <span>
             {t("inside.chapters_progress.title", { defaultValue: "Прогресс по главам" })}
           </span>
-          {/*<span>
-            {cur}/{total}
-          </span>*/}
+          {/* 4/4 убрали как лишнее */}
         </div>
 
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1343,7 +1367,6 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     </section>
   );
 }
-
 
 /* ===================== Main Page ===================== */
 
