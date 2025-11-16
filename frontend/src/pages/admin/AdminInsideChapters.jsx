@@ -41,6 +41,18 @@ function toLocalInputValue(iso) {
   return `${year}-${month}-${day}T${hours}:${mins}`;
 }
 
+// 🔒 helper: минимальное значение для <input type="datetime-local"> (сейчас, локальное время)
+function nowLocalInputMin() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const mins = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${mins}`;
+}
+
 const EMPTY_FORM = {
   chapter_key: "",
   title: "",
@@ -60,6 +72,9 @@ export default function AdminInsideChapters() {
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingKey, setEditingKey] = useState(null); // chapter_key или null
+
+  // 🔒 min-значение для всех дат в форме (фиксируется при монтировании компонента)
+  const [minDateTime] = useState(() => nowLocalInputMin());
 
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -133,19 +148,46 @@ export default function AdminInsideChapters() {
       return;
     }
 
-    const parseLocal = (val) => {
+    // 🔒 локальный парсер в Date
+    const parseLocalToDate = (val) => {
       if (!val) return null;
       const d = new Date(val);
       if (Number.isNaN(d.getTime())) return null;
-      return d.toISOString();
+      return d;
     };
+
+    const now = new Date();
+    const startsAtDate = parseLocalToDate(form.starts_at);
+    const tourStartsDate = parseLocalToDate(form.tour_starts_at);
+    const tourEndsDate = parseLocalToDate(form.tour_ends_at);
+
+    // 🔒 Валидация на прошлые даты
+    if (startsAtDate && startsAtDate < now) {
+      setFormError("Дата старта набора не может быть в прошлом");
+      return;
+    }
+    if (tourStartsDate && tourStartsDate < now) {
+      setFormError("Дата начала тура не может быть в прошлом");
+      return;
+    }
+    if (tourEndsDate && tourEndsDate < now) {
+      setFormError("Дата окончания тура не может быть в прошлом");
+      return;
+    }
+    // 🔒 Дополнительно: окончание должно быть позже начала
+    if (tourStartsDate && tourEndsDate && tourEndsDate <= tourStartsDate) {
+      setFormError("Дата окончания тура должна быть позже даты начала");
+      return;
+    }
+
+    const toIso = (d) => (d ? d.toISOString() : null);
 
     try {
       setSaving(true);
 
-      const startsAtIso = parseLocal(form.starts_at);
-      const tourStartsIso = parseLocal(form.tour_starts_at);
-      const tourEndsIso = parseLocal(form.tour_ends_at);
+      const startsAtIso = toIso(startsAtDate);
+      const tourStartsIso = toIso(tourStartsDate);
+      const tourEndsIso = toIso(tourEndsDate);
 
       const body = {
         chapter_key: form.chapter_key.trim(),
@@ -361,6 +403,7 @@ export default function AdminInsideChapters() {
                 type="datetime-local"
                 value={form.starts_at}
                 onChange={handleChange}
+                min={minDateTime} // 🔒 нельзя выбрать прошедшую дату
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -377,6 +420,7 @@ export default function AdminInsideChapters() {
                 type="datetime-local"
                 value={form.tour_starts_at}
                 onChange={handleChange}
+                min={minDateTime} // 🔒 нельзя выбрать прошедшую дату
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -393,6 +437,7 @@ export default function AdminInsideChapters() {
                 type="datetime-local"
                 value={form.tour_ends_at}
                 onChange={handleChange}
+                min={minDateTime} // 🔒 нельзя выбрать прошедшую дату
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -435,7 +480,7 @@ export default function AdminInsideChapters() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text.sm font-medium text-gray-700">
                 Статус
               </label>
               <select
