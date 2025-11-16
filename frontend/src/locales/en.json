@@ -1361,6 +1361,34 @@
 
 "auth": { "login_required": "Please log in again and retry" },
 "inside": {
+    "my": {
+    "title": "My program",
+    "chapters_title": "Chapters",
+    "chapters_hint": "Tap a chapter to see the program and dates.",
+    "chapter_label": "Chapter {{num}}",
+
+    "details_toggle": "Details for the selected chapter",
+
+    "selected_title": "Selected chapter",
+    "program_by_days": "Day-by-day program",
+
+    "dates_title": "Tour dates",
+    "tour_dates": "Tour dates",
+    "places_title": "Seats for this chapter",
+    "limit": "Limit",
+    "enrolled": "Enrolled",
+    "free": "Available",
+    "enrolment_start": "Enrollment opens",
+
+    "request_title": "Participation request",
+    "request_hint": "After your request is approved you’ll have limited time to pay for the package and receive the documents.",
+    "btn_request": "Request to join",
+    "btn_requested": "Request sent",
+    "btn_approved": "Participation approved",
+    "approved_hint": "Participation approved. Please pay within 24 hours to receive your travel documents.",
+    "btn_pay": "Pay",
+    "btn_contact_curator": "Contact curator"
+  },
       "errors": {
       "request_failed": "Failed to send completion request",
       "ask_open_telegram": "Open curator chat in Telegram?"
