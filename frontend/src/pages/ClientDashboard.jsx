@@ -1021,7 +1021,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     }
   }
 
-  (мы уже используем apiPost в файле, импорт менять не 
+// порядок глав (для верхнего ряда и нижнего прогресс-блока)
   const chaptersOrder = [
     { key: "royal",   order: 1 },
     { key: "silence", order: 2 },
