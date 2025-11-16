@@ -877,11 +877,77 @@ async function adminUpsertChapter(req, res) {
       return res.status(400).json({ error: "chapter_key_required" });
     }
 
-    const normalizeDate = (v) => {
-      if (!v) return null;
-      const s = String(v).trim();
-      return s ? s : null;
+    // --- Валидация дат ---
+    const now = new Date();
+
+    const parseIso = (value, field) => {
+      if (!value) return null;
+      const s = String(value).trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) {
+        throw {
+          httpCode: 400,
+          error: "invalid_date",
+          field,
+          message: `Некорректное значение даты в поле ${field}`,
+        };
+      }
+      return d;
     };
+
+    let startsAtDate, tourStartsDate, tourEndsDate;
+    try {
+      startsAtDate = parseIso(starts_at, "starts_at");
+      tourStartsDate = parseIso(tour_starts_at, "tour_starts_at");
+      tourEndsDate = parseIso(tour_ends_at, "tour_ends_at");
+    } catch (e) {
+      if (e && e.httpCode) {
+        return res
+          .status(e.httpCode)
+          .json({ error: e.error, field: e.field, message: e.message });
+      }
+      throw e;
+    }
+
+    // Запрещаем прошедшие даты (все три поля)
+    if (startsAtDate && startsAtDate < now) {
+      return res.status(400).json({
+        error: "starts_at_in_past",
+        field: "starts_at",
+        message: "Дата старта набора не может быть в прошлом",
+      });
+    }
+
+    if (tourStartsDate && tourStartsDate < now) {
+      return res.status(400).json({
+        error: "tour_starts_at_in_past",
+        field: "tour_starts_at",
+        message: "Дата начала тура не может быть в прошлом",
+      });
+    }
+
+    if (tourEndsDate && tourEndsDate < now) {
+      return res.status(400).json({
+        error: "tour_ends_at_in_past",
+        field: "tour_ends_at",
+        message: "Дата окончания тура не может быть в прошлом",
+      });
+    }
+
+    // Окончание тура должно быть позже начала
+    if (tourStartsDate && tourEndsDate && tourEndsDate <= tourStartsDate) {
+      return res.status(400).json({
+        error: "tour_ends_before_start",
+        field: "tour_ends_at",
+        message: "Дата окончания тура должна быть позже даты начала",
+      });
+    }
+
+    // Приводим к ISO-строке для записи в базу
+    const startsAtIso = startsAtDate ? startsAtDate.toISOString() : null;
+    const tourStartsIso = tourStartsDate ? tourStartsDate.toISOString() : null;
+    const tourEndsIso = tourEndsDate ? tourEndsDate.toISOString() : null;
 
     const sql = `
       INSERT INTO inside_chapters (
@@ -906,9 +972,9 @@ async function adminUpsertChapter(req, res) {
     const { rows } = await pool.query(sql, [
       chapter_key,
       title || null,
-      normalizeDate(starts_at),
-      normalizeDate(tour_starts_at),
-      normalizeDate(tour_ends_at),
+      startsAtIso,
+      tourStartsIso,
+      tourEndsIso,
       capacity != null ? Number(capacity) : null,
       enrolled_count != null ? Number(enrolled_count) : null,
       status || null,
