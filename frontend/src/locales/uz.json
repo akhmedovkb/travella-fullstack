@@ -172,179 +172,177 @@
     "busy": "band",
     "selected": "tanlangan"
   },
-{
-  "accommodation": "Joylashuv",
-  "accommodation_category": "Joylashuv toifasi",
+  "cancel": "Bekor qilish",
 
-  "actions": {
-    "book": "Bron qilish",
-    "cancel": "Bekor qilish",
-    "ok": "OK",
-    "quick_request": "Tez so‘rov",
-    "reject": "Rad etish",
-    "refresh": "Yangilash",
-    "send": "Yuborish",
-    "confirm": "Tasdiqlash",
-    "edit": "Tahrirlash",
-    "delete": "O‘chirish"
+  "category": {
+    "author_tour": "Mualliflik turi",
+    "border_transfer": "Chegara transferi",
+    "city_tour_guide": "Shahar sayohati (gid)",
+    "city_tour_transport": "Shahar sayohati (transport)",
+    "dinner_transfer": "Kechki ovqat transferi",
+    "hall_rent": "Zal ijarasi",
+    "hotel_room": "Mehmonxona xonasi",
+    "hotel_transfer": "Mehmonxona transferi",
+    "mountain_tour_guide": "Tog‘ sayohati (gid)",
+    "mountain_tour_transport": "Tog‘ sayohati (transport)",
+    "one_way_transfer": "Bir tomonga transfer",
+    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
+    "refused_flight": "Rad etilgan aviachipta",
+    "refused_hotel": "Rad etilgan mehmonxona",
+    "refused_tour": "Rad etilgan tur",
+    "visa_support": "Viza yordami",
+    "desert_tour_guide": "Cho‘l sayohati (gid)",
+    "safari_tour_guide": "Safari-tur (gid)",
+    "meet": "Kutib olish (gid)",
+    "seeoff": "Kuzatib qo‘yish (gid)",
+    "translation": "Tarjima (gid)",
+    "desert_tour_transport": "Cho‘l sayohati (transport)",
+    "safari_tour_transport": "Safari-tur (transport)"
   },
 
-  "address": "Manzil",
-  "add_error": "Qo‘shishda xatolik",
-  "adt": "Kattalar (ADT)",
-  "agent": "Turagent",
-  "airline": "Aviakompaniya",
-  "authored_tour": "Mualliflik turi",
-  "back": "← Orqaga",
+  "certificate": "Sertifikat",
+  "change": "O‘zgartirish",
+  "change_password": "Parolni o‘zgartirish",
+  "changeable": "O‘zgartirish mumkin",
+  "chd": "Bolalar (CHD)",
+  "choose_files": "Fayllarni tanlash",
+  "city_tour": "Shahar sayohati",
+  "clear_all": "Hammasini tozalash",
+  "clear_all_images_confirm": "Barcha rasmlar o‘chirilsinmi?",
 
-  "booking": {
-    "date": "Sana",
-    "pax": "Yo‘lovchilar",
-    "submit": "Bron qilish",
-    "time": "Vaqt",
-    "title": "Bron",
-    "selected_dates": "Tanlangan sanalar",
-    "attachments_hint": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)"
-  },
-
-  "bookings": {
-    "provider_cancel_reason": "Rad etilishning sababini ko`rsating",
-    "waiting_for_requester": "Taklif yo`naltirildi. Mijozning javobi kutilmoqda!",
-    "price_agreement": "Narxni kelishish",
-    "last_offer": "Oxirgi taklif",
-    "price": "Narx",
-    "currency": "Valyuta",
-    "comment_optional": "Izoh (majburiy emas)",
-    "price_placeholder": "Mas., 120",
-    "comment_placeholder": "Masalan: to'xtash joyi va kutish kiritilgan",
-    "send_price": "Narxni yuborish",
-    "price_invalid": "To'g'ri narx kiriting",
-    "price_sent": "Narx yuborildi",
-    "price_send_error": "Narxni yuborishda xatolik",
-    "modal_title": "Bron",
-    "message_label": "Xabar",
-    "message_ph": "So‘rov tafsilotlarini yozing...",
-    "attachments_label": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)",
-    "send": "Bronni yuborish",
-    "need_auth": "Bron qilish uchun tizimga kiring",
-    "need_auth_hint": "Bron yuborish uchun tizimga kiring.",
-    "no_dates": "Hech bo‘lmaganda bitta bo‘sh sanani tanlang",
-    "sent": "Bron so‘rovi yuborildi",
-    "error": "Bronni yuborib bo‘lmadi",
-
-    "client_comment": "Izoh:",
-    "empty": "Hozircha bronlar yo‘q.",
-
-    "filters": {
-      "all": "Barchasi",
-      "pending": "Kutilmoqda",
-      "confirmed": "Tasdiqlandi",
-      "upcoming": "Oldinda",
-      "rejected": "Rad etildi"
-    },
-
-    "item": "Bron",
-    "refresh": "Yangilash",
-
-    "tabs": {
-      "incoming": "Mening xizmatlarimga bronlar",
-      "outgoing": "Men qilgan bronlar",
-      "all": "Hammasi",
-      "pending": "Kutilmoqda",
-      "confirmed": "Tasdiqlandi",
-      "upcoming": "Yaqqin",
-      "rejected": "Rad etilgan"
-    },
-
-    "sections": {
-      "incoming": "Xizmatlarimga bronlar",
-      "outgoing": "Mening bronlarim"
-    },
-
-    "status": {
-      "pending": "kutilmoqda",
-      "confirmed": "tasdiqlandi",
-      "active": "faol",
-      "quoted": "tasdiqlash kutilmoqda",
-      "rejected": "rad etilgan",
-      "cancelled": "bekor qilindi"
-    },
-
-    "status_by": {
-      "rejected": {
-        "you": "Rad etildi: siz tomondan",
-        "provider": "Rad etildi: provayder tomonidan",
-        "requester": "Rad etildi: so`rovchi tomonidan",
-        "client": "Rad etildi: mijoz tomonidan"
+  "client": {
+    "profile": { "title": "Mijoz" },
+    "dashboard": {
+      "avatarUrl": "Avatar havolasi",
+      "changeBtn": "Almashtirish",
+      "changePassword": "Parolni almashtirish",
+      "changePhoto": "Rasmni almashtirish",
+      "confirmDeleteRequest": "Ushbu so‘rovni o‘chirmoqchimisiz?",
+      "languagesCsv": "languages_csv",
+      "logout": "Chiqish",
+      "my_bookings": "Bronlarim",
+      "name": "Ism / nom",
+      "newPassword": "Yangi parol",
+      "noBookings": "Bronlar yo‘q",
+      "noRequests": "So‘rovlar yo‘q",
+      "noResults": "Ma’lumot yo‘q",
+      "passwordChanged": "Parol yangilandi",
+      "passwordTooShort": "Kamida 6 ta belgi",
+      "phone": "Telefon",
+      "photoHint": "JPEG/PNG, 512×512 kvadrat. Kesish va siqish avtomatik.",
+      "profileTitle": "Profil",
+      "refresh": "Yangilash",
+      "refusedTours": "Rad etilgan turlar",
+      "removePhoto": "Rasmni olib tashlash",
+      "requestDeleted": "So‘rov o‘chirildi",
+      "deleteRequest": "O‘chirish",
+      "saveBtn": "Saqlash",
+      "tabs": {
+        "myBookings": "Bronlarim",
+        "myRequests": "So‘rovlarim"
       },
-      "cancelled": {
-        "you": "Bekor qilindi: siz tomondan",
-        "provider": "Bekor qilindi: provayder",
-        "requester": "Bekor qilindi: arizachi",
-        "client": "Bekor qilindi: mijoz"
-      }
+      "uploadPhoto": "Rasm yuklash"
     },
-
-    "labels": { "client_comment": "Izoh:" },
-
-    "titles": { "provider": "Bronlar (Ta'minotchi)" },
-
-    "types": {
-      "guide": "Gid",
-      "transport": "Transport",
-      "agent": "Turoperator",
-      "hotel": "Mehmonxona"
+    "header": {
+      "cabinet": "Kabinet",
+      "favorites": "Sevimlilar"
     },
-
-    "actions": {
-      "confirm": "Tasdiqlash",
-      "reject": "Rad etish",
-      "cancel": "Bekor qilish"
+    "login": {
+      "loginBtn": "Kirish",
+      "noAccount": "Hisob yo‘qmi?",
+      "password": "Parol",
+      "registerLink": "Ro‘yxatdan o‘tish",
+      "title": "Mijoz kirishi",
+      "success": "Kirish muvaffaqiyatli",
+      "error": "Kirish xatosi"
     },
-
-    "confirmed": "Bron tasdiqlandi",
-    "confirm_error": "Tasdiqlash xatosi",
-    "rejected": "Bron rad etildi",
-    "reject_error": "Rad etish xatosi",
-
-    "dates_label": "Band qilingan sanalar:",
-    "wait_price": "Ta’minotchidan narx taklifi kutilmoqda",
-
-    "search": {
-      "placeholder": "Qidiruv: ta’minotchi, xizmat, holat…"
-    },
-
-    "view": {
-      "compact": "Kompakt",
-      "normal": "Oddiy",
-      "compact_title": "Kompakt rejim"
-    },
-
-    "allow_popups_pdf": "PDF eksporti uchun qalqib chiquvchi oynalarga ruxsat bering.",
-    "pdf": {
-      "generated_at": "Tuzilgan vaqti",
-      "total": "Jami",
-      "confirmed_at": "tasdiqlangan"
+    "register": {
+      "errors": {
+        "email_taken": "Bu e-pochta allaqachon roʻyxatdan oʻtgan",
+        "phone_taken": "Bu telefon raqami allaqachon roʻyxatdan oʻtgan",
+        "weak_password": "Parol juda oddiy",
+        "generic": "Roʻyxatdan oʻtishda xatolik"
+      },
+      "haveAccount": "Hisobingiz bormi?",
+      "loading": "Ro‘yxatidan o‘tkazilmoqda ...",
+      "loginLink": "Kirish",
+      "name": "Ism",
+      "password": "Parol",
+      "phone": "Telefon",
+      "registerBtn": "Ro‘yxatdan o‘tish",
+      "title": "Mijoz ro‘yxatdan o‘tishi",
+      "success": "Ro‘yxatdan o‘tish muvaffaqiyatli",
+      "error": "Ro‘yxatdan o‘tishda xato"
     }
   },
 
-  "border_transfer": "Chegara transferi",
+  "comment": "Izoh",
+  "car_fleet": "Transport ",
 
-  "calendar": {
-    "blocking_title": "Bandlik kalendari",
-    "booked": "Band qilingan",
-    "dates_saved": "Band sanalar saqlandi",
-    "label_blocked_manual": "Qo‘lda bloklangan",
-    "label_booked_by_clients": "Bronlar sababli band",
-    "load_error": "Sanalarni yuklab bo‘lmadi",
-    "manual_blocked": "Qo‘lda bloklangan",
-    "save_blocked_dates": "Band sanalarni saqlash",
-    "save_button": "Band sanalarni saqlash",
-    "save_error": "Sanalarni saqlab bo‘lmadi",
-    "saved_successfully": "Sanalar saqlandi",
-    "title_public": "Bandlik kalendari",
-    "busy": "band",
-    "selected": "tanlangan"
+  "common": {
+    "add_hotel": "O‘zingizning otelingizni qo‘shing",
+    "anonymous": "Anonim",
+    "comment": "Izoh",
+    "direction": "Yo‘nalish",
+    "find": "Qidirish",
+    "loading": "Yuklanmoqda…",
+    "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
+    "amount": "Summasi",
+    "backToDashboard": "Kabinetga qaytish",
+    "booking": "Bron",
+    "created": "Yaratildi",
+    "date": "Sana",
+    "loading_error": "Ma’lumotlarni yuklab bo‘lmadi",
+    "refresh": "Yangilash",
+    "request": "So‘rov",
+    "saving": "Saqlanmoqda…",
+    "sending": "Yuborilmoqda…",
+    "status": "Holat",
+    "about": "Kompaniya haqida",
+    "city": "Shahar",
+    "country": "Mamlakat",
+    "phone": "Telefon",
+    "telegram": "Telegram",
+    "email": "Email",
+    "website": "Sayt",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "pros": "Afzalliklari",
+    "cons": "Kamchiliklari",
+    "features": "Xususiyatlari",
+    "nothing_found": "Hech narsa topilmadi"
+  },
+
+  "confirm_delete": "Ushbu element o‘chirilsinmi?",
+  "countdown": { 
+    "until_end": "Tugashigacha", 
+    "expired": "Muddati tugadi",
+    "days_short": "k"
+  },
+
+  "country_not_chosen": "Mamlakatlar topilmadi",
+  "cover": "Muqova",
+  "days": "kun.",
+  "delete": "O‘chirish",
+  "delete_error": "O‘chirishda xatolik",
+  "departure_date": "Jo‘nash sanasi",
+  "description": "Tavsif",
+  "dinner_transfer": "Kechki ovqat transferi",
+  "direction": "Yo‘nalish",
+  "direction_country": "Manzil mamlakati",
+  "direction_from": "Jo‘nash shahri",
+  "direction_from_not_chosen": "Jo‘nash shahri tanlanmagan",
+  "direction_to": "Borish shahri",
+  "direction_to_not_chosen": "Borish shahri tanlanmagan",
+  "drag_to_reorder": "Tartiblash uchun sudrang",
+
+  "edit": "Tahrirlash",
+  "edit_service": "Xizmatni tahrirlang:",
+
+  "empty": {
+    "no_bookings": "Hozircha bronlar yo‘q.",
+    "no_favorites": "Sevimlilar bo‘sh",
+    "no_requests": "Hozircha so‘rovlar yo‘q."
   },
   "end_flight_date": "Qaytish reysi sanasi",
   "enter_accommodation": "Joylashuvni kiriting",
