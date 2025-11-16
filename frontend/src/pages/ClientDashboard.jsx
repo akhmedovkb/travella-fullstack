@@ -548,51 +548,51 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   // мини-«база» программ по дням
   const programDaysMap = {
     royal: [
-      t("inside.program.royal.day1", { defaultValue: "Дели: прилёт, трансфер, вечерний брифинг" }),
-      t("inside.program.royal.day2", { defaultValue: "Агра: Тадж-Махал на рассвете, форт Агры" }),
-      t("inside.program.royal.day3", { defaultValue: "Джайпур: Амбер-форт, Дворец ветров" }),
-      t("inside.program.royal.day4", { defaultValue: "Джайпур: тур по городу, ремёсла" }),
-      t("inside.program.royal.day5", { defaultValue: "Дели: современная Индия — арт/мода/гастро" }),
-      t("inside.program.royal.day6", { defaultValue: "Свободный день / доп. опции" }),
-      t("inside.program.royal.day7", { defaultValue: "Вылет" }),
+      t("landing.inside.program.royal.day1", { defaultValue: "Дели: прилёт, трансфер, вечерний брифинг" }),
+      t("landing.inside.program.royal.day2", { defaultValue: "Агра: Тадж-Махал на рассвете, форт Агры" }),
+      t("landing.inside.program.royal.day3", { defaultValue: "Джайпур: Амбер-форт, Дворец ветров" }),
+      t("landing.inside.program.royal.day4", { defaultValue: "Джайпур: тур по городу, ремёсла" }),
+      t("landing.inside.program.royal.day5", { defaultValue: "Дели: современная Индия — арт/мода/гастро" }),
+      t("landing.inside.program.royal.day6", { defaultValue: "Свободный день / доп. опции" }),
+      t("landing.inside.program.royal.day7", { defaultValue: "Вылет" }),
     ],
     silence: [
-      t("inside.program.silence.day1", { defaultValue: "Удайпур: прилёт, озеро Пичола, City Palace" }),
-      t("inside.program.silence.day2", { defaultValue: "Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз" }),
-      t("inside.program.silence.day3", { defaultValue: "Переезд в Джодхпур, прогулка по «синему» старому городу" }),
-      t("inside.program.silence.day4", { defaultValue: "Джодхпур: форт Мехрангарх, башни, закат на крыше" }),
-      t("inside.program.silence.day5", { defaultValue: "Переезд в Джайсалмер, Золотой форт, хавели" }),
-      t("inside.program.silence.day6", { defaultValue: "Пустыня Тар: сафари на дюнах, ужин у костра" }),
-      t("inside.program.silence.day7", { defaultValue: "Резерв/отдых или мастер-класс" }),
-      t("inside.program.silence.day8", { defaultValue: "Вылет" }),
+      t("landing.inside.program.silence.day1", { defaultValue: "Удайпур: прилёт, озеро Пичола, City Palace" }),
+      t("landing.inside.program.silence.day2", { defaultValue: "Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз" }),
+      t("landing.inside.program.silence.day3", { defaultValue: "Переезд в Джодхпур, прогулка по «синему» старому городу" }),
+      t("landing.inside.program.silence.day4", { defaultValue: "Джодхпур: форт Мехрангарх, башни, закат на крыше" }),
+      t("landing.inside.program.silence.day5", { defaultValue: "Переезд в Джайсалмер, Золотой форт, хавели" }),
+      t("landing.inside.program.silence.day6", { defaultValue: "Пустыня Тар: сафари на дюнах, ужин у костра" }),
+      t("landing.inside.program.silence.day7", { defaultValue: "Резерв/отдых или мастер-класс" }),
+      t("landing.inside.program.silence.day8", { defaultValue: "Вылет" }),
     ],
     modern: [
-      t("inside.program.modern.day1", { defaultValue: "Мумбаи: полудневной тур, вечер на набережной" }),
-      t("inside.program.modern.day2", { defaultValue: "Студии Болливуда/арт-кварталы" }),
-      t("inside.program.modern.day3", { defaultValue: "Перелёт в Гоа, океан" }),
-      t("inside.program.modern.day4", { defaultValue: "Пляжи, старый Гоа, португальское наследие" }),
-      t("inside.program.modern.day5", { defaultValue: "Яхта/закат, гастрономический вечер" }),
-      t("inside.program.modern.day6", { defaultValue: "Свободный день / wellness" }),
-      t("inside.program.modern.day7", { defaultValue: "Вылет" }),
+      t("landing.inside.program.modern.day1", { defaultValue: "Мумбаи: полудневной тур, вечер на набережной" }),
+      t("landing.inside.program.modern.day2", { defaultValue: "Студии Болливуда/арт-кварталы" }),
+      t("landing.inside.program.modern.day3", { defaultValue: "Перелёт в Гоа, океан" }),
+      t("landing.inside.program.modern.day4", { defaultValue: "Пляжи, старый Гоа, португальское наследие" }),
+      t("landing.inside.program.modern.day5", { defaultValue: "Яхта/закат, гастрономический вечер" }),
+      t("landing.inside.program.modern.day6", { defaultValue: "Свободный день / wellness" }),
+      t("landing.inside.program.modern.day7", { defaultValue: "Вылет" }),
     ],
     kerala: [
-      t("inside.program.kerala.day1", { defaultValue: "Кочи: город, китайские сети, колониальная часть" }),
-      t("inside.program.kerala.day2", { defaultValue: "Муннар: чайные плантации, viewpoints" }),
-      t("inside.program.kerala.day3", { defaultValue: "Муннар: треккинг / фотодень" }),
-      t("inside.program.kerala.day4", { defaultValue: "Аллеппи: заселение на хаусбоат" }),
-      t("inside.program.kerala.day5", { defaultValue: "Бэквотеры, деревни, локальная кухня" }),
-      t("inside.program.kerala.day6", { defaultValue: "Аюрведический центр, индивидуальная программа" }),
-      t("inside.program.kerala.day7", { defaultValue: "Свободный день / море" }),
-      t("inside.program.kerala.day8", { defaultValue: "Вылет" }),
+      t("landing.inside.program.kerala.day1", { defaultValue: "Кочи: город, китайские сети, колониальная часть" }),
+      t("landing.inside.program.kerala.day2", { defaultValue: "Муннар: чайные плантации, viewpoints" }),
+      t("landing.inside.program.kerala.day3", { defaultValue: "Муннар: треккинг / фотодень" }),
+      t("landing.inside.program.kerala.day4", { defaultValue: "Аллеппи: заселение на хаусбоат" }),
+      t("landing.inside.program.kerala.day5", { defaultValue: "Бэквотеры, деревни, локальная кухня" }),
+      t("landing.inside.program.kerala.day6", { defaultValue: "Аюрведический центр, индивидуальная программа" }),
+      t("landing.inside.program.kerala.day7", { defaultValue: "Свободный день / море" }),
+      t("landing.inside.program.kerala.day8", { defaultValue: "Вылет" }),
     ],
   };
 
   // хэлпер: пилюля статуса программы (справа сверху)
   const renderProgramStatusPill = (st) => {
     const map = {
-      active:    t("inside.status_active",    { defaultValue: "Активна" }),
-      completed: t("inside.status_completed", { defaultValue: "Завершена" }),
-      expelled:  t("inside.status_expelled",  { defaultValue: "Отчислен" }),
+      active:    t("landing.inside.status_active",    { defaultValue: "Активна" }),
+      completed: t("landing.inside.status_completed", { defaultValue: "Завершена" }),
+      expelled:  t("landing.inside.status_expelled",  { defaultValue: "Отчислен" }),
     };
     let cls = "border-slate-200 bg-slate-50 text-slate-700";
     if (st === "active")    cls = "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -600,7 +600,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     if (st === "expelled")  cls = "border-rose-200 bg-rose-50 text-rose-700";
     return (
       <span className={`text-xs px-3 py-1 rounded-full border ${cls}`}>
-        {map[st] ?? st ?? t("inside.status", { defaultValue: "Статус" })}
+        {map[st] ?? st ?? t("landing.inside.status", { defaultValue: "Статус" })}
       </span>
     );
   };
@@ -646,7 +646,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
+              {t("landing.inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
             </div>
             <div className="font-medium">
               {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
@@ -655,7 +655,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             {/* Дата тура */}
             {tourDatesText && (
               <div className="mt-1 text-xs text-slate-500">
-                {t("inside.next_chapter.tour_dates_label", {
+                {t("landing.inside.next_chapter.tour_dates_label", {
                   defaultValue: "Дата тура:",
                 })}{" "}
                 <span className="font-medium">{tourDatesText}</span>
@@ -665,7 +665,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             {/* Старт набора */}
             {startsAt && (
               <div className="text-xs text-slate-500">
-                {t("inside.next_chapter.starts_at", {
+                {t("landing.inside.next_chapter.starts_at", {
                   defaultValue: "Старт набора:",
                 })}{" "}
                 {startsAt.toLocaleString()}
@@ -681,15 +681,15 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                 }`}
               >
                 {diffMs > 0
-                  ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
-                  : t("inside.next_chapter.enrollment_open", {
+                  ? t("landing.inside.next_chapter.countdown", { defaultValue: "До начала" })
+                  : t("landing.inside.next_chapter.enrollment_open", {
                       defaultValue: "Набор идёт",
                     })}
                 {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
               </span>
             )}
             <span className="text-xs text-slate-700">
-              {t("inside.next_chapter.places_left", {
+              {t("landing.inside.next_chapter.places_left", {
                 defaultValue: "Свободных мест: {{count}}",
                 count: placesLeft,
               })}
@@ -825,16 +825,16 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         if (res && (res.ok || res.status === "ok" || res.joined)) {
           const me = await apiGet("/api/inside/me");
           onJoined?.(me?.data ?? me ?? null);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          tSuccess(t("landing.inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
           return;
         }
         const me = await apiGet("/api/inside/me");
         if (me && (me.status && me.status !== "none")) {
           onJoined?.(me);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
+          tSuccess(t("landing.inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
           return;
         }
-        tError(t("inside.toast.join_failed") || "Не удалось присоединиться");
+        tError(t("landing.inside.toast.join_failed") || "Не удалось присоединиться");
       } catch {
         window.open("/landing/india-inside", "_blank", "noreferrer");
       }
@@ -843,10 +843,10 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     return (
       <div className="bg-white rounded-xl shadow p-6 border">
         <div className="text-xl font-semibold">
-          {t("inside.invite.title", { defaultValue: "Присоединиться к India Inside" })}
+          {t("landing.inside.invite.title", { defaultValue: "Присоединиться к India Inside" })}
         </div>
         <p className="mt-2 text-gray-600">
-          {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
+          {t("landing.inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
         </p>
         {!loadingNext && <NextChapterBanner />}
         <div className="mt-4 flex gap-2">
@@ -854,7 +854,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             onClick={handleJoinProgram}
             className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-white font-semibold"
           >
-            {t("inside.invite.join_now", { defaultValue: "Присоединиться" })}
+            {t("landing.inside.invite.join_now", { defaultValue: "Присоединиться" })}
           </button>
           <a
             href="/landing/india-inside"
@@ -862,7 +862,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             target="_blank"
             rel="noreferrer"
           >
-            {t("inside.invite.cta", { defaultValue: "Узнать больше" })}
+            {t("landing.inside.invite.cta", { defaultValue: "Узнать больше" })}
           </a>
         </div>
       </div>
@@ -959,23 +959,23 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   // подпись для кнопки "Запросить участие"
   let enrollButtonLabel;
   if (isEnrollmentNotOpened) {
-    enrollButtonLabel = t("inside.actions.enroll_not_started", {
+    enrollButtonLabel = t("landing.inside.actions.enroll_not_started", {
       defaultValue: "Набор ещё не открыт",
     });
   } else if (isPendingForSelected) {
-    enrollButtonLabel = t("inside.actions.request_sent", {
+    enrollButtonLabel = t("landing.inside.actions.request_sent", {
       defaultValue: "Заявка отправлена",
     });
   } else if (canShowApprovedLabel) {
-    enrollButtonLabel = t("inside.actions.request_approved", {
+    enrollButtonLabel = t("landing.inside.actions.request_approved", {
       defaultValue: "Участие одобрено",
     });
   } else if (isApprovalExpired) {
-    enrollButtonLabel = t("inside.actions.request_expired", {
+    enrollButtonLabel = t("landing.inside.actions.request_expired", {
       defaultValue: "Срок оплаты истёк — отправьте новую заявку",
     });
   } else {
-    enrollButtonLabel = t("inside.actions.request_join", {
+    enrollButtonLabel = t("landing.inside.actions.request_join", {
       defaultValue: "Запросить участие",
     });
   }
@@ -1017,7 +1017,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
       } else {
         tError(
-          t("inside.errors.request_failed") || "Не удалось отправить запрос на участие",
+          t("landing.inside.errors.request_failed") || "Не удалось отправить запрос на участие",
           { autoClose: 2200 }
         );
       }
@@ -1028,7 +1028,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     if (item) setLastReq(item);
 
     tSuccess(
-      t("inside.toast.request_joined") || "Запрос на участие отправлен",
+      t("landing.inside.toast.request_joined") || "Запрос на участие отправлен",
       { autoClose: 1600 }
     );
   }
@@ -1050,13 +1050,13 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
       }
 
       tError(
-        t("inside.pay_block.error") ||
+        t("landing.inside.pay_block.error") ||
           "Не удалось инициализировать оплату. Попробуйте позже."
       );
     } catch (e) {
       console.error("handlePay error:", e);
       tError(
-        t("inside.pay_block.error") ||
+        t("landing.inside.pay_block.error") ||
           "Не удалось инициализировать оплату. Попробуйте позже."
       );
     }
@@ -1077,7 +1077,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
         <div>
           <div className="text-sm text-gray-500">India Inside</div>
           <h2 className="text-xl font-semibold">
-            {t("inside.my.title", { defaultValue: "Моя программа" })}
+            {t("landing.inside.my.title", { defaultValue: "Моя программа" })}
           </h2>
         </div>
         {/*{renderProgramStatusPill(programStatus)}*/}
@@ -1107,7 +1107,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                 onClick={() => setSelectedKey(key)}
               >
                 <div className="text-[11px] uppercase tracking-wide text-emerald-700">
-                  {t("inside.chapter_label", {
+                  {t("landing.inside.chapter_label", {
                     defaultValue: "Глава {{n}}",
                     n: order,
                   })}
@@ -1130,7 +1130,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 hover:bg-slate-100"
         >
           <span className="font-medium">
-            {t("inside.details.toggle_label", {
+            {t("landing.inside.details.toggle_label", {
               defaultValue: "Детали по выбранной главе",
             })}
           </span>
@@ -1149,14 +1149,14 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
               <div>
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  {t("inside.selected_chapter", { defaultValue: "Выбранная глава" })}
+                  {t("landing.inside.selected_chapter", { defaultValue: "Выбранная глава" })}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">
                   {selectedTitle}
                 </div>
 
                 <div className="mt-3 text-sm font-medium text-slate-700">
-                  {t("inside.program_by_days", { defaultValue: "Программа по дням:" })}
+                  {t("landing.inside.program_by_days", { defaultValue: "Программа по дням:" })}
                 </div>
 
                 {programDays.length ? (
@@ -1172,7 +1172,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                   </ol>
                 ) : (
                   <div className="mt-2 text-xs text-slate-500">
-                    {t("inside.program_empty", {
+                    {t("landing.inside.program_empty", {
                       defaultValue: "Программа по дням будет опубликована позже.",
                     })}
                   </div>
@@ -1183,13 +1183,13 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             {/* 2. Даты туров + места */}
             <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
               <div className="text-xs uppercase tracking-wide text-slate-500">
-                {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
+                {t("landing.inside.dates_block.title", { defaultValue: "Даты туров" })}
               </div>
 
               {selectedChapterMeta && (tourStartsRaw || tourEndsRaw) ? (
                 <>
                   <div className="mt-2 text-xs text-slate-500">
-                    {t("inside.dates_block.tour_dates_label", {
+                    {t("landing.inside.dates_block.tour_dates_label", {
                       defaultValue: "Даты тура:",
                     })}
                   </div>
@@ -1198,28 +1198,28 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                   </div>
 
                   <div className="mt-3 text-xs text-slate-500">
-                    {t("inside.dates_block.places_label", {
+                    {t("landing.inside.dates_block.places_label", {
                       defaultValue: "Места по главе:",
                     })}
                   </div>
                   <div className="text-xs text-slate-700 space-y-0.5">
                     {capacity != null && (
                       <div>
-                        {t("inside.dates_block.limit", {
+                        {t("landing.inside.dates_block.limit", {
                           defaultValue: "Лимит: {{value}}",
                           value: capacity,
                         })}
                       </div>
                     )}
                     <div>
-                      {t("inside.dates_block.enrolled", {
+                      {t("landing.inside.dates_block.enrolled", {
                         defaultValue: "Зачислено: {{value}}",
                         value: enrolled,
                       })}
                     </div>
                     {remaining != null && (
                       <div>
-                        {t("inside.dates_block.left", {
+                        {t("landing.inside.dates_block.left", {
                           defaultValue: "Свободно: {{value}}",
                           value: remaining,
                         })}
@@ -1232,7 +1232,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                       {startsAtRaw && (
                         <div>
                           <span className="text-xs text-slate-500">
-                            {t("inside.chapter_start_at", { defaultValue: "Старт набора:" })}{" "}
+                            {t("landing.inside.chapter_start_at", { defaultValue: "Старт набора:" })}{" "}
                           </span>
                           <span className="font-medium">
                             {new Date(startsAtRaw).toLocaleString()}
@@ -1242,7 +1242,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                       {countdown && (
                         <div className="mt-1">
                           <span className="text-xs text-slate-500">
-                            {t("inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
+                            {t("landing.inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
                           </span>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs font-mono">
                             {countdown}
@@ -1254,7 +1254,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                 </>
               ) : (
                 <div className="mt-2 text-xs text-slate-500">
-                  {t("inside.dates_block.empty", {
+                  {t("landing.inside.dates_block.empty", {
                     defaultValue: "Даты туров по этой главе появятся здесь.",
                   })}
                 </div>
@@ -1266,10 +1266,10 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             {/* 3. Запрос на участие + оплата */}
             <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
               <div className="text-xs uppercase tracking-wide text-slate-500">
-                {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
+                {t("landing.inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
               </div>
               <div className="mt-2 text-xs text-slate-600">
-                {t("inside.enroll_block.desc", {
+                {t("landing.inside.enroll_block.desc", {
                   defaultValue:
                     "После одобрения заявки у вас будет ограниченное время, чтобы оплатить турпакет и получить документы.",
                 })}
@@ -1293,11 +1293,11 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               {hasRequestForSelected && (
                 <div className="mt-2 text-xs text-slate-500">
                   {lastReq?.status === "pending" &&
-                    t("inside.enroll_block.pending", {
+                    t("landing.inside.enroll_block.pending", {
                       defaultValue: "Заявка по этой главе ожидает одобрения.",
                     })}
                   {lastReq?.status === "rejected" &&
-                    t("inside.enroll_block.rejected", {
+                    t("landing.inside.enroll_block.rejected", {
                       defaultValue:
                         "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
                     })}
@@ -1306,7 +1306,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
               {canShowApprovedLabel && approvalWindowHours != null && (
                 <div className="mt-2 text-[11px] text-slate-500">
-                  {t("inside.pay_block.window_hint", {
+                  {t("landing.inside.pay_block.window_hint", {
                     defaultValue:
                       "Участие одобрено. Оплатите в течение {{hours}} часов, чтобы получить документы по турпакету.",
                     hours: approvalWindowHours,
@@ -1316,7 +1316,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
               {isApprovalExpired && (
                 <div className="mt-2 text-[11px] text-rose-500">
-                  {t("inside.pay_block.window_expired", {
+                  {t("landing.inside.pay_block.window_expired", {
                     defaultValue:
                       "Срок на оплату по этой заявке истёк. Отправьте новый запрос или свяжитесь с куратором.",
                   })}
@@ -1326,7 +1326,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               {/* Блок оплаты + кнопка куратора */}
               <div className="mt-4 pt-3 border-t border-slate-200">
                 <div className="text-xs text-slate-600 mb-2">
-                  {t("inside.pay_block.desc", {
+                  {t("landing.inside.pay_block.desc", {
                     defaultValue:
                       "Для того чтобы получить документы по турпакету нажмите кнопку «Оплатить».",
                   })}
@@ -1341,7 +1341,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                       : "bg-slate-200 text-slate-500 cursor-not-allowed"
                   }`}
                 >
-                  {t("inside.actions.pay", { defaultValue: "Оплатить" })}
+                  {t("landing.inside.actions.pay", { defaultValue: "Оплатить" })}
                 </button>
 
                 <button
@@ -1354,7 +1354,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                   }
                   className="mt-3 w-full rounded-lg border px-4 py-2 text-xs hover:bg-gray-50 text-center"
                 >
-                  {t("inside.actions.contact_curator", {
+                  {t("landing.inside.actions.contact_curator", {
                     defaultValue: "Связаться с куратором",
                   })}
                 </button>
@@ -1368,7 +1368,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
       <div className="mt-6 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
         <div className="flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            {t("inside.chapters_progress.title", { defaultValue: "Прогресс по главам" })}
+            {t("landing.inside.chapters_progress.title", { defaultValue: "Прогресс по главам" })}
           </span>
           {/* 4/4 убрали как лишнее */}
         </div>
@@ -1390,7 +1390,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                   <div className="ml-1 h-2 w-[3px] rounded-sm bg-rose-300" />
                 </div>
                 <div className="text-[11px] font-semibold text-rose-700">
-                  {t("inside.chapter_label", {
+                  {t("landing.inside.chapter_label", {
                     defaultValue: "Глава {{n}}",
                     n: order,
                   })}
