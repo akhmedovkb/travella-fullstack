@@ -1377,34 +1377,127 @@
   },
 "auth": { "login_required": "Qaytadan kiring va yana urinib ko‘ring" },
 "inside": {
-    "my": {
-    "title": "Mening dasturim",
-    "chapters_title": "Boblar",
-    "chapters_hint": "Bobni tanlang — dastur va sanalarni ko‘rasiz.",
-    "chapter_label": "Bob {{num}}",
+      "my": {
+        "title": "Mening dasturim"
+      },
 
-    "details_toggle": "Tanlangan bob bo‘yicha tafsilotlar",
+      "chapter_label": "{{n}}-bob",
+      "selected_chapter": "Tanlangan bob",
+      "program_by_days": "Kunlar bo‘yicha dastur:",
+      "program_empty": "Kunlar bo‘yicha dastur keyinroq e’lon qilinadi.",
 
-    "selected_title": "Tanlangan bob",
-    "program_by_days": "Kunlar bo‘yicha dastur",
+      "dates_block": {
+        "title": "Turlar sanalari",
+        "tour_dates_label": "Tur sanalari:",
+        "places_label": "Bob bo‘yicha joylar:",
+        "limit": "Limit: {{value}}",
+        "enrolled": "Qabul qilingan: {{value}}",
+        "left": "Bo‘sh: {{value}}",
+        "empty": "Bu bob bo‘yicha sanalar tez orada paydo bo‘ladi."
+      },
 
-    "dates_title": "Turlar sanalari",
-    "tour_dates": "Tur sanalari",
-    "places_title": "Bu bob bo‘yicha joylar",
-    "limit": "Limit",
-    "enrolled": "Qabul qilingan",
-    "free": "Bo‘sh joylar",
-    "enrolment_start": "Qabul boshlanishi",
+      "chapter_start_at": "Qabul boshlanishi:",
+      "chapter_countdown": "Boshlanishigacha:",
 
-    "request_title": "Ishtirok uchun so‘rov",
-    "request_hint": "So‘rov tasdiqlangandan so‘ng turpaketni to‘lash va hujjatlarni olish uchun cheklangan vaqt bo‘ladi.",
-    "btn_request": "Ishtirok uchun so‘rov",
-    "btn_requested": "So‘rov yuborildi",
-    "btn_approved": "Ishtirok tasdiqlandi",
-    "approved_hint": "Ishtirok tasdiqlandi. Turpaket hujjatlarini olish uchun 24 soat ichida to‘lovni amalga oshiring.",
-    "btn_pay": "To‘lash",
-    "btn_contact_curator": "Kurator bilan bog‘lanish",
-              "title": "Mening India Inside dasturim"
+      "enroll_block": {
+        "title": "Ishtirok uchun so‘rov",
+        "desc": "So‘rov tasdiqlangandan so‘ng, to‘lov qilish va hujjatlarni olish uchun cheklangan vaqt bo‘ladi.",
+        "pending": "Bu bob bo‘yicha so‘rov tasdiqlanishni kutmoqda.",
+        "rejected": "So‘rov rad etilgan. Kurator bilan bog‘laning."
+      },
+
+      "pay_block": {
+        "desc": "Turpaket hujjatlarini olish uchun «To‘lash» tugmasini bosing.",
+        "window_hint": "Ishtirok tasdiqlandi. Hujjatlarni olish uchun {{hours}} soat ichida to‘lovni amalga oshiring.",
+        "window_expired": "To‘lov muddati tugadi. Yangi so‘rov yuboring yoki kurator bilan bog‘laning.",
+        "error": "To‘lovni boshlashning imkoni bo‘lmadi. Birozdan keyin qayta urinib ko‘ring."
+      },
+
+      "actions": {
+        "pay": "To‘lash",
+        "contact_curator": "Kurator bilan bog‘lanish",
+        "enroll_not_started": "Qabul hali ochilmagan",
+        "request_sent": "So‘rov yuborildi",
+        "request_approved": "Ishtirok tasdiqlandi",
+        "request_expired": "To‘lov muddati tugadi — yangi so‘rov yuboring",
+        "request_join": "Ishtirok so‘rash"
+      },
+
+      "invite": {
+        "title": "India Inside dasturiga qo‘shilish",
+        "sub": "Shaxsiy kurator, boblar va 4 bobdan so‘ng Guru maqomi.",
+        "join_now": "Qo‘shilish",
+        "cta": "Batafsil"
+      },
+
+      "toast": {
+        "joined": "Siz India Inside dasturiga qo‘shildingiz!",
+        "join_failed": "Qo‘shilish amalga oshmadi",
+        "request_joined": "Ishtirok uchun so‘rov yuborildi"
+      },
+
+      "details": {
+        "toggle_label": "Tanlangan bob bo‘yicha batafsil"
+      },
+
+      "chapters_progress": {
+        "title": "Boblar bo‘yicha progress"
+      },
+
+      "chapters": {
+        "royal": {
+          "title": "Oltin Uchburchak"
+        },
+        "silence": {
+          "title": "Raǰastandagi sarguzashtlar"
+        },
+        "modern": {
+          "title": "Mumbai + Goa — eng yaxshi xotiralar"
+        },
+        "kerala": {
+          "title": "Kerala: Yer yuzidagi jannat"
+        }
+      },
+
+      "program": {
+        "royal": {
+          "day1": "Dehli: kelish, transfer, oqshom brifingi",
+          "day2": "Agra: Tongda Toj Mahal, Agra qal’asi",
+          "day3": "Jaypur: Amberfort, Shamollar saroyi",
+          "day4": "Jaypur: shahar bo‘ylab ekskursiya",
+          "day5": "Dehli: zamonaviy Hindiston — san’at/moda/gastro",
+          "day6": "Bo‘sh kun / qo‘shimcha imkoniyatlar",
+          "day7": "Uchish"
+        },
+        "silence": {
+          "day1": "Udaypur: kelish, Pichola ko‘li, City Palace",
+          "day2": "Udaypur: ibodatxonalar, hunarmandchilik, kruiz",
+          "day3": "Jodxpurga yo‘l, ko‘k shahar",
+          "day4": "Jodxpur: Mehrangarh qal’asi",
+          "day5": "Jaysalmerga yo‘l, Oltin qal’a",
+          "day6": "Tar cho‘li: safari, kechki dasturxon",
+          "day7": "Dam olish / rezerv",
+          "day8": "Uchish"
+        },
+        "modern": {
+          "day1": "Mumbai: tur, dengiz bo‘yida sayr",
+          "day2": "Bollivud studiyalari / art hududlar",
+          "day3": "Goaga uchish, okean",
+          "day4": "Plyajlar, portugal merosi",
+          "day5": "Yaxta / quyosh botishi, gastro-kecha",
+          "day6": "Bo‘sh kun / wellness",
+          "day7": "Uchish"
+        },
+        "kerala": {
+          "day1": "Ko‘chi: shahar, Xitoy to‘rlari",
+          "day2": "Munnar: choy plantatsiyalari",
+          "day3": "Munnar: trekking / foto kun",
+          "day4": "Alleppi: houseboat",
+          "day5": "Backwaters, qishloqlar",
+          "day6": "Ayurveda markazi",
+          "day7": "Bo‘sh kun / dengiz",
+          "day8": "Uchish"
+        }
       },
 
       "chapter_label": "Bo‘lim",
