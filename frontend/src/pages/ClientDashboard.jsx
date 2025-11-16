@@ -1305,9 +1305,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           <span>
             {t("inside.chapters_progress.title", { defaultValue: "Прогресс по главам" })}
           </span>
-          <span>
+          {/*<span>
             {cur}/{total}
-          </span>
+          </span>*/}
         </div>
 
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
