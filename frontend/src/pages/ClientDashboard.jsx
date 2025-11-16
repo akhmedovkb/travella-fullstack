@@ -514,7 +514,11 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const [loadingChapters, setLoadingChapters] = useState(true);
 
   // сворачивание/разворачивание блока деталей (3 карточки)
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  // на мобиле по умолчанию свернуто, на десктопе открыто
+  const [detailsOpen, setDetailsOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth >= 768; // md breakpoint
+  });
 
   // текущая глава и статус программы
   const currentChapterKey = inside?.current_chapter || "royal";
@@ -1367,6 +1371,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     </section>
   );
 }
+
 
 /* ===================== Main Page ===================== */
 
