@@ -844,6 +844,11 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const tourStartsRaw = selectedChapterMeta?.tour_starts_at || null;
   const tourEndsRaw = selectedChapterMeta?.tour_ends_at || null;
 
+  // дата открытия набора на главу
+  const startsAtTs = startsAtRaw ? Date.parse(startsAtRaw) : NaN;
+  const isEnrollmentNotOpened =
+    !Number.isNaN(startsAtTs) && startsAtTs > nowTs;
+
   let countdown = null;
   if (startsAtRaw) {
     const ts = Date.parse(startsAtRaw);
@@ -866,7 +871,76 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
 
   const isPendingForSelected  = hasRequestForSelected && lastReq.status === "pending";
   const isApprovedForSelected = hasRequestForSelected && lastReq.status === "approved";
-  const enrollButtonDisabled  = isPendingForSelected || isApprovedForSelected;
+
+  // ===== окно на оплату после одобрения заявки =====
+  const tourStartTs = tourStartsRaw ? Date.parse(tourStartsRaw) : NaN;
+  const daysUntilTour = !Number.isNaN(tourStartTs)
+    ? (tourStartTs - nowTs) / (1000 * 60 * 60 * 24)
+    : null;
+
+  // >30 дней до тура → 24 часа; 14–30 → 10 часов; <14 → 1 час
+  let approvalWindowHours = null;
+  if (daysUntilTour != null) {
+    if (daysUntilTour > 30)      approvalWindowHours = 24;
+    else if (daysUntilTour > 14) approvalWindowHours = 10;
+    else                         approvalWindowHours = 1;
+  }
+
+  // начало отсчёта окна — время approve (или fallback на requested_at)
+  const approvedAtRaw =
+    lastReq?.approved_at || lastReq?.resolved_at || lastReq?.requested_at || null;
+
+  let approvalExpiresAt = null;
+  let isApprovalWindowActive = false;
+
+  if (isApprovedForSelected && approvalWindowHours != null && approvedAtRaw) {
+    const approvedTs = Date.parse(approvedAtRaw);
+    if (!Number.isNaN(approvedTs)) {
+      approvalExpiresAt =
+        approvedTs + approvalWindowHours * 60 * 60 * 1000;
+      isApprovalWindowActive = approvalExpiresAt > nowTs;
+    }
+  }
+
+  const isApprovalExpired =
+    isApprovedForSelected &&
+    approvalWindowHours != null &&
+    !isApprovalWindowActive;
+
+  const canShowApprovedLabel =
+    isApprovedForSelected && isApprovalWindowActive;
+
+  // кнопка "Запросить участие" блокируется:
+  // 1) до старта набора, 2) при pending, 3) когда уже "участие одобрено" в активное окно
+  const enrollButtonDisabled =
+    isEnrollmentNotOpened || isPendingForSelected || canShowApprovedLabel;
+
+  // подпись для кнопки "Запросить участие"
+  let enrollButtonLabel;
+  if (isEnrollmentNotOpened) {
+    enrollButtonLabel = t("inside.actions.enroll_not_started", {
+      defaultValue: "Набор ещё не открыт",
+    });
+  } else if (isPendingForSelected) {
+    enrollButtonLabel = t("inside.actions.request_sent", {
+      defaultValue: "Заявка отправлена",
+    });
+  } else if (canShowApprovedLabel) {
+    enrollButtonLabel = t("inside.actions.request_approved", {
+      defaultValue: "Участие одобрено",
+    });
+  } else if (isApprovalExpired) {
+    enrollButtonLabel = t("inside.actions.request_expired", {
+      defaultValue: "Срок оплаты истёк — отправьте новую заявку",
+    });
+  } else {
+    enrollButtonLabel = t("inside.actions.request_join", {
+      defaultValue: "Запросить участие",
+    });
+  }
+
+  // можно ли сейчас оплатить (активна ли кнопка "Оплатить")
+  const canPayNow = canShowApprovedLabel;
 
   async function requestJoinChapter() {
     if (enrollButtonDisabled) return;
@@ -918,6 +992,36 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
     );
   }
 
+  // инициализация оплаты тура (редирект на платёжку)
+  async function handlePay() {
+    if (!canPayNow) return;
+    try {
+      const res = await apiPost("/api/inside/pay", { chapter: selectedKey });
+      const url =
+        res?.url ||
+        res?.payment_url ||
+        res?.data?.url ||
+        res?.data?.payment_url;
+
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+
+      tError(
+        t("inside.pay_block.error") ||
+          "Не удалось инициализировать оплату. Попробуйте позже."
+      );
+    } catch (e) {
+      console.error("handlePay error:", e);
+      tError(
+        t("inside.pay_block.error") ||
+          "Не удалось инициализировать оплату. Попробуйте позже."
+      );
+    }
+  }
+
+  (мы уже используем apiPost в файле, импорт менять не 
   const chaptersOrder = [
     { key: "royal",   order: 1 },
     { key: "silence", order: 2 },
@@ -1096,7 +1200,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           {/* нижние кнопки мы убрали по твоему ТЗ */}
         </div>
 
-        {/* 3. Запрос на участие */}
+        {/* 3. Запрос на участие + оплата */}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
           <div className="text-xs uppercase tracking-wide text-slate-500">
             {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
@@ -1104,23 +1208,22 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
           <div className="mt-2 text-xs text-slate-600">
             {t("inside.enroll_block.desc", {
               defaultValue:
-                "После одобрения заявки администратором ваша глава появится в прогрессе участия.",
+                "После одобрения заявки у вас будет ограниченное время, чтобы оплатить турпакет и получить документы.",
             })}
           </div>
 
+          {/* Кнопка «Запросить участие» / «Участие одобрено» и т.п. */}
           <div className="mt-4">
             <button
               onClick={requestJoinChapter}
               disabled={enrollButtonDisabled}
               className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
-                enrollButtonDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-black/90"
+                enrollButtonDisabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-black hover:bg-black/90"
               }`}
             >
-              {isPendingForSelected
-                ? t("inside.actions.request_sent", { defaultValue: "Заявка отправлена" })
-                : isApprovedForSelected
-                ? t("inside.actions.request_approved", { defaultValue: "Участие одобрено" })
-                : t("inside.actions.request_join", { defaultValue: "Запросить участие" })}
+              {enrollButtonLabel}
             </button>
           </div>
 
@@ -1130,29 +1233,71 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
                 t("inside.enroll_block.pending", {
                   defaultValue: "Заявка по этой главе ожидает одобрения.",
                 })}
-              {lastReq?.status === "approved" &&
-                t("inside.enroll_block.approved", {
-                  defaultValue: "Участие по этой главе подтверждено.",
-                })}
               {lastReq?.status === "rejected" &&
                 t("inside.enroll_block.rejected", {
-                  defaultValue: "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
+                  defaultValue:
+                    "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
                 })}
             </div>
           )}
 
+          {canShowApprovedLabel && approvalWindowHours != null && (
+            <div className="mt-2 text-[11px] text-slate-500">
+              {t("inside.pay_block.window_hint", {
+                defaultValue:
+                  "Участие одобрено. Оплатите в течение {{hours}} часов, чтобы получить документы по турпакету.",
+                hours: approvalWindowHours,
+              })}
+            </div>
+          )}
+
+          {isApprovalExpired && (
+            <div className="mt-2 text-[11px] text-rose-500">
+              {t("inside.pay_block.window_expired", {
+                defaultValue:
+                  "Срок на оплату по этой заявке истёк. Отправьте новый запрос или свяжитесь с куратором.",
+              })}
+            </div>
+          )}
+
+          {/* Блок оплаты + кнопка куратора */}
           <div className="mt-4 pt-3 border-t border-slate-200">
-            <a
-              href={`https://t.me/${curator.replace(/^@/, "")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border px-4 py-2 text-xs hover:bg-gray-50 text-center block"
+            <div className="text-xs text-slate-600 mb-2">
+              {t("inside.pay_block.desc", {
+                defaultValue:
+                  "Для того чтобы получить документы по турпакету нажмите кнопку «Оплатить».",
+              })}
+            </div>
+
+            <button
+              onClick={handlePay}
+              disabled={!canPayNow}
+              className={`w-full rounded-lg px-4 py-2 text-sm font-semibold ${
+                canPayNow
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "bg-slate-200 text-slate-500 cursor-not-allowed"
+              }`}
             >
-              {t("inside.actions.contact_curator", { defaultValue: "Связаться с куратором" })}
-            </a>
+              {t("inside.actions.pay", { defaultValue: "Оплатить" })}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                window.open(
+                  `https://t.me/${curator.replace(/^@/, "")}`,
+                  "_blank"
+                )
+              }
+              className="mt-3 w-full rounded-lg border px-4 py-2 text-xs hover:bg-gray-50 text-center"
+            >
+              {t("inside.actions.contact_curator", {
+                defaultValue: "Связаться с куратором",
+              })}
+            </button>
           </div>
         </div>
-      </div>
+     </div>
 
       {/* НИЖНИЙ БЛОК: прогресс по главам в виде батареек */}
       <div className="mt-6 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
