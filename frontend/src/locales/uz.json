@@ -5,7 +5,7 @@
   "actions": {
     "book": "Bron qilish",
     "cancel": "Bekor qilish",
-    "ok": "ОК",
+    "ok": "OK",
     "quick_request": "Tez so‘rov",
     "reject": "Rad etish",
     "refresh": "Yangilash",
@@ -172,181 +172,180 @@
     "busy": "band",
     "selected": "tanlangan"
   },
+{
+  "accommodation": "Joylashuv",
+  "accommodation_category": "Joylashuv toifasi",
 
-  "cancel": "Bekor qilish",
-
-  "category": {
-    "author_tour": "Mualliflik turi",
-    "border_transfer": "Chegara transferi",
-    "city_tour_guide": "Shahar sayohati (gid)",
-    "city_tour_transport": "Shahar sayohati (transport)",
-    "dinner_transfer": "Kechki ovqat transferi",
-    "hall_rent": "Zal ijarasi",
-    "hotel_room": "Mehmonxona xonasi",
-    "hotel_transfer": "Mehmonxona transferi",
-    "mountain_tour_guide": "Tog‘ sayohati (gid)",
-    "mountain_tour_transport": "Tog‘ sayohati (transport)",
-    "one_way_transfer": "Bir tomonga transfer",
-    "refused_event_ticket": "Rad etilgan tadbir chiptasi",
-    "refused_flight": "Rad etilgan aviachipta",
-    "refused_hotel": "Rad etilgan mehmonxona",
-    "refused_tour": "Rad etilgan tur",
-    "visa_support": "Viza yordami",
-    "desert_tour_guide": "Cho‘l sayohati (gid)",
-    "safari_tour_guide": "Safari-tur (gid)",
-    "meet": "Kutib olish (gid)",
-    "seeoff": "Kuzatib qo‘yish (gid)",
-    "translation": "Tarjima (gid)",
-    "desert_tour_transport": "Cho‘l sayohati (transport)",
-    "safari_tour_transport": "Safari-tur (transport)"
+  "actions": {
+    "book": "Bron qilish",
+    "cancel": "Bekor qilish",
+    "ok": "OK",
+    "quick_request": "Tez so‘rov",
+    "reject": "Rad etish",
+    "refresh": "Yangilash",
+    "send": "Yuborish",
+    "confirm": "Tasdiqlash",
+    "edit": "Tahrirlash",
+    "delete": "O‘chirish"
   },
 
-  "certificate": "Sertifikat",
-  "change": "O‘zgartirish",
-  "change_password": "Parolni o‘zgartirish",
-  "changeable": "O‘zgartirish mumkin",
-  "chd": "Bolalar (CHD)",
-  "choose_files": "Fayllarni tanlash",
-  "city_tour": "Shahar sayohati",
-  "clear_all": "Hammasini tozalash",
-  "clear_all_images_confirm": "Barcha rasmlar o‘chirilsinmi?",
+  "address": "Manzil",
+  "add_error": "Qo‘shishda xatolik",
+  "adt": "Kattalar (ADT)",
+  "agent": "Turagent",
+  "airline": "Aviakompaniya",
+  "authored_tour": "Mualliflik turi",
+  "back": "← Orqaga",
 
-  "client": {
-    "profile": { "title": "Mijoz" },
-    "dashboard": {
-      "avatarUrl": "Avatar havolasi",
-      "changeBtn": "Almashtirish",
-      "changePassword": "Parolni almashtirish",
-      "changePhoto": "Rasmni almashtirish",
-      "confirmDeleteRequest": "Ushbu so‘rovni o‘chirmoqchimisiz?",
-      "languagesCsv": "languages_csv",
-      "logout": "Chiqish",
-      "my_bookings": "Bronlarim",
-      "name": "Ism / nom",
-      "newPassword": "Yangi parol",
-      "noBookings": "Bronlar yo‘q",
-      "noRequests": "So‘rovlar yo‘q",
-      "noResults": "Ma’lumot yo‘q",
-      "passwordChanged": "Parol yangilandi",
-      "passwordTooShort": "Kamida 6 ta belgi",
-      "phone": "Telefon",
-      "photoHint": "JPEG/PNG, 512×512 kvadrat. Kesish va siqish avtomatik.",
-      "profileTitle": "Profil",
-      "refresh": "Yangilash",
-      "refusedTours": "Rad etilgan turlar",
-      "removePhoto": "Rasmni olib tashlash",
-      "requestDeleted": "So‘rov o‘chirildi",
-      "deleteRequest": "O‘chirish",
-      "saveBtn": "Saqlash",
-      "tabs": {
-        "myBookings": "Bronlarim",
-        "myRequests": "So‘rovlarim"
+  "booking": {
+    "date": "Sana",
+    "pax": "Yo‘lovchilar",
+    "submit": "Bron qilish",
+    "time": "Vaqt",
+    "title": "Bron",
+    "selected_dates": "Tanlangan sanalar",
+    "attachments_hint": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)"
+  },
+
+  "bookings": {
+    "provider_cancel_reason": "Rad etilishning sababini ko`rsating",
+    "waiting_for_requester": "Taklif yo`naltirildi. Mijozning javobi kutilmoqda!",
+    "price_agreement": "Narxni kelishish",
+    "last_offer": "Oxirgi taklif",
+    "price": "Narx",
+    "currency": "Valyuta",
+    "comment_optional": "Izoh (majburiy emas)",
+    "price_placeholder": "Mas., 120",
+    "comment_placeholder": "Masalan: to'xtash joyi va kutish kiritilgan",
+    "send_price": "Narxni yuborish",
+    "price_invalid": "To'g'ri narx kiriting",
+    "price_sent": "Narx yuborildi",
+    "price_send_error": "Narxni yuborishda xatolik",
+    "modal_title": "Bron",
+    "message_label": "Xabar",
+    "message_ph": "So‘rov tafsilotlarini yozing...",
+    "attachments_label": "Ilovalar (PDF, Word, Excel, PPT, rasmlar va h.k.)",
+    "send": "Bronni yuborish",
+    "need_auth": "Bron qilish uchun tizimga kiring",
+    "need_auth_hint": "Bron yuborish uchun tizimga kiring.",
+    "no_dates": "Hech bo‘lmaganda bitta bo‘sh sanani tanlang",
+    "sent": "Bron so‘rovi yuborildi",
+    "error": "Bronni yuborib bo‘lmadi",
+
+    "client_comment": "Izoh:",
+    "empty": "Hozircha bronlar yo‘q.",
+
+    "filters": {
+      "all": "Barchasi",
+      "pending": "Kutilmoqda",
+      "confirmed": "Tasdiqlandi",
+      "upcoming": "Oldinda",
+      "rejected": "Rad etildi"
+    },
+
+    "item": "Bron",
+    "refresh": "Yangilash",
+
+    "tabs": {
+      "incoming": "Mening xizmatlarimga bronlar",
+      "outgoing": "Men qilgan bronlar",
+      "all": "Hammasi",
+      "pending": "Kutilmoqda",
+      "confirmed": "Tasdiqlandi",
+      "upcoming": "Yaqqin",
+      "rejected": "Rad etilgan"
+    },
+
+    "sections": {
+      "incoming": "Xizmatlarimga bronlar",
+      "outgoing": "Mening bronlarim"
+    },
+
+    "status": {
+      "pending": "kutilmoqda",
+      "confirmed": "tasdiqlandi",
+      "active": "faol",
+      "quoted": "tasdiqlash kutilmoqda",
+      "rejected": "rad etilgan",
+      "cancelled": "bekor qilindi"
+    },
+
+    "status_by": {
+      "rejected": {
+        "you": "Rad etildi: siz tomondan",
+        "provider": "Rad etildi: provayder tomonidan",
+        "requester": "Rad etildi: so`rovchi tomonidan",
+        "client": "Rad etildi: mijoz tomonidan"
       },
-      "uploadPhoto": "Rasm yuklash"
+      "cancelled": {
+        "you": "Bekor qilindi: siz tomondan",
+        "provider": "Bekor qilindi: provayder",
+        "requester": "Bekor qilindi: arizachi",
+        "client": "Bekor qilindi: mijoz"
+      }
     },
-    "header": {
-      "cabinet": "Kabinet",
-      "favorites": "Sevimlilar"
+
+    "labels": { "client_comment": "Izoh:" },
+
+    "titles": { "provider": "Bronlar (Ta'minotchi)" },
+
+    "types": {
+      "guide": "Gid",
+      "transport": "Transport",
+      "agent": "Turoperator",
+      "hotel": "Mehmonxona"
     },
-    "login": {
-      "loginBtn": "Kirish",
-      "noAccount": "Hisob yo‘qmi?",
-      "password": "Parol",
-      "registerLink": "Ro‘yxatdan o‘tish",
-      "title": "Mijoz kirishi",
-      "success": "Kirish muvaffaqiyatli",
-      "error": "Kirish xatosi"
+
+    "actions": {
+      "confirm": "Tasdiqlash",
+      "reject": "Rad etish",
+      "cancel": "Bekor qilish"
     },
-    "register": {
-      "errors": {
-      "email_taken": "Bu e-pochta allaqachon roʻyxatdan oʻtgan",
-      "phone_taken": "Bu telefon raqami allaqachon roʻyxatdan oʻtgan",
-      "weak_password": "Parol juda oddiy",
-      "generic": "Roʻyxatdan oʻtishda xatolik"
+
+    "confirmed": "Bron tasdiqlandi",
+    "confirm_error": "Tasdiqlash xatosi",
+    "rejected": "Bron rad etildi",
+    "reject_error": "Rad etish xatosi",
+
+    "dates_label": "Band qilingan sanalar:",
+    "wait_price": "Ta’minotchidan narx taklifi kutilmoqda",
+
+    "search": {
+      "placeholder": "Qidiruv: ta’minotchi, xizmat, holat…"
     },
-      "haveAccount": "Hisobingiz bormi?",
-      "loading" : "Ro`yxatidan o`tkazilmoqda ...",
-      "loginLink": "Kirish",
-      "name": "Ism",
-      "password": "Parol",
-      "phone": "Telefon",
-      "registerBtn": "Ro‘yxatdan o‘tish",
-      "title": "Mijoz ro‘yxatdan o‘tishi",
-      "success": "Ro‘yxatdan o‘tish muvaffaqiyatli",
-      "error": "Ro‘yxatdan o‘tishda xato"
+
+    "view": {
+      "compact": "Kompakt",
+      "normal": "Oddiy",
+      "compact_title": "Kompakt rejim"
+    },
+
+    "allow_popups_pdf": "PDF eksporti uchun qalqib chiquvchi oynalarga ruxsat bering.",
+    "pdf": {
+      "generated_at": "Tuzilgan vaqti",
+      "total": "Jami",
+      "confirmed_at": "tasdiqlangan"
     }
   },
 
-  "comment": "Izoh",
-  "car_fleet" : "Transport ",
+  "border_transfer": "Chegara transferi",
 
-  "common": {
-    "add_hotel": "O‘zingizning otelingizni qo‘shing",
-    "anonymous": "Anonim",
-    "comment": "Izoh",
-    "direction": "Yo‘nalish",
-    "find": "Qidirish",
-    "loading": "Yuklanmoqda…",
-    "note_optional": "So‘rov uchun izoh (ixtiyoriy):",
-    "amount": "Summasi",
-    "backToDashboard": "Kabinetga qaytish",
-    "booking": "Bron",
-    "created": "Yaratildi",
-    "date": "Sana",
-    "loading_error": "Ma’lumotlarni yuklab bo‘lmadi",
-    "refresh": "Yangilash",
-    "request": "So‘rov",
-    "saving": "Saqlanmoqda…",
-    "sending": "Yuborilmoqda…",
-    "status": "Holat",
-    "about": "Kompaniya haqida",
-    "city": "Shahar",
-    "country": "Mamlakat",
-    "phone": "Telefon",
-    "telegram": "Telegram",
-    "email": "Email",
-    "website": "Sayt",
-    "save": "Saqlash",
-    "cancel": "Bekor qilish",
-    "pros": "Afzalliklari",
-    "cons": "Kamchiliklari",
-    "features": "Xususiyatlari",
-    "nothing_found": "Hech narsa topilmadi"
+  "calendar": {
+    "blocking_title": "Bandlik kalendari",
+    "booked": "Band qilingan",
+    "dates_saved": "Band sanalar saqlandi",
+    "label_blocked_manual": "Qo‘lda bloklangan",
+    "label_booked_by_clients": "Bronlar sababli band",
+    "load_error": "Sanalarni yuklab bo‘lmadi",
+    "manual_blocked": "Qo‘lda bloklangan",
+    "save_blocked_dates": "Band sanalarni saqlash",
+    "save_button": "Band sanalarni saqlash",
+    "save_error": "Sanalarni saqlab bo‘lmadi",
+    "saved_successfully": "Sanalar saqlandi",
+    "title_public": "Bandlik kalendari",
+    "busy": "band",
+    "selected": "tanlangan"
   },
-
-  "confirm_delete": "Ushbu element o‘chirilsinmi?",
-  "countdown": { 
-    "until_end": "Tugashigacha", 
-    "expired": "Muddati tugadi",
-    "days_short": "k"
-  },
-  
-
-  "country_not_chosen": "Mamlakatlar topilmadi",
-  "cover": "Muqova",
-  "days": "kun.",
-  "delete": "O‘chirish",
-  "delete_error": "O‘chirishda xatolik",
-  "departure_date": "Jo‘nash sanasi",
-  "description": "Tavsif",
-  "dinner_transfer": "Kechki ovqat transferi",
-  "direction": "Yo‘nalish",
-  "direction_country": "Manzil mamlakati",
-  "direction_from": "Jo‘nash shahri",
-  "direction_from_not_chosen": "Jo‘nash shahri tanlanmagan",
-  "direction_to": "Borish shahri",
-  "direction_to_not_chosen": "Borish shahri tanlanmagan",
-  "drag_to_reorder": "Tartiblash uchun sudrang",
-
-  "edit": "Tahrirlash",
-  "edit_service": "Xizmatni tahrirlang:",
-
-  "empty": {
-    "no_bookings": "Hozircha bronlar yo‘q.",
-    "no_favorites": "Sevimlilar bo‘sh",
-    "no_requests": "Hozircha so‘rovlar yo‘q."
-  },
-
   "end_flight_date": "Qaytish reysi sanasi",
   "enter_accommodation": "Joylashuvni kiriting",
   "enter_airline": "Aviakompaniyani kiriting",
@@ -371,11 +370,8 @@
     "tab_load": "Yorliqni yuklab bo‘lmadi",
     "write_review": "Umumiy fikrni yozing",
     "save_failed": "Inspeksiyani saqlab bo‘lmadi",
-    "only_providers": "Inspeksiyani faqat tasdiqlangan provayderlar/agentlar qoldira oladi. Provayder kabinetingizga kiring.",
-    "write_review": "Iltimos, umumiy sharh yozing",
-    "only_providers": "Faqat provayder/agent sharh qoldirishi mumkin",
-    "save_failed": "Sharhni saqlab bo‘lmadi",
-    "already_inspected": "Siz bu mehmonxona bo‘yicha allaqachon inspeksiya qoldirgansiz.",
+    "only_providers": "Faqat provayder/turagent sharh qoldirishi mumkin",
+    "already_inspected": "Bu mehmonxona bo‘yicha allaqachon inspeksiya qoldirgansiz.",
     "only_providers": "Faqat provayder/turagentlar inspeksiya qoldirishi mumkin.",
     "save_failed": "Saqlab bo‘lmadi. Keyinroq urinib ko‘ring.",
     "write_review": "Umumiy sharhni yozing"
@@ -394,7 +390,7 @@
 
   "favorites": {
     "add": "Sevimlilarga qo‘shish",
-    "empty": "Bo`m-bo`sh",
+    "empty": "Bo‘m-bo‘sh",
     "expired_badge": "Muddati tugagan",
     "expired_title": "Bu taklif endi mavjud emas",
     "remove_from": "Sevimlilardan olib tashlash",
@@ -440,7 +436,7 @@
   "hotel.no_options": "Variantlar yo‘q",
   "hotel.search_placeholder": "Mehmonxona nomini kiriting",
 
-   "hotels": {
+  "hotels": {
     "title": "Mehmonxonalar",
     "tabs": { "top": "Top", "popular": "Ommabop", "new": "Yangi", "worst": "Eng yomonlari" },
     "emptyHint": "Mehmonxonalarni ko‘rish uchun tabni tanlang yoki qidiring.",
@@ -451,7 +447,7 @@
     "searching": "Qidirilmoqda...",
     "col": { "name": "Nomi", "city": "Shahar", "rating": "Baholash" },
     "empty": "Hech narsa topilmadi",
-     
+
     "inspections": {
       "author_fallback": "provayder",
       "author": "Muallif",
@@ -484,6 +480,7 @@
         "save": "Saqlash"
       }
     },
+
     "scores": {
       "quiet_level": "Tinchlik darajasi",
       "family_score": "Oila uchun qulay",
@@ -495,6 +492,7 @@
       "value_score": "Narx/qiymat",
       "access_score": "Kiruvchanlik/transport"
     },
+
     "amenities": {
       "crib": "Bolalar beshigi",
       "kids_pool": "Bolalar hovuzi",
@@ -511,6 +509,7 @@
       "laundry": "Kir yuvish xizmati",
       "late_checkin": "Kech check-in"
     },
+
     "nearby": {
       "metro_m": "Metro (m)",
       "supermarket_m": "Supermarket (m)",
@@ -540,7 +539,7 @@
     "error": "Email yoki parol noto‘g‘ri",
     "no_account": "Hisob yo‘qmi?",
     "password": "Parol",
-    "title": "Ta’minotchi kirishi",
+    "title": "Ta’minotчи kirishi",
     "success": "Muvaffaqiyatli kirildi"
   },
 
@@ -570,8 +569,8 @@
     "search": "Qidirish",
     "search_filters": "Qidiruv filtrlari",
     "search_in": "{{category}} bo‘yicha qidirish:",
-    "search_placeholder": "Xizmatlar, davlatlar, shaharlar…",
-    "searching": "Qidirilmoqda...",
+    "search_placeholder": "Xizmatlar, davlatлар, шaharлар…",
+    "searching": "Qidirилmoqda...",
     "select_category": "Toifani tanlang",
     "start_date": "Boshlanish sanasi",
     "title": "Bozor (e’lonlar)",
@@ -583,1025 +582,140 @@
     "time_left": "Tugashiga qoldi",
     "time_expired": "Muddati tugagan"
   },
-
-  "messages": {
-    "booking_created": "Bron yaratildi",
-    "favorite_removed": "Sevimlilardan olib tashlandi",
-    "profile_saved": "Profil saqlandi",
-    "request_sent": "So‘rov yuborildi"
-  },
-
+  "meal": "Oziqlanish",
+  "moderator_required": "Moderator tasdig‘i kerak",
   "moderation": {
-    "service_status": {
-      "draft": "Qoralama",
-      "pending": "Moderator ko‘rib chiqishiga yuborildi",
-      "published": "Moderator tasdiqlagan",
-      "rejected": "Rad etildi",
-      "archived": "E’lonlardan olib tashlandi"
-    },
-    "send_to_review": "Moderatsiyaga yuborish",
-    "submitted_toast": "Moderatsiyaga yuborildi",
-    "title": "Xizmatlarni moderatsiya qilish",
-    "no_title": "(sarlavhasiz)",
-    "supplier": "Taʼminotchi",
-    "direction": "Yoʻnalish",
-    "start": "Boshlanish",
-    "end": "Tugash",
-    "location": "Manzil",
-    "event": "Tadbir",
-    "airline": "Aviakompaniya",
-    "rejected_reason": "Sabab",
-    "confirm": "Tasdiqlash",
     "approve": "Tasdiqlash",
-    "enter_reason": "Rad etish sababi:",
     "reject": "Rad etish",
-    "unpublish": "Nashrdan olish",
-    "approved": "Nashr etildi",
-    "approve_error": "Tasdiqlashda xatolik",
-    "enter_reason_short": "Sababni kiriting",
-    "rejected": "Rad etildi",
-    "reject_error": "Rad etishda xatolik",
-    "unpublished": "Nashrdan olindi",
-    "unpublish_error": "Nashrdan olishda xatolik",
-    "forbidden": "Faqat administrator uchun",
-    "empty": "Elementlar yoʻq",
-    "tabs": {
-      "pending": "Kutilmoqda",
-      "rejected": "Rad etilgan"
-    }
-  
+    "title": "Moderasия"
   },
 
-  "mountain_tour": "Tog‘ sayohati",
-  "my_requests": "So‘rovlarim",
-
-  "name": "Nom",
-  "name_placeholder": "Ismingiz",
-
-  "nav": {
+  "my": {
+    "favorites": "Sevimlilarim",
+    "inbox": "Xabarlar",
     "bookings": "Bronlar",
-    "dashboard": "Boshqaruv",
-    "requests": "So‘rovlar",
-    "favorites": "Sevimlilar",
-    "hotels": "Mehmonxonalar",
-    "hotels_admin": "Mehmonxonalar (admin)",
-    "hotels": "Mehmonxonalar",
-    "hotels_admin": "Mehmonxonalar (admin)"
+    "requests": "So‘rovlar"
   },
 
+  "myinside": {
+    "title": "Mening India Inside dasturim"
+  },
+
+  "nearby_places": "Yaqin joylar",
   "net_price": "Netto narx",
-  "current_password": "Eski parol",
-  "new_password": "Yangi parol",
+  "newest": "Eng yangi",
+  "no": "Yo‘q",
+  "no_data": "Hozircha ma’lumot yo‘q",
+  "no_results": "Hech narsa topilmadi",
+  "not_active": "Faol emas",
 
-  "new_refused_airtkt": "Yangi rad etilgan aviachipta:",
-  "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
-  "new_refused_hotel": "Yangi rad etilgan mehmonxona:",
-  "new_refused_tkt": "Yangi rad etilgan tadbir chiptasi:",
-  "new_refused_tour": "Yangi rad etilgan tur:",
+  "offers": "Takliflar",
+  "open": "Ochish",
+  "open_map": "Xaritani ochish",
+  "open_profile": "Profilni ochish",
+  "optional": "Ixtiyoriy",
+  "owner": "Egalik qiluvchi",
 
-  "new_service_tip": "Yangi xizmat yaratish uchun hamma maydonlarni to‘ldirib, «Xizmatni saqlash» tugmasini bosing.",
-  "new_visa_service": "Viza yordami xizmati:",
-  "new_visa_support": "Viza yordami",
+  "package": "Tur paketi",
+  "packages": "Paketlar",
+  "password": {
+    "change": "Parolni o‘zgartirish",
+    "current": "Joriy parol",
+    "new": "Yangi parol",
+    "repeat": "Yangi parolni takrorlang",
+    "updated": "Parol muvaffaqiyatli yangilandi"
+  },
 
-  "no_changes": "Saqlash uchun o‘zgarish yo‘q",
-  "no_file_chosen": "Fayl tanlanmagan",
-  "no_files_selected": "Fayllar tanlanmagan",
-  "no_images_yet": "Hozircha rasmlar yo‘q",
-  "not_specified": "Ko‘rsatilmagan",
+  "pay": "To‘lash",
+  "payment": {
+    "title": "To‘lov",
+    "success": "To‘lov muvaffaqiyatli amalga oshirildi",
+    "failed": "To‘lovni amalga oshirib bo‘lmadi"
+  },
 
-  "ok": "OK",
-  "one_way": "Bir tomonga",
-  "one_way_transfer": "Bir tomonga transfer",
-
-  "pagination": { "next": "Keyingi", "prev": "Oldingi" },
-
-  "password_change": "Parolni o‘zgartirish",
-  "password_changed": "Parol o‘zgartirildi",
-  "password_error": "Parolni o‘zgartirish xatosi",
-  "password_too_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
-
+  "people": "Odamlar",
   "phone": "Telefon",
-  "photo": "Rasm",
-  "pick_dates": "Boshlanish va tugash sanalarini tanlang",
+  "photos": "Rasmlar",
+  "places_left": "Bo‘sh joylar",
+  "please_wait": "Kutib turing…",
   "price": "Narx",
-
-  "profile": { 
-    "city": "Shahar",
-    "languages": "Tillar",
-    "phone": "Tel.",
-    "telegram": "Telegram",
-    "email": "Email",
-    "price_per_day": "Narx/kun",
-    "open_profile": "Profilni ochish →",
-    "password_changed": "Parol yangilandi", 
+  "profile": {
+    "title": "Profil",
     "saved": "Profil saqlandi",
-    "regions_placeholder": "Shahar nomini ingliz tilida kiritishni boshlang",
-        "completeness": {
-      "title": "Profil to‘ldirilganligi",
-      "progress": "{{percent}}% to‘ldirildi",
-      "hint": "Profilingiz 100% to‘ldirilmagan. Xizmatlaringiz Marketplace va TourBuilder’da e’lon qilinishi uchun ma’lumotlarni to‘ldiring.",
-      "languages": "Tillarni bilish",
-      "transport": "Transport mavjudligi",
-      "certificate": "Sertifikat yuklash",
-      "logo": "Logo yuklash",
-      "telegram": "Telegram ulash",
-      "optional": "(ixtiyoriy)",
-      "fill": "To‘ldirish"
-    }
-  },
-  "profile_load_error": "Profilni yuklab bo‘lmadi",
-  "profile_updated": "Profil yangilandi",
-
-  "provider": {
-    "languages": "Tillar",
-    "type": "Ta’minotchi turi",
-    "region": "Ta’minotchi mintaqasi",
-    "types": {
-      "agent": "Turagent",
-      "guide": "Gid",
-      "transport": "Transport",
-      "hotel": "Mehmonxona"
-    },
-    "bookings": {
-      "cancel": "Bekor qilish",
-      "confirm": "Tasdiqlash",
-      "details": "Tafsilotlar",
-      "noItems": "Bronlar yo‘q.",
-      "reject": "Rad etish",
-      "status": "Holat",
-      "title": "Bronlar (Ta’minotchi)"
-    },
-    "inbox": {
-      "confirm_delete_title": "So‘rov o‘chirilsinmi?",
-      "confirm_delete_msg": "Ushbu tez so‘rovni qayta tiklab bo‘lmaydi. O‘chirishni tasdiqlaysizmi?",
-      "title": "Kelib tushgan so‘rovlar",
-      "total": "Jami",
-      "new": "Yangi",
-      "processed": "Ko‘rib chiqilgan",
-      "from": "Kimdan",
-      "empty": "So‘rovlar yo‘q",
-      "mark_processed": "Ko‘rib chiqilgan",
-      "confirm_delete": "So‘rovni o‘chirishni xohlaysizmi?"
-    },
-    "outbox": {
-      "confirm_delete_title": "So‘rov o‘chirilsinmi?",
-      "confirm_delete_msg": "Ushbu tez so‘rovni qayta tiklab bo‘lmaydi. O‘chirishni tasdiqlaysizmi?",
-      "edit_soon_title": "Travella.uz da harakatingizni tasdiqlang",
-      "edit_soon_msg": "Tahrirlash imkoniyati kutilmoqda",
-      "title": "Chiqib ketgan so‘rovlar",
-      "total": "Jami",
-      "new": "Yangi",
-      "processed": "Ko‘rib chiqilgan",
-      "from": "Kimdan",
-      "empty": "So‘rovlar yo‘q",
-      "mark_processed": "Ko‘rib chiqilgan",
-      "confirm_delete": "So‘rovni o‘chirishni xohlaysizmi?"
-    }
+    "save_error": "Profilni saqlab bo‘lmadi",
+    "upload_photo": "Rasm yuklash"
   },
 
-  "requests": {
-    "afterAcceptNote": "Mijoz taklifni qabul qilgach (status = accepted), bron qilish mumkin bo‘ladi.",
-    "messagePlaceholder": "Mijozga xabar…",
-    "noItems": "So‘rovlar yo‘q.",
-    "proposalPlaceholder": "JSON taklif (masalan, {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-    "send": "Yuborish",
-    "sendProposal": "Taklif yuborish",
-    "title": "So‘rovlar (Ta’minotchi)"
-  },
+  "program": "Dastur",
+  "progress": "Progress",
+  "provider": "Ta’minotchi",
+  "provider_dashboard": "Ta’minotchining kabinеti",
 
-  "provider_profile": "Ta’minotchi profili",
-  "providerProfile": { "type": "Ta’minotchi turi", "region": "Ta’minotchi mintaqasi", "address": "Manzil" },
-
-  "ps": {
-    "title": "Tour Builder uchun Xizmatlar",
-
-    "btn": {
-      "refresh": "Yangilash",
-      "generate_from_profile": "Profil asosida yaratish",
-      "generating": "Yaratilmoqda…",
-      "generate_hint": "Profil shahar va avtomobillari bo‘yicha avto-yaratish"
-    },
-
-    "grp": {
-      "guide": "GID",
-      "guide_transport": "GID+TRANSPORT",
-      "transport": "TRANSPORT"
-    },
-
-    "form": {
-      "category": "Toifa",
-      "category_ph": "— toifa tanlang —",
-      "name_opt": "Nomi (ixtiyoriy)",
-      "name_optional_ph": "masalan, 4 soat yoki avtomobil modeli",
-      "seats": "Joylar",
-      "price": "Narx",
-      "price_ph": "100, 120.50 …",
-      "currency": "Valyuta",
-      "add": "Qo‘shish"
-    },
-
-    "table": {
-      "category": "Toifa",
-      "name": "Nomi",
-      "seats": "Joylar",
-      "price": "Narx",
-      "currency": "Valyuta",
-      "status": "Holat",
-      "actions": "Amallar"
-    },
-
-    "row": {
-      "name_ph": "Nomi…",
-      "enable": "Yoqish",
-      "disable": "O‘chirish",
-      "delete": "O‘chirish"
-    },
-
-    "status": {
-      "enabled": "Yoqilgan",
-      "disabled": "O‘chirilgan"
-    },
-
-    "empty": "Xizmatlar topilmadi. Hech bo‘lmaganda bittasini qo‘shing.",
-    "hint": {
-      "zero_price": "Maslahat: narxi 0 bo‘lgan xizmatlar TourBuilder’da ko‘rinmaydi. Narxlarni kiriting — va ular darhol paydo bo‘ladi."
-    },
-
-    "confirm": {
-      "delete": "Xizmat o‘chirilsinmi?",
-      "bulk": "Ommaviy qo‘shishni tasdiqlang."
-    },
-
-    "error": {
-      "delete": "O‘chirish imkonsiz: ",
-      "no_cities": "Avval profilga “Faoliyat hududi”ni kiriting.",
-      "nothing_to_generate": "Hech narsa yaratib bo‘lmaydi: profilda shaharlar va/yoki avtomobillarni qo‘shing.",
-      "bulk": "Paket yaratish xatosi: "
-    }
-  },
-
+  "refused_flight": "Rad etilgan aviachipta",
   "refused_hotel": "Rad etilgan mehmonxona",
-  "refused_hotel_city": "Shahar",
-  "refused_hotel_name": "Rad etilgan mehmonxona nomi",
-  "refused_hotel_select": "Mehmonxonani kiriting",
-  "refused_hotel_select_city": "Shaharni kiriting",
-  "refused_ticket": "Rad etilgan aviachipta",
-  "refused_tour": "Rad etilgan tur",
+  "refused_package": "Rad etilgan tur",
+  "refused_ticket": "Rad etilgan tadbir chiptasi",
 
-  "register": {
-    "button": "Ro‘yxatdan o‘tish",
-    "email": "Email",
-    "error": "Ro‘yxatdan o‘tishda xato.",
-    "file_chosen": "Fayl tanlandi",
-    "location_placeholder": "masalan, Samarqand, Buxoro",
-    "name": "Nom",
-    "no_file": "Fayl tanlanmagan",
-    "password": "Parol",
-    "phone": "Telefon",
-    "photo": "Profil rasmi",
-    "required": "Ushbu maydonni to‘ldiring",
-    "select_file": "Faylni tanlash",
-    "social": "Telegram yuzerneymi",
-    "success": "Ro‘yxatdan o‘tish muvaffaqiyatli!",
-    "title": "Ta’minotchini ro‘yxatdan o‘tkazish",
-    "type": "Ta’minotchi turi"
+  "remove": "O‘chirish",
+  "request": "So‘rov",
+  "requests": {
+    "title": "So‘rovlar",
+    "empty": "So‘rovlar yo‘q",
+    "send": "So‘rov yuborish",
+    "sent": "So‘rov yuborildi",
+    "accept": "Qabul qilish",
+    "reject": "Rad etish"
   },
 
-  "requests.tabs.incoming": "Kelib tushgan", "requests.tabs.outgoing": "Chiqib ketgan",
-
-  "requests_list": {
-    "empty": "Hozircha so‘rovlar yo‘q.",
-    "error": "So‘rovni yuborib bo‘lmadi",
-    "item": "So‘rov",
-    "note_prompt": "So‘rov uchun izoh (ixtiyoriy):",
-    "sent": "So‘rov yuborildi"
-  },
-
-  "return_date": "Qaytish sanasi",
-
-  "reviews": {
-    "already_left": "Bunga oldin sharh qoldirgansiz!",
-    "count": "ta sharh",
-    "count_one": "{{count}} sharh",
-    "count_few": "{{count}} sharh",
-    "count_many": "{{count}} sharh",
-    "count_other": "{{count}} sharh",
-    "empty": "Hozircha sharhlar yo‘q.",
-    "leave": "Sharh qoldirish",
-    "leave_client": "Mijoz haqida sharh qoldirish",
-    "leave_service": "Xizmat haqida sharh qoldirish",
-    "list": "Sharhlar",
-    "placeholder": "Tajribaingizni qisqacha yozing",
-    "rating": "Baholash",
-    "save_error": "Sharhni saqlab bo‘lmadi",
-    "saved": "Sharh saqlandi",
-    "send": "Yuborish",
-    "title": "Sharhlar",
-    "title_provider": "Mijozlar sharhlari",
-    "title_service": "Xizmat sharhlari",
-    "your_rating": "Sizning bahoyingiz"
-  },
-
-  "roles": { "client": "Mijoz", "provider": "Ta’minotchi", "admin": "Admin" },
-
-  "room_rent": "Xona ijarasi",
-  "round_trip": "Qaytish bilan",
+  "rooms": "Xonalar",
   "save": "Saqlash",
-  "save_service": "Xizmatni saqlash",
-  "saving": "Saqlanmoqda...",
-  "select_category": "Toifani tanlang",
-  "select_city": "Shaharni tanlang",
-  "select_country": "Viza uchun mamlakatni tanlang",
-  "select_event_category": "Tadbir toifasini tanlang",
-  "select_files": "Fayllarni tanlash",
-  "select_hotel": "Mehmonxonani tanlang",
-  "select.type_more": "Kamida 2ta harf kiriting",
+  "search": "Qidirish",
+  "search_city": "Shahar qidirish",
+  "search_country": "Davlat qidirish",
+  "search_results": "Natijalar",
+  "searching": "Qidirilmoqda…",
+
+  "send": "Yuborish",
   "service": "Xizmat",
+  "services": "Xizmatlar",
+  "settings": "Sozlamalar",
 
-  "service_added": "Xizmat qo‘shildi",
-  "service_deleted": "Xizmat o‘chirildi",
-  "service_images": "Xizmat rasmlari",
-  "service_updated": "Xizmat yangilandi",
-  "services_marketplace": "MARKETPLACE uchun xizmatlar",
-  "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
+  "show_all": "Hammasini ko‘rish",
+  "show_more": "Ko‘proq ko‘rsatish",
 
-  "social": "Telegram yuzerneymi",
-  "start_flight_date": "Jo‘nash reysi sanasi",
-
-  "stats": {
-    "bonus_progress": "Bonus jarayoni",
-    "bookings_total": "Bronlar (jami)",
-    "cancelled": "Bekor qilingan",
-    "completed": "Yakunlangan",
-    "level": "Daraja",
-    "rating": "Reyting",
-    "requests_active": "Faol so‘rovlar",
-    "requests_total": "So‘rovlar (jami)",
-    "tier": "Daraja",
-    "tier_label": "Daraja"
+  "sms_code": "SMS kod",
+  "sort": {
+    "price_low": "Avval arzonlari",
+    "price_high": "Avval qimmati",
+    "rating": "Reyting bo‘yicha"
   },
 
-  "status": {
-    "new": "yangi",
-    "processed": "ko‘rib chiqilgan",
-    "pending": "kutilmoqda",
-    "rejected": "rad etilgan",
-    "active": "faol",
-    "accepted": "qabul qilingan",
-    "not_actual": "nofaol"
-  },
+  "staff": "Xodimlar",
+  "start": "Boshlash",
+  "start_date": "Boshlanish sanasi",
+  "status": "Holat",
+  "success": "Muvaffaqiyatli bajarildi",
+  "supplier": "Ta’minotchi",
+  "suppliers": "Ta’minotchilar",
 
-  "sum": "Summasi",
-
-  "tabs": {
-    "favorites": "Sevimlilar",
-    "my_bookings": "Bronlarim",
-    "my_requests": "So‘rovlarim"
-  },
-
-  "tb": {
-    "tpl_apply_title": "Shablonni qo‘llash",
-    "tpl_select": "Shablon",
-    "tpl_select_placeholder": "Shablonni tanlang…",
-    "tpl_start_date": "Boshlanish sanasi",
-    "tpl_start_hint": "Faqat bugun yoki kelajakdagi sana tanlanadi.",
-    "tpl_btn_cancel": "Bekor qilish",
-    "tpl_btn_apply": "Qo‘llash",
-    "err": {
-      "select_template": "Iltimos, shablonni tanlang.",
-      "start_required": "Boshlanish sanasini kiriting.",
-      "template_empty": "Shablonda kunlar yo‘q.",
-      "invalid_date": "Noto‘g‘ri sana.",
-      "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas."
-    },
-      "hotel_category": "Mehmonxonalar toifasi",
-      "any": "Har qanday",
-      "templates": "Andozalar",
-      "templates_open": "Andozalarni ochish",
-      "templates_count": "{{count}} ta",
-      "tpl_apply_title": "Andozani qo‘llash",
-      "tpl_select": "Andoza",
-      "tpl_select_placeholder": "— tanlang —",
-      "tpl_start_date": "Boshlanish sanasi",
-      "tpl_btn_cancel": "Bekor qilish",
-      "tpl_btn_apply": "Qo‘llash",
-      "transfers": "Shaharlararo transferlar",
-      "transfer_from_ph": "Qayerdan (shahar)",
-      "transfer_to_ph": "Qayerga (shahar)",
-      "transfer_price_ph": "Narx",
-      "per_pax": "/ pax",
-      "remove": "O‘chirish",
-      "add_transfer": " Transfer qo‘shish",
-      "transfers_day_sum": "Kun bo‘yicha transferlar yig‘indisi",
-      "totals": {
-        "transfers": "Transferlar"
-      },
-
-      "profile": {
-      "city": "Shahar",
-      "languages": "Tillar",
-      "phone": "Tel.",
-      "telegram": "Telegram",
-      "email": "Email",
-      "price_per_day": "Narx/kun",
-      "open_profile": "Profilni ochish →"
-    },
-      "transfer_types": {
-        "car": "Avto",
-        "train": "Poyezd",
-        "air": "Aviya"
-      },
-  "currencyintercities": {
-      "uzs": "UZS",
-      "usd": "USD"      
-    },
-    
-    "tourism_fee_hint": "Turistik yig‘im: rez. {{res}} / norez. {{nrs}} so‘m kishi/kecha",
-    "tourism_fee_absent": "Mehmonxona profilida turistik yig‘im ko‘rsatilmagan",
-    "rooms": "Xonalar",
-    "extra_beds_short": "Qo‘shimcha o‘rinlar",
-    "tourism_fee_short": "Turistik yig‘im",
-    "vat": "QQS",
-    "vat_included": "narxga kiritilgan",
-    "extra_beds_qty": "Qo‘shimcha o‘rin, dona",
-    "usd_enter_valid_rate": "USD miqdorini ko‘rsatish uchun to‘g‘ri kurs kiriting",
-    "tariff_for": "Tariflar:",
-    "residents": "Rezidentlar",
-    "nonresidents": "Norezidentlar",
-    "pick_transport_service_ph": "Transport xizmatini tanlang...",
-    "pick_guide_service_ph": "Gid xizmatini tanlang...",
-    "calc_day_hint": "Ushbu kunda: {{amount}} (ADT/CHD va rezidentlik hisobga olingan)",
-    "pick_places": "Joylarni tanlang",
-    "entry_ph": "Obyektlarni qidiring: muzeylar, bog‘lar…",
-    "speaking_lang": "Afzal muloqot tili",
-    "title": "Tur konstruktori",
-    "dates": "Sanalar",
-    "pick_dates": "Kalendar orqali sanalarni tanlang",
-    "dates_span": "{{from}} → {{to}} ({{days}} kun)",
-    "city_ph": "Shahar (slug yoki nomi)",
-    "speaking_lang": "Afzal muloqot tili",
-    "residents": "Rezidentlar",
-    "nonresidents": "Norezidentlar",
-    "pick_city_first": "Avval shaharni tanlang",
-
-    "guide": "Gid",
-    "pick_guide": "Gidni tanlang",
-    "no_providers": "Provayderlar topilmadi",
-    "no_services_for_guide": "Bu gid uchun mos xizmatlar topilmadi",
-
-    "transport": "Transport",
-    "pick_transport": "Transport provayderini tanlang",
-    "no_services_for_transport": "Bu tashuvchi uchun mos xizmatlar topilmadi",
-
-    "hotel": "Mehmonxona",
-    "hotel_short": "Mehmonxona",
-    "pick_hotel": "Mehmonxonani tanlang",
-    "no_hotels": "Mehmonxonalar topilmadi",
-    "loading_hotel": "Mehmonxona ma’lumotlari yuklanmoqda…",
-
-    "entry_fees": "Kirish chiptalari",
-    "entry_ph": "Obyektlarni qidiring: muzeylar, bog‘lar…",
-    "pick_sites": "Joylarni tanlang",
-    "nothing_found": "Hech narsa topilmadi",
-
-    "price_per_day": "Kuniga narx",
-    "price_per_night": "Tuniga narx",
-    "rooms_and_meals": "Xonalar va ovqatlanish",
-    "day_total": "Kun bo‘yicha jami",
-    "extra_beds_qty": "Qo`shimcha krovat miqdori",
-
-    "totals": {
-      "guide": "Gid",
-      "transport": "Transport",
-      "hotels": "Mehmonxonalar",
-      "entry": "Chipta/kirish",
-      "total": "Jami"
-    },
-  "load_draft": "Qoralamani yuklash",
-  "save_draft": "Qoralamani saqlash",
-  "draft_saved": "Qoralama saqlandi",
-  "draft_saved_locally": "Qoralama brauzerda saqlandi",
-  "draft_loaded": "Qoralama yuklandi",
-  "draft_loaded_local": "Qoralama brauzerdan yuklandi",
-  "no_drafts": "Qoralamalar topilmadi",
-
-  "pax": "Mehmonlar (PAX)",
-  "loop_route": "marshrutni yopish",
-  "loop": "takror",
-  "override_by_day": "Kunlar bo‘yicha o‘zgartirish",
-  "use_default": "Standart bo‘yicha",
-
-  "guides_suggest": "Tanlangan sanalarda mavjud gidlar",
-  "no_guides": "Mos gidlar yo‘q",
-  "transports_suggest": "Tanlangan sanalarda mavjud transport",
-  "no_transports": "Mos transport yo‘q",
-
-  "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
-  "net": "Netto",
-  "notes": "Izoh",
-  "tariff_for": "Tariflar:",
-  "residents": "Rezidentlar",
-  "nonresidents": "Norezidentlar",
-  "entry_fees_net": "Kirish chiptalari (netto)",
-
-  "pricing": "Narxlash",
-  "currency": "Valyuta",
-  "markup": "Ustama, %",
-  "tourist_fee": "Turist to‘lovi / tun",
-  "hotels_cost": "Mehmonxonalar (netto)",
-  "providers_cost": "Gid/Transport (netto)",
-  "total": "Jami",
-
-  "meals": "Ovqatlanish",
-  "meal_types": {
-    "lunch": "Tushlik",
-    "dinner": "Kechki ovqat",
-    "gala": "Gala kechki ovqat"
-  },
-  "meal_price_ph": "Narx",
-  "add_meal": "Ovqat qoʻshish",
-  "meals_day_sum": "Kunlik ovqatlanish summasi"
-},
-"tpl": {
-    "program": "Sayohat dasturi",
-    "program_ph": "Dastur matnini kiriting (ko‘p qator, har band yangi qatorda)…",
-    "title": "Tur andozalari",
-    "btn_new": "+ Yangi andoza",
-    "readonly_hint": "Barcha ta’minotchilar ko‘rishi mumkin. Andozalarni faqat administratorlar yaratishi va tahrirlashi mumkin.",
-    "empty": "Hozircha andozalar yo‘q",
-    "btn_edit": "Tahrirlash",
-    "btn_delete": "O‘chirish",
-    "view_only": "Faqat ko‘rish",
-    "name": "Andoza nomi",
-    "days_title": "Kunlar (shaharlar tartibda)",
-    "city_ph": "Shahar",
-    "btn_add_day": "+ Kun qo‘shish",
-    "btn_save": "Saqlash",
-    "btn_cancel": "Bekor qilish"
-  },
-
-  "telegram": {
-    "enable_title": "Telegram bildirishnomalari",
-    "enable_text": "Quyidagi tugmani bosing, Telegramni ulab, so'rovlar va bronlar haqida bildirishnomalar oling.",
-    "connect_button": "Telegramni ulash"
-  },
-
-  "ticket_details": "Chipta tafsilotlari (qator, o‘rin va h.k.)",
+  "telegram": "Telegram",
+  "terms": "Foydalanish shartlari",
   "title": "Sarlavha",
-
-  "toast": {
-    "addedToFav": "Sevimlilarga qo‘shildi",
-    "favoriteError": "Sevimlilarni o‘zgartirib bo‘lmadi",
-    "removedFromFav": "Sevimlilardan olib tashlandi"
-  },
-
-  "tourBuilder": {
-  "title": "Sayohat konstruktori",
-  "dates": "Tashrif sanalari",
-  "arrivalDay1": "1-kun kelish vaqti",
-  "monuments": "Yodgorliklarga kirish to‘lovlari",
-  "monuments_ph": "Obyektlarni tanlang",
-  "guide": "Gid",
+  "today": "Bugun",
+  "tour": "Tur",
+  "tour_details": "Tur tafsilotlari",
+  "tour_end": "Tur tugashi",
+  "tour_start": "Tur boshlanishi",
   "transport": "Transport",
-  "cities": "Shaharlar (multiselect)",
-  "cities_ph": "Shahar nomini yozing...",
-  "dragToReorder": "Tartibni o‘zgartirish uchun sudrab o‘tkazing",
-  "rooming": "Joylashtirish (xonalar soni)",
-  "map": "Xarita",
-  "monuments": "Kirish chiptalari (ob'ektlar)",
-  "monuments_ph": "Ob'ekt yoki shahar nomini yozing…",
-  "segments": "Marshrut segmentlari",
-  "dep": "Jo‘nash vaqti",
-  "arr": "Kelish vaqti",
-  "extras": "Qo‘shimcha elementlar",
-  "extras_ph": "Oziq-ovqat, master-klass…",
-  "markerHint": "Nuqtani aniqlashtirish uchun markerni torting",
-  "generate": "Dastur yaratish",
-  "programText": "Matnli dastur"
-},
-
   "transfer": "Transfer",
-  "transfer_options": { "group": "Guruhli", "individual": "Individual", "none": "Yo‘q", "select": "Transferni tanlang" },
 
-  "transport": "Transport",
-  "type": "Ta’minotchi turi",
-  "update_error": "Yangilashda xatolik",
-  "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
-  "view_certificate": "Sertifikatni ko‘rish",
-  "visa_included": "Viza kiritilgan",
+  "until": "gacha",
+  "upload": "Yuklash",
+  "user": "Foydalanuvchi",
+  "valid_until": "Amal qilish muddati",
+  "visa": "Visa",
   "visa_support": "Viza yordami",
 
-  "tooltips": { "favorite_add": "Sevimlilarga qo‘shish", "favorite_remove": "Sevimlilardan olib tashlash" },
-
-  "types": { "guide": "Gid", "transport": "Transport", "agent": "Turoperator", "hotel": "Mehmonxona" },
-
-  "gross_price": "Mijoz uchun narx (brutto)",
-  "expired": "Muddati tugagan",
-
-  "form": {
-    "required": "Ushbu maydonni to‘ldiring.",
-    "email_invalid": "To‘g‘ri email kiriting.",
-    "password_short": "Parolning eng kam uzunligi — 6 ta belgi."
-  },
-
-  "enter_current_password": "Joriy parolni kiriting",
-  "hotels_load_error": "Mehmonxonalarni yuklab bo‘lmadi",
-  "country_not_found": "Mamlakat topilmadi",
-  "direction_from_not_found": "Jo‘nash shahri topilmadi",
-  "direction_to_not_found": "Kelish shahri topilmadi",
-
-  "auth": {
-    "login": "Kirish",
-    "login_client": "Mijoz sifatida kirish",
-    "login_provider": "Ta’minotchi sifatida kirish",
-    "login_required": "Davom etish uchun tizimga kiring",
-    "provider_login_required": "Ta’minotchi sifatida kiring"
-  },
-
-  "rooms_and_prices": "Xona fondi va narxlar",
-  "room_category": "Xona toifasi",
-  "count_short": "Soni",
-  "price_per_night": "Tuniga narx",
-  "low_season": "Past mavsum",
-  "high_season": "Yuqori mavsum",
-  "for_residents": "Rezidentlar uchun",
-  "for_nonresidents": "Norezidentlar uchun",
-  "taxes_fees": "Soliqlar va yig‘imlar",
-  "vat_percent": "QQS, %",
-  "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/tun",
-  "tourism_fee_nonresident": "Turistik yig‘im (norezidentlar), so‘m/tun",
-  "extra_bed_cost": "Qo‘shimcha o‘rin, so‘m/tun",
-  "room_category": "Xona toifasi",
-  "select.no_options": "Hech narsa topilmadi",
-  "select.loading": "Yuklanmoqda…",
-
-  "admin": { "new_hotel_title": "Yangi mehmonxona" },
-
-  "hotel_name": "Nomi",
-  "enter_hotel_name": "Mehmonxona nomini kiriting",
-  "enter_address": "Manzilni kiriting",
-  "hotel_saved": "Mehmonxona saqlandi",
-  "hotel_save_error": "Mehmonxonani saqlab bo‘lmadi",
-
-  "country": "Mamlakat",
-  "city": "Shahar",
-  "currency": "Valyuta",
-
-  "resident": "Rezidentlar uchun",
-  "non_resident": "Norezidentlar uchun",
-
-  "room_type_name": "Toifa nomi",
-  "add_custom_room_type_ph": "O‘zingizning xona turini qo‘shing (masalan, Deluxe…)",
-  "add_type": "Tur qo‘shish",
-
-  "extra_bed_price": "Qo‘shimcha o‘rin narxi (kishi/tuniga)",
-
-  "taxes_and_fees": "Soliqlar va yig‘imlar",
-  "vat_included": "Narxlarga QQS kiritilgan",
-  "vat_rate": "QQS stavkasi, %",
-
-  "tourist_tax_resident": "Turistik yig‘im (rezident), /kishi/tun",
-  "tourist_tax_nonresident": "Turistik yig‘im (norezident), /kishi/tun",
-
-  "amenities": "Qulayliklar",
-  "add_amenity": "Qulaylik qo‘shish…",
-  "add_service": "Xizmat qo‘shish…",
-  "add": "Qo‘shish",
-
-  "images": "Rasmlar",
-
-  "select_city": "Shaharni tanlang",
-  "select_country": "Mamlakatni tanlang",
-  "select": {
-    "type_more": "Kamida 2 ta harf kiriting",
-    "no_options": "Hech narsa topilmadi",
-    "loading": "Yuklanmoqda…"
-  },
-"landing": {
-  "menu": {
-    "tours": "Turlar",
-    "indiaInside": "India Inside",
-    "ayurveda": "Ayurveda",
-    "checkup": "Check-up",
-    "treatment": "Davolash",
-    "clinics": "Klinikalar",
-    "b2b": "B2B agentlar",
-    "contacts": "Aloqa"
-  },
-  "home": {
-    "h1": "Hindistonda sayohat va davolash — to‘liq xizmat",
-    "sub": "Turlar, Ayurveda, Check-up, Dehlidagi klinikalar. 24/7 qo‘llab-quvvatlash.",
-    "cta": "Taklif olish",
-    "whatsapp": "WhatsApp"
-  },
-  "form": {
-    "name": "Ism",
-    "phone": "Telefon",
-    "comment": "Izoh",
-    "service": "Xizmat",
-    "send": "Ariza yuborish",
-    "sent": "Yuborildi. Tez orada bog‘lanamiz.",
-    "error": "Xato. Keyinroq urinib ko‘ring.",
-    "tour": "Tur tanlash",
-    "checkup": "Check-up",
-    "ayurveda": "Ayurveda",
-    "treatment": "Davolash",
-    "pax": "Odamlar soni",
-    "dates": "Sana / davomiylik",
-    "destination": "Shahar / sana",
-    "program": "Dastur",
-    "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
-  },
-
-  "tours": {
-    "h1": "Hindistonga turlar",
-    "sub": "Goa, Kerala, Dehli, Mumbay, Oltin uchburchak. Paketlar va mualliflik dasturlari.",
-    "from": "{{price}} dan",
-    "cta": "Batafsil",
-    "nights": "{{count}} kecha",
-
-    "program": {
-      "badge": "TRAVELLA × INDIA",
-      "title": "India Inside — Hindiston bo‘yicha mutaxassis bo‘ling",
-      "desc": "4 sayohat: Oltin uchburchak · Rajastan · Mumbay+Goa · Kerala. «India Guru» sertifikatini oling.",
-      "trailer": "Treylerni ko‘rish",
-      "cta": "Dasturga o‘tish"
-    },
-
-    "offers": [
-      {
-        "id": "golden-triangle",
-        "title": "Oltin uchburchak",
-        "desc": "Dehli — Agra — Jaypur. Tarix, saroylar, Toj Mahal.",
-        "priceFrom": 590,
-        "currency": "USD",
-        "nights": 6,
-        "slug": "/india/tours/golden-triangle",
-        "image": "/gti.jpeg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "rajasthan",
-        "title": "Rajastandagi sarguzashtlar",
-        "desc": "Cho‘l qumlari, qirollik saroylari, ko‘k shaharlar.",
-        "priceFrom": 790,
-        "currency": "USD",
-        "nights": 8,
-        "slug": "/india/tours/rajasthan",
-        "image": "/rj_01.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "mumbai-goa",
-        "title": "Mumbay + Goa = Eng yaxshi xotiralar",
-        "desc": "Megapolis ruhi va tropik plyajlar.",
-        "priceFrom": 350,
-        "currency": "USD",
-        "nights": 7,
-        "slug": "/india/tours/mumbai-goa",
-        "image": "/mg.jpg",
-        "tag": "India Inside"
-      },
-      {
-        "id": "kerala",
-        "title": "Kerala — Jannatmakon o‘lka",
-        "desc": "Choy plantatsiyalari, backwaters va wellness dasturlar.",
-        "priceFrom": 690,
-        "currency": "USD",
-        "nights": 9,
-        "slug": "/india/tours/kerala",
-        "image": "/kerala_01.jpg",
-        "tag": "India Inside"
-      }
-    ]
-  },
-"auth": { "login_required": "Qaytadan kiring va yana urinib ko‘ring" },
-"inside": {
-    "my": {
-    "title": "Mening dasturim",
-    "chapters_title": "Boblar",
-    "chapters_hint": "Bobni tanlang — dastur va sanalarni ko‘rasiz.",
-    "chapter_label": "Bob {{num}}",
-
-    "details_toggle": "Tanlangan bob bo‘yicha tafsilotlar",
-
-    "selected_title": "Tanlangan bob",
-    "program_by_days": "Kunlar bo‘yicha dastur",
-
-    "dates_title": "Turlar sanalari",
-    "tour_dates": "Tur sanalari",
-    "places_title": "Bu bob bo‘yicha joylar",
-    "limit": "Limit",
-    "enrolled": "Qabul qilingan",
-    "free": "Bo‘sh joylar",
-    "enrolment_start": "Qabul boshlanishi",
-
-    "request_title": "Ishtirok uchun so‘rov",
-    "request_hint": "So‘rov tasdiqlangandan so‘ng turpaketni to‘lash va hujjatlarni olish uchun cheklangan vaqt bo‘ladi.",
-    "btn_request": "Ishtirok uchun so‘rov",
-    "btn_requested": "So‘rov yuborildi",
-    "btn_approved": "Ishtirok tasdiqlandi",
-    "approved_hint": "Ishtirok tasdiqlandi. Turpaket hujjatlarini olish uchun 24 soat ichida to‘lovni amalga oshiring.",
-    "btn_pay": "To‘lash",
-    "btn_contact_curator": "Kurator bilan bog‘lanish"
-  },
-      "errors": {
-      "request_failed": "Bo‘limni yakunlash so‘rovi yuborilmadi",
-      "ask_open_telegram": "Telegram’da kurator bilan yozishishni ochamizmi?"
-    }, 
-      "steps_title": "Qanday qatnashish",
-      "steps_sub": "To‘rt oddiy qadam — kurator har bosqichda yo‘l-yo‘riq beradi.",
-      "steps": {
-        "apply": {
-          "title": "Ariza qoldiring",
-          "desc": "Aloqa va sanalarni yozing. WhatsApp/Telegram orqali bog‘lanamiz."
-        },
-        "call": {
-          "title": "Kurator bilan qo‘ng‘iroq",
-          "desc": "Maqsadlaringizni tushunib, mos bo‘lim va marshrutni tanlaymiz."
-        },
-        "chapter": {
-          "title": "Sayohat — tanlangan bo‘lim",
-          "desc": "Individual yoki kichik guruh, 24/7 qo‘llab-quvvatlash."
-        },
-        "certificate": {
-          "title": "Sertifikat va Guru maqomi",
-          "desc": "4 bo‘limdan so‘ng — raqamli sertifikat va Travella klubi."
-        }
-      },
-      "chapters_title": "India Inside bo‘limlari",
-      "experience": {
-        "title": "Sizni nimalar kutadi",
-        "sub": "Xususiy marshrutlar, yopiq marosimlar va nafis servis.",
-        "cards": {
-          "palaces": {
-            "title": "Saroylar va meros",
-            "desc": "Rajasthan, hunarmandchilik va qirollik me’morchiligi."
-          },
-          "rituals": {
-            "title": "Marosimlar va rituallar",
-            "desc": "Maxfiy amaliyotlar va kamyob joylarga kirish."
-          },
-          "wellness": {
-            "title": "Wellness va ayurveda",
-            "desc": "Ishonchli shifokorlar bilan shaxsiy sog‘lomlashtirish dasturlari."
-          },
-          "yacht": {
-            "title": "Yaxtalar va quyosh botishi",
-            "desc": "Arab dengizi sohilida sayr va kechki taomlar."
-          }
-        }
-      },
-      "curated_badge": "Boshchilik ostidagi madaniy sayohat",
-      "cta_get_program": "Dastur olish",
-      "cta_ask": "Savol berish",
-      "curator": {
-        "photo_alt": "India Inside kuratori",
-        "title": "Komil Axmedov",
-        "subtitle": "Travella asoschisi, India Inside kuratori",
-        "p1": "12+ yildan beri Hindistonni — madaniyat, zamonaviy shaharlar, meros va wellnessni o‘rganaman.",
-        "p2": "India Inside — shaxsiy sayohatlar va madaniyatga chuqur sho‘ng‘ish asosidagi mualliflik dasturi.",
-        "bullets": {
-          "one": "Hindistonda 12+ yil marshrutlar",
-          "two": "Wellness, hunarmandchilik, madaniy amaliyotlar",
-          "three": "Mahalliy ekspertlar va ustozlar",
-          "four": "Individual hamrohlik"
-        },
-        "disclaimer": "Bu tur emas. Bu — madaniy loyiha."
-      },
-        
-  "badge": "TRAVELLA • INDIA",
-  "title": "India Inside — hashamatli sayohat",
-  "sub": "Shaxsiy dasturlar, maharaja saroylari, yopiq marosimlar va Himolay sokinligi.",
-  "cta_trailer": "Treylerni ko‘rish",
-  "cta_join": "Dasturga so‘rov qoldirish",
-
-  "steps_title": "India Inside boblari",
-  "steps_sub": "Bobni tanlang — biz shaxsiy marshrut tuzamiz.",
-  "view": "Dasturga so‘rov qoldirish",
-
-  "chapters": {
-  "royal": {
-    "title": "Oltin Uchburchak",
-    "desc": "Dehli — Agra — Jaypur",
-    "days": "7–8 kun",
-    "from": "dan $699"
-  },
-  "silence": {
-          "title": "Rajasthan sarguzashtlari",
-          "desc": "Udaypur — Jodhpur — Jaysalmer",
-          "days": "8–9 kun",
-          "from": "$890 dan"
-  },
-  "modern": {
-    "title": "Mumbay + Goa — eng yaxshi xotiralar",
-    "desc": "Shahar va okean dami",
-    "days": "7 kun",
-    "from": "dan $490"
-  },
-  "kerala": {
-    "title": "Kerala: Yer yuzidagi jannat",
-    "desc": "Ayurveda, choy tepaliklari, xususiy hausbot",
-    "days": "8–9 kun",
-    "from": "dan $790"
-  }
-},
-"program": {
-  "royal": {
-    "d1": "Dehli: kelish, transfer, kechki tanishtirish",
-    "d2": "Agra: Tongda Taj Mahal, Agra qal’asi",
-    "d3": "Jaypur: Amber qal’asi, Shamollar saroyi",
-    "d4": "Jaypur: shahar bo‘ylab sayohat, hunarmandchilik",
-    "d5": "Dehli: zamonaviy Hindiston — art/moda/gastro",
-    "d6": "Bo‘sh kun / qo‘shimcha dasturlar",
-    "d7": "Jo‘nab ketish / parvoz"
-  },
-  "rajasthan": {
-    "d1": "Udaypur: kelish, Pichola ko‘li, City Palace",
-    "d2": "Udaypur: Jagdish/Eklingji ibodatxonalari, hunarmandchilik, kechki qayiq sayri",
-    "d3": "Jodhpurni yo‘lga chiqish, ‘Ko‘k shahar’ eski qismida sayr",
-    "d4": "Jodhpur: Mehrangarh qal’asi, manzaralar, tomda quyosh botishi",
-    "d5": "Jaysalmerga yo‘l, Oltin qal’a, haveli lar",
-    "d6": "Tar cho‘li: qumtepalar safari, gulxan yonida kechki ovqat",
-    "d7": "Bo‘sh kun / master-klass",
-    "d8": "Jo‘nab ketish"
-  },
-  "mumbaiGoa": {
-    "d1": "Mumbay: yarim kunlik sayohat, sohil bo‘ylab kechki sayr",
-    "d2": "Bollivud studiyalari / art-mahallalar",
-    "d3": "Goaga parvoz, okean",
-    "d4": "Plyajlar, Eski Goa, portugal merosi",
-    "d5": "Yaxta/Quyosh botishi, gurme kechki ovqat",
-    "d6": "Bo‘sh kun / wellness",
-    "d7": "Jo‘nab ketish"
-  },
-  "kerala": {
-    "d1": "Ko‘chi: shahar, Xitoy baliqchi to‘rlari, kolonial hudud",
-    "d2": "Munnar: choy plantatsiyalari, manzaralar",
-    "d3": "Munnar: trekking / foto-kun",
-    "d4": "Alleppi: hausbotga joylashish",
-    "d5": "Backwaters, qishloqlar, mahalliy oshxona",
-    "d6": "Ayurveda markazi, individual dastur",
-    "d7": "Bo‘sh kun / dengiz",
-    "d8": "Jo‘nab ketish"
-  }
-},
-  "guru": {
-    "title": "Hindiston bo‘yicha Guru dasturi",
-    "lead": "India Inside’ning 4 bobini yakunlab, «India Inside: Guru» maqomiga ega bo‘ling.",
-    "bullets": {
-      "one": "Individual marshrutlar va shaxsiy kurator",
-      "two": "Yopiq marosimlar va odatda yopiq joylar",
-      "three": "«Guru» sertifikati va Travella klubi",
-      "four": "Faqat ariza orqali"
-    },
-    "certificate_label": "Sertifikat",
-    "certificate_meta": "Egasining ismi • Sana • Dastur identifikatori",
-    "cta_apply": "Ishtirok etishga ariza",
-    "cta_chapters": "Dastur boblarini ko‘rish"
-  },
-  "experience": {
-  "title": "India Inside bilan sizni nimalar kutadi",
-  "sub": "Hindistonga — uning ruhiga, odamlari va go‘zalligiga muhabbat bilan yaratilgan nafis yo‘nalishlar.",
-  "cards": {
-    "palaces": {
-      "title": "Saroylar va meros",
-      "desc": "Heritage mehmonxonalarda yashash, tarix nafas olgan maskanlar, yopiq maxsus joylar."
-    },
-    "rituals": {
-      "title": "Marosimlar va an’analar",
-      "desc": "Haqiqiy marosimlar, ma’rifat ahli, madaniyatga chuqur sho‘ng‘ish."
-    },
-    "wellness": {
-      "title": "Wellness & Ayurveda",
-      "desc": "Shaxsiy sog‘lomlashtirish dasturlari, qadimiy shifo amaliyotlari va ustoz-terapevtlar."
-    },
-    "yacht": {
-      "title": "Yaxta va gastro-kecha",
-      "desc": "Quyosh botishi, sokin muhit, nafis taomlar va xotirjam suhbatlar."
-    }
-  }
-}
-},
-
-  "ayurveda": {
-    "h1": "Ayurveda va wellness",
-    "sub": "Kerala, reabilitatsiya va detox dasturlari. Klinik tanlash, transfer va joylashish.",
-    "get": "Dastur olish"
-  },
-  "checkup": {
-    "h1": "Hindistonda Check-up",
-    "sub": "Bazaviy, kardio, onko, ayollar/erkaklar paketlari. Dehlidagi hamkor klinikalar.",
-    "get": "Narx olish"
-  },
-  "treatment": {
-    "h1": "Hindistonda davolash",
-    "sub": "Onkologiya, kardiologiya, ortopediya, IVF, transplantatsiya.",
-    "get": "Maslahat olish"
-  },
-  "clinics": { "h1": "Hamkor klinikalar (Dehli)" },
-  "b2b": { "h1": "Travella B2B — agentlar uchun", "connect": "B2B ga ulanish", "company": "Agentlik" },
-  "contacts": { "h1": "Aloqa", "phone": "Telefon", "address": "Manzil" }
-}
-
+  "write_review": "Sharh yozish",
+  "yes": "Ha"
 }
