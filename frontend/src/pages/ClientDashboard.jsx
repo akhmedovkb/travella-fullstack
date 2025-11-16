@@ -1080,7 +1080,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             {t("inside.my.title", { defaultValue: "Моя программа" })}
           </h2>
         </div>
-        {renderProgramStatusPill(programStatus)}
+        {/*{renderProgramStatusPill(programStatus)}*/}
       </div>
 
       {/* ВЕРХ: список глав */}
