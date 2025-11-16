@@ -1386,6 +1386,62 @@
       "program_by_days": "Kunlar bo‘yicha dastur:",
       "program_empty": "Kunlar bo‘yicha dastur keyinroq e’lon qilinadi.",
 
+      "details": {
+        "toggle_label": "Tanlangan bob bo‘yicha tafsilotlar"
+      },
+
+      "chapters_progress": {
+        "title": "Boblar bo‘yicha progress"
+      },
+
+      "chapters": {
+        "royal":   { "title": "Oltin Uchburchak" },
+        "silence": { "title": "Rajasthandagi sarguzashtlar" },
+        "modern":  { "title": "Mumbay + Goa — eng yaxshi xotiralar" },
+        "kerala":  { "title": "Kerala: Yer yuzidagi jannat" }
+      },
+
+      "program": {
+        "royal": {
+          "day1": "Dehli: kelish, transfer, oqshom brifingi",
+          "day2": "Agra: Tongda Toj Mahal, Agra qal’asi",
+          "day3": "Jaypur: Amberfort, Shamollar saroyi",
+          "day4": "Jaypur: shahar bo‘ylab ekskursiya",
+          "day5": "Dehli: zamonaviy Hindiston — san’at/moda/gastro",
+          "day6": "Bo‘sh kun / qo‘shimcha imkoniyatlar",
+          "day7": "Uchish"
+        },
+        "silence": {
+          "day1": "Udaypur: kelish, Pichola ko‘li, City Palace",
+          "day2": "Udaypur: ibodatxonalar, hunarmandchilik, kruiz",
+          "day3": "Jodxpurga yo‘l, ko‘k shahar",
+          "day4": "Jodxpur: Mehrangarh qal’asi",
+          "day5": "Jaysalmerga yo‘l, Oltin qal’a",
+          "day6": "Tar cho‘li: safari, kechki dasturxon",
+          "day7": "Dam olish / rezerv",
+          "day8": "Uchish"
+        },
+        "modern": {
+          "day1": "Mumbay: tur, dengiz bo‘yida sayr",
+          "day2": "Bollivud studiyalari / art hududlar",
+          "day3": "Goaga uchish, okean",
+          "day4": "Plyajlar, portugal merosi",
+          "day5": "Yaxta / quyosh botishi, gastro-kecha",
+          "day6": "Bo‘sh kun / wellness",
+          "day7": "Uchish"
+        },
+        "kerala": {
+          "day1": "Ko‘chi: shahar, Xitoy to‘rlari",
+          "day2": "Munnar: choy plantatsiyalari",
+          "day3": "Munnar: trekking / foto kun",
+          "day4": "Alleppi: houseboat",
+          "day5": "Backwaters, qishloqlar",
+          "day6": "Ayurveda markazi",
+          "day7": "Bo‘sh kun / dengiz",
+          "day8": "Uchish"
+        }
+      },
+
       "dates_block": {
         "title": "Turlar sanalari",
         "tour_dates_label": "Tur sanalari:",
@@ -1399,18 +1455,27 @@
       "chapter_start_at": "Qabul boshlanishi:",
       "chapter_countdown": "Boshlanishigacha:",
 
+      "next_chapter": {
+        "label": "Eng yaqin bob",
+        "tour_dates_label": "Tur sanasi:",
+        "starts_at": "Qabul boshlanishi:",
+        "countdown": "Boshlanishigacha",
+        "enrollment_open": "Qabul ochiq",
+        "places_left": "Bo‘sh joylar: {{count}}"
+      },
+
       "enroll_block": {
         "title": "Ishtirok uchun so‘rov",
         "desc": "So‘rov tasdiqlangandan so‘ng, to‘lov qilish va hujjatlarni olish uchun cheklangan vaqt bo‘ladi.",
         "pending": "Bu bob bo‘yicha so‘rov tasdiqlanishni kutmoqda.",
-        "rejected": "So‘rov rad etilgan. Kurator bilan bog‘laning."
+        "rejected": "Bu bob bo‘yicha so‘rov rad etilgan. Kurator bilan bog‘laning."
       },
 
       "pay_block": {
-        "desc": "Turpaket hujjatlarini olish uchun «To‘lash» tugmasini bosing.",
-        "window_hint": "Ishtirok tasdiqlandi. Hujjatlarni olish uchun {{hours}} soat ichida to‘lovni amalga oshiring.",
-        "window_expired": "To‘lov muddati tugadi. Yangi so‘rov yuboring yoki kurator bilan bog‘laning.",
-        "error": "To‘lovni boshlashning imkoni bo‘lmadi. Birozdan keyin qayta urinib ko‘ring."
+        "desc": "Hujjatlarni olish uchun «To‘lash» tugmasini bosing.",
+        "window_hint": "Ishtirok tasdiqlandi. {{hours}} soat ichida to‘lovni amalga oshiring.",
+        "window_expired": "To‘lov muddati tugadi. Yangi so‘rov yuboring yoki kurator bilan bog‘ланing.",
+        "error": "To‘lovni boshlashning imkoni bo‘lmadi. Keyinroq urinib ko‘ring."
       },
 
       "actions": {
@@ -1418,7 +1483,7 @@
         "contact_curator": "Kurator bilan bog‘lanish",
         "enroll_not_started": "Qabul hali ochilmagan",
         "request_sent": "So‘rov yuborildi",
-        "request_approved": "Ishtirok tasdiqlandi",
+        "request_approved": "Tasdiqlandi",
         "request_expired": "To‘lov muddati tugadi — yangi so‘rov yuboring",
         "request_join": "Ishtirok so‘rash"
       },
@@ -1431,32 +1496,13 @@
       },
 
       "toast": {
-        "joined": "Siz India Inside dasturiga qo‘shildingiz!",
+        "joined": "Siz India Inside dasturiga qo‘шildingiz!",
         "join_failed": "Qo‘shilish amalga oshmadi",
         "request_joined": "Ishtirok uchun so‘rov yuborildi"
       },
 
-      "details": {
-        "toggle_label": "Tanlangan bob bo‘yicha batafsil"
-      },
-
-      "chapters_progress": {
-        "title": "Boblar bo‘yicha progress"
-      },
-
-      "chapters": {
-        "royal": {
-          "title": "Oltin Uchburchak"
-        },
-        "silence": {
-          "title": "Raǰastandagi sarguzashtlar"
-        },
-        "modern": {
-          "title": "Mumbai + Goa — eng yaxshi xotiralar"
-        },
-        "kerala": {
-          "title": "Kerala: Yer yuzidagi jannat"
-        }
+      "errors": {
+        "request_failed": "So‘rovni yuborib bo‘lmadi"
       },
 
       "program": {
