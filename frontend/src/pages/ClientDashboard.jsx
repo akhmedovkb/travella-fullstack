@@ -609,9 +609,26 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
   const NextChapterBanner = () => {
     if (!nextChapter) return null;
 
+    // старт набора
     const startsAt = nextChapter.starts_at ? new Date(nextChapter.starts_at) : null;
     const nowMs = typeof now === "number" ? now : Date.now();
     const diffMs = startsAt ? startsAt.getTime() - nowMs : null;
+
+    // даты тура
+    const tourStartsRaw =
+      nextChapter.tour_starts_at ||
+      nextChapter.tour_start_at ||
+      nextChapter.start_tour_at ||
+      null;
+    const tourEndsRaw =
+      nextChapter.tour_ends_at ||
+      nextChapter.tour_end_at ||
+      nextChapter.end_tour_at ||
+      null;
+
+    const tourDatesText =
+      formatDateRange(tourStartsRaw, tourEndsRaw) ||
+      (tourStartsRaw ? new Date(tourStartsRaw).toLocaleDateString() : null);
 
     const capacityRaw = nextChapter.capacity ?? nextChapter.chapter_capacity;
     const enrolledRaw = nextChapter.enrolled_count ?? nextChapter.chapter_enrolled;
@@ -634,13 +651,28 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
             <div className="font-medium">
               {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
             </div>
+
+            {/* Дата тура */}
+            {tourDatesText && (
+              <div className="mt-1 text-xs text-slate-500">
+                {t("inside.next_chapter.tour_dates_label", {
+                  defaultValue: "Дата тура:",
+                })}{" "}
+                <span className="font-medium">{tourDatesText}</span>
+              </div>
+            )}
+
+            {/* Старт набора */}
             {startsAt && (
               <div className="text-xs text-slate-500">
-                {t("inside.next_chapter.starts_at", { defaultValue: "Старт:" })}{" "}
+                {t("inside.next_chapter.starts_at", {
+                  defaultValue: "Старт набора:",
+                })}{" "}
                 {startsAt.toLocaleString()}
               </div>
             )}
           </div>
+
           <div className="flex flex-col items-end gap-1">
             {diffMs != null && (
               <span
@@ -650,7 +682,9 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
               >
                 {diffMs > 0
                   ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
-                  : t("inside.next_chapter.enrollment_open", { defaultValue: "Набор идёт" })}
+                  : t("inside.next_chapter.enrollment_open", {
+                      defaultValue: "Набор идёт",
+                    })}
                 {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
               </span>
             )}
@@ -665,6 +699,7 @@ function MyInsideCard({ inside, loading, t, onJoined, now }) {
       </div>
     );
   };
+
 
   // загрузка последней заявки
   useEffect(() => {
