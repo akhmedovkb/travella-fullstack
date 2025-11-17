@@ -88,7 +88,7 @@ function GuruBlock({ onOpenLead }) {
     {/* Небольшой «штамп» внизу */}
 <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
   <img
-    src="/ll_logo_2.png"
+    src="/ll_logo_2.PNG"
     alt="LL Stamp"
     className="h-6 w-auto opacity-100 mix-blend-normal drop-shadow-[0_0_4px_rgba(0,0,0,0.35)]"
     style={{ filter: "brightness(0.9) contrast(1.2)" }}
