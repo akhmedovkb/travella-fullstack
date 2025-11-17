@@ -1,661 +1,635 @@
-// --- MyInsideCard: карточка статуса India Inside (запрос на участие в главах)
-function MyInsideCard({ inside, loading, t, onJoined, now }) {
-  // хуки ВСЕГДА в начале
-  const [lastReq, setLastReq] = useState(null);   // последняя заявка (на участие)
-  const [loadingReq, setLoadingReq] = useState(true);
+// frontend/src/pages/landing/IndiaInside.jsx
+import React from "react";
+import { useTranslation } from "react-i18next";
+import IndiaCurator from "./IndiaCurator";
 
-  const [nextChapter, setNextChapter] = useState(null);  // ближайшая глава (для invite)
-  const [loadingNext, setLoadingNext] = useState(true);
-
-  // текущая глава и статус программы
-  const currentChapterKey = inside?.current_chapter || "royal";
-  const programStatus = inside?.status || "active";
-
-  // выбранная в верхнем ряду глава (по умолчанию — текущая)
-  const [selectedKey, setSelectedKey] = useState(currentChapterKey);
-
-  // если сервер поменял current_chapter — синхронизируем выбор
-  useEffect(() => {
-    if (inside?.current_chapter) {
-      setSelectedKey(inside.current_chapter);
-    }
-  }, [inside?.current_chapter]);
-
-  // заголовки глав по ключам
-  const chapterTitle = (key) => {
-    const map = {
-      royal:   t("landing.inside.chapters.royal.title",   { defaultValue: "Золотой Треугольник" }),
-      silence: t("landing.inside.chapters.silence.title", { defaultValue: "Приключения в Раджастане" }),
-      modern:  t("landing.inside.chapters.modern.title",  { defaultValue: "Мумбаи + Гоа — лучшие воспоминания" }),
-      kerala:  t("landing.inside.chapters.kerala.title",  { defaultValue: "Керала: Рай на Земле" }),
-    };
-    return map[key] || key || "Глава";
-  };
-
-  // мини-«база» программ по дням (royal расписал, остальные — заглушки, можно дописать позже)
-  const programDaysMap = {
-    royal: [
-      t("inside.program.royal.day1", { defaultValue: "Дели: прилёт, трансфер, вечерний брифинг" }),
-      t("inside.program.royal.day2", { defaultValue: "Агра: Тадж-Махал на рассвете, форт Агры" }),
-      t("inside.program.royal.day3", { defaultValue: "Джайпур: Амбер-форт, Дворец ветров" }),
-      t("inside.program.royal.day4", { defaultValue: "Джайпур: тур по городу, ремёсла" }),
-      t("inside.program.royal.day5", { defaultValue: "Дели: современная Индия — арт/мода/гастро" }),
-      t("inside.program.royal.day6", { defaultValue: "Свободный день / доп. опции" }),
-      t("inside.program.royal.day7", { defaultValue: "Вылет" }),
-    ],
-    silence: [
-      t("inside.program.silence.day1", { defaultValue: "День 1" }),
-      t("inside.program.silence.day2", { defaultValue: "День 2" }),
-      t("inside.program.silence.day3", { defaultValue: "День 3" }),
-      t("inside.program.silence.day4", { defaultValue: "День 4" }),
-      t("inside.program.silence.day5", { defaultValue: "День 5" }),
-      t("inside.program.silence.day6", { defaultValue: "День 6" }),
-      t("inside.program.silence.day7", { defaultValue: "День 7" }),
-    ],
-    modern: [
-      t("inside.program.modern.day1", { defaultValue: "День 1" }),
-      t("inside.program.modern.day2", { defaultValue: "День 2" }),
-      t("inside.program.modern.day3", { defaultValue: "День 3" }),
-      t("inside.program.modern.day4", { defaultValue: "День 4" }),
-      t("inside.program.modern.day5", { defaultValue: "День 5" }),
-      t("inside.program.modern.day6", { defaultValue: "День 6" }),
-      t("inside.program.modern.day7", { defaultValue: "День 7" }),
-    ],
-    kerala: [
-      t("inside.program.kerala.day1", { defaultValue: "День 1" }),
-      t("inside.program.kerala.day2", { defaultValue: "День 2" }),
-      t("inside.program.kerala.day3", { defaultValue: "День 3" }),
-      t("inside.program.kerala.day4", { defaultValue: "День 4" }),
-      t("inside.program.kerala.day5", { defaultValue: "День 5" }),
-      t("inside.program.kerala.day6", { defaultValue: "День 6" }),
-      t("inside.program.kerala.day7", { defaultValue: "День 7" }),
-    ],
-  };
-
-  // хэлпер: пилюля статуса программы (справа сверху)
-  const renderProgramStatusPill = (st) => {
-    const map = {
-      active:    t("inside.status_active",    { defaultValue: "Активна" }),
-      completed: t("inside.status_completed", { defaultValue: "Завершена" }),
-      expelled:  t("inside.status_expelled",  { defaultValue: "Отчислен" }),
-    };
-    let cls = "border-slate-200 bg-slate-50 text-slate-700";
-    if (st === "active")    cls = "border-emerald-200 bg-emerald-50 text-emerald-700";
-    if (st === "completed") cls = "border-blue-200 bg-blue-50 text-blue-700";
-    if (st === "expelled")  cls = "border-rose-200 bg-rose-50 text-rose-700";
-    return (
-      <span className={`text-xs px-3 py-1 rounded-full border ${cls}`}>
-        {map[st] ?? st ?? t("inside.status", { defaultValue: "Статус" })}
-      </span>
-    );
-  };
-
-  // баннер ближайшей главы (для тех, кто ещё НЕ в программе)
-  const NextChapterBanner = () => {
-    if (!nextChapter) return null;
-
-    const startsAt = nextChapter.starts_at ? new Date(nextChapter.starts_at) : null;
-    const nowMs = typeof now === "number" ? now : Date.now();
-    const diffMs = startsAt ? startsAt.getTime() - nowMs : null;
-
-    const capacityRaw = nextChapter.capacity ?? nextChapter.chapter_capacity;
-    const enrolledRaw = nextChapter.enrolled_count ?? nextChapter.chapter_enrolled;
-    let placesLeft;
-    if (capacityRaw != null) {
-      const cap = Number(capacityRaw) || 0;
-      const enrolled = Number(enrolledRaw ?? 0) || 0;
-      placesLeft = Math.max(0, cap - enrolled);
-    } else {
-      placesLeft = Number(nextChapter.places_left ?? 0);
-    }
-
-    return (
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("inside.next_chapter.label", { defaultValue: "Ближайшая глава" })}
-            </div>
-            <div className="font-medium">
-              {nextChapter.title || chapterTitle(nextChapter.chapter_key)}
-            </div>
-            {startsAt && (
-              <div className="text-xs text-slate-500">
-                {t("inside.next_chapter.starts_at", { defaultValue: "Старт:" })}{" "}
-                {startsAt.toLocaleString()}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            {diffMs != null && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-mono ${
-                  diffMs > 0 ? "bg-black text-white" : "bg-emerald-600 text-white"
-                }`}
-              >
-                {diffMs > 0
-                  ? t("inside.next_chapter.countdown", { defaultValue: "До начала" })
-                  : t("inside.next_chapter.enrollment_open", { defaultValue: "Набор идёт" })}
-                {diffMs > 0 && <span>{formatLeft(diffMs)}</span>}
-              </span>
-            )}
-            <span className="text-xs text-slate-700">
-              {t("inside.next_chapter.places_left", {
-                defaultValue: "Свободных мест: {{count}}",
-                count: placesLeft,
-              })}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // загрузка последней заявки
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      if (!inside) {
-        setLastReq(null);
-        setLoadingReq(false);
-        return;
-      }
-      try {
-        setLoadingReq(true);
-        const r = await apiGet("/api/inside/my-request");
-        if (!cancel) setLastReq(r || null);
-      } catch {
-        if (!cancel) setLastReq(null);
-      } finally {
-        if (!cancel) setLoadingReq(false);
-      }
-    })();
-    return () => { cancel = true; };
-  }, [inside]);
-
-  // ближайшая глава (для invite-блока)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingNext(true);
-        const res = await apiGet("/api/inside/chapters/next");
-        if (!cancelled) setNextChapter(res || null);
-      } catch {
-        if (!cancelled) setNextChapter(null);
-      } finally {
-        if (!cancelled) setLoadingNext(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ======== состояния загрузки ========
-  if (loading) {
-    return (
-      <div className="bg-white rounded-xl shadow p-6 border animate-pulse">
-        <div className="h-5 w-48 bg-gray-200 rounded" />
-        <div className="mt-4 h-4 w-80 bg-gray-200 rounded" />
-        <div className="mt-6 h-3 w-full bg-gray-200 rounded" />
-      </div>
-    );
-  }
-
-  // ======== 1. Пользователь ещё НЕ участвует в программе ========
-  if (!inside) {
-    async function handleJoinProgram() {
-      try {
-        const res = await apiPost("/api/inside/join");
-        if (res && (res.ok || res.status === "ok" || res.joined)) {
-          const me = await apiGet("/api/inside/me");
-          onJoined?.(me?.data ?? me ?? null);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
-          return;
-        }
-        const me = await apiGet("/api/inside/me");
-        if (me && (me.status && me.status !== "none")) {
-          onJoined?.(me);
-          tSuccess(t("inside.toast.joined") || "Вы присоединились к India Inside!", { autoClose: 1600 });
-          return;
-        }
-        tError(t("inside.toast.join_failed") || "Не удалось присоединиться");
-      } catch {
-        window.open("/landing/india-inside", "_blank", "noreferrer");
-      }
-    }
-
-    return (
-      <div className="bg-white rounded-xl shadow p-6 border">
-        <div className="text-xl font-semibold">
-          {t("inside.invite.title", { defaultValue: "Присоединиться к India Inside" })}
-        </div>
-        <p className="mt-2 text-gray-600">
-          {t("inside.invite.sub", { defaultValue: "Личный куратор, главы и статус Guru после 4 глав." })}
-        </p>
-        {!loadingNext && <NextChapterBanner />}
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={handleJoinProgram}
-            className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-white font-semibold"
-          >
-            {t("inside.invite.join_now", { defaultValue: "Присоединиться" })}
-          </button>
-          <a
-            href="/landing/india-inside"
-            className="inline-flex items-center rounded-lg border px-4 py-2 font-medium hover:bg-gray-50"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("inside.invite.cta", { defaultValue: "Узнать больше" })}
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  // ======== 2. Пользователь уже в программе ========
-  const cur = Number(inside.progress_current ?? 0);
-  const total = Number(inside.progress_total ?? 4);
-  const pct = Math.max(0, Math.min(100, Math.round((cur / (total || 1)) * 100)));
-  const curator = inside.curator_telegram || "@akhmedovkb";
-
-  const chapterMeta = inside.chapter || {};
-
-  const chaptersFromBackend =
-    (Array.isArray(inside?.chapters) && inside.chapters) ||
-    (Array.isArray(inside?.chapters_list) && inside.chapters_list) ||
-    (inside?.chapters_map && Object.values(inside.chapters_map)) ||
-    null;
-
-  const getChapterMeta = (key) => {
-    if (chaptersFromBackend) {
-      const found =
-        chaptersFromBackend.find((c) => c.chapter_key === key || c.key === key) || null;
-      if (found) return found;
-    }
-    if (
-      (chapterMeta.chapter_key && chapterMeta.chapter_key === key) ||
-      (chapterMeta.key && chapterMeta.key === key)
-    ) {
-      return chapterMeta;
-    }
-    return chapterMeta;
-  };
-
-  const selectedMeta = getChapterMeta(selectedKey);
-  const selectedTitle = chapterTitle(selectedKey);
-  const programDays = (programDaysMap[selectedKey] || []).filter(
-    (x) => x && String(x).trim() !== ""
-  );
-
-  // даты туров по выбранной главе
-  const toursByChapter = (() => {
-    const all = []
-      .concat(inside?.chapter_runs || [])
-      .concat(inside?.runs || [])
-      .concat(inside?.slots || [])
-      .concat(inside?.tours || [])
-      .concat(inside?.schedules || [])
-      .concat(selectedMeta?.runs || [])
-      .concat(selectedMeta?.slots || [])
-      .concat(selectedMeta?.tours || []);
-
-    return all
-      .filter((r) => {
-        const k = r.chapter_key || r.chapter || r.key;
-        return !k || String(k) === String(selectedKey);
-      })
-      .map((r) => {
-        const dateRaw =
-          r.start_date || r.date || r.starts_at || r.departure_date || r.start_at || r.day;
-        const capRaw =
-          r.capacity ?? r.places_total ?? r.total_places ?? r.seats_total;
-        const enrolledRaw =
-          r.enrolled_count ?? r.booked_count ?? r.places_used ?? r.seats_taken;
-        const capacity = Number(capRaw ?? 0) || 0;
-        const enrolled = Number(enrolledRaw ?? 0) || 0;
-        const left = Math.max(0, capacity - enrolled);
-
-        return {
-          id: r.id || `${dateRaw || "date"}_${capacity}_${enrolled}`,
-          date: dateRaw,
-          capacity,
-          left,
-        };
-      })
-      .filter((x) => x.date);
-  })();
-
-  const nowTs = now ?? Date.now();
-  const nearestTour = toursByChapter.length
-    ? [...toursByChapter].sort((a, b) => {
-        const ta = Date.parse(a.date) || 0;
-        const tb = Date.parse(b.date) || 0;
-        const da = ta >= nowTs ? ta - nowTs : Number.MAX_SAFE_INTEGER;
-        const db = tb >= nowTs ? tb - nowTs : Number.MAX_SAFE_INTEGER;
-        return da - db;
-      })[0]
-    : null;
-
-  const startsAtRaw =
-    (nearestTour && nearestTour.date) ||
-    selectedMeta?.starts_at ||
-    selectedMeta?.start_date ||
-    chapterMeta.starts_at ||
-    inside.chapter_starts_at ||
-    null;
-
-  let countdown = null;
-  if (startsAtRaw) {
-    const ts = Date.parse(startsAtRaw);
-    if (!Number.isNaN(ts)) {
-      const diff = ts - nowTs;
-      if (diff > 0) countdown = formatLeft(diff);
-    }
-  }
-
-  const hasRequestForSelected =
-    lastReq &&
-    (lastReq.chapter === selectedKey ||
-      lastReq.chapter_key === selectedKey ||
-      lastReq.chapterKey === selectedKey);
-
-  const isPendingForSelected  = hasRequestForSelected && lastReq.status === "pending";
-  const isApprovedForSelected = hasRequestForSelected && lastReq.status === "approved";
-  const enrollButtonDisabled  = isPendingForSelected || isApprovedForSelected;
-
-  async function requestJoinChapter() {
-    if (enrollButtonDisabled) return;
-
-    const payload = { chapter: selectedKey };
-    let lastError = null;
-    let res = null;
-
-    const endpoints = [
-      "/api/inside/request-join",
-      "/api/inside/request-enroll",
-      "/api/inside/request-completion", // fallback
-    ];
-
-    for (const url of endpoints) {
-      try {
-        res = await apiPost(url, payload);
-        if (res) break;
-      } catch (e) {
-        lastError = e;
-      }
-    }
-
-    if (!res && lastError) {
-      const msg = (lastError?.response?.data?.error || lastError?.message || "")
-        .toString()
-        .toLowerCase();
-      if (
-        lastError?.response?.status === 401 ||
-        lastError?.response?.status === 403 ||
-        msg.includes("unauthorized")
-      ) {
-        tError(t("auth.login_required") || "Войдите заново и повторите попытку", { autoClose: 2200 });
-      } else {
-        tError(
-          t("inside.errors.request_failed") || "Не удалось отправить запрос на участие",
-          { autoClose: 2200 }
-        );
-      }
-      return;
-    }
-
-    const item = res?.item || res?.data || res.request || res;
-    if (item) setLastReq(item);
-
-    tSuccess(
-      t("inside.toast.request_joined") || "Запрос на участие отправлен",
-      { autoClose: 1600 }
-    );
-  }
-
-  const chaptersOrder = [
-    { key: "royal",   order: 1 },
-    { key: "silence", order: 2 },
-    { key: "modern",  order: 3 },
-    { key: "kerala",  order: 4 },
-  ];
-
+function GuruBlock({ onOpenLead }) {
+  const { t } = useTranslation();
   return (
-    <section className="bg-white rounded-xl shadow p-6 border">
-      {/* шапка */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm text-gray-500">India Inside</div>
-          <h2 className="text-xl font-semibold">
-            {t("inside.my.title", { defaultValue: "Моя программа" })}
-          </h2>
-        </div>
-        {renderProgramStatusPill(programStatus)}
-      </div>
+    <section
+      id="guru"
+      className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
+    >
+      <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
+        {/* фон + градиент */}
+        <img
+          src="/indiainside_guru.jpg"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/10" />
 
-      {/* ВЕРХ: список глав */}
-      <div className="mt-4 rounded-2xl bg-orange-50 border border-orange-100 p-4">
-        <div className="flex flex-wrap gap-3">
-          {chaptersOrder.map(({ key, order }) => {
-            const isSelected = selectedKey === key;
-            const isCurrent  = currentChapterKey === key;
-            const base =
-              "flex-1 min-w-[180px] cursor-pointer rounded-2xl border px-4 py-3 text-left transition-all";
-            const colorSelected =
-              "border-orange-400 bg-white shadow-sm ring-2 ring-orange-200";
-            const colorCurrent =
-              "border-emerald-500 bg-white shadow-sm";
-            const colorDefault =
-              "border-emerald-300 bg-white/80 hover:bg-white";
-            const cls = isSelected ? colorSelected : isCurrent ? colorCurrent : colorDefault;
-
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`${base} ${cls}`}
-                onClick={() => setSelectedKey(key)}
-              >
-                <div className="text-[11px] uppercase tracking-wide text-emerald-700">
-                  {t("inside.chapter_label", {
-                    defaultValue: "Глава {{n}}",
-                    n: order,
-                  })}
-                </div>
-                <div className="mt-0.5 text-sm font-medium text-slate-900 leading-snug">
-                  {chapterTitle(key)}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* НИЗ: три карточки */}
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* 1. Выбранная глава + программа по дням */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("inside.selected_chapter", { defaultValue: "Выбранная глава" })}
-            </div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">
-              {selectedTitle}
+        {/* Контент */}
+        <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
+              <span>{t("landing.inside.badge")}</span>
+              <span className="h-1 w-1 rounded-full bg-amber-500" />
+              <span>INSIDE</span>
             </div>
 
-            <div className="mt-3 text-sm font-medium text-slate-700">
-              {t("inside.program_by_days", { defaultValue: "Программа по дням:" })}
-            </div>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+              {t("landing.inside.guru.title")}
+            </h2>
+            <p className="mt-3 max-w-2xl text-white/80">
+              {t("landing.inside.guru.lead")}
+            </p>
 
-            {programDays.length ? (
-              <ol className="mt-2 space-y-1.5 text-sm text-slate-800">
-                {programDays.map((txt, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-semibold text-white">
-                      {idx + 1}
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <ul className="space-y-3 text-sm text-zinc-200">
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.one")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.two")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.three")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.four")}
+                </li>
+              </ul>
+
+              {/* Сертификат */}
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
+                <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
+                  {/* Орнамент по краю */}
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
+                  <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
+
+                  {/* Заголовок-лейбл */}
+                  <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    {t("landing.inside.guru.certificate_label")}
+                  </div>
+
+                  {/* Логотип LL вместо текста India Inside: Guru */}
+                  <div className="mt-2 mb-1 flex justify-start">
+                    <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2 shadow-[0_0_16px_rgba(248,197,120,0.85)]">
+                      <img
+                        src="/ll_logo.png"
+                        alt="LL logo"
+                        className="h-7 w-auto"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Декоративная линия-узор */}
+                  <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
+                    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
+                    <span className="px-2">India • Inside • Guru</span>
+                    <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-200 to-transparent" />
+                  </div>
+
+                  {/* Золотая плашка */}
+                  <div className="mt-4 h-20 w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90 shadow-inner">
+                    <span>Komil Akhmedov</span>
+                    <span className="mt-1 text-[10px] opacity-85">
+                      12.11.2025 • ID: IN-GURU-78211
                     </span>
-                    <span className="leading-snug">{txt}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="mt-2 text-xs text-slate-500">
-                {t("inside.program_empty", {
-                  defaultValue: "Программа по дням будет опубликована позже.",
-                })}
+                  </div>
+
+                  {/* Штамп + подпись */}
+                  <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
+                    <img
+                      src="/goldtri.jpg" // маленький «золотой» знак как печать
+                      alt="LL stamp"
+                      className="h-7 w-7 rounded-full object-cover shadow-[0_0_6px_rgba(0,0,0,0.35)] border border-amber-200"
+                    />
+                    <span className="tracking-wide text-zinc-500">
+                      India Inside
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-200">
-            <div className="text-xs text-gray-500 mb-1">
-              {t("inside.progress", { defaultValue: "Прогресс" })}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="h-2 bg-orange-500 rounded-full transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-gray-500">
-              {cur} / {total} ({pct}%)
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
+                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
+              >
+                {t("landing.inside.guru.cta_apply")}
+              </button>
+              <a
+                href="#chapters"
+                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
+              >
+                {t("landing.inside.guru.cta_chapters")}
+              </a>
             </div>
           </div>
-        </div>
-
-        {/* 2. Даты туров + оставшиеся места */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            {t("inside.dates_block.title", { defaultValue: "Даты туров" })}
-          </div>
-
-          {toursByChapter.length ? (
-            <div className="mt-2 space-y-1.5 text-sm text-slate-800">
-              {toursByChapter.map((r) => (
-                <div key={r.id} className="flex items-baseline justify-between gap-3">
-                  <div>
-                    <span className="font-medium">
-                      {new Date(r.date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-600 text-right">
-                    {t("inside.dates_block.capacity", {
-                      defaultValue: "Мест всего: {{total}}",
-                      total: r.capacity,
-                    })}
-                    {r.capacity > 0 && (
-                      <>
-                        <br />
-                        {t("inside.dates_block.left", {
-                          defaultValue: "Свободно: {{left}}",
-                          left: r.left,
-                        })}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-slate-500">
-              {t("inside.dates_block.empty", {
-                defaultValue: "Даты туров по этой главе появятся здесь.",
-              })}
-            </div>
-          )}
-
-          {(startsAtRaw || countdown) && (
-            <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-800">
-              {startsAtRaw && (
-                <div>
-                  <span className="text-xs text-slate-500">
-                    {t("inside.chapter_start_at", { defaultValue: "Ближайший старт:" })}{" "}
-                  </span>
-                  <span className="font-medium">
-                    {new Date(startsAtRaw).toLocaleString()}
-                  </span>
-                </div>
-              )}
-              {countdown && (
-                <div className="mt-1">
-                  <span className="text-xs text-slate-500">
-                    {t("inside.chapter_countdown", { defaultValue: "До старта осталось:" })}{" "}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-black text-white text-xs font-mono">
-                    {countdown}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-col gap-2">
-            <a
-              href={`/india/inside?chapter=${encodeURIComponent(selectedKey)}#chapters`}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("inside.actions.view_program", { defaultValue: "Смотреть программу" })}
-            </a>
-            <a
-              href={`https://t.me/${curator.replace(/^@/, "")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 text-center"
-            >
-              {t("inside.actions.contact_curator", { defaultValue: "Связаться с куратором" })}
-            </a>
-          </div>
-        </div>
-
-        {/* 3. Запрос на участие */}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex flex-col">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            {t("inside.enroll_block.title", { defaultValue: "Запрос на участие" })}
-          </div>
-          <div className="mt-2 text-xs text-slate-600">
-            {t("inside.enroll_block.desc", {
-              defaultValue:
-                "После одобрения заявки администратором ваша глава появится в прогрессе участия.",
-            })}
-          </div>
-
-          <div className="mt-4">
-            <button
-              onClick={requestJoinChapter}
-              disabled={enrollButtonDisabled}
-              className={`w-full rounded-lg px-4 py-2 text-sm text-white ${
-                enrollButtonDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-black/90"
-              }`}
-            >
-              {isPendingForSelected
-                ? t("inside.actions.request_sent", { defaultValue: "Заявка отправлена" })
-                : isApprovedForSelected
-                ? t("inside.actions.request_approved", { defaultValue: "Участие одобрено" })
-                : t("inside.actions.request_join", { defaultValue: "Запросить участие" })}
-            </button>
-          </div>
-
-          {hasRequestForSelected && (
-            <div className="mt-2 text-xs text-slate-500">
-              {lastReq?.status === "pending" &&
-                t("inside.enroll_block.pending", {
-                  defaultValue: "Заявка по этой главе ожидает одобрения.",
-                })}
-              {lastReq?.status === "approved" &&
-                t("inside.enroll_block.approved", {
-                  defaultValue: "Участие по этой главе подтверждено.",
-                })}
-              {lastReq?.status === "rejected" &&
-                t("inside.enroll_block.rejected", {
-                  defaultValue: "Заявка по этой главе была отклонена. Свяжитесь с куратором.",
-                })}
-            </div>
-          )}
         </div>
       </div>
     </section>
+  );
+}
+
+// -------- модалки (без изменений) --------
+// (оставляю как есть из твоего файла)
+
+function InsideProgramModal() {
+  const { t } = useTranslation();
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setOpen(true);
+    document.addEventListener("openInsideModal", handler);
+    return () => document.removeEventListener("openInsideModal", handler);
+  }, []);
+
+  if (!open) return null;
+
+  const days = [
+    t("landing.inside.modal.d1"),
+    t("landing.inside.modal.d2"),
+    t("landing.inside.modal.d3"),
+    t("landing.inside.modal.d4"),
+    t("landing.inside.modal.d5"),
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2000] flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
+        <h3 className="text-xl font-semibold mb-4">
+          {t("landing.inside.modal.title")}
+        </h3>
+        <ul className="space-y-3 text-sm text-gray-700">
+          {days.map((d, i) => (
+            <li key={i}>• {d}</li>
+          ))}
+        </ul>
+        <button
+          onClick={() => setOpen(false)}
+          className="mt-6 w-full rounded-xl bg-black text-white py-3 text-sm font-medium"
+        >
+          {t("landing.inside.modal.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChapterProgramModal({ open, chapter, onClose, onOpenLead }) {
+  if (!open || !chapter) return null;
+  const days = Array.isArray(chapter.program) ? chapter.program : [];
+
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-amber-600">
+              India Inside
+            </div>
+            <h3 className="mt-1 text-xl font-semibold">{chapter.title}</h3>
+            <div className="mt-1 text-sm text-gray-500">
+              {chapter.desc} • {chapter.days} • {chapter.from}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        <ol className="space-y-3 text-sm text-gray-800">
+          {days.length === 0 ? (
+            <li>Программа обновляется…</li>
+          ) : (
+            days.map((d, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="mt-1 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-semibold text-white">
+                  {i + 1}
+                </span>
+                <span>{d}</span>
+              </li>
+            ))
+          )}
+        </ol>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm hover:bg-gray-50 sm:w-auto"
+          >
+            Закрыть
+          </button>
+          <button
+            onClick={() => {
+              onOpenLead?.({
+                chapterKey: chapter.key,
+                chapterTitle: chapter.title,
+              });
+              onClose();
+            }}
+            className="w-full rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-white sm:w-auto"
+          >
+            Запросить программу
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepsApplyModal({ onOpenLead }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("openStepsApply", handler);
+    return () => window.removeEventListener("openStepsApply", handler);
+  }, []);
+
+  if (!open) return null;
+
+  const steps = [
+    { k: "apply", n: 1 },
+    { k: "call", n: 2 },
+    { k: "chapter", n: 3 },
+    { k: "certificate", n: 4 },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
+      <div className="w-full max-w-xl rounded-2xl bg-white p-6">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 className="text-xl font-semibold">
+            {t("landing.inside.steps_title", "Как стать участником")}
+          </h3>
+          <button
+            onClick={() => setOpen(false)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        <ol className="grid gap-4 sm:grid-cols-2">
+          {steps.map((s) => (
+            <li
+              key={s.k}
+              className="rounded-2xl border border-gray-200 bg-white p-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black text-white text-sm font-semibold">
+                  {s.n}
+                </span>
+                <h4 className="text-sm font-semibold">
+                  {t(`landing.inside.steps.${s.k}.title`, {
+                    defaultValue:
+                      s.k === "apply"
+                        ? "Оставьте заявку"
+                        : s.k === "call"
+                        ? "Созвон с куратором"
+                        : s.k === "chapter"
+                        ? "Поездка — выбранная глава"
+                        : "Сертификат и статус Guru",
+                  })}
+                </h4>
+              </div>
+              <p className="mt-2 text-sm text-gray-600">
+                {t(`landing.inside.steps.${s.k}.desc`, {
+                  defaultValue:
+                    s.k === "apply"
+                      ? "Укажите контакты и желаемые даты. Свяжемся в WhatsApp/Telegram."
+                      : s.k === "call"
+                      ? "Поймём цели и подберём главу/маршрут под вас."
+                      : s.k === "chapter"
+                      ? "Индивидуально или в малой группе, поддержка 24/7."
+                      : "После 4 глав — цифровой сертификат и клуб Travella.",
+                })}
+              </p>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            onClick={() => setOpen(false)}
+            className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm hover:bg-gray-50 sm:w-auto"
+          >
+            {t("landing.inside.modal.close", "Закрыть")}
+          </button>
+          <button
+            onClick={() => {
+              onOpenLead?.();
+              setOpen(false);
+            }}
+            className="w-full rounded-xl bg-black px-5 py-3 text-sm font-medium text-white sm:w-auto"
+          >
+            {t("landing.inside.guru.cta_apply", "Перейти к заявке")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function IndiaInside({ onOpenLead }) {
+  const { t } = useTranslation();
+  const [programOpen, setProgramOpen] = React.useState(false);
+  const [chapterForProgram, setChapterForProgram] = React.useState(null);
+
+  const openProgram = (c) => {
+    setChapterForProgram(c);
+    setProgramOpen(true);
+  };
+
+  // --- главы: ставим локальные картинки ---
+  const chapters = [
+    {
+      key: "royal",
+      title: t(
+        "landing.inside.chapters.royal.title",
+        "Золотой Треугольник"
+      ),
+      desc: t(
+        "landing.inside.chapters.royal.desc",
+        "Дели — Агра — Джайпур"
+      ),
+      days: t("landing.inside.chapters.royal.days", "7–8 дней"),
+      from: t("landing.inside.chapters.royal.from", "от $699"),
+      image: "/goldtri.jpg",
+      program: [
+        t(
+          "landing.inside.program.royal.d1",
+          "Дели: прилёт, трансфер, вечерний брифинг"
+        ),
+        t(
+          "landing.inside.program.royal.d2",
+          "Агра: Тадж-Махал на рассвете, форт Агры"
+        ),
+        t(
+          "landing.inside.program.royal.d3",
+          "Джайпур: Амбер-форт, Дворец ветров"
+        ),
+        t(
+          "landing.inside.program.royal.d4",
+          "Джайпур: городской тур, ремёсла, шопинг"
+        ),
+        t(
+          "landing.inside.program.royal.d5",
+          "Дели: современная Индия — арт/мода/гастро"
+        ),
+        t(
+          "landing.inside.program.royal.d6",
+          "Свободный день / дополнительные опции"
+        ),
+        t("landing.inside.program.royal.d7", "Вылет"),
+      ],
+    },
+    {
+      key: "silence",
+      title: t(
+        "landing.inside.chapters.silence.title",
+        "Приключения в Раджастане"
+      ),
+      desc: t(
+        "landing.inside.chapters.silence.desc",
+        "Удайпур — Джодпур — Джайсалмер"
+      ),
+      days: t("landing.inside.chapters.silence.days", "8–9 дней"),
+      from: t("landing.inside.chapters.silence.from", "от $890"),
+      image: "/indiainside_2.jpg",
+      program: [
+        t(
+          "landing.inside.program.silence.d1",
+          "Удайпур: прилёт, озеро Пичола, City Palace"
+        ),
+        t(
+          "landing.inside.program.silence.d2",
+          "Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз"
+        ),
+        t(
+          "landing.inside.program.silence.d3",
+          "Переезд в Джодпур, прогулка по «синему» старому городу"
+        ),
+        t(
+          "landing.inside.program.silence.d4",
+          "Джодпур: форт Мехрангарх, башни, закат на крыше"
+        ),
+        t(
+          "landing.inside.program.silence.d5",
+          "Переезд в Джайсалмер, Золотой форт, хавели"
+        ),
+        t(
+          "landing.inside.program.silence.d6",
+          "Пустыня Тар: сафари на дюнах, ужин у костра"
+        ),
+        t(
+          "landing.inside.program.silence.d7",
+          "Резерв/отдых или мастер-класс"
+        ),
+        t("landing.inside.program.silence.d8", "Вылет"),
+      ],
+    },
+    {
+      key: "modern",
+      title: t(
+        "landing.inside.chapters.modern.title",
+        "Мумбаи + Гоа — лучшие воспоминания"
+      ),
+      desc: t(
+        "landing.inside.chapters.modern.desc",
+        "Город & океан"
+      ),
+      days: t("landing.inside.chapters.modern.days", "7 дней"),
+      from: t("landing.inside.chapters.modern.from", "от $490"),
+      image: "/indiainside_3.jpg",
+      program: [
+        t(
+          "landing.inside.program.modern.d1",
+          "Мумбаи: полудневной тур, вечер на набережной"
+        ),
+        t(
+          "landing.inside.program.modern.d2",
+          "Студии Болливуда/арт-кварталы"
+        ),
+        t(
+          "landing.inside.program.modern.d3",
+          "Перелёт в Гоа, океан"
+        ),
+        t(
+          "landing.inside.program.modern.d4",
+          "Пляжи, старый Гоа, португальское наследие"
+        ),
+        t(
+          "landing.inside.program.modern.d5",
+          "Яхта/закат, гастрономический вечер"
+        ),
+        t(
+          "landing.inside.program.modern.d6",
+          "Свободный день / wellness"
+        ),
+        t("landing.inside.program.modern.d7", "Вылет"),
+      ],
+    },
+    {
+      key: "kerala",
+      title: t(
+        "landing.inside.chapters.kerala.title",
+        "Керала: Рай на Земле"
+      ),
+      desc: t(
+        "landing.inside.chapters.kerala.desc",
+        "Аюрведа, чайные холмы, хаусбоат"
+      ),
+      days: t("landing.inside.chapters.kerala.days", "8–9 дней"),
+      from: t("landing.inside.chapters.kerala.from", "от $790"),
+      image: "/kerala_01.jpg",
+      program: [
+        t(
+          "landing.inside.program.kerala.d1",
+          "Кочи: город, китайские сети, колониальная часть"
+        ),
+        t(
+          "landing.inside.program.kerala.d2",
+          "Муннар: чайные плантации, viewpoints"
+        ),
+        t(
+          "landing.inside.program.kerala.d3",
+          "Муннар: треккинг / фотодень"
+        ),
+        t(
+          "landing.inside.program.kerala.d4",
+          "Аллеппи: заселение на хаусбоат"
+        ),
+        t(
+          "landing.inside.program.kerala.d5",
+          "Backwaters, деревни, локальная кухня"
+        ),
+        t(
+          "landing.inside.program.kerala.d6",
+          "Аюрведический центр, индивидуальная программа"
+        ),
+        t(
+          "landing.inside.program.kerala.d7",
+          "Свободный день / море"
+        ),
+        t("landing.inside.program.kerala.d8", "Вылет"),
+      ],
+    },
+  ];
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 pb-16">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl bg-black text-white">
+        <img
+          src="/indiainside_1.jpg"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-40"
+        />
+        <div className="relative z-10 p-10 sm:p-16 lg:p-24">
+          <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
+            {t("landing.inside.badge")}
+          </div>
+          <h1 className="text-3xl font-semibold sm:text-5xl">
+            {t("landing.inside.title")}
+          </h1>
+          <p className="mt-4 max-w-2xl text-white/80">
+            {t("landing.inside.sub")}
+          </p>
+
+          <div className="mt-8 flex gap-3">
+            <button
+              className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black"
+              onClick={() =>
+                document
+                  .getElementById("chapters")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              {t("landing.inside.cta_trailer")}
+            </button>
+            <a
+              href="#guru"
+              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium"
+              onClick={(e) => {
+                e.preventDefault();
+                document
+                  .getElementById("guru")
+                  ?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              {t("landing.inside.cta_join")}
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Программа Guru */}
+      <GuruBlock onOpenLead={onOpenLead} />
+
+      {/* Главы */}
+      <div id="chapters" className="mt-10">
+        <h2 className="text-2xl font-semibold">
+          {t("landing.inside.chapters_title", "Главы India Inside")}
+        </h2>
+        <p className="mt-1 text-gray-600">
+          {t("landing.inside.steps_sub")}
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {chapters.map((c) => (
+          <article
+            key={c.key}
+            className="overflow-hidden rounded-2xl bg-white shadow flex flex-col"
+          >
+            <div className="h-40 w-full overflow-hidden">
+              <img
+                src={c.image}
+                alt={c.title}
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <div className="p-4 flex flex-col grow">
+              <div className="mb-1 text-xs text-amber-600">India Inside</div>
+              <h3 className="text-lg font-semibold">{c.title}</h3>
+              <p className="mt-1 line-clamp-2 text-sm text-gray-600">
+                {c.desc}
+              </p>
+              <div className="mt-3 text-sm text-gray-500">
+                {c.days} · {c.from}
+              </div>
+              <button
+                className="mt-auto w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
+                onClick={() => openProgram(c)}
+              >
+                {t("landing.inside.view")}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* остальное — опыт, куратор, модалки */}
+      {/* ... ниже твой существующий код без изменений ... */}
+
+      <section id="experience" className="mt-24">
+        {/* как в твоём исходнике */}
+      </section>
+
+      <IndiaCurator photo="/komil.jpg" onOpenLead={onOpenLead} />
+
+      <InsideProgramModal />
+      <ChapterProgramModal
+        open={programOpen}
+        chapter={chapterForProgram}
+        onClose={() => setProgramOpen(false)}
+        onOpenLead={onOpenLead}
+      />
+      <StepsApplyModal onOpenLead={onOpenLead} />
+    </div>
   );
 }
