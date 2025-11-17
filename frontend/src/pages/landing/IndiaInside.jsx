@@ -604,11 +604,57 @@ export default function IndiaInside({ onOpenLead }) {
         ))}
       </div>
 
-      {/* остальное — опыт, куратор, модалки */}
-      {/* ... ниже твой существующий код без изменений ... */}
-
       <section id="experience" className="mt-24">
         {/* как в твоём исходнике */}
+      </section>
+      {/* 4) Что вас ждёт */}
+      <section id="experience" className="mt-24">
+        <h2 className="text-2xl font-semibold">
+          {t("landing.inside.experience.title")}
+        </h2>
+        <p className="mt-1 text-gray-600">
+          {t("landing.inside.experience.sub")}
+        </p>
+
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              key: "palaces",
+              img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80",
+            },
+            {
+              key: "rituals",
+              img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80",
+            },
+            {
+              key: "wellness",
+              img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80",
+            },
+            {
+              key: "yacht",
+              img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80",
+            },
+          ].map((c) => (
+            <div
+              key={c.key}
+              className="overflow-hidden rounded-2xl bg-white shadow"
+            >
+              <img
+                src={c.img}
+                alt=""
+                className="h-32 w-full object-cover"
+              />
+              <div className="p-4">
+                <div className="font-semibold text-lg">
+                  {t(`landing.inside.experience.cards.${c.key}.title`)}
+                </div>
+                <p className="mt-2 text-sm text-gray-600">
+                  {t(`landing.inside.experience.cards.${c.key}.desc`)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <IndiaCurator photo="/komil.jpg" onOpenLead={onOpenLead} />
