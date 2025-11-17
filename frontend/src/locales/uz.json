@@ -1658,7 +1658,7 @@
     "d6": "Bo‘sh kun / qo‘shimcha dasturlar",
     "d7": "Jo‘nab ketish / parvoz"
   },
-  "rajasthan": {
+  "silence": {
     "d1": "Udaypur: kelish, Pichola ko‘li, City Palace",
     "d2": "Udaypur: Jagdish/Eklingji ibodatxonalari, hunarmandchilik, kechki qayiq sayri",
     "d3": "Jodhpurni yo‘lga chiqish, ‘Ko‘k shahar’ eski qismida sayr",
@@ -1668,7 +1668,7 @@
     "d7": "Bo‘sh kun / master-klass",
     "d8": "Jo‘nab ketish"
   },
-  "mumbaiGoa": {
+  "modern": {
     "d1": "Mumbay: yarim kunlik sayohat, sohil bo‘ylab kechki sayr",
     "d2": "Bollivud studiyalari / art-mahallalar",
     "d3": "Goaga parvoz, okean",
