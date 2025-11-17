@@ -1,127 +1,83 @@
 // frontend/src/pages/landing/IndiaInside.jsx
 import React from "react";
 import { useTranslation } from "react-i18next";
-import IndiaCurator from "./IndiaCurator";
 
 function GuruBlock({ onOpenLead }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation("landing");
   return (
-    <section
-      id="guru"
-      className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
-    >
-      <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
-        {/* фон + градиент */}
+    <section id="guru" className="mt-12 overflow-hidden rounded-3xl bg-black text-white">
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
         <img
-          src="/indiainside_guru.jpg"
+          src="https://images.unsplash.com/photo-1549880338-65ddcdfd017b?q=80&w=2000&auto=format&fit=crop"
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          className="h-full w-full object-cover opacity-30"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/10" />
+        <div className="relative z-10 p-8 sm:p-12 lg:p-16">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
+            <span>{t("inside.badge", "TRAVELLA • INDIA")}</span>
+            <span className="h-1 w-1 rounded-full bg-amber-500" />
+            <span>INSIDE</span>
+          </div>
 
-        {/* Контент */}
-        <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-              <span>{t("landing.inside.badge")}</span>
-              <span className="h-1 w-1 rounded-full bg-amber-500" />
-              <span>INSIDE</span>
-            </div>
+          <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+            {t("inside.guru.title", "Программа Guru по Индии")}
+          </h2>
+          <p className="mt-3 max-w-2xl text-white/80">
+            {t(
+              "inside.guru.lead",
+              "Пройди 4 главы India Inside — королевская Индия, Путь Тишины, современная Индия и Южная перезагрузка — и получи персональный статус «India Inside: Guru» с сертификатом и доступом в закрытый клуб."
+            )}
+          </p>
 
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
-              {t("landing.inside.guru.title")}
-            </h2>
-            <p className="mt-3 max-w-2xl text-white/80">
-              {t("landing.inside.guru.lead")}
-            </p>
+          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+            <ul className="space-y-3 text-sm text-zinc-200">
+              <li className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                {t("inside.guru.bullets.one", "Индивидуальные маршруты и личный куратор")}
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                {t("inside.guru.bullets.two", "Приватные церемонии и недоступные локации")}
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                {t("inside.guru.bullets.three", "Сертификат «Guru по Индии» и клуб Travella")}
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                {t("inside.guru.bullets.four", "Доступно только по заявке")}
+              </li>
+            </ul>
 
-            <div className="mt-6 grid gap-6 sm:grid-cols-2">
-              <ul className="space-y-3 text-sm text-zinc-200">
-                <li>
-                  <span className="dot" />
-                  {t("landing.inside.guru.bullets.one")}
-                </li>
-                <li>
-                  <span className="dot" />
-                  {t("landing.inside.guru.bullets.two")}
-                </li>
-                <li>
-                  <span className="dot" />
-                  {t("landing.inside.guru.bullets.three")}
-                </li>
-                <li>
-                  <span className="dot" />
-                  {t("landing.inside.guru.bullets.four")}
-                </li>
-              </ul>
-
-              {/* Сертификат */}
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
-                <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
-                  {/* Орнамент по краю */}
-                  <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
-                  <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
-
-                  {/* Заголовок-лейбл */}
-                  <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                    {t("landing.inside.guru.certificate_label")}
-                  </div>
-
-                  {/* Логотип LL вместо текста India Inside: Guru */}
-                  <div className="mt-2 mb-1 flex justify-start">
-                    <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2 shadow-[0_0_16px_rgba(248,197,120,0.85)]">
-                      <img
-                        src="/ll_logo.png"
-                        alt="LL logo"
-                        className="h-7 w-auto"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Декоративная линия-узор */}
-                  <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
-                    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
-                    <span className="px-2">India • Inside • Guru</span>
-                    <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-200 to-transparent" />
-                  </div>
-
-                  {/* Золотая плашка */}
-                  <div className="mt-4 h-20 w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90 shadow-inner">
-                    <span>Komil Akhmedov</span>
-                    <span className="mt-1 text-[10px] opacity-85">
-                      12.11.2025 • ID: IN-GURU-78211
-                    </span>
-                  </div>
-
-                  {/* Штамп + подпись */}
-                  <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
-                    <img
-                      src="/goldtri.jpg" // маленький «золотой» знак как печать
-                      alt="LL stamp"
-                      className="h-7 w-7 rounded-full object-cover shadow-[0_0_6px_rgba(0,0,0,0.35)] border border-amber-200"
-                    />
-                    <span className="tracking-wide text-zinc-500">
-                      India Inside
-                    </span>
-                  </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
+                <div className="text-xs uppercase tracking-wider text-zinc-500">
+                  {t("inside.guru.certificate_label", "Сертификат")}
                 </div>
+                <div className="mt-1 text-lg font-semibold">India Inside: Guru</div>
+                <div className="mt-2 text-xs text-zinc-600">
+                  {t("inside.guru.certificate_meta", "Имя владельца • Дата • Идентификатор программы")}
+                </div>
+                <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
+                <div className="mt-3 text-right text-[10px] text-zinc-500">Travella • India Inside</div>
               </div>
             </div>
+          </div>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
-                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
-              >
-                {t("landing.inside.guru.cta_apply")}
-              </button>
-              <a
-                href="#chapters"
-                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
-              >
-                {t("landing.inside.guru.cta_chapters")}
-              </a>
-            </div>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <button
+              onClick={() => onOpenLead?.()}
+              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
+            >
+              {t("inside.guru.cta_apply", "Запросить участие")}
+            </button>
+            <a
+              href="#chapters"
+              className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
+            >
+              {t("inside.guru.cta_chapters", "Посмотреть главы программы")}
+            </a>
           </div>
         </div>
       </div>
@@ -129,507 +85,132 @@ function GuruBlock({ onOpenLead }) {
   );
 }
 
-// -------- модалки (без изменений) --------
-// (оставляю как есть из твоего файла)
-
-function InsideProgramModal() {
-  const { t } = useTranslation();
-  const [open, setOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    const handler = () => setOpen(true);
-    document.addEventListener("openInsideModal", handler);
-    return () => document.removeEventListener("openInsideModal", handler);
-  }, []);
-
-  if (!open) return null;
-
-  const days = [
-    t("landing.inside.modal.d1"),
-    t("landing.inside.modal.d2"),
-    t("landing.inside.modal.d3"),
-    t("landing.inside.modal.d4"),
-    t("landing.inside.modal.d5"),
-  ];
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2000] flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
-        <h3 className="text-xl font-semibold mb-4">
-          {t("landing.inside.modal.title")}
-        </h3>
-        <ul className="space-y-3 text-sm text-gray-700">
-          {days.map((d, i) => (
-            <li key={i}>• {d}</li>
-          ))}
-        </ul>
-        <button
-          onClick={() => setOpen(false)}
-          className="mt-6 w-full rounded-xl bg-black text-white py-3 text-sm font-medium"
-        >
-          {t("landing.inside.modal.close")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ChapterProgramModal({ open, chapter, onClose, onOpenLead }) {
-  if (!open || !chapter) return null;
-  const days = Array.isArray(chapter.program) ? chapter.program : [];
-
-  return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-6">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-amber-600">
-              India Inside
-            </div>
-            <h3 className="mt-1 text-xl font-semibold">{chapter.title}</h3>
-            <div className="mt-1 text-sm text-gray-500">
-              {chapter.desc} • {chapter.days} • {chapter.from}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
-          >
-            ✕
-          </button>
-        </div>
-
-        <ol className="space-y-3 text-sm text-gray-800">
-          {days.length === 0 ? (
-            <li>Программа обновляется…</li>
-          ) : (
-            days.map((d, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="mt-1 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-semibold text-white">
-                  {i + 1}
-                </span>
-                <span>{d}</span>
-              </li>
-            ))
-          )}
-        </ol>
-
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            onClick={onClose}
-            className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm hover:bg-gray-50 sm:w-auto"
-          >
-            Закрыть
-          </button>
-          <button
-            onClick={() => {
-              onOpenLead?.({
-                chapterKey: chapter.key,
-                chapterTitle: chapter.title,
-              });
-              onClose();
-            }}
-            className="w-full rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-white sm:w-auto"
-          >
-            Запросить программу
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StepsApplyModal({ onOpenLead }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    const handler = () => setOpen(true);
-    window.addEventListener("openStepsApply", handler);
-    return () => window.removeEventListener("openStepsApply", handler);
-  }, []);
-
-  if (!open) return null;
-
-  const steps = [
-    { k: "apply", n: 1 },
-    { k: "call", n: 2 },
-    { k: "chapter", n: 3 },
-    { k: "certificate", n: 4 },
-  ];
-
-  return (
-    <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-6">
-        <div className="mb-4 flex items-start justify-between">
-          <h3 className="text-xl font-semibold">
-            {t("landing.inside.steps_title", "Как стать участником")}
-          </h3>
-          <button
-            onClick={() => setOpen(false)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
-          >
-            ✕
-          </button>
-        </div>
-
-        <ol className="grid gap-4 sm:grid-cols-2">
-          {steps.map((s) => (
-            <li
-              key={s.k}
-              className="rounded-2xl border border-gray-200 bg-white p-4"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black text-white text-sm font-semibold">
-                  {s.n}
-                </span>
-                <h4 className="text-sm font-semibold">
-                  {t(`landing.inside.steps.${s.k}.title`, {
-                    defaultValue:
-                      s.k === "apply"
-                        ? "Оставьте заявку"
-                        : s.k === "call"
-                        ? "Созвон с куратором"
-                        : s.k === "chapter"
-                        ? "Поездка — выбранная глава"
-                        : "Сертификат и статус Guru",
-                  })}
-                </h4>
-              </div>
-              <p className="mt-2 text-sm text-gray-600">
-                {t(`landing.inside.steps.${s.k}.desc`, {
-                  defaultValue:
-                    s.k === "apply"
-                      ? "Укажите контакты и желаемые даты. Свяжемся в WhatsApp/Telegram."
-                      : s.k === "call"
-                      ? "Поймём цели и подберём главу/маршрут под вас."
-                      : s.k === "chapter"
-                      ? "Индивидуально или в малой группе, поддержка 24/7."
-                      : "После 4 глав — цифровой сертификат и клуб Travella.",
-                })}
-              </p>
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            onClick={() => setOpen(false)}
-            className="w-full rounded-xl border border-gray-200 px-5 py-3 text-sm hover:bg-gray-50 sm:w-auto"
-          >
-            {t("landing.inside.modal.close", "Закрыть")}
-          </button>
-          <button
-            onClick={() => {
-              onOpenLead?.();
-              setOpen(false);
-            }}
-            className="w-full rounded-xl bg-black px-5 py-3 text-sm font-medium text-white sm:w-auto"
-          >
-            {t("landing.inside.guru.cta_apply", "Перейти к заявке")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function IndiaInside({ onOpenLead }) {
-  const { t } = useTranslation();
-  const [programOpen, setProgramOpen] = React.useState(false);
-  const [chapterForProgram, setChapterForProgram] = React.useState(null);
+  const { t } = useTranslation("landing");
 
-  const openProgram = (c) => {
-    setChapterForProgram(c);
-    setProgramOpen(true);
-  };
-
-  // --- главы: ставим локальные картинки ---
   const chapters = [
     {
       key: "royal",
-      title: t(
-        "landing.inside.chapters.royal.title",
-        "Золотой Треугольник"
-      ),
-      desc: t(
-        "landing.inside.chapters.royal.desc",
-        "Дели — Агра — Джайпур"
-      ),
-      days: t("landing.inside.chapters.royal.days", "7–8 дней"),
-      from: t("landing.inside.chapters.royal.from", "от $699"),
-      image: "/goldtri.jpg",
-      program: [
-        t(
-          "landing.inside.program.royal.d1",
-          "Дели: прилёт, трансфер, вечерний брифинг"
-        ),
-        t(
-          "landing.inside.program.royal.d2",
-          "Агра: Тадж-Махал на рассвете, форт Агры"
-        ),
-        t(
-          "landing.inside.program.royal.d3",
-          "Джайпур: Амбер-форт, Дворец ветров"
-        ),
-        t(
-          "landing.inside.program.royal.d4",
-          "Джайпур: городской тур, ремёсла, шопинг"
-        ),
-        t(
-          "landing.inside.program.royal.d5",
-          "Дели: современная Индия — арт/мода/гастро"
-        ),
-        t(
-          "landing.inside.program.royal.d6",
-          "Свободный день / дополнительные опции"
-        ),
-        t("landing.inside.program.royal.d7", "Вылет"),
-      ],
+      title: t("inside.chapters.royal.title", "Королевские главы"),
+      desc: t("inside.chapters.royal.desc", "Дворцы Удайпура и Джайпура, закрытые церемонии."),
+      days: t("inside.chapters.royal.days", "8–9 дней"),
+      from: t("inside.chapters.royal.from", "от $8 900"),
+      image:
+        "https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "silence",
-      title: t(
-        "landing.inside.chapters.silence.title",
-        "Приключения в Раджастане"
-      ),
-      desc: t(
-        "landing.inside.chapters.silence.desc",
-        "Удайпур — Джодпур — Джайсалмер"
-      ),
-      days: t("landing.inside.chapters.silence.days", "8–9 дней"),
-      from: t("landing.inside.chapters.silence.from", "от $890"),
-      image: "/indiainside_2.jpg",
-      program: [
-        t(
-          "landing.inside.program.silence.d1",
-          "Удайпур: прилёт, озеро Пичола, City Palace"
-        ),
-        t(
-          "landing.inside.program.silence.d2",
-          "Удайпур: храмы Джагдиш/Эклингджи, ремёсла, вечерний круиз"
-        ),
-        t(
-          "landing.inside.program.silence.d3",
-          "Переезд в Джодпур, прогулка по «синему» старому городу"
-        ),
-        t(
-          "landing.inside.program.silence.d4",
-          "Джодпур: форт Мехрангарх, башни, закат на крыше"
-        ),
-        t(
-          "landing.inside.program.silence.d5",
-          "Переезд в Джайсалмер, Золотой форт, хавели"
-        ),
-        t(
-          "landing.inside.program.silence.d6",
-          "Пустыня Тар: сафари на дюнах, ужин у костра"
-        ),
-        t(
-          "landing.inside.program.silence.d7",
-          "Резерв/отдых или мастер-класс"
-        ),
-        t("landing.inside.program.silence.d8", "Вылет"),
-      ],
+      title: t("inside.chapters.silence.title", "Путь Тишины"),
+      desc: t("inside.chapters.silence.desc", "Гималаи, аюрведа, монахи, чайные холмы."),
+      days: t("inside.chapters.silence.days", "7–8 дней"),
+      from: t("inside.chapters.silence.from", "от $6 200"),
+      image:
+        "https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "modern",
-      title: t(
-        "landing.inside.chapters.modern.title",
-        "Мумбаи + Гоа — лучшие воспоминания"
-      ),
-      desc: t(
-        "landing.inside.chapters.modern.desc",
-        "Город & океан"
-      ),
-      days: t("landing.inside.chapters.modern.days", "7 дней"),
-      from: t("landing.inside.chapters.modern.from", "от $490"),
-      image: "/indiainside_3.jpg",
-      program: [
-        t(
-          "landing.inside.program.modern.d1",
-          "Мумбаи: полудневной тур, вечер на набережной"
-        ),
-        t(
-          "landing.inside.program.modern.d2",
-          "Студии Болливуда/арт-кварталы"
-        ),
-        t(
-          "landing.inside.program.modern.d3",
-          "Перелёт в Гоа, океан"
-        ),
-        t(
-          "landing.inside.program.modern.d4",
-          "Пляжи, старый Гоа, португальское наследие"
-        ),
-        t(
-          "landing.inside.program.modern.d5",
-          "Яхта/закат, гастрономический вечер"
-        ),
-        t(
-          "landing.inside.program.modern.d6",
-          "Свободный день / wellness"
-        ),
-        t("landing.inside.program.modern.d7", "Вылет"),
-      ],
+      title: t("inside.chapters.modern.title", "Современная Индия"),
+      desc: t("inside.chapters.modern.desc", "Мумбаи, стиль, киностудия, яхта, гала-ужин."),
+      days: t("inside.chapters.modern.days", "7 дней"),
+      from: t("inside.chapters.modern.from", "от $7 400"),
+      image:
+        "https://images.unsplash.com/photo-1508009603885-50cf7c579365?q=80&w=1600&auto=format&fit=crop",
     },
     {
       key: "kerala",
-      title: t(
-        "landing.inside.chapters.kerala.title",
-        "Керала: Рай на Земле"
-      ),
-      desc: t(
-        "landing.inside.chapters.kerala.desc",
-        "Аюрведа, чайные холмы, хаусбоат"
-      ),
-      days: t("landing.inside.chapters.kerala.days", "8–9 дней"),
-      from: t("landing.inside.chapters.kerala.from", "от $790"),
-      image: "/kerala_01.jpg",
-      program: [
-        t(
-          "landing.inside.program.kerala.d1",
-          "Кочи: город, китайские сети, колониальная часть"
-        ),
-        t(
-          "landing.inside.program.kerala.d2",
-          "Муннар: чайные плантации, viewpoints"
-        ),
-        t(
-          "landing.inside.program.kerala.d3",
-          "Муннар: треккинг / фотодень"
-        ),
-        t(
-          "landing.inside.program.kerala.d4",
-          "Аллеппи: заселение на хаусбоат"
-        ),
-        t(
-          "landing.inside.program.kerala.d5",
-          "Backwaters, деревни, локальная кухня"
-        ),
-        t(
-          "landing.inside.program.kerala.d6",
-          "Аюрведический центр, индивидуальная программа"
-        ),
-        t(
-          "landing.inside.program.kerala.d7",
-          "Свободный день / море"
-        ),
-        t("landing.inside.program.kerala.d8", "Вылет"),
-      ],
+      title: t("inside.chapters.kerala.title", "Керала: перезагрузка"),
+      desc: t("inside.chapters.kerala.desc", "Бэквотеры, чай, wellness, частный хаусбоат."),
+      days: t("inside.chapters.kerala.days", "8–9 дней"),
+      from: t("inside.chapters.kerala.from", "от $6 900"),
+      image:
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
     },
   ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16">
-      {/* Hero */}
+      {/* HERO */}
       <section className="relative overflow-hidden rounded-3xl bg-black text-white">
         <img
-          src="/indiainside_1.jpg"
+          src="https://images.unsplash.com/photo-1519125263344-35456d2937b4?q=80&w=2000&auto=format&fit=crop"
           alt=""
           className="absolute inset-0 h-full w-full object-cover opacity-40"
         />
         <div className="relative z-10 p-10 sm:p-16 lg:p-24">
           <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            {t("landing.inside.badge")}
+            {t("inside.badge", "TRAVELLA • INDIA")}
           </div>
           <h1 className="text-3xl font-semibold sm:text-5xl">
-            {t("landing.inside.title")}
+            {t("inside.title", "India Inside — роскошное путешествие")}
           </h1>
           <p className="mt-4 max-w-2xl text-white/80">
-            {t("landing.inside.sub")}
+            {t(
+              "inside.sub",
+              "Частные программы, дворцы махараджей, закрытые ритуалы и тишина Гималаев."
+            )}
           </p>
-
           <div className="mt-8 flex gap-3">
             <button
               className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black"
-              onClick={() =>
-                document
-                  .getElementById("chapters")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
+              onClick={() => {
+                const el = document.getElementById("chapters");
+                el?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
             >
-              {t("landing.inside.cta_trailer")}
+              {t("inside.cta_trailer", "Смотреть трейлер")}
             </button>
             <a
               href="#guru"
               className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium"
               onClick={(e) => {
                 e.preventDefault();
-                document
-                  .getElementById("guru")
-                  ?.scrollIntoView({ behavior: "smooth" });
+                const el = document.getElementById("guru");
+                el?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
-              {t("landing.inside.cta_join")}
+              {t("inside.cta_join", "Запросить программу")}
             </a>
           </div>
         </div>
       </section>
 
-      {/* Программа Guru */}
-      <GuruBlock onOpenLead={onOpenLead} />
-
-      {/* Главы */}
+      {/* Section heading */}
       <div id="chapters" className="mt-10">
         <h2 className="text-2xl font-semibold">
-          {t("landing.inside.chapters_title", "Главы India Inside")}
+          {t("inside.steps_title", "Главы India Inside")}
         </h2>
         <p className="mt-1 text-gray-600">
-          {t("landing.inside.steps_sub")}
+          {t("inside.steps_sub", "Выберите свою главу — мы соберём частный маршрут.")}
         </p>
       </div>
 
+      {/* Cards */}
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {chapters.map((c) => (
-          <article
-            key={c.key}
-            className="overflow-hidden rounded-2xl bg-white shadow flex flex-col"
-          >
+          <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow">
             <div className="h-40 w-full overflow-hidden">
-              <img
-                src={c.image}
-                alt={c.title}
-                className="h-full w-full object-cover"
-              />
+              <img src={c.image} alt="" className="h-full w-full object-cover" />
             </div>
-            <div className="p-4 flex flex-col grow">
+            <div className="p-4">
               <div className="mb-1 text-xs text-amber-600">India Inside</div>
               <h3 className="text-lg font-semibold">{c.title}</h3>
-              <p className="mt-1 line-clamp-2 text-sm text-gray-600">
-                {c.desc}
-              </p>
+              <p className="mt-1 line-clamp-2 text-sm text-gray-600">{c.desc}</p>
               <div className="mt-3 text-sm text-gray-500">
                 {c.days} · {c.from}
               </div>
               <button
-                className="mt-auto w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
-                onClick={() => openProgram(c)}
+                className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white"
+                onClick={() => onOpenLead?.()}
               >
-                {t("landing.inside.view")}
+                {t("inside.view", "Запросить программу")}
               </button>
             </div>
           </article>
         ))}
       </div>
 
-      {/* остальное — опыт, куратор, модалки */}
-      {/* ... ниже твой существующий код без изменений ... */}
-
-      <section id="experience" className="mt-24">
-        {/* как в твоём исходнике */}
-      </section>
-
-      <IndiaCurator photo="/komil.jpg" onOpenLead={onOpenLead} />
-
-      <InsideProgramModal />
-      <ChapterProgramModal
-        open={programOpen}
-        chapter={chapterForProgram}
-        onClose={() => setProgramOpen(false)}
-        onOpenLead={onOpenLead}
-      />
-      <StepsApplyModal onOpenLead={onOpenLead} />
+      {/* Guru program */}
+      <GuruBlock onOpenLead={onOpenLead} />
     </div>
   );
 }
