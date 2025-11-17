@@ -97,13 +97,17 @@ function GuruBlock({ onOpenLead }) {
         India Inside
       </span>
 
-      <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2">
-        <img
-          src="/ll_logo2.png"
-          alt="LL logo"
-          className="h-7 w-auto"
-        />
-      </div>
+{/* Верхний логотип LL — более заметный */}
+<div className="mt-2 mb-1 flex justify-start">
+  <div className="inline-flex items-center justify-center rounded-full bg-amber-100/90 px-2.5 py-2">
+    <img
+      src="/ll_logo2.png"
+      alt="LL logo"
+      className="h-9 w-auto"
+    />
+  </div>
+</div>
+
     </div>
   </div>
 </div>
