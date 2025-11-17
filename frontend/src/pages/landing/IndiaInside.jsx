@@ -10,7 +10,7 @@ function GuruBlock({ onOpenLead }) {
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
         <img
-          src="https://images.unsplash.com/photo-1549880338-65ddcdfd017b?q=80&w=2000&auto=format&fit=crop"
+          src="/indiainside_guru.jpg"
           alt=""
           className="h-full w-full object-cover opacity-30"
         />
