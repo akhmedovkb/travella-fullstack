@@ -1361,218 +1361,249 @@
 
 "auth": { "login_required": "Please log in again and retry" },
 "inside": {
-    "my": {
-    "title": "My program",
-    "chapters_title": "Chapters",
-    "chapters_hint": "Tap a chapter to see the program and dates.",
-    "chapter_label": "Chapter {{num}}",
-
-    "details": {
-      "toggle_label": "Details for the selected chapter"
-    },
-
-    "selected_title": "Selected chapter",
-    "program_by_days": "Day-by-day program",
-
-    "dates_title": "Tour dates",
-    "tour_dates": "Tour dates",
-    "places_title": "Seats for this chapter",
-    "limit": "Limit",
-    "enrolled": "Enrolled",
-    "free": "Available",
-    "enrolment_start": "Enrollment opens",
-
-    "request_title": "Participation request",
-    "request_hint": "After your request is approved you’ll have limited time to pay for the package and receive the documents.",
-    "btn_request": "Request to join",
-    "btn_requested": "Request sent",
-    "btn_approved": "Participation approved",
-    "approved_hint": "Participation approved. Please pay within 24 hours to receive your travel documents.",
-    "btn_pay": "Pay",
-    "btn_contact_curator": "Contact curator"
+  "my": {
+    "title": "My program"
   },
-      "errors": {
-      "request_failed": "Failed to send completion request",
-      "ask_open_telegram": "Open curator chat in Telegram?"
-    },    
-      "toast": {
-      "requested": "Completion request sent",
-      "joined": "You’ve joined India Inside!",
-      "join_failed": "Failed to join"
-    },
-      "steps_title": "How to join",
-      "steps_sub": "Four simple steps — your curator will guide you through.",
-      "steps": {
-        "apply": {
-          "title": "Submit a request",
-          "desc": "Leave your contacts and dates. We’ll reach out via WhatsApp/Telegram."
-        },
-        "call": {
-          "title": "Curator call",
-          "desc": "We clarify your goals and pick the right chapter and route."
-        },
-        "chapter": {
-          "title": "Trip — selected chapter",
-          "desc": "Private or small group journey with 24/7 support."
-        },
-        "certificate": {
-          "title": "Certificate & Guru status",
-          "desc": "After 4 chapters — digital certificate and Travella Club."
-        }
-      },
-      "chapters_title": "India Inside chapters",
-      "experience": {
-        "title": "What awaits you",
-        "sub": "Private routes, closed-door ceremonies and seamless service.",
-        "cards": {
-          "palaces": {
-            "title": "Palaces & heritage",
-            "desc": "Rajasthan, crafts, architecture and royal stories."
-          },
-          "rituals": {
-            "title": "Ceremonies & rituals",
-            "desc": "Private practices with access to rare locations."
-          },
-          "wellness": {
-            "title": "Wellness & Ayurveda",
-            "desc": "Personal recovery programs with trusted doctors."
-          },
-          "yacht": {
-            "title": "Yachts & sunsets",
-            "desc": "Sea cruises and dinner on the Arabian coast."
-          }
-        }
-      },
-      "curated_badge": "Curated Cultural Journey",
-      "cta_get_program": "Request the program",
-      "cta_ask": "Ask a question",
-      "curator": {
-        "photo_alt": "India Inside curator",
-        "title": "Komil Akhmedov",
-        "subtitle": "Founder of Travella, curator of India Inside",
-        "p1": "Over 12 years studying India — its culture, modern cities, heritage and wellness.",
-        "p2": "India Inside is an author’s program built on personal travel, connections and deep cultural immersion.",
-        "bullets": {
-          "one": "12+ years of India routes",
-          "two": "Wellness, crafts, cultural practices",
-          "three": "Local experts and masters",
-          "four": "Personalised accompaniment"
-        },
-        "disclaimer": "Not a tour. A cultural project."
-      },
-  "badge": "TRAVELLA • INDIA",
-  "title": "India Inside — a luxury journey",
-  "sub": "Private programs, maharaja palaces, closed rituals and Himalayan silence.",
-  "cta_trailer": "Watch trailer",
-  "cta_join": "Request the program",
 
-  "steps_title": "India Inside chapters",
-  "steps_sub": "Pick your chapter — we’ll craft a private itinerary.",
-  "view": "Request the program",
+  "chapter_label": "Chapter {{n}}",
+  "selected_chapter": "Selected chapter",
+  "program_by_days": "Program by days:",
+  "program_empty": "The day-by-day program will be published later.",
+
+  "details": {
+    "toggle_label": "Details for the selected chapter"
+  },
+
+  "chapters_progress": {
+    "title": "Your progress by chapters"
+  },
 
   "chapters": {
-  "royal": {
-    "title": "Golden Triangle",
-    "desc": "Delhi — Agra — Jaipur",
-    "days": "7–8 days",
-    "from": "from $699"
+    "royal": {
+      "title": "Golden Triangle",
+      "desc": "Delhi — Agra — Jaipur",
+      "days": "7–8 days",
+      "from": "from $699"
+    },
+    "silence": {
+      "title": "Adventures in Rajasthan",
+      "desc": "Udaipur — Jodhpur — Jaisalmer",
+      "days": "8–9 days",
+      "from": "from $890"
+    },
+    "modern": {
+      "title": "Mumbai + Goa — Best Memories",
+      "desc": "City vibes and ocean rest",
+      "days": "7 days",
+      "from": "from $490"
+    },
+    "kerala": {
+      "title": "Kerala: Paradise on Earth",
+      "desc": "Ayurveda, tea hills, private houseboat",
+      "days": "8–9 days",
+      "from": "from $790"
+    }
   },
-  "silence": {
-          "title": "Adventures in Rajasthan",
-          "desc": "Udaipur — Jodhpur — Jaisalmer",
-          "days": "8–9 days",
-          "from": "from $890"
+
+  "program": {
+    "royal": {
+      "day1": "Delhi: arrival, transfer, evening briefing",
+      "day2": "Agra: Taj Mahal at sunrise, Agra Fort",
+      "day3": "Jaipur: Amber Fort, Hawa Mahal",
+      "day4": "Jaipur: city tour, crafts",
+      "day5": "Delhi: modern India — art/fashion/gastro",
+      "day6": "Free day / optional experiences",
+      "day7": "Departure"
+    },
+    "silence": {
+      "day1": "Udaipur: arrival, Lake Pichola, City Palace",
+      "day2": "Udaipur: temples, crafts, evening cruise",
+      "day3": "Drive to Jodhpur, walk in the Blue City",
+      "day4": "Jodhpur: Mehrangarh Fort, rooftop sunset",
+      "day5": "Drive to Jaisalmer, Golden Fort and havelis",
+      "day6": "Thar desert: dunes safari, dinner by the fire",
+      "day7": "Free day / master-class",
+      "day8": "Departure"
+    },
+    "modern": {
+      "day1": "Mumbai: half-day tour, seaside walk",
+      "day2": "Bollywood studios / art districts",
+      "day3": "Flight to Goa, ocean",
+      "day4": "Beaches, Old Goa, Portuguese heritage",
+      "day5": "Yacht / sunset, gourmet dinner",
+      "day6": "Free day / wellness",
+      "day7": "Departure"
+    },
+    "kerala": {
+      "day1": "Kochi: city, Chinese fishing nets, old town",
+      "day2": "Munnar: tea plantations, viewpoints",
+      "day3": "Munnar: trekking / photo day",
+      "day4": "Alleppey: check-in to houseboat",
+      "day5": "Backwaters, villages, local cuisine",
+      "day6": "Ayurveda center, individual program",
+      "day7": "Free day / sea",
+      "day8": "Departure"
+    },
+
+    "title": "Day-by-day program",
+    "empty": "The daily program has not been added yet."
   },
-  "modern": {
-    "title": "Mumbai + Goa — Best Memories",
-    "desc": "City & ocean escape",
-    "days": "7 days",
-    "from": "from $490"
+
+  "dates_block": {
+    "title": "Tour dates",
+    "tour_dates_label": "Tour dates:",
+    "places_label": "Places in this chapter:",
+    "limit": "Limit: {{value}}",
+    "enrolled": "Enrolled: {{value}}",
+    "left": "Available: {{value}}",
+    "empty": "Dates for this chapter will appear soon."
   },
-  "kerala": {
-    "title": "Kerala: Paradise on Earth",
-    "desc": "Ayurveda, tea hills, private houseboat",
-    "days": "8–9 days",
-    "from": "from $790"
-  }
-},
-"program": {
-  "royal": {
-    "d1": "Delhi: arrival, transfer, evening briefing",
-    "d2": "Agra: Taj Mahal at sunrise, Agra Fort",
-    "d3": "Jaipur: Amber Fort, Hawa Mahal",
-    "d4": "Jaipur: city tour, crafts",
-    "d5": "Delhi: modern India — art/fashion/gastro",
-    "d6": "Free day / optional experiences",
-    "d7": "Departure"
+
+  "chapter_start_at": "Enrollment opens:",
+  "chapter_countdown": "Starts in:",
+
+  "next_chapter": {
+    "label": "Next chapter",
+    "tour_dates_label": "Tour date:",
+    "starts_at": "Enrollment opens:",
+    "countdown": "Starts in",
+    "enrollment_open": "Enrollment open",
+    "places_left": "Places left: {{count}}"
   },
-  "silence": {
-    "d1": "Udaipur: arrival, Lake Pichola, City Palace",
-    "d2": "Udaipur: Jagdish/Eklingji temples, crafts, evening cruise",
-    "d3": "Drive to Jodhpur, Old Blue City walk",
-    "d4": "Jodhpur: Mehrangarh Fort, viewpoints, rooftop sunset",
-    "d5": "Drive to Jaisalmer, Golden Fort, havelis",
-    "d6": "Thar Desert: dune safari, dinner by the fire",
-    "d7": "Free day / master-class",
-    "d8": "Departure"
+
+  "status_active": "Active",
+  "status_completed": "Completed",
+  "status_expelled": "Removed from the program",
+
+  "enroll_block": {
+    "title": "Request to join",
+    "desc": "After your request is approved, you will have limited time to pay and receive your travel documents.",
+    "pending": "Your request for this chapter is awaiting approval.",
+    "rejected": "Your request for this chapter was rejected. Please contact the curator."
   },
-  "modern": {
-    "d1": "Mumbai: half-day tour, evening on the promenade",
-    "d2": "Bollywood studios / art districts",
-    "d3": "Flight to Goa, ocean",
-    "d4": "Beaches, Old Goa, Portuguese heritage",
-    "d5": "Yacht/sunset, gourmet dinner",
-    "d6": "Free day / wellness",
-    "d7": "Departure"
+
+  "pay_block": {
+    "desc": "To receive your documents, click the “Pay” button.",
+    "window_hint": "Your participation is approved. Please make the payment within {{hours}} hours.",
+    "window_expired": "The payment window has expired. Send a new request or contact the curator.",
+    "error": "Could not start the payment process. Please try again later."
   },
-  "kerala": {
-    "d1": "Kochi: city tour, Chinese fishing nets, colonial quarter",
-    "d2": "Munnar: tea plantations, viewpoints",
-    "d3": "Munnar: trekking / photo day",
-    "d4": "Alleppey: check-in on houseboat",
-    "d5": "Backwaters, villages, local cuisine",
-    "d6": "Ayurveda center, personal program",
-    "d7": "Free day / beach",
-    "d8": "Departure"
-  }
-},
+
+  "actions": {
+    "pay": "Pay",
+    "contact_curator": "Contact curator",
+    "enroll_not_started": "Enrollment has not opened yet",
+    "request_sent": "Request sent",
+    "request_approved": "Participation approved",
+    "request_expired": "Payment window expired — please send a new request",
+    "request_join": "Request to join"
+  },
+
+  "invite": {
+    "title": "Join the India Inside program",
+    "sub": "Personal curator, chapters, and Guru status after 4 chapters.",
+    "join_now": "Join now",
+    "cta": "Learn more"
+  },
+
+  "toast": {
+    "joined": "You have joined India Inside!",
+    "join_failed": "Could not join the program",
+    "request_joined": "Your request to join has been sent"
+  },
+
+  "errors": {
+    "request_failed": "Could not send the request",
+    "ask_open_telegram": "Open Telegram chat with the curator?"
+  },
+
+  "badge": "TRAVELLA • INDIA",
+  "title": "India Inside — curated luxury journeys",
+  "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan silence.",
+  "cta_trailer": "Watch trailer",
+  "cta_join": "Request to join",
+
+  "steps_title": "India Inside chapters",
+  "steps_sub": "Choose a chapter — we will craft a personal route for you.",
+  "view": "Request to join the program",
+
+  "steps": {
+    "apply": {
+      "title": "Submit a request",
+      "desc": "Share your contacts and dates. We’ll reach out via WhatsApp/Telegram."
+    },
+    "call": {
+      "title": "Call with the curator",
+      "desc": "We clarify your goals and pick the right chapter and route."
+    },
+    "chapter": {
+      "title": "Travel — your chapter",
+      "desc": "Private or small group, 24/7 support."
+    },
+    "certificate": {
+      "title": "Certificate & Guru status",
+      "desc": "After 4 chapters — a digital certificate and Travella club access."
+    }
+  },
+
+  "chapters_title": "India Inside chapters",
+
+  "experience": {
+    "title": "What awaits you with India Inside",
+    "sub": "Refined routes created with love for India — its spirit, people and beauty.",
+    "cards": {
+      "palaces": {
+        "title": "Palaces and heritage",
+        "desc": "Stay in heritage hotels, feel the history, access usually closed locations."
+      },
+      "rituals": {
+        "title": "Rituals and traditions",
+        "desc": "Authentic ceremonies, spiritual guides, deep cultural immersion."
+      },
+      "wellness": {
+        "title": "Wellness & Ayurveda",
+        "desc": "Personal wellness programs, ancient healing practices and trusted therapists."
+      },
+      "yacht": {
+        "title": "Yacht & gastro-evening",
+        "desc": "Sunset, calm atmosphere, fine dining and soulful conversations."
+      }
+    }
+  },
+
+  "curated_badge": "Curated cultural journey",
+  "cta_get_program": "Get the program",
+  "cta_ask": "Ask a question",
+
+  "curator": {
+    "photo_alt": "India Inside curator",
+    "title": "Komil Akhmedov",
+    "subtitle": "Founder of Travella, curator of India Inside",
+    "p1": "For 12+ years I have been exploring India — its culture, modern cities, heritage and wellness.",
+    "p2": "India Inside is an author’s program based on private journeys and deep cultural immersion.",
+    "bullets": {
+      "one": "12+ years of routes in India",
+      "two": "Wellness, crafts and cultural practices",
+      "three": "Local experts and masters",
+      "four": "Personal guidance"
+    },
+    "disclaimer": "This is not a tour. It’s a cultural project."
+  },
 
   "guru": {
-    "title": "India Guru program",
-    "lead": "Complete all 4 India Inside chapters and earn the personal status «India Inside: Guru».",
+    "title": "Guru of India program",
+    "lead": "Complete all 4 India Inside chapters and receive the “India Inside: Guru” status.",
     "bullets": {
-      "one": "Tailor-made routes and a personal curator",
-      "two": "Private ceremonies and off-limits locations",
-      "three": "“Guru of India” certificate and Travella club",
-      "four": "By application only"
+      "one": "Personal curator and bespoke itineraries",
+      "two": "Closed ceremonies and normally inaccessible places",
+      "three": "“Guru” certificate and Travella club",
+      "four": "Entry by application only"
     },
     "certificate_label": "Certificate",
-    "certificate_meta": "Owner name • Date • Program ID",
-    "cta_apply": "Apply to join",
+    "certificate_meta": "Name • Date • Program ID",
+    "cta_apply": "Apply to participate",
     "cta_chapters": "View program chapters"
-  },
-"experience": {
-  "title": "What Awaits You with India Inside",
-  "sub": "Curated journeys crafted with love for India — its culture, people, and timeless beauty.",
-  "cards": {
-    "palaces": {
-      "title": "Palaces & Heritage",
-      "desc": "Stay in heritage palaces, private access experiences, spaces filled with history and grace."
-    },
-    "rituals": {
-      "title": "Rituals & Traditions",
-      "desc": "Authentic ceremonies, spiritual masters, and deep cultural immersion."
-    },
-    "wellness": {
-      "title": "Wellness & Ayurveda",
-      "desc": "Tailored rejuvenation programs, ancient healing rituals, and master-therapists."
-    },
-    "yacht": {
-      "title": "Yacht & Culinary Evening",
-      "desc": "Golden sunset, intimate setting, refined gastronomy, and slow conversations."
-    }
   }
-}
 },
     "ayurveda": {
       "h1": "Ayurveda & wellness",
