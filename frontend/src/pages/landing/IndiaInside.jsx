@@ -55,31 +55,35 @@ function GuruBlock({ onOpenLead }) {
                   {t("landing.inside.guru.bullets.four")}
                 </li>
               </ul>
-              <div className="relative overflow-hidden rounded-xl border border-white/20 bg-white/5 backdrop-blur-sm p-4">
-                <div className="rounded-lg bg-white/95 p-5 text-zinc-900 shadow-xl border border-zinc-200">
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                    Certificate
-                  </div>
-              
-                  <div className="mt-1 text-lg font-semibold">
-                    India Inside: Guru
-                  </div>
-              
-                  <div className="mt-2 text-xs text-zinc-500">
-                    Name • Date • Program ID
-                  </div>
-              
-                  <div className="relative mt-4 h-20 rounded-md bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 border border-amber-300/40 shadow-inner">
-                    <div className="absolute inset-0 flex items-center justify-center text-amber-900/10 text-xs font-medium tracking-widest">
-                      INDIA INSIDE • GURU
-                    </div>
-                  </div>
-              
-                  <div className="mt-3 text-right text-[10px] text-zinc-500">
-                    Travella • India Inside
-                  </div>
-                </div>
-              </div>
+<div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
+  <div className="w-[340px] min-h-[230px] rounded-xl bg-white p-4 text-zinc-900 shadow">
+    <div className="text-xs uppercase tracking-wider text-zinc-500">
+      {t("landing.inside.guru.certificate_label")}
+    </div>
+
+    <div className="mt-1 text-lg font-semibold">
+      India Inside: Guru
+    </div>
+
+    {/* Подпись к сертификату (переводимая строка) */}
+    <div className="mt-2 text-[11px] text-zinc-600">
+      {t("landing.inside.guru.certificate_meta")}
+    </div>
+
+    {/* Золотая полоса с примером реального участника */}
+    <div className="mt-4 h-20 w-full rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90">
+      <span>Komil Akhmedov</span>
+      <span className="mt-1 text-[10px] opacity-80">
+        12.11.2025 • ID: IN-GURU-78211
+      </span>
+    </div>
+
+    <div className="mt-3 text-right text-[10px] text-zinc-500">
+      Travella • India Inside
+    </div>
+  </div>
+</div>
+
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
