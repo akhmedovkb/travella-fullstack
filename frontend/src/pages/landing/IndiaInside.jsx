@@ -69,7 +69,7 @@ function GuruBlock({ onOpenLead }) {
 
                   {/* Логотип LL вместо текста India Inside: Guru */}
                   <div className="mt-2 mb-1 flex justify-start">
-                    <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2 shadow-[0_0_16px_rgba(248,197,120,0.85)]">
+                    <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2">
                       <img
                         src="/ll_logo2.png"
                         alt="LL logo"
@@ -96,10 +96,11 @@ function GuruBlock({ onOpenLead }) {
                   {/* Штамп + подпись */}
                   <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
                     <img
-                      src="/ll_logo.png" // маленький «золотой» знак как печать
+                      src="/ll_logo.png"
                       alt="LL stamp"
-                      className="h-7 w-7 rounded-full object-cover shadow-[0_0_6px_rgba(0,0,0,0.35)] border border-amber-200"
+                      className="h-7 w-7 rounded-full object-cover border border-amber-200"
                     />
+
                     <span className="tracking-wide text-zinc-500">
                       India Inside
                     </span>
