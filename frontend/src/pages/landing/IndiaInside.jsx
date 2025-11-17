@@ -55,61 +55,58 @@ function GuruBlock({ onOpenLead }) {
                 </li>
               </ul>
 
-{/* Сертификат */}
-<div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
-  <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
-    {/* Орнамент по краю */}
-    <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
-    <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
+              {/* Сертификат */}
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
+                <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
+                  {/* Орнамент по краю */}
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
+                  <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
 
-    {/* Заголовок-лейбл */}
-    <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-      {t("landing.inside.guru.certificate_label")}
-    </div>
+                  {/* Заголовок-лейбл */}
+                  <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    {t("landing.inside.guru.certificate_label")}
+                  </div>
 
-    {/* Логотип LL вместо текста India Inside: Guru */}
-    <div className="mt-2 mb-1 flex justify-start">
-      <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2">
-        <img
-          src="/ll_logo2.png"
-          alt="LL logo"
-          className="h-7 w-auto"
-        />
-      </div>
-    </div>
+                  {/* Логотип LL вместо текста India Inside: Guru */}
+                  <div className="mt-2 mb-1 flex justify-start">
+                    <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2">
+                      <img
+                        src="/ll_logo2.png"
+                        alt="LL logo"
+                        className="h-7 w-auto"
+                      />
+                    </div>
+                  </div>
 
-    {/* Декоративная линия-узор */}
-    <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
-      <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
-      <span className="px-2">India • Inside • Guru</span>
-      <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-200 to-transparent" />
-    </div>
+                  {/* Декоративная линия-узор */}
+                  <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
+                    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
+                    <span className="px-2">India • Inside • Guru</span>
+                    <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-200 to-transparent" />
+                  </div>
 
-    {/* Золотая плашка */}
-    <div className="mt-4 h-20 w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90 shadow-inner">
-      <span>Komil Akhmedov</span>
-      <span className="mt-1 text-[10px] opacity-85">
-        12.11.2025 • ID: IN-GURU-78211
-      </span>
-    </div>
+                  {/* Золотая плашка */}
+                  <div className="mt-4 h-20 w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90 shadow-inner">
+                    <span>Komil Akhmedov</span>
+                    <span className="mt-1 text-[10px] opacity-85">
+                      12.11.2025 • ID: IN-GURU-78211
+                    </span>
+                  </div>
 
-    {/* Штамп + подпись (местами поменяли) */}
-    <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
-      {/* слева текст */}
-      <span className="tracking-wide text-zinc-500">
-        India Inside
-      </span>
+                  {/* Штамп + подпись */}
+                  <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
+                    <img
+                      src="/ll_logo.png"
+                      alt="LL stamp"
+                      className="h-7 w-7 rounded-full object-cover border-0 shadow-none"
+                    />
 
-      {/* справа штамп */}
-      <img
-        src="/ll_logo.png"
-        alt="LL stamp"
-        className="h-7 w-7 rounded-full object-cover border-0 shadow-none"
-      />
-    </div>
-  </div>
-</div>
-
+                    <span className="tracking-wide text-zinc-500">
+                      India Inside
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
