@@ -312,7 +312,7 @@ export default function IndiaInside({ onOpenLead }) {
       {/* 1) Hero с трейлером */}
       <section className="relative overflow-hidden rounded-3xl bg-black text-white">
         <img
-          src="https://images.unsplash.com/photo-1519125263344-35456d2937b4?q=80&w=2000&auto=format&fit=crop"
+          src="/indiainside_1.jpg"
           alt=""
           className="absolute inset-0 h-full w-full object-cover opacity-40"
         />
