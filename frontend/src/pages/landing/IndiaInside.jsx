@@ -58,6 +58,7 @@ function GuruBlock({ onOpenLead }) {
 {/* Сертификат */}
 <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
   <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
+
     {/* Орнамент по краю */}
     <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
     <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
@@ -67,13 +68,15 @@ function GuruBlock({ onOpenLead }) {
       {t("landing.inside.guru.certificate_label")}
     </div>
 
-    {/* ВЕРХНИЙ ЭЛЕМЕНТ — БЫЛО НИЖНИЙ ШТАМП */}
+    {/* ВЕРХНИЙ ЛОГОТИП LL — теперь заметный */}
     <div className="mt-2 mb-1 flex justify-start">
-      <img
-        src="/ll_logo.png"
-        alt="LL stamp"
-        className="h-7 w-7 rounded-full object-cover border-0 shadow-none"
-      />
+      <div className="inline-flex items-center justify-center rounded-full bg-amber-100/90 px-2.5 py-2">
+        <img
+          src="/ll_logo2.png"
+          alt="LL logo"
+          className="h-9 w-auto"
+        />
+      </div>
     </div>
 
     {/* Декоративная линия */}
@@ -91,24 +94,20 @@ function GuruBlock({ onOpenLead }) {
       </span>
     </div>
 
-    {/* НИЖНИЙ ЭЛЕМЕНТ — БЫЛО ВЕРХНИЙ ЛОГОТИП */}
+    {/* Нижняя строка — текст слева, штамп справа */}
     <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
+
       <span className="tracking-wide text-zinc-500">
         India Inside
       </span>
 
-{/* Верхний логотип LL — более заметный */}
-<div className="mt-2 mb-1 flex justify-start">
-  <div className="inline-flex items-center justify-center rounded-full bg-amber-100/90 px-2.5 py-2">
-    <img
-      src="/ll_logo2.png"
-      alt="LL logo"
-      className="h-9 w-auto"
-    />
-  </div>
-</div>
-
+      <img
+        src="/ll_logo.png"
+        alt="LL stamp"
+        className="h-7 w-7 rounded-full object-cover border-0 shadow-none"
+      />
     </div>
+
   </div>
 </div>
 
