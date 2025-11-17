@@ -89,7 +89,7 @@ function GuruBlock({ onOpenLead }) {
 <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
   {/* Штамп / логотип */}
   <img
-    src="/ll_logo.png"
+    src="/ll_logo.PNG"
     alt="LL Stamp"
     className="h-5 w-auto opacity-90 drop-shadow-[0_0_2px_rgba(0,0,0,0.25)]"
   />
