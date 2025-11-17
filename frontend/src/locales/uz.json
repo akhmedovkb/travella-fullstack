@@ -1513,47 +1513,6 @@
         "request_failed": "So‘rovni yuborib bo‘lmadi"
       },
 
-      "program": {
-        "royal": {
-          "day1": "Dehli: kelish, transfer, oqshom brifingi",
-          "day2": "Agra: Tongda Toj Mahal, Agra qal’asi",
-          "day3": "Jaypur: Amberfort, Shamollar saroyi",
-          "day4": "Jaypur: shahar bo‘ylab ekskursiya",
-          "day5": "Dehli: zamonaviy Hindiston — san’at/moda/gastro",
-          "day6": "Bo‘sh kun / qo‘shimcha imkoniyatlar",
-          "day7": "Uchish"
-        },
-        "silence": {
-          "day1": "Udaypur: kelish, Pichola ko‘li, City Palace",
-          "day2": "Udaypur: ibodatxonalar, hunarmandchilik, kruiz",
-          "day3": "Jodxpurga yo‘l, ko‘k shahar",
-          "day4": "Jodxpur: Mehrangarh qal’asi",
-          "day5": "Jaysalmerga yo‘l, Oltin qal’a",
-          "day6": "Tar cho‘li: safari, kechki dasturxon",
-          "day7": "Dam olish / rezerv",
-          "day8": "Uchish"
-        },
-        "modern": {
-          "day1": "Mumbai: tur, dengiz bo‘yida sayr",
-          "day2": "Bollivud studiyalari / art hududlar",
-          "day3": "Goaga uchish, okean",
-          "day4": "Plyajlar, portugal merosi",
-          "day5": "Yaxta / quyosh botishi, gastro-kecha",
-          "day6": "Bo‘sh kun / wellness",
-          "day7": "Uchish"
-        },
-        "kerala": {
-          "day1": "Ko‘chi: shahar, Xitoy to‘rlari",
-          "day2": "Munnar: choy plantatsiyalari",
-          "day3": "Munnar: trekking / foto kun",
-          "day4": "Alleppi: houseboat",
-          "day5": "Backwaters, qishloqlar",
-          "day6": "Ayurveda markazi",
-          "day7": "Bo‘sh kun / dengiz",
-          "day8": "Uchish"
-        }
-      },
-
       "chapter_label": "Bo‘lim",
       "selected_chapter": "Tanlangan boʻlim",
       "details": {
@@ -1569,18 +1528,6 @@
         "silence": { "title": "Rajasthandagi sarguzashtlar" },
         "modern": { "title": "Mumbay + Goa" },
         "kerala": { "title": "Kerala" }
-      },
-
-      "program": {
-        "title": "Dastur boʻyicha kunlik reja",
-        "empty": "Kunlik dastur hali qo‘shilmagan",
-        "day1": "1-kun",
-        "day2": "2-kun",
-        "day3": "3-kun",
-        "day4": "4-kun",
-        "day5": "5-kun",
-        "day6": "6-kun",
-        "day7": "7-kun"
       },
 
       "chapter_countdown": {
@@ -1706,6 +1653,7 @@
     "from": "dan $790"
   }
 },
+  
 "program": {
   "royal": {
     "d1": "Dehli: kelish, transfer, kechki tanishtirish",
