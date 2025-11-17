@@ -66,9 +66,14 @@ function GuruBlock({ onOpenLead }) {
     <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
       {t("landing.inside.guru.certificate_label")}
     </div>
-    <div className="mt-1 text-lg font-semibold">
-      India Inside: Guru
-    </div>
+{/* Заголовок — заменён на лого */}
+<div className="mt-2 mb-1 flex justify-start">
+  <img
+    src="/ll_logo_2.png"
+    alt="Logo"
+    className="h-8 w-auto opacity-90 drop-shadow-[0_0_3px_rgba(0,0,0,0.2)]"
+  />
+</div>
 
     {/* Декоративная линия-узор */}
     <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
