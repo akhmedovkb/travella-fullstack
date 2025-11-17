@@ -86,15 +86,18 @@ function GuruBlock({ onOpenLead }) {
     </div>
 
     {/* Небольшой «штамп» внизу */}
-    <div className="mt-4 flex items-center justify-between text-[9px] text-zinc-500">
-      {/* Логотип вместо Travella */}
-      <img
-        src="/ll_logo.png"
-        alt="Travella logo"
-        className="h-4 opacity-70"
-      />
-      <span>India Inside</span>
-    </div>
+<div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
+  {/* Штамп / логотип */}
+  <img
+    src="/ll_logo.png"
+    alt="LL Stamp"
+    className="h-5 w-auto opacity-90 drop-shadow-[0_0_2px_rgba(0,0,0,0.25)]"
+  />
+
+  {/* Подпись программы */}
+  <span className="tracking-wide text-zinc-500">India Inside</span>
+</div>
+
   </div>
 </div>
             </div>
