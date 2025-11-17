@@ -71,7 +71,7 @@ function GuruBlock({ onOpenLead }) {
                   <div className="mt-2 mb-1 flex justify-start">
                     <div className="inline-flex items-center justify-center rounded-full bg-amber-50/90 px-3 py-2 shadow-[0_0_16px_rgba(248,197,120,0.85)]">
                       <img
-                        src="/ll_logo.png"
+                        src="/ll_logo2.png"
                         alt="LL logo"
                         className="h-7 w-auto"
                       />
