@@ -552,19 +552,7 @@ export default function IndiaInside({ onOpenLead }) {
             >
               {t("landing.inside.cta_trailer")}
             </button>
-            <a
-              href="#guru"
-              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium"
-              onClick={(e) => {
-                e.preventDefault();
-                document
-                  .getElementById("guru")
-                  ?.scrollIntoView({ behavior: "smooth" });
-              }}
-            >
-              {t("landing.inside.cta_join")}
-            </a>
-          </div>
+           </div>
         </div>
       </section>
 
