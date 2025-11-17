@@ -12,7 +12,7 @@ function GuruBlock({ onOpenLead }) {
         <img
           src="/indiainside_guru.jpg"
           alt=""
-          className="h-full w-full object-cover opacity-30"
+          className="h-full w-full object-cover opacity-70"
         />
         <div className="relative z-10 p-8 sm:p-12 lg:p-16">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
