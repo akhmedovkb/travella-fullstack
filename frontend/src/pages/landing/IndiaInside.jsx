@@ -354,7 +354,7 @@ export default function IndiaInside({ onOpenLead }) {
         {chapters.map((c) => (
           <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow flex flex-col">
             <div className="h-40 w-full overflow-hidden">
-              <img src={c.image} alt="" className="h-full w-full object-cover" />
+              <img src="/indiainside_guru.jpg" alt="" className="h-full w-full object-cover" />
             </div>
             <div className="p-4 flex flex-col grow">
               <div className="mb-1 text-xs text-amber-600">India Inside</div>
