@@ -10,7 +10,7 @@ function GuruBlock({ onOpenLead }) {
       id="guru"
       className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
     >
-      <div className="relative min-h-[380px] sm:min-h-[430px] lg:min-h-[480px]">
+      <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
         {/* фон + градиент */}
         <img
           src="/indiainside_guru.jpg"
