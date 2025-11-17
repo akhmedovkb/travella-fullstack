@@ -72,7 +72,7 @@ function GuruBlock({ onOpenLead }) {
       <img
         src="/ll_logo.png"
         alt="LL stamp"
-        className="h-7 w-7 rounded-full object-cover border-0 shadow-none"
+        className="h-9 w-9 rounded-full object-cover border-0 shadow-none"
       />
     </div>
 
