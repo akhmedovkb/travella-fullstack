@@ -6,69 +6,95 @@ import IndiaCurator from "./IndiaCurator";
 function GuruBlock({ onOpenLead }) {
   const { t } = useTranslation();
   return (
-    <section id="guru" className="mt-12 overflow-hidden rounded-3xl bg-black text-white">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
+    <section
+      id="guru"
+      className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
+    >
+      <div className="relative min-h-[380px] sm:min-h-[430px] lg:min-h-[480px]">
+        {/* фон + градиент */}
         <img
           src="/indiainside_guru.jpg"
           alt=""
-          className="h-full w-full object-cover opacity-70"
+          className="absolute inset-0 h-full w-full object-cover opacity-70"
         />
-        <div className="relative z-10 p-8 sm:p-12 lg:p-16">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            <span>{t("landing.inside.badge")}</span>
-            <span className="h-1 w-1 rounded-full bg-amber-500" />
-            <span>INSIDE</span>
-          </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
 
-          <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
-            {t("landing.inside.guru.title")}
-          </h2>
-          <p className="mt-3 max-w-2xl text-white/80">{t("landing.inside.guru.lead")}</p>
+        {/* Контент */}
+        <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
+              <span>{t("landing.inside.badge")}</span>
+              <span className="h-1 w-1 rounded-full bg-amber-500" />
+              <span>INSIDE</span>
+            </div>
 
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            <ul className="space-y-3 text-sm text-zinc-200">
-              <li><span className="dot" />{t("landing.inside.guru.bullets.one")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.two")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.three")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.four")}</li>
-            </ul>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+              {t("landing.inside.guru.title")}
+            </h2>
+            <p className="mt-3 max-w-2xl text-white/80">
+              {t("landing.inside.guru.lead")}
+            </p>
 
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
-                <div className="text-xs uppercase tracking-wider text-zinc-500">
-                  {t("landing.inside.guru.certificate_label")}
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <ul className="space-y-3 text-sm text-zinc-200">
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.one")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.two")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.three")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.four")}
+                </li>
+              </ul>
+
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
+                  <div className="text-xs uppercase tracking-wider text-zinc-500">
+                    {t("landing.inside.guru.certificate_label")}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold">
+                    India Inside: Guru
+                  </div>
+                  <div className="mt-2 text-xs text-zinc-600">
+                    {t("landing.inside.guru.certificate_meta")}
+                  </div>
+                  <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
+                  <div className="mt-3 text-right text-[10px] text-zinc-500">
+                    Travella • India Inside
+                  </div>
                 </div>
-                <div className="mt-1 text-lg font-semibold">India Inside: Guru</div>
-                <div className="mt-2 text-xs text-zinc-600">
-                  {t("landing.inside.guru.certificate_meta")}
-                </div>
-                <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
-                <div className="mt-3 text-right text-[10px] text-zinc-500">Travella • India Inside</div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            {/* Открываем модалку со степами, которая затем ведёт в LeadModal */}
-            <button
-              onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
-              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
-            >
-              {t("landing.inside.guru.cta_apply")}
-            </button>
-            <a
-              href="#chapters"
-              className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
-            >
-              {t("landing.inside.guru.cta_chapters")}
-            </a>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
+                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
+              >
+                {t("landing.inside.guru.cta_apply")}
+              </button>
+              <a
+                href="#chapters"
+                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
+              >
+                {t("landing.inside.guru.cta_chapters")}
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </section>
   );
 }
+
 
 function InsideProgramModal() {
   const { t } = useTranslation();
