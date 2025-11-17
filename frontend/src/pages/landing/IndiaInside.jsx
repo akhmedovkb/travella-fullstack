@@ -402,7 +402,7 @@ export default function IndiaInside({ onOpenLead }) {
       ),
       days: t("landing.inside.chapters.silence.days", "8–9 дней"),
       from: t("landing.inside.chapters.silence.from", "от $890"),
-      image: "/indiainside_2.jpg",
+      image: "/rajastan1.jpg",
       program: [
         t(
           "landing.inside.program.silence.d1",
@@ -447,7 +447,7 @@ export default function IndiaInside({ onOpenLead }) {
       ),
       days: t("landing.inside.chapters.modern.days", "7 дней"),
       from: t("landing.inside.chapters.modern.from", "от $490"),
-      image: "/indiainside_3.jpg",
+      image: "/mumbaigoa.jpg",
       program: [
         t(
           "landing.inside.program.modern.d1",
@@ -488,7 +488,7 @@ export default function IndiaInside({ onOpenLead }) {
       ),
       days: t("landing.inside.chapters.kerala.days", "8–9 дней"),
       from: t("landing.inside.chapters.kerala.from", "от $790"),
-      image: "/kerala_01.jpg",
+      image: "/kerala1.jpg",
       program: [
         t(
           "landing.inside.program.kerala.d1",
