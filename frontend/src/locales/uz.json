@@ -1538,12 +1538,6 @@
       "status_active": "Faol",
       "status_completed": "Yakunlangan",
 
-      "actions": {
-        "open": "Ochish",
-        "collapse": "Yig‘ish",
-        "expand": "Kengaytirish"
-      },
-
       "toast": {
         "request_sent": "So‘rov yuborildi",
         "request_error": "So‘rovni yuborib bo‘lmadi"
