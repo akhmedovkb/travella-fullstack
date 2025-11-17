@@ -6,18 +6,19 @@ import IndiaCurator from "./IndiaCurator";
 function GuruBlock({ onOpenLead }) {
   const { t } = useTranslation();
   return (
-    <section
-      id="guru"
-      className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
-    >
-      <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
-        {/* фон + градиент */}
-        <img
-          src="/indiainside_guru.jpg"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-70"
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
+      <section
+        id="guru"
+        className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
+      >
+        <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
+          {/* фон + градиент */}
+          <img
+            src="/indiainside_guru.jpg"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* делаем градиент полупрозрачным, чтобы горы были видны */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/70 to-black/20" />
 
         {/* Контент */}
         <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
