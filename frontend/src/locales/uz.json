@@ -1445,7 +1445,7 @@
       "dates_block": {
         "title": "Turlar sanalari",
         "tour_dates_label": "Tur sanalari:",
-        "places_label": "Bob bo‘yicha joylar:",
+        "places_label": "Tur bo‘yicha joylar:",
         "limit": "Limit: {{value}}",
         "enrolled": "Qabul qilingan: {{value}}",
         "left": "Bo‘sh: {{value}}",
