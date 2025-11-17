@@ -55,35 +55,45 @@ function GuruBlock({ onOpenLead }) {
                   {t("landing.inside.guru.bullets.four")}
                 </li>
               </ul>
+              
 <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
-  <div className="w-[340px] min-h-[230px] rounded-xl bg-white p-4 text-zinc-900 shadow">
-    <div className="text-xs uppercase tracking-wider text-zinc-500">
+  <div className="relative w-[340px] min-h-[230px] rounded-2xl bg-white/95 p-4 text-zinc-900 shadow-lg shadow-amber-500/10 border border-amber-100 overflow-hidden">
+    {/* Лёгкий орнамент по краю */}
+    <div className="pointer-events-none absolute inset-0 rounded-2xl border border-amber-100/70" />
+    <div className="pointer-events-none absolute inset-3 rounded-2xl border border-amber-50/60" />
+
+    {/* Заголовок */}
+    <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">
       {t("landing.inside.guru.certificate_label")}
     </div>
-
     <div className="mt-1 text-lg font-semibold">
       India Inside: Guru
     </div>
 
-    {/* Подпись к сертификату (переводимая строка) */}
-    <div className="mt-2 text-[11px] text-zinc-600">
-      {t("landing.inside.guru.certificate_meta")}
+    {/* Декоративная линия-узор */}
+    <div className="mt-3 flex items-center text-[9px] tracking-[0.3em] text-amber-700/70 uppercase">
+      <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-200 to-transparent" />
+      <span className="px-2">India • Inside • Guru</span>
+      <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-200 to-transparent" />
     </div>
 
-    {/* Золотая полоса с примером реального участника */}
-    <div className="mt-4 h-20 w-full rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90">
+    {/* Золотая плашка с реальным примером */}
+    <div className="mt-4 h-20 w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90 shadow-inner">
       <span>Komil Akhmedov</span>
-      <span className="mt-1 text-[10px] opacity-80">
+      <span className="mt-1 text-[10px] opacity-85">
         12.11.2025 • ID: IN-GURU-78211
       </span>
     </div>
 
-    <div className="mt-3 text-right text-[10px] text-zinc-500">
-      Travella • India Inside
+    {/* Небольшой «штамп» внизу */}
+    <div className="mt-4 flex items-center justify-between text-[9px] text-zinc-500">
+      <span className="rounded-full border border-amber-200 px-2 py-0.5 uppercase tracking-[0.2em]">
+        Travella
+      </span>
+      <span>India Inside</span>
     </div>
   </div>
 </div>
-
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
