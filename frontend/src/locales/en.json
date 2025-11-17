@@ -1407,42 +1407,42 @@
 
   "program": {
     "royal": {
-      "day1": "Delhi: arrival, transfer, evening briefing",
-      "day2": "Agra: Taj Mahal at sunrise, Agra Fort",
-      "day3": "Jaipur: Amber Fort, Hawa Mahal",
-      "day4": "Jaipur: city tour, crafts",
-      "day5": "Delhi: modern India — art/fashion/gastro",
-      "day6": "Free day / optional experiences",
-      "day7": "Departure"
+      "d1": "Delhi: arrival, transfer, evening briefing",
+      "d2": "Agra: Taj Mahal at sunrise, Agra Fort",
+      "d3": "Jaipur: Amber Fort, Hawa Mahal",
+      "d4": "Jaipur: city tour, crafts",
+      "d5": "Delhi: modern India — art/fashion/gastro",
+      "d6": "Free day / optional experiences",
+      "d7": "Departure"
     },
     "silence": {
-      "day1": "Udaipur: arrival, Lake Pichola, City Palace",
-      "day2": "Udaipur: temples, crafts, evening cruise",
-      "day3": "Drive to Jodhpur, walk in the Blue City",
-      "day4": "Jodhpur: Mehrangarh Fort, rooftop sunset",
-      "day5": "Drive to Jaisalmer, Golden Fort and havelis",
-      "day6": "Thar desert: dunes safari, dinner by the fire",
-      "day7": "Free day / master-class",
-      "day8": "Departure"
+      "d1": "Udaipur: arrival, Lake Pichola, City Palace",
+      "d2": "Udaipur: temples, crafts, evening cruise",
+      "d3": "Drive to Jodhpur, walk in the Blue City",
+      "d4": "Jodhpur: Mehrangarh Fort, rooftop sunset",
+      "d5": "Drive to Jaisalmer, Golden Fort and havelis",
+      "d6": "Thar desert: dunes safari, dinner by the fire",
+      "d7": "Free day / master-class",
+      "d8": "Departure"
     },
     "modern": {
-      "day1": "Mumbai: half-day tour, seaside walk",
-      "day2": "Bollywood studios / art districts",
-      "day3": "Flight to Goa, ocean",
-      "day4": "Beaches, Old Goa, Portuguese heritage",
-      "day5": "Yacht / sunset, gourmet dinner",
-      "day6": "Free day / wellness",
-      "day7": "Departure"
+      "d1": "Mumbai: half-day tour, seaside walk",
+      "d2": "Bollywood studios / art districts",
+      "d3": "Flight to Goa, ocean",
+      "d4": "Beaches, Old Goa, Portuguese heritage",
+      "d5": "Yacht / sunset, gourmet dinner",
+      "d6": "Free day / wellness",
+      "d7": "Departure"
     },
     "kerala": {
-      "day1": "Kochi: city, Chinese fishing nets, old town",
-      "day2": "Munnar: tea plantations, viewpoints",
-      "day3": "Munnar: trekking / photo day",
-      "day4": "Alleppey: check-in to houseboat",
-      "day5": "Backwaters, villages, local cuisine",
-      "day6": "Ayurveda center, individual program",
-      "day7": "Free day / sea",
-      "day8": "Departure"
+      "d1": "Kochi: city, Chinese fishing nets, old town",
+      "d2": "Munnar: tea plantations, viewpoints",
+      "d3": "Munnar: trekking / photo day",
+      "d4": "Alleppey: check-in to houseboat",
+      "d5": "Backwaters, villages, local cuisine",
+      "d6": "Ayurveda center, individual program",
+      "d7": "Free day / sea",
+      "d8": "Departure"
     },
 
     "title": "Day-by-day program",
