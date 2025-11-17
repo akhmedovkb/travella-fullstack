@@ -6,69 +6,107 @@ import IndiaCurator from "./IndiaCurator";
 function GuruBlock({ onOpenLead }) {
   const { t } = useTranslation();
   return (
-    <section id="guru" className="mt-12 overflow-hidden rounded-3xl bg-black text-white">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-black via-black/80 to-zinc-900" />
-        <img
-          src="https://images.unsplash.com/photo-1549880338-65ddcdfd017b?q=80&w=2000&auto=format&fit=crop"
-          alt=""
-          className="h-full w-full object-cover opacity-30"
-        />
-        <div className="relative z-10 p-8 sm:p-12 lg:p-16">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
-            <span>{t("landing.inside.badge")}</span>
-            <span className="h-1 w-1 rounded-full bg-amber-500" />
-            <span>INSIDE</span>
-          </div>
+      <section
+        id="guru"
+        className="mt-10 overflow-hidden rounded-3xl bg-black text-white"
+      >
+        <div className="relative min-h-[480px] sm:min-h-[430px] lg:min-h-[480px]">
+          {/* фон + градиент */}
+          <img
+            src="/indiainside_guru.jpg"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* делаем градиент полупрозрачным, чтобы горы были видны */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/10" />
 
-          <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
-            {t("landing.inside.guru.title")}
-          </h2>
-          <p className="mt-3 max-w-2xl text-white/80">{t("landing.inside.guru.lead")}</p>
-
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            <ul className="space-y-3 text-sm text-zinc-200">
-              <li><span className="dot" />{t("landing.inside.guru.bullets.one")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.two")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.three")}</li>
-              <li><span className="dot" />{t("landing.inside.guru.bullets.four")}</li>
-            </ul>
-
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="rounded-xl bg-white p-4 text-zinc-900 shadow">
-                <div className="text-xs uppercase tracking-wider text-zinc-500">
-                  {t("landing.inside.guru.certificate_label")}
-                </div>
-                <div className="mt-1 text-lg font-semibold">India Inside: Guru</div>
-                <div className="mt-2 text-xs text-zinc-600">
-                  {t("landing.inside.guru.certificate_meta")}
-                </div>
-                <div className="mt-4 h-20 rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200" />
-                <div className="mt-3 text-right text-[10px] text-zinc-500">Travella • India Inside</div>
-              </div>
+        {/* Контент */}
+        <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs tracking-wider">
+              <span>{t("landing.inside.badge")}</span>
+              <span className="h-1 w-1 rounded-full bg-amber-500" />
+              <span>INSIDE</span>
             </div>
-          </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            {/* Открываем модалку со степами, которая затем ведёт в LeadModal */}
-            <button
-              onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
-              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
-            >
-              {t("landing.inside.guru.cta_apply")}
-            </button>
-            <a
-              href="#chapters"
-              className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
-            >
-              {t("landing.inside.guru.cta_chapters")}
-            </a>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">
+              {t("landing.inside.guru.title")}
+            </h2>
+            <p className="mt-3 max-w-2xl text-white/80">
+              {t("landing.inside.guru.lead")}
+            </p>
+
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <ul className="space-y-3 text-sm text-zinc-200">
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.one")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.two")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.three")}
+                </li>
+                <li>
+                  <span className="dot" />
+                  {t("landing.inside.guru.bullets.four")}
+                </li>
+              </ul>
+<div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 flex justify-center">
+  <div className="w-[340px] min-h-[230px] rounded-xl bg-white p-4 text-zinc-900 shadow">
+    <div className="text-xs uppercase tracking-wider text-zinc-500">
+      {t("landing.inside.guru.certificate_label")}
+    </div>
+
+    <div className="mt-1 text-lg font-semibold">
+      India Inside: Guru
+    </div>
+
+    {/* Подпись к сертификату (переводимая строка) */}
+    <div className="mt-2 text-[11px] text-zinc-600">
+      {t("landing.inside.guru.certificate_meta")}
+    </div>
+
+    {/* Золотая полоса с примером реального участника */}
+    <div className="mt-4 h-20 w-full rounded-lg bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 flex flex-col justify-center px-4 text-[11px] font-medium text-amber-900/90">
+      <span>Komil Akhmedov</span>
+      <span className="mt-1 text-[10px] opacity-80">
+        12.11.2025 • ID: IN-GURU-78211
+      </span>
+    </div>
+
+    <div className="mt-3 text-right text-[10px] text-zinc-500">
+      Travella • India Inside
+    </div>
+  </div>
+</div>
+
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new Event("openStepsApply"))}
+                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-black"
+              >
+                {t("landing.inside.guru.cta_apply")}
+              </button>
+              <a
+                href="#chapters"
+                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10"
+              >
+                {t("landing.inside.guru.cta_chapters")}
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </section>
   );
 }
+
 
 function InsideProgramModal() {
   const { t } = useTranslation();
@@ -354,7 +392,7 @@ export default function IndiaInside({ onOpenLead }) {
         {chapters.map((c) => (
           <article key={c.key} className="overflow-hidden rounded-2xl bg-white shadow flex flex-col">
             <div className="h-40 w-full overflow-hidden">
-              <img src={c.image} alt="" className="h-full w-full object-cover" />
+              <img src="/indiainside_guru.jpg" alt="" className="h-full w-full object-cover" />
             </div>
             <div className="p-4 flex flex-col grow">
               <div className="mb-1 text-xs text-amber-600">India Inside</div>
