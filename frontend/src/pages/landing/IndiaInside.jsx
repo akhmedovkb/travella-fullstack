@@ -96,7 +96,7 @@ function GuruBlock({ onOpenLead }) {
                   {/* Штамп + подпись */}
                   <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500">
                     <img
-                      src="/goldtri.jpg" // маленький «золотой» знак как печать
+                      src="/ll_logo.png" // маленький «золотой» знак как печать
                       alt="LL stamp"
                       className="h-7 w-7 rounded-full object-cover shadow-[0_0_6px_rgba(0,0,0,0.35)] border border-amber-200"
                     />
