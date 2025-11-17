@@ -1367,7 +1367,9 @@
     "chapters_hint": "Tap a chapter to see the program and dates.",
     "chapter_label": "Chapter {{num}}",
 
-    "details_toggle": "Details for the selected chapter",
+    "details": {
+      "toggle_label": "Details for the selected chapter"
+    },
 
     "selected_title": "Selected chapter",
     "program_by_days": "Day-by-day program",
