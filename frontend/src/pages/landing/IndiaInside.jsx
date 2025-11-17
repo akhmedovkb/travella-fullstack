@@ -18,7 +18,7 @@ function GuruBlock({ onOpenLead }) {
             className="absolute inset-0 h-full w-full object-cover"
           />
           {/* делаем градиент полупрозрачным, чтобы горы были видны */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/70 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/10" />
 
         {/* Контент */}
         <div className="relative z-10 flex h-full items-start p-6 sm:p-10 lg:p-12">
