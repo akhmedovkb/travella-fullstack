@@ -87,9 +87,12 @@ function GuruBlock({ onOpenLead }) {
 
     {/* Небольшой «штамп» внизу */}
     <div className="mt-4 flex items-center justify-between text-[9px] text-zinc-500">
-      <span className="rounded-full border border-amber-200 px-2 py-0.5 uppercase tracking-[0.2em]">
-        Travella
-      </span>
+      {/* Логотип вместо Travella */}
+      <img
+        src="/ll_logo.png"
+        alt="Travella logo"
+        className="h-4 opacity-70"
+      />
       <span>India Inside</span>
     </div>
   </div>
