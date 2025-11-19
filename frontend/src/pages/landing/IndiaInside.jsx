@@ -604,58 +604,61 @@ export default function IndiaInside({ onOpenLead }) {
         ))}
       </div>
 
-      <section id="experience" className="mt-24">
-        {/* как в твоём исходнике */}
-      </section>
-      {/* 4) Что вас ждёт */}
-      <section id="experience" className="mt-24">
-        <h2 className="text-2xl font-semibold">
-          {t("landing.inside.experience.title")}
-        </h2>
-        <p className="mt-1 text-gray-600">
-          {t("landing.inside.experience.sub")}
-        </p>
+{/* 4) Что вас ждёт */}
+<section id="experience" className="mt-24">
+  <h2 className="text-2xl font-semibold">
+    {t("landing.inside.experience.title")}
+  </h2>
+  <p className="mt-1 text-gray-600">
+    {t("landing.inside.experience.sub")}
+  </p>
 
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              key: "palaces",
-              img: "https://images.unsplash.com/photo-1580657361856-d6b8d63d2c3f?q=80",
-            },
-            {
-              key: "rituals",
-              img: "https://images.unsplash.com/photo-1508672019048-805c876b67e2?q=80",
-            },
-            {
-              key: "wellness",
-              img: "https://images.unsplash.com/photo-1526139492921-1e30d1cb001c?q=80",
-            },
-            {
-              key: "yacht",
-              img: "https://images.unsplash.com/photo-1596716483986-d2d4b6de58a4?q=80",
-            },
-          ].map((c) => (
-            <div
-              key={c.key}
-              className="overflow-hidden rounded-2xl bg-white shadow"
-            >
-              <img
-                src={c.img}
-                alt=""
-                className="h-32 w-full object-cover"
-              />
-              <div className="p-4">
-                <div className="font-semibold text-lg">
-                  {t(`landing.inside.experience.cards.${c.key}.title`)}
-                </div>
-                <p className="mt-2 text-sm text-gray-600">
-                  {t(`landing.inside.experience.cards.${c.key}.desc`)}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+  {/* Хоризонтальная карусель на мобиле, сетка на десктопе */}
+  <div className="mt-8 overflow-x-auto pb-4 -mx-4 sm:mx-0 sm:overflow-visible">
+    <div className="flex gap-4 snap-x snap-mandatory sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:snap-none sm:gap-6">
+      {[
+        {
+          key: "palaces",
+          img: "/rajwada1.jpg", 
+        },
+        {
+          key: "rituals",
+          img: "/inside_rituals.jpg",
+        },
+        {
+          key: "wellness",
+          img: "/inside_wellness.jpg",
+        },
+        {
+          key: "yacht",
+          img: "/inside_yacht.jpg",
+        },
+      ].map((c) => (
+        <article
+          key={c.key}
+          className="snap-center shrink-0 w-[260px] sm:w-auto rounded-2xl bg-white shadow transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg"
+        >
+          <div className="h-40 w-full overflow-hidden rounded-t-2xl">
+            <img
+              src={c.img}
+              alt={t(`landing.inside.experience.cards.${c.key}.title`)}
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div className="p-4">
+            <h3 className="font-semibold text-gray-900 text-base">
+              {t(`landing.inside.experience.cards.${c.key}.title`)}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              {t(`landing.inside.experience.cards.${c.key}.desc`)}
+            </p>
+          </div>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
 
       <IndiaCurator photo="/komil.jpg" onOpenLead={onOpenLead} />
 
