@@ -1,15 +1,18 @@
 {
-  "redirects": [
+  "rewrites": [
     {
       "source": "/",
       "destination": "/india/inside",
-      "statusCode": 308,
       "has": [
         {
           "type": "host",
           "value": "india.travella.uz"
         }
       ]
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
