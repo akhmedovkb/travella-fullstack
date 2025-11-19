@@ -12,28 +12,28 @@ export default function IndiaNav() {
   ];
 
   return (
-    <div
-      className="
-        mx-auto mb-6 
-        w-full rounded-2xl bg-white px-4 py-2
-        flex justify-center
-        shadow-sm
-        overflow-x-auto scrollbar-hide
-      "
-    >
-      <div className="flex gap-2 py-1">
+    <div className="mx-auto mb-6 w-full flex justify-center">
+      <div
+        className="
+          inline-flex max-w-full gap-2
+          rounded-3xl bg-white/70 px-3 py-2
+          shadow-lg ring-1 ring-amber-100/60
+          backdrop-blur-md
+          overflow-x-auto scrollbar-hide
+        "
+      >
         {tabs.map((t) => (
           <NavLink
             key={t.id}
             to={t.to}
             className={({ isActive }) =>
               `
-                px-5 py-2 rounded-xl text-sm font-medium whitespace-nowrap
-                transition-all duration-150
+                px-5 py-2 rounded-2xl text-sm font-medium whitespace-nowrap
+                transition-all duration-200
                 ${
                   isActive
-                    ? "bg-orange-500 text-white shadow-sm"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                    : "text-gray-700 hover:bg-amber-50 hover:text-amber-700"
                 }
               `
             }
@@ -42,33 +42,6 @@ export default function IndiaNav() {
           </NavLink>
         ))}
       </div>
-    </div>
-  );
-}
-
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      {/* остальное — опыт, куратор, модалки */}
-      {/* ... ниже твой существующий код без изменений ... */}
-
-      <section id="experience" className="mt-24">
-        {/* как в твоём исходнике */}
-      </section>
-
-      <IndiaCurator photo="/komil.jpg" onOpenLead={onOpenLead} />
-
-      <InsideProgramModal />
-      <ChapterProgramModal
-        open={programOpen}
-        chapter={chapterForProgram}
-        onClose={() => setProgramOpen(false)}
-        onOpenLead={onOpenLead}
-      />
-      <StepsApplyModal onOpenLead={onOpenLead} />
     </div>
   );
 }
