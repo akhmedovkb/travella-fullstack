@@ -13,39 +13,73 @@ export default function IndiaNav() {
 
   return (
     <div className="mx-auto mb-6 w-full flex justify-center">
+      {/* внешняя «капсула» */}
       <div
         className="
-          inline-flex max-w-full gap-1
-          rounded-[28px] bg-white px-5 py-3
+          inline-flex max-w-full items-center
+          rounded-[32px] bg-amber-50/70 px-3 py-2
           shadow-sm ring-1 ring-amber-100
-          overflow-x-auto scrollbar-hide
         "
       >
-        {tabs.map((t, idx) => (
-          <div key={t.id} className="flex items-center">
-            <NavLink
-              to={t.to}
-              className={({ isActive }) =>
-                `
-                  px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap
-                  tracking-wide transition-all
-                  ${
-                    isActive
-                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm"
-                      : "text-gray-700 hover:text-amber-600 hover:bg-amber-50"
-                  }
-                `
-              }
-            >
-              {t.label}
-            </NavLink>
+        {/* внутренняя дорожка с табами */}
+        <div
+          className="
+            flex max-w-full items-center gap-1
+            rounded-[28px] bg-white/95 px-4 py-2
+            shadow-sm
+            overflow-x-auto scrollbar-hide
+          "
+        >
+          {tabs.map((t, idx) => (
+            <div key={t.id} className="flex items-center">
+              <NavLink
+                to={t.to}
+                className={({ isActive }) =>
+                  `
+                    relative px-5 py-2 rounded-2xl
+                    text-sm font-medium whitespace-nowrap tracking-wide
+                    transition-all duration-200
+                    ${
+                      isActive
+                        ? `
+                          bg-gradient-to-r from-orange-500 to-amber-500
+                          text-white shadow-md
+                          ring-1 ring-amber-300/70
+                          scale-[1.02]
+                        `
+                        : `
+                          text-gray-700
+                          hover:text-amber-700 hover:bg-amber-50
+                        `
+                    }
+                  `
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span>{t.label}</span>
+                    {isActive && (
+                      <span
+                        className="
+                          pointer-events-none absolute inset-x-4 -bottom-1
+                          h-[2px] rounded-full
+                          bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200
+                        "
+                      />
+                    )}
+                  </>
+                )}
+              </NavLink>
 
-            {/* золотая точка между пунктами */}
-            {idx !== tabs.length - 1 && (
-              <span className="mx-3 text-[8px] text-amber-400 select-none">•</span>
-            )}
-          </div>
-        ))}
+              {/* разделитель между табами */}
+              {idx !== tabs.length - 1 && (
+                <span className="mx-3 text-[7px] text-amber-300 select-none">
+                  •
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
