@@ -1,5 +1,5 @@
 {
-  "rewrites": [
+  "redirects": [
     {
       "source": "/",
       "destination": "/india/inside",
@@ -8,8 +8,11 @@
           "type": "host",
           "value": "india.travella.uz"
         }
-      ]
-    },
+      ],
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
