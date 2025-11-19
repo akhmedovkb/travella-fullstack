@@ -309,13 +309,14 @@ export default function Header() {
             {/* центрируем вторую строку */}
             <div className="py-2 flex items-center justify-center gap-2">
               {/* Продукты */}
-              <nav className="flex items-center gap-1">
-                <NavItem to="/marketplace" label="MARKETPLACE" />
-                {role === "provider" && (
-                  <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-                )}
-                <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-              </nav>
+            <nav className="flex items-center gap-1">
+              <NavItem to="/" label="MARKETPLACE" end />
+              {role === "provider" && (
+                <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              )}
+              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </nav>
+
               {/* разделитель */}
               <div className="mx-2 h-5 w-px bg-gray-200" />
               
