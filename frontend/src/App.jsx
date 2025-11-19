@@ -52,7 +52,6 @@ import AdminEntryFees from "./pages/AdminEntryFees";
 // Landing
 import IndiaLayout from "./pages/landing/IndiaLayout";
 import LandingHome from "./pages/landing/Home";
-//import Tours from "./pages/landing/Tours";
 import Ayurveda from "./pages/landing/Ayurveda";
 import Checkup from "./pages/landing/Checkup";
 import Treatment from "./pages/landing/Treatment";
@@ -60,7 +59,7 @@ import B2B from "./pages/landing/B2B";
 import Clinics from "./pages/landing/Clinics";
 import Contacts from "./pages/landing/Contacts";
 
-//IndiaInside
+// IndiaInside
 import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
 
 function ClientPrivateRoute({ children }) {
@@ -97,14 +96,15 @@ function AdminRoute({ children }) {
       roles.some((r) => ["admin", "moderator", "super", "root"].includes(r)) ||
       perms.some((x) => ["moderation", "admin:moderation"].includes(x));
 
-    return isAdmin ? children : <Navigate to="/marketplace" replace />;
+    return isAdmin ? children : <Navigate to="/" replace />;
   } catch {
-    return <Navigate to="/marketplace" replace />;
+    return <Navigate to="/" replace />;
   }
 }
 
 export default function App() {
   const [leadOpen, setLeadOpen] = React.useState(false);
+
   return (
     <Router>
       <ToastMount />
@@ -112,21 +112,27 @@ export default function App() {
         <Header />
         <main className="flex-1 p-4">
           <Routes>
-            {/* --- Публичный лендинг --- */}
-            <Route path="/" element={<LandingHome />} />
+            {/* --- Главная: сразу MARKETPLACE --- */}
+            <Route path="/" element={<Marketplace />} />
+
+            {/* Старый лендинг, если понадобится отдельно */}
+            <Route path="/landing" element={<LandingHome />} />
 
             {/* --- INDIA namespace --- */}
             <Route path="/india" element={<IndiaLayout />}>
-              {/* по адресу /india сразу отправляем в /india/inside */}
+              {/* /india → /india/inside */}
               <Route index element={<Navigate to="inside" replace />} />
-            
-              {/* /india/inside — единственная главная страница Индии */}
-              <Route path="inside" element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />} />
-            
+
+              {/* /india/inside — главная India Inside */}
+              <Route
+                path="inside"
+                element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />}
+              />
+
               {/* легаси: /india/tours → /india/inside */}
               <Route path="tours" element={<Navigate to="/india/inside" replace />} />
-            
-              {/* остальные разделы Индии без изменений */}
+
+              {/* остальные разделы Индии */}
               <Route path="ayurveda" element={<Ayurveda />} />
               <Route path="checkup" element={<Checkup />} />
               <Route path="treatment" element={<Treatment />} />
@@ -134,7 +140,6 @@ export default function App() {
               <Route path="clinics" element={<Clinics />} />
               <Route path="contacts" element={<Contacts />} />
             </Route>
-
 
             {/* --- Редиректы со старых путей на /india/* --- */}
             <Route path="/tours" element={<Navigate to="/india/inside" replace />} />
@@ -181,6 +186,8 @@ export default function App() {
               }
             />
             <Route path="/profile/provider/:id" element={<ProviderProfile />} />
+
+            {/* Алиас старого пути MARKETPLACE */}
             <Route path="/marketplace" element={<Marketplace />} />
 
             {/* Клиент */}
@@ -284,7 +291,7 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <AdminRoute>
-                    <AdminInsideRequests  />
+                    <AdminInsideRequests />
                   </AdminRoute>
                 </PrivateRoute>
               }
@@ -300,7 +307,7 @@ export default function App() {
             <Route path="/templates" element={<TemplateCreator />} />
 
             {/* Fallback — всегда последним */}
-            <Route path="*" element={<Navigate to="/marketplace" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
         <Footer />
