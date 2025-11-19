@@ -19,11 +19,13 @@ const BASE_WHITELIST = [
   "http://localhost:5173",
   "https://travella.uz",
   "https://www.travella.uz",
+  "https://india.travella.uz",                // ← ДОБАВИЛ ЭТУ СТРОКУ
   "https://travella-fullstack.vercel.app",
   "https://travella-fullstack-q0ayptios-komil.vercel.app", // из логов
   "https://travella-fullstack-8yle5am3l-komil.vercel.app", // старое превью
   process.env.FRONTEND_URL || "",
 ];
+
 
 // добираем из ENV (если задано)
 const ENV_WHITELIST = (process.env.CORS_ORIGINS || "")
