@@ -389,13 +389,13 @@ export default function Header() {
             )}
 
             {/* Продукты */}
-            <RowGroup title={t("nav.products","Продукты")}>
-              <NavItemMobile to="/marketplace" label="MARKETPLACE" />
-              {role === "provider" && (
-                <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
-              <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-            </RowGroup>
+          <RowGroup title={t("nav.products","Продукты")}>
+            <NavItemMobile to="/marketplace" label="MARKETPLACE" />
+            {role === "provider" && (
+              <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+            )}
+            <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+          </RowGroup>
 
             {/* Админ */}
             {isAdmin && (
