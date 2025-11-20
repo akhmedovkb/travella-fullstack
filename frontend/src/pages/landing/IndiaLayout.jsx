@@ -1,9 +1,12 @@
 // frontend/src/pages/landing/IndiaLayout.jsx
 import React from "react";
 import { Outlet, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import IndiaNav from "../../components/IndiaNav";
 
 export default function IndiaLayout() {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-gray-50">
       {/* Верхняя плашка India-навигации + кнопки входа */}
@@ -15,17 +18,17 @@ export default function IndiaLayout() {
               to="/client/login"
               className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
             >
-              Войти как клиент
+              {t("landing.india.login_client", "Войти как клиент")}
             </Link>
             <Link
               to="/login"
               className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
             >
-              Войти как поставщик
+              {t("landing.india.login_provider", "Войти как поставщик")}
             </Link>
           </div>
 
-          {/* 2-я строка: сами India-табы, по центру */}
+          {/* 2-я строка: India-табы по центру */}
           <IndiaNav />
         </div>
       </div>
