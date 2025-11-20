@@ -5,41 +5,32 @@ import IndiaNav from "../../components/IndiaNav";
 
 export default function IndiaLayout() {
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-16">
-      {/* Верхний блок: табы India + кнопки входа */}
-      <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {/* Табы India Inside / Ayurveda / ... */}
-        <IndiaNav />
+    <div className="bg-gray-50">
+      {/* Верхняя плашка India-навигации + кнопки входа */}
+      <div className="border-b border-orange-100/70 bg-orange-50/40">
+        <div className="mx-auto max-w-7xl px-4 pt-6 pb-4">
+          {/* 1-я строка: кнопки входа справа */}
+          <div className="mb-4 flex justify-end gap-3">
+            <Link
+              to="/client/login"
+              className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+            >
+              Войти как клиент
+            </Link>
+            <Link
+              to="/login"
+              className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+            >
+              Войти как поставщик
+            </Link>
+          </div>
 
-        {/* Кнопки «Войти как клиент / поставщик» */}
-        <div className="flex gap-3 justify-start lg:justify-end">
-          <Link
-            to="/client/login"
-            className="
-              inline-flex items-center justify-center
-              rounded-xl border border-gray-300 bg-white
-              px-4 py-2 text-sm font-medium text-gray-700
-              hover:bg-gray-50
-            "
-          >
-            Войти как клиент
-          </Link>
-
-          <Link
-            to="/login"
-            className="
-              inline-flex items-center justify-center
-              rounded-xl border border-gray-300 bg-white
-              px-4 py-2 text-sm font-medium text-gray-700
-              hover:bg-gray-50
-            "
-          >
-            Войти как поставщик
-          </Link>
+          {/* 2-я строка: сами India-табы, по центру */}
+          <IndiaNav />
         </div>
       </div>
 
-      {/* Контент конкретной страницы India (Inside / Ayurveda / ...) */}
+      {/* Контент конкретного раздела (India Inside, Ayurveda и т.д.) */}
       <div className="mt-6">
         <Outlet />
       </div>
