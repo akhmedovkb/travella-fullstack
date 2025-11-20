@@ -18,13 +18,13 @@ export default function IndiaLayout() {
               to="/client/login"
               className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
             >
-              {t("landing.india.login_client", "Войти как клиент")}
+              {t("auth.login_client", "Войти как клиент")}
             </Link>
             <Link
               to="/login"
               className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
             >
-              {t("landing.india.login_provider", "Войти как поставщик")}
+              {t("auth.login_provider", "Войти как поставщик")}
             </Link>
           </div>
 
