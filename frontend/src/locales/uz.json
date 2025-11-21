@@ -1278,6 +1278,90 @@
     "loading": "Yuklanmoqda…"
   },
 "landing": {
+      "ayurveda": {
+      "badge": "Hindiston Ayurveda",
+      "h1": "An’anaviy Ayurveda orqali to‘liq tiklanish",
+      "sub": "Hindistonning yetakchi klinikalaridan sog‘lomlashtirish dasturlari: detoks, tiklanish, surunkali kasalliklar va stress boshqaruvi.",
+      "cta_primary": "Konsultatsiya olish",
+      "cta_secondary": "Klinikalarni ko‘rish",
+
+      "stats": {
+        "days": "Dastur davomiyligi",
+        "doctors": "Litsenziyalangan shifokorlar",
+        "support": "Kurator yordami"
+      },
+
+      "benefits": {
+        "title": "Nega aynan Ayurveda?",
+        "sub": "Organizmni tabiiy usullar bilan tozalash, tiklash va muvozanatga qaytarish tizimi.",
+        "items": [
+          { "title": "Detoks va yoshartirish", "text": "Individual tozalash va tiklanish dasturlari." },
+          { "title": "Stressni kamaytirish", "text": "Nerv tizimi uchun xavfsiz tiklanish amaliyotlari." },
+          { "title": "Surunkali holatlar", "text": "Uyqusizlik, migren, ovqat hazm qilish, gormon balansini yaxshilash." },
+          { "title": "Sog‘lom vazn normallashuvi", "text": "Organizmga zarar bermasdan tabiiy vazn tushirish." }
+        ]
+      },
+
+      "programs": {
+        "title": "Mashhur dasturlar",
+        "sub": "Hindistonning tajribali ayurveda shifokorlari tomonidan tuzilgan.",
+        "items": [
+          {
+            "title": "Panchakarma",
+            "text": "Tana va ongni chuqur tozalashning klassik dasturi.",
+            "duration": "14–21 kun",
+            "format": "Intensiv"
+          },
+          {
+            "title": "Stress Relief",
+            "text": "Surunkali charchoq, uyqusizlik, tashvish bilan ishlash.",
+            "duration": "7–14 kun",
+            "format": "Yengil format"
+          },
+          {
+            "title": "Slim & Fit",
+            "text": "Sog‘lom vazn normallashuvi va parhez bilan birgalikdagi amaliyotlar.",
+            "duration": "10–14 kun",
+            "format": "Standart"
+          }
+        ]
+      },
+
+      "steps": {
+        "title": "Dastur qanday o‘tadi",
+        "step": "{{num}}-qadam",
+        "items": [
+          { "title": "Onlayn diagnostika", "text": "Shifokor dastur uchun holatingizni baholaydi." },
+          { "title": "Klinika tanlash", "text": "Biz byudjetga mos variantlarni taklif qilamiz." },
+          { "title": "Davolash dasturi", "text": "Muolajalar, massaj, yoga, parhez, shifokor nazorati." },
+          { "title": "Natijalar", "text": "Uy sharoitidagi tavsiyalar bilan ta’minlanasiz." }
+        ]
+      },
+
+      "clinics": {
+        "title": "Hindistondagi eng yaxshi Ayurveda klinikalari",
+        "sub": "Kerala, Goa, Dehli va Himachal hududlaridagi hamkor klinikalar.",
+        "btn": "Klinikalar katalogi",
+        "btn2": "Kuratordan so‘rash"
+      },
+
+      "faq": {
+        "title": "Ko‘p beriladigan savollar",
+        "items": [
+          { "q": "Dastur qancha davom etadi?", "a": "Maqsadga qarab 7–21 kun." },
+          { "q": "Oldindan tayyorgarlik kerakmi?", "a": "Yo‘q, shifokor hammasini joyida belgilab beradi." },
+          { "q": "Oila bilan borish mumkinmi?", "a": "Ha, ko‘pchilik klinikalar har xil yoshdagi bemorlarni qabul qiladi." },
+          { "q": "Narx qancha?", "a": "Haftasiga $500–$1200 atrofida." }
+        ]
+      },
+
+      "final": {
+        "title": "Tiklanish yo‘lini bugun boshlang",
+        "sub": "Travella kuratori bilan bepul maslahat oling.",
+        "btn": "Konsultatsiya olish"
+      }
+    }
+  },
   "menu": {
     "tours": "Turlar",
     "indiaInside": "India Inside",
