@@ -1658,47 +1658,6 @@
       "details": {
         "toggle_label": "Tanlangan bob bo‘yicha tafsilotlar"
       },
-      "program": {
-        "royal": {
-          "day1": "Dehli: kelish, transfer, oqshom brifingi",
-          "day2": "Agra: Tongda Toj Mahal, Agra qal’asi",
-          "day3": "Jaypur: Amberfort, Shamollar saroyi",
-          "day4": "Jaypur: shahar bo‘ylab ekskursiya",
-          "day5": "Dehli: zamonaviy Hindiston — san’at/moda/gastro",
-          "day6": "Bo‘sh kun / qo‘shimcha imkoniyatlar",
-          "day7": "Uchish"
-        },
-        "silence": {
-          "day1": "Udaypur: kelish, Pichola ko‘li, City Palace",
-          "day2": "Udaypur: ibodatxonalar, hunarmandchilik, kruiz",
-          "day3": "Jodxpurga yo‘l, ko‘k shahar",
-          "day4": "Jodxpur: Mehrangarh qal’asi",
-          "day5": "Jaysalmerga yo‘l, Oltin qal’a",
-          "day6": "Tar cho‘li: safari, kechki dasturxon",
-          "day7": "Dam olish / rezerv",
-          "day8": "Uchish"
-        },
-        "modern": {
-          "day1": "Mumbay: tur, dengiz bo‘yida sayr",
-          "day2": "Bollivud studiyalari / art hududlar",
-          "day3": "Goaga uchish, okean",
-          "day4": "Plyajlar, portugal merosi",
-          "day5": "Yaxta / quyosh botishi, gastro-kecha",
-          "day6": "Bo‘sh kun / wellness",
-          "day7": "Uchish"
-        },
-        "kerala": {
-          "day1": "Kochi: shahar, Xitoy to‘rlari",
-          "day2": "Munnar: choy plantatsiyalari",
-          "day3": "Munnar: trekking / foto kun",
-          "day4": "Alleppi: houseboat",
-          "day5": "Backwaters, qishloqlar",
-          "day6": "Ayurveda markazi",
-          "day7": "Bo‘sh kun / dengiz",
-          "day8": "Uchish"
-        }
-      },
-
       "dates_block": {
         "title": "Turlar sanalari",
         "tour_dates_label": "Tur sanalari:",
@@ -1813,28 +1772,6 @@
         }
       },
       "chapters_title": "India Inside bo‘limlari",
-      "experience": {
-        "title": "Sizni nimalar kutadi",
-        "sub": "Xususiy marshrutlar, yopiq marosimlar va nafis servis.",
-        "cards": {
-          "palaces": {
-            "title": "Saroylar va meros",
-            "desc": "Rajasthan, hunarmandchilik va qirollik me’morchiligi."
-          },
-          "rituals": {
-            "title": "Marosimlar va rituallar",
-            "desc": "Maxfiy amaliyotlar va kamyob joylarga kirish."
-          },
-          "wellness": {
-            "title": "Wellness va ayurveda",
-            "desc": "Ishonchli shifokorlar bilan shaxsiy sog‘lomlashtirish dasturlari."
-          },
-          "yacht": {
-            "title": "Yaxtalar va quyosh botishi",
-            "desc": "Arab dengizi sohilida sayr va kechki taomlar."
-          }
-        }
-      },
       "curated_badge": "Boshchilik ostidagi madaniy sayohat",
       "cta_get_program": "Dastur olish",
       "cta_ask": "Savol berish",
