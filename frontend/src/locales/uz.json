@@ -1496,6 +1496,73 @@
   "final_sub": "Ariza qoldiring — sizga mos variantni taklif qilamiz.",
   "final_btn": "Konsultatsiya olish"
 },
+"b2b": {
+  "badge": "Agentliklar uchun B2B",
+  "h1": "Travella bilan hamkor bo‘ling — Hindiston bo‘yicha",
+  "sub": "Davolanish, Check-up, Ayurveda va turlar. Siz sotasiz — biz to‘liq tashkil qilamiz.",
+
+  "cta": "Hamkor bo‘lish",
+
+  "benefits": {
+    "title": "Nega agentliklar bizni tanlaydi",
+    "sub": "Hamkorlik qulay va foydali.",
+    "items": [
+      { "title": "Yuqori komissiya", "text": "Tibbiy dasturlar uchun 20% gacha." },
+      { "title": "To‘liq hamrohlik", "text": "Hujjatlar, klinikalar, kurator — barchasi bizdan." },
+      { "title": "Ishonchli klinikalar", "text": "Faqat JCI/NABH kasalxonalari." },
+      { "title": "Tez javob", "text": "6–24 soat ichida narx va davolash rejasi." }
+    ]
+  },
+
+  "formats": {
+    "title": "Hamkorlik formatlari",
+    "sub": "Agentlik uchun qulay variantni tanlang.",
+    "items": [
+      {
+        "title": "Tibbiy turizm",
+        "text": "Davolanish, operatsiya, Ayurveda, Check-up.",
+        "note": "Har qanday agentlik uchun mos."
+      },
+      {
+        "title": "Viza yordami",
+        "text": "Medical Visa, e-Medical, hujjatlar nazorati.",
+        "note": "Tez va ishonchli."
+      },
+      {
+        "title": "Individual turlar",
+        "text": "Ayurveda, yoga, retreat, mualliflik turlari.",
+        "note": "Paket va bronlar bizdan."
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "Hamkorlik jarayoni",
+    "step": "{{num}}-qadam",
+    "items": [
+      { "title": "Ariza", "text": "Bog‘lanish uchun ma’lumot qoldirasiz." },
+      { "title": "Ulanish", "text": "Materiallar, narxlar, qo‘llanma beramiz." },
+      { "title": "Mijozlar arizasi", "text": "Siz yuborasiz — biz darhol ishlaymiz." },
+      { "title": "To‘lovlar", "text": "Komissiya to‘lab beriladi." }
+    ]
+  },
+
+  "faq": {
+    "title": "Ko‘p beriladigan savollar",
+    "items": [
+      { "q": "Komissiyani qanday olaman?", "a": "Hisobot va pul o‘tkazma yuboramiz." },
+      { "q": "Minimal savdo kerakmi?", "a": "Yo‘q, bir buyurtma bilan ham boshlashingiz mumkin." },
+      { "q": "Jismoniy shaxslar bilan ham ishlaysizmi?", "a": "Ha, ammo hamkorlarga bonus tariflar beriladi." },
+      { "q": "O‘z brendingiz ostida sotish mumkinmi?", "a": "Ha, white-label mavjud." }
+    ]
+  },
+
+  "final": {
+    "title": "Hamkorlikni boshlashga tayyormisiz?",
+    "sub": "Ariza qoldiring — bir kun ichida ulamiz.",
+    "btn": "Hamkor bo‘lish"
+  }
+},
   "menu": {
     "tours": "Turlar",
     "indiaInside": "India Inside",
