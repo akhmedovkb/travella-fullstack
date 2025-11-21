@@ -1887,23 +1887,9 @@
     "yacht": {
       "title": "Yaxta va gastro-kecha",
       "desc": "Quyosh botishi, sokin muhit, nafis taomlar va xotirjam suhbatlar."
+     }
     }
+   }
   }
-}
-},
-  "checkup": {
-    "h1": "Hindistonda Check-up",
-    "sub": "Bazaviy, kardio, onko, ayollar/erkaklar paketlari. Dehlidagi hamkor klinikalar.",
-    "get": "Narx olish"
-  },
-  "treatment": {
-    "h1": "Hindistonda davolash",
-    "sub": "Onkologiya, kardiologiya, ortopediya, IVF, transplantatsiya.",
-    "get": "Maslahat olish"
-  },
-  "clinics": { "h1": "Hamkor klinikalar (Dehli)" },
-  "b2b": { "h1": "Travella B2B — agentlar uchun", "connect": "B2B ga ulanish", "company": "Agentlik" },
-  "contacts": { "h1": "Aloqa", "phone": "Telefon", "address": "Manzil" }
-}
-
+ }
 }
