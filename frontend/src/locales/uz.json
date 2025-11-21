@@ -376,9 +376,6 @@
     "only_providers": "Faqat provayder/agent sharh qoldirishi mumkin",
     "save_failed": "Sharhni saqlab bo‘lmadi",
     "already_inspected": "Siz bu mehmonxona bo‘yicha allaqachon inspeksiya qoldirgansiz.",
-    "only_providers": "Faqat provayder/turagentlar inspeksiya qoldirishi mumkin.",
-    "save_failed": "Saqlab bo‘lmadi. Keyinroq urinib ko‘ring.",
-    "write_review": "Umumiy sharhni yozing"
   },
 
   "event_category_concert": "Konsert",
@@ -645,8 +642,6 @@
     "favorites": "Sevimlilar",
     "hotels": "Mehmonxonalar",
     "hotels_admin": "Mehmonxonalar (admin)",
-    "hotels": "Mehmonxonalar",
-    "hotels_admin": "Mehmonxonalar (admin)"
   },
 
   "net_price": "Netto narx",
@@ -910,8 +905,6 @@
   "save_service": "Xizmatni saqlash",
   "saving": "Saqlanmoqda...",
   "select_category": "Toifani tanlang",
-  "select_city": "Shaharni tanlang",
-  "select_country": "Viza uchun mamlakatni tanlang",
   "select_event_category": "Tadbir toifasini tanlang",
   "select_files": "Fayllarni tanlash",
   "select_hotel": "Mehmonxonani tanlang",
@@ -979,12 +972,6 @@
       "templates": "Andozalar",
       "templates_open": "Andozalarni ochish",
       "templates_count": "{{count}} ta",
-      "tpl_apply_title": "Andozani qo‘llash",
-      "tpl_select": "Andoza",
-      "tpl_select_placeholder": "— tanlang —",
-      "tpl_start_date": "Boshlanish sanasi",
-      "tpl_btn_cancel": "Bekor qilish",
-      "tpl_btn_apply": "Qo‘llash",
       "transfers": "Shaharlararo transferlar",
       "transfer_from_ph": "Qayerdan (shahar)",
       "transfer_to_ph": "Qayerga (shahar)",
@@ -993,9 +980,6 @@
       "remove": "O‘chirish",
       "add_transfer": " Transfer qo‘shish",
       "transfers_day_sum": "Kun bo‘yicha transferlar yig‘indisi",
-      "totals": {
-        "transfers": "Transferlar"
-      },
 
       "profile": {
       "city": "Shahar",
@@ -1039,9 +1023,6 @@
     "pick_dates": "Kalendar orqali sanalarni tanlang",
     "dates_span": "{{from}} → {{to}} ({{days}} kun)",
     "city_ph": "Shahar (slug yoki nomi)",
-    "speaking_lang": "Afzal muloqot tili",
-    "residents": "Rezidentlar",
-    "nonresidents": "Norezidentlar",
     "pick_city_first": "Avval shaharni tanlang",
 
     "guide": "Gid",
@@ -1060,7 +1041,6 @@
     "loading_hotel": "Mehmonxona ma’lumotlari yuklanmoqda…",
 
     "entry_fees": "Kirish chiptalari",
-    "entry_ph": "Obyektlarni qidiring: muzeylar, bog‘lar…",
     "pick_sites": "Joylarni tanlang",
     "nothing_found": "Hech narsa topilmadi",
 
@@ -1068,14 +1048,14 @@
     "price_per_night": "Tuniga narx",
     "rooms_and_meals": "Xonalar va ovqatlanish",
     "day_total": "Kun bo‘yicha jami",
-    "extra_beds_qty": "Qo`shimcha krovat miqdori",
 
     "totals": {
       "guide": "Gid",
       "transport": "Transport",
       "hotels": "Mehmonxonalar",
       "entry": "Chipta/kirish",
-      "total": "Jami"
+      "total": "Jami",
+      "transfers": "Transferlar"
     },
   "load_draft": "Qoralamani yuklash",
   "save_draft": "Qoralamani saqlash",
@@ -1099,9 +1079,6 @@
   "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
   "net": "Netto",
   "notes": "Izoh",
-  "tariff_for": "Tariflar:",
-  "residents": "Rezidentlar",
-  "nonresidents": "Norezidentlar",
   "entry_fees_net": "Kirish chiptalari (netto)",
 
   "pricing": "Narxlash",
@@ -1159,8 +1136,6 @@
   "title": "Sayohat konstruktori",
   "dates": "Tashrif sanalari",
   "arrivalDay1": "1-kun kelish vaqti",
-  "monuments": "Yodgorliklarga kirish to‘lovlari",
-  "monuments_ph": "Obyektlarni tanlang",
   "guide": "Gid",
   "transport": "Transport",
   "cities": "Shaharlar (multiselect)",
@@ -1231,7 +1206,6 @@
   "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/tun",
   "tourism_fee_nonresident": "Turistik yig‘im (norezidentlar), so‘m/tun",
   "extra_bed_cost": "Qo‘shimcha o‘rin, so‘m/tun",
-  "room_category": "Xona toifasi",
   "select.no_options": "Hech narsa topilmadi",
   "select.loading": "Yuklanmoqda…",
 
@@ -1463,27 +1437,6 @@
 
   "list_title": "Ishonchli klinikalar",
   "list_sub": "Faqat JCI/NABH akkreditatsiyadan o‘tgan shifoxonalar.",
-  "items": [
-    {
-      "name": "BLK-Max Hospital",
-      "city": "Nyu-Dehli",
-      "specialization": "Onkologiya • Kardiologiya • Transplantatsiya",
-      "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
-    },
-    {
-      "name": "Fortis Escorts",
-      "city": "Dehli",
-      "specialization": "Kardiologiya • Yurak jarrohligi",
-      "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
-    },
-    {
-      "name": "Medanta Hospital",
-      "city": "Gurgaon",
-      "specialization": "Onkologiya • Neyroxirurgiya • Ortopediya",
-      "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
-    }
-  ],
-
   "why_title": "Nega Hindiston?",
   "why": {
     "items": [
@@ -1690,6 +1643,7 @@
       }
     ]
   },
+  
 "auth": { "login_required": "Qaytadan kiring va yana urinib ko‘ring" },
 "inside": {
       "my": {
