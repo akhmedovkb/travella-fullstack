@@ -1782,12 +1782,6 @@
         "request_failed": "So‘rovni yuborib bo‘lmadi"
       },
 
-      "chapter_label": "Bo‘lim",
-      "selected_chapter": "Tanlangan boʻlim",
-      "details": {
-        "toggle_label": "Tafsilotlar"
-      },
-
       "chapters_progress": {
         "title": "Dastur boʻyicha sizning holatingiz"
       },
