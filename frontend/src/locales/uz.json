@@ -1658,18 +1658,6 @@
       "details": {
         "toggle_label": "Tanlangan bob bo‘yicha tafsilotlar"
       },
-
-      "chapters_progress": {
-        "title": "Boblar bo‘yicha progress"
-      },
-
-      "chapters": {
-        "royal":   { "title": "Oltin Uchburchak" },
-        "silence": { "title": "Rajasthandagi sarguzashtlar" },
-        "modern":  { "title": "Mumbay + Goa = eng yorqin xotiralar" },
-        "kerala":  { "title": "Kerala: Yer yuzidagi jannat" }
-      },
-
       "program": {
         "royal": {
           "day1": "Dehli: kelish, transfer, oqshom brifingi",
@@ -1725,8 +1713,6 @@
       },
 
       "chapter_start_at": "Qabul boshlanishi:",
-      "chapter_countdown": "Boshlanishigacha:",
-
       "next_chapter": {
         "label": "Eng yaqin bob",
         "tour_dates_label": "Tur sanasi:",
