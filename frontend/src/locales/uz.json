@@ -1850,6 +1850,7 @@
                "d8":"Jo‘nab ketish"
             }
          },
+         
          "guru":{
             "title":"Hindiston bo‘yicha Guru dasturi",
             "lead":"India Inside’ning 4 bobini yakunlab, «India Inside: Guru» maqomiga ega bo‘ling.",
@@ -1887,5 +1888,6 @@
             }
          }
       }
-   }
+    }
+  }
 }
