@@ -1494,8 +1494,33 @@
 
   "final_title": "Klinika tanlashda yordam kerakmi?",
   "final_sub": "Ariza qoldiring — sizga mos variantni taklif qilamiz.",
-  "final_btn": "Konsultatsiya olish"
-},
+  "final_btn": "Konsultatsiya olish",
+  "items": [
+  {
+    "name": "Sarvodaya Hospital",
+    "city": "Faridobod",
+    "specialization": "Onkologiya • Ortopediya • Neyroxirurgiya",
+    "img": "https://sarvodayahospital.com/sites/default/files/2023-09/sarvodaya-hospital.jpg"
+  },
+  {
+    "name": "Fortis Escorts",
+    "city": "Dehli",
+    "specialization": "Kardiologiya • Yurak jarrohligi",
+    "img": "https://fortishealthcare.com/sites/default/files/2023-08/escorts-delhi.jpg"
+  },
+  {
+    "name": "Max Super Specialty Hospital",
+    "city": "Saket, Dehli",
+    "specialization": "Onkologiya • Neyroxirurgiya • Transplantatsiya",
+    "img": "https://maxhealthcare.in/sites/default/files/2023-04/max-saket.jpg"
+  },
+  {
+    "name": "Medanta Hospital",
+    "city": "Gurgaon",
+    "specialization": "Onkologiya • Neyroxirurgiya • Ortopediya",
+    "img": "https://medanta.org/sites/default/files/2023-06/medanta-hospital.jpg"
+  }
+],
 "b2b": {
   "badge": "Agentliklar uchun B2B",
   "h1": "Travella bilan hamkor bo‘ling — Hindiston bo‘yicha",
