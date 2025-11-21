@@ -1574,6 +1574,73 @@
     "btn": "Стать партнёром"
   }
 },
+"b2b": {
+  "badge": "B2B for Agencies",
+  "h1": "Partner with Travella for India",
+  "sub": "Medical tourism, Check-up, Ayurveda and custom tours. You sell — we organize everything.",
+
+  "cta": "Become a partner",
+
+  "benefits": {
+    "title": "Why agencies choose us",
+    "sub": "We make it easy and profitable.",
+    "items": [
+      { "title": "High commissions", "text": "Up to 20% on medical programs and tours." },
+      { "title": "Full support", "text": "Documents, clinics, coordinators — we manage the process." },
+      { "title": "Accredited hospitals", "text": "Only JCI/NABH certified partners." },
+      { "title": "Fast processing", "text": "Treatment plan within 6–24 hours." }
+    ]
+  },
+
+  "formats": {
+    "title": "Partnership formats",
+    "sub": "Choose the model that suits your agency.",
+    "items": [
+      {
+        "title": "Medical Tourism",
+        "text": "Treatment, surgeries, Ayurveda, Check-up.",
+        "note": "Suitable for any scale."
+      },
+      {
+        "title": "Visa Support",
+        "text": "Medical Visa, e-Medical and document monitoring.",
+        "note": "Fast and reliable."
+      },
+      {
+        "title": "Custom Tours",
+        "text": "Ayurveda, yoga, retreats, author tours.",
+        "note": "We prepare and book everything."
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "How the partnership works",
+    "step": "Step {{num}}",
+    "items": [
+      { "title": "Application", "text": "Leave your contact and direction." },
+      { "title": "Setup", "text": "We provide materials, prices and guides." },
+      { "title": "Client requests", "text": "You forward leads — we process instantly." },
+      { "title": "Payments", "text": "Commission is transferred after client payment." }
+    ]
+  },
+
+  "faq": {
+    "title": "FAQ",
+    "items": [
+      { "q": "How do I receive commissions?", "a": "We provide reports and transfer to your account." },
+      { "q": "Is there a minimum sales volume?", "a": "No, you can start with one request." },
+      { "q": "Do you work with individuals?", "a": "Yes, but partners get better rates." },
+      { "q": "Can I sell under my own brand?", "a": "Yes, white-label is possible." }
+    ]
+  },
+
+  "final": {
+    "title": "Ready to become a partner?",
+    "sub": "Send a request — we will activate your account within a day.",
+    "btn": "Become a partner"
+  }
+},
   "menu": {
     "tours": "Туры",
     "indiaInside": "India Inside",
