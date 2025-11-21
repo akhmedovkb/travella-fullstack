@@ -1361,6 +1361,89 @@
         "btn": "Konsultatsiya olish"
       }
     },
+  "checkup": {
+  "badge": "Hindiston Check-up",
+  "h1": "Hindistonda 1–3 kunda to‘liq sog‘liq diagnostikasi",
+  "sub": "Dehlidagi yetakchi klinikalarda bazaviy va kengaytirilgan tekshiruv paketlari. Kurator, tarjima va 24/7 yordam.",
+  "cta_primary": "Konsultatsiya olish",
+  "cta_secondary": "Klinikalarni ko‘rish",
+
+  "stats": {
+    "days": "Dastur davomiyligi (kun)",
+    "tests": "Tahlil va tekshiruvlar",
+    "support": "Kurator yordami"
+  },
+
+  "benefits": {
+    "title": "Nega Check-up Hindistonda?",
+    "sub": "Tez, aniq va zamonaviy diagnostika.",
+    "items": [
+      { "title": "Tez va tizimli", "text": "Barcha tekshiruvlar 1–3 kunda bir joyda." },
+      { "title": "Zamonaviy texnologiyalar", "text": "MRT, KT, PET, endoskopiya, genetik testlar." },
+      { "title": "Aniq xulosalar", "text": "Shifokorlar konsiliumi va yakuniy hisobot." },
+      { "title": "Qulay narx", "text": "Yuqori servis bilan hamyonbop paketlar." }
+    ]
+  },
+
+  "programs": {
+    "title": "Mashhur paketlar",
+    "sub": "Yosh, maqsad va sog‘liq tarixiga qarab tanlaymiz.",
+    "items": [
+      {
+        "title": "Bazaviy Check-up",
+        "text": "Qon tahlillari, UZI, EKG, terapevt ko‘rigi.",
+        "duration": "1 kun",
+        "forWhom": "Hamma uchun"
+      },
+      {
+        "title": "Kardio Check-up",
+        "text": "EhoKG, holter, stress-test, kardiolog konsultatsiyasi.",
+        "duration": "1–2 kun",
+        "forWhom": "Yurak/tomir"
+      },
+      {
+        "title": "Onko-skrining",
+        "text": "Xavflarni aniqlash va erta diagnostika.",
+        "duration": "2–3 kun",
+        "forWhom": "40+ / ko‘rsatma bo‘yicha"
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "Diagnostika qanday o‘tadi",
+    "step": "{{num}}-qadam",
+    "items": [
+      { "title": "Ma’lumot yig‘ish", "text": "Qisqa anketani to‘ldirasiz va hujjatlarni yuborasiz." },
+      { "title": "Klinika tanlash", "text": "Kurator 2–3 variant taklif qiladi." },
+      { "title": "Check-up Hindistonda", "text": "Tekshiruvlar, tarjima va hamrohlik." },
+      { "title": "Yakuniy xulosa", "text": "Rus/uzbek tilida tavsiyalar beriladi." }
+    ]
+  },
+
+  "clinics": {
+    "title": "Dehlidagi ishonchli klinikalar",
+    "sub": "Faqat akkreditatsiyadan o‘tgan shifoxonalar bilan ishlaymiz.",
+    "btn": "Klinikalar katalogi",
+    "btn2": "Kuratordan so‘rash"
+  },
+
+  "faq": {
+    "title": "Ko‘p beriladigan savollar",
+    "items": [
+      { "q": "Check-up qancha vaqt oladi?", "a": "Paketga qarab 1–3 kun." },
+      { "q": "Tibbiy hujjatlar kerakmi?", "a": "Ha, iloji bo‘lsa oldindan yuboring." },
+      { "q": "Tarjimon bo‘ladimi?", "a": "Ha, kurator barcha bosqichda yordam beradi." },
+      { "q": "Narxlar qancha?", "a": "Bazaviy paket $250 dan boshlanadi." }
+    ]
+  },
+
+  "final": {
+    "title": "Diagnostikani bugun rejalashtiring",
+    "sub": "Ariza qoldiring — paket va klinikani tanlab beramiz.",
+    "btn": "Konsultatsiya olish"
+  }
+},
   "menu": {
     "tours": "Turlar",
     "indiaInside": "India Inside",
