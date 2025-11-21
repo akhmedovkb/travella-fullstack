@@ -1422,6 +1422,58 @@
     "btn": "Get consultation"
   }
 },
+"clinics": {
+  "badge": "India Clinics",
+  "h1": "Best hospitals in Delhi for diagnosis & treatment",
+  "sub": "Oncology, cardiology, neurosurgery, orthopedics and more. Modern, reliable and affordable.",
+  "cta_primary": "Get consultation",
+
+  "categories_title": "Main specialties",
+  "categories_sub": "Trusted departments and leading doctors.",
+  "categories": [
+    { "title": "Oncology", "text": "Modern diagnostics and treatment." },
+    { "title": "Cardiology", "text": "Stenting, angiography, heart surgery." },
+    { "title": "Orthopedics", "text": "Joint replacement and spine surgery." },
+    { "title": "Neurosurgery", "text": "Brain and spine operations." }
+  ],
+
+  "list_title": "Trusted hospitals",
+  "list_sub": "We work only with accredited JCI/NABH hospitals.",
+  "items": [
+    {
+      "name": "BLK-Max Hospital",
+      "city": "New Delhi",
+      "specialization": "Oncology • Cardiology • Transplant",
+      "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
+    },
+    {
+      "name": "Fortis Escorts",
+      "city": "Delhi",
+      "specialization": "Cardiology • Cardiac Surgery",
+      "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+    },
+    {
+      "name": "Medanta Hospital",
+      "city": "Gurgaon",
+      "specialization": "Oncology • Neurosurgery • Orthopedics",
+      "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
+    }
+  ],
+
+  "why_title": "Why India?",
+  "why": {
+    "items": [
+      { "title": "Top doctors", "text": "Experienced specialists with global standards." },
+      { "title": "Modern tech", "text": "PET-CT, Da Vinci robot, neuro-navigation." },
+      { "title": "Affordable", "text": "40–70% cheaper than UAE/Europe." },
+      { "title": "Full support", "text": "Coordinator, translation, visa help." }
+    ]
+  },
+
+  "final_title": "Need help choosing a clinic?",
+  "final_sub": "Send a request — we will match the best option for you.",
+  "final_btn": "Get consultation"
+},
     "menu": {
       "tours": "Tours",
       "indiaInside": "India Inside",
