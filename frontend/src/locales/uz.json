@@ -1787,11 +1787,6 @@
       "status_active": "Faol",
       "status_completed": "Yakunlangan",
 
-      "toast": {
-        "request_sent": "So‘rov yuborildi",
-        "request_error": "So‘rovni yuborib bo‘lmadi"
-      },
-
       "errors": {
         "request_failed": "So‘rovni amalga oshirib bo‘lmadi"
   },
