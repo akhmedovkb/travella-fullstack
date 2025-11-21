@@ -1444,6 +1444,58 @@
     "btn": "Konsultatsiya olish"
   }
 },
+"clinics": {
+  "badge": "Hindiston klinikalari",
+  "h1": "Dehlidagi eng yaxshi klinikalar",
+  "sub": "Onkologiya, kardiologiya, neyroxirurgiya, ortopediya va boshqa yo‘nalishlar. Ishonchli va zamonaviy.",
+  "cta_primary": "Konsultatsiya olish",
+
+  "categories_title": "Asosiy yo‘nalishlar",
+  "categories_sub": "Tajribali shifokorlar va ishonchli bo‘limlar.",
+  "categories": [
+    { "title": "Onkologiya", "text": "Diagnostika, jarrohlik, davolash." },
+    { "title": "Kardiologiya", "text": "Stentlash, koronarografiya, yurak operatsiyalari." },
+    { "title": "Ortopediya", "text": "Bo‘g‘im almashtirish, umurtqa jarrohligi." },
+    { "title": "Neyroxirurgiya", "text": "Miya va umurtqa pog‘onasi operatsiyalari." }
+  ],
+
+  "list_title": "Ishonchli klinikalar",
+  "list_sub": "Faqat JCI/NABH akkreditatsiyadan o‘tgan shifoxonalar.",
+  "items": [
+    {
+      "name": "BLK-Max Hospital",
+      "city": "Nyu-Dehli",
+      "specialization": "Onkologiya • Kardiologiya • Transplantatsiya",
+      "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
+    },
+    {
+      "name": "Fortis Escorts",
+      "city": "Dehli",
+      "specialization": "Kardiologiya • Yurak jarrohligi",
+      "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+    },
+    {
+      "name": "Medanta Hospital",
+      "city": "Gurgaon",
+      "specialization": "Onkologiya • Neyroxirurgiya • Ortopediya",
+      "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
+    }
+  ],
+
+  "why_title": "Nega Hindiston?",
+  "why": {
+    "items": [
+      { "title": "Tajribali shifokorlar", "text": "Dunyo standartlariga mos davolash." },
+      { "title": "Zamonaviy texnologiyalar", "text": "PET-KT, Da Vinci roboti, neyronavigatsiya." },
+      { "title": "Arzon narxlar", "text": "Yevropaga nisbatan 40–70% arzon." },
+      { "title": "To‘liq hamrohlik", "text": "Kurator, tarjima, viza yordami." }
+    ]
+  },
+
+  "final_title": "Klinika tanlashda yordam kerakmi?",
+  "final_sub": "Ariza qoldiring — sizga mos variantni taklif qilamiz.",
+  "final_btn": "Konsultatsiya olish"
+},
   "menu": {
     "tours": "Turlar",
     "indiaInside": "India Inside",
