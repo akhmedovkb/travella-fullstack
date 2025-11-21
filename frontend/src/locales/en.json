@@ -1770,21 +1770,7 @@
     "cta_apply": "Apply to participate",
     "cta_chapters": "View program chapters"
   }
-},
-
-    "checkup": {
-      "h1": "Check-up in India",
-      "sub": "Basic, cardio, oncology, women/men packages in Delhi.",
-      "get": "Get price"
-    },
-    "treatment": {
-      "h1": "Medical treatment in India",
-      "sub": "Oncology, cardiology, orthopedics, IVF, transplant programs.",
-      "get": "Get consultation"
-    },
-    "clinics": { "h1": "Partner clinics (Delhi)" },
-    "b2b": { "h1": "Travella B2B for travel agents", "connect": "Join B2B", "company": "Agency" },
-    "contacts": { "h1": "Contacts", "phone": "Phone", "address": "Address" }
+}
   }
 }
 
