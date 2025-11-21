@@ -31,12 +31,13 @@ export default function B2B() {
             </p>
 
             <div className="mt-6">
-              <Link
-                to="/india/contacts"
-                className="rounded-full bg-black px-7 py-3 text-white text-sm font-semibold hover:bg-black/90 transition"
-              >
-                {t("landing.b2b.cta")}
-              </Link>
+            <Link
+              to="/page/contacts"
+              className="rounded-full bg-black px-7 py-3 text-white text-sm font-semibold hover:bg-black/90 transition"
+            >
+              {t("landing.b2b.cta")}
+            </Link>
+
             </div>
           </div>
 
