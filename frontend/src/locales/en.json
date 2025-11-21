@@ -1256,6 +1256,90 @@
   "vat_included": "Prices include VAT",
   "vat_rate": "VAT rate, %",
   "landing": {
+        "ayurveda": {
+      "badge": "Ayurveda in India",
+      "h1": "Deep recovery through traditional Ayurveda",
+      "sub": "Healing programs from leading Indian clinics: detox, restoration, chronic conditions and stress management.",
+      "cta_primary": "Get consultation",
+      "cta_secondary": "View clinics",
+
+      "stats": {
+        "days": "Program duration",
+        "doctors": "Licensed doctors",
+        "support": "Curator support"
+      },
+
+      "benefits": {
+        "title": "Why Ayurveda?",
+        "sub": "A unique healing tradition combining detox, nutrition, massages and complete body reset.",
+        "items": [
+          { "title": "Detox & Rejuvenation", "text": "Deep cleansing programs tailored individually." },
+          { "title": "Stress relief", "text": "Nervous system recovery practices, yoga & breathing." },
+          { "title": "Chronic conditions", "text": "Work with insomnia, migraines, digestion, hormonal balance." },
+          { "title": "Healthy weight", "text": "Gentle weight correction without stress for the body." }
+        ]
+      },
+
+      "programs": {
+        "title": "Popular programs",
+        "sub": "Developed by top Ayurvedic doctors in India.",
+        "items": [
+          {
+            "title": "Panchakarma",
+            "text": "Classical deep cleansing of the body and mind.",
+            "duration": "14–21 days",
+            "format": "Intensive"
+          },
+          {
+            "title": "Stress Relief",
+            "text": "Designed for chronic fatigue, insomnia and anxiety.",
+            "duration": "7–14 days",
+            "format": "Soft format"
+          },
+          {
+            "title": "Slim & Fit",
+            "text": "Natural weight correction with tailored diet and treatments.",
+            "duration": "10–14 days",
+            "format": "Standard"
+          }
+        ]
+      },
+
+      "steps": {
+        "title": "How the program works",
+        "step": "Step {{num}}",
+        "items": [
+          { "title": "Online diagnosis", "text": "Doctor evaluates your condition and selects the right program." },
+          { "title": "Clinic selection", "text": "We offer the best clinics based on your budget." },
+          { "title": "Treatment course", "text": "Therapies, massages, yoga, diet, medical supervision." },
+          { "title": "Results", "text": "You receive recommendations and post-program guidance." }
+        ]
+      },
+
+      "clinics": {
+        "title": "Best Ayurvedic clinics in India",
+        "sub": "Trusted partners in Kerala, Goa, Delhi and Himachal Pradesh.",
+        "btn": "Clinic catalog",
+        "btn2": "Contact curator"
+      },
+
+      "faq": {
+        "title": "FAQ",
+        "items": [
+          { "q": "How long are the programs?", "a": "From 7 to 21 days depending on the goal." },
+          { "q": "Do I need preparation?", "a": "No, doctor will guide everything on arrival." },
+          { "q": "Can I come with family?", "a": "Yes, most clinics accept all age groups." },
+          { "q": "How much does it cost?", "a": "From $500–$1200 per week depending on clinic level." }
+        ]
+      },
+
+      "final": {
+        "title": "Start your recovery today",
+        "sub": "Get a free consultation with a Travella curator.",
+        "btn": "Get consultation"
+      }
+    }
+  },
     "menu": {
       "tours": "Tours",
       "indiaInside": "India Inside",
