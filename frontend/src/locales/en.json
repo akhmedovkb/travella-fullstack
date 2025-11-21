@@ -1472,8 +1472,33 @@
 
   "final_title": "Need help choosing a clinic?",
   "final_sub": "Send a request — we will match the best option for you.",
-  "final_btn": "Get consultation"
-},
+  "final_btn": "Get consultation",
+  "items": [
+  {
+    "name": "Sarvodaya Hospital",
+    "city": "Faridabad",
+    "specialization": "Oncology • Orthopedics • Neurosurgery",
+    "img": "https://sarvodayahospital.com/sites/default/files/2023-09/sarvodaya-hospital.jpg"
+  },
+  {
+    "name": "Fortis Escorts",
+    "city": "Delhi",
+    "specialization": "Cardiology • Cardiac Surgery",
+    "img": "https://fortishealthcare.com/sites/default/files/2023-08/escorts-delhi.jpg"
+  },
+  {
+    "name": "Max Super Specialty Hospital",
+    "city": "Saket, Delhi",
+    "specialization": "Oncology • Neurosurgery • Transplant",
+    "img": "https://maxhealthcare.in/sites/default/files/2023-04/max-saket.jpg"
+  },
+  {
+    "name": "Medanta Hospital",
+    "city": "Gurgaon",
+    "specialization": "Oncology • Neurosurgery • Orthopedics",
+    "img": "https://medanta.org/sites/default/files/2023-06/medanta-hospital.jpg"
+  }
+],
     "menu": {
       "tours": "Tours",
       "indiaInside": "India Inside",
