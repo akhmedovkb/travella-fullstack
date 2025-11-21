@@ -1339,6 +1339,89 @@
         "btn": "Get consultation"
       }
     },
+    "checkup": {
+  "badge": "India Check-up",
+  "h1": "Full health diagnostics in India in 1–3 days",
+  "sub": "Basic and advanced check-up packages in top Delhi hospitals. Translator, coordinator and 24/7 support included.",
+  "cta_primary": "Get consultation",
+  "cta_secondary": "View clinics",
+
+  "stats": {
+    "days": "Program length (days)",
+    "tests": "Tests & procedures",
+    "support": "Curator support"
+  },
+
+  "benefits": {
+    "title": "Why do a Check-up in India?",
+    "sub": "Fast, accurate and evidence-based diagnostics.",
+    "items": [
+      { "title": "Quick & structured", "text": "All tests are done in 1–3 days in one hospital." },
+      { "title": "Modern tech", "text": "MRI, CT, PET, endoscopy, genetic screening." },
+      { "title": "Clear conclusions", "text": "Doctors’ board review and final report." },
+      { "title": "Cost-effective", "text": "High quality care with reasonable pricing." }
+    ]
+  },
+
+  "programs": {
+    "title": "Popular packages",
+    "sub": "We tailor packages to your age, goals and history.",
+    "items": [
+      {
+        "title": "Basic Check-up",
+        "text": "Blood tests, ultrasound, ECG, physician consultation.",
+        "duration": "1 day",
+        "forWhom": "Everyone"
+      },
+      {
+        "title": "Cardio Check-up",
+        "text": "Echo, Holter, stress test, cardiologist consult.",
+        "duration": "1–2 days",
+        "forWhom": "Heart & vessels"
+      },
+      {
+        "title": "Oncology screening",
+        "text": "Risk assessment and early detection program.",
+        "duration": "2–3 days",
+        "forWhom": "40+ / by indication"
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "How it works",
+    "step": "Step {{num}}",
+    "items": [
+      { "title": "Collect info", "text": "Fill a short form and send medical records." },
+      { "title": "Choose clinic", "text": "Curator suggests 2–3 best options." },
+      { "title": "Check-up in India", "text": "We guide you through every test on site." },
+      { "title": "Final report", "text": "You receive conclusions and recommendations." }
+    ]
+  },
+
+  "clinics": {
+    "title": "Trusted Delhi hospitals",
+    "sub": "We work only with accredited clinics and doctors.",
+    "btn": "Open clinics catalog",
+    "btn2": "Ask curator"
+  },
+
+  "faq": {
+    "title": "FAQ",
+    "items": [
+      { "q": "How many days does it take?", "a": "1–3 days depending on the package." },
+      { "q": "Do I need medical records?", "a": "Yes, preferably. You can send them in advance." },
+      { "q": "Is translation included?", "a": "Yes, curator assists throughout the process." },
+      { "q": "What is the cost?", "a": "From $250 for a basic package. Final price depends on tests." }
+    ]
+  },
+
+  "final": {
+    "title": "Plan your diagnosis today",
+    "sub": "Leave a request — we’ll pick the right package and clinic.",
+    "btn": "Get consultation"
+  }
+},
     "menu": {
       "tours": "Tours",
       "indiaInside": "India Inside",
