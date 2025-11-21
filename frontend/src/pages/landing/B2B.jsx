@@ -139,11 +139,12 @@ export default function B2B() {
           </div>
 
           <Link
-            to="/india/contacts"
+            to="/page/contacts"
             className="rounded-full bg-black px-7 py-3 text-white text-sm font-semibold hover:bg-black/90 transition text-center"
           >
             {t("landing.b2b.final.btn")}
           </Link>
+
         </div>
       </section>
 
