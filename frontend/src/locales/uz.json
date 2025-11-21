@@ -1719,11 +1719,6 @@
         "join_failed": "Qo‘shilish amalga oshmadi",
         "request_joined": "Ishtirok uchun so‘rov yuborildi"
       },
-
-      "errors": {
-        "request_failed": "So‘rovni yuborib bo‘lmadi"
-      },
-
       "chapters_progress": {
         "title": "Dastur boʻyicha sizning holatingiz"
       },
