@@ -1794,8 +1794,6 @@
       "request_failed": "Bo‘limni yakunlash so‘rovi yuborilmadi",
       "ask_open_telegram": "Telegram’da kurator bilan yozishishni ochamizmi?"
     }, 
-      "steps_title": "Qanday qatnashish",
-      "steps_sub": "To‘rt oddiy qadam — kurator har bosqichda yo‘l-yo‘riq beradi.",
       "steps": {
         "apply": {
           "title": "Ariza qoldiring",
@@ -1864,33 +1862,6 @@
   "steps_title": "India Inside boblari",
   "steps_sub": "Bobni tanlang — biz shaxsiy marshrut tuzamiz.",
   "view": "Dasturga so‘rov qoldirish",
-
-  "chapters": {
-  "royal": {
-    "title": "Oltin Uchburchak",
-    "desc": "Dehli — Agra — Jaypur",
-    "days": "7–8 kun",
-    "from": "dan $699"
-  },
-  "silence": {
-          "title": "Rajasthan sarguzashtlari",
-          "desc": "Udaypur — Jodhpur — Jaysalmer",
-          "days": "8–9 kun",
-          "from": "$890 dan"
-  },
-  "modern": {
-    "title": "Mumbay + Goa — eng yorqin xotiralar",
-    "desc": "Shahar va okean dami",
-    "days": "7 kun",
-    "from": "dan $490"
-  },
-  "kerala": {
-    "title": "Kerala: Yer yuzidagi jannat",
-    "desc": "Ayurveda, choy tepaliklari, xususiy hausbot",
-    "days": "8–9 kun",
-    "from": "dan $790"
-  }
-},
   
 "program": {
   "royal": {
