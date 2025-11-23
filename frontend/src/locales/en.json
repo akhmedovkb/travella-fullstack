@@ -1444,19 +1444,18 @@
       "name": "BLK-Max Hospital",
       "city": "New Delhi",
       "specialization": "Oncology • Cardiology • Transplant",
-      "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
-    },
+      "img": "/fortis.jpg"
     {
       "name": "Fortis Escorts",
       "city": "Delhi",
       "specialization": "Cardiology • Cardiac Surgery",
-      "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+      "img": "/max.jpg"
     },
     {
       "name": "Medanta Hospital",
       "city": "Gurgaon",
       "specialization": "Oncology • Neurosurgery • Orthopedics",
-      "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
+      "img": "/medanta.jpg"
     }
   ],
 
@@ -1478,25 +1477,25 @@
     "name": "Sarvodaya Hospital",
     "city": "Faridabad",
     "specialization": "Oncology • Orthopedics • Neurosurgery",
-    "img": "https://sarvodayahospital.com/sites/default/files/2023-09/sarvodaya-hospital.jpg"
+    "img": "/sarvodaya.jpg"
   },
   {
     "name": "Fortis Escorts",
     "city": "Delhi",
     "specialization": "Cardiology • Cardiac Surgery",
-    "img": "https://fortishealthcare.com/sites/default/files/2023-08/escorts-delhi.jpg"
+    "img": "/fortis.jpg"
   },
   {
     "name": "Max Super Specialty Hospital",
     "city": "Saket, Delhi",
     "specialization": "Oncology • Neurosurgery • Transplant",
-    "img": "https://maxhealthcare.in/sites/default/files/2023-04/max-saket.jpg"
+    "img": "/max.jpg"
   },
   {
     "name": "Medanta Hospital",
     "city": "Gurgaon",
     "specialization": "Oncology • Neurosurgery • Orthopedics",
-    "img": "https://medanta.org/sites/default/files/2023-06/medanta-hospital.jpg"
+    "img": "/medanta.jpg"
   }
 ],
     "menu": {
