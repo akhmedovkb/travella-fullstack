@@ -40,7 +40,7 @@ export default function Clinics() {
 
           <div className="relative min-h-[280px] md:min-h-[420px]">
             <img
-              src="https://images.unsplash.com/photo-1631217870027-218ae06638b3?q=80&w=1400&auto=format&fit=crop"
+              https://images.unsplash.com/photo-1581094794329-41fe0ebd7d87?q=80
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />
