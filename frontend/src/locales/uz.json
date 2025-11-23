@@ -1,8 +1,4 @@
-{
-   "accommodation":"Joylashuv",
-   "accommodation_category":"Joylashuv toifasi",
-   "actions":{
-      "book":"Bron qilish",
+"errors"
       "cancel":"Bekor qilish",
       "ok":"ОК",
       "quick_request":"Tez so‘rov",
@@ -238,7 +234,7 @@
          "error":"Kirish xatosi"
       },
       "register":{
-         "errors":{
+         :{
             "email_taken":"Bu e-pochta allaqachon roʻyxatdan oʻtgan",
             "phone_taken":"Bu telefon raqami allaqachon roʻyxatdan oʻtgan",
             "weak_password":"Parol juda oddiy",
@@ -324,7 +320,7 @@
    "enter_airline":"Aviakompaniyani kiriting",
    "enter_category":"Joylashuv toifasini kiriting",
    "enter_flight_details":"Parvoz tafsilotlarini kiriting",
-   "errors":{
+   :{
       "action_failed":"Amal bajarilmadi",
       "auth_required":"Sharh qoldirish uchun tizimga kiring",
       "booking_create":"Bronni yaratib bo‘lmadi",
@@ -1759,9 +1755,6 @@
          "status_waiting":"Kutilmoqda",
          "status_active":"Faol",
          "status_completed":"Yakunlangan",
-         "errors":{
-            "request_failed":"So‘rovni amalga oshirib bo‘lmadi"
-         },
          "errors":{
             "request_failed":"Bo‘limni yakunlash so‘rovi yuborilmadi",
             "ask_open_telegram":"Telegram’da kurator bilan yozishishni ochamizmi?"
