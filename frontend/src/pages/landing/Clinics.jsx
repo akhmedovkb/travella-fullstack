@@ -39,11 +39,11 @@ export default function Clinics() {
           </div>
 
           <div className="relative min-h-[280px] md:min-h-[420px]">
-            <img
-              https://images.unsplash.com/photo-1581094794329-41fe0ebd7d87?q=80
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+          <img
+            src="/clinics.jpg"
+            alt="Clinics Hero"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
             <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-black/10 to-transparent" />
           </div>
 
