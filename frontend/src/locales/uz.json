@@ -1,4 +1,8 @@
-"errors"
+{
+   "accommodation":"Joylashuv",
+   "accommodation_category":"Joylashuv toifasi",
+   "actions":{
+      "book":"Bron qilish",
       "cancel":"Bekor qilish",
       "ok":"ОК",
       "quick_request":"Tez so‘rov",
@@ -234,7 +238,7 @@
          "error":"Kirish xatosi"
       },
       "register":{
-         :{
+         "errors":{
             "email_taken":"Bu e-pochta allaqachon roʻyxatdan oʻtgan",
             "phone_taken":"Bu telefon raqami allaqachon roʻyxatdan oʻtgan",
             "weak_password":"Parol juda oddiy",
@@ -320,7 +324,7 @@
    "enter_airline":"Aviakompaniyani kiriting",
    "enter_category":"Joylashuv toifasini kiriting",
    "enter_flight_details":"Parvoz tafsilotlarini kiriting",
-   :{
+   "errors":{
       "action_failed":"Amal bajarilmadi",
       "auth_required":"Sharh qoldirish uchun tizimga kiring",
       "booking_create":"Bronni yaratib bo‘lmadi",
@@ -1842,44 +1846,43 @@
                "d7":"Bo‘sh kun / dengiz",
                "d8":"Jo‘nab ketish"
             },
-         
-         "guru":{
-            "title":"Hindiston bo‘yicha Guru dasturi",
-            "lead":"India Inside’ning 4 bobini yakunlab, «India Inside: Guru» maqomiga ega bo‘ling.",
-            "bullets":{
-               "one":"Individual marshrutlar va shaxsiy kurator",
-               "two":"Yopiq marosimlar va odatda yopiq joylar",
-               "three":"«Guru» sertifikati va Travella klubi",
-               "four":"Faqat ariza orqali"
+            "guru":{
+               "title":"Hindiston bo‘yicha Guru dasturi",
+               "lead":"India Inside’ning 4 bobini yakunlab, «India Inside: Guru» maqomiga ega bo‘ling.",
+               "bullets":{
+                  "one":"Individual marshrutlar va shaxsiy kurator",
+                  "two":"Yopiq marosimlar va odatda yopiq joylar",
+                  "three":"«Guru» sertifikati va Travella klubi",
+                  "four":"Faqat ariza orqali"
+               },
+               "certificate_label":"Sertifikat",
+               "certificate_meta":"Egasining ismi • Sana • Dastur identifikatori",
+               "cta_apply":"Ishtirok etishga ariza",
+               "cta_chapters":"Dastur boblarini ko‘rish"
             },
-            "certificate_label":"Sertifikat",
-            "certificate_meta":"Egasining ismi • Sana • Dastur identifikatori",
-            "cta_apply":"Ishtirok etishga ariza",
-            "cta_chapters":"Dastur boblarini ko‘rish"
-         },
-         "experience":{
-            "title":"India Inside bilan sizni nimalar kutadi",
-            "sub":"Hindistonga — uning ruhiga, odamlari va go‘zalligiga muhabbat bilan yaratilgan nafis yo‘nalishlar.",
-            "cards":{
-               "palaces":{
-                  "title":"Saroylar va meros",
-                  "desc":"Heritage mehmonxonalarda yashash, tarix nafas olgan maskanlar, yopiq maxsus joylar."
-               },
-               "rituals":{
-                  "title":"Marosimlar va an’analar",
-                  "desc":"Haqiqiy marosimlar, ma’rifat ahli, madaniyatga chuqur sho‘ng‘ish."
-               },
-               "wellness":{
-                  "title":"Wellness & Ayurveda",
-                  "desc":"Shaxsiy sog‘lomlashtirish dasturlari, qadimiy shifo amaliyotlari va ustoz-terapevtlar."
-               },
-               "yacht":{
-                  "title":"Yaxta va gastro-kecha",
-                  "desc":"Quyosh botishi, sokin muhit, nafis taomlar va xotirjam suhbatlar."
+            "experience":{
+               "title":"India Inside bilan sizni nimalar kutadi",
+               "sub":"Hindistonga — uning ruhiga, odamlari va go‘zalligiga muhabbat bilan yaratilgan nafis yo‘nalishlar.",
+               "cards":{
+                  "palaces":{
+                     "title":"Saroylar va meros",
+                     "desc":"Heritage mehmonxonalarda yashash, tarix nafas olgan maskanlar, yopiq maxsus joylar."
+                  },
+                  "rituals":{
+                     "title":"Marosimlar va an’analar",
+                     "desc":"Haqiqiy marosimlar, ma’rifat ahli, madaniyatga chuqur sho‘ng‘ish."
+                  },
+                  "wellness":{
+                     "title":"Wellness & Ayurveda",
+                     "desc":"Shaxsiy sog‘lomlashtirish dasturlari, qadimiy shifo amaliyotlari va ustoz-terapevtlar."
+                  },
+                  "yacht":{
+                     "title":"Yaxta va gastro-kecha",
+                     "desc":"Quyosh botishi, sokin muhit, nafis taomlar va xotirjam suhbatlar."
+                  }
                }
             }
          }
       }
-    }
-  }
+   }
 }
