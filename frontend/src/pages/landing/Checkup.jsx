@@ -66,12 +66,12 @@ export default function Checkup() {
           </div>
 
           <div className="relative min-h-[280px] md:min-h-[420px]">
-            <img
-              src="https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80&w=1400&auto=format&fit=crop"
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover"
-              loading="lazy"
-            />
+          <img
+            src="/checkup.jpg"
+            alt="India Check-up"
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+          />
             <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-black/10 to-transparent" />
           </div>
         </div>
