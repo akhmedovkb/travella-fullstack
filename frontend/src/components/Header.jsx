@@ -529,7 +529,7 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
             show ? "bg-orange-500 text-white" : "bgwhite/10 text-white/70",
           ].join(" ")
         >
-          {loading ? "…" : show ? badge : 0}
+          {loading ? "..." : show ? badge : 0}
         </span>
       )}
     </NavLink>
