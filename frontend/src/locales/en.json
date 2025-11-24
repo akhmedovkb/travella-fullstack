@@ -149,10 +149,10 @@
     "mountain_tour_guide": "Mountain tour (guide)",
     "mountain_tour_transport": "Mountain tour (transport)",
     "one_way_transfer": "One-way transfer",
-    "refused_event_ticket": "Resold event ticket",
-    "refused_flight": "Resold flight ticket",
-    "refused_hotel": "Resold hotel",
-    "refused_tour": "Resold tour",
+    "refused_event_ticket": "refused event ticket",
+    "refused_flight": "refused flight ticket",
+    "refused_hotel": "refused hotel",
+    "refused_tour": "refused tour",
     "visa_support": "Visa support",
     "desert_tour_guide": "Desert tour (guide)",
     "safari_tour_guide": "Safari tour (guide)",
@@ -195,7 +195,7 @@
       "photoHint": "JPEG/PNG, 512×512 square. Cropping & compression are automatic.",
       "profileTitle": "Profile",
       "refresh": "Refresh",
-      "refusedTours": "Resold tours",
+      "refusedTours": "refused tours",
       "removePhoto": "Remove photo",
       "requestDeleted": "Request deleted",
       "deleteRequest": "Delete",
@@ -502,16 +502,16 @@
     "adults": "Adults (12+)",
     "children": "Children (2–11)",
     "end_date": "End date",
-    "flight": "Resold flight ticket",
+    "flight": "refused flight ticket",
     "guide": "Guide",
-    "hotel": "Resold hotel",
+    "hotel": "refused hotel",
     "infants": "Infants (0–1)",
     "location": "Location",
     "location_placeholder": "Enter location ...",
-    "package": "Resold tour",
+    "package": "refused tour",
     "price": "Price",
     "propose_price": "Propose a price",
-    "refused_event": "Resold event ticket",
+    "refused_event": "refused event ticket",
     "results": "Search results",
     "reviews": "Service reviews",
     "search": "Search",
@@ -595,10 +595,313 @@
   "current_password": "Current password",
   "new_password": "New password",
 
-  "new_refused_airtkt": "Add new resold flight ticket:",
-  "new_refused_event_ticket": "Resold event ticket",
-  "new_refused_hotel": "Add new resold hotel:",
-  "new_refused_tkt": "Add new resold event ticket:",
-  "new_refused_tour": "Add new resold tour:"
-}
+  "new_refused_airtkt": "Add new refused flight ticket:",
+  "new_refused_event_ticket": "refused event ticket",
+  "new_refused_hotel": "Add new refused hotel:",
+  "new_refused_tkt": "Add new refused event ticket:",
+  "new_refused_tour": "Add new refused tour:"
+  "new_service_tip": "To create a new service, fill in all fields below and click “Save service”.",
+  "new_visa_service": "Add a visa support service:",
+  "new_visa_support": "Visa support",
+
+  "no_changes": "No changes to save",
+  "no_file_chosen": "No file chosen",
+  "no_files_selected": "No files selected",
+  "no_images_yet": "No images yet",
+  "not_specified": "Not specified",
+
+  "ok": "OK",
+  "one_way": "One-way",
+  "one_way_transfer": "One-way transfer",
+
+  "pagination": { "next": "Next", "prev": "Prev" },
+
+  "password_change": "Change password",
+  "password_changed": "Password updated",
+  "password_error": "Password change error",
+  "password_too_short": "Password must be at least 6 characters long",
+
+  "phone": "Phone",
+  "photo": "Photo",
+  "pick_dates": "Pick start and end dates",
+  "price": "Price",
+
+  "profile": {
+    "city": "City",
+    "languages": "Languages",
+    "phone": "Tel.",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Price/day",
+    "open_profile": "Open profile →",
+    "password_changed": "Password changed",
+    "saved": "Profile saved",
+    "regions_placeholder": "Start typing a city in English.",
+    "completeness": {
+      "title": "Profile completeness",
+      "progress": "{{percent}}% completed",
+      "hint": "Your profile is not 100% complete. Complete it so your services can be published in Marketplace and TourBuilder.",
+      "languages": "Languages",
+      "transport": "Available vehicles",
+      "certificate": "Upload certificate",
+      "logo": "Upload logo",
+      "telegram": "Connect Telegram",
+      "optional": "(optional)",
+      "fill": "Fill in"
+    }
+  },
+  "profile_load_error": "Failed to load profile",
+  "profile_updated": "Profile updated",
+
+  "provider": {
+    "type": "Provider type",
+    "region": "Provider region",
+    "types": {
+      "agent": "Travel agent",
+      "guide": "Guide",
+      "transport": "Transport",
+      "hotel": "Hotel"
+    },
+    "bookings": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "details": "Details",
+      "languages": "Languages",
+      "noItems": "No bookings.",
+      "reject": "Reject",
+      "status": "Status",
+      "title": "Bookings (Provider)"
+    },
+    "inbox": {
+      "confirm_delete_title": "Delete request?",
+      "confirm_delete_msg": "Delete this quick request with no possibility to restore?",
+      "title": "Incoming requests",
+      "total": "Total",
+      "new": "New",
+      "processed": "Processed",
+      "from": "From",
+      "empty": "No requests",
+      "mark_processed": "Processed",
+      "confirm_delete": "Delete request?"
+    },
+    "outbox": {
+      "confirm_delete_title": "Delete request?",
+      "confirm_delete_msg": "Delete this quick request with no possibility to restore?",
+      "edit_soon_title": "Confirm the action on travella.uz",
+      "edit_soon_msg": "Editing is coming soon",
+      "title": "Outgoing requests",
+      "total": "Total",
+      "new": "New",
+      "processed": "Processed",
+      "from": "From",
+      "empty": "No requests",
+      "mark_processed": "Processed",
+      "confirm_delete": "Delete request?"
+    }
+  },
+
+  "ps": {
+    "title": "Services for Tour Builder",
+
+    "btn": {
+      "refresh": "Refresh",
+      "generate_from_profile": "Generate from profile",
+      "generating": "Generating…",
+      "generate_hint": "Auto-generation by cities and cars from your profile"
+    },
+
+    "grp": {
+      "guide": "GUIDE",
+      "guide_transport": "GUIDE+TRANSPORT",
+      "transport": "TRANSPORT"
+    },
+
+    "form": {
+      "category": "Category",
+      "category_ph": "— select category —",
+      "name_opt": "Name (opt.)",
+      "name_optional_ph": "e.g. 4 hours or car model",
+      "seats": "Seats",
+      "price": "Price",
+      "price_ph": "100, 120.50 …",
+      "currency": "Currency",
+      "add": "Add"
+    },
+
+    "table": {
+      "category": "Category",
+      "name": "Name",
+      "seats": "Seats",
+      "price": "Price",
+      "currency": "Currency",
+      "status": "Status",
+      "actions": "Actions"
+    },
+
+    "row": {
+      "name_ph": "Name…",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
+
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+
+    "empty": "No services found. Add at least one.",
+    "hint": {
+      "zero_price": "Tip: TourBuilder does not show services priced at 0. Enter prices and they will appear in the builder right away."
+    },
+
+    "confirm": {
+      "delete": "Delete service?",
+      "bulk": "Confirm bulk service addition."
+    },
+
+    "error": {
+      "delete": "Failed to delete: ",
+      "no_cities": "First fill in “Operating region” in your profile.",
+      "nothing_to_generate": "Nothing to generate from: add cities and/or cars to your profile.",
+      "bulk": "Bulk creation error: "
+    }
+  },
+
+  "requests": {
+    "afterAcceptNote": "After the client accepts the proposal (status = accepted), they will be able to create a booking.",
+    "messagePlaceholder": "Message to client…",
+    "noItems": "No requests.",
+    "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+    "send": "Send",
+    "sendProposal": "Send proposal",
+    "title": "Requests (Provider)"
+  },
+
+  "provider_profile": "Provider profile",
+  "providerProfile": { "type": "Provider type", "region": "Provider region", "address": "Address" },
+
+  "refused_hotel": "refused hotel",
+  "refused_hotel_city": "City",
+  "refused_hotel_name": "refused hotel name",
+  "refused_hotel_select": "Enter hotel",
+  "refused_hotel_select_city": "Enter city",
+  "refused_ticket": "refused flight ticket",
+  "refused_tour": "refused tour",
+
+  "register": {
+    "errors": {
+      "email_taken": "This e-mail is already registered",
+      "phone_taken": "This phone number is already registered",
+      "weak_password": "Password is too weak",
+      "generic": "Registration error"
+    },
+    "button": "Register",
+    "email": "Email",
+    "error": "Registration error.",
+    "file_chosen": "File chosen",
+    "loading": "Registering ...",
+    "location_placeholder": "e.g. Samarkand, Bukhara",
+    "name": "Name",
+    "no_file": "No file chosen",
+    "password": "Password",
+    "phone": "Phone",
+    "photo": "Profile photo",
+    "required": "Fill in this field",
+    "select_file": "Select file",
+    "social": "Telegram username",
+    "success": "Registration successful!",
+    "title": "Provider registration",
+    "type": "Provider type"
+  },
+
+  "requests.tabs.incoming": "Incoming",
+  "requests.tabs.outgoing": "Outgoing",
+
+  "requests_list": {
+    "empty": "No requests yet.",
+    "error": "Failed to send request",
+    "item": "Request",
+    "note_prompt": "Comment to request (optional):",
+    "sent": "Request sent"
+  },
+
+  "return_date": "Return date",
+
+  "reviews": {
+    "already_left": "You have already left a review",
+    "count": "review(s)",
+    "count_one": "{{count}} review",
+    "count_few": "{{count}} reviews",
+    "count_many": "{{count}} reviews",
+    "count_other": "{{count}} reviews",
+    "empty": "No reviews yet.",
+    "leave": "Leave a review",
+    "leave_client": "Leave a review about the client",
+    "leave_service": "Leave a review about the service",
+    "list": "Reviews",
+    "placeholder": "Briefly describe your experience",
+    "rating": "Rating",
+    "save_error": "Failed to save review",
+    "saved": "Review saved",
+    "send": "Send",
+    "title": "Reviews",
+    "title_provider": "Client reviews",
+    "title_service": "Service reviews",
+    "your_rating": "Your rating"
+  },
+
+  "roles": { "client": "Client", "provider": "Provider", "admin": "Admin" },
+
+  "room_rent": "Room rent",
+  "round_trip": "Round trip",
+  "save": "Save",
+  "save_service": "Save service",
+  "saving": "Saving...",
+  "select_category": "Select category",
+  "select_event_category": "Select event category",
+  "select_files": "Select files",
+  "select_hotel": "Select hotel",
+
+  "service": "Service",
+  "service_added": "Service added",
+  "service_deleted": "Service deleted",
+  "service_images": "Service photos",
+  "service_updated": "Service updated",
+  "services_marketplace": "Services for MARKETPLACE",
+  "services_load_error": "Failed to load services",
+
+  "social": "Telegram username",
+  "start_flight_date": "Departure flight date",
+
+  "stats": {
+    "bonus_progress": "Bonus progress",
+    "bookings_total": "Bookings (total)",
+    "cancelled": "Cancelled",
+    "completed": "Completed",
+    "level": "Level",
+    "rating": "Rating",
+    "requests_active": "Requests (active)",
+    "requests_total": "Requests (total)",
+    "tier": "Tier",
+    "tier_label": "Tier"
+  },
+
+  "status": {
+    "new": "new",
+    "processed": "processed",
+    "pending": "pending",
+    "rejected": "rejected",
+    "active": "active",
+    "accepted": "accepted",
+    "not_actual": "not actual"
+  },
+
+  "sum": "Amount",
+
+  "tabs": {
+    "favorites": "Favorites",
+    "my_bookings": "My bookings",
+    "my_requests": "My requests"
+  }
 
