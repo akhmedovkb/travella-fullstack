@@ -598,4 +598,310 @@
   "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
   "new_refused_hotel": "Yangi rad etilgan mehmonxonani qo‘shish:",
   "new_refused_tkt": "Yangi rad etilgan tadbir chiptasini qo‘shish:",
-  "new_refused_tour": "Yangi rad etilgan turni qo‘shish:"
+  "new_refused_tour": "Yangi rad etilgan turni qo‘shish:",
+  "new_service_tip": "Yangi xizmat yaratish uchun quyidagi barcha maydonlarni to‘ldiring va «Xizmatni saqlash» tugmasini bosing.",
+  "new_visa_service": "Viza qo‘llab-quvvatlash xizmati qo‘shish:",
+  "new_visa_support": "Viza qo‘llab-quvvatlash",
+
+  "no_changes": "Saqlash uchun o‘zgarishlar yo‘q",
+  "no_file_chosen": "Fayl tanlanmagan",
+  "no_files_selected": "Fayllar tanlanmagan",
+  "no_images_yet": "Hozircha rasmlar yo‘q",
+  "not_specified": "Ko‘rsatilmagan",
+
+  "ok": "OK",
+  "one_way": "Bir tomonga",
+  "one_way_transfer": "Bir tomonga transfer",
+
+  "pagination": { "next": "Oldinga", "prev": "Orqaga" },
+
+  "password_change": "Parolni o‘zgartirish",
+  "password_changed": "Parol yangilandi",
+  "password_error": "Parolni o‘zgartirishda xatolik",
+  "password_too_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
+
+  "phone": "Telefon",
+  "photo": "Foto",
+  "pick_dates": "Boshlanish va tugash sanalarini tanlang",
+  "price": "Narx",
+
+  "profile": {
+    "city": "Shahar",
+    "languages": "Tillar",
+    "phone": "Tel.",
+    "telegram": "Telegram",
+    "email": "Email",
+    "price_per_day": "Narx/kun",
+    "open_profile": "Profilni ochish →",
+    "password_changed": "Parol o‘zgartirildi",
+    "saved": "Profil saqlandi",
+    "regions_placeholder": "Shahar nomini inglizcha kiritishni boshlang.",
+    "completeness": {
+      "title": "Profil to‘ldirilganligi",
+      "progress": "{{percent}}% to‘ldirilgan",
+      "hint": "Siz profilingizni 100% to‘ldirmagansiz. Marketplace va TourBuilder’da xizmatlaringiz chiqishi uchun to‘ldiring.",
+      "languages": "Til bilish darajasi",
+      "transport": "Mavjud transport",
+      "certificate": "Sertifikat yuklash",
+      "logo": "Logo yuklash",
+      "telegram": "Telegram ulash",
+      "optional": "(ixtiyoriy)",
+      "fill": "To‘ldirish"
+    }
+  },
+  "profile_load_error": "Profilni yuklab bo‘lmadi",
+  "profile_updated": "Profil yangilandi",
+
+  "provider": {
+    "type": "Provayder turi",
+    "region": "Provayder hududi",
+    "types": {
+      "agent": "Turoperator",
+      "guide": "Gid",
+      "transport": "Transport",
+      "hotel": "Mehmonxona"
+    },
+    "bookings": {
+      "cancel": "Bekor qilish",
+      "confirm": "Tasdiqlash",
+      "details": "Tafsilotlar",
+      "languages": "Tillar",
+      "noItems": "Bronlar yo‘q.",
+      "reject": "Rad etish",
+      "status": "Holat",
+      "title": "Bronlar (Provayder)"
+    },
+    "inbox": {
+      "confirm_delete_title": "So‘rovni o‘chirasizmi?",
+      "confirm_delete_msg": "Ushbu tez so‘rovni tiklab bo‘lmaydigan tarzda o‘chirishni xohlaysizmi?",
+      "title": "Kiruvchi so‘rovlar",
+      "total": "Jami",
+      "new": "Yangi",
+      "processed": "Ko‘rib chiqilgan",
+      "from": "Kimdan",
+      "empty": "Arizalar yo‘q",
+      "mark_processed": "Ko‘rib chiqildi",
+      "confirm_delete": "Arizani o‘chirasizmi?"
+    },
+    "outbox": {
+      "confirm_delete_title": "So‘rovni o‘chirasizmi?",
+      "confirm_delete_msg": "Ushbu tez so‘rovni tiklab bo‘lmaydigan tarzda o‘chirishni xohlaysizmi?",
+      "edit_soon_title": "Amalni travella.uz saytida tasdiqlang",
+      "edit_soon_msg": "Tahrirlash tez orada bo‘ladi",
+      "title": "Chiquvchi so‘rovlar",
+      "total": "Jami",
+      "new": "Yangi",
+      "processed": "Ko‘rib chiqilgan",
+      "from": "Kimdan",
+      "empty": "Arizalar yo‘q",
+      "mark_processed": "Ko‘rib chiqildi",
+      "confirm_delete": "Arizani o‘chirasizmi?"
+    }
+  },
+
+  "ps": {
+    "title": "Tour Builder uchun xizmatlar",
+
+    "btn": {
+      "refresh": "Yangilash",
+      "generate_from_profile": "Profil asosida yaratish",
+      "generating": "Yaratilmoqda…",
+      "generate_hint": "Profilingizdagi shaharlar va avtomobillar bo‘yicha avto-yaratish"
+    },
+
+    "grp": {
+      "guide": "GID",
+      "guide_transport": "GID+TRANSPORT",
+      "transport": "TRANSPORT"
+    },
+
+    "form": {
+      "category": "Kategoriya",
+      "category_ph": "— kategoriyani tanlang —",
+      "name_opt": "Nom (ixt.)",
+      "name_optional_ph": "masalan, 4 soat yoki avtomobil modeli",
+      "seats": "O‘rinlar",
+      "price": "Narx",
+      "price_ph": "100, 120.50 …",
+      "currency": "Valyuta",
+      "add": "Qo‘shish"
+    },
+
+    "table": {
+      "category": "Kategoriya",
+      "name": "Nom",
+      "seats": "O‘rinlar",
+      "price": "Narx",
+      "currency": "Valyuta",
+      "status": "Holat",
+      "actions": "Amallar"
+    },
+
+    "row": {
+      "name_ph": "Nom…",
+      "enable": "Yoqish",
+      "disable": "O‘chirish",
+      "delete": "O‘chirish"
+    },
+
+    "status": {
+      "enabled": "Yoqilgan",
+      "disabled": "O‘chirilgan"
+    },
+
+    "empty": "Xizmatlar topilmadi. Hech bo‘lmasa bittasini qo‘shing.",
+    "hint": {
+      "zero_price": "Maslahat: narxi 0 bo‘lgan xizmatlarni TourBuilder ko‘rsatmaydi. Narxlarni kiriting — va ular darhol konstruktorda paydo bo‘ladi."
+    },
+
+    "confirm": {
+      "delete": "Xizmatni o‘chirasizmi?",
+      "bulk": "Xizmatlarni paket tarzda qo‘shishni tasdiqlang."
+    },
+
+    "error": {
+      "delete": "O‘chirib bo‘lmadi: ",
+      "no_cities": "Avval profilga «Faoliyat hududi»ni to‘ldiring.",
+      "nothing_to_generate": "Yaratish uchun ma’lumot yo‘q: profilga shaharlar va/yoki avtomobillar qo‘shing.",
+      "bulk": "Paket yaratishda xatolik: "
+    }
+  },
+
+  "requests": {
+    "afterAcceptNote": "Klient taklifni qabul qilgach (status = accepted), u bronni rasmiylashtira oladi.",
+    "messagePlaceholder": "Klientga xabar…",
+    "noItems": "Arizalar yo‘q.",
+    "proposalPlaceholder": "JSON-taklif (masalan, {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
+    "send": "Yuborish",
+    "sendProposal": "Taklif yuborish",
+    "title": "So‘rovlar (Provayder)"
+  },
+
+  "provider_profile": "Provayder profili",
+  "providerProfile": { "type": "Provayder turi", "region": "Provayder hududi", "address": "Manzil" },
+
+  "refused_hotel": "Rad etilgan mehmonxona",
+  "refused_hotel_city": "Shahar",
+  "refused_hotel_name": "Rad etilgan mehmonxona nomi",
+  "refused_hotel_select": "Mehmonxonani kiriting",
+  "refused_hotel_select_city": "Shaharni kiriting",
+  "refused_ticket": "Rad etilgan aviachiptasi",
+  "refused_tour": "Rad etilgan tur",
+
+  "register": {
+    "errors": {
+      "email_taken": "Ushbu e-mail allaqachon ro‘yxatdan o‘tgan",
+      "phone_taken": "Ushbu raqam allaqachon ro‘yxatdan o‘tgan",
+      "weak_password": "Parol juda oddiy",
+      "generic": "Ro‘yxatdan o‘tishda xatolik"
+    },
+    "button": "Ro‘yxatdan o‘tish",
+    "email": "Email",
+    "error": "Ro‘yxatdan o‘tishda xatolik.",
+    "file_chosen": "Fayl tanlandi",
+    "loading": "Ro‘yxatdan o‘tkazyapmiz ...",
+    "location_placeholder": "masalan, Samarqand, Buxoro",
+    "name": "Nom",
+    "no_file": "Fayl tanlanmagan",
+    "password": "Parol",
+    "phone": "Telefon",
+    "photo": "Profil fotosi",
+    "required": "Bu maydonni to‘ldiring",
+    "select_file": "Fayl tanlash",
+    "social": "Telegram username",
+    "success": "Ro‘yxatdan o‘tish muvaffaqiyatli!",
+    "title": "Provayder ro‘yxatdan o‘tishi",
+    "type": "Provayder turi"
+  },
+
+  "requests.tabs.incoming": "Kiruvchi",
+  "requests.tabs.outgoing": "Chiquvchi",
+
+  "requests_list": {
+    "empty": "Hozircha so‘rovlar yo‘q.",
+    "error": "So‘rov yuborilmadi",
+    "item": "So‘rov",
+    "note_prompt": "So‘rovga izoh (ixtiyoriy):",
+    "sent": "So‘rov yuborildi"
+  },
+
+  "return_date": "Qaytish sanasi",
+
+  "reviews": {
+    "already_left": "Siz allaqachon sharh qoldirgansiz",
+    "count": "sharh(lar)",
+    "count_one": "{{count}} sharh",
+    "count_few": "{{count}} sharh",
+    "count_many": "{{count}} sharh",
+    "count_other": "{{count}} sharh",
+    "empty": "Hozircha sharhlar yo‘q.",
+    "leave": "Sharh qoldirish",
+    "leave_client": "Klient haqida sharh qoldirish",
+    "leave_service": "Xizmat haqida sharh qoldirish",
+    "list": "Sharhlar",
+    "placeholder": "Tajriba haqida qisqacha yozing",
+    "rating": "Baho",
+    "save_error": "Sharhni saqlab bo‘lmadi",
+    "saved": "Sharh saqlandi",
+    "send": "Yuborish",
+    "title": "Sharhlar",
+    "title_provider": "Klientlar sharhlari",
+    "title_service": "Xizmat sharhlari",
+    "your_rating": "Sizning bahoingiz"
+  },
+
+  "roles": { "client": "Klient", "provider": "Provayder", "admin": "Admin" },
+
+  "room_rent": "Xona ijarasi",
+  "round_trip": "Borib-qaytish",
+  "save": "Saqlash",
+  "save_service": "Xizmatni saqlash",
+  "saving": "Saqlayapman...",
+  "select_category": "Kategoriyani tanlang",
+  "select_event_category": "Tadbir kategoriyasini tanlang",
+  "select_files": "Fayllarni tanlash",
+  "select_hotel": "Mehmonxonani tanlang",
+
+  "service": "Xizmat",
+  "service_added": "Xizmat qo‘shildi",
+  "service_deleted": "Xizmat o‘chirildi",
+  "service_images": "Xizmat fotosuratlari",
+  "service_updated": "Xizmat yangilandi",
+  "services_marketplace": "MARKETPLACE uchun xizmatlar",
+  "services_load_error": "Xizmatlarni yuklab bo‘lmadi",
+
+  "social": "Telegram username",
+  "start_flight_date": "Uchish reysi sanasi",
+
+  "stats": {
+    "bonus_progress": "Bonus progress",
+    "bookings_total": "Bronlar (jami)",
+    "cancelled": "Bekor qilingan",
+    "completed": "Yakunlangan",
+    "level": "Daraja",
+    "rating": "Reyting",
+    "requests_active": "So‘rovlar (faol)",
+    "requests_total": "So‘rovlar (jami)",
+    "tier": "Daraja",
+    "tier_label": "Daraja"
+  },
+
+  "status": {
+    "new": "yangi",
+    "processed": "ko‘rib chiqilgan",
+    "pending": "kutilmoqda",
+    "rejected": "rad etilgan",
+    "active": "faol",
+    "accepted": "qabul qilingan",
+    "not_actual": "dolzarb emas"
+  },
+
+  "sum": "Summa",
+
+  "tabs": {
+    "favorites": "Sevimlilar",
+    "my_bookings": "Mening bronlarim",
+    "my_requests": "Mening so‘rovlarim"
+  }
+
+
