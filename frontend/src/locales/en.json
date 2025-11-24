@@ -1199,5 +1199,302 @@
     "generate": "Generate program",
     "programText": "Text program"
   },
-  
+  "landing": {
+  "ayurveda": {
+    "badge": "Ayurveda in India",
+    "h1": "Complete recovery through traditional Ayurveda",
+    "sub": "Wellness programs from India’s leading clinics: detox, rehabilitation, chronic condition care, and stress management.",
+    "cta_primary": "Get a consultation",
+    "cta_secondary": "View clinics",
+
+    "stats": {
+      "days": "Program duration",
+      "doctors": "Licensed doctors",
+      "support": "Curator support"
+    },
+
+    "benefits": {
+      "title": "Why Ayurveda in India?",
+      "sub": "A unique tradition combining natural therapy, nutrition, massages, and a full body reset.",
+      "items": [
+        { "title": "Detox & rejuvenation", "text": "Comprehensive cleansing with personalized protocols." },
+        { "title": "Stress relief", "text": "Nervous system recovery practices, yoga, and breathing." },
+        { "title": "Chronic conditions", "text": "Support for insomnia, migraines, GI issues, and hormonal balance." },
+        { "title": "Eco-friendly weight loss", "text": "Gentle weight reduction without stressing the body." }
+      ]
+    },
+
+    "programs": {
+      "title": "Popular programs",
+      "sub": "Designed by India’s leading Ayurvedic doctors.",
+      "items": [
+        {
+          "title": "Panchakarma",
+          "text": "Classic deep cleansing for body and mind.",
+          "duration": "14–21 days",
+          "format": "Intensive"
+        },
+        {
+          "title": "Stress Relief",
+          "text": "For chronic fatigue, insomnia, and anxiety.",
+          "duration": "7–14 days",
+          "format": "Gentle format"
+        },
+        {
+          "title": "Slim & Fit",
+          "text": "Natural weight correction with tailored diet and procedures.",
+          "duration": "10–14 days",
+          "format": "Standard"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "How the program works",
+      "step": "Step {{num}}",
+      "items": [
+        { "title": "Online assessment", "text": "The doctor reviews your condition and selects a program." },
+        { "title": "Clinic selection", "text": "We choose the best option based on your budget." },
+        { "title": "Treatment program", "text": "Procedures, diet, massages, yoga, and doctor supervision." },
+        { "title": "Results", "text": "You receive recommendations and a post-program plan." }
+      ]
+    },
+
+    "clinics": {
+      "title": "Top Ayurvedic clinics in India",
+      "sub": "Trusted partners in Kerala, Goa, Delhi, and Himachal Pradesh.",
+      "btn": "Clinics catalog",
+      "btn2": "Contact a curator"
+    },
+
+    "faq": {
+      "title": "FAQ",
+      "items": [
+        { "q": "How long are the programs?", "a": "From 7 to 21 days depending on your goal." },
+        { "q": "Can I come without preparation?", "a": "Yes, the doctor will tailor everything on site." },
+        { "q": "Can we travel as a family?", "a": "Yes, most clinics welcome all age groups." },
+        { "q": "How much does the program cost?", "a": "From $500–$1200 per week depending on clinic and level." }
+      ]
+    },
+
+    "final": {
+      "title": "Start your recovery journey today",
+      "sub": "Get a free consultation from a Travella curator.",
+      "btn": "Get a consultation"
+    }
+  },
+
+  "checkup": {
+    "badge": "India Check-up",
+    "h1": "Full health check-up in India in 1–3 days",
+    "sub": "Basic and extended screening packages in top Delhi clinics. сопровождение, translation, and 24/7 curator help.",
+    "cta_primary": "Get a consultation",
+    "cta_secondary": "View clinics",
+
+    "stats": {
+      "days": "Program duration (days)",
+      "tests": "Tests and examinations",
+      "support": "Curator support"
+    },
+
+    "benefits": {
+      "title": "Why do a Check-up in India?",
+      "sub": "Save time, get accurate diagnostics, and evidence-based medicine.",
+      "items": [
+        { "title": "Fast and structured", "text": "All tests are done in 1–3 days in one place." },
+        { "title": "Modern technology", "text": "MRI, CT, PET, endoscopy, genetic tests." },
+        { "title": "Precise conclusions", "text": "Doctor board and a final report." },
+        { "title": "Cost-effective", "text": "Lower price with a high service level." }
+      ]
+    },
+
+    "programs": {
+      "title": "Popular packages",
+      "sub": "We match a package to your age, goals, and health history.",
+      "items": [
+        {
+          "title": "Basic Check-up",
+          "text": "CBC, biochemistry, ultrasound, ECG, therapist.",
+          "duration": "1 day",
+          "forWhom": "For everyone"
+        },
+        {
+          "title": "Cardio Check-up",
+          "text": "EchoCG, 24-hour monitoring, stress test, cardiologist consult.",
+          "duration": "1–2 days",
+          "forWhom": "Heart / vessels"
+        },
+        {
+          "title": "Oncology screening",
+          "text": "Extended diagnostics for risk assessment and early detection.",
+          "duration": "2–3 days",
+          "forWhom": "40+ / by indication"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "How diagnostics work",
+      "step": "Step {{num}}",
+      "items": [
+        { "title": "Data collection", "text": "You fill a short form and send documents." },
+        { "title": "Clinic selection", "text": "The curator offers 2–3 options by needs and budget." },
+        { "title": "Check-up in India", "text": "We handle exams, translation, and support." },
+        { "title": "Final report", "text": "You receive conclusions and recommendations in Russian/Uzbek." }
+      ]
+    },
+
+    "clinics": {
+      "title": "Trusted Delhi clinics",
+      "sub": "We work only with accredited hospitals and doctors.",
+      "btn": "Open clinics catalog",
+      "btn2": "Ask a curator"
+    },
+
+    "faq": {
+      "title": "FAQ",
+      "items": [
+        { "q": "How many days does a Check-up take?", "a": "From 1 to 3 days depending on the package." },
+        { "q": "Should I bring medical records?", "a": "Yes, preferably. You can send them in advance." },
+        { "q": "Is there an interpreter?", "a": "Yes, your curator helps at every step." },
+        { "q": "How much does it cost?", "a": "From $250 for the basic package. Exact price depends on tests." }
+      ]
+    },
+
+    "final": {
+      "title": "Get diagnosed without long waiting",
+      "sub": "Leave a request — we’ll match a package and clinic for you.",
+      "btn": "Get a consultation"
+    }
+  },
+
+  "treatment": {
+    "badge": "Treatment in India",
+    "h1": "Advanced treatment in India’s leading hospitals",
+    "sub": "Top specialists, accredited hospitals, transparent pricing, and full patient support.",
+
+    "cta_primary": "Get a consultation",
+    "cta_secondary": "View clinics",
+
+    "stats": {
+      "specialties": "Medical specialties",
+      "prices": "Savings vs UAE/Europe",
+      "jci": "International accreditation"
+    },
+
+    "benefits": {
+      "title": "Why patients choose India",
+      "sub": "High technology, experienced doctors, and affordable prices.",
+      "items": [
+        { "title": "Strong doctors", "text": "Oncology, cardiology, transplants, orthopedics — all to global standards." },
+        { "title": "Modern equipment", "text": "Robotic surgery, neuronavigation, high-precision PET-CT." },
+        { "title": "Transparent pricing", "text": "Treatment costs are 40–70% lower." },
+        { "title": "24/7 support", "text": "Curator, translation, full logistics." }
+      ]
+    },
+
+    "programs": {
+      "title": "Key treatment areas",
+      "sub": "We work only with verified hospitals.",
+      "items": [
+        {
+          "title": "Oncology",
+          "text": "Diagnostics, surgery, chemo-/radiotherapy, targeted therapy.",
+          "time": "From 5 days",
+          "level": "High-tech"
+        },
+        {
+          "title": "Cardiology & cardiac surgery",
+          "text": "Coronary angiography, stenting, CABG, valve surgery.",
+          "time": "From 3 days",
+          "level": "Complex procedures"
+        },
+        {
+          "title": "Orthopedics & neurosurgery",
+          "text": "Joint replacement, spine surgery, arthroscopy.",
+          "time": "From 4 days",
+          "level": "Top specialists"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "How treatment works",
+      "step": "Step {{num}}",
+      "items": [
+        { "title": "Consultation", "text": "You send documents — the doctor reviews and proposes a plan." },
+        { "title": "Clinic selection", "text": "We compare options, prices, timelines, and doctors." },
+        { "title": "Treatment in India", "text": "We meet you, translate, support, and handle all issues." },
+        { "title": "Post-discharge support", "text": "Follow-up tests, doctor communication, recommendations." }
+      ]
+    },
+
+    "faq": {
+      "title": "FAQ",
+      "items": [
+        { "q": "Which hospitals are available?", "a": "Only JCI/NABH accredited hospitals." },
+        { "q": "Can I come urgently?", "a": "Yes, we handle emergency requests." },
+        { "q": "Do you help with visas?", "a": "Yes, we arrange medical visas." },
+        { "q": "What about prices?", "a": "2–3× cheaper than UAE/Europe." }
+      ]
+    },
+
+    "final": {
+      "title": "Get a treatment plan within 24 hours",
+      "sub": "Send medical documents — we’ll forward them to doctors.",
+      "btn": "Get a consultation"
+    }
+  },
+
+  "clinics": {
+    "badge": "India clinics",
+    "h1": "Top Delhi clinics for diagnostics and treatment",
+    "sub": "Oncology, cardiology, neurosurgery, orthopedics and more. Affordable, modern, and reliable.",
+    "cta_primary": "Get a consultation",
+
+    "categories_title": "Main specialties",
+    "categories_sub": "Verified departments and leading doctors.",
+    "categories": [
+      { "title": "Oncology", "text": "Modern diagnostics, surgery, and therapy." },
+      { "title": "Cardiology", "text": "Stenting, angiography, heart surgery." },
+      { "title": "Orthopedics", "text": "Joint replacement, arthroscopy, spine surgery." },
+      { "title": "Neurosurgery", "text": "Brain and spine surgery, minimally invasive methods." }
+    ],
+
+    "list_title": "Trusted hospitals",
+    "list_sub": "We work only with JCI/NABH accredited hospitals.",
+    "items": [
+      {
+        "name": "BLK-Max Hospital",
+        "city": "New Delhi",
+        "specialization": "Oncology • Cardiology • Transplants",
+        "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
+      },
+      {
+        "name": "Fortis Escorts",
+        "city": "Delhi",
+        "specialization": "Cardiology • Cardiac Surgery",
+        "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+      },
+      {
+        "name": "Medanta Hospital",
+        "city": "Gurgaon",
+        "specialization": "Oncology • Neurosurgery • Orthopedics",
+        "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
+      }
+    ],
+
+    "why_title": "Why India?",
+    "why": {
+      "items": [
+        { "title": "Top specialists", "text": "Experienced doctors working to global standards." },
+        { "title": "Modern technologies", "text": "PET-CT, Da Vinci robot, neuronavigation." },
+        { "title": "Affordable prices", "text": "40–70% lower than UAE/Europe." },
+        { "title": "Full support", "text": "Curator, translation, visa support." }
+      ]
+    },
+
+    "final_title": "Need help choosing a clinic?",
+    "final_sub": "Leave a request — we’ll find the best option for your case.",
+    "final_btn": "Get a consultation",
 
