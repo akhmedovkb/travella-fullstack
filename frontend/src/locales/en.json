@@ -903,5 +903,301 @@
     "favorites": "Favorites",
     "my_bookings": "My bookings",
     "my_requests": "My requests"
-  }
+  },
+    "tb": {
+    "tpl_apply_title": "Apply template",
+    "tpl_select": "Template",
+    "tpl_select_placeholder": "Select a template…",
+    "tpl_start_date": "Start date",
+    "tpl_start_hint": "You can choose only today’s date or later.",
+    "tpl_btn_cancel": "Cancel",
+    "tpl_btn_apply": "Apply",
+    "err": {
+      "select_template": "Select a template.",
+      "start_required": "Specify the start date.",
+      "template_empty": "The template has no days.",
+      "invalid_date": "Invalid date.",
+      "past_forbidden": "Start date cannot be in the past."
+    },
+    "hotel_category": "Hotel category",
+    "any": "Any",
+    "route": "Route",
+    "templates": "Templates",
+    "templates_open": "Open templates",
+    "templates_count": "{{count}} pcs.",
+    "transfers": "Intercity transfers",
+    "transfer_from_ph": "From (city)",
+    "transfer_to_ph": "To (city)",
+    "transfer_price_ph": "Price",
+    "per_pax": "/ pax",
+    "remove": "Remove",
+    "add_transfer": " Add transfer",
+    "transfers_day_sum": "Transfers total per day",
+    "profile": {
+      "city": "City",
+      "languages": "Languages",
+      "phone": "Tel.",
+      "telegram": "Telegram",
+      "email": "Email",
+      "price_per_day": "Price/day",
+      "open_profile": "Open profile →"
+    },
+    "transfer_types": {
+      "car": "Car",
+      "train": "Train",
+      "air": "Air"
+    },
+    "currencyintercities": {
+      "uzs": "UZS",
+      "usd": "USD"
+    },
+    "tourism_fee_hint": "Tourism fee: res. {{res}} / non-res. {{nrs}} UZS per person/night",
+    "tourism_fee_absent": "Tourism fee is not set in the hotel profile",
+    "rooms": "Rooms",
+    "extra_beds_short": "Extra beds",
+    "tourism_fee_short": "Tour. fee",
+    "vat": "VAT",
+    "vat_included": "included in price",
+    "usd_enter_valid_rate": "Enter a valid rate to see amounts in USD",
+    "tariff_for": "Tariffs for",
+    "tariffs_for": "Tariffs for",
+    "residents": "Residents",
+    "nonresidents": "Non-residents",
+
+    "speaking_lang": "Tour language",
+    "city_ph": "City (e.g., Tashkent)",
+    "pick_city_first": "Pick a city first",
+
+    "guide": "Guide",
+    "pick_guide": "Select a guide",
+    "pick_guide_service_ph": "Select a guide service…",
+    "no_services_for_guide": "No services found for this guide. Fill them in Dashboard → Services.",
+    "no_providers": "No available providers",
+
+    "transport": "Transport",
+    "pick_transport": "Select transport",
+    "pick_transport_service_ph": "Select a transport service…",
+    "no_services_for_transport": "No services found for this carrier. Fill them in Dashboard → Services.",
+
+    "hotel": "Hotel (per night, net)",
+    "hotel_short": "Hotel",
+    "pick_hotel": "Select a hotel",
+    "no_hotels": "No options",
+    "loading_hotel": "Loading room stock and seasons…",
+
+    "entry_fees": "Entry fees (sites)",
+    "entry_ph": "Start typing a site…",
+    "pick_sites": "Select sites",
+    "nothing_found": "Nothing found",
+    "entry_for_day": "For this day",
+    "entry_hint_suffix": "ADT/CHD and residency status are considered",
+
+    "price_per_day": "Price/day",
+    "price_per_night": "Price/night",
+    "day_total": "Day total",
+    "rooms_and_meals": "Rooms and meals",
+    "calc_day_hint": "For this day: {{amount}} (ADT/CHD and residency considered)",
+
+    "totals": {
+      "guide": "Guide (net)",
+      "transfers": "Transfers",
+      "transport": "Transport (net)",
+      "hotels": "Hotels (net)",
+      "entry": "Entry fees (net)",
+      "total": "TOTAL"
+    },
+
+    "title": "Tour builder",
+    "dates": "Tour dates",
+    "pick_dates": "Select start and end dates",
+    "dates_span": "{{from}} — {{to}} • {{days}} days",
+    "pax": "Guests (PAX)",
+
+    "load_draft": "Load draft",
+    "save_draft": "Save draft",
+    "draft_saved": "Draft saved",
+    "draft_saved_locally": "Draft saved locally",
+    "draft_loaded": "Draft loaded",
+    "draft_loaded_local": "Draft loaded from browser",
+    "no_drafts": "No drafts found",
+
+    "loop_route": "close route loop",
+    "loop": "repeat",
+    "override_by_day": "Override by day",
+    "use_default": "Use default",
+
+    "guides_suggest": "Guides available for selected dates",
+    "no_guides": "No suitable guides",
+    "transports_suggest": "Transport available for selected dates",
+    "no_transports": "No suitable transport",
+
+    "hotels_nights": "Nights (hotels are added manually)",
+    "net": "Net",
+    "notes": "Note",
+    "extra_beds_qty": "Extra beds qty",
+
+    "pricing": "Pricing",
+    "currency": "Currency",
+    "markup": "Markup, %",
+    "tourist_fee": "Tourism fee / night",
+    "hotels_cost": "Hotels (net)",
+    "providers_cost": "Guide/Transport (net)",
+    "total": "Total",
+
+    "meals": "Meals",
+    "meal_types": {
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "gala": "Gala dinner"
+    },
+    "meal_price_ph": "Price",
+    "add_meal": " Add meal",
+    "meals_day_sum": "Meals total per day"
+  },
+
+  "tpl": {
+    "program": "Tour program",
+    "program_ph": "Describe the program (multiline text, each item on a new line)…",
+    "title": "Tour templates",
+    "btn_new": "+ New template",
+    "readonly_hint": "Viewing is available to all providers. Only administrators can create and edit templates.",
+    "empty": "No templates yet",
+    "btn_edit": "Edit",
+    "btn_delete": "Delete",
+    "view_only": "View only",
+    "name": "Template name",
+    "days_title": "Days (cities in order)",
+    "city_ph": "City",
+    "btn_add_day": "+ Add day",
+    "btn_save": "Save",
+    "btn_cancel": "Cancel"
+  },
+
+  "ticket_details": "Ticket details (row, seat, etc.)",
+  "title": "Title",
+
+  "toast": {
+    "addedToFav": "Added to favorites",
+    "favoriteError": "Failed to update favorites",
+    "removedFromFav": "Removed from favorites"
+  },
+
+  "transfer": "Transfer",
+  "transfer_options": {
+    "group": "Group",
+    "individual": "Individual",
+    "none": "None",
+    "select": "Select transfer"
+  },
+
+  "transport": "Transport",
+  "type": "Provider type",
+  "update_error": "Update error",
+  "upload_images": "Images (multiple allowed):",
+  "view_certificate": "View certificate",
+  "visa_included": "Visa included",
+  "visa_support": "Visa support",
+
+  "tooltips": {
+    "favorite_add": "Add to favorites",
+    "favorite_remove": "Remove from favorites"
+  },
+
+  "gross_price": "Client price (gross)",
+  "expired": "Expired",
+
+  "form": {
+    "required": "Please fill out this field.",
+    "email_invalid": "Enter a valid e-mail.",
+    "password_short": "Minimum password length is 6 characters."
+  },
+
+  "enter_current_password": "Enter current password",
+  "hotels_load_error": "Failed to load hotels",
+  "country_not_found": "Country not found",
+  "direction_from_not_found": "Departure city not found",
+  "direction_to_not_found": "Arrival city not found",
+
+  "auth": {
+    "login": "Log in",
+    "login_client": "Log in as client",
+    "login_provider": "Log in as provider",
+    "login_required": "Log in to continue",
+    "provider_login_required": "Log in as provider"
+  },
+
+  "rooms_and_prices": "Room stock and prices",
+  "room_category": "Room category",
+  "count_short": "Qty",
+  "price_per_night": "Price/night",
+  "low_season": "Low season",
+  "high_season": "High season",
+  "for_residents": "For residents",
+  "for_nonresidents": "For non-residents",
+  "taxes_fees": "Taxes and fees",
+  "vat_percent": "VAT, %",
+  "tourism_fee_resident": "Tourism fee (residents), UZS/night",
+  "tourism_fee_nonresident": "Tourism fee (non-residents), UZS/night",
+  "extra_bed_cost": "Extra bed, UZS/night",
+
+  "admin": { "new_hotel_title": "New hotel" },
+  "hotel_name": "Name",
+  "enter_hotel_name": "Enter hotel name",
+  "enter_address": "Enter address",
+  "hotel_saved": "Hotel saved",
+  "hotel_save_error": "Hotel save error",
+  "country": "Country",
+  "city": "City",
+  "currency": "Currency",
+
+  "resident": "For residents",
+  "non_resident": "For non-residents",
+
+  "room_type_name": "Type name",
+  "add_custom_room_type_ph": "Add your room type (e.g., Deluxe…)",
+  "add_type": "Add type",
+  "extra_bed_price": "Extra bed price (per person/night)",
+
+  "taxes_and_fees": "Taxes and fees",
+  "vat_included": "Prices include VAT",
+  "vat_rate": "VAT rate, %",
+
+  "amenities": "Amenities",
+  "add_amenity": "Add amenity…",
+  "add_service": "Add service…",
+  "add": "Add",
+
+  "images": "Images",
+
+  "select_city": "Select city",
+  "select_country": "Select country",
+  "select": {
+    "type_more": "Type at least 2 characters",
+    "no_options": "Nothing found",
+    "loading": "Loading…"
+  },
+
+  "tourBuilder": {
+    "title": "Tour builder",
+    "dates": "Tour dates",
+    "arrivalDay1": "Arrival time on day 1",
+    "monuments": "Entry fees (sites)",
+    "monuments_ph": "Start typing a site/city…",
+    "guide": "Guide",
+    "transport": "Transport",
+    "cities": "Cities (multiselect)",
+    "cities_ph": "Start typing a city...",
+    "dragToReorder": "Drag to reorder",
+    "rooming": "Rooming (number of rooms)",
+    "map": "Map",
+    "segments": "Route segments",
+    "dep": "Departure time",
+    "arr": "Arrival time",
+    "extras": "Extras",
+    "extras_ph": "Meals, masterclass…",
+    "markerHint": "Drag the marker to refine the point",
+    "generate": "Generate program",
+    "programText": "Text program"
+  },
+  
 
