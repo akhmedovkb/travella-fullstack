@@ -173,7 +173,7 @@ export default function Header() {
   const location = useLocation();
 
   // если позже захочешь отдельно для India — поменяешь тут
-  const logoSrc = "/logo1.jpg";
+  const logoSrc = "/logo4.jpg";
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
