@@ -10,100 +10,116 @@ import AdminQuickTools from "./admin/AdminQuickTools";
 /* --- Inline SVG icons --- */
 const IconChecklist = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-    <path d="M8 8h8M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-    <path d="M7 4.5l1 1 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
+    <path d="M8 8h8M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M7 4.5l1 1 2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
 
 const IconModeration = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
+    <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
+
 const IconDashboard = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
+
 const IconRequests = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 4h16v12H7l-3 3V4Z" stroke="currentColor" strokeWidth="2" />
     <path d="M8 8h8M8 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
 const IconBookings = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M7 3v4M17 3v4M4 8h16v13H4V8Z" stroke="currentColor" strokeWidth="2" />
     <path d="M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
 const IconHeart = (p) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
-  </svg>
-);
-const IconUsers = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/>
-    <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="2"/>
-    <path d="M20 21v-2a3 3 0 0 0-3-3h-1" stroke="currentColor" strokeWidth="2"/>
-    <circle cx="17" cy="7" r="2" stroke="currentColor" strokeWidth="2"/>
-  </svg>
-);
-const IconHotel = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
-    <path d="M7 9h4M7 12h4M7 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-    <path d="M14 11h5a2 2 0 0 1 2 2v7" stroke="currentColor" strokeWidth="2"/>
-    <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-const IconTicket = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M4 7h16v10H4z" stroke="currentColor" strokeWidth="2"/>
-    <path d="M9 7v10M15 7v10" stroke="currentColor" strokeWidth="2" strokeDasharray="2 3"/>
-    <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
-  </svg>
-);
-const IconDoc = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M7 3h7l5 5v13H7z" stroke="currentColor" strokeWidth="2"/>
-    <path d="M14 3v6h6" stroke="currentColor" strokeWidth="2"/>
-    <path d="M10 13h7M10 17h7M10 9h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-const IconBurger = (p) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-const IconClose = (p) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-const IconChevron = (p) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
-    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <path
+      d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    />
   </svg>
 );
 
-const YES = new Set(["1","true","yes","on"]);
+const IconUsers = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" />
+    <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="2" />
+    <path d="M20 21v-2a3 3 0 0 0-3-3h-1" stroke="currentColor" strokeWidth="2" />
+    <circle cx="17" cy="7" r="2" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+
+const IconHotel = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2" />
+    <path d="M7 9h4M7 12h4M7 15h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M14 11h5a2 2 0 0 1 2 2v7" stroke="currentColor" strokeWidth="2" />
+    <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const IconTicket = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M4 7h16v10H4z" stroke="currentColor" strokeWidth="2" />
+    <path d="M9 7v10M15 7v10" stroke="currentColor" strokeWidth="2" strokeDasharray="2 3" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+  </svg>
+);
+
+const IconDoc = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M7 3h7l5 5v13H7z" stroke="currentColor" strokeWidth="2" />
+    <path d="M14 3v6h6" stroke="currentColor" strokeWidth="2" />
+    <path d="M10 13h7M10 17h7M10 9h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const IconBurger = (p) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const IconClose = (p) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const IconChevron = (p) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const YES = new Set(["1", "true", "yes", "on"]);
+
 function detectAdmin(profile) {
   const p = profile || {};
   const roles = []
     .concat(p.role || [])
     .concat(p.roles || [])
-    .flatMap(r => String(r).split(","))
-    .map(s => s.trim());
+    .flatMap((r) => String(r).split(","))
+    .map((s) => s.trim());
   const perms = []
     .concat(p.permissions || p.perms || [])
     .map(String);
   let is =
     !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
-    roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
-    perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()));
+    roles.some((r) => ["admin", "moderator", "super", "root"].includes(r.toLowerCase())) ||
+    perms.some((x) => ["moderation", "admin:moderation"].includes(x.toLowerCase()));
   if (typeof window !== "undefined" && import.meta?.env?.DEV) {
     const v = localStorage.getItem("isAdminUiHint");
     if (v && YES.has(String(v).toLowerCase())) is = true;
@@ -118,23 +134,30 @@ function detectAdminFromJwt() {
     const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
     const json = decodeURIComponent(
-      atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
     );
     const claims = JSON.parse(json);
     const roles = []
       .concat(claims.role || [])
       .concat(claims.roles || [])
-      .flatMap(r => String(r).split(","))
-      .map(s => s.trim());
+      .flatMap((r) => String(r).split(","))
+      .map((s) => s.trim());
     const perms = []
       .concat(claims.permissions || claims.perms || [])
       .map(String);
     return (
-      claims.role === "admin" || claims.is_admin === true || claims.moderator === true ||
-      roles.some(r => ["admin","moderator","super","root"].includes(r.toLowerCase())) ||
-      perms.some(x => ["moderation","admin:moderation"].includes(x.toLowerCase()))
+      claims.role === "admin" ||
+      claims.is_admin === true ||
+      claims.moderator === true ||
+      roles.some((r) => ["admin", "moderator", "super", "root"].includes(r.toLowerCase())) ||
+      perms.some((x) => ["moderation", "admin:moderation"].includes(x.toLowerCase()))
     );
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export default function Header() {
@@ -146,8 +169,11 @@ export default function Header() {
   const location = useLocation();
 
   const isIndia = location.pathname.startsWith("/india");
-  const logoSrc = isIndia ? "/logo1.jpg" : "/logo1.jpg"; 
-  // если позже захочешь другое для India — просто замени справа
+  const logoSrc = `${import.meta.env.BASE_URL}logo1.jpg`;
+  // если позже захочешь другое для India:
+  // const logoSrc = isIndia
+  //   ? `${import.meta.env.BASE_URL}logo_india.jpg`
+  //   : `${import.meta.env.BASE_URL}logo1.jpg`;
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -160,12 +186,19 @@ export default function Header() {
   const [favCount, setFavCount] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // Admin detect
   useEffect(() => {
     let alive = true;
     (async () => {
       const jwtAdmin = detectAdminFromJwt();
-      if (jwtAdmin) { if (alive) setIsAdmin(true); return; }
-      if (role !== "provider") { if (alive) setIsAdmin(false); return; }
+      if (jwtAdmin) {
+        if (alive) setIsAdmin(true);
+        return;
+      }
+      if (role !== "provider") {
+        if (alive) setIsAdmin(false);
+        return;
+      }
       try {
         const p = await apiGet("/api/providers/profile", role);
         if (alive) setIsAdmin(detectAdmin(p));
@@ -174,9 +207,12 @@ export default function Header() {
         if (alive) setIsAdmin(!!(v && YES.has(String(v).toLowerCase())));
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [role]);
 
+  // close admin dropdown on outside click
   useEffect(() => {
     const onDoc = (e) => {
       if (!adminRef.current) return;
@@ -186,6 +222,7 @@ export default function Header() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  // Favorites (provider)
   useEffect(() => {
     if (role !== "provider") return;
     let alive = true;
@@ -200,9 +237,13 @@ export default function Header() {
     load();
     const onChanged = () => load();
     window.addEventListener("provider:favorites:changed", onChanged);
-    return () => { alive = false; window.removeEventListener("provider:favorites:changed", onChanged); };
+    return () => {
+      alive = false;
+      window.removeEventListener("provider:favorites:changed", onChanged);
+    };
   }, [role]);
 
+  // Counters (provider)
   useEffect(() => {
     if (role !== "provider") return;
     let cancelled = false;
@@ -227,6 +268,7 @@ export default function Header() {
           bookingsPending = list.filter((x) => String(x.status).toLowerCase() === "pending").length;
           bookingsTotal = list.length;
         }
+
         if (!cancelled) {
           setCounts({
             requests_open: Number(rs?.open || 0) + requestsNew,
@@ -241,11 +283,16 @@ export default function Header() {
         if (!cancelled) setLoading(false);
       }
     };
+
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [role, refreshTick]);
 
+  // External events refresh
   useEffect(() => {
     const bump = () => setRefreshTick((x) => x + 1);
     window.addEventListener("provider:counts:refresh", bump);
@@ -256,6 +303,7 @@ export default function Header() {
     };
   }, []);
 
+  // Client favorites
   useEffect(() => {
     if (role !== "client") return;
     const fetchFavs = async () => {
@@ -263,7 +311,9 @@ export default function Header() {
         const res = await apiGet("/api/wishlist", true);
         const list = Array.isArray(res) ? res : res?.items || [];
         setFavCount(list.length);
-      } catch { setFavCount(0); }
+      } catch {
+        setFavCount(0);
+      }
     };
     fetchFavs();
     const onFavChanged = () => fetchFavs();
@@ -275,33 +325,51 @@ export default function Header() {
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  useEffect(() => { setMobileOpen(false); setAdminOpen(false); }, [location]);
+  // close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+    setAdminOpen(false);
+  }, [location]);
 
-return (
-  <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
-    {/* full width */}
-    <div className="w-full px-0">
-      {/* centered grid, как было */}
-      <div className="mx-auto max-w-7xl px-2 sm:px-3">
+  return (
+    <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
+      {/* px-0 чтобы лого было левее */}
+      <div className="mx-auto max-w-7xl px-0">
+        {/* One-row desktop header */}
         <div className="h-14 flex items-center justify-between gap-2">
-
+          {/* Left group */}
           <div className="flex items-center gap-2">
-            {/* burger ... */}
-
-            {/* LOGO — сильнее влево */}
-            <Link
-              to="/"
-              className="inline-flex items-center mr-2 -ml-3 sm:-ml-6"
-              aria-label="Travella Home"
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label="Menu"
             >
+              {mobileOpen ? <IconClose /> : <IconBurger />}
+            </button>
+
+            {/* LOGO */}
+            <Link to="/" className="inline-flex items-center mr-2 pl-2" aria-label="Travella Home">
               <img
                 src={logoSrc}
                 alt="Travella"
                 className="h-9 w-auto object-contain sm:h-10 md:h-11"
                 loading="lazy"
+                onError={(e) => {
+                  // фолбэк для доменов/кэша/имени файла
+                  e.currentTarget.style.display = "none";
+                  const parent = e.currentTarget.parentElement;
+                  if (parent && !parent.querySelector(".logo-fallback")) {
+                    const span = document.createElement("span");
+                    span.className = "logo-fallback text-white font-semibold tracking-wide";
+                    span.textContent = "TRAVELLA";
+                    parent.appendChild(span);
+                  }
+                }}
               />
             </Link>
 
+            {/* Products */}
             <nav className="hidden md:flex items-center gap-1">
               <NavItemDark to="/" label="MARKETPLACE" end />
               {role === "provider" && (
@@ -310,27 +378,28 @@ return (
               <NavItemDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </nav>
 
+            {/* Admin dropdown (desktop) */}
             {isAdmin && (
               <div className="hidden md:block relative ml-1" ref={adminRef}>
                 <button
                   type="button"
-                  onClick={() => setAdminOpen(v => !v)}
+                  onClick={() => setAdminOpen((v) => !v)}
                   className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition
                     ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
                 >
                   <IconModeration className="opacity-90" />
-                  <span>{t("nav.admin","Админ")}</span>
+                  <span>{t("nav.admin", "Админ")}</span>
                   <IconChevron className={`transition ${adminOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {adminOpen && (
                   <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
                     <DropdownItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
-                    <DropdownItem to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
-                    <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-                    <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
-                    <DropdownItem to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
+                    <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
+                    <DropdownItem to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
+                    <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
+                    <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
+                    <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
                     <div className="border-t border-white/10 p-2">
                       <AdminQuickTools />
                     </div>
@@ -340,7 +409,8 @@ return (
             )}
           </div>
 
-          <div className="hidden md:flex items-center gap-1">
+          {/* Right group */}
+          <div className="hidden md:flex items-center gap-1 pr-2">
             {role === "provider" && (
               <>
                 <NavBadgeDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} />
@@ -362,16 +432,18 @@ return (
             </div>
           </div>
 
-          <div className="md:hidden flex items-center">
+          {/* Mobile lang only */}
+          <div className="md:hidden flex items-center pr-2">
             <LanguageSelector />
           </div>
         </div>
 
+        {/* ===== Mobile drawer ===== */}
         <div
           className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
           aria-hidden={!mobileOpen}
         >
-          <nav className="pb-3 -mx-1">
+          <nav className="pb-3 -mx-1 px-2">
             {role && (
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
@@ -391,7 +463,7 @@ return (
               </RowGroupDark>
             )}
 
-            <RowGroupDark title={t("nav.products","Продукты")}>
+            <RowGroupDark title={t("nav.products", "Продукты")}>
               <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
               {role === "provider" && (
                 <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
@@ -400,19 +472,18 @@ return (
             </RowGroupDark>
 
             {isAdmin && (
-              <RowGroupDark title={t("nav.admin","Админ")}>
+              <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
-                <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
-                <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
-                <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
-                <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
-                <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
+                <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
+                <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
+                <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
+                <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
+                <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
               </RowGroupDark>
             )}
           </nav>
         </div>
       </div>
-     </div> 
     </header>
   );
 }
