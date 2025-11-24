@@ -50,7 +50,8 @@ export default function Footer() {
                 <img
                   src="/logo1.jpg"
                   alt="Travella"
-                  className="h-8 w-auto object-contain"
+                  className="h-10 w-auto sm:h-12 md:h-14 object-contain"
+                  loading="lazy"
                 />
               </Link>
 
