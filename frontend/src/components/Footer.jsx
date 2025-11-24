@@ -44,7 +44,7 @@ export default function Footer() {
             {/* logo */}
             <a href="/" className="inline-flex items-center gap-3">
               <img
-                src="/logo1.jpg"
+                src="/logo7.jpg"
                 alt="Travella"
                 className="h-12 w-auto sm:h-14 md:h-16 object-contain"
                 loading="lazy"
