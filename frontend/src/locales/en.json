@@ -5,14 +5,14 @@
   "actions": {
     "book": "Book",
     "cancel": "Cancel",
-    "ok": "ОК",
-    "quick_request": "Quick request",
-    "reject": "Reject",
-    "refresh": "Refresh",
+    "ok": "OK",
     "send": "Send",
-    "confirm": "Confirm",
+    "quick_request": "Quick request",
+    "refresh": "Refresh",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "reject": "Reject"
   },
 
   "address": "Address",
@@ -20,9 +20,9 @@
   "adt": "Adults (ADT)",
   "agent": "Travel agent",
   "airline": "Airline",
-  "authored_tour": "Authored tour",
+  "authored_tour": "Author tour",
   "back": "← Back",
-  "badges": { "boosted": "Boosted" },
+  "badges": { "boosted": "Recommended" },
 
   "booking": {
     "date": "Date",
@@ -30,76 +30,49 @@
     "submit": "Book",
     "time": "Time",
     "title": "Booking",
-    "modal_title": "Booking",
+    "service": "Service:",
+    "provider": "Provider:",
+    "offer": "Offer:",
     "selected_dates": "Selected dates",
+    "attachments_hint": "Attachments (PDF, Word, Excel, PPT, images, etc.)",
+    "modal_title": "Booking",
     "message_label": "Message",
     "message_ph": "Describe the request details...",
     "attachments_label": "Attachments (PDF, Word, Excel, PPT, images, etc.)",
     "send": "Send booking",
-    "need_auth": "Sign in to book",
-    "need_auth_hint": "Please sign in to send a booking request.",
-    "no_dates": "Select at least one free date",
+    "need_auth": "Log in to book",
+    "need_auth_hint": "To send a booking request, please log in.",
+    "no_dates": "Select at least one available date",
     "sent": "Booking request sent",
     "error": "Failed to send booking"
   },
 
   "bookings": {
-    "provider_cancel_reason": "Show the reason of cancellation",
-    "waiting_for_requester": "Proposal has been sent. Waiting for reply of the client",
-    "price_agreement": "Price agreement",
-    "last_offer": "Last offer",
-    "price": "Price",
-    "currency": "Currency",
-    "comment_optional": "Comment (optional)",
-    "price_placeholder": "e.g., 120",
-    "comment_placeholder": "For example: parking and waiting included",
-    "send_price": "Send price",
-    "price_invalid": "Enter a valid price",
-    "price_sent": "Price sent",
-    "price_send_error": "Failed to send price",
-
-    "client_comment": "Comment:",
+    "provider_cancel_reason": "Specify cancellation reason",
+    "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
     "empty": "No bookings yet.",
-
-    "filters": {
-      "all": "All",
-      "pending": "Pending",
-      "confirmed": "Confirmed",
-      "upcoming": "Upcoming",
-      "rejected": "Rejected"
-    },
-
     "item": "Booking",
-    "refresh": "Refresh",
-
     "tabs": {
-      "incoming": "Bookings for my services",
-      "outgoing": "My bookings",
+      "incomingOfMine": "Bookings for my services",
+      "myOutgoing": "My bookings",
       "all": "All",
       "pending": "Pending",
       "confirmed": "Confirmed",
       "upcoming": "Upcoming",
       "rejected": "Rejected"
     },
-
-    "sections": {
-      "incoming": "Bookings for my services",
-      "outgoing": "My bookings"
-    },
-
     "status": {
       "pending": "pending",
       "confirmed": "confirmed",
       "active": "active",
-      "quoted": "awaiting confirmation",
       "rejected": "rejected",
       "cancelled": "cancelled"
-     },
-
+    },
     "status_by": {
       "rejected": {
         "you": "Rejected: by you",
         "provider": "Rejected: by provider",
+        "quoted": "awaiting confirmation",
         "requester": "Rejected: by requester",
         "client": "Rejected: by client"
       },
@@ -110,41 +83,31 @@
         "client": "Cancelled: by client"
       }
     },
-
     "labels": { "client_comment": "Comment:" },
-
-    "titles": { "provider": "Bookings (Provider)" },
-
     "types": {
       "guide": "Guide",
       "transport": "Transport",
       "agent": "Travel agent",
       "hotel": "Hotel"
     },
-
     "actions": {
       "confirm": "Confirm",
       "reject": "Reject",
       "cancel": "Cancel"
     },
-
     "confirmed": "Booking confirmed",
     "confirm_error": "Confirmation error",
     "rejected": "Booking rejected",
     "reject_error": "Rejection error",
-
-    "dates_label": "Dates reserved:",
-    "wait_price": "Waiting for a price offer from the provider",
-
+    "dates_label": "Booked dates:",
+    "wait_price": "Waiting for provider's price offer",
     "search": { "placeholder": "Search: provider, service, status…" },
-
     "view": {
       "compact": "Compact",
       "normal": "Normal",
       "compact_title": "Compact mode"
     },
-
-    "allow_popups_pdf": "Allow pop-ups to export to PDF.",
+    "allow_popups_pdf": "Allow pop-ups for PDF export.",
     "pdf": {
       "generated_at": "Generated at",
       "total": "Total",
@@ -156,45 +119,45 @@
 
   "calendar": {
     "title_public": "Availability calendar",
-    "busy": "busy",
-    "selected": "selected",
     "blocking_title": "Availability calendar",
     "booked": "Booked",
+    "busy": "busy",
+    "selected": "selected",
     "dates_saved": "Blocked dates saved",
     "label_blocked_manual": "Manually blocked",
-    "label_booked_by_clients": "Blocked by bookings",
-    "load_error": "Failed to load dates",
+    "label_booked_by_clients": "Booked by clients",
+    "load_error": "Failed to load booked dates",
     "manual_blocked": "Manually blocked",
     "save_blocked_dates": "Save blocked dates",
     "save_button": "Save blocked dates",
-    "save_error": "Failed to save dates",
+    "save_error": "Error saving dates",
     "saved_successfully": "Dates saved"
   },
 
   "cancel": "Cancel",
-  "car_fleet" : "Available transport",
+  "car_fleet": "Available transport",
 
   "category": {
-    "author_tour": "Authored tour",
+    "author_tour": "Author tour",
     "border_transfer": "Border transfer",
     "city_tour_guide": "City tour (guide)",
     "city_tour_transport": "City tour (transport)",
     "dinner_transfer": "Dinner transfer",
-    "hall_rent": "Hall rent",
+    "hall_rent": "Hall rental",
     "hotel_room": "Hotel room",
     "hotel_transfer": "Hotel transfer",
     "mountain_tour_guide": "Mountain tour (guide)",
     "mountain_tour_transport": "Mountain tour (transport)",
     "one_way_transfer": "One-way transfer",
-    "refused_event_ticket": "Non-refundable event ticket",
-    "refused_flight": "Non-refundable air ticket",
-    "refused_hotel": "Non-refundable hotel",
-    "refused_tour": "Non-refundable tour",
+    "refused_event_ticket": "Resold event ticket",
+    "refused_flight": "Resold flight ticket",
+    "refused_hotel": "Resold hotel",
+    "refused_tour": "Resold tour",
     "visa_support": "Visa support",
     "desert_tour_guide": "Desert tour (guide)",
     "safari_tour_guide": "Safari tour (guide)",
     "meet": "Meet (guide)",
-    "seeoff": "See-off (guide)",
+    "seeoff": "See off (guide)",
     "translation": "Translation (guide)",
     "desert_tour_transport": "Desert tour (transport)",
     "safari_tour_transport": "Safari tour (transport)"
@@ -203,7 +166,7 @@
   "certificate": "Certificate",
   "change": "Change",
   "change_password": "Change password",
-  "changeable": "Changeable",
+  "changeable": "Changes allowed",
   "chd": "Children (CHD)",
   "choose_files": "Choose files",
   "city_tour": "City tour",
@@ -219,7 +182,7 @@
       "changePhoto": "Change photo",
       "confirmDeleteRequest": "Delete this request?",
       "languagesCsv": "languages_csv",
-      "logout": "Log out",
+      "logout": "Logout",
       "my_bookings": "My bookings",
       "name": "Name",
       "newPassword": "New password",
@@ -227,45 +190,41 @@
       "noRequests": "No requests",
       "noResults": "No data",
       "passwordChanged": "Password updated",
-      "passwordTooShort": "At least 6 characters",
+      "passwordTooShort": "Minimum 6 characters",
       "phone": "Phone",
-      "photoHint": "JPEG/PNG, 512×512 square. Crop & compression are automatic.",
+      "photoHint": "JPEG/PNG, 512×512 square. Cropping & compression are automatic.",
       "profileTitle": "Profile",
       "refresh": "Refresh",
-      "refusedTours": "Non-refundable tours",
+      "refusedTours": "Resold tours",
       "removePhoto": "Remove photo",
       "requestDeleted": "Request deleted",
       "deleteRequest": "Delete",
       "saveBtn": "Save",
-      "tabs": { "myBookings": "My bookings", "myRequests": "My requests" },
+      "tabs": {
+        "myBookings": "My bookings",
+        "myRequests": "My requests"
+      },
       "uploadPhoto": "Upload photo"
     },
-    "header": { "cabinet": "Dashboard", "favorites": "Favorites" },
+    "header": { "cabinet": "Cabinet", "favorites": "Favorites" },
     "login": {
-      "loginBtn": "Log in",
+      "loginBtn": "Login",
       "noAccount": "No account?",
       "password": "Password",
-      "registerLink": "Sign up",
+      "registerLink": "Register",
       "title": "Client login",
-      "success": "Logged in",
+      "success": "Login successful",
       "error": "Login error"
     },
     "register": {
-      "errors": {
-      "email_taken": "This e-mail is already registered",
-      "phone_taken": "This phone number is already registered",
-      "weak_password": "Password is too weak",
-      "generic": "Registration error"
-    },
       "haveAccount": "Already have an account?",
-      "loading" : "Signing up ...",
-      "loginLink": "Log in",
+      "loginLink": "Login",
       "name": "Name",
       "password": "Password",
       "phone": "Phone",
-      "registerBtn": "Sign up",
+      "registerBtn": "Register",
       "title": "Client registration",
-      "success": "Registered successfully",
+      "success": "Registration successful",
       "error": "Registration error"
     }
   },
@@ -273,25 +232,26 @@
   "comment": "Comment",
 
   "common": {
-    "add_hotel": "Add your own hotel",
+    "add_hotel": "Add your hotel",
     "anonymous": "Anonymous",
     "comment": "Comment",
     "direction": "Direction",
     "find": "Find",
     "loading": "Loading…",
-    "note_optional": "Comment for the request (optional):",
+    "note_optional": "Comment (optional):",
     "amount": "Amount",
     "backToDashboard": "Back to dashboard",
     "booking": "Booking",
     "created": "Created",
     "date": "Date",
     "loading_error": "Failed to load data",
+    "nothing_found": "Nothing found",
     "refresh": "Refresh",
     "request": "Request",
     "saving": "Saving…",
     "sending": "Sending…",
     "status": "Status",
-    "about": "About company",
+    "about": "About us",
     "city": "City",
     "country": "Country",
     "phone": "Phone",
@@ -300,16 +260,17 @@
     "website": "Website",
     "save": "Save",
     "cancel": "Cancel",
+    "export_pdf": "Export PDF",
+    "print_pdf": "Print / PDF",
     "pros": "Pros",
     "cons": "Cons",
-    "features": "Highlights",
-    "nothing_found": "Nothing found"
+    "features": "Features"
   },
 
-  "confirm_delete": "Delete this item?",
-  "countdown": { "until_end": "Time left", "expired": "Expired", "days_short": "d" },
+  "confirm_delete": "Delete item?",
+  "countdown": { "until_end": "Until the end", "expired": "Expired" },
 
-  "country_not_chosen": "No countries found",
+  "country_not_chosen": "Country not found",
   "cover": "Cover",
   "days": "days",
   "delete": "Delete",
@@ -324,13 +285,12 @@
   "direction_to": "Arrival city",
   "direction_to_not_chosen": "Arrival city not chosen",
   "drag_to_reorder": "Drag to reorder",
-
   "edit": "Edit",
-  "edit_service": "Edit the service:",
+  "edit_service": "Edit service:",
 
   "empty": {
     "no_bookings": "No bookings yet.",
-    "no_favorites": "Favorites is empty",
+    "no_favorites": "Favorites are empty",
     "no_requests": "No requests yet."
   },
 
@@ -338,1515 +298,5 @@
   "enter_accommodation": "Enter accommodation",
   "enter_airline": "Enter airline",
   "enter_category": "Enter accommodation category",
-  "enter_flight_details": "Enter flight details",
-
-  "errors": {
-    "action_failed": "Action failed",
-    "auth_required": "Log in to leave a review",
-    "booking_create": "Failed to create booking",
-    "data_load": "Failed to load data",
-    "image_process": "Image processing error",
-    "password_change": "Failed to change password",
-    "password_short": "Password must be at least 6 characters",
-    "profile_load": "Failed to load profile",
-    "profile_save": "Failed to save profile",
-    "request_send": "Failed to send request",
-    "request_already_sent": "You have already sent this request",
-    "self_request_forbidden": "You cannot send a quick request to yourself!",
-    "service_unknown": "Service not found",
-    "tab_load": "Failed to load tab",
-    "write_review": "Please write a general review",
-    "only_providers": "Only providers/agents can submit inspections.",
-    "save_failed": "Couldn’t save. Please try again later.",
-    "already_inspected": "You’ve already submitted an inspection for this hotel."
-  },
-
-  "event_category_concert": "Concert",
-  "event_category_exhibition": "Exhibition",
-  "event_category_fight": "Fight",
-  "event_category_football": "Football match",
-  "event_category_masterclass": "Master class",
-  "event_category_show": "Show",
-  "event_date": "Event date",
-  "event_name": "Event name",
-
-  "expiration_timer": "Expiration timer",
-
-  "favorites": {
-    "add": "Add to favorites",
-    "empty": "Empty",
-    "expired_badge": "Expired",
-    "expired_title": "This service is no longer available",
-    "remove_from": "Remove from favorites",
-    "no_image": "No image",
-    "added_toast": "Added to favorites",
-    "removed_toast": "Removed from favorites",
-    "add_error": "Failed to add to favorites",
-    "remove_error": "Failed to remove from favorites"
-  },
-
-  "file_chosen": "Files chosen",
-  "fill_all_fields": "Please fill in all fields and choose dates",
-  "flight_details": "Flight details",
-  "flight_type": "Flight type",
-
-  "filter": {
-    "all": "All",
-    "pending": "Pending",
-    "confirmed": "Confirmed",
-    "upcoming": "Upcoming",
-    "rejected": "Rejected"
-  },
-
-  "food": "Meal plan",
-  "food_options": {
-    "ai": "All inclusive",
-    "bb": "Bed & breakfast",
-    "fb": "Full board",
-    "halal": "Halal",
-    "hb": "Half board",
-    "select": "Choose an option",
-    "uai": "Ultra all inclusive"
-  },
-
-  "guide": "Guide",
-  "hall_rent": "Room rent",
-
-  "hotel": "Hotel",
-  "hotel_check_in": "Check-in date",
-  "hotel_check_out": "Check-out date",
-  "hotel_not_found": "Hotel not found",
-  "hotel_transfer": "Hotel transfer",
-  "hotel.no_options": "No options",
-  "hotel.search_placeholder": "Enter hotel name",
-
-  "hotels": {
-    "title": "Hotels",
-    "tabs": { "top": "Top", "popular": "Popular", "new": "New", "worst": "Worst" },
-    "emptyHint": "Pick a tab or run a search to show hotels.",
-    "emptyAfterAction": "No results. Adjust filters or try another tab.",
-    "search_by_name": "Search by name",
-    "city_placeholder": "City",
-    "find_btn": "Search",
-    "searching": "Searching...",
-    "col": { "name": "Name", "city": "City", "rating": "Rating" },
-    "empty": "Nothing found",
-
-    "inspections": {
-      "author_fallback": "provider",
-      "author": "Author",
-      "hotel_label": "Hotel",
-      "sort": { "topOption": "Most likes first", "newOption": "Newest first" },
-      "back_to_hotel": "Back to hotel",
-      "empty": "No inspections yet",
-      "new": {
-        "title": "New inspection",
-        "author_auto_hint": "Author and profile link will be auto-filled",
-        "review_label": "General review",
-        "pros": "Pros",
-        "cons": "Cons",
-        "features": "Highlights",
-        "scores_title": "Scores (0–5)",
-        "current_value": "Current: {{v}}",
-        "amenities_title": "Amenities",
-        "nearby_title": "Nearby (distances)",
-        "meters_placeholder": "m",
-        "add_photos": "Add photos",
-        "selected_n_one": "selected: {{count}}",
-        "selected_n_other": "selected: {{count}}",
-        "no_photos": "no photos selected",
-        "saving": "Saving…",
-        "save": "Save"
-      }
-    },
-    "scores": {
-      "quiet_level": "Quietness level",
-      "family_score": "Family-friendly",
-      "infra_score": "Infrastructure around",
-      "nightlife_score": "Nightlife",
-      "activity_score": "Active leisure",
-      "wellness_score": "SPA/Wellness",
-      "business_score": "Business-friendly",
-      "value_score": "Value for money",
-      "access_score": "Accessibility/Transport"
-    },
-    "amenities": {
-      "crib": "Baby crib",
-      "kids_pool": "Kids pool",
-      "kids_club": "Kids club",
-      "kitchenette": "Kitchenette",
-      "gym": "Gym",
-      "spa": "Spa",
-      "pool_indoor": "Indoor pool",
-      "pool_outdoor": "Outdoor pool",
-      "parking": "Parking",
-      "bar": "Bar",
-      "elevator": "Elevator",
-      "soundproof_rooms": "Soundproof rooms",
-      "laundry": "Laundry",
-      "late_checkin": "Late check-in"
-    },
-    "nearby": {
-      "metro_m": "Metro (m)",
-      "supermarket_m": "Supermarket (m)",
-      "pharmacy_m": "Pharmacy (m)",
-      "park_m": "Park (m)"
-    }
-  },
-
-  "images_hint": "Up to 10 images, each ≤ 3 MB",
-  "inf": "Infants (INF)",
-  "is_active": "Active",
-  "loading": "Loading…",
-  "loading_stats": "Loading stats...",
-  "location": "Region or venue",
-
-  "labels": {
-    "client": "Client",
-    "agent": "Agent",
-    "guide": "Guide",
-    "transport": "Transport",
-    "hotel": "Hotel"
-  },
-
-  "languages": {
-    "heading": "Language proficiency",
-    "placeholder": "Start typing a language…",
-    "load_error": "Failed to load languages",
-    "saved": "Languages saved",
-    "save_error": "Failed to save languages"
-  },
-
-  "login": {
-    "button": "Log in",
-    "email": "Email",
-    "error": "Wrong email or password",
-    "no_account": "No account?",
-    "password": "Password",
-    "title": "Provider login",
-    "success": "Logged in successfully"
-  },
-
-  "logout": "Log out",
-  "make_cover": "Make cover",
-
-  "marketplace": {
-    "telegram": "Telegram",
-    "website": "Website",
-    "address": "Address",
-    "adults": "Adults (12+)",
-    "children": "Children (2–11)",
-    "end_date": "End date",
-    "flight": "Non-refundable air ticket",
-    "guide": "Guide",
-    "hotel": "Non-refundable hotel",
-    "infants": "Infants (0–1)",
-    "location": "Location",
-    "location_placeholder": "Enter a location...",
-    "package": "Non-refundable tour",
-    "price": "Price",
-    "propose_price": "Propose a price",
-    "refused_event": "Non-refundable event ticket",
-    "results": "Search results",
-    "reviews": "Service reviews",
-    "sections": { "top": "Top", "new": "New", "upcoming": "Upcoming" },
-    "search": "Search",
-    "search_filters": "Search filters",
-    "search_in": "Search in {{category}}:",
-    "search_placeholder": "Search services, countries, cities…",
-    "searching": "Searching...",
-    "select_category": "Choose a category",
-    "start_date": "Start date",
-    "title": "Marketplace",
-    "transport": "Transport",
-    "supplier": "Supplier",
-    "phone": "Phone",
-    "no_image": "No image",
-    "no_results": "No results",
-    "time_left": "Time left",
-    "time_expired": "Expired"
-  },
-
-  "messages": {
-    "booking_created": "Booking created",
-    "favorite_removed": "Removed from favorites",
-    "profile_saved": "Profile saved",
-    "request_sent": "Request sent"
-  },
-
-  "moderation": {
-    "service_status": {
-      "draft": "Draft",
-      "pending": "Submitted for review",
-      "published": "Approved by moderator",
-      "rejected": "Rejected",
-      "archived": "Archived"
-    },
-    "send_to_review": "Send to review",
-    "submitted_toast": "Submitted for review",
-    "title": "Service moderation",
-    "no_title": "(no title)",
-    "supplier": "Supplier",
-    "direction": "Direction",
-    "start": "Start",
-    "end": "End",
-    "location": "Location",
-    "event": "Event",
-    "airline": "Airline",
-    "rejected_reason": "Reason",
-    "confirm": "Confirm",
-    "approve": "Approve",
-    "enter_reason": "Rejection reason:",
-    "reject": "Reject",
-    "unpublish": "Unpublish",
-    "approved": "Published",
-    "approve_error": "Approve error",
-    "enter_reason_short": "Enter a reason",
-    "rejected": "Rejected",
-    "reject_error": "Reject error",
-    "unpublished": "Unpublished",
-    "unpublish_error": "Unpublish error",
-    "forbidden": "Admins only",
-    "empty": "No items",
-    "tabs": { "pending": "Pending", "rejected": "Rejected" }
-  },
-
-  "mountain_tour": "Mountain tour",
-  "my_requests": "My requests",
-
-  "name": "Name",
-  "name_placeholder": "Your name",
-
-  "nav": {
-    "bookings": "Bookings",
-    "dashboard": "Dashboard",
-    "requests": "Requests",
-    "favorites": "Favorites",
-    "hotels": "Hotels",
-    "hotels_admin": "Hotels (admin)"
-  },
-
-  "net_price": "Net price",
-  "current_password": "Current password",
-  "new_password": "New password",
-
-  "new_refused_airtkt": "Add a non-refundable air ticket:",
-  "new_refused_event_ticket": "Non-refundable event ticket",
-  "new_refused_hotel": "Add a non-refundable hotel:",
-  "new_refused_tkt": "Add a non-refundable event ticket:",
-  "new_refused_tour": "Add a non-refundable tour:",
-
-  "new_service_tip": "To create a new service, fill in all fields below and click “Save service”.",
-  "new_visa_service": "Visa support service:",
-  "new_visa_support": "Visa support",
-
-  "no_changes": "No changes to save",
-  "no_file_chosen": "No file chosen",
-  "no_files_selected": "No files selected",
-  "no_images_yet": "No images yet",
-  "not_specified": "Not specified",
-
-  "ok": "OK",
-  "one_way": "One-way",
-  "one_way_transfer": "One-way transfer",
-
-  "pagination": { "next": "Next", "prev": "Prev" },
-
-  "password_change": "Change password",
-  "password_changed": "Password changed",
-  "password_error": "Password change error",
-  "password_too_short": "Password must be at least 6 characters",
-
-  "phone": "Phone",
-  "photo": "Photo",
-  "pick_dates": "Select start and end dates",
-  "price": "Price",
-
-  "profile": {
-    "city": "City",
-    "languages": "Languages",
-    "phone": "Phone",
-    "telegram": "Telegram",
-    "email": "Email",
-    "price_per_day": "Price/day",
-    "open_profile": "Open profile →",
-    "password_changed": "Password updated", 
-    "saved": "Profile saved",
-    "regions_placeholder": "Start typing city name (EN)",
-        "completeness": {
-      "title": "Profile completeness",
-      "progress": "{{percent}}% completed",
-      "hint": "Your profile is not 100% complete. Fill it out so your services can be published in the Marketplace and TourBuilder.",
-      "languages": "Language proficiency",
-      "transport": "Transport available",
-      "certificate": "Certificate upload",
-      "logo": "Logo upload",
-      "telegram": "Telegram connection",
-      "optional": "(optional)",
-      "fill": "Fill in"
-    }
-  },
-  "profile_load_error": "Failed to load profile",
-  "profile_updated": "Profile updated",
-
-  "provider": {
-    "languages": "Languages",
-    "type": "Provider type",
-    "region": "Provider region",
-    "types": {
-      "agent": "Travel agent",
-      "guide": "Guide",
-      "transport": "Transport",
-      "hotel": "Hotel"
-    },
-    "bookings": {
-      "cancel": "Cancel",
-      "confirm": "Confirm",
-      "details": "Details",
-      "languages": "Languages",
-      "noItems": "No bookings.",
-      "reject": "Reject",
-      "status": "Status",
-      "title": "Bookings (Provider)"
-    },
-    "inbox": {
-      "confirm_delete_title": "Delete request?",
-      "confirm_delete_msg": "Delete this quick request permanently?",
-      "title": "Incoming requests",
-      "total": "Total",
-      "new": "New",
-      "processed": "Processed",
-      "from": "From",
-      "empty": "No requests",
-      "mark_processed": "Processed",
-      "confirm_delete": "Delete the request?"
-    },
-    "outbox": {
-      "confirm_delete_title": "Delete request?",
-      "confirm_delete_msg": "Delete this quick request permanently?",
-      "edit_soon_title": "Confirm your action on travella.uz",
-      "edit_soon_msg": "Editing will be available soon",
-      "title": "Outgoing requests",
-      "total": "Total",
-      "new": "New",
-      "processed": "Processed",
-      "from": "From",
-      "empty": "No requests",
-      "mark_processed": "Processed",
-      "confirm_delete": "Delete the request?"
-    }
-  },
-
-  "requests": {
-    "afterAcceptNote": "After the client accepts the offer (status = accepted), they can place a booking.",
-    "messagePlaceholder": "Message to client…",
-    "noItems": "No requests.",
-    "proposalPlaceholder": "JSON proposal (e.g. {\"price\":1200,\"hotel\":\"Taj\",\"room\":\"TRPL\"})",
-    "send": "Send",
-    "sendProposal": "Send proposal",
-    "title": "Requests (Provider)"
-  },
-
-  "provider_profile": "Provider profile",
-  "providerProfile": { "type": "Provider type", "region": "Provider region", "address": "Address" },
-  
-  "ps": {
-    "title": "Services for Tour Builder",
-
-    "btn": {
-      "refresh": "Refresh",
-      "generate_from_profile": "Generate from profile",
-      "generating": "Generating…",
-      "generate_hint": "Autogenerate by profile cities & cars"
-    },
-
-    "grp": {
-      "guide": "Guide",
-      "guide_transport": "Guide+Transport",
-      "transport": "Transport"
-    },
-
-    "form": {
-      "category": "Category",
-      "category_ph": "— choose category —",
-      "name_opt": "Name (opt.)",
-      "name_optional_ph": "e.g., 4 hours or car model",
-      "seats": "Seats",
-      "price": "Price",
-      "price_ph": "100, 120.50 …",
-      "currency": "Currency",
-      "add": "Add"
-    },
-
-    "table": {
-      "category": "Category",
-      "name": "Name",
-      "seats": "Seats",
-      "price": "Price",
-      "currency": "Currency",
-      "status": "Status",
-      "actions": "Actions"
-    },
-
-    "row": {
-      "name_ph": "Name…",
-      "enable": "Enable",
-      "disable": "Disable",
-      "delete": "Delete"
-    },
-
-    "status": {
-      "enabled": "Enabled",
-      "disabled": "Disabled"
-    },
-
-    "empty": "No services yet. Please add one.",
-    "hint": {
-      "zero_price": "Tip: services priced 0 are hidden in TourBuilder. Fill in prices — they will appear right away."
-    },
-
-    "confirm": {
-      "delete": "Delete this service?",
-      "bulk": "Confirm bulk creation of services."
-    },
-
-    "error": {
-      "delete": "Failed to delete: ",
-      "no_cities": "Please fill “Region of activity” in your profile first.",
-      "nothing_to_generate": "Nothing to generate: add cities and/or cars in your profile.",
-      "bulk": "Bulk create error: "
-    }
-  },
-
-  "refused_hotel": "Non-refundable hotel",
-  "refused_hotel_city": "City",
-  "refused_hotel_name": "Non-refundable hotel name",
-  "refused_hotel_select": "Enter hotel",
-  "refused_hotel_select_city": "Enter city",
-  "refused_ticket": "Non-refundable air ticket",
-  "refused_tour": "Non-refundable tour",
-
-  "register": {
-    "button": "Sign up",
-    "email": "Email",
-    "error": "Registration error.",
-    "file_chosen": "File chosen",
-    "location_placeholder": "e.g., Samarkand, Bukhara",
-    "name": "Name",
-    "no_file": "No file chosen",
-    "password": "Password",
-    "phone": "Phone",
-    "photo": "Profile photo",
-    "required": "Fill out this field",
-    "select_file": "Choose file",
-    "social": "Telegram username",
-    "success": "Registration successful!",
-    "title": "Provider registration",
-    "type": "Provider type"
-  },
-
-  "requests.tabs.incoming": "Incoming",
-  "requests.tabs.outgoing": "Outgoing",
-
-  "requests_list": {
-    "empty": "No requests yet.",
-    "error": "Failed to send request",
-    "item": "Request",
-    "note_prompt": "Comment for the request (optional):",
-    "sent": "Request sent"
-  },
-
-  "return_date": "Return date",
-
-  "reviews": {
-    "already_left": "You have already left a review.",
-    "count": "review(s)",
-    "count_one": "{{count}} review",
-    "count_few": "{{count}} reviews",
-    "count_many": "{{count}} reviews",
-    "count_other": "{{count}} reviews",
-    "empty": "No reviews yet.",
-    "leave": "Leave a review",
-    "leave_client": "Review the client",
-    "leave_service": "Review the service",
-    "list": "Reviews",
-    "placeholder": "Briefly describe your experience",
-    "rating": "Rating",
-    "save_error": "Failed to save review",
-    "saved": "Review saved",
-    "send": "Send",
-    "title": "Reviews",
-    "title_provider": "Client reviews",
-    "title_service": "Service reviews",
-    "your_rating": "Your rating"
-  },
-
-  "roles": { "client": "Client", "provider": "Provider", "admin": "Admin" },
-
-  "room_rent": "Room rent",
-  "round_trip": "Round trip",
-  "save": "Save",
-  "save_service": "Save service",
-  "saving": "Saving...",
-  "select_category": "Choose a category",
-  "select_city": "Choose a city",
-  "select_country": "Choose a visa country",
-  "select_event_category": "Choose an event category",
-  "select_files": "Choose files",
-
-  "service": "Service",
-  "service_added": "Service added",
-  "service_deleted": "Service deleted",
-  "service_images": "Service images",
-  "service_updated": "Service updated",
-  "services_marketplace": "Services for MARKETPLACE",
-  "services_load_error": "Failed to load services",
-
-  "social": "Telegram username",
-  "start_flight_date": "Outbound flight date",
-
-  "stats": {
-    "bonus_progress": "Bonus progress",
-    "bookings_total": "Bookings (total)",
-    "cancelled": "Cancelled",
-    "completed": "Completed",
-    "level": "Level",
-    "rating": "Rating",
-    "requests_active": "Requests (active)",
-    "requests_total": "Requests (total)",
-    "tier": "Tier",
-    "tier_label": "Tier"
-  },
-
-  "status": {
-    "new": "new",
-    "processed": "processed",
-    "pending": "pending",
-    "rejected": "rejected",
-    "active": "active",
-    "accepted": "accepted",
-    "not_actual": "not actual"
-  },
-
-  "sum": "Amount",
-
-  "tabs": {
-    "favorites": "Favorites",
-    "my_bookings": "My bookings",
-    "my_requests": "My requests"
-  },
-
-  "tb": {
-    "tpl_apply_title": "Apply template",
-    "tpl_select": "Template",
-    "tpl_select_placeholder": "Choose a template…",
-    "tpl_start_date": "Start date",
-    "tpl_start_hint": "Only today or a future date is allowed.",
-    "tpl_btn_cancel": "Cancel",
-    "tpl_btn_apply": "Apply",
-    "err": {
-      "select_template": "Please choose a template.",
-      "start_required": "Please specify the start date.",
-      "template_empty": "The template has no days.",
-      "invalid_date": "Invalid date.",
-      "past_forbidden": "Start date cannot be in the past."
-    },
-    "hotel_category": "Hotel category",
-    "any": "Any",
-    "route": "Route",
-    "templates": "Templates",
-    "templates_open": "Open templates",
-    "templates_count": "{{count}} pcs",
-    "tpl_apply_title": "Apply template",
-    "tpl_select": "Template",
-    "tpl_select_placeholder": "— choose —",
-    "tpl_start_date": "Start date",
-    "tpl_btn_cancel": "Cancel",
-    "tpl_btn_apply": "Apply",
-    "transfers": "Intercity transfers",
-    "transfer_from_ph": "From (city)",
-    "transfer_to_ph": "To (city)",
-    "transfer_price_ph": "Price",
-    "per_pax": "/ pax",
-    "remove": "Remove",
-    "add_transfer": " Add transfer",
-    "transfers_day_sum": "Transfers total for the day",
-    "totals": {
-      "transfers": "Transfers"
-    },
-    "profile": {
-      "city": "City",
-      "languages": "Languages",
-      "phone": "Phone",
-      "telegram": "Telegram",
-      "email": "Email",
-      "price_per_day": "Price/day",
-      "open_profile": "Open profile →"    
-   },
-    "transfer_types": {
-      "car": "Car",
-      "train": "Train",
-      "air": "Flight"
-    },
-  "currencyintercities": {
-      "uzs": "UZS",
-      "usd": "USD"      
-    },
-    "tourism_fee_hint": "Tourism fee: res. {{res}} / non-res. {{nrs}} UZS per person/night",
-    "tourism_fee_absent": "Tourism fee is not set in the hotel profile",
-    "rooms": "Rooms",
-    "extra_beds_short": "Extra beds",
-    "tourism_fee_short": "Tourism fee",
-    "vat": "VAT",
-    "vat_included": "included in price",
-    "extra_beds_qty": "Extra beds, qty",
-    "usd_enter_valid_rate": "Enter a valid USD rate to see totals in USD",
-    "tariff_for": "Tariffs for:",
-    "residents": "Residents",
-    "nonresidents": "Non-residents",
-    "pick_transport_service_ph": "Select a transport service...",
-    "pick_guide_service_ph": "Select a guide service...",
-    "calc_day_hint": "For this day: {{amount}} (ADT/CHD and residency included)",
-    "pick_places": "Pick places",
-    "entry_ph": "Search sites, museums, parks…",
-    "speaking_lang": "Preferred speaking language",
-    "title": "Tour builder",
-    "dates": "Dates",
-    "pick_dates": "Pick the dates on the calendar",
-    "dates_span": "{{from}} → {{to}} ({{days}} days)",
-    "city_ph": "City (slug or name)",
-    "speaking_lang": "Preferred speaking language",
-    "residents": "Residents",
-    "nonresidents": "Non-residents",
-    "pick_city_first": "Pick a city first",
-
-    "guide": "Guide",
-    "pick_guide": "Pick a guide",
-    "no_providers": "No providers found",
-    "no_services_for_guide": "This guide has no services matching your filters",
-
-    "transport": "Transport",
-    "pick_transport": "Pick a transport provider",
-    "no_services_for_transport": "This transport provider has no services matching your filters",
-
-    "hotel": "Hotel",
-    "hotel_short": "Hotel",
-    "pick_hotel": "Pick a hotel",
-    "no_hotels": "No hotels found",
-    "loading_hotel": "Loading hotel info…",
-
-    "entry_fees": "Entry fees / tickets",
-    "entry_ph": "Search sites, museums, parks…",
-    "pick_sites": "Pick places",
-    "nothing_found": "Nothing found",
-
-    "price_per_day": "Price/day",
-    "price_per_night": "Price/night",
-    "rooms_and_meals": "Rooms & meal plan",
-    "day_total": "Day total",
-    "extra_beds_qty": "Extra beds q-ty",
-
-    "totals": {
-      "guide": "Guide",
-      "transfers": "Transfers",
-      "transport": "Transport",
-      "hotels": "Hotels",
-      "entry": "Entry fees",
-      "total": "Total"
-    },
-   "load_draft": "Load draft",
-    "save_draft": "Save draft",
-    "draft_saved": "Draft saved",
-    "draft_saved_locally": "Draft saved locally",
-    "draft_loaded": "Draft loaded",
-    "draft_loaded_local": "Draft loaded from browser",
-    "no_drafts": "No drafts found",
-    "tariff_for": "Tariffs for:",
-    "residents": "Residents",
-    "nonresidents": "Non-residents",
-    "entry_fees_net": "Entry fees (net)",
-
-    "pax": "Guests (PAX)",
-    "loop_route": "close the loop",
-    "loop": "repeat",
-    "override_by_day": "Override by day",
-    "use_default": "Use default",
-
-    "guides_suggest": "Guides available for selected dates",
-    "no_guides": "No suitable guides",
-    "transports_suggest": "Transport available for selected dates",
-    "no_transports": "No suitable transport",
-
-    "hotels_nights": "Overnights (add hotels manually)",
-    "net": "Net",
-    "notes": "Note",
-
-    "pricing": "Pricing",
-    "currency": "Currency",
-    "markup": "Markup, %",
-    "tourist_fee": "Tourist fee / night",
-    "hotels_cost": "Hotels (net)",
-    "providers_cost": "Guide/Transport (net)",
-    "total": "Total",
-
-    "meals": "Meals",
-    "meal_types": {
-    "lunch": "Lunch",
-    "dinner": "Dinner",
-    "gala": "Gala dinner"
-   },
-  "meal_price_ph": "Price",
-  "add_meal": "Add meal",
-  "meals_day_sum": "Meals total for the day"
-    
-  },
-    "tpl": {
-    "program": "Tour program",
-    "program_ph": "Describe the program (multi-line text, one item per line)…",
-    "title": "Tour templates",
-    "btn_new": "+ New template",
-    "readonly_hint": "All providers can view. Only administrators can create and edit templates.",
-    "empty": "No templates yet",
-    "btn_edit": "Edit",
-    "btn_delete": "Delete",
-    "view_only": "View only",
-    "name": "Template name",
-    "days_title": "Days (cities in order)",
-    "city_ph": "City",
-    "btn_add_day": "+ Add day",
-    "btn_save": "Save",
-    "btn_cancel": "Cancel"
-  },
-
-  "telegram": {
-    "enable_title": "Telegram notifications",
-    "enable_text": "Click the button below to link Telegram and receive notifications about requests and bookings.",
-    "connect_button": "Connect Telegram"
-  },
-
-  "ticket_details": "Ticket details (row, seat, etc.)",
-  "title": "Title",
-
-  "toast": {
-    "addedToFav": "Added to favorites",
-    "favoriteError": "Failed to update favorites",
-    "removedFromFav": "Removed from favorites"
-  },
-
-  "tourBuilder": {
-    "title": "Tour Builder",
-    "dates": "Tour dates",
-    "arrivalDay1": "Arrival time (Day 1)",
-    "monuments": "Monuments entry fees",
-    "monuments_ph": "Start typing a site or city…",
-    "guide": "Guide",
-    "transport": "Transport",
-    "cities": "Cities (multiselect)",
-    "cities_ph": "Start typing a city...",
-    "dragToReorder": "Drag to reorder",
-    "rooming": "Rooming (number of rooms)",
-    "map": "Map",
-    "segments": "Route segments",
-    "dep": "Departure time",
-    "arr": "Arrival time",
-    "extras": "Extras",
-    "extras_ph": "Meals, master class…",
-    "markerHint": "Drag the marker to refine the point",
-    "generate": "Generate program",
-    "programText": "Program text"
-  },
-
-  "transfer": "Transfer",
-  "transfer_options": {
-    "group": "Group",
-    "individual": "Individual",
-    "none": "None",
-    "select": "Choose transfer"
-  },
-
-  "transport": "Transport",
-  "type": "Provider type",
-  "update_error": "Update error",
-  "upload_images": "Images (multiple allowed):",
-  "view_certificate": "View certificate",
-  "visa_included": "Visa included",
-  "visa_support": "Visa support",
-
-  "tooltips": {
-    "favorite_add": "Add to favorites",
-    "favorite_remove": "Remove from favorites"
-  },
-
-  "types": {
-    "guide": "Guide",
-    "transport": "Transport",
-    "agent": "Travel agent",
-    "hotel": "Hotel"
-  },
-
-  "gross_price": "Price for client (gross)",
-  "expired": "Expired",
-
-  "form": {
-    "required": "Please fill out this field.",
-    "email_invalid": "Enter a valid email.",
-    "password_short": "Minimum password length is 6 characters."
-  },
-
-  "enter_current_password": "Enter current password",
-  "hotels_load_error": "Failed to load hotels",
-  "country_not_found": "Country not found",
-  "direction_from_not_found": "Departure city not found",
-  "direction_to_not_found": "Arrival city not found",
-
-  "auth": {
-    "login": "Log in",
-    "login_client": "Log in as client",
-    "login_provider": "Log in as provider",
-    "login_required": "Log in to continue",
-    "provider_login_required": "Log in as provider"
-  },
-
-  "rooms_and_prices": "Rooms & prices",
-  "room_category": "Room category",
-  "count_short": "Qty",
-  "price_per_night": "Price/night",
-  "low_season": "Low season",
-  "high_season": "High season",
-  "for_residents": "Residents",
-  "for_nonresidents": "Non-residents",
-  "taxes_fees": "Taxes & fees",
-  "vat_percent": "VAT, %",
-  "tourism_fee_resident": "Tourist tax (residents), UZS/night",
-  "tourism_fee_nonresident": "Tourist tax (non-residents), UZS/night",
-  "extra_bed_cost": "Extra bed, UZS/night",
-
-  "images": "Images",
-
-  "select_city": "Choose a city",
-  "select_country": "Choose a country",
-  "select": {
-    "type_more": "Enter at least 2 characters",
-    "no_options": "No options",
-    "loading": "Loading…"
-  },
-
-  "admin": { "new_hotel_title": "New hotel" },
-
-  "hotel_name": "Name",
-  "enter_hotel_name": "Enter hotel name",
-  "enter_address": "Enter address",
-  "hotel_saved": "Hotel saved",
-  "hotel_save_error": "Failed to save hotel",
-
-  "country": "Country",
-  "city": "City",
-  "currency": "Currency",
-
-  "resident": "Residents",
-  "non_resident": "Non-residents",
-
-  "room_type_name": "Type name",
-  "add_custom_room_type_ph": "Add your room type (e.g., Deluxe…)",
-  "add_type": "Add type",
-
-  "extra_bed_price": "Extra bed price (per person/night)",
-
-  "taxes_and_fees": "Taxes & fees",
-  "vat_included": "Prices include VAT",
-  "vat_rate": "VAT rate, %",
-  "landing": {
-        "ayurveda": {
-      "badge": "Ayurveda in India",
-      "h1": "Deep recovery through traditional Ayurveda",
-      "sub": "Healing programs from leading Indian clinics: detox, restoration, chronic conditions and stress management.",
-      "cta_primary": "Get consultation",
-      "cta_secondary": "View clinics",
-
-      "stats": {
-        "days": "Program duration",
-        "doctors": "Licensed doctors",
-        "support": "Curator support"
-      },
-
-      "benefits": {
-        "title": "Why Ayurveda?",
-        "sub": "A unique healing tradition combining detox, nutrition, massages and complete body reset.",
-        "items": [
-          { "title": "Detox & Rejuvenation", "text": "Deep cleansing programs tailored individually." },
-          { "title": "Stress relief", "text": "Nervous system recovery practices, yoga & breathing." },
-          { "title": "Chronic conditions", "text": "Work with insomnia, migraines, digestion, hormonal balance." },
-          { "title": "Healthy weight", "text": "Gentle weight correction without stress for the body." }
-        ]
-      },
-
-      "programs": {
-        "title": "Popular programs",
-        "sub": "Developed by top Ayurvedic doctors in India.",
-        "items": [
-          {
-            "title": "Panchakarma",
-            "text": "Classical deep cleansing of the body and mind.",
-            "duration": "14–21 days",
-            "format": "Intensive"
-          },
-          {
-            "title": "Stress Relief",
-            "text": "Designed for chronic fatigue, insomnia and anxiety.",
-            "duration": "7–14 days",
-            "format": "Soft format"
-          },
-          {
-            "title": "Slim & Fit",
-            "text": "Natural weight correction with tailored diet and treatments.",
-            "duration": "10–14 days",
-            "format": "Standard"
-          }
-        ]
-      },
-
-      "steps": {
-        "title": "How the program works",
-        "step": "Step {{num}}",
-        "items": [
-          { "title": "Online diagnosis", "text": "Doctor evaluates your condition and selects the right program." },
-          { "title": "Clinic selection", "text": "We offer the best clinics based on your budget." },
-          { "title": "Treatment course", "text": "Therapies, massages, yoga, diet, medical supervision." },
-          { "title": "Results", "text": "You receive recommendations and post-program guidance." }
-        ]
-      },
-
-      "clinics": {
-        "title": "Best Ayurvedic clinics in India",
-        "sub": "Trusted partners in Kerala, Goa, Delhi and Himachal Pradesh.",
-        "btn": "Clinic catalog",
-        "btn2": "Contact curator"
-      },
-
-      "faq": {
-        "title": "FAQ",
-        "items": [
-          { "q": "How long are the programs?", "a": "From 7 to 21 days depending on the goal." },
-          { "q": "Do I need preparation?", "a": "No, doctor will guide everything on arrival." },
-          { "q": "Can I come with family?", "a": "Yes, most clinics accept all age groups." },
-          { "q": "How much does it cost?", "a": "From $500–$1200 per week depending on clinic level." }
-        ]
-      },
-
-      "final": {
-        "title": "Start your recovery today",
-        "sub": "Get a free consultation with a Travella curator.",
-        "btn": "Get consultation"
-      }
-    },
-    "checkup": {
-  "badge": "India Check-up",
-  "h1": "Full health diagnostics in India in 1–3 days",
-  "sub": "Basic and advanced check-up packages in top Delhi hospitals. Translator, coordinator and 24/7 support included.",
-  "cta_primary": "Get consultation",
-  "cta_secondary": "View clinics",
-
-  "stats": {
-    "days": "Program length (days)",
-    "tests": "Tests & procedures",
-    "support": "Curator support"
-  },
-
-  "benefits": {
-    "title": "Why do a Check-up in India?",
-    "sub": "Fast, accurate and evidence-based diagnostics.",
-    "items": [
-      { "title": "Quick & structured", "text": "All tests are done in 1–3 days in one hospital." },
-      { "title": "Modern tech", "text": "MRI, CT, PET, endoscopy, genetic screening." },
-      { "title": "Clear conclusions", "text": "Doctors’ board review and final report." },
-      { "title": "Cost-effective", "text": "High quality care with reasonable pricing." }
-    ]
-  },
-
-  "programs": {
-    "title": "Popular packages",
-    "sub": "We tailor packages to your age, goals and history.",
-    "items": [
-      {
-        "title": "Basic Check-up",
-        "text": "Blood tests, ultrasound, ECG, physician consultation.",
-        "duration": "1 day",
-        "forWhom": "Everyone"
-      },
-      {
-        "title": "Cardio Check-up",
-        "text": "Echo, Holter, stress test, cardiologist consult.",
-        "duration": "1–2 days",
-        "forWhom": "Heart & vessels"
-      },
-      {
-        "title": "Oncology screening",
-        "text": "Risk assessment and early detection program.",
-        "duration": "2–3 days",
-        "forWhom": "40+ / by indication"
-      }
-    ]
-  },
-
-  "steps": {
-    "title": "How it works",
-    "step": "Step {{num}}",
-    "items": [
-      { "title": "Collect info", "text": "Fill a short form and send medical records." },
-      { "title": "Choose clinic", "text": "Curator suggests 2–3 best options." },
-      { "title": "Check-up in India", "text": "We guide you through every test on site." },
-      { "title": "Final report", "text": "You receive conclusions and recommendations." }
-    ]
-  },
-
-  "clinics": {
-    "title": "Trusted Delhi hospitals",
-    "sub": "We work only with accredited clinics and doctors.",
-    "btn": "Open clinics catalog",
-    "btn2": "Ask curator"
-  },
-
-  "faq": {
-    "title": "FAQ",
-    "items": [
-      { "q": "How many days does it take?", "a": "1–3 days depending on the package." },
-      { "q": "Do I need medical records?", "a": "Yes, preferably. You can send them in advance." },
-      { "q": "Is translation included?", "a": "Yes, curator assists throughout the process." },
-      { "q": "What is the cost?", "a": "From $250 for a basic package. Final price depends on tests." }
-    ]
-  },
-
-  "final": {
-    "title": "Plan your diagnosis today",
-    "sub": "Leave a request — we’ll pick the right package and clinic.",
-    "btn": "Get consultation"
-  }
-},
-"clinics": {
-  "badge": "India Clinics",
-  "h1": "Best hospitals in Delhi for diagnosis & treatment",
-  "sub": "Oncology, cardiology, neurosurgery, orthopedics and more. Modern, reliable and affordable.",
-  "cta_primary": "Get consultation",
-
-  "categories_title": "Main specialties",
-  "categories_sub": "Trusted departments and leading doctors.",
-  "categories": [
-    { "title": "Oncology", "text": "Modern diagnostics and treatment." },
-    { "title": "Cardiology", "text": "Stenting, angiography, heart surgery." },
-    { "title": "Orthopedics", "text": "Joint replacement and spine surgery." },
-    { "title": "Neurosurgery", "text": "Brain and spine operations." }
-  ],
-
-  "list_title": "Trusted hospitals",
-  "list_sub": "We work only with accredited JCI/NABH hospitals.",
-  "items": [
-    {
-      "name": "BLK-Max Hospital",
-      "city": "New Delhi",
-      "specialization": "Oncology • Cardiology • Transplant",
-      "img": "/fortis.jpg"
-    {
-      "name": "Fortis Escorts",
-      "city": "Delhi",
-      "specialization": "Cardiology • Cardiac Surgery",
-      "img": "/max.jpg"
-    },
-    {
-      "name": "Medanta Hospital",
-      "city": "Gurgaon",
-      "specialization": "Oncology • Neurosurgery • Orthopedics",
-      "img": "/medanta.jpg"
-    }
-  ],
-
-  "why_title": "Why India?",
-  "why": {
-    "items": [
-      { "title": "Top doctors", "text": "Experienced specialists with global standards." },
-      { "title": "Modern tech", "text": "PET-CT, Da Vinci robot, neuro-navigation." },
-      { "title": "Affordable", "text": "40–70% cheaper than UAE/Europe." },
-      { "title": "Full support", "text": "Coordinator, translation, visa help." }
-    ]
-  },
-
-  "final_title": "Need help choosing a clinic?",
-  "final_sub": "Send a request — we will match the best option for you.",
-  "final_btn": "Get consultation",
-  "items": [
-  {
-    "name": "Sarvodaya Hospital",
-    "city": "Faridabad",
-    "specialization": "Oncology • Orthopedics • Neurosurgery",
-    "img": "/sarvodaya.jpg"
-  },
-  {
-    "name": "Fortis Escorts",
-    "city": "Delhi",
-    "specialization": "Cardiology • Cardiac Surgery",
-    "img": "/fortis.jpg"
-  },
-  {
-    "name": "Max Super Specialty Hospital",
-    "city": "Saket, Delhi",
-    "specialization": "Oncology • Neurosurgery • Transplant",
-    "img": "/max.jpg"
-  },
-  {
-    "name": "Medanta Hospital",
-    "city": "Gurgaon",
-    "specialization": "Oncology • Neurosurgery • Orthopedics",
-    "img": "/medanta.jpg"
-  }
-],
-    "menu": {
-      "tours": "Tours",
-      "indiaInside": "India Inside",
-      "ayurveda": "Ayurveda",
-      "checkup": "Check-up",
-      "treatment": "Treatment",
-      "clinics": "Clinics",
-      "b2b": "B2B for agents",
-      "contacts": "Contacts"
-    },
-    "home": {
-      "h1": "Travel & Medical Services in India — turnkey",
-      "sub": "Tours, Ayurveda, Check-up, hospitals in Delhi. 24/7 support.",
-      "cta": "Get a quote",
-      "whatsapp": "WhatsApp"
-    },
-    "form": {
-      "name": "Name",
-      "phone": "Phone",
-      "comment": "Comment",
-      "service": "Service",
-      "send": "Send request",
-      "sent": "Request sent. We will contact you.",
-      "error": "Error. Please try again later.",
-      "tour": "Tour selection",
-      "checkup": "Check-up",
-      "ayurveda": "Ayurveda",
-      "treatment": "Treatment",
-      "pax": "Passengers",
-      "dates": "Dates / duration",
-      "destination": "City / dates",
-      "program": "Program",
-      "programs": {
-        "base": "Basic",
-        "cardio": "Cardio",
-        "onco": "Onco",
-        "female": "Female",
-        "male": "Male"
-      }
-    },
-    "tours": {
-      "h1": "Tours to India",
-      "sub": "Goa, Kerala, Delhi, Mumbai, Golden Triangle. Packages & tailor-made programs.",
-      "from": "from {{price}}",
-      "cta": "View details",
-      "nights": "{{count}} night",
-      "nights_plural_2": "{{count}} nights",
-      "nights_plural_5": "{{count}} nights",
-      "program": {
-        "badge": "TRAVELLA × INDIA",
-        "title": "India Inside — Become an India Guru",
-        "desc": "4 trips: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Certified India Guru.",
-        "trailer": "Watch trailer",
-        "cta": "Open program"
-      },
-      "offers": [
-        {
-          "id": "golden-triangle",
-          "title": "Golden Triangle",
-          "desc": "Delhi — Agra — Jaipur. History, palaces, Taj Mahal.",
-          "priceFrom": 590,
-          "currency": "USD",
-          "nights": 6,
-          "slug": "/india/tours/golden-triangle",
-          "image": "/gti.jpeg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "rajasthan",
-          "title": "Rajasthan Adventure",
-          "desc": "Desert dunes, royal palaces, blue cities.",
-          "priceFrom": 790,
-          "currency": "USD",
-          "nights": 8,
-          "slug": "/india/tours/rajasthan",
-          "image": "/rj_01.jpg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "mumbai-goa",
-          "title": "Mumbai + Goa = Best memories",
-          "desc": "Cosmopolitan city + tropical beaches.",
-          "priceFrom": 350,
-          "currency": "USD",
-          "nights": 7,
-          "slug": "/india/tours/mumbai-goa",
-          "image": "/mg.jpg",
-          "tag": "India Inside"
-        },
-        {
-          "id": "kerala",
-          "title": "Kerala — Heaven on Earth",
-          "desc": "Tea plantations, backwaters & wellness programs.",
-          "priceFrom": 690,
-          "currency": "USD",
-          "nights": 9,
-          "slug": "/india/tours/kerala",
-          "image": "/kerala_01.jpg",
-          "tag": "India Inside"
-        }
-      ]
-    },
-
-"auth": { "login_required": "Please log in again and retry" },
-"inside": {
-  "my": {
-    "title": "My program"
-  },
-
-  "chapter_label": "Chapter {{n}}",
-  "selected_chapter": "Selected chapter",
-  "program_by_days": "Program by days:",
-  "program_empty": "The day-by-day program will be published later.",
-
-  "details": {
-    "toggle_label": "Details for the selected chapter"
-  },
-
-  "chapters_progress": {
-    "title": "Your progress by chapters"
-  },
-
-  "chapters": {
-    "royal": {
-      "title": "Golden Triangle",
-      "desc": "Delhi — Agra — Jaipur",
-      "days": "7–8 days",
-      "from": "from $699"
-    },
-    "silence": {
-      "title": "Adventures in Rajasthan",
-      "desc": "Udaipur — Jodhpur — Jaisalmer",
-      "days": "8–9 days",
-      "from": "from $890"
-    },
-    "modern": {
-      "title": "Mumbai + Goa — Best Memories",
-      "desc": "City vibes and ocean rest",
-      "days": "7 days",
-      "from": "from $490"
-    },
-    "kerala": {
-      "title": "Kerala: Paradise on Earth",
-      "desc": "Ayurveda, tea hills, private houseboat",
-      "days": "8–9 days",
-      "from": "from $790"
-    }
-  },
-
-  "program": {
-    "royal": {
-      "d1": "Delhi: arrival, transfer, evening briefing",
-      "d2": "Agra: Taj Mahal at sunrise, Agra Fort",
-      "d3": "Jaipur: Amber Fort, Hawa Mahal",
-      "d4": "Jaipur: city tour, crafts",
-      "d5": "Delhi: modern India — art/fashion/gastro",
-      "d6": "Free day / optional experiences",
-      "d7": "Departure"
-    },
-    "silence": {
-      "d1": "Udaipur: arrival, Lake Pichola, City Palace",
-      "d2": "Udaipur: temples, crafts, evening cruise",
-      "d3": "Drive to Jodhpur, walk in the Blue City",
-      "d4": "Jodhpur: Mehrangarh Fort, rooftop sunset",
-      "d5": "Drive to Jaisalmer, Golden Fort and havelis",
-      "d6": "Thar desert: dunes safari, dinner by the fire",
-      "d7": "Free day / master-class",
-      "d8": "Departure"
-    },
-    "modern": {
-      "d1": "Mumbai: half-day tour, seaside walk",
-      "d2": "Bollywood studios / art districts",
-      "d3": "Flight to Goa, ocean",
-      "d4": "Beaches, Old Goa, Portuguese heritage",
-      "d5": "Yacht / sunset, gourmet dinner",
-      "d6": "Free day / wellness",
-      "d7": "Departure"
-    },
-    "kerala": {
-      "d1": "Kochi: city, Chinese fishing nets, old town",
-      "d2": "Munnar: tea plantations, viewpoints",
-      "d3": "Munnar: trekking / photo day",
-      "d4": "Alleppey: check-in to houseboat",
-      "d5": "Backwaters, villages, local cuisine",
-      "d6": "Ayurveda center, individual program",
-      "d7": "Free day / sea",
-      "d8": "Departure"
-    },
-
-    "title": "Day-by-day program",
-    "empty": "The daily program has not been added yet."
-  },
-
-  "dates_block": {
-    "title": "Tour dates",
-    "tour_dates_label": "Tour dates:",
-    "places_label": "Places in this chapter:",
-    "limit": "Limit: {{value}}",
-    "enrolled": "Enrolled: {{value}}",
-    "left": "Available: {{value}}",
-    "empty": "Dates for this chapter will appear soon."
-  },
-
-  "chapter_start_at": "Enrollment opens:",
-  "chapter_countdown": "Starts in:",
-
-  "next_chapter": {
-    "label": "Next chapter",
-    "tour_dates_label": "Tour date:",
-    "starts_at": "Enrollment opens:",
-    "countdown": "Starts in",
-    "enrollment_open": "Enrollment open",
-    "places_left": "Places left: {{count}}"
-  },
-
-  "status_active": "Active",
-  "status_completed": "Completed",
-  "status_expelled": "Removed from the program",
-
-  "enroll_block": {
-    "title": "Request to join",
-    "desc": "After your request is approved, you will have limited time to pay and receive your travel documents.",
-    "pending": "Your request for this chapter is awaiting approval.",
-    "rejected": "Your request for this chapter was rejected. Please contact the curator."
-  },
-
-  "pay_block": {
-    "desc": "To receive your documents, click the “Pay” button.",
-    "window_hint": "Your participation is approved. Please make the payment within {{hours}} hours.",
-    "window_expired": "The payment window has expired. Send a new request or contact the curator.",
-    "error": "Could not start the payment process. Please try again later."
-  },
-
-  "actions": {
-    "pay": "Pay",
-    "contact_curator": "Contact curator",
-    "enroll_not_started": "Enrollment has not opened yet",
-    "request_sent": "Request sent",
-    "request_approved": "Participation approved",
-    "request_expired": "Payment window expired — please send a new request",
-    "request_join": "Request to join"
-  },
-
-  "invite": {
-    "title": "Join the India Inside program",
-    "sub": "Personal curator, chapters, and Guru status after 4 chapters.",
-    "join_now": "Join now",
-    "cta": "Learn more"
-  },
-
-  "toast": {
-    "joined": "You have joined India Inside!",
-    "join_failed": "Could not join the program",
-    "request_joined": "Your request to join has been sent"
-  },
-
-  "errors": {
-    "request_failed": "Could not send the request",
-    "ask_open_telegram": "Open Telegram chat with the curator?"
-  },
-
-  "badge": "TRAVELLA • INDIA",
-  "title": "India Inside — curated luxury journeys",
-  "sub": "Private itineraries, maharaja palaces, closed ceremonies and Himalayan silence.",
-  "cta_trailer": "Watch trailer",
-  "cta_join": "Request to join",
-
-  "steps_title": "India Inside chapters",
-  "steps_sub": "Choose a chapter — we will craft a personal route for you.",
-  "view": "Request to join the program",
-
-  "steps": {
-    "apply": {
-      "title": "Submit a request",
-      "desc": "Share your contacts and dates. We’ll reach out via WhatsApp/Telegram."
-    },
-    "call": {
-      "title": "Call with the curator",
-      "desc": "We clarify your goals and pick the right chapter and route."
-    },
-    "chapter": {
-      "title": "Travel — your chapter",
-      "desc": "Private or small group, 24/7 support."
-    },
-    "certificate": {
-      "title": "Certificate & Guru status",
-      "desc": "After 4 chapters — a digital certificate and Travella club access."
-    }
-  },
-
-  "chapters_title": "India Inside chapters",
-
-  "experience": {
-    "title": "What awaits you with India Inside",
-    "sub": "Refined routes created with love for India — its spirit, people and beauty.",
-    "cards": {
-      "palaces": {
-        "title": "Palaces and heritage",
-        "desc": "Stay in heritage hotels, feel the history, access usually closed locations."
-      },
-      "rituals": {
-        "title": "Rituals and traditions",
-        "desc": "Authentic ceremonies, spiritual guides, deep cultural immersion."
-      },
-      "wellness": {
-        "title": "Wellness & Ayurveda",
-        "desc": "Personal wellness programs, ancient healing practices and trusted therapists."
-      },
-      "yacht": {
-        "title": "Yacht & gastro-evening",
-        "desc": "Sunset, calm atmosphere, fine dining and soulful conversations."
-      }
-    }
-  },
-
-  "curated_badge": "Curated cultural journey",
-  "cta_get_program": "Get the program",
-  "cta_ask": "Ask a question",
-
-  "curator": {
-    "photo_alt": "India Inside curator",
-    "title": "Komil Akhmedov",
-    "subtitle": "Founder of Travella, curator of India Inside",
-    "p1": "For 12+ years I have been exploring India — its culture, modern cities, heritage and wellness.",
-    "p2": "India Inside is an author’s program based on private journeys and deep cultural immersion.",
-    "bullets": {
-      "one": "12+ years of routes in India",
-      "two": "Wellness, crafts and cultural practices",
-      "three": "Local experts and masters",
-      "four": "Personal guidance"
-    },
-    "disclaimer": "This is not a tour. It’s a cultural project."
-  },
-
-  "guru": {
-    "title": "Guru of India program",
-    "lead": "Complete all 4 India Inside chapters and receive the “India Inside: Guru” status.",
-    "bullets": {
-      "one": "Personal curator and bespoke itineraries",
-      "two": "Closed ceremonies and normally inaccessible places",
-      "three": "“Guru” certificate and Travella club",
-      "four": "Entry by application only"
-    },
-    "certificate_label": "Certificate",
-    "certificate_meta": "Name • Date • Program ID",
-    "cta_apply": "Apply to participate",
-    "cta_chapters": "View program chapters"
-  }
-   }
-  }
- }
+  "enter_flight_details": "Enter flight details"
 }
