@@ -1498,3 +1498,446 @@
     "final_sub": "Leave a request — we’ll find the best option for your case.",
     "final_btn": "Get a consultation",
 
+"final_btn": "Get a consultation",
+  "items": [
+  {
+    "name": "Sarvodaya Hospital",
+    "city": "Faridabad",
+    "specialization": "Oncology • Orthopedics • Neurosurgery",
+    "img": "/sarvodaya.jpg"
+  },
+  {
+    "name": "Fortis Escorts",
+    "city": "Delhi",
+    "specialization": "Cardiology • Cardiac Surgery",
+    "img": "/fortis.jpg"
+  },
+  {
+    "name": "Max Super Specialty Hospital",
+    "city": "Saket, Delhi",
+    "specialization": "Oncology • Neurosurgery • Transplants",
+    "img": "/max.jpg"
+  },
+  {
+    "name": "Medanta Hospital",
+    "city": "Gurgaon",
+    "specialization": "Oncology • Neurosurgery • Orthopedics",
+    "img": "/medanta.jpg"
+  }
+]
+},
+"b2b": {
+  "badge": "B2B for agencies",
+  "h1": "Become Travella’s India partner",
+  "sub": "We provide ready-to-sell solutions: treatment, check-ups, Ayurveda, tours, and consultations. You sell — we organize everything end to end.",
+
+  "cta": "Become a partner",
+
+  "benefits": {
+    "title": "Why agencies choose us",
+    "sub": "Working with us is easy and profitable.",
+    "items": [
+      { "title": "High commissions", "text": "Up to 20% on medical programs and tours." },
+      { "title": "Full support", "text": "We handle organization, documents, clinics, and curators." },
+      { "title": "Reliable hospitals", "text": "We work only with JCI/NABH accredited facilities." },
+      { "title": "Speed", "text": "Invoice and treatment plan in 6–24 hours." }
+    ]
+  },
+
+  "formats": {
+    "title": "Cooperation formats",
+    "sub": "Choose the format that fits your company.",
+    "items": [
+      {
+        "title": "Medical tourism",
+        "text": "Treatment, surgeries, Ayurveda, Check-up. We do everything turnkey.",
+        "note": "Suitable for agencies of any size."
+      },
+      {
+        "title": "Visa support",
+        "text": "Medical Visa / e-Medical processing and status tracking.",
+        "note": "Fast, with no refusals."
+      },
+      {
+        "title": "Tailor-made tours",
+        "text": "Ayurveda, yoga tours, retreats, and curated routes.",
+        "note": "We build the package and book everything ourselves."
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "How partnership works",
+    "step": "Step {{num}}",
+    "items": [
+      { "title": "Application", "text": "You leave your contacts and direction." },
+      { "title": "Onboarding", "text": "We provide materials, prices, and guidelines." },
+      { "title": "Client requests", "text": "You forward leads — we process them immediately." },
+      { "title": "Payouts", "text": "You receive commission after client payment." }
+    ]
+  },
+
+  "faq": {
+    "title": "FAQ",
+    "items": [
+      { "q": "How do I receive commissions?", "a": "We provide reports and transfer to your card/bank details." },
+      { "q": "Is there a minimum sales volume?", "a": "No, you can start with a single request." },
+      { "q": "Do you work with individuals?", "a": "Yes, but partners get bonus rates." },
+      { "q": "Can I sell under my brand?", "a": "Yes, white-label is possible." }
+    ]
+  },
+
+  "final": {
+    "title": "Ready to start partnering?",
+    "sub": "Leave a request — we’ll onboard you within a day.",
+    "btn": "Become a partner"
+  }
+},
+  "menu": {
+    "tours": "Tours",
+    "indiaInside": "India Inside",
+    "ayurveda": "Ayurveda",
+    "checkup": "Check-up",
+    "treatment": "Treatment",
+    "clinics": "Clinics",
+    "b2b": "B2B for agents",
+    "contacts": "Contacts"
+  },
+
+  "home": {
+    "h1": "Turnkey travel and treatment in India",
+    "sub": "Tours, Ayurveda, Check-up, Delhi clinics. 24/7 support.",
+    "cta": "Get a selection",
+    "whatsapp": "WhatsApp"
+  },
+
+  "form": {
+    "name": "Name",
+    "phone": "Phone",
+    "comment": "Comment",
+    "service": "Service",
+    "send": "Send request",
+    "sent": "Request sent. We will contact you.",
+    "error": "Error. Please try later.",
+    "tour": "Tour selection",
+    "checkup": "Check-up",
+    "ayurveda": "Ayurveda",
+    "treatment": "Treatment",
+    "pax": "Number of people",
+    "dates": "Dates / duration",
+    "destination": "City / dates",
+    "program": "Program",
+    "programs": { "base": "Basic", "cardio": "Cardio", "onco": "Onco", "female": "Female", "male": "Male" }
+  },
+
+  "tours": {
+    "h1": "Tours to India",
+    "sub": "Goa, Kerala, Delhi, Mumbai, Golden Triangle. Packages and curated programs.",
+    "from": "from {{price}}",
+    "cta": "Details",
+    "nights": "{{count}} night",
+    "nights_plural_2": "{{count}} nights",
+    "nights_plural_5": "{{count}} nights",
+
+    "program": {
+      "badge": "TRAVELLA × INDIA",
+      "title": "India Inside — become an India Guru",
+      "desc": "4 journeys: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Complete the path and earn India Guru status.",
+      "trailer": "Watch trailer",
+      "cta": "Go to the program"
+    },
+
+    "offers": [
+      {
+        "id": "golden-triangle",
+        "title": "Golden Triangle",
+        "desc": "Delhi — Agra — Jaipur. History, forts and a world wonder.",
+        "priceFrom": 590,
+        "currency": "USD",
+        "nights": 6,
+        "slug": "/india/tours/golden-triangle",
+        "image": "/gti.jpeg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "rajasthan",
+        "title": "Adventures in Rajasthan",
+        "desc": "Thar desert, maharaja palaces and blue cities.",
+        "priceFrom": 790,
+        "currency": "USD",
+        "nights": 8,
+        "slug": "/india/tours/rajasthan",
+        "image": "/rj_01.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "mumbai-goa",
+        "title": "Mumbai + Goa = best memories",
+        "desc": "A big city, Bollywood vibes and ocean relaxation.",
+        "priceFrom": 350,
+        "currency": "USD",
+        "nights": 7,
+        "slug": "/india/tours/mumbai-goa",
+        "image": "/mg.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "kerala",
+        "title": "Kerala: Paradise on Earth",
+        "desc": "Ayurveda, houseboats and Munnar tea plantations.",
+        "priceFrom": 690,
+        "currency": "USD",
+        "nights": 9,
+        "slug": "/india/tours/kerala",
+        "image": "/kerala_01.jpg",
+        "tag": "India Inside"
+      }
+    ]
+  },
+"auth": { "login_required": "Please log in again and try once more" },
+"inside": {
+    "my": {
+    "title": "My program",
+    "chapters_title": "Chapters",
+    "chapters_hint": "Click a chapter to view the program and dates.",
+    "chapter_label": "Chapter {{num}}",
+
+    "details_toggle": "Details for the selected chapter",
+
+    "selected_title": "Selected chapter",
+    "program_by_days": "Day-by-day program",
+
+    "dates_title": "Tour dates",
+    "tour_dates": "Tour date",
+    "places_title": "Seats per chapter",
+    "limit": "Limit",
+    "enrolled": "Enrolled",
+    "free": "Available",
+    "enrolment_start": "Enrollment starts",
+
+    "request_title": "Participation request",
+    "request_hint": "After approval you’ll have limited time to pay for the tour package and receive documents.",
+    "btn_request": "Request participation",
+    "btn_requested": "Request sent",
+    "btn_approved": "Participation approved",
+    "approved_hint": "Approved. Please pay within 24 hours to receive your tour package documents.",
+    "btn_pay": "Pay",
+    "btn_contact_curator": "Contact curator"
+  },
+    "errors": {
+      "request_failed": "Failed to send completion request",
+      "ask_open_telegram": "Open curator chat in Telegram?"
+    },
+
+      "toast": {
+      "requested": "Completion request sent",
+      "joined": "You joined the India Inside program!",
+      "join_failed": "Failed to join"
+    },
+      "toast": {
+      "requested": "Completion request sent",
+      "joined": "You joined India Inside!",
+      "join_failed": "Unable to join"
+    },
+      "steps_title": "How to become a participant",
+      "steps_sub": "Four simple steps — your curator will guide you through each one.",
+      "steps": {
+        "apply": {
+          "title": "Leave a request",
+          "desc": "Share your contacts and preferred dates. We’ll reach you via WhatsApp/Telegram."
+        },
+        "call": {
+          "title": "Call with curator",
+          "desc": "We’ll understand your goals and pick the right chapter and route."
+        },
+        "chapter": {
+          "title": "Trip — selected chapter",
+          "desc": "Private or small group format, 24/7 support."
+        },
+        "certificate": {
+          "title": "Certificate & Guru status",
+          "desc": "After 4 chapters — a digital certificate and Travella club."
+        }
+      },
+      "chapters_title": "India Inside chapters",
+      "experience": {
+        "title": "What awaits you",
+        "sub": "Private routes, closed ceremonies, and seamless service at every step.",
+        "cards": {
+          "palaces": {
+            "title": "Palaces & heritage",
+            "desc": "Rajasthan, crafts, architecture and royal stories."
+          },
+          "rituals": {
+            "title": "Ceremonies & rituals",
+            "desc": "Private practices and access to rare locations."
+          },
+          "wellness": {
+            "title": "Wellness & Ayurveda",
+            "desc": "Personal recovery programs with trusted doctors."
+          },
+          "yacht": {
+            "title": "Yachts & sunsets",
+            "desc": "Sea cruises and dinners on the Arabian Sea coast."
+          }
+        }
+      },
+      "curated_badge": "Curated cultural journey",
+      "cta_get_program": "Get the program",
+      "cta_ask": "Ask a question",
+      "curator": {
+        "photo_alt": "India Inside curator",
+        "title": "Komil Akhmedov",
+        "subtitle": "Founder of Travella, India Inside curator",
+        "p1": "I’ve been exploring India for 12+ years: its culture, modern cities, heritage and wellness traditions.",
+        "p2": "India Inside is an author program based on personal journeys, connections and deep cultural immersion. We show India as a living space of people, ideas, flavors and meanings.",
+        "bullets": {
+          "one": "12+ years of routes across India",
+          "two": "Wellness, crafts, cultural practices",
+          "three": "Local experts and masters",
+          "four": "Personal guidance"
+        },
+        "disclaimer": "This is not a tour. This is a cultural project."
+          },
+  "badge": "TRAVELLA • INDIA",
+  "title": "India Inside — a luxury journey",
+  "sub": "Private programs, maharaja palaces, closed rituals and Himalayan silence.",
+  "cta_trailer": "Watch trailer",
+  "cta_join": "Request the program",
+
+  "steps_title": "India Inside chapters",
+  "steps_sub": "Choose your chapter — we’ll craft a private route.",
+  "view": "Request the program",
+
+  "chapters": {
+  "royal": {
+    "title": "Golden Triangle",
+    "desc": "Delhi — Agra — Jaipur",
+    "days": "7–8 days",
+    "from": "from $699"
+  },
+  "silence": {
+          "title": "Adventures in Rajasthan",
+          "desc": "Udaipur — Jodhpur — Jaisalmer",
+          "days": "8–9 days",
+          "from": "from $890"
+  },
+  "modern": {
+    "title": "Mumbai + Goa — best memories",
+    "desc": "A big city and ocean relaxation",
+    "days": "7 days",
+    "from": "from $490"
+  },
+  "kerala": {
+    "title": "Kerala: Paradise on Earth",
+    "desc": "Ayurveda, tea hills, houseboat",
+    "days": "8–9 days",
+    "from": "from $790"
+  }
+},
+
+  "guru": {
+    "title": "India Guru program",
+    "lead": "Complete 4 chapters of India Inside and get a personal “India Inside: Guru” status.",
+    "bullets": {
+      "one": "Private routes and a personal curator",
+      "two": "Closed ceremonies and hidden locations",
+      "three": "“India Guru” certificate and Travella club",
+      "four": "Available by request only"
+    },
+    "certificate_label": "Certificate",
+    "certificate_meta": "Owner name • Date • Program ID",
+    "cta_apply": "Request participation",
+    "cta_chapters": "View program chapters"
+  },
+  "exp": {
+  "title": "Inside experience — how it goes",
+  "sub": "A short 5-day program timeline.",
+  "day": "Day",
+  "d1": "Meet in Delhi. Private transfer. Evening welcome briefing dinner.",
+  "d2": "Agra: Taj Mahal at sunrise, Agra Fort. Return to Delhi.",
+  "d3": "Jaipur: Hawa Mahal, Amber Fort, private ceremony.",
+  "d4": "Delhi: modern India — art, fashion, gastronomy.",
+  "d5": "Finale: wellness session / Ayurveda. Departure.",
+  "cards": {
+    "palace":   { "title": "Palaces & heritage", "desc": "Private locations, closed ceremonies, curator." },
+    "ritual":   { "title": "Rituals & traditions", "desc": "Authentic practices without crowds, with translation." },
+    "wellness": { "title": "Wellness & Ayurveda", "desc": "Personal recovery programs." },
+    "yacht":    { "title": "Yacht / gala dinner", "desc": "Program finale — style and atmosphere." }
+  },
+  "cta": "View the detailed program"
+},
+"modal": {
+  "title": "Sample 5-day program",
+  "d1": "Day 1 — Delhi: arrival, transfer, welcome dinner.",
+  "d2": "Day 2 — Agra: Taj Mahal, fort, return.",
+  "d3": "Day 3 — Jaipur: palaces, ceremonies.",
+  "d4": "Day 4 — Modern India: art/fashion/gastro.",
+  "d5": "Day 5 — Wellness/Ayurveda. Departure.",
+  "close": "Close"
+},
+"program": {
+      "royal": {
+        "d1": "Delhi: arrival, transfer, evening briefing",
+        "d2": "Agra: Taj Mahal at sunrise, Agra Fort",
+        "d3": "Jaipur: Amber Fort, Hawa Mahal",
+        "d4": "Jaipur: city tour, crafts",
+        "d5": "Delhi: modern India — art/fashion/gastro",
+        "d6": "Free day / optional add-ons",
+        "d7": "Departure"
+      },
+      "rajasthan": {
+          "d1": "Udaipur: arrival, Lake Pichola, City Palace",
+          "d2": "Udaipur: Jagdish/Eklingji temples, crafts, evening cruise",
+          "d3": "Drive to Jodhpur, walk the “blue” old town",
+          "d4": "Jodhpur: Mehrangarh Fort, towers, rooftop sunset",
+          "d5": "Drive to Jaisalmer, Golden Fort, havelis",
+          "d6": "Thar Desert: dune safari, bonfire dinner",
+          "d7": "Reserve/relax or masterclass",
+          "d8": "Departure"
+      },
+      "mumbaiGoa": {
+        "d1": "Mumbai: half-day tour, evening promenade",
+        "d2": "Bollywood studios / art quarters",
+        "d3": "Flight to Goa, ocean",
+        "d4": "Beaches, Old Goa, Portuguese heritage",
+        "d5": "Yacht/sunset, gastronomy evening",
+        "d6": "Free day / wellness",
+        "d7": "Departure"
+      },
+      "kerala": {
+        "d1": "Kochi: city, Chinese nets, colonial quarter",
+        "d2": "Munnar: tea plantations, viewpoints",
+        "d3": "Munnar: trekking / photo day",
+        "d4": "Alleppey: check-in to houseboat",
+        "d5": "Backwaters, villages, local cuisine",
+        "d6": "Ayurveda center, personal program",
+        "d7": "Free day / sea",
+        "d8": "Departure"
+      }
+    },
+"experience": {
+  "title": "What awaits you with India Inside",
+  "sub": "Delicate routes crafted with love for India, its culture, people, and beauty.",
+  "cards": {
+    "palaces": {
+      "title": "Palaces & heritage",
+      "desc": "Stays in heritage hotels, behind-the-scenes access, private spaces, and the spirit of past eras."
+    },
+    "rituals": {
+      "title": "Rituals & traditions",
+      "desc": "Authentic ceremonies, sages and knowledge keepers, deep cultural immersion."
+    },
+    "wellness": {
+      "title": "Wellness & Ayurveda",
+      "desc": "Personal recovery programs, ancient practices, and master therapists."
+    },
+    "yacht": {
+      "title": "Yacht & gastro evening",
+      "desc": "Sunset, intimate atmosphere, fine dining, and special moments in a close circle."
+    }
+   }
+  }
+ }
+}
+}
