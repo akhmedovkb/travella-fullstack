@@ -1,6 +1,6 @@
 // frontend/src/components/Header.jsx
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
@@ -296,6 +296,20 @@ export default function Header() {
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
 
+            {/* LOGO (перенесли из футера) */}
+            <Link
+              to="/"
+              className="inline-flex items-center mr-1"
+              aria-label="Travella Home"
+            >
+              <img
+                src="/logo1.jpg"
+                alt="Travella"
+                className="h-9 w-auto object-contain sm:h-10 md:h-11"
+                loading="lazy"
+              />
+            </Link>
+
             {/* Products */}
             <nav className="hidden md:flex items-center gap-1">
               <NavItemDark to="/" label="MARKETPLACE" end />
@@ -512,8 +526,8 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
         <span
           className={[
             "min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center",
-            show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
-          ].join(" ")}
+            show ? "bg-orange-500 text-white" : "bgwhite/10 text-white/70",
+          ].join(" ")
         >
           {loading ? "…" : show ? badge : 0}
         </span>
