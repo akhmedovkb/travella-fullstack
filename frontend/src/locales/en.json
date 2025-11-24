@@ -300,7 +300,6 @@
   "enter_category": "Enter accommodation category",
   "enter_flight_details": "Enter flight details",
 
-  {
   "errors": {
     "action_failed": "Action failed",
     "auth_required": "You need to log in to leave a review",
