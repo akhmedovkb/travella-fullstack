@@ -298,5 +298,304 @@
   "enter_accommodation": "Joylashuvni kiriting",
   "enter_airline": "Aviakompaniyani kiriting",
   "enter_category": "Joylashuv toifasini kiriting",
-  "enter_flight_details": "Reys tafsilotlarini kiriting"
-}
+  "enter_flight_details": "Reys tafsilotlarini kiriting",
+  
+  "errors": {
+    "action_failed": "Amal bajarilmadi",
+    "auth_required": "Sharh qoldirish uchun tizimga kiring",
+    "booking_create": "Bron yaratib bo‘lmadi",
+    "data_load": "Ma’lumotlarni yuklashda xatolik",
+    "image_process": "Rasmni qayta ishlashda xatolik",
+    "password_change": "Parolni o‘zgartirib bo‘lmadi",
+    "password_short": "Parol kamida 6 ta belgidan iborat bo‘lishi kerak",
+    "profile_load": "Profilni yuklab bo‘lmadi",
+    "profile_load_failed": "Profilni yuklab bo‘lmadi",
+    "profile_save": "Profilni saqlab bo‘lmadi",
+    "request_send": "So‘rov yuborilmadi",
+    "request_already_sent": "Siz allaqachon so‘rov yuborgansiz",
+    "self_request_forbidden": "O‘zingizga tez so‘rov yubora olmaysiz!",
+    "service_unknown": "Xizmat topilmadi",
+    "tab_load": "Bo‘lim yuklanmadi",
+    "write_review": "Umumiy sharh yozing",
+    "save_failed": "Inspeksiyani saqlab bo‘lmadi",
+    "only_providers": "Inspeksiyalarni faqat avtorizatsiyadan o‘tgan provayderlar/turoperatorlar qoldira oladi.",
+    "already_inspected": "Siz bu mehmonxona uchun inspeksiya qoldirgansiz.",
+    "save_failed_generic": "Saqlab bo‘lmadi. Keyinroq urinib ko‘ring."
+  },
+
+  "event_category_concert": "Konsert",
+  "event_category_exhibition": "Ko‘rgazma",
+  "event_category_fight": "Jang",
+  "event_category_football": "Futbol o‘yini",
+  "event_category_masterclass": "Master-klass",
+  "event_category_show": "Shou",
+  "event_date": "Tadbir sanasi",
+  "event_name": "Tadbir nomi",
+
+  "expiration_timer": "Dolzarblik taymeri",
+
+  "favorites": {
+    "add": "Sevimlilarga qo‘shish",
+    "empty": "Bo‘sh",
+    "expired_badge": "Muddati tugagan",
+    "expired_title": "Bu xizmat endi mavjud emas",
+    "remove_from": "Sevimlilardan olib tashlash",
+    "no_image": "Rasm yo‘q",
+    "added_toast": "Sevimlilarga qo‘shildi",
+    "removed_toast": "Sevimlilardan olib tashlandi",
+    "add_error": "Sevimlilarga qo‘shib bo‘lmadi",
+    "remove_error": "Sevimlilardan olib tashlab bo‘lmadi"
+  },
+
+  "file_chosen": "Fayllar tanlandi",
+  "fill_all_fields": "Barcha maydonlarni to‘ldiring va sanalarni tanlang",
+  "flight_details": "Reys tafsilotlari",
+  "flight_type": "Parvoz turi",
+
+  "filter": {
+    "all": "Barchasi",
+    "pending": "Kutilmoqda",
+    "confirmed": "Tasdiqlangan",
+    "upcoming": "Yaqinlashmoqda",
+    "rejected": "Rad etilgan"
+  },
+
+  "food": "Ovqatlanish",
+  "food_options": {
+    "ai": "Hammasi kiritilgan",
+    "bb": "Faqat nonushta",
+    "fb": "To‘liq pansion",
+    "halal": "Halol",
+    "hb": "Nonushta va kechki ovqat",
+    "select": "Variantni tanlang",
+    "uai": "Ultra hammasi kiritilgan"
+  },
+
+  "guide": "Gid",
+  "hall_rent": "Zal ijarasi",
+
+  "hotel": "Mehmonxona",
+  "hotel_check_in": "Kirish sanasi",
+  "hotel_check_out": "Chiqish sanasi",
+  "hotel_not_found": "Mehmonxona topilmadi",
+  "hotel_transfer": "Mehmonxonaga/undan transfer",
+  "hotel.no_options": "Variantlar yo‘q",
+  "hotel.search_placeholder": "Mehmonxona nomini kiriting",
+
+  "hotels": {
+    "title": "Mehmonxonalar",
+    "tabs": { "top": "Top", "popular": "Mashhur", "new": "Yangi", "worst": "Eng yomon" },
+    "emptyHint": "Ro‘yxatni ko‘rish uchun bo‘limni tanlang yoki qidiruv qiling.",
+    "emptyAfterAction": "Hech narsa topilmadi. Filtrlarni o‘zgartiring yoki boshqa bo‘limni sinab ko‘ring.",
+    "search_by_name": "Nom bo‘yicha qidirish",
+    "city_placeholder": "Shahar",
+    "find_btn": "Topish",
+    "searching": "Qidirilmoqda...",
+    "col": { "name": "Nom", "city": "Shahar", "rating": "Baho" },
+    "empty": "Hech narsa topilmadi",
+
+    "inspections": {
+      "author_fallback": "provayder",
+      "author": "Muallif",
+      "hotel_label": "Mehmonxona",
+      "sort": { "top": "Avval ko‘p layk olganlar", "new": "Avval yangilar" },
+      "back_to_hotel": "Mehmonxonaga qaytish",
+      "empty": "Hozircha inspeksiyalar yo‘q",
+      "new": {
+        "title": "Yangi inspeksiya",
+        "author_auto_hint": "Muallif va profil havolasi avtomatik qo‘shiladi",
+        "review_label": "Umumiy sharh",
+        "pros": "Afzalliklar",
+        "cons": "Kamchiliklar",
+        "features": "Xususiyatlar",
+        "scores_title": "Baholar (0–5)",
+        "current_value": "Joriy: {{v}}",
+        "amenities_title": "Qulayliklar",
+        "nearby_title": "Yaqin atrof (masofalar)",
+        "meters_placeholder": "m",
+        "add_photos": "Rasm qo‘shish",
+        "selected_n_one": "tanlandi: {{count}}",
+        "selected_n_few": "tanlandi: {{count}}",
+        "selected_n_many": "tanlandi: {{count}}",
+        "selected_n_other": "tanlandi: {{count}}",
+        "no_photos": "rasmlar tanlanmagan",
+        "saving": "Saqlanmoqda…",
+        "save": "Saqlash"
+      }
+    },
+    "scores": {
+      "quiet_level": "Tinchlik darajasi",
+      "family_score": "Oila uchun mos",
+      "infra_score": "Atrof infratuzilmasi",
+      "nightlife_score": "Tungi hayot",
+      "activity_score": "Faol dam olish",
+      "wellness_score": "SPA/Wellness",
+      "business_score": "Biznes uchun",
+      "value_score": "Narx/sifat",
+      "access_score": "Qulaylik/transport"
+    },
+    "amenities": {
+      "crib": "Bolalar krovatkasi",
+      "kids_pool": "Bolalar basseyni",
+      "kids_club": "Bolalar klubi",
+      "kitchenette": "Kichik oshxona burchagi",
+      "gym": "Sport zali",
+      "spa": "Spa",
+      "pool_indoor": "Yopiq basseyn",
+      "pool_outdoor": "Ochiq basseyn",
+      "parking": "Avtoturargoh",
+      "bar": "Bar",
+      "elevator": "Lift",
+      "soundproof_rooms": "Shovqinsiz xonalar",
+      "laundry": "Kir yuvish",
+      "late_checkin": "Kech kirish"
+    },
+    "nearby": {
+      "metro_m": "Metro (m)",
+      "supermarket_m": "Supermarket (m)",
+      "pharmacy_m": "Dorixona (m)",
+      "park_m": "Park (m)"
+    }
+  },
+
+  "images_hint": "10 tagacha rasm, har biri ≤ 3 MB",
+  "inf": "Chaqaloqlar (INF)",
+  "is_active": "Dolzarb",
+  "loading": "Yuklanmoqda…",
+  "loading_stats": "Statistika yuklanmoqda...",
+  "location": "Hudud yoki o‘tkaziladigan joy",
+
+  "labels": {
+    "client": "Klient",
+    "agent": "Turoperator",
+    "guide": "Gid",
+    "transport": "Transport",
+    "hotel": "Mehmonxona"
+  },
+
+  "languages": {
+    "heading": "Til bilish darajasi",
+    "placeholder": "Tilni kirita boshlang…",
+    "load_error": "Tillarni yuklab bo‘lmadi",
+    "saved": "Tillar saqlandi",
+    "save_error": "Tillarni saqlashda xatolik"
+  },
+
+  "login": {
+    "button": "Kirish",
+    "email": "Email",
+    "error": "Email yoki parol noto‘g‘ri",
+    "no_account": "Akkaunt yo‘qmi?",
+    "password": "Parol",
+    "title": "Provayder kirishi",
+    "success": "Kirish muvaffaqiyatli"
+  },
+
+  "logout": "Chiqish",
+  "make_cover": "Muqova qilish",
+
+  "marketplace": {
+    "telegram": "Telegram",
+    "website": "Sayt",
+    "address": "Manzil",
+    "adults": "Kattalar (12+)",
+    "children": "Bolalar (2–11)",
+    "end_date": "Tugash sanasi",
+    "flight": "Rad etilgan aviachiptasi",
+    "guide": "Gid",
+    "hotel": "Rad etilgan mehmonxona",
+    "infants": "Chaqaloqlar (0–1)",
+    "location": "Lokatsiya",
+    "location_placeholder": "Lokatsiyani kiriting ...",
+    "package": "Rad etilgan tur",
+    "price": "Narx",
+    "propose_price": "Narx taklif qilish",
+    "refused_event": "Rad etilgan tadbir chiptasi",
+    "results": "Qidiruv natijalari",
+    "reviews": "Xizmat bo‘yicha sharhlar",
+    "search": "Topish",
+    "search_filters": "Qidiruv filtri",
+    "search_in": "{{category}} bo‘yicha qidirish:",
+    "search_placeholder": "Xizmatlar, mamlakatlar, shaharlar bo‘yicha qidirish…",
+    "searching": "Qidirilmoqda...",
+    "sections": { "top": "Top", "new": "Yangi", "upcoming": "Yaqinlashayotgan" },
+    "select_category": "Kategoriyani tanlang",
+    "start_date": "Boshlanish sanasi",
+    "title": "E’lonlar doskasi",
+    "transport": "Transport",
+    "supplier": "Yetkazib beruvchi",
+    "phone": "Telefon",
+    "no_image": "Rasm yo‘q",
+    "no_results": "Natijalar yo‘q",
+    "time_left": "Tugashigacha",
+    "time_expired": "Vaqt tugadi"
+  },
+
+  "messages": {
+    "booking_created": "Bron yaratildi",
+    "favorite_removed": "Sevimlilardan olib tashlandi",
+    "profile_saved": "Profil saqlandi",
+    "request_sent": "So‘rov yuborildi"
+  },
+
+  "moderation": {
+    "service_status": {
+      "draft": "Qoralama",
+      "pending": "Moderatsiyaga yuborildi",
+      "published": "Moderator tomonidan tasdiqlandi",
+      "rejected": "Rad etildi",
+      "archived": "Nashrdan olib tashlandi"
+    },
+    "send_to_review": "Moderatsiyaga yuborish",
+    "submitted_toast": "Moderatsiyaga yuborildi",
+    "title": "Xizmatlar moderatsiyasi",
+    "no_title": "(sarlavhasiz)",
+    "supplier": "Yetkazib beruvchi",
+    "direction": "Yo‘nalish",
+    "start": "Boshlanish",
+    "end": "Tugash",
+    "location": "Lokatsiya",
+    "event": "Tadbir",
+    "airline": "Aviakompaniya",
+    "rejected_reason": "Sabab",
+    "confirm": "Tasdiqlash",
+    "approve": "Nashr qilish",
+    "enter_reason": "Rad etish sababi:",
+    "reject": "Rad etish",
+    "unpublish": "Nashrdan olib tashlash",
+    "approved": "Nashr qilindi",
+    "approve_error": "Nashr qilishda xatolik",
+    "enter_reason_short": "Sababni ko‘rsating",
+    "rejected": "Rad etildi",
+    "reject_error": "Rad etishda xatolik",
+    "unpublished": "Nashrdan olib tashlandi",
+    "unpublish_error": "Nashrdan olishda xatolik",
+    "forbidden": "Faqat administrator uchun",
+    "empty": "Elementlar yo‘q",
+    "tabs": { "pending": "Kutilmoqda", "rejected": "Rad etilganlar" }
+  },
+
+  "mountain_tour": "Tog‘ turi",
+  "my_requests": "Mening so‘rovlarim",
+
+  "name": "Nom",
+  "name_placeholder": "Ismingiz",
+
+  "nav": {
+    "bookings": "Bronlar",
+    "dashboard": "Boshqaruv",
+    "requests": "So‘rovlar",
+    "favorites": "Sevimlilar",
+    "hotels": "Mehmonxonalar",
+    "hotels_admin": "Mehmonxonalar (admin)"
+  },
+
+  "net_price": "Netto narx",
+  "current_password": "Eski parol",
+  "new_password": "Yangi parol",
+
+  "new_refused_airtkt": "Yangi rad etilgan aviachiptani qo‘shish:",
+  "new_refused_event_ticket": "Rad etilgan tadbir chiptasi",
+  "new_refused_hotel": "Yangi rad etilgan mehmonxonani qo‘shish:",
+  "new_refused_tkt": "Yangi rad etilgan tadbir chiptasini qo‘shish:",
+  "new_refused_tour": "Yangi rad etilgan turni qo‘shish:"
