@@ -902,6 +902,301 @@
     "favorites": "Sevimlilar",
     "my_bookings": "Mening bronlarim",
     "my_requests": "Mening so‘rovlarim"
-  }
+  },
+    "tb": {
+    "tpl_apply_title": "Shablonni qo‘llash",
+    "tpl_select": "Shablon",
+    "tpl_select_placeholder": "Shablonni tanlang…",
+    "tpl_start_date": "Boshlanish sanasi",
+    "tpl_start_hint": "Faqat bugungi sana yoki undan keyingisini tanlash mumkin.",
+    "tpl_btn_cancel": "Bekor qilish",
+    "tpl_btn_apply": "Qo‘llash",
+    "err": {
+      "select_template": "Shablonni tanlang.",
+      "start_required": "Boshlanish sanasini ko‘rsating.",
+      "template_empty": "Shablonda kunlar yo‘q.",
+      "invalid_date": "Noto‘g‘ri sana.",
+      "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas."
+    },
+    "hotel_category": "Mehmonxonalar kategoriyasi",
+    "any": "Istalgan",
+    "route": "Marshrut",
+    "templates": "Shablonlar",
+    "templates_open": "Shablonlarni ochish",
+    "templates_count": "{{count}} ta",
+    "transfers": "Shaharlararo transferlar",
+    "transfer_from_ph": "Qayerdan (shahar)",
+    "transfer_to_ph": "Qayerga (shahar)",
+    "transfer_price_ph": "Narx",
+    "per_pax": "/ pax",
+    "remove": "O‘chirish",
+    "add_transfer": " Transfer qo‘shish",
+    "transfers_day_sum": "Kun bo‘yicha transferlar summasi",
+    "profile": {
+      "city": "Shahar",
+      "languages": "Tillar",
+      "phone": "Tel.",
+      "telegram": "Telegram",
+      "email": "Email",
+      "price_per_day": "Narx/kun",
+      "open_profile": "Profilni ochish →"
+    },
+    "transfer_types": {
+      "car": "Avto",
+      "train": "Poyezd",
+      "air": "Aviya"
+    },
+    "currencyintercities": {
+      "uzs": "UZS",
+      "usd": "USD"
+    },
+    "tourism_fee_hint": "Turistik yig‘im: rez. {{res}} / nerez. {{nrs}} so‘m bir kishi/kecha uchun",
+    "tourism_fee_absent": "Turistik yig‘im mehmonxona profilida ko‘rsatilmagan",
+    "rooms": "Xonalar",
+    "extra_beds_short": "Qo‘sh. joylar",
+    "tourism_fee_short": "Tur. yig‘im",
+    "vat": "QQS",
+    "vat_included": "narxga kiritilgan",
+    "usd_enter_valid_rate": "USD summalarini ko‘rish uchun to‘g‘ri kursni kiriting",
+    "tariff_for": "Tariflar",
+    "tariffs_for": "Tariflar",
+    "residents": "Rezidentlar",
+    "nonresidents": "Nerezidentlar",
+
+    "speaking_lang": "Tur o‘tkaziladigan til",
+    "city_ph": "Shahar (masalan, Tashkent)",
+    "pick_city_first": "Avval shaharni ko‘rsating",
+
+    "guide": "Gid",
+    "pick_guide": "Gidni tanlang",
+    "pick_guide_service_ph": "Gid xizmatini tanlang…",
+    "no_services_for_guide": "Bu gid uchun xizmatlar topilmadi. Dashboard → Services bo‘limida to‘ldiring.",
+    "no_providers": "Mavjud provayderlar yo‘q",
+
+    "transport": "Transport",
+    "pick_transport": "Transportni tanlang",
+    "pick_transport_service_ph": "Transport xizmatini tanlang…",
+    "no_services_for_transport": "Bu tashuvchi uchun xizmatlar topilmadi. Dashboard → Services bo‘limida to‘ldiring.",
+
+    "hotel": "Mehmonxona (kecha uchun, netto)",
+    "hotel_short": "Mehmonxona",
+    "pick_hotel": "Mehmonxonani tanlang",
+    "no_hotels": "Variantlar yo‘q",
+    "loading_hotel": "Fond va mavsumlarni yuklayapmiz…",
+
+    "entry_fees": "Kirish chiptalari (obyektlar)",
+    "entry_ph": "Obyekt nomini kirita boshlang…",
+    "pick_sites": "Obyektlarni tanlang",
+    "nothing_found": "Hech narsa topilmadi",
+    "entry_for_day": "Ushbu kun uchun",
+    "entry_hint_suffix": "ADT/CHD va rezidentlik holati hisobga olingan",
+
+    "price_per_day": "Narx/kun",
+    "price_per_night": "Narx/kecha",
+    "day_total": "Kun bo‘yicha jami",
+    "rooms_and_meals": "Xonalar va ovqatlanish",
+    "calc_day_hint": "Ushbu kun uchun: {{amount}} (ADT/CHD va rezidentlik hisobga olingan)",
+
+    "totals": {
+      "guide": "Gid (netto)",
+      "transfers": "Transferlar",
+      "transport": "Transport (netto)",
+      "hotels": "Mehmonxonalar (netto)",
+      "entry": "Entry fees (netto)",
+      "total": "JAMI"
+    },
+
+    "title": "Tur konstruktori",
+    "dates": "Tur sanalari",
+    "pick_dates": "Boshlanish va tugash sanalarini tanlang",
+    "dates_span": "{{from}} — {{to}} • {{days}} kun",
+    "pax": "Mehmonlar (PAX)",
+
+    "load_draft": "Qoralamani yuklash",
+    "save_draft": "Qoralamani saqlash",
+    "draft_saved": "Qoralama saqlandi",
+    "draft_saved_locally": "Qoralama lokal saqlandi",
+    "draft_loaded": "Qoralama yuklandi",
+    "draft_loaded_local": "Qoralama brauzerdan yuklandi",
+    "no_drafts": "Qoralamalar topilmadi",
+
+    "loop_route": "marshrutni yopish",
+    "loop": "takror",
+    "override_by_day": "Kunlar bo‘yicha qayta belgilash",
+    "use_default": "Standart bo‘yicha",
+
+    "guides_suggest": "Tanlangan sanalarda mavjud gidlar",
+    "no_guides": "Mos gidlar yo‘q",
+    "transports_suggest": "Tanlangan sanalarda mavjud transport",
+    "no_transports": "Mos transport yo‘q",
+
+    "hotels_nights": "Tunashlar (mehmonxonalar qo‘lda qo‘shiladi)",
+    "net": "Netto",
+    "notes": "Eslatma",
+    "extra_beds_qty": "Qo‘sh. krovat soni",
+
+    "pricing": "Narx belgilash",
+    "currency": "Valyuta",
+    "markup": "Ustama, %",
+    "tourist_fee": "Turistik yig‘im / kecha",
+    "hotels_cost": "Mehmonxonalar (netto)",
+    "providers_cost": "Gid/Transport (netto)",
+    "total": "Jami",
+
+    "meals": "Ovqatlanish",
+    "meal_types": {
+      "lunch": "Tushlik",
+      "dinner": "Kechki ovqat",
+      "gala": "Gala-kechki ovqat"
+    },
+    "meal_price_ph": "Narx",
+    "add_meal": " Ovqatlanish qo‘shish",
+    "meals_day_sum": "Kun bo‘yicha ovqatlanish summasi"
+  },
+
+  "tpl": {
+    "program": "Tur dasturi",
+    "program_ph": "Dastur tavsifini yozing (ko‘p qatorli matn, har band yangi qatordan)…",
+    "title": "Tur shablonlari",
+    "btn_new": "+ Yangi shablon",
+    "readonly_hint": "Ko‘rish barcha provayderlar uchun ochiq. Shablonlarni faqat administratorlar yaratishi va tahrirlashi mumkin.",
+    "empty": "Hozircha shablonlar yo‘q",
+    "btn_edit": "Tahrirlash",
+    "btn_delete": "O‘chirish",
+    "view_only": "Faqat ko‘rish",
+    "name": "Shablon nomi",
+    "days_title": "Kunlar (shaharlar tartib bo‘yicha)",
+    "city_ph": "Shahar",
+    "btn_add_day": "+ Kun qo‘shish",
+    "btn_save": "Saqlash",
+    "btn_cancel": "Bekor qilish"
+  },
+
+  "ticket_details": "Chipta tafsilotlari (qator, o‘rin va h.k.)",
+  "title": "Nom",
+
+  "toast": {
+    "addedToFav": "Sevimlilarga qo‘shildi",
+    "favoriteError": "Sevimlilarni o‘zgartirib bo‘lmadi",
+    "removedFromFav": "Sevimlilardan olib tashlandi"
+  },
+
+  "transfer": "Transfer",
+  "transfer_options": {
+    "group": "Guruhli",
+    "individual": "Individual",
+    "none": "Mavjud emas",
+    "select": "Transferni tanlang"
+  },
+
+  "transport": "Transport",
+  "type": "Provayder turi",
+  "update_error": "Yangilash xatosi",
+  "upload_images": "Rasmlar (bir nechta bo‘lishi mumkin):",
+  "view_certificate": "Sertifikatni ko‘rish",
+  "visa_included": "Viza kiritilgan",
+  "visa_support": "Viza qo‘llab-quvvatlash",
+
+  "tooltips": {
+    "favorite_add": "Sevimlilarga",
+    "favorite_remove": "Sevimlilardan olib tashlash"
+  },
+
+  "gross_price": "Klient uchun narx (brutto)",
+  "expired": "Muddati tugagan",
+
+  "form": {
+    "required": "Bu maydonni to‘ldiring.",
+    "email_invalid": "To‘g‘ri e-mail kiriting.",
+    "password_short": "Parolning minimal uzunligi — 6 ta belgi."
+  },
+
+  "enter_current_password": "Joriy parolni kiriting",
+  "hotels_load_error": "Mehmonxonalarni yuklab bo‘lmadi",
+  "country_not_found": "Mamlakat topilmadi",
+  "direction_from_not_found": "Uchish shahri topilmadi",
+  "direction_to_not_found": "Kelish shahri topilmadi",
+
+  "auth": {
+    "login": "Kirish",
+    "login_client": "Klient sifatida kirish",
+    "login_provider": "Provayder sifatida kirish",
+    "login_required": "Davom etish uchun kiring",
+    "provider_login_required": "Provayder sifatida kiring"
+  },
+
+  "rooms_and_prices": "Xonalar fondi va narxlar",
+  "room_category": "Xona kategoriyasi",
+  "count_short": "Soni",
+  "price_per_night": "Narx/kecha",
+  "low_season": "Past mavsum",
+  "high_season": "Yuqori mavsum",
+  "for_residents": "Rezidentlar uchun",
+  "for_nonresidents": "Nerezidentlar uchun",
+  "taxes_fees": "Soliqlar va yig‘imlar",
+  "vat_percent": "QQS, %",
+  "tourism_fee_resident": "Turistik yig‘im (rezidentlar), so‘m/kecha",
+  "tourism_fee_nonresident": "Turistik yig‘im (nerezidentlar), so‘m/kecha",
+  "extra_bed_cost": "Qo‘sh. joy, so‘m/kecha",
+
+  "admin": { "new_hotel_title": "Yangi mehmonxona" },
+  "hotel_name": "Nom",
+  "enter_hotel_name": "Mehmonxona nomini kiriting",
+  "enter_address": "Manzilni ko‘rsating",
+  "hotel_saved": "Mehmonxona saqlandi",
+  "hotel_save_error": "Mehmonxonani saqlashda xatolik",
+  "country": "Mamlakat",
+  "city": "Shahar",
+  "currency": "Valyuta",
+
+  "resident": "Rezidentlar uchun",
+  "non_resident": "Nerezidentlar uchun",
+
+  "room_type_name": "Tur nomi",
+  "add_custom_room_type_ph": "O‘z xona turini qo‘shing (masalan, Deluxe…)",
+  "add_type": "Tur qo‘shish",
+  "extra_bed_price": "Qo‘sh. joy narxi (bir kishi/kecha)",
+
+  "taxes_and_fees": "Soliqlar va yig‘imlar",
+  "vat_included": "Narxlar QQS bilan",
+  "vat_rate": "QQS stavkasi, %",
+
+  "amenities": "Qulayliklar",
+  "add_amenity": "Qulaylik qo‘shish…",
+  "add_service": "Xizmat qo‘shish…",
+  "add": "Qo‘shish",
+
+  "images": "Rasmlar",
+
+  "select_city": "Shaharni tanlang",
+  "select_country": "Mamlakatni tanlang",
+  "select": {
+    "type_more": "Kamida 2 ta belgi kiriting",
+    "no_options": "Hech narsa topilmadi",
+    "loading": "Yuklanmoqda…"
+  },
+
+  "tourBuilder": {
+    "title": "Tur konstruktori",
+    "dates": "Tur sanalari",
+    "arrivalDay1": "1-kun kelish vaqti",
+    "monuments": "Kirish chiptalari (obyektlar)",
+    "monuments_ph": "Obyekt/shahar nomini kirita boshlang…",
+    "guide": "Gid",
+    "transport": "Transport",
+    "cities": "Shaharlar (multiselect)",
+    "cities_ph": "Shahar nomini kirita boshlang...",
+    "dragToReorder": "Tartibni o‘zgartirish uchun sudrang",
+    "rooming": "Rooming (xonalar soni)",
+    "map": "Xarita",
+    "segments": "Marshrut segmentlari",
+    "dep": "Jo‘nash vaqti",
+    "arr": "Kelish vaqti",
+    "extras": "Qo‘shimcha elementlar",
+    "extras_ph": "Ovqatlanish, master-klass…",
+    "markerHint": "Nuqtani aniqlashtirish uchun markerini sudrang",
+    "generate": "Dastur yaratish",
+    "programText": "Matnli dastur"
+  },
 
 
