@@ -298,5 +298,307 @@
   "enter_accommodation": "Enter accommodation",
   "enter_airline": "Enter airline",
   "enter_category": "Enter accommodation category",
-  "enter_flight_details": "Enter flight details"
+  "enter_flight_details": "Enter flight details",
+
+  {
+  "errors": {
+    "action_failed": "Action failed",
+    "auth_required": "You need to log in to leave a review",
+    "booking_create": "Failed to create booking",
+    "data_load": "Data loading error",
+    "image_process": "Image processing error",
+    "password_change": "Failed to change password",
+    "password_short": "Password must be at least 6 characters long",
+    "profile_load": "Failed to load profile",
+    "profile_load_failed": "Failed to load profile",
+    "profile_save": "Failed to save profile",
+    "request_send": "Failed to send request",
+    "request_already_sent": "You have already sent a request",
+    "self_request_forbidden": "You cannot send a quick request to yourself!",
+    "service_unknown": "Service not found",
+    "tab_load": "Failed to load tab",
+    "write_review": "Write an overall review",
+    "save_failed": "Failed to save inspection",
+    "only_providers": "Only authorized providers/travel agents can leave inspections.",
+    "already_inspected": "You have already left an inspection for this hotel.",
+    "save_failed_generic": "Failed to save. Please try again later."
+  },
+
+  "event_category_concert": "Concert",
+  "event_category_exhibition": "Exhibition",
+  "event_category_fight": "Fight",
+  "event_category_football": "Football match",
+  "event_category_masterclass": "Master class",
+  "event_category_show": "Show",
+  "event_date": "Event date",
+  "event_name": "Event name",
+
+  "expiration_timer": "Validity timer",
+
+  "favorites": {
+    "add": "Add to favorites",
+    "empty": "Empty",
+    "expired_badge": "Expired",
+    "expired_title": "This service is no longer available",
+    "remove_from": "Remove from favorites",
+    "no_image": "No image",
+    "added_toast": "Added to favorites",
+    "removed_toast": "Removed from favorites",
+    "add_error": "Failed to add to favorites",
+    "remove_error": "Failed to remove from favorites"
+  },
+
+  "file_chosen": "Files selected",
+  "fill_all_fields": "Fill in all fields and select dates",
+  "flight_details": "Flight details",
+  "flight_type": "Flight type",
+
+  "filter": {
+    "all": "All",
+    "pending": "Pending",
+    "confirmed": "Confirmed",
+    "upcoming": "Upcoming",
+    "rejected": "Rejected"
+  },
+
+  "food": "Meals",
+  "food_options": {
+    "ai": "All inclusive",
+    "bb": "Breakfast only",
+    "fb": "Full board",
+    "halal": "Halal",
+    "hb": "Breakfast and dinner",
+    "select": "Select an option",
+    "uai": "Ultra all inclusive"
+  },
+
+  "guide": "Guide",
+  "hall_rent": "Hall rental",
+
+  "hotel": "Hotel",
+  "hotel_check_in": "Check-in date",
+  "hotel_check_out": "Check-out date",
+  "hotel_not_found": "Hotel not found",
+  "hotel_transfer": "Hotel transfer",
+  "hotel.no_options": "No options",
+  "hotel.search_placeholder": "Enter hotel name",
+
+  "hotels": {
+    "title": "Hotels",
+    "tabs": { "top": "Top", "popular": "Popular", "new": "New", "worst": "Worst" },
+    "emptyHint": "Select a tab or run a search to see the hotel list.",
+    "emptyAfterAction": "Nothing found. Change filters or try another tab.",
+    "search_by_name": "Search by name",
+    "city_placeholder": "City",
+    "find_btn": "Find",
+    "searching": "Searching...",
+    "col": { "name": "Name", "city": "City", "rating": "Rating" },
+    "empty": "Nothing found",
+
+    "inspections": {
+      "author_fallback": "provider",
+      "author": "Author",
+      "hotel_label": "Hotel",
+      "sort": { "top": "Most liked first", "new": "Newest first" },
+      "back_to_hotel": "Back to hotel",
+      "empty": "No inspections yet",
+      "new": {
+        "title": "New inspection",
+        "author_auto_hint": "Author and profile link will be filled automatically",
+        "review_label": "Overall review",
+        "pros": "Pros",
+        "cons": "Cons",
+        "features": "Features",
+        "scores_title": "Scores (0–5)",
+        "current_value": "Current: {{v}}",
+        "amenities_title": "Amenities",
+        "nearby_title": "Nearby (distances)",
+        "meters_placeholder": "m",
+        "add_photos": "Add photos",
+        "selected_n_one": "selected: {{count}}",
+        "selected_n_few": "selected: {{count}}",
+        "selected_n_many": "selected: {{count}}",
+        "selected_n_other": "selected: {{count}}",
+        "no_photos": "no photos selected",
+        "saving": "Saving…",
+        "save": "Save"
+      }
+    },
+    "scores": {
+      "quiet_level": "Quietness level",
+      "family_score": "Family-friendly",
+      "infra_score": "Surrounding infrastructure",
+      "nightlife_score": "Nightlife",
+      "activity_score": "Active leisure",
+      "wellness_score": "SPA/Wellness",
+      "business_score": "Business-friendly",
+      "value_score": "Value for money",
+      "access_score": "Accessibility/transport"
+    },
+    "amenities": {
+      "crib": "Baby crib",
+      "kids_pool": "Kids pool",
+      "kids_club": "Kids club",
+      "kitchenette": "Kitchenette",
+      "gym": "Gym",
+      "spa": "Spa",
+      "pool_indoor": "Indoor pool",
+      "pool_outdoor": "Outdoor pool",
+      "parking": "Parking",
+      "bar": "Bar",
+      "elevator": "Elevator",
+      "soundproof_rooms": "Soundproof rooms",
+      "laundry": "Laundry",
+      "late_checkin": "Late check-in"
+    },
+    "nearby": {
+      "metro_m": "Metro (m)",
+      "supermarket_m": "Supermarket (m)",
+      "pharmacy_m": "Pharmacy (m)",
+      "park_m": "Park (m)"
+    }
+  },
+
+  "images_hint": "Up to 10 images, ≤ 3 MB each",
+  "inf": "Infants (INF)",
+  "is_active": "Active",
+  "loading": "Loading…",
+  "loading_stats": "Loading statistics...",
+  "location": "Region or venue",
+
+  "labels": {
+    "client": "Client",
+    "agent": "Travel agent",
+    "guide": "Guide",
+    "transport": "Transport",
+    "hotel": "Hotel"
+  },
+
+  "languages": {
+    "heading": "Languages",
+    "placeholder": "Start typing a language…",
+    "load_error": "Failed to load languages",
+    "saved": "Languages saved",
+    "save_error": "Error saving languages"
+  },
+
+  "login": {
+    "button": "Login",
+    "email": "Email",
+    "error": "Invalid email or password",
+    "no_account": "No account?",
+    "password": "Password",
+    "title": "Provider login",
+    "success": "Login successful"
+  },
+
+  "logout": "Logout",
+  "make_cover": "Make cover",
+
+  "marketplace": {
+    "telegram": "Telegram",
+    "website": "Website",
+    "address": "Address",
+    "adults": "Adults (12+)",
+    "children": "Children (2–11)",
+    "end_date": "End date",
+    "flight": "Resold flight ticket",
+    "guide": "Guide",
+    "hotel": "Resold hotel",
+    "infants": "Infants (0–1)",
+    "location": "Location",
+    "location_placeholder": "Enter location ...",
+    "package": "Resold tour",
+    "price": "Price",
+    "propose_price": "Propose a price",
+    "refused_event": "Resold event ticket",
+    "results": "Search results",
+    "reviews": "Service reviews",
+    "search": "Search",
+    "search_filters": "Search filters",
+    "search_in": "Search in {{category}}:",
+    "search_placeholder": "Search by services, countries, cities…",
+    "searching": "Searching...",
+    "sections": { "top": "Top", "new": "New", "upcoming": "Upcoming" },
+    "select_category": "Select category",
+    "start_date": "Start date",
+    "title": "Marketplace board",
+    "transport": "Transport",
+    "supplier": "Supplier",
+    "phone": "Phone",
+    "no_image": "No image",
+    "no_results": "No results",
+    "time_left": "Time left",
+    "time_expired": "Time expired"
+  },
+
+  "messages": {
+    "booking_created": "Booking created",
+    "favorite_removed": "Removed from favorites",
+    "profile_saved": "Profile saved",
+    "request_sent": "Request sent"
+  },
+
+  "moderation": {
+    "service_status": {
+      "draft": "Draft",
+      "pending": "Sent for moderation",
+      "published": "Approved by moderator",
+      "rejected": "Rejected",
+      "archived": "Unpublished"
+    },
+    "send_to_review": "Send for moderation",
+    "submitted_toast": "Submitted for moderation",
+    "title": "Service moderation",
+    "no_title": "(no title)",
+    "supplier": "Supplier",
+    "direction": "Direction",
+    "start": "Start",
+    "end": "End",
+    "location": "Location",
+    "event": "Event",
+    "airline": "Airline",
+    "rejected_reason": "Reason",
+    "confirm": "Confirm",
+    "approve": "Publish",
+    "enter_reason": "Rejection reason:",
+    "reject": "Reject",
+    "unpublish": "Unpublish",
+    "approved": "Published",
+    "approve_error": "Publish error",
+    "enter_reason_short": "Enter a reason",
+    "rejected": "Rejected",
+    "reject_error": "Rejection error",
+    "unpublished": "Unpublished",
+    "unpublish_error": "Unpublish error",
+    "forbidden": "Admin access only",
+    "empty": "No items",
+    "tabs": { "pending": "Pending", "rejected": "Rejected" }
+  },
+
+  "mountain_tour": "Mountain tour",
+  "my_requests": "My requests",
+
+  "name": "Name",
+  "name_placeholder": "Your name",
+
+  "nav": {
+    "bookings": "Bookings",
+    "dashboard": "Dashboard",
+    "requests": "Requests",
+    "favorites": "Favorites",
+    "hotels": "Hotels",
+    "hotels_admin": "Hotels (admin)"
+  },
+
+  "net_price": "Net price",
+  "current_password": "Current password",
+  "new_password": "New password",
+
+  "new_refused_airtkt": "Add new resold flight ticket:",
+  "new_refused_event_ticket": "Resold event ticket",
+  "new_refused_hotel": "Add new resold hotel:",
+  "new_refused_tkt": "Add new resold event ticket:",
+  "new_refused_tour": "Add new resold tour:"
 }
+
