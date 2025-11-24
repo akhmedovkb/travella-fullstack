@@ -105,7 +105,6 @@ const IconChevron = (p) => (
 );
 
 const YES = new Set(["1", "true", "yes", "on"]);
-
 function detectAdmin(profile) {
   const p = profile || {};
   const roles = []
@@ -168,12 +167,12 @@ export default function Header() {
   const { t } = useTranslation();
   const location = useLocation();
 
+  // если позже захочешь отдельный логотип для India — поменяем тут
   const isIndia = location.pathname.startsWith("/india");
-  const logoSrc = `${import.meta.env.BASE_URL}logo1.jpg`;
-  // если позже захочешь другое для India:
-  // const logoSrc = isIndia
-  //   ? `${import.meta.env.BASE_URL}logo_india.jpg`
-  //   : `${import.meta.env.BASE_URL}logo1.jpg`;
+  const primaryLogo = isIndia ? "/logo1.jpg" : "/logo1.jpg";
+  const backupLogo = "/logo7.jpg";
+  const [logoSrc, setLogoSrc] = useState(primaryLogo);
+  useEffect(() => setLogoSrc(primaryLogo), [primaryLogo]);
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -268,7 +267,6 @@ export default function Header() {
           bookingsPending = list.filter((x) => String(x.status).toLowerCase() === "pending").length;
           bookingsTotal = list.length;
         }
-
         if (!cancelled) {
           setCounts({
             requests_open: Number(rs?.open || 0) + requestsNew,
@@ -283,7 +281,6 @@ export default function Header() {
         if (!cancelled) setLoading(false);
       }
     };
-
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
     return () => {
@@ -292,7 +289,7 @@ export default function Header() {
     };
   }, [role, refreshTick]);
 
-  // External events refresh
+  // External events
   useEffect(() => {
     const bump = () => setRefreshTick((x) => x + 1);
     window.addEventListener("provider:counts:refresh", bump);
@@ -333,8 +330,8 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
-      {/* px-0 чтобы лого было левее */}
-      <div className="mx-auto max-w-7xl px-0">
+      {/* уменьшаем padding слева/справа, чтобы лого ушло левее */}
+      <div className="mx-auto max-w-7xl px-1 sm:px-2">
         {/* One-row desktop header */}
         <div className="h-14 flex items-center justify-between gap-2">
           {/* Left group */}
@@ -348,23 +345,20 @@ export default function Header() {
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
 
-            {/* LOGO */}
-            <Link to="/" className="inline-flex items-center mr-2 pl-2" aria-label="Travella Home">
+            {/* LOGO — максимально влево */}
+            <Link
+              to="/"
+              className="inline-flex items-center mr-1 -ml-2 sm:-ml-3 md:-ml-4"
+              aria-label="Travella Home"
+            >
               <img
                 src={logoSrc}
                 alt="Travella"
                 className="h-9 w-auto object-contain sm:h-10 md:h-11"
                 loading="lazy"
                 onError={(e) => {
-                  // фолбэк для доменов/кэша/имени файла
-                  e.currentTarget.style.display = "none";
-                  const parent = e.currentTarget.parentElement;
-                  if (parent && !parent.querySelector(".logo-fallback")) {
-                    const span = document.createElement("span");
-                    span.className = "logo-fallback text-white font-semibold tracking-wide";
-                    span.textContent = "TRAVELLA";
-                    parent.appendChild(span);
-                  }
+                  if (e.currentTarget.src.includes(backupLogo)) return;
+                  setLogoSrc(backupLogo);
                 }}
               />
             </Link>
@@ -410,7 +404,7 @@ export default function Header() {
           </div>
 
           {/* Right group */}
-          <div className="hidden md:flex items-center gap-1 pr-2">
+          <div className="hidden md:flex items-center gap-1">
             {role === "provider" && (
               <>
                 <NavBadgeDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} />
@@ -433,7 +427,7 @@ export default function Header() {
           </div>
 
           {/* Mobile lang only */}
-          <div className="md:hidden flex items-center pr-2">
+          <div className="md:hidden flex items-center">
             <LanguageSelector />
           </div>
         </div>
@@ -443,21 +437,43 @@ export default function Header() {
           className={`md:hidden overflow-hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[80vh]" : "max-h-0"}`}
           aria-hidden={!mobileOpen}
         >
-          <nav className="pb-3 -mx-1 px-2">
+          <nav className="pb-3 -mx-1">
             {role && (
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
                   <>
                     <NavItemMobileDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-                    <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
-                    <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
-                    <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                    <NavItemMobileDark
+                      to="/dashboard/requests"
+                      label={t("nav.requests")}
+                      icon={<IconRequests />}
+                      badge={providerRequests}
+                      loading={loading}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/favorites"
+                      label={t("nav.favorites") || "Избранное"}
+                      icon={<IconHeart />}
+                      badge={favCount}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/bookings"
+                      label={t("nav.bookings")}
+                      icon={<IconBookings />}
+                      badge={bookingsBadge}
+                      loading={loading}
+                    />
                   </>
                 )}
                 {role === "client" && (
                   <>
                     <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
-                    <NavItemMobileDark to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                    <NavItemMobileDark
+                      to="/client/dashboard?tab=favorites"
+                      label={t("client.header.favorites", "Избранное")}
+                      icon={<IconHeart />}
+                      badge={favCount}
+                    />
                   </>
                 )}
               </RowGroupDark>
@@ -465,9 +481,7 @@ export default function Header() {
 
             <RowGroupDark title={t("nav.products", "Продукты")}>
               <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
-              {role === "provider" && (
-                <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
+              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
 
@@ -588,7 +602,7 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
             show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
           ].join(" ")}
         >
-          {loading ? "…" : show ? badge : 0}
+          {loading ? "…" : (show ? badge : 0)}
         </span>
       )}
     </NavLink>
