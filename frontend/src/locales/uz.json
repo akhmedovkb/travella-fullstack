@@ -1497,5 +1497,448 @@
     "final_sub": "Ariza qoldiring — vazifangizga mos eng yaxshi variantni topib beramiz.",
     "final_btn": "Konsultatsiya olish",
     
+"final_btn": "Konsultatsiya olish",
+  "items": [
+  {
+    "name": "Sarvodaya Hospital",
+    "city": "Faridobod",
+    "specialization": "Onkologiya • Ortopediya • Neyrojarrohlik",
+    "img": "/sarvodaya.jpg"
+  },
+  {
+    "name": "Fortis Escorts",
+    "city": "Dehli",
+    "specialization": "Kardiologiya • Kardiojarrohlik",
+    "img": "/fortis.jpg"
+  },
+  {
+    "name": "Max Super Specialty Hospital",
+    "city": "Saket, Dehli",
+    "specialization": "Onkologiya • Neyrojarrohlik • Transplantatsiya",
+    "img": "/max.jpg"
+  },
+  {
+    "name": "Medanta Hospital",
+    "city": "Gurgaon",
+    "specialization": "Onkologiya • Neyrojarrohlik • Ortopediya",
+    "img": "/medanta.jpg"
+  }
+]
+},
+"b2b": {
+  "badge": "Agentliklar uchun B2B",
+  "h1": "Hindiston bo‘yicha Travella hamkoriga aylaning",
+  "sub": "Tayyor yechimlarni beramiz: davolash, check-up, Ayurveda, turlar va konsultatsiyalar. Siz sotasiz — biz hammasini to‘liq tashkil qilamiz.",
+
+  "cta": "Hamkor bo‘lish",
+
+  "benefits": {
+    "title": "Nega agentliklar bizni tanlaydi",
+    "sub": "Biz bilan ishlash qulay va sotish foydali.",
+    "items": [
+      { "title": "Yuqori komissiyalar", "text": "Tibbiy dasturlar va turlarga 20% gacha." },
+      { "title": "To‘liq hamrohlik", "text": "Tashkiliy ishlar, hujjatlar, klinikalar va kuratorlarni biz o‘z zimmamizga olamiz." },
+      { "title": "Ishonchli klinikalar", "text": "Faqat JCI/NABH shifoxonalari bilan ishlaymiz." },
+      { "title": "Tezkorlik", "text": "Hisob va davolash rejasi — 6–24 soatda." }
+    ]
+  },
+
+  "formats": {
+    "title": "Hamkorlik formatlari",
+    "sub": "Kompaniyangiz uchun qulay formatni tanlang.",
+    "items": [
+      {
+        "title": "Tibbiy turizm",
+        "text": "Davolash, operatsiyalar, Ayurveda, Check-up. Hammasini “kalit topshirish” shaklida qilamiz.",
+        "note": "Har qanday ko‘lamdagi agentliklar uchun mos."
+      },
+      {
+        "title": "Viza yordami",
+        "text": "Medical Visa, e-Medical rasmiylashtirish, statusni kuzatish.",
+        "note": "Tez ishlaymiz, rad etishlarsiz."
+      },
+      {
+        "title": "Individual turlar",
+        "text": "Ayurveda, yoga turlari, retreatlar, mualliflik marshrutlari.",
+        "note": "Paketni tayyorlaymiz + hammasini o‘zimiz bron qilamiz."
+      }
+    ]
+  },
+
+  "steps": {
+    "title": "Hamkorlik qanday ishlaydi",
+    "step": "{{num}}-qadam",
+    "items": [
+      { "title": "Ariza", "text": "Kontaktlaringizni va yo‘nalishni qoldirasiz." },
+      { "title": "Ulanish", "text": "Materiallar, narxlar va yo‘riqnomalarni beramiz." },
+      { "title": "Mijozlar so‘rovlari", "text": "So‘rovlarni yuborasiz — biz darhol ishlov beramiz." },
+      { "title": "To‘lovlar", "text": "Mijoz to‘lagach komissiya olasiz." }
+    ]
+  },
+
+  "faq": {
+    "title": "Tez-tez so‘raladigan savollar",
+    "items": [
+      { "q": "Komissiyani qanday olaman?", "a": "Hisobot beramiz va kartaga/rekvizitga o‘tkazamiz." },
+      { "q": "Minimal savdo hajmi bormi?", "a": "Yo‘q, bitta arizadan ham boshlash mumkin." },
+      { "q": "Jismoniy shaxslar bilan ishlaysizmi?", "a": "Ha, lekin hamkorlar uchun bonus stavkalar bor." },
+      { "q": "O‘z brendim ostida sotish mumkinmi?", "a": "Ha, white-label mumkin." }
+    ]
+  },
+
+  "final": {
+    "title": "Hamkorlikni boshlashga tayyormisiz?",
+    "sub": "Ariza qoldiring — sizni bir kun ichida ulaymiz.",
+    "btn": "Hamkor bo‘lish"
+  }
+},
+  "menu": {
+    "tours": "Turlar",
+    "indiaInside": "India Inside",
+    "ayurveda": "Ayurveda",
+    "checkup": "Check-up",
+    "treatment": "Davolash",
+    "clinics": "Klinikalar",
+    "b2b": "Agentlar uchun B2B",
+    "contacts": "Kontaktlar"
+  },
+
+  "home": {
+    "h1": "Hindistonga sayohat va davolanish — to‘liq “kalit topshirish”",
+    "sub": "Turlar, Ayurveda, Check-up, Dehli klinikalari. 24/7 yordam.",
+    "cta": "Tanlab berishni olish",
+    "whatsapp": "WhatsApp"
+  },
+
+  "form": {
+    "name": "Ism",
+    "phone": "Telefon",
+    "comment": "Izoh",
+    "service": "Xizmat",
+    "send": "Arizani yuborish",
+    "sent": "Ariza yuborildi. Siz bilan bog‘lanamiz.",
+    "error": "Xatolik. Keyinroq urinib ko‘ring.",
+    "tour": "Tur tanlash",
+    "checkup": "Check-up",
+    "ayurveda": "Ayurveda",
+    "treatment": "Davolash",
+    "pax": "Odamlar soni",
+    "dates": "Sanalar / davomiylik",
+    "destination": "Shahar / sanalar",
+    "program": "Dastur",
+    "programs": { "base": "Bazaviy", "cardio": "Kardio", "onco": "Onko", "female": "Ayollar", "male": "Erkaklar" }
+  },
+
+  "tours": {
+    "h1": "Hindistonga turlar",
+    "sub": "Goa, Kerala, Dehli, Mumbay, Oltin uchburchak. Paketlar va mualliflik dasturlari.",
+    "from": "{{price}} dan",
+    "cta": "Batafsil",
+    "nights": "{{count}} tun",
+    "nights_plural_2": "{{count}} tun",
+    "nights_plural_5": "{{count}} tun",
+
+    "program": {
+      "badge": "TRAVELLA × INDIA",
+      "title": "India Inside — Hindiston bo‘yicha Guru bo‘ling",
+      "desc": "4 sayohat: Golden Triangle · Rajasthan · Mumbai+Goa · Kerala. Yo‘lni bosib o‘ting va India Guru maqomini oling.",
+      "trailer": "Treylorni ko‘rish",
+      "cta": "Dasturga o‘tish"
+    },
+
+    "offers": [
+      {
+        "id": "golden-triangle",
+        "title": "Oltin uchburchak",
+        "desc": "Dehli — Agra — Jaypur. Tarix, qal’alar va dunyo mo‘jizasi.",
+        "priceFrom": 590,
+        "currency": "USD",
+        "nights": 6,
+        "slug": "/india/tours/golden-triangle",
+        "image": "/gti.jpeg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "rajasthan",
+        "title": "Rajasthandagi sarguzashtlar",
+        "desc": "Tar cho‘li, maharaajalar saroylari va ko‘k shaharlar.",
+        "priceFrom": 790,
+        "currency": "USD",
+        "nights": 8,
+        "slug": "/india/tours/rajasthan",
+        "image": "/rj_01.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "mumbai-goa",
+        "title": "Mumbay + Goa = eng yaxshi xotiralar",
+        "desc": "Katta shahar, Bollivud va okean bo‘yida dam.",
+        "priceFrom": 350,
+        "currency": "USD",
+        "nights": 7,
+        "slug": "/india/tours/mumbai-goa",
+        "image": "/mg.jpg",
+        "tag": "India Inside"
+      },
+      {
+        "id": "kerala",
+        "title": "Kerala: Yer yuzidagi jannat",
+        "desc": "Ayurveda, hausbotlar va Munnar choy plantatsiyalari.",
+        "priceFrom": 690,
+        "currency": "USD",
+        "nights": 9,
+        "slug": "/india/tours/kerala",
+        "image": "/kerala_01.jpg",
+        "tag": "India Inside"
+      }
+    ]
+  },
+"auth": { "login_required": "Qayta kiring va urinib ko‘ring" },
+"inside": {
+    "my": {
+    "title": "Mening dasturim",
+    "chapters_title": "Boblar",
+    "chapters_hint": "Bobni bosib dastur va sanalarni ko‘ring.",
+    "chapter_label": "{{num}}-bob",
+
+    "details_toggle": "Tanlangan bob bo‘yicha tafsilotlar",
+
+    "selected_title": "Tanlangan bob",
+    "program_by_days": "Kunlar bo‘yicha dastur",
+
+    "dates_title": "Tur sanalari",
+    "tour_dates": "Tur sanasi",
+    "places_title": "Bob bo‘yicha joylar",
+    "limit": "Limit",
+    "enrolled": "Qabul qilinganlar",
+    "free": "Bo‘sh",
+    "enrolment_start": "Qabul boshlanishi",
+
+    "request_title": "Ishtirok etish so‘rovi",
+    "request_hint": "Ariza tasdiqlangach, turpaketni to‘lash va hujjatlarni olish uchun vaqt cheklangan bo‘ladi.",
+    "btn_request": "Ishtirok etish so‘rovi",
+    "btn_requested": "Ariza yuborildi",
+    "btn_approved": "Ishtirok tasdiqlandi",
+    "approved_hint": "Ishtirok tasdiqlandi. Turpaket hujjatlarini olish uchun 24 soat ichida to‘lang.",
+    "btn_pay": "To‘lash",
+    "btn_contact_curator": "Kurator bilan bog‘lanish"
+  },
+    "errors": {
+      "request_failed": "Yakunlash so‘rovini yuborib bo‘lmadi",
+      "ask_open_telegram": "Telegramda kurator chatini ochasizmi?"
+    },
+
+      "toast": {
+      "requested": "Bo‘limni yakunlash so‘rovi yuborildi",
+      "joined": "Siz India Inside dasturiga qo‘shildingiz!",
+      "join_failed": "Qo‘shilish muvaffaqiyatsiz tugadi"
+    },
+      "toast": {
+      "requested": "Yakunlash so‘rovi yuborildi",
+      "joined": "Siz India Inside’ga qo‘shildingiz!",
+      "join_failed": "Qo‘shilib bo‘lmadi"
+    },
+      "steps_title": "Qanday ishtirokchi bo‘lish mumkin",
+      "steps_sub": "To‘rtta oddiy qadam — kurator har birida sizni boshqaradi.",
+      "steps": {
+        "apply": {
+          "title": "Ariza qoldiring",
+          "desc": "Kontaktlar va istalgan sanalarni kiriting. WhatsApp/Telegramda bog‘lanamiz."
+        },
+        "call": {
+          "title": "Kurator bilan qo‘ng‘iroq",
+          "desc": "Maqsadlarni aniqlaymiz va sizga mos bob hamda marshrut tanlaymiz."
+        },
+        "chapter": {
+          "title": "Safar — tanlangan bob",
+          "desc": "Individual yoki kichik guruhda, 24/7 hamrohlik."
+        },
+        "certificate": {
+          "title": "Sertifikat va Guru maqomi",
+          "desc": "4 bobdan so‘ng — raqamli sertifikat va Travella klubi."
+        }
+      },
+      "chapters_title": "India Inside boblari",
+      "experience": {
+        "title": "Sizni nimalar kutadi",
+        "sub": "Xususiy marshrutlar, yopiq marosimlar va har qadamda yumshoq servis.",
+        "cards": {
+          "palaces": {
+            "title": "Saroylar va meros",
+            "desc": "Rajasthan, hunarmandchilik, arxitektura va qirollik hikoyalari."
+          },
+          "rituals": {
+            "title": "Marosimlar va rituallar",
+            "desc": "Xususiy amaliyotlar va noyob joylarga kirish."
+          },
+          "wellness": {
+            "title": "Wellness va Ayurveda",
+            "desc": "Tekshirilgan shifokorlar bilan shaxsiy tiklanish dasturlari."
+          },
+          "yacht": {
+            "title": "Yaxtalar va quyosh botishi",
+            "desc": "Dengiz sayrlari va Arab dengizi sohilida kechki ovqatlar."
+          }
+        }
+      },
+      "curated_badge": "Kuratorlik qilingan madaniy sayohat",
+      "cta_get_program": "Dastur olish",
+      "cta_ask": "Savol berish",
+      "curator": {
+        "photo_alt": "India Inside kuratori",
+        "title": "Komil Axmedov",
+        "subtitle": "Travella asoschisi, India Inside kuratori",
+        "p1": "12+ yildan beri Hindistonni o‘rganaman: madaniyati, zamonaviy shaharlari, merosi va wellness an’analari.",
+        "p2": "India Inside — shaxsiy sayohatlar, tanishuvlar va madaniyatga chuqur kirish asosida yaratilgan mualliflik dasturi. Hindistonni tirik makon sifatida ko‘rsatamiz: odamlar, g‘oyalar, ta’mlar va ma’nolar.",
+        "bullets": {
+          "one": "Hindiston bo‘ylab 12+ yil marshrutlar",
+          "two": "Wellness, hunarmandchilik, madaniy amaliyotlar",
+          "three": "Mahalliy ekspertlar va ustalar",
+          "four": "Shaxsiy hamrohlik"
+        },
+        "disclaimer": "Bu tur emas. Bu madaniy loyiha."
+          },
+  "badge": "TRAVELLA • INDIA",
+  "title": "India Inside — hashamatli sayohat",
+  "sub": "Xususiy dasturlar, maharaajalar saroylari, yopiq rituallar va Himolaylar sukunati.",
+  "cta_trailer": "Treylorni ko‘rish",
+  "cta_join": "Dastur so‘rash",
+
+  "steps_title": "India Inside boblari",
+  "steps_sub": "O‘z bobingizni tanlang — biz xususiy marshrut tuzamiz.",
+  "view": "Dastur so‘rash",
+
+  "chapters": {
+  "royal": {
+    "title": "Oltin uchburchak",
+    "desc": "Dehli — Agra — Jaypur",
+    "days": "7–8 kun",
+    "from": "$699 dan"
+  },
+  "silence": {
+          "title": "Rajasthandagi sarguzashtlar",
+          "desc": "Udaipur — Jodhpur — Jaisalmer",
+          "days": "8–9 kun",
+          "from": "$890 dan"
+  },
+  "modern": {
+    "title": "Mumbay + Goa — eng yaxshi xotiralar",
+    "desc": "Katta shahar va okean bo‘yida dam",
+    "days": "7 kun",
+    "from": "$490 dan"
+  },
+  "kerala": {
+    "title": "Kerala: Yer yuzidagi jannat",
+    "desc": "Ayurveda, choy tepaliklari, hausbot",
+    "days": "8–9 kun",
+    "from": "$790 dan"
+  }
+},
+
+  "guru": {
+    "title": "Hindiston bo‘yicha Guru dasturi",
+    "lead": "India Inside’ning 4 bobini o‘ting va shaxsiy “India Inside: Guru” maqomini oling.",
+    "bullets": {
+      "one": "Shaxsiy marshrutlar va shaxsiy kurator",
+      "two": "Xususiy marosimlar va yopiq lokatsiyalar",
+      "three": "“Hindiston bo‘yicha Guru” sertifikati va Travella klubi",
+      "four": "Faqat ariza orqali"
+    },
+    "certificate_label": "Sertifikat",
+    "certificate_meta": "Egasi ismi • Sana • Dastur identifikatori",
+    "cta_apply": "Ishtirokni so‘rash",
+    "cta_chapters": "Dastur boblarini ko‘rish"
+  },
+  "exp": {
+  "title": "Inside tajribasi — qanday o‘tadi",
+  "sub": "5 kunlik dasturning qisqa taymlayni.",
+  "day": "Kun",
+  "d1": "Dehlida tanishuv. Xususiy transfer. Kechki tanishuv-briefing.",
+  "d2": "Agra: tongda Taj-Mahal, Agra forti. Dehliga qaytish.",
+  "d3": "Jaypur: Shamollar saroyi, Amber forti, xususiy marosim.",
+  "d4": "Dehli: zamonaviy Hindiston — san’at, moda, gastronomiya.",
+  "d5": "Final: wellness seans/ayurveda. Uchib ketish.",
+  "cards": {
+    "palace":   { "title": "Saroylar va meros", "desc": "Xususiy lokatsiyalar, yopiq marosimlar, kurator." },
+    "ritual":   { "title": "Rituallar va an’analar", "desc": "Olomonsiz autentik amaliyotlar, tarjima bilan." },
+    "wellness": { "title": "Wellness & Ayurveda", "desc": "Shaxsiy tiklanish dasturlari." },
+    "yacht":    { "title": "Yaxta / gala-kechki ovqat", "desc": "Dastur finali — uslub va atmosfera." }
+  },
+  "cta": "Batafsil dasturini ko‘rish"
+},
+"modal": {
+  "title": "5 kunlik dastur namunasi",
+  "d1": "1-kun — Dehli: uchib kelish, transfer, tanishuv kechki ovqati.",
+  "d2": "2-kun — Agra: Taj-Mahal, fort, qaytish.",
+  "d3": "3-kun — Jaypur: saroylar, marosimlar.",
+  "d4": "4-kun — Zamonaviy Hindiston: art/moda/gastro.",
+  "d5": "5-kun — Wellness/Ayurveda. Uchib ketish.",
+  "close": "Yopish"
+},
+"program": {
+      "royal": {
+        "d1": "Dehli: uchib kelish, transfer, kechki briefing",
+        "d2": "Agra: tongda Taj-Mahal, Agra forti",
+        "d3": "Jaypur: Amber forti, Shamollar saroyi",
+        "d4": "Jaypur: shahar bo‘ylab tur, hunarmandchilik",
+        "d5": "Dehli: zamonaviy Hindiston — art/moda/gastro",
+        "d6": "Bo‘sh kun / qo‘shimcha variantlar",
+        "d7": "Uchib ketish"
+      },
+      "rajasthan": {
+          "d1": "Udaipur: uchib kelish, Pichola ko‘li, City Palace",
+          "d2": "Udaipur: Jagdish/Eklingji ibodatxonalari, hunarmandchilik, kechki kruiz",
+          "d3": "Jodhpurga yo‘l, “ko‘k” eski shahar bo‘ylab sayr",
+          "d4": "Jodhpur: Mehrangarh forti, minoralar, tomda quyosh botishi",
+          "d5": "Jaisalmerga yo‘l, Oltin fort, haveli",
+          "d6": "Tar cho‘li: dyunalarda safari, gulxon yonida kechki ovqat",
+          "d7": "Zaxira/dam olish yoki master-klass",
+          "d8": "Uchib ketish"
+      },
+      "mumbaiGoa": {
+        "d1": "Mumbay: yarim kunlik tur, kechqurun sohil bo‘yida sayr",
+        "d2": "Bollivud studiyalari / art-kvartallar",
+        "d3": "Goaga parvoz, okean",
+        "d4": "Plyajlar, eski Goa, portugal merosi",
+        "d5": "Yaxta/quyosh botishi, gastronomik kecha",
+        "d6": "Bo‘sh kun / wellness",
+        "d7": "Uchib ketish"
+      },
+      "kerala": {
+        "d1": "Kochi: shahar, xitoy to‘rlari, kolonial qism",
+        "d2": "Munnar: choy plantatsiyalari, viewpoints",
+        "d3": "Munnar: treking / foto-kun",
+        "d4": "Alleppey: hausbotga joylashish",
+        "d5": "Backwaters, qishloqlar, mahalliy oshxona",
+        "d6": "Ayurveda markazi, individual dastur",
+        "d7": "Bo‘sh kun / dengiz",
+        "d8": "Uchib ketish"
+      }
+    },
+"experience": {
+  "title": "India Inside bilan sizni nimalar kutadi",
+  "sub": "Hindiston, uning madaniyati, odamlari va go‘zalligiga mehr bilan yaratilgan nozik marshrutlar.",
+  "cards": {
+    "palaces": {
+      "title": "Saroylar va meros",
+      "desc": "Heritage-mehmonxonalarda yashash, sahna orti kirish, xususiy maydonlar, o‘tgan davrlar ruhi."
+    },
+    "rituals": {
+      "title": "Rituallar va an’analar",
+      "desc": "Autentik marosimlar, donishmandlar va bilim tashuvchilar bilan chuqur tajriba."
+    },
+    "wellness": {
+      "title": "Wellness & Ayurveda",
+      "desc": "Individual tiklanish dasturlari, qadimiy amaliyotlar va master-terapevtlar."
+    },
+    "yacht": {
+      "title": "Yaxta va gastro-kecha",
+      "desc": "Quyosh botishi, kamer muhit, yuqori oshxona va yaqin doirada unutilmas lahzalar."
+    }
+   }
+  }
+ }
+}
+}
 
 
