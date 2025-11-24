@@ -85,7 +85,7 @@ export default function Footer() {
                 <path d="M4 5c0 8.5 6.5 15 15 15l2-2-4-4-2 2c-4-1-7-4-8-8l2-2-4-4-1 1Z"
                       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              +998 (90) 123-45-67
+              +998 (90) 808-73-39
             </a>
 
             <div className="text-sm text-neutral-300 md:text-right">
