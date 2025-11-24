@@ -277,25 +277,21 @@ export default function Header() {
 
   useEffect(() => { setMobileOpen(false); setAdminOpen(false); }, [location]);
 
-  return (
-    <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
-      {/* было px-3 sm:px-4 — делаем чуть уже, чтобы всё прижалось */}
+return (
+  <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
+    {/* full width */}
+    <div className="w-full px-0">
+      {/* centered grid, как было */}
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
         <div className="h-14 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              aria-label="Menu"
-            >
-              {mobileOpen ? <IconClose /> : <IconBurger />}
-            </button>
 
-            {/* LOGO — ближе к краю */}
+          <div className="flex items-center gap-2">
+            {/* burger ... */}
+
+            {/* LOGO — сильнее влево */}
             <Link
               to="/"
-              className="inline-flex items-center mr-1 -ml-1 sm:-ml-2"
+              className="inline-flex items-center mr-2 -ml-3 sm:-ml-6"
               aria-label="Travella Home"
             >
               <img
