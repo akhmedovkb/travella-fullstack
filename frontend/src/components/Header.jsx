@@ -345,10 +345,10 @@ export default function Header() {
               {mobileOpen ? <IconClose /> : <IconBurger />}
             </button>
 
-            {/* LOGO — максимально влево */}
+            {/* LOGO — всегда видимый, не сжимается */}
             <Link
               to="/"
-              className="inline-flex items-center mr-1 -ml-2 sm:-ml-3 md:-ml-4"
+              className="inline-flex shrink-0 flex-none items-center mr-1 -ml-2 sm:-ml-3 md:-ml-4"
               aria-label="Travella Home"
             >
               <img
@@ -364,7 +364,7 @@ export default function Header() {
             </Link>
 
             {/* Products */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-1 min-w-0">
               <NavItemDark to="/" label="MARKETPLACE" end />
               {role === "provider" && (
                 <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
