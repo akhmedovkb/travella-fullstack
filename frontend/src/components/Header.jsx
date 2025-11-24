@@ -263,7 +263,7 @@ export default function Header() {
   useEffect(() => { setMobileOpen(false); }, [location]);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
       <div className="mx-auto max-w-7xl px-3 sm:px-4">
         {/* колонка: Row1 (операционка) + Row2 (продукты/админ) */}
         <div className="flex flex-col gap-0">
@@ -279,8 +279,8 @@ export default function Header() {
               >
                 {mobileOpen ? <IconClose /> : <IconBurger />}
               </button>
-
             </div>
+
             {/* Right: операционка (desktop/tablet) */}
             <div className="hidden md:flex items-center gap-1">
               {role === "provider" && (
@@ -298,6 +298,7 @@ export default function Header() {
                 </>
               )}
             </div>
+
             {/* язык */}
             <div className="shrink-0 flex items-center justify-end h-9">
               <LanguageSelector />
@@ -305,17 +306,16 @@ export default function Header() {
           </div>  {/* конец строки Row1 */}
 
           {/* ===== Row 2: продукты слева + админ сразу после них ===== */}
-          <div className="hidden md:block border-t">
-            {/* центрируем вторую строку */}
-            <div className="py-2 flex items-center justify-center gap-2">
+          <div className="hidden md:block bg-gray-50/60 border-t border-gray-200">
+            <div className="h-12 flex items-center justify-center gap-2">
               {/* Продукты */}
-            <nav className="flex items-center gap-1">
-              <NavItem to="/" label="MARKETPLACE" end />
-              {role === "provider" && (
-                <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-              )}
-              <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-            </nav>
+              <nav className="flex items-center gap-1">
+                <NavItem to="/" label="MARKETPLACE" end />
+                {role === "provider" && (
+                  <NavItem to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+                )}
+                <NavItem to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+              </nav>
 
               {/* разделитель */}
               <div className="mx-2 h-5 w-px bg-gray-200" />
@@ -389,13 +389,13 @@ export default function Header() {
             )}
 
             {/* Продукты */}
-          <RowGroup title={t("nav.products","Продукты")}>
-            <NavItemMobile to="/marketplace" label="MARKETPLACE" />
-            {role === "provider" && (
-              <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
-            )}
-            <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
-          </RowGroup>
+            <RowGroup title={t("nav.products","Продукты")}>
+              <NavItemMobile to="/marketplace" label="MARKETPLACE" />
+              {role === "provider" && (
+                <NavItemMobile to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              )}
+              <NavItemMobile to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </RowGroup>
 
             {/* Админ */}
             {isAdmin && (
@@ -441,21 +441,16 @@ function NavItem({ to, label, icon, end }) {
       end={end}
       className={({ isActive }) =>
         [
-          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "text-sm",
           isActive
-            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
+            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50 after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-500 after:rounded-full"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
         ].join(" ")
       }
     >
       {icon}
       <span>{label}</span>
-            {/* тонкая активная полоска снизу */}
-      {/*
-        Нужны before/after utilities tailwind. Если нет — можно удалить блок ниже.
-      */}
-      {/* eslint-disable-next-line jsx-a11y/aria-proptypes */}
-      {({ isActive }) => isActive && <span aria-hidden="true" className="pointer-events-none absolute -bottom-[6px] left-3 right-3 h-[2px] bg-orange-500 rounded-full" />}
     </NavLink>
   );
 }
@@ -467,9 +462,10 @@ function NavBadge({ to, label, value, loading, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "text-sm",
           isActive
-            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50"
+            ? "text-orange-600 font-semibold border border-orange-200 bg-orange-50 after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-500 after:rounded-full"
             : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
         ].join(" ")
       }
@@ -484,9 +480,6 @@ function NavBadge({ to, label, value, loading, icon }) {
       >
         {loading ? "…" : show ? value : 0}
       </span>
-            {/* тонкая активная полоска снизу */}
-      {/* eslint-disable-next-line jsx-a11y/aria-proptypes */}
-      {({ isActive }) => isActive && <span aria-hidden="true" className="pointer-events-none absolute -bottom-[6px] left-3 right-3 h-[2px] bg-orange-500 rounded-full" />}
     </NavLink>
   );
 }
