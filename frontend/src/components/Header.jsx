@@ -375,4 +375,149 @@ export default function Header() {
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
                   <>
-                    <NavItemMobileDark to="/dashboard
+                    <NavItemMobileDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
+                    <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
+                    <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
+                    <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                  </>
+                )}
+                {role === "client" && (
+                  <>
+                    <NavItemMobileDark to="/client/dashboard" label={t("client.header.cabinet", "Кабинет")} icon={<IconDashboard />} />
+                    <NavItemMobileDark to="/client/dashboard?tab=favorites" label={t("client.header.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                  </>
+                )}
+              </RowGroupDark>
+            )}
+
+            <RowGroupDark title={t("nav.products","Продукты")}>
+              <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
+              {role === "provider" && (
+                <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+              )}
+              <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            </RowGroupDark>
+
+            {isAdmin && (
+              <RowGroupDark title={t("nav.admin","Админ")}>
+                <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests","Inside заявки")} icon={<IconChecklist />} />
+                <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin","Провайдеры")} icon={<IconUsers />} />
+                <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin","Entry fees")} icon={<IconTicket />} />
+                <NavItemMobileDark to="/admin/hotels" label={t("nav.hotels_admin","Отели (админ)")} icon={<IconHotel />} />
+                <NavItemMobileDark to="/admin/pages" label={t("nav.cms_pages","Подвал")} icon={<IconDoc />} />
+              </RowGroupDark>
+            )}
+          </nav>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ---------- Subcomponents ---------- */
+
+function RowGroupDark({ title, children }) {
+  return (
+    <div className="mb-2 rounded-xl ring-1 ring-white/10 bg-[#171717] overflow-hidden text-white">
+      <div className="px-3 py-2 text-[13px] font-semibold text-white/70 bg-black/20">{title}</div>
+      <div className="flex flex-col">{children}</div>
+    </div>
+  );
+}
+
+function NavItemDark({ to, label, icon, end }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        [
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "text-sm",
+          isActive
+            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
+            : "text-white/80 hover:text-white hover:bg-white/10",
+        ].join(" ")
+      }
+    >
+      {icon}
+      <span>{label}</span>
+    </NavLink>
+  );
+}
+
+function NavBadgeDark({ to, label, value, loading, icon }) {
+  const show = Number.isFinite(value) && value > 0;
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        [
+          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "text-sm",
+          isActive
+            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
+            : "text-white/80 hover:text-white hover:bg-white/10",
+        ].join(" ")
+      }
+    >
+      {icon}
+      <span>{label}</span>
+      <span
+        className={[
+          "ml-1 min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center transition-colors",
+          show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
+        ].join(" ")}
+      >
+        {loading ? "…" : show ? value : 0}
+      </span>
+    </NavLink>
+  );
+}
+
+function DropdownItem({ to, label, icon }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        [
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+        ].join(" ")
+      }
+    >
+      <div className="w-5 h-5">{icon}</div>
+      <div className="flex-1">{label}</div>
+    </NavLink>
+  );
+}
+
+function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
+  const show = Number.isFinite(badge) && badge > 0;
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        [
+          "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+        ].join(" ")
+      }
+    >
+      <div className="w-5 h-5">{icon}</div>
+      <div className="flex-1">{label}</div>
+      {badge != null && (
+        <span
+          className={[
+            "min-w-[20px] h-[20px] px-1 rounded-full text-[11px] leading-none flex items-center justify-center",
+            show ? "bg-orange-500 text-white" : "bg-white/10 text-white/70",
+          ].join(" ")}
+        >
+          {loading ? "…" : show ? badge : 0}
+        </span>
+      )}
+    </NavLink>
+  );
+}
