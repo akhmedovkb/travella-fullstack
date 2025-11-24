@@ -1198,5 +1198,304 @@
     "generate": "Dastur yaratish",
     "programText": "Matnli dastur"
   },
+  "landing": {
+  "ayurveda": {
+    "badge": "Hindistonda Ayurveda",
+    "h1": "An’anaviy ayurveda orqali to‘liq tiklanish",
+    "sub": "Hindistonning yetakchi klinikalaridan sog‘lomlashtirish dasturlari: detoks, tiklanish, surunkali holatlarni davolash va stress-menejment.",
+    "cta_primary": "Konsultatsiya olish",
+    "cta_secondary": "Klinikalarni ko‘rish",
+
+    "stats": {
+      "days": "Dasturlar davomiyligi",
+      "doctors": "Litsenziyalangan shifokorlar",
+      "support": "Kurator yordami"
+    },
+
+    "benefits": {
+      "title": "Nega aynan Hindistonda Ayurveda?",
+      "sub": "Tabiiy davolash usullari, ovqatlanish, massajlar va organizmni to‘liq yangilashni uyg‘unlashtirgan noyob an’ana.",
+      "items": [
+        { "title": "Detoks va yoshartirish", "text": "Individual sxemalar bo‘yicha organizmni kompleks tozalash." },
+        { "title": "Stressni kamaytirish", "text": "Asab tizimini tiklash amaliyotlari, yoga va nafas mashqlari." },
+        { "title": "Surunkali holatlar", "text": "Uyqusizlik, migren, OVQAT HAZM tizimi, gormonal fon bilan ishlash." },
+        { "title": "Ekologik ozish", "text": "Organizmga stresssiz, yumshoq vazn kamaytirish." }
+      ]
+    },
+
+    "programs": {
+      "title": "Ommabop dasturlar",
+      "sub": "Hindistonning yetakchi ayurveda shifokorlari tomonidan ishlab chiqilgan.",
+      "items": [
+        {
+          "title": "Panchakarma",
+          "text": "Tana va ongni chuqur tozalashning klassik dasturi.",
+          "duration": "14–21 kun",
+          "format": "Intensiv"
+        },
+        {
+          "title": "Stress Relief",
+          "text": "Surunkali charchoq, uyqusizlik va xavotir bilan ishlash.",
+          "duration": "7–14 kun",
+          "format": "Yumshoq format"
+        },
+        {
+          "title": "Slim & Fit",
+          "text": "Ovqatlanish va muolajalar tanlovi bilan tabiiy vazn korreksiyasi.",
+          "duration": "10–14 kun",
+          "format": "Standart"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "Dastur qanday o‘tadi",
+      "step": "{{num}}-qadam",
+      "items": [
+        { "title": "Onlayn diagnostika", "text": "Shifokor holatni tahlil qiladi va dastur tanlaydi." },
+        { "title": "Klinika tanlash", "text": "Biz byudjetni hisobga olgan holda eng maqbul joyni taklif qilamiz." },
+        { "title": "Davolash dasturi", "text": "Muolajalar, ovqatlanish, massajlar, yoga, shifokor nazorati." },
+        { "title": "Natijalar", "text": "Siz tavsiyalar va post-dastur olasiz." }
+      ]
+    },
+
+    "clinics": {
+      "title": "Hindistonning eng yaxshi ayurveda klinikalari",
+      "sub": "Kerala, Goa, Dehli va Himachal-Pradeshdagi ishonchli hamkorlar.",
+      "btn": "Klinikalar katalogi",
+      "btn2": "Kurator bilan bog‘lanish"
+    },
+
+    "faq": {
+      "title": "Tez-tez so‘raladigan savollar",
+      "items": [
+        { "q": "Dasturlar qancha davom etadi?", "a": "Maqsadga qarab 7 kundan 21 kungacha." },
+        { "q": "Tayyorlovsiz kelish mumkinmi?", "a": "Ha, shifokor hammasini joyida tanlaydi." },
+        { "q": "Butun oila bilan borish mumkinmi?", "a": "Ha, ko‘pchilik klinikalar barcha yosh guruhlarini qabul qiladi." },
+        { "q": "Dastur narxi qancha?", "a": "Bir hafta uchun klinika va darajaga qarab $500–$1200 dan." }
+      ]
+    },
+
+    "final": {
+      "title": "Bugun tiklanish yo‘lini boshlang",
+      "sub": "Travella kuratoridan bepul konsultatsiya oling.",
+      "btn": "Konsultatsiya olish"
+    }
+  },
+
+  "checkup": {
+    "badge": "Hindiston Check-up",
+    "h1": "Hindistonda 1–3 kunda to‘liq sog‘liq diagnostikasi",
+    "sub": "Dehlining eng yaxshi klinikalarida bazaviy va kengaytirilgan tekshiruv paketlari. Hamrohlik, tarjima va 24/7 kurator yordami.",
+    "cta_primary": "Konsultatsiya olish",
+    "cta_secondary": "Klinikalarni ko‘rish",
+
+    "stats": {
+      "days": "Dastur davomiyligi (kun)",
+      "tests": "Tahlillar va tekshiruvlar",
+      "support": "Kurator yordami"
+    },
+
+    "benefits": {
+      "title": "Nega Hindistonda Check-up o‘tish kerak?",
+      "sub": "Vaqt tejaladi, aniq diagnostika va isbotlangan tibbiyot.",
+      "items": [
+        { "title": "Tez va tizimli", "text": "Barcha tekshiruvlar 1–3 kunda bitta joyda o‘tadi." },
+        { "title": "Zamonaviy texnologiyalar", "text": "MRT, KT, PET, endoskopiya, genetik testlar." },
+        { "title": "Aniq xulosalar", "text": "Shifokorlar konsiliumi va yakuniy hisobot." },
+        { "title": "Foydali", "text": "Xizmat darajasi yuqori bo‘lsa-da, narx pastroq." }
+      ]
+    },
+
+    "programs": {
+      "title": "Ommabop paketlar",
+      "sub": "Yosh, maqsad va sog‘liq tarixiga mos paketni tanlaymiz.",
+      "items": [
+        {
+          "title": "Bazaviy Check-up",
+          "text": "Umumiy qon tahlili, biokimyo, UZI, EKG, terapevt.",
+          "duration": "1 kun",
+          "forWhom": "Hamma uchun"
+        },
+        {
+          "title": "Kardio Check-up",
+          "text": "EhoKG, sutkalik monitoring, stress-test, kardiolog konsultatsiyasi.",
+          "duration": "1–2 kun",
+          "forWhom": "Yurak/tomirlar"
+        },
+        {
+          "title": "Onko-skrining",
+          "text": "Xavflarni va erta aniqlashni kengaytirilgan diagnostika qilish.",
+          "duration": "2–3 kun",
+          "forWhom": "40+ / ko‘rsatma bo‘yicha"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "Diagnostika qanday o‘tadi",
+      "step": "{{num}}-qadam",
+      "items": [
+        { "title": "Ma’lumot yig‘ish", "text": "Qisqa anketani to‘ldirasiz va hujjatlarni yuborasiz." },
+        { "title": "Klinika tanlash", "text": "Kurator vazifa va byudjetga ko‘ra 2–3 variant taklif qiladi." },
+        { "title": "Hindistonda Check-up", "text": "Tekshiruvlarni o‘tkazamiz, tarjima qilamiz va hamrohlik qilamiz." },
+        { "title": "Yakuniy hisobot", "text": "Rus/ozbek tilida xulosa va tavsiyalar olasiz." }
+      ]
+    },
+
+    "clinics": {
+      "title": "Dehlining ishonchli klinikalari",
+      "sub": "Faqat akkreditatsiyadan o‘tgan shifoxona va shifokorlar bilan ishlaymiz.",
+      "btn": "Klinikalar katalogini ochish",
+      "btn2": "Kuratorga murojaat qilish"
+    },
+
+    "faq": {
+      "title": "Tez-tez so‘raladigan savollar",
+      "items": [
+        { "q": "Check-up necha kun oladi?", "a": "Paketga qarab 1 kundan 3 kungacha." },
+        { "q": "Tibbiy kartalarni olib kelish kerakmi?", "a": "Ha, ma’qul. Oldindan ham yuborish mumkin." },
+        { "q": "Tarjimon bormi?", "a": "Ha, kurator barcha bosqichlarda yordam beradi." },
+        { "q": "Narxi qancha?", "a": "Bazaviy paket $250 dan. Aniq narx tahlillar to‘plamiga bog‘liq." }
+      ]
+    },
+
+    "final": {
+      "title": "Ortiqcha kutishsiz diagnostikadan o‘ting",
+      "sub": "Ariza qoldiring — paket va klinikani tanlab beramiz.",
+      "btn": "Konsultatsiya olish"
+    }
+  },
+
+  "treatment": {
+    "badge": "Hindistonda davolanish",
+    "h1": "Hindistonning yetakchi klinikalarida zamonaviy davolash",
+    "sub": "Top mutaxassislar, akkreditatsiyalangan shifoxonalar, shaffof narxlar va bemorni to‘liq kuzatib borish.",
+
+    "cta_primary": "Konsultatsiya olish",
+    "cta_secondary": "Klinikalarni ko‘rish",
+
+    "stats": {
+      "specialties": "Tibbiy yo‘nalishlar",
+      "prices": "BAA/Yevropa bilan solishtirganda tejamkorlik",
+      "jci": "Xalqaro akkreditatsiya"
+    },
+
+    "benefits": {
+      "title": "Nega bemorlar Hindistonni tanlaydi?",
+      "sub": "Yuqori texnologiyalar, tajribali shifokorlar va hamyonbop narxlar.",
+      "items": [
+        { "title": "Kuchli shifokorlar", "text": "Onkologiya, kardiologiya, transplantatsiya, ortopediya — hammasi jahon standartida." },
+        { "title": "Zamonaviy uskunalar", "text": "Robotlashtirilgan jarrohlik, neyronavigatsiya, yuqori aniqlikdagi PET-KT." },
+        { "title": "Shaffof narxlar", "text": "Davolash narxi 40–70% arzon." },
+        { "title": "24/7 hamrohlik", "text": "Kurator, tarjima, barcha logistikani tashkil etish." }
+      ]
+    },
+
+    "programs": {
+      "title": "Asosiy davolash yo‘nalishlari",
+      "sub": "Faqat tekshirilgan shifoxonalar bilan ishlaymiz.",
+      "items": [
+        {
+          "title": "Onkologiya",
+          "text": "Diagnostika, jarrohlik, kimyo- va radioterapiya, target terapiya.",
+          "time": "5 kundan",
+          "level": "Yuqori texnologiyali"
+        },
+        {
+          "title": "Kardiologiya va kardiojarrohlik",
+          "text": "Koronarografiya, stentlash, AKSh, klapan operatsiyalari.",
+          "time": "3 kundan",
+          "level": "Murakkab operatsiyalar"
+        },
+        {
+          "title": "Ortopediya va neyrojarrohlik",
+          "text": "Bo‘g‘imlarni almashtirish, umurtqa operatsiyalari, artroskopiya.",
+          "time": "4 kundan",
+          "level": "Top mutaxassislar"
+        }
+      ]
+    },
+
+    "steps": {
+      "title": "Davolash qanday o‘tadi",
+      "step": "{{num}}-qadam",
+      "items": [
+        { "title": "Konsultatsiya", "text": "Hujjatlarni yuborasiz — shifokor o‘rganib, davolash rejasini taklif qiladi." },
+        { "title": "Klinika tanlash", "text": "Variantlar, narxlar, muddatlar va shifokorlarni solishtiramiz." },
+        { "title": "Hindistonda davolash", "text": "Kutib olamiz, tarjima qilamiz, hamrohlik qilamiz va barcha masalalarni hal qilamiz." },
+        { "title": "Chiqishdan keyingi qo‘llab-quvvatlash", "text": "Tahlillar nazorati, shifokor bilan aloqa, tavsiyalar." }
+      ]
+    },
+
+    "faq": {
+      "title": "Tez-tez so‘raladigan savollar",
+      "items": [
+        { "q": "Qaysi klinikalar mavjud?", "a": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz." },
+        { "q": "Shoshilinch kelish mumkinmi?", "a": "Ha, shoshilinch so‘rovlarni qabul qilamiz." },
+        { "q": "Viza bilan yordam berasizmi?", "a": "Ha, tibbiy vizani rasmiylashtiramiz." },
+        { "q": "Narxlar qanday?", "a": "BAA/Yevropaga nisbatan 2–3 baravar arzon." }
+      ]
+    },
+
+    "final": {
+      "title": "24 soatda davolash rejasini oling",
+      "sub": "Tibbiy hujjatlarni yuboring — ularni shifokorlarga yetkazamiz.",
+      "btn": "Konsultatsiya olish"
+    }
+  },
+
+  "clinics": {
+    "badge": "Hindiston klinikalari",
+    "h1": "Dehlining diagnostika va davolash bo‘yicha eng yaxshi klinikalari",
+    "sub": "Onkologiya, kardiologiya, neyrojarrohlik, ortopediya va boshqa yo‘nalishlar. Hamyonbop, zamonaviy va ishonchli.",
+    "cta_primary": "Konsultatsiya olish",
+
+    "categories_title": "Asosiy yo‘nalishlar",
+    "categories_sub": "Tekshirilgan bo‘limlar va yetakchi mutaxassislar.",
+    "categories": [
+      { "title": "Onkologiya", "text": "Zamonaviy diagnostika, jarrohlik va terapiya." },
+      { "title": "Kardiologiya", "text": "Stentlash, koronarografiya, yurak operatsiyalari." },
+      { "title": "Ortopediya", "text": "Bo‘g‘imlarni almashtirish, artroskopiya, umurtqa operatsiyalari." },
+      { "title": "Neyrojarrohlik", "text": "Miya va umurtqa operatsiyalari, minimal invaziv usullar." }
+    ],
+
+    "list_title": "Ishonchli klinikalar",
+    "list_sub": "Faqat JCI/NABH akkreditatsiyalangan shifoxonalar bilan ishlaymiz.",
+    "items": [
+      {
+        "name": "BLK-Max Hospital",
+        "city": "Nyu-Dehli",
+        "specialization": "Onkologiya • Kardiologiya • Transplantatsiya",
+        "img": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80"
+      },
+      {
+        "name": "Fortis Escorts",
+        "city": "Dehli",
+        "specialization": "Kardiologiya • Kardiojarrohlik",
+        "img": "https://images.unsplash.com/photo-1580281657525-5c4b8a1e9a8a?q=80"
+      },
+      {
+        "name": "Medanta Hospital",
+        "city": "Gurgaon",
+        "specialization": "Onkologiya • Neyrojarrohlik • Ortopediya",
+        "img": "https://images.unsplash.com/photo-1583912372067-1f77adf46f31?q=80"
+      }
+    ],
+
+    "why_title": "Nega Hindiston?",
+    "why": {
+      "items": [
+        { "title": "Top mutaxassislar", "text": "Jahon standartlari bo‘yicha ishlaydigan tajribali shifokorlar." },
+        { "title": "Zamonaviy texnologiyalar", "text": "PET-CT, Da Vinci roboti, neyronavigatsiya." },
+        { "title": "Hamyonbop narxlar", "text": "BAA/Yevropaga nisbatan 40–70% arzon." },
+        { "title": "To‘liq hamrohlik", "text": "Kurator, tarjima, viza yordami." }
+      ]
+    },
+
+    "final_title": "Klinika tanlashda yordam kerakmi?",
+    "final_sub": "Ariza qoldiring — vazifangizga mos eng yaxshi variantni topib beramiz.",
+    "final_btn": "Konsultatsiya olish",
+    
 
 
