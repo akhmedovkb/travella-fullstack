@@ -36,26 +36,14 @@ export default function Footer() {
 
   return (
     <footer className="mt-14 bg-neutral-950 text-white">
-      {/* верхняя часть */}
       <div className="mx-auto max-w-7xl px-4 py-10">
         <div className="grid gap-10 md:grid-cols-2">
-          {/* LEFT: logo + social */}
+          {/* LEFT: community + socials */}
           <div className="flex flex-col gap-5">
-            {/* logo */}
-            <a href="/" className="inline-flex items-center gap-3">
-              <img
-                src="/logo7.jpg"
-                alt="Travella"
-                className="h-12 w-auto sm:h-14 md:h-16 object-contain"
-                loading="lazy"
-              />
-            </a>
-
             <div className="text-sm text-neutral-300">
               {t("footer.partners_community", "Сообщество для партнёров Travella")}
             </div>
 
-            {/* socials */}
             <div className="flex items-center gap-3">
               <a
                 href="https://t.me/travellauzb"
@@ -65,7 +53,6 @@ export default function Footer() {
                 aria-label="Telegram"
                 title="Telegram"
               >
-                {/* telegram icon */}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <path d="M22 3L2 11l6.5 2.2L11 21l3.2-5.3L20 8.5 8.7 13.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -79,7 +66,6 @@ export default function Footer() {
                 aria-label="Instagram"
                 title="Instagram"
               >
-                {/* instagram icon */}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.8"/>
                   <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8"/>
@@ -91,12 +77,10 @@ export default function Footer() {
 
           {/* RIGHT: phone + apps */}
           <div className="flex flex-col gap-5 md:items-end">
-            {/* phone */}
             <a
               href="tel:+998901234567"
               className="inline-flex items-center gap-2 text-base font-semibold text-white hover:text-[#FF5722] transition"
             >
-              {/* phone icon */}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M4 5c0 8.5 6.5 15 15 15l2-2-4-4-2 2c-4-1-7-4-8-8l2-2-4-4-1 1Z"
                       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -108,7 +92,6 @@ export default function Footer() {
               {t("footer.apps_hint", "Скачайте наше приложение — для удобной работы")}
             </div>
 
-            {/* app buttons (текстовые, пока нет нормальных иконок) */}
             <div className="flex flex-wrap gap-2 md:justify-end">
               <StoreBtn label="App Store" />
               <StoreBtn label="Google Play" />
@@ -117,7 +100,7 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* ссылки страниц */}
+        {/* links */}
         <div className="mt-10 grid grid-cols-2 gap-y-3 gap-x-6 sm:grid-cols-3 md:grid-cols-6 text-sm">
           {items.map(it => (
             <a
@@ -132,27 +115,11 @@ export default function Footer() {
 
         {/* payments */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-6 opacity-90">
-          <img
-            src="/payments/visa-mastercard.png"
-            alt="Visa / MasterCard"
-            loading="lazy"
-            className="h-9 sm:h-10 object-contain"
-          />
-          <img
-            src="/payments/uzcard.jpg"
-            alt="Uzcard"
-            loading="lazy"
-            className="h-9 sm:h-10 object-contain"
-          />
-          <img
-            src="/payments/humo.png"
-            alt="HUMO"
-            loading="lazy"
-            className="h-9 sm:h-10 object-contain"
-          />
+          <img src="/payments/visa-mastercard.png" alt="Visa / MasterCard" loading="lazy" className="h-9 sm:h-10 object-contain" />
+          <img src="/payments/uzcard.jpg" alt="Uzcard" loading="lazy" className="h-9 sm:h-10 object-contain" />
+          <img src="/payments/humo.png" alt="HUMO" loading="lazy" className="h-9 sm:h-10 object-contain" />
         </div>
 
-        {/* copyright */}
         <div className="mt-8 text-center text-xs text-neutral-500">
           © {new Date().getFullYear()} Travella
         </div>
