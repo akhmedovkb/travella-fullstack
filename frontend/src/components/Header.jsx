@@ -1,6 +1,6 @@
 // frontend/src/components/Header.jsx
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
 import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
@@ -21,28 +21,33 @@ const IconModeration = (p) => (
     <path d="M4 5h16v4H4zM7 9v10m10-10v7m-5-7v10" stroke="currentColor" strokeWidth="2"/>
   </svg>
 );
+
 const IconDashboard = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
+
 const IconRequests = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 4h16v12H7l-3 3V4Z" stroke="currentColor" strokeWidth="2" />
     <path d="M8 8h8M8 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
 const IconBookings = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M7 3v4M17 3v4M4 8h16v13H4V8Z" stroke="currentColor" strokeWidth="2" />
     <path d="M8 12h8M8 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
 const IconHeart = (p) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M12 21s-6.716-4.35-9.192-7.2C.818 11.48 1.04 8.72 2.88 7.2a5 5 0 0 1 6.573.33L12 9.08l2.547-1.55a5 5 0 0 1 6.573.33c1.84 1.52 2.062 4.28.072 6.6C18.716 16.65 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
   </svg>
 );
+
 const IconUsers = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/>
@@ -51,6 +56,7 @@ const IconUsers = (p) => (
     <circle cx="17" cy="7" r="2" stroke="currentColor" strokeWidth="2"/>
   </svg>
 );
+
 const IconHotel = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 20h18M5 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2"/>
@@ -59,6 +65,7 @@ const IconHotel = (p) => (
     <path d="M14 14h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
+
 const IconTicket = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M4 7h16v10H4z" stroke="currentColor" strokeWidth="2"/>
@@ -66,6 +73,7 @@ const IconTicket = (p) => (
     <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
   </svg>
 );
+
 const IconDoc = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M7 3h7l5 5v13H7z" stroke="currentColor" strokeWidth="2"/>
@@ -73,16 +81,19 @@ const IconDoc = (p) => (
     <path d="M10 13h7M10 17h7M10 9h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
+
 const IconBurger = (p) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
+
 const IconClose = (p) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
   </svg>
 );
+
 const IconChevron = (p) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" {...p}>
     <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -110,6 +121,7 @@ function detectAdmin(profile) {
   }
   return is;
 }
+
 function detectAdminFromJwt() {
   try {
     const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -226,6 +238,7 @@ export default function Header() {
           bookingsPending = list.filter((x) => String(x.status).toLowerCase() === "pending").length;
           bookingsTotal = list.length;
         }
+
         if (!cancelled) {
           setCounts({
             requests_open: Number(rs?.open || 0) + requestsNew,
@@ -240,6 +253,7 @@ export default function Header() {
         if (!cancelled) setLoading(false);
       }
     };
+
     fetchCounts();
     const id = setInterval(fetchCounts, 30000);
     return () => { cancelled = true; clearInterval(id); };
@@ -269,7 +283,6 @@ export default function Header() {
     fetchFavs();
     const onFavChanged = () => fetchFavs();
     window.addEventListener("wishlist:changed", onFavChanged);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchFavs(location.pathname + location.search);
     return () => window.removeEventListener("wishlist:changed", onFavChanged);
   }, [role, location]);
@@ -281,10 +294,26 @@ export default function Header() {
   useEffect(() => { setMobileOpen(false); setAdminOpen(false); }, [location]);
 
   return (
-    <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40">
-      <div className="mx-auto max-w-7xl px-3 sm:px-4">
+    <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40 relative">
+      {/* LOGO — в самом левом углу */}
+      <Link
+        to="/"
+        className="absolute left-2 sm:left-3 md:left-4 top-1/2 -translate-y-1/2 inline-flex items-center"
+        aria-label="Travella Home"
+      >
+        <img
+          src="/logo1.jpg"
+          alt="Travella"
+          className="h-10 w-auto object-contain sm:h-11 md:h-12"
+          loading="lazy"
+          onError={(e) => { e.currentTarget.src = "/logo7.jpg"; }}
+        />
+      </Link>
+
+      {/* Внутренний контейнер навигации */}
+      <div className="mx-auto max-w-7xl px-2 sm:px-3">
         {/* One-row desktop header */}
-        <div className="h-14 flex items-center justify-between gap-2">
+        <div className="h-14 flex items-center justify-between gap-2 pl-16 sm:pl-20 md:pl-24">
           {/* Left group */}
           <div className="flex items-center gap-2">
             <button
@@ -297,7 +326,7 @@ export default function Header() {
             </button>
 
             {/* Products */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-2 lg:gap-3">
               <NavItemDark to="/" label="MARKETPLACE" end />
               {role === "provider" && (
                 <NavItemDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
@@ -311,7 +340,7 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={() => setAdminOpen(v => !v)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition
+                  className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
                     ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
                 >
                   <IconModeration className="opacity-90" />
@@ -433,7 +462,7 @@ function NavItemDark({ to, label, icon, end }) {
       end={end}
       className={({ isActive }) =>
         [
-          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
           "text-sm",
           isActive
             ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
@@ -454,7 +483,7 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
       to={to}
       className={({ isActive }) =>
         [
-          "relative shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap",
+          "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
           "text-sm",
           isActive
             ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
