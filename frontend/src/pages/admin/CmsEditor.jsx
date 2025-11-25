@@ -1,9 +1,9 @@
-//frontend/src/pages/admin/CmsEditor.jsx
+// frontend/src/pages/admin/CmsEditor.jsx
 import React, { useEffect, useState } from "react";
 import ReactQuill from "react-quill";
 import { apiGet, apiPut } from "../../api";
 
-const SLUGS = ["about","mission","project","partners","contacts","privacy","faq"];
+const SLUGS = ["about", "mission", "project", "partners", "contacts", "privacy", "faq"];
 
 const quillModules = {
   toolbar: [
@@ -18,8 +18,12 @@ const quillModules = {
 
 const quillFormats = [
   "header",
-  "bold", "italic", "underline", "strike",
-  "list", "bullet",
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "list",
+  "bullet",
   "align",
   "link",
 ];
@@ -27,29 +31,38 @@ const quillFormats = [
 export default function CmsEditor() {
   const [slug, setSlug] = useState(SLUGS[0]);
   const [form, setForm] = useState({
-    title_ru:"", title_uz:"", title_en:"",
-    body_ru:"",  body_uz:"",  body_en:"",
-    published:true
+    title_ru: "",
+    title_uz: "",
+    title_en: "",
+    body_ru: "",
+    body_uz: "",
+    body_en: "",
+    published: true,
   });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Загружаем сразу все языки (RU/UZ/EN), чтобы править существующий текст
+  // загружаем RU/UZ/EN при смене slug
   useEffect(() => {
     let alive = true;
+
     (async () => {
       setLoading(true);
       setMsg("");
+
       try {
-        const [ru, uz, en] = await Promise.all([
+        const [ruRes, uzRes, enRes] = await Promise.all([
           apiGet(`/api/cms/pages/${slug}?lang=ru`),
           apiGet(`/api/cms/pages/${slug}?lang=uz`),
           apiGet(`/api/cms/pages/${slug}?lang=en`),
         ]);
 
-        const r = ru?.data || {};
-        const u = uz?.data || {};
-        const e = en?.data || {};
+        // нормализация: поддерживаем и res.data, и «плоский» res
+        const norm = (res) => (res && (res.data || res)) || {};
+
+        const r = norm(ruRes);
+        const u = norm(uzRes);
+        const e = norm(enRes);
 
         if (!alive) return;
 
@@ -60,10 +73,16 @@ export default function CmsEditor() {
           body_uz: u.body || "",
           title_en: e.title || "",
           body_en: e.body || "",
-          published: r.published ?? u.published ?? e.published ?? true,
+          // если published есть хотя бы в одном языке — берём его
+          published:
+            (typeof r.published === "boolean" && r.published) ??
+            (typeof u.published === "boolean" && u.published) ??
+            (typeof e.published === "boolean" && e.published) ??
+            true,
         });
       } catch (err) {
         if (alive) {
+          console.error("CMS load error", err);
           setMsg("Ошибка загрузки");
         }
       } finally {
@@ -71,7 +90,9 @@ export default function CmsEditor() {
       }
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [slug]);
 
   const save = async () => {
@@ -80,16 +101,17 @@ export default function CmsEditor() {
       setMsg("Сохранено");
       setTimeout(() => setMsg(""), 2000);
     } catch (e) {
+      console.error("CMS save error", e);
       setMsg("Ошибка сохранения");
     }
   };
 
-  const inp = (name, p={}) => (
+  const inp = (name, extra = {}) => (
     <input
       className="border rounded px-3 py-2 w-full"
       value={form[name] || ""}
-      onChange={e=>setForm({...form, [name]: e.target.value})}
-      {...p}
+      onChange={(e) => setForm({ ...form, [name]: e.target.value })}
+      {...extra}
     />
   );
 
@@ -114,16 +136,20 @@ export default function CmsEditor() {
         <select
           className="border rounded px-3 py-2"
           value={slug}
-          onChange={e=>setSlug(e.target.value)}
+          onChange={(e) => setSlug(e.target.value)}
         >
-          {SLUGS.map(s => <option key={s} value={s}>{s}</option>)}
+          {SLUGS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
 
         <label className="ml-4 flex items-center gap-2">
           <input
             type="checkbox"
             checked={!!form.published}
-            onChange={e=>setForm({...form, published: e.target.checked})}
+            onChange={(e) => setForm({ ...form, published: e.target.checked })}
           />
           Опубликована
         </label>
