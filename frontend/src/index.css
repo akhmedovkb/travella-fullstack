@@ -28,3 +28,27 @@ label {
   .pt-safe { padding-top: env(safe-area-inset-top); }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 }
+.cms-content ul {
+  list-style: none !important;
+  padding-left: 0;
+  margin: 14px 0;
+}
+
+.cms-content li {
+  position: relative;
+  padding-left: 20px;
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.cms-content li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  background: #ff7a00; /* фирменный оранжевый Travella */
+  border-radius: 50%;
+}
+
