@@ -66,7 +66,7 @@ export default function CmsPage() {
 
         {/* Текст из CMS — с форматированием Quill */}
         <div
-          className="prose prose-neutral max-w-none leading-relaxed text-[15px] md:text-[16px]"
+          className="cms-content prose prose-neutral max-w-none leading-relaxed text-[15px] md:text-[16px]"
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
         />
       </div>
