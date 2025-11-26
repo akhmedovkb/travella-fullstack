@@ -1177,6 +1177,7 @@
   },
 
   "tourBuilder": {
+    "booking_note": "The button creates bookings for providers (guide/transport) for all selected days. Notifications are sent to providers (if configured on the backend).",
     "title": "Tour builder",
     "dates": "Tour dates",
     "arrivalDay1": "Arrival time on day 1",
