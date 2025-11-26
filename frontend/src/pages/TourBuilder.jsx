@@ -13,8 +13,6 @@ import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 
-const [resultModal, setResultModal] = useState(null);
-// resultModal = { created, groupId, url } или null
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const debounce = (fn, ms=300) => {
