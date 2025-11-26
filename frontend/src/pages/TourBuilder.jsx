@@ -2335,7 +2335,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           {sending ? "Создаю..." : "Бронировать"}
         </button>
         <div className="text-xs text-gray-500 mt-1">
-          Кнопка создаёт бронирования провайдерам (гид/транспорт) по всем выбранным дням. Уведомления приходят провайдерам (если настроено на бэке).
+          {t("tour_builder.booking_note")}
         </div>
       </div>
       </div>
