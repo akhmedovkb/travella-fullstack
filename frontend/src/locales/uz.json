@@ -1177,6 +1177,8 @@
   },
 
   "tourBuilder": {
+    "book": "Bron qilish",
+    "booking_in_progress": "Yaratilmoqda...",
     "booking_note": "Tugma barcha tanlangan kunlar bo‘yicha provayderlar (gid/transport) uchun bronlar yaratadi. Xabarnomalar provayderlarga yuboriladi (agar backend’da sozlangan bo‘lsa).",
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",
