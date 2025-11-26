@@ -1177,6 +1177,15 @@
   },
 
   "tourBuilder": {
+    "result_success_title": "Bronlar yaratildi",
+    "result_partial_title": "Bronlar qisman yaratildi",
+    "result_error_title": "Bron yaratishda xatolik",
+    "result_success_text": "Yaratilgan bronlar soni: {{count}}.",
+    "result_partial_text": "Qisman yaratildi: {{ok}} ta, xatoliklar: {{fail}} ta.",
+    "result_error_text": "Bronlarni yaratib bo‘lmadi.",
+    "result_group_id": "Paket ID",
+    "result_open_package": "Dashboard’da paketni ochish",
+    "result_hint": "Bronlar bo‘limida ushbu paketni ko‘rishingiz mumkin.",
     "book": "Bron qilish",
     "booking_in_progress": "Yaratilmoqda...",
     "booking_note": "Tugma barcha tanlangan kunlar bo‘yicha provayderlar (gid/transport) uchun bronlar yaratadi. Xabarnomalar provayderlarga yuboriladi (agar backend’da sozlangan bo‘lsa).",
