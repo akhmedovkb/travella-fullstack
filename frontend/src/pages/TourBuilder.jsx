@@ -2324,16 +2324,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
       </div>
       {/* ===== Кнопка «Бронировать» → создаём ЗАПРОСЫ поставщикам ===== */}
       <div className="max-w-6xl mx-auto mt-4 mb-8">
-        <button
-          type="button"
-          onClick={handleSendRequests}
-          disabled={sending}
-          className="px-4 py-2 rounded-lg text-white"
-          style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
-          title="Создать бронирования поставщикам по выбранным дням"
-        >
-          {sending ? "Создаю..." : "Бронировать"}
-        </button>
+      <button
+        type="button"
+        onClick={handleSendRequests}
+        disabled={sending}
+        className="px-4 py-2 rounded-lg text-white"
+        style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
+        title={t("tourBuilder.book")}
+      >
+        {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
+      </button>
         <div className="text-xs text-gray-500 mt-1">
           {t("tourBuilder.booking_note")}
         </div>
