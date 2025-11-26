@@ -820,6 +820,8 @@ const HotelOption = (props) => {
 
 export default function TourBuilder() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [bookingResult, setBookingResult] = useState(null);
+
   useEffect(() => {
     setIsAdmin(isAdminFromJwt());
   }, []);
@@ -2412,6 +2414,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
           </div>
         </div>
       )}
+            {/* Модал результата создания бронирований */}
+      <BookingResultModal
+        open={!!bookingResult}
+        data={bookingResult}
+        onClose={() => setBookingResult(null)}
+      />
     </div>
   );
 }
@@ -2639,10 +2647,3 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     </div>
   );
 }
-
-<BookingResultModal
-  open={!!bookingResult}
-  data={bookingResult}
-  onClose={() => setBookingResult(null)}
-/>
-
