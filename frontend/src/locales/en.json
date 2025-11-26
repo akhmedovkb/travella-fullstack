@@ -1177,6 +1177,15 @@
   },
 
   "tourBuilder": {
+    "result_success_title": "Bookings created",
+    "result_partial_title": "Bookings created partially",
+    "result_error_title": "Error creating bookings",
+    "result_success_text": "Bookings created: {{count}}.",
+    "result_partial_text": "Some bookings were created: {{ok}}, errors: {{fail}}.",
+    "result_error_text": "Failed to create bookings.",
+    "result_group_id": "Package ID",
+    "result_open_package": "Open package in Dashboard",
+    "result_hint": "You can view this package in the bookings section.",
     "book": "Book",
     "booking_in_progress": "Processing...",
     "booking_note": "The button creates bookings for providers (guide/transport) for all selected days. Notifications are sent to providers (if configured on the backend).",
