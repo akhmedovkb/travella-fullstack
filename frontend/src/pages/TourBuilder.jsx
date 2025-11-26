@@ -2335,7 +2335,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           {sending ? "Создаю..." : "Бронировать"}
         </button>
         <div className="text-xs text-gray-500 mt-1">
-          {t("tour_builder.booking_note")}
+          {t("tourBuilder.booking_note")}
         </div>
       </div>
       </div>
