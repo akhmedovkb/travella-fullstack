@@ -11,7 +11,10 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
-// ⬆️ мелкие правки: см. ниже — debounce, belongs, валюты отелей, type="button"
+import BookingResultModal from "../components/tourbuilder/BookingResultModal";
+
+const [resultModal, setResultModal] = useState(null);
+// resultModal = { created, groupId, url } или null
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const debounce = (fn, ms=300) => {
@@ -1213,63 +1216,90 @@ const makeTransportLoader = (dateKey) => async (input) => {
   };
 
   const [sending, setSending] = useState(false);
+  
   const handleSendRequests = async () => {
-    if (!range?.from || !range?.to) return alert("Выберите даты маршрута.");
-    const payloads = buildBookings();
-    if (!payloads.length) return alert("Не выбраны провайдеры (гид/транспорт).");
-    // общий маршрут: города и «переезды» между разными городами
-    const routeCities = computeRouteCities(byDay);
-    const legs = buildLegsFromByDay(byDay);
-    setSending(true);
-    try {
-      let ok = 0, fail = 0;
-      // общий group_id для всей пачки
-      const groupId = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
-      const errs = [];
-      for (const p of payloads) {
-        try {
-           // ✅ аккуратно используем проверку принадлежности услуги провайдеру
-           const belongs =
-             p.service_id && ensureServiceBelongsToProvider(p.provider_id, p.service_id);
- 
-           const body = {
-             provider_id: String(p.provider_id),
-             ...(belongs ? { service_id: String(p.service_id) } : {}),
-             dates: p.dates,
-             pax_adult: Number(p.pax_adult) || 0,
-             pax_child: Number(p.pax_child) || 0,
-             language: p.language || "en",
-             message: p.message || "",
-             source: "tour_builder",
-              type: p.kind,
-             ...(p.__needs_group_id ? { group_id: groupId } : {}),
-             // ⬇️ новье: прокидываем маршрут и ноги (поддерживается бэком)
-             details: {
-               from_city: routeCities.from || "",
-               to_city:   routeCities.to   || "",
-             },
-             legs,
-           };
-          delete body.__needs_group_id;
-          await createBookingCompat(body);
-          ok++;
-        } catch (e) {
-          console.error("booking failed", e);
-          errs.push(String(e?.message || e));
-          fail++;
-        }
+  if (!range?.from || !range?.to)
+    return alert("Выберите даты маршрута."); // можно потом тоже перевести/заменить
+
+  const payloads = buildBookings();
+  if (!payloads.length)
+    return alert("Не выбраны провайдеры (гид/транспорт).");
+
+  const routeCities = computeRouteCities(byDay);
+  const legs = buildLegsFromByDay(byDay);
+  setSending(true);
+
+  try {
+    let ok = 0,
+      fail = 0;
+    const groupId =
+      crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+    const errs = [];
+
+    for (const p of payloads) {
+      try {
+        const belongs =
+          p.service_id &&
+          ensureServiceBelongsToProvider(p.provider_id, p.service_id);
+
+        const body = {
+          provider_id: String(p.provider_id),
+          ...(belongs ? { service_id: String(p.service_id) } : {}),
+          dates: p.dates,
+          pax_adult: Number(p.pax_adult) || 0,
+          pax_child: Number(p.pax_child) || 0,
+          language: p.language || "en",
+          message: p.message || "",
+          source: "tour_builder",
+          type: p.kind,
+          ...(p.__needs_group_id ? { group_id: groupId } : {}),
+          details: {
+            from_city: routeCities.from || "",
+            to_city: routeCities.to || "",
+          },
+          legs,
+        };
+
+        delete body.__needs_group_id;
+        await createBookingCompat(body);
+        ok++;
+      } catch (e) {
+        console.error("booking failed", e);
+        errs.push(String(e?.message || e));
+        fail++;
       }
-       if (ok && !fail) {
-         alert(`Бронирований создано: ${ok}.\nОткройте пакет: /dashboard/bookings?group_id=${groupId}`);
-       } else if (ok && fail) {
-        alert(`Часть броней создана: ${ok}, ошибок: ${fail}.\n${errs.slice(0,3).join("\n")}`);
-      } else {
-        alert(`Не удалось создать бронирования.\n${(errs[0]||"Проверьте API /api/bookings и /api/requests.")}`);
-      }
-    } finally {
-      setSending(false);
     }
-  };
+
+    // вместо alert — открываем красивое модальное окно
+    if (ok && !fail) {
+      setBookingResult({
+        status: "success",
+        ok,
+        fail,
+        groupId,
+        errs,
+      });
+    } else if (ok && fail) {
+      setBookingResult({
+        status: "partial",
+        ok,
+        fail,
+        groupId,
+        errs,
+      });
+    } else {
+      setBookingResult({
+        status: "error",
+        ok,
+        fail,
+        groupId: null,
+        errs,
+      });
+    }
+  } finally {
+    setSending(false);
+  }
+};
 
    // Если PAX увеличился и выбранная (транспорт/гид+транспорт) не тянет — очищаем.
   useEffect(() => {
@@ -2610,4 +2640,9 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
   );
 }
 
+<BookingResultModal
+  open={!!bookingResult}
+  data={bookingResult}
+  onClose={() => setBookingResult(null)}
+/>
 
