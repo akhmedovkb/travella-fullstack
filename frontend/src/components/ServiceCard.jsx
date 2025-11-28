@@ -18,15 +18,29 @@ const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
   if (typeof x === "string") {
-    try { return JSON.parse(x); } catch { return null; }
+    try {
+      return JSON.parse(x);
+    } catch {
+      return null;
+    }
   }
   return null;
 };
 const mergeDetails = (svc, it) => {
   const parts = [
-    svc?.details, it?.details, svc?.detail, it?.detail,
-    svc?.meta, svc?.params, svc?.payload, svc?.extra, svc?.data, svc?.info,
-  ].map(maybeParse).filter(Boolean);
+    svc?.details,
+    it?.details,
+    svc?.detail,
+    it?.detail,
+    svc?.meta,
+    svc?.params,
+    svc?.payload,
+    svc?.extra,
+    svc?.data,
+    svc?.info,
+  ]
+    .map(maybeParse)
+    .filter(Boolean);
   return Object.assign({}, ...parts);
 };
 const firstImageFrom = (val) => {
@@ -69,7 +83,7 @@ const collectImages = (...vals) => {
   };
   for (const val of vals) {
     if (!val) continue;
-    if (typeof val === "string" || typeof val === "object" && !Array.isArray(val)) {
+    if (typeof val === "string" || (typeof val === "object" && !Array.isArray(val))) {
       push(val);
     } else if (Array.isArray(val)) {
       for (const it of val) push(it);
@@ -91,10 +105,17 @@ function resolveExpireAt(svc, details) {
   const s = svc || {};
   const d = details || {};
   const cand =
-    s.expires_at ?? s.expire_at ?? s.expireAt ??
-    d.expires_at ?? d.expire_at ?? d.expiresAt ??
-    d.expiration ?? d.expiration_at ?? d.expirationAt ??
-    d.expiration_ts ?? d.expirationTs;
+    s.expires_at ??
+    s.expire_at ??
+    s.expireAt ??
+    d.expires_at ??
+    d.expire_at ??
+    d.expiresAt ??
+    d.expiration ??
+    d.expiration_at ??
+    d.expirationAt ??
+    d.expiration_ts ??
+    d.expirationTs;
   let ts = null;
   if (cand != null) {
     if (typeof cand === "number") ts = cand > 1e12 ? cand : cand * 1000;
@@ -120,7 +141,9 @@ function formatLeft(ms, dayLabel = "d") {
   const mm = Math.floor((total % 3600) / 60);
   const ss = total % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  return dd > 0 ? `${dd}${dayLabel} ${pad(hh)}:${pad(mm)}` : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+  return dd > 0
+    ? `${dd}${dayLabel} ${pad(hh)}:${pad(mm)}`
+    : `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
 /* ============== provider profile cache ============== */
@@ -145,7 +168,8 @@ async function fetchProviderProfile(providerId) {
     try {
       const res = await apiGet(url);
       const obj =
-        (res && (res.data || res.item || res.profile || res.provider || res.company)) || res;
+        (res && (res.data || res.item || res.profile || res.provider || res.company)) ||
+        res;
       if (obj && (obj.id || obj.name || obj.title)) {
         profile = obj;
         break;
@@ -444,43 +468,64 @@ export default function ServiceCard({
 
   /* ========= КАРУСЕЛЬ: собираем список изображений ========= */
   const images = collectImages(
-    svc.images, details?.images, item?.images,
-    svc.gallery, details?.gallery, item?.gallery,
-    svc.photos, details?.photos, item?.photos,
-    svc.cover, svc.image, details?.cover, details?.image,
-    item?.cover, item?.image,
-    details?.photo, details?.picture, details?.imageUrl,
-    svc.image_url, item?.image_url
+    svc.images,
+    details?.images,
+    item?.images,
+    svc.gallery,
+    details?.gallery,
+    item?.gallery,
+    svc.photos,
+    details?.photos,
+    item?.photos,
+    svc.cover,
+    svc.image,
+    details?.cover,
+    details?.image,
+    item?.cover,
+    item?.image,
+    details?.photo,
+    details?.picture,
+    details?.imageUrl,
+    svc.image_url,
+    item?.image_url
   );
   const [idx, setIdx] = useState(0);
-  useEffect(() => { setIdx(0); }, [id]);             // при смене услуги — к первому кадру
-  useEffect(() => { if (idx >= images.length) setIdx(0); }, [images.length]); // на случай фильтрации
+  useEffect(() => {
+    setIdx(0);
+  }, [id]);
+  useEffect(() => {
+    if (idx >= images.length) setIdx(0);
+  }, [images.length]);
 
-  const go = (n) => { if (!images.length) return; setIdx((p) => (p + n + images.length) % images.length); };
+  const go = (n) => {
+    if (!images.length) return;
+    setIdx((p) => (p + n + images.length) % images.length);
+  };
   const prev = () => go(-1);
   const next = () => go(+1);
 
-  // обработка ошибок загрузки кадра — пропускаем испорченный
   const onImgError = () => {
     if (!images.length) return;
-    // попробуем сдвинуться дальше, чтобы пользователь не видел битое изображение
     setIdx((p) => (p + 1) % images.length);
   };
 
   // свайп для мобильных
   const touch = useRef({ x: 0, y: 0, active: false });
   const onTouchStart = (e) => {
-    const t = e.touches?.[0]; if (!t) return;
+    const t = e.touches?.[0];
+    if (!t) return;
     touch.current = { x: t.clientX, y: t.clientY, active: true };
   };
   const onTouchEnd = (e) => {
     if (!touch.current.active) return;
-    const t = e.changedTouches?.[0]; if (!t) return;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
     const dx = t.clientX - touch.current.x;
     const dy = t.clientY - touch.current.y;
     touch.current.active = false;
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx < 0) next(); else prev();
+      if (dx < 0) next();
+      else prev();
     }
   };
 
@@ -493,22 +538,44 @@ export default function ServiceCard({
       const p = await fetchProviderProfile(providerId);
       if (alive) setProvider(p);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [providerId]);
   const prov = { ...(inlineProvider || {}), ...(provider || {}) };
 
   const supplierName = firstNonEmpty(
-    prov?.name, prov?.title, prov?.display_name, prov?.company_name, prov?.brand, flatName
+    prov?.name,
+    prov?.title,
+    prov?.display_name,
+    prov?.company_name,
+    prov?.brand,
+    flatName
   );
   const supplierPhone = firstNonEmpty(
-    prov?.phone, prov?.phone_number, prov?.phoneNumber, prov?.tel, prov?.mobile,
-    prov?.whatsapp, prov?.whatsApp, prov?.phones?.[0], prov?.contacts?.phone,
-    prov?.contact_phone, flatPhone
+    prov?.phone,
+    prov?.phone_number,
+    prov?.phoneNumber,
+    prov?.tel,
+    prov?.mobile,
+    prov?.whatsapp,
+    prov?.whatsApp,
+    prov?.phones?.[0],
+    prov?.contacts?.phone,
+    prov?.contact_phone,
+    flatPhone
   );
   const supplierTg = (() => {
     const value = firstNonEmpty(
-      prov?.telegram, prov?.tg, prov?.telegram_username, prov?.telegram_link,
-      prov?.contacts?.telegram, prov?.socials?.telegram, prov?.social, prov?.social_link, flatTg
+      prov?.telegram,
+      prov?.tg,
+      prov?.telegram_username,
+      prov?.telegram_link,
+      prov?.contacts?.telegram,
+      prov?.socials?.telegram,
+      prov?.social,
+      prov?.social_link,
+      flatTg
     );
     if (!value) return null;
     const s = String(value).trim();
@@ -597,7 +664,10 @@ export default function ServiceCard({
                 <button
                   type="button"
                   aria-label="Previous"
-                  onClick={(e) => { e.stopPropagation(); prev(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prev();
+                  }}
                   className="absolute left-2 top-1/2 -translate-y-1/2 z-30 hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/40 hover:bg-black/55 text-white ring-1 ring-white/20"
                 >
                   ‹
@@ -605,7 +675,10 @@ export default function ServiceCard({
                 <button
                   type="button"
                   aria-label="Next"
-                  onClick={(e) => { e.stopPropagation(); next(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    next();
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 z-30 hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/40 hover:bg-black/55 text-white ring-1 ring-white/20"
                 >
                   ›
@@ -619,10 +692,15 @@ export default function ServiceCard({
                 {images.map((src, i) => (
                   <button
                     key={src + i}
-                    onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIdx(i);
+                    }}
                     className={[
                       "relative w-2.5 h-2.5 rounded-full ring-1 ring-white/40 transition-opacity",
-                      i === idx ? "bg-white/95 opacity-100" : "bg-white/60 opacity-60 hover:opacity-90",
+                      i === idx
+                        ? "bg-white/95 opacity-100"
+                        : "bg-white/60 opacity-60 hover:opacity-90",
                     ].join(" ")}
                     title={`${i + 1}/${images.length}`}
                     onMouseEnter={(e) => {
@@ -647,7 +725,9 @@ export default function ServiceCard({
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400">
-            <span className="text-sm">{t("marketplace.no_image") || "Нет изображения"}</span>
+            <span className="text-sm">
+              {t("marketplace.no_image") || "Нет изображения"}
+            </span>
           </div>
         )}
 
@@ -669,13 +749,17 @@ export default function ServiceCard({
               ))}
             {(() => {
               const rating = Number(svc.rating ?? item.rating ?? 0);
-              const statusLower = typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
-              const statusForBadge =
-                statusLower === "draft" || statusLower === "published" ? null : statusRaw;
-              const badge = rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadge;
-              return badge ? (
+              const statusLowerLocal =
+                typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
+              const statusForBadgeLocal =
+                statusLowerLocal === "draft" || statusLowerLocal === "published"
+                  ? null
+                  : statusRaw;
+              const badgeLocal =
+                rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadgeLocal;
+              return badgeLocal ? (
                 <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                  {badge}
+                  {badgeLocal}
                 </span>
               ) : null;
             })()}
@@ -683,15 +767,7 @@ export default function ServiceCard({
 
           <div className="pointer-events-auto">
             <WishHeart
-              active={
-                typeof isFav === "boolean"
-                  ? isFav
-                  : typeof favActive === "boolean"
-                  ? favActive
-                  : favoriteIds
-                  ? favoriteIds.has(String(id))
-                  : false
-              }
+              active={activeFav}
               onClick={() => onToggleFavorite?.(id)}
               size={36}
               titleAdd={t("favorites.add") || "Добавить в избранное"}
@@ -700,61 +776,35 @@ export default function ServiceCard({
           </div>
         </div>
 
-        {/* hover info overlay (glass) — НЕ перекрывает карусель */}
-        <div className="pointer-events-none absolute inset-0 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
-          <div className="absolute inset-x-0 bottom-0 px-3 pb-0">
-            <div
-              className="pointer-events-auto w-full rounded-t-lg bg-black/55 backdrop-blur-md
-                         text-white text-xs sm:text-sm p-3 ring-1 ring-white/15 shadow-lg
-                         max-h-[55%] overflow-auto flex flex-col"
-              >
-              {flightDetails && (
-                <div className="mt-1 w-full rounded-lg px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 shadow-md">
-                  <div className="text-white/80 text-[11px] mb-1">
-                    {t("marketplace.flight_details", { defaultValue: "Детали рейса" })}
-                  </div>
-                  <div className="font-mono text-[12px] whitespace-pre-wrap break-words leading-snug">
-                    {String(flightDetails || "").replace(/\r\n/g, "\n")}
-                  </div>
-                </div>
-              )}
-
-              <div className="font-semibold mt-2 line-clamp-2">{direction || title}</div>
-
-              {hotel && (
-                <div>
-                  <span className="opacity-80">Отель: </span>
-                  <span className="font-medium">{hotel}</span>
-                </div>
-              )}
-              {accommodation && (
-                <div>
-                  <span className="opacity-80">Размещение: </span>
-                  <span className="font-medium">{accommodation}</span>
-                </div>
-              )}
-              {dates && (
-                <div>
-                  <span className="opacity-80">{t("common.date") || "Дата"}: </span>
-                  <span className="font-medium">{dates}</span>
-                </div>
-              )}
-              {prettyPrice && (
-                <div className="mt-auto pt-2">
-                  <span className="opacity-80">{t("marketplace.price") || "Цена"}: </span>
-                  <span className="font-semibold">{prettyPrice}</span>
-                </div>
-              )}
-            </div>
+        {/* НОВАЯ компактная стекляшка снизу: направление + даты + цена */}
+        {(direction || dates || prettyPrice) && (
+          <div className="absolute inset-x-0 bottom-0 z-20 bg-black/55 backdrop-blur-sm px-3 py-2 text-white text-xs sm:text-sm">
+            {direction && (
+              <div className="font-semibold leading-snug line-clamp-1">
+                {direction}
+              </div>
+            )}
+            {dates && (
+              <div className="text-[11px] sm:text-xs opacity-90 leading-snug line-clamp-1">
+                {dates}
+              </div>
+            )}
+            {prettyPrice && (
+              <div className="mt-0.5 text-sm font-semibold text-orange-300">
+                {t("marketplace.price") || "Цена"}: {prettyPrice}
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* reviews tooltip portal */}
       {SHOW_REVIEWS && (
         <TooltipPortal visible={revOpen} x={revPos.x} y={revPos.y}>
           <div className="pointer-events-none max-w-xs rounded-lg bg-black/85 text-white text-xs p-3 shadow-2xl ring-1 ring-white/10">
-            <div className="mb-1 font-semibold">{t("marketplace.reviews") || "Отзывы об услуге"}</div>
+            <div className="mb-1 font-semibold">
+              {t("marketplace.reviews") || "Отзывы об услуге"}
+            </div>
             <div className="flex items-center gap-2">
               <Stars value={revData.avg} />
               <span className="opacity-80">({revData.count || 0})</span>
@@ -781,7 +831,8 @@ export default function ServiceCard({
         <div className="font-semibold line-clamp-2">{title}</div>
         {prettyPrice && (
           <div className="mt-1 text-sm">
-            {t("marketplace.price") || "Цена"}: <span className="font-semibold">{prettyPrice}</span>
+            {t("marketplace.price") || "Цена"}:{" "}
+            <span className="font-semibold">{prettyPrice}</span>
           </div>
         )}
 
@@ -789,7 +840,9 @@ export default function ServiceCard({
           <div className="mt-2 text-sm space-y-0.5">
             {supplierName && (
               <div>
-                <span className="text-gray-500">{t("marketplace.supplier") || "Поставщик"}: </span>
+                <span className="text-gray-500">
+                  {t("marketplace.supplier") || "Поставщик"}:{" "}
+                </span>
                 {providerId ? (
                   <a
                     href={`/profile/provider/${providerId}`}
@@ -806,8 +859,13 @@ export default function ServiceCard({
 
             {supplierPhone && (
               <div>
-                <span className="text-gray-500">{t("marketplace.phone") || "Телефон"}: </span>
-                <a href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`} className="underline">
+                <span className="text-gray-500">
+                  {t("marketplace.phone") || "Телефон"}:{" "}
+                </span>
+                <a
+                  href={`tel:${String(supplierPhone).replace(/\s+/g, "")}`}
+                  className="underline"
+                >
                   {supplierPhone}
                 </a>
               </div>
@@ -815,7 +873,9 @@ export default function ServiceCard({
 
             {supplierTg?.label && (
               <div>
-                <span className="text-gray-500">{t("marketplace.telegram") || "Телеграм"}: </span>
+                <span className="text-gray-500">
+                  {t("marketplace.telegram") || "Телеграм"}:{" "}
+                </span>
                 {supplierTg.href ? (
                   <a
                     href={supplierTg.href}
@@ -830,6 +890,18 @@ export default function ServiceCard({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* перенесли детали рейса в тело карточки */}
+        {flightDetails && (
+          <div className="mt-2 text-xs text-gray-700 bg-gray-50 rounded-lg p-2 whitespace-pre-wrap leading-snug">
+            <div className="font-semibold mb-1">
+              {t("marketplace.flight_details", {
+                defaultValue: "Детали рейса",
+              })}
+            </div>
+            {String(flightDetails || "").replace(/\r\n/g, "\n")}
           </div>
         )}
 
