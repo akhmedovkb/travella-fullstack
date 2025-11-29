@@ -220,13 +220,32 @@ function DetailsPopup({ open, anchorRef, onClose, children }) {
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (!open || !anchorRef?.current) return;
-    const r = anchorRef.current.getBoundingClientRect();
-    const margin = 12;
-    const width = 320;
-    const x = Math.min(r.left, window.innerWidth - width - margin);
-    const y = Math.max(margin, r.bottom + 4);
-    setPos({ x, y });
+    if (!open) return;
+
+    const update = () => {
+      if (!anchorRef?.current) return;
+      const r = anchorRef.current.getBoundingClientRect();
+      const margin = 12;
+      const width = 320;
+
+      const x = Math.min(
+        Math.max(margin, r.left),
+        window.innerWidth - width - margin
+      );
+      const y = Math.min(
+        window.innerHeight - margin,
+        Math.max(margin, r.bottom + 4)
+      );
+      setPos({ x, y });
+    };
+
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
   }, [open, anchorRef]);
 
   if (!open) return null;
@@ -851,7 +870,7 @@ export default function ServiceCard({
           {/* заголовок */}
           <div className="font-semibold line-clamp-2">{title}</div>
 
-          {/* коротко: направление + дата одной строкой, чтобы не растягивать карточку */}
+          {/* коротко: направление + дата одной строкой */}
           {direction && (
             <div className="mt-1 text-xs text-gray-700">{direction}</div>
           )}
@@ -964,7 +983,7 @@ export default function ServiceCard({
         </div>
       </div>
 
-      {/* POPUP с подробной информацией о туре (за карточкой) */}
+      {/* POPUP с подробной информацией о туре */}
       <DetailsPopup
         open={detailsOpen}
         anchorRef={detailsBtnRef}
