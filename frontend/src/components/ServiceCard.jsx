@@ -976,7 +976,9 @@ export default function ServiceCard({
 
         {direction && (
           <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">Маршрут: </span>
+            <span className="text-gray-500">
+              {t("marketplace.route", { defaultValue: "Маршрут" })}:{" "}
+            </span>
             <span className="font-medium">{direction}</span>
           </div>
         )}
@@ -990,19 +992,25 @@ export default function ServiceCard({
         )}
         {hotel && (
           <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">Отель: </span>
+            <span className="text-gray-500">
+              {t("marketplace.hotel_label", { defaultValue: "Отель" })}:{" "}
+            </span>
             <span className="font-medium">{hotel}</span>
           </div>
         )}
         {accommodation && (
           <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">Размещение: </span>
+            <span className="text-gray-500">
+              {t("marketplace.accommodation", { defaultValue: "Размещение" })}:{" "}
+            </span>
             <span className="font-medium">{accommodation}</span>
           </div>
         )}
         {transfer && (
           <div className="text-xs sm:text-sm mb-1">
-            <span className="text-gray-500">Трансфер: </span>
+            <span className="text-gray-500">
+              {t("marketplace.transfer", { defaultValue: "Трансфер" })}:{" "}
+            </span>
             <span className="font-medium">{transfer}</span>
           </div>
         )}
