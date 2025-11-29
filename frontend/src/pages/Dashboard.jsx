@@ -1612,7 +1612,11 @@ useEffect(() => {
                   {profile.phone || t("not_specified")}
                 </div>
               )}
-
+              {/* ⬅️ EMAIL */}
+              <h3 className="font-semibold text-lg mb-2">{t("email", { defaultValue: "Email" })}</h3>
+              <div className="border px-3 py-2 mb-2 rounded bg-gray-100 w-full text-center">
+                {profile.email || t("not_specified")}
+              </div>
               {/* Адрес */}
               <h3 className="font-semibold text-lg mb-2">{t("address")}</h3>
               {isEditing ? (
