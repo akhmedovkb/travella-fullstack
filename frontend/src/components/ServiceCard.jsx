@@ -278,6 +278,14 @@ function extractServiceFields(item, viewerRole) {
     svc.room_type
   );
 
+  const transfer = firstNonEmpty(
+    details?.transfer,
+    details?.transferType,
+    details?.transfer_type,
+    svc.transfer,
+    svc.transfer_type
+  );
+
   const left = firstNonEmpty(
     bag.hotel_check_in,
     bag.checkIn,
@@ -413,6 +421,7 @@ function extractServiceFields(item, viewerRole) {
     title,
     hotel,
     accommodation,
+    transfer,
     dates,
     direction,
     prettyPrice,
@@ -445,7 +454,9 @@ export default function ServiceCard({
     title,
     hotel,
     accommodation,
+    transfer,
     dates,
+    direction,
     prettyPrice,
     inlineProvider,
     providerId,
@@ -454,7 +465,6 @@ export default function ServiceCard({
     flatTg,
     status: statusRaw,
     details,
-    direction,
     flightDetails,
   } = extractServiceFields(item, viewerRole);
 
@@ -747,22 +757,11 @@ export default function ServiceCard({
                   ⏳ {formatLeft(leftMs, dayShort)}
                 </span>
               ))}
-            {(() => {
-              const rating = Number(svc.rating ?? item.rating ?? 0);
-              const statusLowerLocal =
-                typeof statusRaw === "string" ? statusRaw.toLowerCase() : null;
-              const statusForBadgeLocal =
-                statusLowerLocal === "draft" || statusLowerLocal === "published"
-                  ? null
-                  : statusRaw;
-              const badgeLocal =
-                rating > 0 ? `★ ${rating.toFixed(1)}` : statusForBadgeLocal;
-              return badgeLocal ? (
-                <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
-                  {badgeLocal}
-                </span>
-              ) : null;
-            })()}
+            {badge && (
+              <span className="pointer-events-auto px-2 py-0.5 rounded-full text-white text-xs bg-black/50 backdrop-blur-md ring-1 ring-white/20">
+                {badge}
+              </span>
+            )}
           </div>
 
           <div className="pointer-events-auto">
@@ -775,27 +774,6 @@ export default function ServiceCard({
             />
           </div>
         </div>
-
-        {/* НОВАЯ компактная стекляшка снизу: направление + даты + цена */}
-        {(direction || dates || prettyPrice) && (
-          <div className="absolute inset-x-0 bottom-0 z-20 bg-black/55 backdrop-blur-sm px-3 py-2 text-white text-xs sm:text-sm">
-            {direction && (
-              <div className="font-semibold leading-snug line-clamp-1">
-                {direction}
-              </div>
-            )}
-            {dates && (
-              <div className="text-[11px] sm:text-xs opacity-90 leading-snug line-clamp-1">
-                {dates}
-              </div>
-            )}
-            {prettyPrice && (
-              <div className="mt-0.5 text-sm font-semibold text-orange-300">
-                {t("marketplace.price") || "Цена"}: {prettyPrice}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* reviews tooltip portal */}
@@ -828,14 +806,52 @@ export default function ServiceCard({
 
       {/* BODY */}
       <div className="p-3 flex-1 flex flex-col">
+        {/* Заголовок услуги */}
         <div className="font-semibold line-clamp-2">{title}</div>
+
+        {/* Направление и даты */}
+        {direction && (
+          <div className="mt-1 text-sm text-gray-800 font-medium">{direction}</div>
+        )}
+        {dates && (
+          <div className="text-xs text-gray-500">
+            {t("common.date") || "Дата"}: {dates}
+          </div>
+        )}
+
+        {/* Отель / размещение / трансфер */}
+        {(hotel || accommodation || transfer) && (
+          <div className="mt-2 text-xs text-gray-700 space-y-0.5">
+            {hotel && (
+              <div>
+                <span className="text-gray-500">Отель: </span>
+                <span className="font-medium">{hotel}</span>
+              </div>
+            )}
+            {accommodation && (
+              <div>
+                <span className="text-gray-500">Размещение: </span>
+                <span className="font-medium">{accommodation}</span>
+              </div>
+            )}
+            {transfer && (
+              <div>
+                <span className="text-gray-500">Трансфер: </span>
+                <span className="font-medium">{transfer}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Цена */}
         {prettyPrice && (
-          <div className="mt-1 text-sm">
+          <div className="mt-2 text-sm">
             {t("marketplace.price") || "Цена"}:{" "}
             <span className="font-semibold">{prettyPrice}</span>
           </div>
         )}
 
+        {/* Поставщик / контакты */}
         {(supplierName || supplierPhone || supplierTg?.label) && (
           <div className="mt-2 text-sm space-y-0.5">
             {supplierName && (
@@ -893,7 +909,7 @@ export default function ServiceCard({
           </div>
         )}
 
-        {/* перенесли детали рейса в тело карточки */}
+        {/* Детали рейса */}
         {flightDetails && (
           <div className="mt-2 text-xs text-gray-700 bg-gray-50 rounded-lg p-2 whitespace-pre-wrap leading-snug">
             <div className="font-semibold mb-1">
