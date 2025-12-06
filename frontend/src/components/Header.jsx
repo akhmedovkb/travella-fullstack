@@ -634,7 +634,7 @@ export default function Header() {
             )}
 
             <RowGroupDark title={t("nav.products", "Продукты")}>
-              <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
+              <NavItemMobileDark to="/" label="MARKETPLACE" />
               {role === "provider" && (
                 <NavItemMobileDark
                   to="/tour-builder"
