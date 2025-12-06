@@ -392,7 +392,7 @@ export default function Header() {
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
                     ${
                       adminOpen
-                        ? "bg:white/10 text-white"
+                        ? "bg-white/10 text-white"
                         : "text-white/80 hover:text-white hover:bg-white/10"
                     }`}
                 >
@@ -446,12 +446,6 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-1">
             {role === "provider" && (
               <>
-                <NavBadgeDark
-                  to="/dashboard"
-                  label={t("nav.dashboard")}
-                  icon={<IconDashboard />}
-                />
-
                 {/* ▼ УСЛУГИ: дропдаун с тремя пунктами */}
                 <div className="relative" ref={servicesRef}>
                   <button
@@ -564,12 +558,6 @@ export default function Header() {
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
                   <>
-                    <NavItemMobileDark
-                      to="/dashboard"
-                      label={t("nav.dashboard")}
-                      icon={<IconDashboard />}
-                      end
-                    />
                     {/* Услуги в мобиле просто списком */}
                     <NavItemMobileDark
                       to="/dashboard/services/tourbuilder"
