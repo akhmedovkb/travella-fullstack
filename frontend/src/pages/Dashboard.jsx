@@ -16,6 +16,7 @@ import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
 import AdminHotelsTable from "./admin/AdminHotelsTable";
 import AdminHotelForm from "./admin/AdminHotelForm"; 
+import ProviderProfile from "../components/ProviderProfile";
 
 /** ================= Helpers ================= */
 
