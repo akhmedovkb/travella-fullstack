@@ -335,6 +335,11 @@ export default function Header() {
     setServicesOpen(false);
   }, [location]);
 
+  // активен ли блок "Услуги" (любой из трёх маршрутов)
+  const servicesActive =
+    location.pathname.startsWith("/dashboard/services/") ||
+    location.pathname === "/dashboard/calendar";
+
   return (
     <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40 relative">
       {/* LOGO — в самом левом углу */}
@@ -387,7 +392,7 @@ export default function Header() {
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
                     ${
                       adminOpen
-                        ? "bg-white/10 text-white"
+                        ? "bg:white/10 text-white"
                         : "text-white/80 hover:text-white hover:bg-white/10"
                     }`}
                 >
@@ -454,7 +459,7 @@ export default function Header() {
                     onClick={() => setServicesOpen((v) => !v)}
                     className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition 
                       ${
-                        servicesOpen
+                        servicesOpen || servicesActive
                           ? "bg-white/10 text-white"
                           : "text-white/80 hover:text-white hover:bg-white/10"
                       }`}
@@ -634,7 +639,7 @@ export default function Header() {
             )}
 
             <RowGroupDark title={t("nav.products", "Продукты")}>
-              <NavItemMobileDark to="/" label="MARKETPLACE" />
+              <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
               {role === "provider" && (
                 <NavItemMobileDark
                   to="/tour-builder"
