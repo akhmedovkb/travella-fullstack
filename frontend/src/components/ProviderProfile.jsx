@@ -589,7 +589,7 @@ const ProviderProfile = () => {
   // ---------- RENDER ----------
 
   return (
-    <div className="w-full bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0">
+    <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0">
       <div id="anchor-profile-left" />
 
       <div className="flex flex-col md:flex-row gap-4 items-stretch">
