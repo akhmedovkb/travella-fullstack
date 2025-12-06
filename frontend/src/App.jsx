@@ -194,13 +194,13 @@ export default function App() {
               path="/dashboard/profile"
               element={
                 <PrivateRoute>
-                  <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
-                    <ProviderProfileCabinet />
+                  <div className="max-w-7xl mx-auto px-4 md:px-6">
+                    <ProviderProfileCabinet fullWidth />
                   </div>
                 </PrivateRoute>
               }
             />
-
+            
             {/* Публичная страница профиля провайдера для клиентов */}
             <Route path="/profile/provider/:id" element={<ProviderProfile />} />
 
