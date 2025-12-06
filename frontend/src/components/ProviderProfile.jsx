@@ -1,3 +1,5 @@
+//frontend/src/components/ProviderProfile.jsx
+  
 import React, {
   useCallback,
   useEffect,
