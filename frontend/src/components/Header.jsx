@@ -100,19 +100,6 @@ const IconChevron = (p) => (
   </svg>
 );
 
-// 👇 новый простой икон для "Профиль"
-const IconProfile = (p) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
-    <path
-      d="M6 19a6 6 0 0 1 12 0"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
 const YES = new Set(["1","true","yes","on"]);
 function detectAdmin(profile) {
   const p = profile || {};
@@ -173,6 +160,9 @@ export default function Header() {
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
 
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const servicesRef = useRef(null);
+
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const [counts, setCounts] = useState(null);
@@ -198,11 +188,15 @@ export default function Header() {
     return () => { alive = false; };
   }, [role]);
 
-  // close admin dropdown on outside click
+  // close admin & services dropdown on outside click
   useEffect(() => {
     const onDoc = (e) => {
-      if (!adminRef.current) return;
-      if (!adminRef.current.contains(e.target)) setAdminOpen(false);
+      if (adminRef.current && !adminRef.current.contains(e.target)) {
+        setAdminOpen(false);
+      }
+      if (servicesRef.current && !servicesRef.current.contains(e.target)) {
+        setServicesOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -303,8 +297,12 @@ export default function Header() {
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  // close mobile menu on route change
-  useEffect(() => { setMobileOpen(false); setAdminOpen(false); }, [location]);
+  // close mobile menu & dropdowns on route change
+  useEffect(() => {
+    setMobileOpen(false);
+    setAdminOpen(false);
+    setServicesOpen(false);
+  }, [location]);
 
   return (
     <header className="sticky top-0 z-40 bg-[#111] text-white border-b border-black/40 relative">
@@ -332,7 +330,7 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg:white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
@@ -354,7 +352,7 @@ export default function Header() {
                   type="button"
                   onClick={() => setAdminOpen(v => !v)}
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
-                    ${adminOpen ? "bg-white/10 text:white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
+                    ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
                 >
                   <IconModeration className="opacity-90" />
                   <span>{t("nav.admin","Админ")}</span>
@@ -382,16 +380,42 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-1">
             {role === "provider" && (
               <>
-                <NavBadgeDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} />
+                {/* НОВОЕ: dropdown "Услуги" вместо одиночного Dashboard */}
+                <div className="relative" ref={servicesRef}>
+                  <button
+                    type="button"
+                    onClick={() => setServicesOpen(v => !v)}
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
+                      ${servicesOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
+                  >
+                    <IconDashboard />
+                    <span>{t("nav.services", "Услуги")}</span>
+                    <IconChevron className={`transition ${servicesOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {servicesOpen && (
+                    <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
+                      <DropdownItem
+                        to="/dashboard/services/tour-builder"
+                        label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
+                        icon={<IconDashboard />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/services/marketplace"
+                        label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
+                        icon={<IconDashboard />}
+                      />
+                      <DropdownItem
+                        to="/dashboard"
+                        label={t("nav.services_all", "Все услуги (общий экран)")}
+                        icon={<IconDashboard />}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <NavBadgeDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} value={providerRequests} loading={loading} />
                 <NavBadgeDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} value={favCount} />
                 <NavBadgeDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} value={bookingsBadge} loading={loading} />
-                {/* 👇 новый пункт "Профиль" для кабинета провайдера */}
-                <NavItemDark
-                  to="/dashboard/profile"
-                  label={t("nav.profile", "Профиль")}
-                  icon={<IconProfile />}
-                />
               </>
             )}
 
@@ -423,15 +447,36 @@ export default function Header() {
               <RowGroupDark title={t("nav.ops", "Операционка")}>
                 {role === "provider" && (
                   <>
-                    <NavItemMobileDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} end />
-                    <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
-                    <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
-                    <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
-                    {/* 👇 мобильный пункт "Профиль" */}
+                    {/* На мобиле просто два пункта для услуг */}
                     <NavItemMobileDark
-                      to="/dashboard/profile"
-                      label={t("nav.profile", "Профиль")}
-                      icon={<IconProfile />}
+                      to="/dashboard/services/tour-builder"
+                      label={t("nav.services_tourbuilder", "Услуги для Tour Builder")}
+                      icon={<IconDashboard />}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/services/marketplace"
+                      label={t("nav.services_marketplace", "Услуги для MARKETPLACE")}
+                      icon={<IconDashboard />}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/requests"
+                      label={t("nav.requests")}
+                      icon={<IconRequests />}
+                      badge={providerRequests}
+                      loading={loading}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/favorites"
+                      label={t("nav.favorites") || "Избранное"}
+                      icon={<IconHeart />}
+                      badge={favCount}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/bookings"
+                      label={t("nav.bookings")}
+                      icon={<IconBookings />}
+                      badge={bookingsBadge}
+                      loading={loading}
                     />
                   </>
                 )}
@@ -447,7 +492,7 @@ export default function Header() {
             <RowGroupDark title={t("nav.products","Продукты")}>
               <NavItemMobileDark to="/marketplace" label="MARKETPLACE" />
               {role === "provider" && (
-                <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} />
+                <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} icon={<IconDashboard />} />
               )}
               <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
             </RowGroupDark>
@@ -511,8 +556,8 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
           "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
           "text-sm",
           isActive
-            ? "bg:white/10 text:white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg:white/10",
+            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
+            : "text-white/80 hover:text-white hover:bg-white/10",
         ].join(" ")
       }
     >
@@ -537,7 +582,7 @@ function DropdownItem({ to, label, icon }) {
       className={({ isActive }) =>
         [
           "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text:white" : "text-white/80 hover:bg:white/10 hover:text:white",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
@@ -556,7 +601,7 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       className={({ isActive }) =>
         [
           "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg:white/10 text:white" : "text-white/80 hover:bg:white/10 hover:text:white",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
