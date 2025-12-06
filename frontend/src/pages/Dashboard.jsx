@@ -7,8 +7,6 @@ import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import ProviderStatsHeader from "../components/ProviderStatsHeader";
-import ProviderReviews from "../components/ProviderReviews";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
