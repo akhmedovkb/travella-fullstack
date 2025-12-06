@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
@@ -9,7 +8,8 @@ import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
 import Marketplace from "./pages/Marketplace";
 import ProviderFavorites from "./pages/ProviderFavorites";
-import ProviderProfile from "./pages/ProviderProfile";
+import ProviderProfile from "./pages/ProviderProfile";          // публичный профиль провайдера
+import ProviderProfileCabinet from "./components/ProviderProfile"; // кабинет провайдера (/dashboard/profile)
 import ClientProfile from "./pages/ClientProfile";
 import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
@@ -29,9 +29,6 @@ import ClientDashboard from "./pages/ClientDashboard";
 // Провайдерские новые страницы
 import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
-
-// 👇 Личный кабинет профиля поставщика (из components/ProviderProfile)
-import ProviderProfileCabinet from "./components/ProviderProfile";
 
 import Header from "./components/Header";
 // CMS (подвал)
@@ -188,20 +185,16 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-
-            {/* 🔸 Новый маршрут: личный кабинет профиля поставщика (как в суточно) */}
+            {/* новый кабинет провайдера в дашборде */}
             <Route
               path="/dashboard/profile"
               element={
                 <PrivateRoute>
-                  <div className="max-w-7xl mx-auto px-4 md:px-6">
-                    <ProviderProfileCabinet fullWidth />
-                  </div>
+                  <ProviderProfileCabinet />
                 </PrivateRoute>
               }
             />
-            
-            {/* Публичная страница профиля провайдера для клиентов */}
+            {/* публичный профиль провайдера (как на витрине) */}
             <Route path="/profile/provider/:id" element={<ProviderProfile />} />
 
             {/* Алиас старого пути MARKETPLACE */}
