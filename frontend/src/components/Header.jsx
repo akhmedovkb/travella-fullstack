@@ -100,6 +100,19 @@ const IconChevron = (p) => (
   </svg>
 );
 
+// 👇 новый простой икон для "Профиль"
+const IconProfile = (p) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
+    <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
+    <path
+      d="M6 19a6 6 0 0 1 12 0"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 const YES = new Set(["1","true","yes","on"]);
 function detectAdmin(profile) {
   const p = profile || {};
@@ -319,7 +332,7 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg:white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
@@ -341,7 +354,7 @@ export default function Header() {
                   type="button"
                   onClick={() => setAdminOpen(v => !v)}
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
-                    ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
+                    ${adminOpen ? "bg-white/10 text:white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
                 >
                   <IconModeration className="opacity-90" />
                   <span>{t("nav.admin","Админ")}</span>
@@ -373,6 +386,12 @@ export default function Header() {
                 <NavBadgeDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} value={providerRequests} loading={loading} />
                 <NavBadgeDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} value={favCount} />
                 <NavBadgeDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} value={bookingsBadge} loading={loading} />
+                {/* 👇 новый пункт "Профиль" для кабинета провайдера */}
+                <NavItemDark
+                  to="/dashboard/profile"
+                  label={t("nav.profile", "Профиль")}
+                  icon={<IconProfile />}
+                />
               </>
             )}
 
@@ -408,6 +427,12 @@ export default function Header() {
                     <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                     <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites") || "Избранное"} icon={<IconHeart />} badge={favCount} />
                     <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                    {/* 👇 мобильный пункт "Профиль" */}
+                    <NavItemMobileDark
+                      to="/dashboard/profile"
+                      label={t("nav.profile", "Профиль")}
+                      icon={<IconProfile />}
+                    />
                   </>
                 )}
                 {role === "client" && (
@@ -486,8 +511,8 @@ function NavBadgeDark({ to, label, value, loading, icon }) {
           "relative shrink-0 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
           "text-sm",
           isActive
-            ? "bg-white/10 text-white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
-            : "text-white/80 hover:text-white hover:bg-white/10",
+            ? "bg:white/10 text:white font-semibold after:content-[''] after:absolute after:left-3 after:right-3 after:-bottom-1 after:h-[2px] after:bg-orange-400 after:rounded-full"
+            : "text-white/80 hover:text-white hover:bg:white/10",
         ].join(" ")
       }
     >
@@ -512,7 +537,7 @@ function DropdownItem({ to, label, icon }) {
       className={({ isActive }) =>
         [
           "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+          isActive ? "bg:white/10 text:white" : "text-white/80 hover:bg:white/10 hover:text:white",
         ].join(" ")
       }
     >
@@ -531,7 +556,7 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       className={({ isActive }) =>
         [
           "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
+          isActive ? "bg:white/10 text:white" : "text-white/80 hover:bg:white/10 hover:text:white",
         ].join(" ")
       }
     >
