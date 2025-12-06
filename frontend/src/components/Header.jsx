@@ -104,16 +104,11 @@ const IconChevron = (p) => (
   </svg>
 );
 
-// Иконка профиля
+// иконка Профиля
 const IconProfile = (p) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...p}>
-    <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="2" />
-    <path
-      d="M5 19.5C5.8 16.3 8.6 14 12 14s6.2 2.3 7 5.5"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    />
+    <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="2" />
+    <path d="M6 19a6 6 0 0 1 12 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
 
@@ -125,9 +120,7 @@ function detectAdmin(profile) {
     .concat(p.roles || [])
     .flatMap((r) => String(r).split(","))
     .map((s) => s.trim());
-  const perms = []
-    .concat(p.permissions || p.perms || [])
-    .map(String);
+  const perms = [].concat(p.permissions || p.perms || []).map(String);
   let is =
     !!(p.is_admin || p.isAdmin || p.admin || p.moderator || p.is_moderator) ||
     roles.some((r) => ["admin", "moderator", "super", "root"].includes(r.toLowerCase())) ||
@@ -157,9 +150,7 @@ function detectAdminFromJwt() {
       .concat(claims.roles || [])
       .flatMap((r) => String(r).split(","))
       .map((s) => s.trim());
-    const perms = []
-      .concat(claims.permissions || claims.perms || [])
-      .map(String);
+    const perms = [].concat(claims.permissions || claims.perms || []).map(String);
     return (
       claims.role === "admin" ||
       claims.is_admin === true ||
@@ -386,7 +377,11 @@ export default function Header() {
                   type="button"
                   onClick={() => setAdminOpen((v) => !v)}
                   className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition
-                    ${adminOpen ? "bg-white/10 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`}
+                    ${
+                      adminOpen
+                        ? "bg-white/10 text-white"
+                        : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`}
                 >
                   <IconModeration className="opacity-90" />
                   <span>{t("nav.admin", "Админ")}</span>
@@ -438,11 +433,7 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-1">
             {role === "provider" && (
               <>
-                <NavBadgeDark
-                  to="/dashboard"
-                  label={t("nav.dashboard")}
-                  icon={<IconDashboard />}
-                />
+                <NavBadgeDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} />
                 <NavBadgeDark
                   to="/dashboard/requests"
                   label={t("nav.requests")}
@@ -463,7 +454,7 @@ export default function Header() {
                   value={bookingsBadge}
                   loading={loading}
                 />
-                {/* Профиль провайдера — открывает components/ProviderProfile.jsx через /dashboard/profile */}
+                {/* Профиль провайдера */}
                 <NavItemDark
                   to="/dashboard/profile"
                   label={t("nav.profile", "Профиль")}
@@ -537,7 +528,6 @@ export default function Header() {
                       badge={bookingsBadge}
                       loading={loading}
                     />
-                    {/* Профиль в мобильном меню */}
                     <NavItemMobileDark
                       to="/dashboard/profile"
                       label={t("nav.profile", "Профиль")}
@@ -706,7 +696,7 @@ function NavItemMobileDark({ to, label, icon, end, badge, loading }) {
       className={({ isActive }) =>
         [
           "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
-          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg:white/10 hover:text-white",
+          isActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
