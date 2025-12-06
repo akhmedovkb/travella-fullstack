@@ -1,5 +1,3 @@
-// frontend/src/components/ProviderProfile.jsx
-const ProviderProfile = ({ fullWidth = false }) => {
 import React, {
   useCallback,
   useEffect,
@@ -589,12 +587,9 @@ const ProviderProfile = () => {
   };
 
   // ---------- RENDER ----------
-  const rootClass = fullWidth
-    ? "w-full bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0"
-    : "w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0";
-  
+
   return (
-    <div className={rootClass}>
+    <div className="w-full bg-white p-6 rounded-xl shadow-md flex flex-col min-w-0">
       <div id="anchor-profile-left" />
 
       <div className="flex flex-col md:flex-row gap-4 items-stretch">
