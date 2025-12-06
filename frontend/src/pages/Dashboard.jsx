@@ -14,7 +14,6 @@ import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
 import AdminHotelsTable from "./admin/AdminHotelsTable";
 import AdminHotelForm from "./admin/AdminHotelForm"; 
-import ProviderProfile from "../components/ProviderProfile";
 
 /** ================= Helpers ================= */
 
@@ -1570,10 +1569,7 @@ useEffect(() => {
         </div>
       )}
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
-        {/* Левый блок: профиль */}
-        <ProviderProfile />
-       
-        {/* Правый блок: услуги + входящие/брони */}
+        { блок: услуги + входящие/брони */}
         <div className="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-md">
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
