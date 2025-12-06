@@ -30,6 +30,9 @@ import ClientDashboard from "./pages/ClientDashboard";
 import ProviderRequests from "./pages/ProviderRequests";
 import ProviderBookings from "./pages/ProviderBookings";
 
+// 👇 Личный кабинет профиля поставщика (из components/ProviderProfile)
+import ProviderProfileCabinet from "./components/ProviderProfile";
+
 import Header from "./components/Header";
 // CMS (подвал)
 import Footer from "./components/Footer";
@@ -185,6 +188,20 @@ export default function App() {
                 </PrivateRoute>
               }
             />
+
+            {/* 🔸 Новый маршрут: личный кабинет профиля поставщика (как в суточно) */}
+            <Route
+              path="/dashboard/profile"
+              element={
+                <PrivateRoute>
+                  <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
+                    <ProviderProfileCabinet />
+                  </div>
+                </PrivateRoute>
+              }
+            />
+
+            {/* Публичная страница профиля провайдера для клиентов */}
             <Route path="/profile/provider/:id" element={<ProviderProfile />} />
 
             {/* Алиас старого пути MARKETPLACE */}
