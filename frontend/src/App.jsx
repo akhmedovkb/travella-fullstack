@@ -8,7 +8,6 @@ import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
 import Marketplace from "./pages/Marketplace";
 import ProviderFavorites from "./pages/ProviderFavorites";
-import ProviderProfile from "./pages/ProviderProfile";
 import ClientProfile from "./pages/ClientProfile";
 import AdminModeration from "./pages/AdminModeration";
 import HotelDetails from "./pages/HotelDetails";
@@ -64,6 +63,15 @@ import Contacts from "./pages/landing/Contacts";
 
 // IndiaInside
 import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
+
+/** ВАЖНО:
+ * 1) Кабинет провайдера: редактирование профиля
+ *    ./components/ProviderProfile.jsx
+ * 2) Публичный профиль поставщика по id
+ *    ./pages/ProviderProfile.jsx
+ */
+import ProviderProfile from "./components/ProviderProfile";
+import ProviderProfilePublic from "./pages/ProviderProfile";
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -221,7 +229,10 @@ export default function App() {
             />
 
             {/* Публичный просмотр профиля провайдера по id */}
-            <Route path="/profile/provider/:id" element={<ProviderProfile />} />
+            <Route
+              path="/profile/provider/:id"
+              element={<ProviderProfilePublic />}
+            />
 
             {/* Алиас старого пути MARKETPLACE */}
             <Route path="/marketplace" element={<Marketplace />} />
