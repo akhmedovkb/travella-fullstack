@@ -1,369 +1,86 @@
+// frontend/src/App.jsx
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { ToastMount } from "./shared/toast";
+import { Routes, Route, Navigate } from "react-router-dom";
 
-import Register from "./pages/Register";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import PrivateRoute from "./pages/PrivateRoute";
+import Header from "./components/Header";
+
+// Публичные страницы
 import Marketplace from "./pages/Marketplace";
-import ProviderFavorites from "./pages/ProviderFavorites";
-import ClientProfile from "./pages/ClientProfile";
-import AdminModeration from "./pages/AdminModeration";
-import HotelDetails from "./pages/HotelDetails";
-import HotelInspections from "./pages/HotelInspections";
-import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
-import AdminProviders from "./pages/admin/AdminProviders";
-import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
-import AdminLeads from "./pages/admin/Leads";
-import IndiaInside from "./pages/landing/IndiaInside";
-import LeadModal from "./components/LeadModal";
+import TourBuilder from "./pages/TourBuilder";
+import Hotels from "./pages/Hotels";
 
-// Клиентские
-import ClientRegister from "./pages/ClientRegister";
-import ClientLogin from "./pages/ClientLogin";
-import ClientDashboard from "./pages/ClientDashboard";
-
-// Провайдерские новые страницы
-import ProviderRequests from "./pages/ProviderRequests";
-import ProviderBookings from "./pages/ProviderBookings";
-
-// НОВОЕ: отдельные страницы управления услугами
+// Провайдер
+import Dashboard from "./pages/Dashboard";
+import ProviderProfile from "./pages/ProviderProfile";
+import ProviderCalendar from "./pages/ProviderCalendar";
 import ProviderServicesTourBuilder from "./pages/ProviderServicesTourBuilder";
 import ProviderServicesMarketplace from "./pages/ProviderServicesMarketplace";
 
-import Header from "./components/Header";
-// CMS (подвал)
-import Footer from "./components/Footer";
-import CmsPage from "./pages/CmsPage";
-import CmsEditor from "./pages/admin/CmsEditor";
+// Клиент
+import ClientDashboard from "./pages/ClientDashboard";
 
-// Отели
-import Hotels from "./pages/Hotels";
-import AdminHotelForm from "./pages/admin/AdminHotelForm";
+// Авторизация
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ClientLogin from "./pages/ClientLogin";
+import ClientRegister from "./pages/ClientRegister";
 
-// Конструктор шаблонов
-import TemplateCreator from "./pages/TemplateCreator";
-
-// TourBuilder - Тур конструктор
-import TourBuilder from "./pages/TourBuilder";
-
-// Entry fees form
-import AdminEntryFees from "./pages/AdminEntryFees";
-
-// Landing
-import IndiaLayout from "./pages/landing/IndiaLayout";
-import LandingHome from "./pages/landing/Home";
-import Ayurveda from "./pages/landing/Ayurveda";
-import Checkup from "./pages/landing/Checkup";
-import Treatment from "./pages/landing/Treatment";
-import B2B from "./pages/landing/B2B";
-import Clinics from "./pages/landing/Clinics";
-import Contacts from "./pages/landing/Contacts";
-
-// IndiaInside
-import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
-
-/** ВАЖНО:
- * 1) Кабинет провайдера: редактирование профиля
- *    ./components/ProviderProfile.jsx
- * 2) Публичный профиль поставщика по id
- *    ./pages/ProviderProfile.jsx
- */
-import ProviderProfile from "./components/ProviderProfile";
-import ProviderProfilePublic from "./pages/ProviderProfile";
-
-function ClientPrivateRoute({ children }) {
-  const token = localStorage.getItem("clientToken");
-  return token ? children : <Navigate to="/client/login" replace />;
-}
-
-function AdminRoute({ children }) {
-  const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
-  if (!tok) return <Navigate to="/login" replace />;
-  try {
-    const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const base64 = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-    const json = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    const claims = JSON.parse(json);
-
-    const roles = []
-      .concat(claims.role || [])
-      .concat(claims.roles || [])
-      .flatMap((r) => String(r).split(","))
-      .map((s) => s.trim().toLowerCase());
-    const perms = []
-      .concat(claims.permissions || claims.perms || [])
-      .map((x) => String(x).toLowerCase());
-
-    const isAdmin =
-      claims.is_admin === true ||
-      claims.moderator === true ||
-      roles.some((r) => ["admin", "moderator", "super", "root"].includes(r)) ||
-      perms.some((x) => ["moderation", "admin:moderation"].includes(x));
-
-    return isAdmin ? children : <Navigate to="/" replace />;
-  } catch {
-    return <Navigate to="/" replace />;
-  }
-}
-
-export default function App() {
-  const [leadOpen, setLeadOpen] = React.useState(false);
-
+function AppLayout() {
   return (
-    <Router>
-      <ToastMount />
-      <div className="min-h-screen bg-gray-100 flex flex-col">
-        <Header />
-        <main className="flex-1 p-4">
-          <Routes>
-            {/* --- Главная: сразу MARKETPLACE --- */}
-            <Route path="/" element={<Marketplace />} />
+    <div className="min-h-screen bg-gray-100">
+      <Header />
 
-            {/* Старый лендинг, если понадобится отдельно */}
-            <Route path="/landing" element={<LandingHome />} />
+      <main className="pt-2 pb-8">
+        <Routes>
+          {/* MARKETPLACE (главная) */}
+          <Route path="/" element={<Marketplace />} />
+          {/* алиас, чтобы старые ссылки /marketplace тоже работали */}
+          <Route path="/marketplace" element={<Marketplace />} />
 
-            {/* --- INDIA namespace --- */}
-            <Route path="/india" element={<IndiaLayout />}>
-              {/* /india → /india/inside */}
-              <Route index element={<Navigate to="inside" replace />} />
+          {/* Tour Builder (для провайдера) */}
+          <Route path="/tour-builder" element={<TourBuilder />} />
 
-              {/* /india/inside — главная India Inside */}
-              <Route
-                path="inside"
-                element={<IndiaInside onOpenLead={() => setLeadOpen(true)} />}
-              />
+          {/* Отели */}
+          <Route path="/hotels" element={<Hotels />} />
 
-              {/* легаси: /india/tours → /india/inside */}
-              <Route path="tours" element={<Navigate to="/india/inside" replace />} />
+          {/* ------- ПРОВАЙДЕР ------- */}
+          {/* Главный кабинет провайдера с табами (заявки/избранное/брони) */}
+          <Route path="/dashboard/*" element={<Dashboard />} />
 
-              {/* остальные разделы Индии */}
-              <Route path="ayurveda" element={<Ayurveda />} />
-              <Route path="checkup" element={<Checkup />} />
-              <Route path="treatment" element={<Treatment />} />
-              <Route path="b2b" element={<B2B />} />
-              <Route path="clinics" element={<Clinics />} />
-              <Route path="contacts" element={<Contacts />} />
-            </Route>
+          {/* Профиль провайдера — отдельный компонент ProviderProfile */}
+          <Route path="/dashboard/profile" element={<ProviderProfile />} />
 
-            {/* --- Редиректы со старых путей на /india/* --- */}
-            <Route path="/tours" element={<Navigate to="/india/inside" replace />} />
-            <Route path="/ayurveda" element={<Navigate to="/india/ayurveda" replace />} />
-            <Route path="/checkup" element={<Navigate to="/india/checkup" replace />} />
-            <Route path="/treatment" element={<Navigate to="/india/treatment" replace />} />
-            <Route path="/clinics" element={<Navigate to="/india/clinics" replace />} />
-            <Route path="/b2b" element={<Navigate to="/india/b2b" replace />} />
-            <Route path="/contacts" element={<Navigate to="/india/contacts" replace />} />
+          {/* Календарь провайдера */}
+          <Route path="/dashboard/calendar" element={<ProviderCalendar />} />
 
-            {/* Поставщик */}
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Login />} />
+          {/* Услуги для Tour Builder */}
+          <Route
+            path="/dashboard/services/tourbuilder"
+            element={<ProviderServicesTourBuilder />}
+          />
 
-            {/* Старый /dashboard пока оставляем как есть (общая страница) */}
-            <Route
-              path="/dashboard"
-              element={
-                <PrivateRoute>
-                  <Dashboard />
-                </PrivateRoute>
-              }
-            />
+          {/* Услуги для MARKETPLACE */}
+          <Route
+            path="/dashboard/services/marketplace"
+            element={<ProviderServicesMarketplace />}
+          />
 
-            {/* НОВОЕ: профиль провайдера в кабинете */}
-            <Route
-              path="/dashboard/profile"
-              element={
-                <PrivateRoute>
-                  <ProviderProfile />
-                </PrivateRoute>
-              }
-            />
+          {/* ------- КЛИЕНТ ------- */}
+          <Route path="/client/dashboard/*" element={<ClientDashboard />} />
 
-            {/* НОВОЕ: отдельные страницы управления услугами */}
-            <Route
-              path="/dashboard/services/tour-builder"
-              element={
-                <PrivateRoute>
-                  <ProviderServicesTourBuilder />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/dashboard/services/marketplace"
-              element={
-                <PrivateRoute>
-                  <ProviderServicesMarketplace />
-                </PrivateRoute>
-              }
-            />
+          {/* ------- АВТОРИЗАЦИЯ ------- */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-            <Route
-              path="/dashboard/requests"
-              element={
-                <PrivateRoute>
-                  <ProviderRequests />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/dashboard/bookings"
-              element={
-                <PrivateRoute>
-                  <ProviderBookings />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/dashboard/favorites"
-              element={
-                <PrivateRoute>
-                  <ProviderFavorites />
-                </PrivateRoute>
-              }
-            />
+          <Route path="/client/login" element={<ClientLogin />} />
+          <Route path="/client/register" element={<ClientRegister />} />
 
-            {/* Публичный просмотр профиля провайдера по id */}
-            <Route
-              path="/profile/provider/:id"
-              element={<ProviderProfilePublic />}
-            />
-
-            {/* Алиас старого пути MARKETPLACE */}
-            <Route path="/marketplace" element={<Marketplace />} />
-
-            {/* Клиент */}
-            <Route path="/client/register" element={<ClientRegister />} />
-            <Route path="/client/login" element={<ClientLogin />} />
-            <Route
-              path="/client/dashboard"
-              element={
-                <ClientPrivateRoute>
-                  <ClientDashboard />
-                </ClientPrivateRoute>
-              }
-            />
-            <Route path="/profile/client/:id" element={<ClientProfile />} />
-
-            {/* Админ и CMS */}
-            <Route path="/admin/moderation" element={<AdminModeration />} />
-            <Route path="/page/:slug" element={<CmsPage />} />
-            <Route
-              path="/admin/providers"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminProviders />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/leads"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminLeads />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/hotels"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminHotelsTable />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/pages"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <CmsEditor />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/entry-fees"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminEntryFees />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/hotels/new"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminHotelForm />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/hotels/:id/edit"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminHotelForm />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/hotels/:id/seasons"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminHotelSeasons />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/admin/inside-requests"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminInsideRequests />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-
-            {/* Отели (публичные) */}
-            <Route path="/hotels" element={<Hotels />} />
-            <Route path="/hotels/:hotelId" element={<HotelDetails />} />
-            <Route path="/hotels/:hotelId/inspections" element={<HotelInspections />} />
-
-            {/* Инструменты */}
-            <Route path="/tour-builder" element={<TourBuilder />} />
-            <Route path="/templates" element={<TemplateCreator />} />
-
-            {/* Fallback — всегда последним */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-        <Footer />
-      </div>
-      <LeadModal
-        open={leadOpen}
-        onClose={() => setLeadOpen(false)}
-        defaultService="india_inside"
-      />
-    </Router>
+          {/* 404 → на главную */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
+
+export default AppLayout;
