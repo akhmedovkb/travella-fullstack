@@ -175,6 +175,9 @@ export default function Header() {
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
 
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const servicesRef = useRef(null);
+
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const [counts, setCounts] = useState(null);
@@ -208,11 +211,15 @@ export default function Header() {
     };
   }, [role]);
 
-  // close admin dropdown on outside click
+  // close dropdowns on outside click
   useEffect(() => {
     const onDoc = (e) => {
-      if (!adminRef.current) return;
-      if (!adminRef.current.contains(e.target)) setAdminOpen(false);
+      if (adminRef.current && !adminRef.current.contains(e.target)) {
+        setAdminOpen(false);
+      }
+      if (servicesRef.current && !servicesRef.current.contains(e.target)) {
+        setServicesOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -321,10 +328,11 @@ export default function Header() {
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  // close mobile menu on route change
+  // close mobile & dropdowns on route change
   useEffect(() => {
     setMobileOpen(false);
     setAdminOpen(false);
+    setServicesOpen(false);
   }, [location]);
 
   return (
@@ -433,7 +441,56 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-1">
             {role === "provider" && (
               <>
-                <NavBadgeDark to="/dashboard" label={t("nav.dashboard")} icon={<IconDashboard />} />
+                <NavBadgeDark
+                  to="/dashboard"
+                  label={t("nav.dashboard")}
+                  icon={<IconDashboard />}
+                />
+
+                {/* ▼ УСЛУГИ: дропдаун с тремя пунктами */}
+                <div className="relative" ref={servicesRef}>
+                  <button
+                    type="button"
+                    onClick={() => setServicesOpen((v) => !v)}
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-sm transition 
+                      ${
+                        servicesOpen
+                          ? "bg-white/10 text-white"
+                          : "text-white/80 hover:text-white hover:bg-white/10"
+                      }`}
+                  >
+                    <IconChecklist />
+                    <span>{t("nav.services_tab", "Услуги")}</span>
+                    <IconChevron className={`transition ${servicesOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {servicesOpen && (
+                    <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden z-30">
+                      <DropdownItem
+                        to="/dashboard/services/tourbuilder"
+                        label={t(
+                          "nav.services_tourbuilder",
+                          "Услуги для Tour Builder"
+                        )}
+                        icon={<IconChecklist />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/services/marketplace"
+                        label={t(
+                          "nav.services_marketplace",
+                          "Услуги для MARKETPLACE"
+                        )}
+                        icon={<IconChecklist />}
+                      />
+                      <DropdownItem
+                        to="/dashboard/calendar"
+                        label={t("nav.provider_calendar", "Календарь")}
+                        icon={<IconBookings />}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <NavBadgeDark
                   to="/dashboard/requests"
                   label={t("nav.requests")}
@@ -454,7 +511,7 @@ export default function Header() {
                   value={bookingsBadge}
                   loading={loading}
                 />
-                {/* Профиль провайдера */}
+                {/* Профиль провайдера — как раньше */}
                 <NavItemDark
                   to="/dashboard/profile"
                   label={t("nav.profile", "Профиль")}
@@ -508,6 +565,29 @@ export default function Header() {
                       icon={<IconDashboard />}
                       end
                     />
+                    {/* Услуги в мобиле просто списком */}
+                    <NavItemMobileDark
+                      to="/dashboard/services/tourbuilder"
+                      label={t(
+                        "nav.services_tourbuilder",
+                        "Услуги для Tour Builder"
+                      )}
+                      icon={<IconChecklist />}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/services/marketplace"
+                      label={t(
+                        "nav.services_marketplace",
+                        "Услуги для MARKETPLACE"
+                      )}
+                      icon={<IconChecklist />}
+                    />
+                    <NavItemMobileDark
+                      to="/dashboard/calendar"
+                      label={t("nav.provider_calendar", "Календарь")}
+                      icon={<IconBookings />}
+                    />
+
                     <NavItemMobileDark
                       to="/dashboard/requests"
                       label={t("nav.requests")}
