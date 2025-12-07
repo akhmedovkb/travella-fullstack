@@ -8,9 +8,7 @@ import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
-import ProviderCalendar from "../components/ProviderCalendar";
 import ProviderLanguages from "../components/ProviderLanguages";
-import ProviderServicesCard from "../components/ProviderServicesCard";
 import ProviderCompleteness from "../components/ProviderCompleteness";
 import AdminHotelsTable from "./admin/AdminHotelsTable";
 import AdminHotelForm from "./admin/AdminHotelForm"; 
@@ -797,7 +795,6 @@ const scrollToProfilePart = useCallback((key) => {
 
   // === Provider Inbox / Bookings ===
 
-  const token = (typeof localStorage !== "undefined" && localStorage.getItem("token")) || "";
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: API_BASE });
@@ -1583,16 +1580,7 @@ useEffect(() => {
               />
             </div>
           )}
-          {/* === Прайс-лист для TourBuilder (guide/transport) === */}
-          {(profile?.id && (profile.type === "guide" || profile.type === "transport" || profile.type === "agent")) && (
-            <div className="mb-6">
-             <ProviderServicesCard
-                  providerId={profile.id}
-                  providerType={profile.type}              // теперь может прийти 'agent'
-                  currencyDefault={profile.currency || 'USD'}
-              />
-            </div>
-          )}
+
                     {/* Delete confirm modal */}
           {deleteConfirmOpen && (
             <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-black/40">
@@ -3443,18 +3431,6 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Календарь блокировок (guide/transport) */}
-      {(profile.type === "guide" || profile.type === "transport") && (
-        <div className="px-6 pb-10">
-          <div className="mt-10 bg-white p-6 rounded shadow border max-w-3xl mx-auto">
-            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-             <div className="min-w-[360px] w-fit max-w-full">
-              <ProviderCalendar token={token} />
-             </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
