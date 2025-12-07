@@ -601,12 +601,6 @@ const makeAsyncSelectI18n = (t) => ({
 
 /** ================= Main ================= */
 const Dashboard = () => {
-  const [hotelFormOpen, setHotelFormOpen] = useState(false);   
-  const [hotelToEdit, setHotelToEdit]   = useState(null);       
-
-  const openNewHotel  = () => { setHotelToEdit(null); setHotelFormOpen(true); };   
-  const openEditHotel = (row) => { setHotelToEdit(row); setHotelFormOpen(true); }; 
-  const closeHotelForm = () => { setHotelFormOpen(false); setHotelToEdit(null); }; 
   const { t, i18n } = useTranslation();
 
   // --- profile completeness: smooth scroll to sections ---
@@ -1566,18 +1560,6 @@ useEffect(() => {
       <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
         {/* блок: услуги + входящие/брони */}
         <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
-            {/* === Отель: прайс и карточка === */}
-          {profile?.type === "hotel" && (
-            <div className="mb-6">
-              {/* Таблица со СВОИМИ отелями и действиями «Править/Сезоны» */}
-              <AdminHotelsTable
-                scope="provider"              // ⬅️ скажем таблице работать от лица провайдера
-                providerId={profile?.id}      // ⬅️ ограничить «моими» отелями
-                onEdit={openEditHotel}        // ⬅️ клик «Править» откроет форму
-                onNew={openNewHotel}          // ⬅️ (если в таблице есть своя кнопка)
-              />
-            </div>
-          )}
 
                     {/* Delete confirm modal */}
           {deleteConfirmOpen && (
@@ -3375,34 +3357,6 @@ useEffect(() => {
          
         </div>
       </div>
-
-      {/* Модалка создания/редактирования отеля */}
-{hotelFormOpen && (
-  <div role="dialog" aria-modal="true"
-       className="fixed inset-0 z-50 grid place-items-center bg-black/40">
-    <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-4 md:p-6 shadow-xl">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xl font-semibold">
-          {hotelToEdit?.id ? "Редактирование отеля" : "Новый отель"}
-        </h3>
-        <button onClick={closeHotelForm}
-                className="px-3 py-1.5 rounded border hover:bg-gray-50">Закрыть</button>
-      </div>
-
-      {/* сам редактор */}
-      <AdminHotelForm
-        hotelIdProp={hotelToEdit?.id || "new"}
-        onSaved={(savedId) => {
-          // мягко обновим таблицу и закроем модалку
-          window.dispatchEvent(new Event("provider-hotels:reload"));
-          setHotelFormOpen(false);
-          setHotelToEdit(null);
-        }}
-      />
-    </div>
-  </div>
-)}
-
 
       {/* МОДАЛКА УДАЛЕНИЯ УСЛУГИ */}
       {deleteConfirmOpen && (
