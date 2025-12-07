@@ -10,8 +10,6 @@ import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderLanguages from "../components/ProviderLanguages";
 import ProviderCompleteness from "../components/ProviderCompleteness";
-import AdminHotelsTable from "./admin/AdminHotelsTable";
-import AdminHotelForm from "./admin/AdminHotelForm"; 
 
 /** ================= Helpers ================= */
 
