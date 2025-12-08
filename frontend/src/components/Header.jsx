@@ -362,13 +362,13 @@ export default function Header() {
       {/* Внутренний контейнер навигации */}
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
         {/* One-row desktop header */}
-        <div className="h-14 flex items-center justify-between gap-2 pl-16 sm:pl-20 md:pl-24">
+        <div className="relative z-10 h-14 flex items-center justify-between gap-2 pl-16 sm:pl-20 md:pl-24">
           {/* Left group */}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/30 bg-white/5 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
