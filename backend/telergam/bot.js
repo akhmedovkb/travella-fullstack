@@ -6,7 +6,8 @@ const axios = require("axios");
 
 dotenv.config();
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN;
+
 if (!BOT_TOKEN) {
   console.error("[tg-bot] ❌ TELEGRAM_BOT_TOKEN не задан в .env");
   // не падаем process.exit, чтобы API мог работать без бота
@@ -310,4 +311,5 @@ if (bot) {
 module.exports = {
   bot,
 };
+
 
