@@ -211,6 +211,20 @@ app.post("/api/requests/purgeExpired", authenticateToken, async (_req, res) => {
 /** ===================== Health ===================== */
 app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 
+/** ===================== Health ===================== */
+app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
+
+/** ===================== Telegram Bot ===================== */
+const { bot } = require("./telegram/bot");
+
+bot.launch().then(() => {
+  console.log("🤖 Telegram bot started");
+});
+
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+
 /** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
