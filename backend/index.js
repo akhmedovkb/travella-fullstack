@@ -265,6 +265,12 @@ if (bot) {
     "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
   );
 }
+/** ===================== Start ===================== */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log("[CORS] allowed:", Array.from(WHITELIST));
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
+});
 
 
 /** ===================== EntryFees ===================== */
