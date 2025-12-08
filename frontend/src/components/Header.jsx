@@ -365,14 +365,14 @@ export default function Header() {
         <div className="relative z-10 h-14 flex items-center justify-between gap-2 pl-16 sm:pl-20 md:pl-24">
           {/* Left group */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/30 bg-white/5 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              aria-label="Menu"
-            >
-              {mobileOpen ? <IconClose /> : <IconBurger />}
-            </button>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            className="relative z-20 md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/30 bg-white/5 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+            aria-label="Menu"
+          >
+            {mobileOpen ? <IconClose /> : <IconBurger />}
+          </button>
 
             {/* Products */}
             <nav className="hidden md:flex items-center gap-2 lg:gap-3">
