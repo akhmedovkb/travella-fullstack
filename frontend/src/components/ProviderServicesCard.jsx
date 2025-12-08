@@ -89,15 +89,17 @@ const TitleCaseCity = (s) =>
 
 export default function ProviderServicesCard({
   providerId,
-  providerType, // 'guide' | 'transport'
+  providerType, // 'guide' | 'transport' | 'agent'
   currencyDefault = "USD",
 }) {
   const { t, i18n } = useTranslation();
   const lang = (i18n?.language || "").toLowerCase();
   const isUZ = lang.startsWith("uz");
+  const isEN = lang.startsWith("en");
+
   // валюта — только UZS
   const FORCE_CURRENCY = "UZS";
-  const isEN = lang.startsWith("en");
+
   // fallback, если ключей нет
   const F = (ru, uz, en) => (isUZ ? uz : isEN ? en : ru);
   const TT = (key, ru, uz, en, opts = {}) =>
@@ -123,7 +125,7 @@ export default function ProviderServicesCard({
   const [price, setPrice] = useState("");
   const [currency, setCurrency] = useState(FORCE_CURRENCY);
   const [seats, setSeats] = useState("");
-  const [vehicleModel, setVehicleModel] = useState(""); // NEW
+  const [vehicleModel, setVehicleModel] = useState("");
 
   // bulk
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -153,7 +155,6 @@ export default function ProviderServicesCard({
         defaultValue: CATEGORY_LABELS[cat] || cat,
       });
     };
-    // важно: зависим от t тоже
   }, [providerType, t]);
 
   const categories = useMemo(() => {
@@ -201,7 +202,7 @@ export default function ProviderServicesCard({
         : [];
 
     const transportSection =
-      (providerType === "transport" || providerType === "agent")
+      providerType === "transport" || providerType === "agent"
         ? [
             {
               label: TT("ps.grp.transport", "ТРАНСПОРТ", "TRANSPORT", "Transport"),
@@ -254,15 +255,10 @@ export default function ProviderServicesCard({
         title: title || null,
         price: toMoney(price),
         currency: currency || currencyDefault || "USD",
-        vehicle_model:
-          isTransportCategory(category) && vehicleModel.trim()
-            ? vehicleModel.trim()
-            : null, // NEW
+        vehicle_model: vehicleModel.trim() || null,
         details: {
           ...(citySlug ? { city_slug: citySlug } : {}),
-          ...(isTransportCategory(category) && Number(seats) > 0
-            ? { seats: Number(seats) }
-            : {}),
+          ...(Number(seats) > 0 ? { seats: Number(seats) } : {}),
         },
       };
 
@@ -273,10 +269,8 @@ export default function ProviderServicesCard({
       setRows((m) => [created, ...m]);
       setTitle("");
       setPrice("");
-      if (isTransportCategory(category)) {
-        setSeats("");
-        setVehicleModel(""); // NEW
-      }
+      setSeats("");
+      setVehicleModel("");
       tSuccess(
         TT("service_added", "Услуга добавлена", "Xizmat qo‘shildi", "Service added")
       );
@@ -391,7 +385,7 @@ export default function ProviderServicesCard({
             )} (гид+транспорт ${seatsOk ? `${n}-местный ` : ""}${model})`,
             price: 0,
             currency: currencyDefault || "USD",
-            vehicle_model: model || null, // NEW
+            vehicle_model: model || null,
             details: {
               ...(seatsOk ? { seats: n } : {}),
               city_slug: slug,
@@ -490,13 +484,17 @@ export default function ProviderServicesCard({
           >
             {bulkBusy
               ? TT("ps.btn.generating", "Генерируем…", "Yaratilmoqda…", "Generating…")
-              : TT("ps.btn.generate_from_profile", "Сгенерировать из профиля", "Profil asosida yaratish", "Generate from profile")}
+              : TT(
+                  "ps.btn.generate_from_profile",
+                  "Сгенерировать из профиля",
+                  "Profil asosida yaratish",
+                  "Generate from profile"
+                )}
           </button>
         </div>
       </div>
 
       {/* add form */}
-      {/* добавили колонку под "Модель авто" */}
       <div
         className="p-4 grid gap-3 min-w-0
                       sm:grid-cols-2
@@ -542,26 +540,28 @@ export default function ProviderServicesCard({
             {TT("ps.form.seats", "Мест", "Joylar", "Seats")}
           </label>
           <input
-            className="w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50 min-w-0"
+            className="w-full h-9 border rounded px-2 text-sm min-w-0"
             type="number"
             min={0}
             value={seats}
             onChange={(e) => setSeats(e.target.value)}
-            disabled={!isTransportCategory(category)}
           />
         </div>
 
-        {/* NEW: Модель авто (только для транспорта) */}
         <div>
           <label className="block text-xs text-gray-600 mb-1">
             {TT("ps.form.vehicle_model", "Модель авто", "Avtomobil modeli", "Vehicle model")}
           </label>
           <input
-            className="w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50 min-w-0"
-            placeholder={TT("ps.form.vehicle_model_ph", "напр., Hyundai Staria", "masalan, Hyundai Staria", "e.g., Hyundai Staria")}
+            className="w-full h-9 border rounded px-2 text-sm min-w-0"
+            placeholder={TT(
+              "ps.form.vehicle_model_ph",
+              "напр., Hyundai Staria",
+              "masalan, Hyundai Staria",
+              "e.g., Hyundai Staria"
+            )}
             value={vehicleModel}
             onChange={(e) => setVehicleModel(e.target.value)}
-            disabled={!isTransportCategory(category)}
           />
         </div>
 
@@ -573,7 +573,12 @@ export default function ProviderServicesCard({
             </label>
             <input
               className="w-full h-9 border rounded px-2 text-sm min-w-0"
-              placeholder={TT("ps.form.price_ph", "100, 120.50 …", "100, 120.50 …", "100, 120.50 …")}
+              placeholder={TT(
+                "ps.form.price_ph",
+                "100, 120.50 …",
+                "100, 120.50 …",
+                "100, 120.50 …"
+              )}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
             />
@@ -588,8 +593,12 @@ export default function ProviderServicesCard({
               onChange={() => setCurrency(FORCE_CURRENCY)}
             >
               <option value="UZS">UZS</option>
-              <option value="USD" disabled>USD</option>
-              <option value="EUR" disabled>EUR</option>
+              <option value="USD" disabled>
+                USD
+              </option>
+              <option value="EUR" disabled>
+                EUR
+              </option>
             </select>
           </div>
         </div>
@@ -632,9 +641,13 @@ export default function ProviderServicesCard({
                 <th className="text-left p-2 border-b">
                   {TT("ps.table.seats", "Мест", "Joylar", "Seats")}
                 </th>
-                {/* NEW */}
                 <th className="text-left p-2 border-b">
-                  {TT("ps.table.vehicle_model", "Модель авто", "Avtomobil modeli", "Vehicle model")}
+                  {TT(
+                    "ps.table.vehicle_model",
+                    "Модель авто",
+                    "Avtomobil modeli",
+                    "Vehicle model"
+                  )}
                 </th>
                 <th className="text-left p-2 border-b">
                   {TT("ps.table.price", "Цена", "Narx", "Price")}
@@ -654,31 +667,44 @@ export default function ProviderServicesCard({
               {loading ? (
                 <tr>
                   <td className="p-3 text-gray-500" colSpan={8}>
-                    {TT("common.loading", "Загрузка…", "Yuklanmoqda…", "Loading…")}
+                    {TT(
+                      "common.loading",
+                      "Загрузка…",
+                      "Yuklanmoqda…",
+                      "Loading…"
+                    )}
                   </td>
                 </tr>
               ) : rows.length ? (
                 rows.map((r) => {
-                  const transport = isTransportCategory(r.category);
                   const seatsVal =
-                    transport && r.details && Number(r.details.seats) > 0
+                    r.details && Number(r.details.seats) > 0
                       ? Number(r.details.seats)
                       : "";
-                  const modelVal = transport ? (r.vehicle_model || "") : ""; // NEW
+                  const modelVal = r.vehicle_model || "";
 
                   return (
                     <tr key={r.id} className="odd:bg-white even:bg-gray-50">
-                      <td className="p-2 align-middle">{labelForCategory(r.category)}</td>
+                      <td className="p-2 align-middle">
+                        {labelForCategory(r.category)}
+                      </td>
 
                       <td className="p-2">
                         <input
                           className="w-full h-8 border rounded px-2"
                           value={r.title || ""}
-                          placeholder={TT("ps.row.name_ph", "Название…", "Nomi…", "Name…")}
+                          placeholder={TT(
+                            "ps.row.name_ph",
+                            "Название…",
+                            "Nomi…",
+                            "Name…"
+                          )}
                           onChange={(e) =>
                             setRows((m) =>
                               m.map((x) =>
-                                x.id === r.id ? { ...x, title: e.target.value } : x
+                                x.id === r.id
+                                  ? { ...x, title: e.target.value }
+                                  : x
                               )
                             )
                           }
@@ -690,11 +716,10 @@ export default function ProviderServicesCard({
 
                       <td className="p-2">
                         <input
-                          className="w-20 h-8 border rounded px-2 disabled:bg-gray-50"
+                          className="w-20 h-8 border rounded px-2"
                           type="number"
                           min={0}
                           value={seatsVal}
-                          disabled={!transport}
                           onChange={(e) => {
                             const v = e.target.value;
                             setRows((m) =>
@@ -704,7 +729,8 @@ export default function ProviderServicesCard({
                                       ...x,
                                       details: {
                                         ...(x.details || {}),
-                                        seats: v === "" ? undefined : Number(v),
+                                        seats:
+                                          v === "" ? undefined : Number(v),
                                       },
                                     }
                                   : x
@@ -714,26 +740,41 @@ export default function ProviderServicesCard({
                           onBlur={(e) => {
                             const n = Number(e.target.value);
                             const patch =
-                              transport && Number.isInteger(n) && n > 0
-                                ? { details: { seats: n } }
-                                : { details: {} }; // очистим seats
+                              Number.isInteger(n) && n > 0
+                                ? {
+                                    details: {
+                                      ...(r.details || {}),
+                                      seats: n,
+                                    },
+                                  }
+                                : {
+                                    details: {
+                                      ...(r.details || {}),
+                                      seats: null,
+                                    },
+                                  };
                             patchRow(r.id, patch);
                           }}
                         />
                       </td>
 
-                      {/* NEW: vehicle_model */}
                       <td className="p-2">
                         <input
-                          className="w-44 h-8 border rounded px-2 disabled:bg-gray-50"
+                          className="w-44 h-8 border rounded px-2"
                           value={modelVal}
-                          placeholder={TT("ps.row.vehicle_model_ph", "напр., Hyundai Staria", "masalan, Hyundai Staria", "e.g., Hyundai Staria")}
-                          disabled={!transport}
+                          placeholder={TT(
+                            "ps.row.vehicle_model_ph",
+                            "напр., Hyundai Staria",
+                            "masalan, Hyundai Staria",
+                            "e.g., Hyundai Staria"
+                          )}
                           onChange={(e) => {
                             const v = e.target.value;
                             setRows((m) =>
                               m.map((x) =>
-                                x.id === r.id ? { ...x, vehicle_model: v } : x
+                                x.id === r.id
+                                  ? { ...x, vehicle_model: v }
+                                  : x
                               )
                             );
                           }}
@@ -771,26 +812,44 @@ export default function ProviderServicesCard({
                           onChange={() => {
                             setRows((m) =>
                               m.map((x) =>
-                                x.id === r.id ? { ...x, currency: "UZS" } : x
+                                x.id === r.id
+                                  ? { ...x, currency: "UZS" }
+                                  : x
                               )
                             );
                           }}
                           onBlur={() => patchRow(r.id, { currency: "UZS" })}
                         >
                           <option value="UZS">UZS</option>
-                          <option value="USD" disabled>USD</option>
-                          <option value="EUR" disabled>EUR</option>
+                          <option value="USD" disabled>
+                            USD
+                          </option>
+                          <option value="EUR" disabled>
+                            EUR
+                          </option>
                         </select>
                       </td>
 
                       <td className="p-2">
                         {r.is_active ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700">
-                            ● {TT("ps.status.enabled", "Включена", "Yoqilgan", "Enabled")}
+                            ●{" "}
+                            {TT(
+                              "ps.status.enabled",
+                              "Включена",
+                              "Yoqilgan",
+                              "Enabled"
+                            )}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-gray-500">
-                            ● {TT("ps.status.disabled", "Выключена", "O‘chirilgan", "Disabled")}
+                            ●{" "}
+                            {TT(
+                              "ps.status.disabled",
+                              "Выключена",
+                              "O‘chirilgan",
+                              "Disabled"
+                            )}
                           </span>
                         )}
                       </td>
@@ -801,14 +860,29 @@ export default function ProviderServicesCard({
                           onClick={() => toggleActive(r)}
                         >
                           {r.is_active
-                            ? TT("ps.row.disable", "Выключить", "O‘chirish", "Disable")
-                            : TT("ps.row.enable", "Включить", "Yoqish", "Enable")}
+                            ? TT(
+                                "ps.row.disable",
+                                "Выключить",
+                                "O‘chirish",
+                                "Disable"
+                              )
+                            : TT(
+                                "ps.row.enable",
+                                "Включить",
+                                "Yoqish",
+                                "Enable"
+                              )}
                         </button>
                         <button
                           className="h-8 px-3 rounded border text-xs text-red-600 border-red-300 hover:bg-red-50"
                           onClick={() => removeRow(r.id)}
                         >
-                          {TT("ps.row.delete", "Удалить", "O‘chirish", "Delete")}
+                          {TT(
+                            "ps.row.delete",
+                            "Удалить",
+                            "O‘chirish",
+                            "Delete"
+                          )}
                         </button>
                       </td>
                     </tr>
