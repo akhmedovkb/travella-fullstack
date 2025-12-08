@@ -1,3 +1,5 @@
+//backend/telergam/bot.jsx
+
 import { Telegraf, session, Markup } from "telegraf";
 import dotenv from "dotenv";
 import axios from "axios";
@@ -71,3 +73,4 @@ export function launchBot() {
   bot.launch();
   console.log("🤖 Telegram Bot запущен");
 }
+
