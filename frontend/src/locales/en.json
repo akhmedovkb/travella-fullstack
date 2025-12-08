@@ -551,6 +551,7 @@
   },
 
   "moderation": {
+    "title": "Services moderation",
     "service_status": {
       "draft": "Draft",
       "pending": "Sent for moderation",
@@ -594,6 +595,27 @@
   "name_placeholder": "Your name",
 
   "nav": {
+    "ops": "Operations",
+    "products": "Products",
+    "admin": "Admin",
+
+    "services_tab": "Services",
+    "services_tourbuilder": "Services for Tour Builder",
+    "services_marketplace": "Services for Marketplace",
+    "provider_calendar": "Calendar",
+
+    "requests": "Requests",
+    "favorites": "Favorites",
+    "bookings": "Bookings",
+    "profile": "Profile",
+
+    "tour_builder": "Tour Builder",
+    "hotels": "Hotels",
+
+    "providers_admin": "Providers",
+    "entry_fees_admin": "Entry fees",
+    "hotels_admin": "Hotels (admin)",
+    "cms_pages": "Footer"
     "bookings": "Bookings",
     "dashboard": "Cabinet",
     "requests": "Requests",
