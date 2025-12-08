@@ -19,13 +19,12 @@ const BASE_WHITELIST = [
   "http://localhost:5173",
   "https://travella.uz",
   "https://www.travella.uz",
-  "https://india.travella.uz",                // ← ДОБАВИЛ ЭТУ СТРОКУ
+  "https://india.travella.uz", // India Inside
   "https://travella-fullstack.vercel.app",
-  "https://travella-fullstack-q0ayptios-komil.vercel.app", // из логов
+  "https://travella-fullstack-q0ayptios-komil.vercel.app", // превью из логов
   "https://travella-fullstack-8yle5am3l-komil.vercel.app", // старое превью
   process.env.FRONTEND_URL || "",
 ];
-
 
 // добираем из ENV (если задано)
 const ENV_WHITELIST = (process.env.CORS_ORIGINS || "")
@@ -37,9 +36,11 @@ const WHITELIST = new Set([...BASE_WHITELIST, ...ENV_WHITELIST]);
 
 function isAllowedOrigin(origin) {
   if (!origin) return true; // curl/Postman/сервер-сервер
+
   try {
     const url = new URL(origin);
     const { hostname, protocol } = url;
+
     if (!/^https?:$/.test(protocol)) return false;
 
     // Точный матч
@@ -66,8 +67,8 @@ const corsOptions = {
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,              // оставил, если используются cookie
-  optionsSuccessStatus: 204,      // корректный код для preflight
+  credentials: true,
+  optionsSuccessStatus: 204,
 };
 
 // ВАЖНО: CORS должен стоять ПЕРЕД ЛЮБЫМИ РОУТАМИ
@@ -79,7 +80,7 @@ app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-/** ===================== Routes ===================== */
+/** ===================== Routes (основные) ===================== */
 const availabilityRoutes = require("./routes/availabilityRoutes");
 app.use("/api/availability", availabilityRoutes);
 
@@ -90,9 +91,9 @@ const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
 const hotels = require("./controllers/hotelsController");
-//app.get("/api/hotels/:id/inspections", hotels.listHotelInspections);
-//app.post("/api/hotels/:id/inspections", hotels.createHotelInspection);
-//app.post("/api/inspections/:id/like", hotels.likeInspection);
+// app.get("/api/hotels/:id/inspections", hotels.listHotelInspections);
+// app.post("/api/hotels/:id/inspections", hotels.createHotelInspection);
+// app.post("/api/inspections/:id/like", hotels.likeInspection);
 
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
@@ -101,7 +102,7 @@ const clientRoutes = require("./routes/clientRoutes");
 app.use("/api/clients", clientRoutes);
 
 const profileRoutes = require("./routes/profileRoutes");
-app.use("/api/profile", profileRoutes); 
+app.use("/api/profile", profileRoutes);
 
 /**
  * requestRoutes может экспортировать:
@@ -123,7 +124,7 @@ app.use("/api/bookings", bookingRoutes);
 const notificationsRoutes = require("./routes/notificationsRoutes");
 app.use("/api/notifications", notificationsRoutes);
 
-// NEW: wishlist
+// NEW: wishlist (избранное)
 const wishlistRoutes = require("./routes/wishlistRoutes");
 app.use("/api/wishlist", wishlistRoutes);
 
@@ -135,93 +136,118 @@ app.use("/api/reviews", reviewRoutes);
 const hotelInspectionRoutes = require("./routes/hotelInspectionRoutes");
 app.use("/api/hotel-inspections", hotelInspectionRoutes);
 
-// Telegram bot
+// Telegram webhook-роуты (СТАРЫЙ бот по токену TELEGRAM_BOT_TOKEN)
 const telegramRoutes = require("./routes/telegramRoutes");
 app.use("/api/telegram", express.json({ limit: "2mb" }), telegramRoutes);
 
-//языки
+// Языки
 const metaRoutes = require("./routes/metaRoutes");
 app.use("/api/meta", metaRoutes);
 
-//модерация админом
+// Модерация админом
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
-//секции маркетплэйса
+// Секции маркетплейса
 const marketplaceSectionsRoutes = require("./routes/marketplaceSectionsRoutes");
 app.use("/api/marketplace/sections", marketplaceSectionsRoutes);
 
 const moderationRoutes = require("./routes/moderationRoutes");
 app.use("/api/moderation", moderationRoutes);
 
-//квота GeoNames
+// Квота GeoNames
 const monitorRoutes = require("./routes/monitorRoutes");
 app.use("/api/monitor", monitorRoutes);
 
-// ===== Leads (лендинги: /tours, /ayurveda, /checkup, /treatment, /b2b, /contacts)
+// Leads (лендинги: /tours, /ayurveda, /checkup, /treatment, /b2b, /contacts)
 const leadRoutes = require("./routes/leadRoutes");
 app.use("/api/leads", leadRoutes);
 
 /** ===================== Debug ===================== */
 const authenticateToken = require("./middleware/authenticateToken");
-app.get("/api/_debug/whoami", authenticateToken, (req, res) => res.json(req.user));
+app.get("/api/_debug/whoami", authenticateToken, (req, res) =>
+  res.json(req.user)
+);
 
 /** ===================== Aliases (Back-compat) ===================== */
-app.post("/api/providers/cleanup-expired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await cleanupExpiredFn();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/providers/cleanup-expired error:", e);
-    res.status(500).json({ error: "Failed to cleanup expired (providers alias)" });
+app.post(
+  "/api/providers/cleanup-expired",
+  authenticateToken,
+  async (_req, res) => {
+    try {
+      const removed = await cleanupExpiredFn();
+      res.json({ success: true, removed });
+    } catch (e) {
+      console.error("POST /api/providers/cleanup-expired error:", e);
+      res
+        .status(500)
+        .json({ error: "Failed to cleanup expired (providers alias)" });
+    }
   }
-});
+);
 
-app.post("/api/provider/cleanup-expired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await cleanupExpiredFn();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/provider/cleanup-expired error:", e);
-    res.status(500).json({ error: "Failed to cleanup expired (provider alias)" });
+app.post(
+  "/api/provider/cleanup-expired",
+  authenticateToken,
+  async (_req, res) => {
+    try {
+      const removed = await cleanupExpiredFn();
+      res.json({ success: true, removed });
+    } catch (e) {
+      console.error("POST /api/provider/cleanup-expired error:", e);
+      res
+        .status(500)
+        .json({ error: "Failed to cleanup expired (provider alias)" });
+    }
   }
-});
+);
 
 // Старые алиасы из фронта
-app.post("/api/requests/cleanup", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await cleanupExpiredFn();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/cleanup error:", e);
-    res.status(500).json({ error: "Failed to cleanup (alias)" });
+app.post(
+  "/api/requests/cleanup",
+  authenticateToken,
+  async (_req, res) => {
+    try {
+      const removed = await cleanupExpiredFn();
+      res.json({ success: true, removed });
+    } catch (e) {
+      console.error("POST /api/requests/cleanup error:", e);
+      res.status(500).json({ error: "Failed to cleanup (alias)" });
+    }
   }
-});
+);
 
-app.post("/api/requests/purgeExpired", authenticateToken, async (_req, res) => {
-  try {
-    const removed = await purgeExpiredFn();
-    res.json({ success: true, removed });
-  } catch (e) {
-    console.error("POST /api/requests/purgeExpired error:", e);
-    res.status(500).json({ error: "Failed to purge (alias)" });
+app.post(
+  "/api/requests/purgeExpired",
+  authenticateToken,
+  async (_req, res) => {
+    try {
+      const removed = await purgeExpiredFn();
+      res.json({ success: true, removed });
+    } catch (e) {
+      console.error("POST /api/requests/purgeExpired error:", e);
+      res.status(500).json({ error: "Failed to purge (alias)" });
+    }
   }
-});
+);
 
 /** ===================== Health ===================== */
 app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 
-/** ===================== Health ===================== */
-app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
-
-/** ===================== Telegram Bot ===================== */
+/** ===================== Telegram Bot (НОВЫЙ клиентский) ===================== */
+/**
+ * Здесь подключается backend/telegram/bot.js,
+ * который использует TELEGRAM_CLIENT_BOT_TOKEN.
+ * Старый бот по webhook'ам живёт в routes/telegramRoutes и
+ * использует TELEGRAM_BOT_TOKEN — мы его не трогаем.
+ */
 let bot = null;
 try {
   ({ bot } = require("./telegram/bot"));
 } catch (e) {
   console.warn(
     "[tg-bot] bot module not loaded:",
-    e && (e.code || e.message || e)
+    (e && (e.code || e.message)) || e
   );
 }
 
@@ -265,13 +291,6 @@ if (bot) {
     "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
   );
 }
-/** ===================== Start ===================== */
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log("[CORS] allowed:", Array.from(WHITELIST));
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-});
-
 
 /** ===================== EntryFees ===================== */
 // публичные
@@ -283,12 +302,12 @@ const entryFeesAdminRoutes = require("./routes/entryFeesAdminRoutes");
 app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
 
 /** ===================== Provider Services ===================== */
-const providerServices = require('./routes/providerServices');
+const providerServices = require("./routes/providerServices");
 app.use(providerServices);
 
 /** ===================== HotelsSeasons ===================== */
-const hotelSeasonsRouter = require('./routes/hotelSeasons');
-app.use('/api/hotels/:id/seasons', hotelSeasonsRouter);
+const hotelSeasonsRouter = require("./routes/hotelSeasons");
+app.use("/api/hotels/:id/seasons", hotelSeasonsRouter);
 
 /** ===================== TBtemplates ===================== */
 app.use("/api/tour-templates", tbTemplatesRoutes);
@@ -305,3 +324,10 @@ app.use("/api/admin", adminProvidersRoutes);
 /** ===================== IndiaInside ===================== */
 const insideRoutes = require("./routes/insideRoutes");
 app.use("/api/inside", insideRoutes);
+
+/** ===================== Start (в самом конце) ===================== */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log("[CORS] allowed:", Array.from(WHITELIST));
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
+});
