@@ -217,13 +217,16 @@ app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 /** ===================== Telegram Bot ===================== */
 const { bot } = require("./telegram/bot");
 
-bot.launch().then(() => {
-  console.log("🤖 Telegram bot started");
-});
+if (bot) {
+  bot.launch().then(() => {
+    console.log("🤖 Telegram bot started");
+  });
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
+  process.once("SIGINT", () => bot.stop("SIGINT"));
+  process.once("SIGTERM", () => bot.stop("SIGTERM"));
+} else {
+  console.log("⚠️ Telegram bot is disabled — no TELEGRAM_BOT_TOKEN");
+}
 
 /** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
