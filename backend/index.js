@@ -226,22 +226,32 @@ try {
 }
 
 if (bot) {
-  bot.launch().then(() => {
-    console.log("🤖 Telegram bot started");
-  });
+  bot
+    .launch()
+    .then(() => {
+      console.log("🤖 Telegram CLIENT-bot started (polling)");
+    })
+    .catch((err) => {
+      const code = err?.response?.error_code;
+      const desc = err?.response?.description;
+
+      if (code === 409) {
+        console.warn(
+          "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
+            "Этот экземпляр бота не будет получать обновления, но API продолжит работать."
+        );
+      } else {
+        console.error("[tg-bot] launch error:", code, desc || err);
+      }
+    });
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 } else {
-  console.log("⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN");
+  console.log(
+    "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
+  );
 }
-
-/** ===================== Start ===================== */
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log("[CORS] allowed:", Array.from(WHITELIST));
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-});
 
 /** ===================== EntryFees ===================== */
 // публичные
