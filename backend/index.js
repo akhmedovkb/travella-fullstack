@@ -211,6 +211,31 @@ app.post("/api/requests/purgeExpired", authenticateToken, async (_req, res) => {
 /** ===================== Health ===================== */
 app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 
+/** ===================== Health ===================== */
+app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
+
+/** ===================== Telegram Bot ===================== */
+let bot = null;
+try {
+  ({ bot } = require("./telegram/bot"));
+} catch (e) {
+  console.warn(
+    "[tg-bot] bot module not loaded:",
+    e && (e.code || e.message || e)
+  );
+}
+
+if (bot) {
+  bot.launch().then(() => {
+    console.log("🤖 Telegram bot started");
+  });
+
+  process.once("SIGINT", () => bot.stop("SIGINT"));
+  process.once("SIGTERM", () => bot.stop("SIGTERM"));
+} else {
+  console.log("⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN");
+}
+
 /** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
