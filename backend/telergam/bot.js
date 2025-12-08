@@ -1,4 +1,5 @@
 // backend/telegram/bot.js
+
 const { Telegraf, Markup, session } = require("telegraf");
 const dotenv = require("dotenv");
 const axios = require("axios");
@@ -309,3 +310,4 @@ if (bot) {
 module.exports = {
   bot,
 };
+
