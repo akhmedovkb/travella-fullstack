@@ -551,6 +551,7 @@
   },
 
   "moderation": {
+    "title": "Xizmatlar moderatsiyasi",
     "service_status": {
       "draft": "Qoralama",
       "pending": "Moderatsiyaga yuborildi",
@@ -594,6 +595,27 @@
   "name_placeholder": "Ismingiz",
 
   "nav": {
+    "ops": "Operatsionka",
+    "products": "Mahsulotlar",
+    "admin": "Admin",
+
+    "services_tab": "Xizmatlar",
+    "services_tourbuilder": "Tour Builder uchun xizmatlar",
+    "services_marketplace": "MARKETPLACE uchun xizmatlar",
+    "provider_calendar": "Kalendar",
+
+    "requests": "So'rovlar",
+    "favorites": "Sevimlilar",
+    "bookings": "Bronlar",
+    "profile": "Profil",
+
+    "tour_builder": "Tour Builder",
+    "hotels": "Mehmonxonalar",
+
+    "providers_admin": "Provayderlar",
+    "entry_fees_admin": "Entry fees",
+    "hotels_admin": "Mehmonxonalar (admin)",
+    "cms_pages": "Pastki qism"
     "bookings": "Bronlar",
     "dashboard": "Kabinet",
     "requests": "So‘rovlar",
