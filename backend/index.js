@@ -233,7 +233,7 @@ if (bot) {
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 } else {
-  console.log("⚠️ Telegram bot is disabled — no module or no TELEGRAM_BOT_TOKEN");
+  console.log("⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN");
 }
 
 /** ===================== Start ===================== */
