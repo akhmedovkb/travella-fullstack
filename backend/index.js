@@ -236,6 +236,7 @@ if (bot) {
   console.log("⚠️ Telegram bot is disabled — no module or no TELEGRAM_BOT_TOKEN");
 }
 
+
 /** ===================== Start ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
