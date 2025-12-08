@@ -229,19 +229,32 @@ if (bot) {
   bot
     .launch()
     .then(() => {
-      console.log("🤖 Telegram CLIENT-bot started (polling)");
+      console.log("🤖 Telegram bot started");
     })
-    .catch((err) => {
-      const code = err?.response?.error_code;
-      const desc = err?.response?.description;
+    .catch((e) => {
+      const desc =
+        (e && e.response && e.response.description) ||
+        e?.description ||
+        e?.message ||
+        String(e);
 
-      if (code === 409) {
+      if (
+        desc &&
+        desc.includes(
+          "Conflict: terminated by other getUpdates request"
+        )
+      ) {
         console.warn(
           "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
-            "Этот экземпляр бота не будет получать обновления, но API продолжит работать."
+            "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
+          desc
         );
+        // НИЧЕГО не кидаем дальше — просто не запускаем polling
       } else {
-        console.error("[tg-bot] launch error:", code, desc || err);
+        console.error(
+          "[tg-bot] launch error — бот будет отключён, но API продолжит работать:",
+          desc
+        );
       }
     });
 
@@ -252,6 +265,7 @@ if (bot) {
     "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
   );
 }
+
 
 /** ===================== EntryFees ===================== */
 // публичные
