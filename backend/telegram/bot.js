@@ -16,7 +16,9 @@ if (!BOT_TOKEN) {
 // Базовый URL бэкенда (используем для запросов позже)
 // Пример: https://travella-production.up.railway.app
 const API_BASE =
-  (process.env.API_BASE_URL || "").replace(/\/+$/, "") || "";
+  (process.env.API_BASE_URL ||
+    process.env.SITE_API_URL ||
+    "").replace(/\/+$/, "") || "";
 
 // Текст кнопок (оставляем RU — их легко поменять)
 const BTN_FIND_SERVICE = "🔍 Найти услугу";
@@ -158,26 +160,30 @@ if (bot) {
     await ctx.reply("Возвращаемся в главное меню:", mainKeyboard);
   });
 
-  /** ============================ Текстовые сообщения (меню) ============================ */
+  /** ============================ Текстовые сообщения (меню + шаги) ============================ */
   bot.on("text", async (ctx) => {
     const step = ctx.session?.step;
+    const text = (ctx.message.text || "").trim();
 
-    // Если ждём телефон в процессе регистрации
+    // 1) Если ждём телефон в процессе регистрации
     if (step === "reg_wait_phone") {
-      const phone = (ctx.message.text || "").trim();
-      if (!phone) {
+      if (!text) {
         await ctx.reply(
           "Пожалуйста, отправьте номер телефона или нажмите кнопку ниже."
         );
         return;
       }
-      await handlePhoneRegistration(ctx, phone);
+      await handlePhoneRegistration(ctx, text);
       return;
     }
 
-    // Иначе — обрабатываем как команду/меню
-    const text = (ctx.message.text || "").trim();
+    // 2) Если ждём текст поискового запроса
+    if (step === "search_wait_query") {
+      await handleSearchQuery(ctx, text);
+      return;
+    }
 
+    // 3) Обычное меню
     if (text === BTN_FIND_SERVICE) {
       await handleSearchStart(ctx);
     } else if (text === BTN_BOOKINGS) {
@@ -223,7 +229,12 @@ if (bot) {
 
     try {
       await ctx.answerCbQuery().catch(() => {});
-      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+      if (!API_BASE) {
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+        );
+        return;
+      }
 
       await axios.post(
         `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/confirm`
@@ -238,7 +249,10 @@ if (bot) {
 
       await ctx.reply(`Бронь #${bookingId} подтверждена ✅`);
     } catch (e) {
-      console.error("[tg-bot] supplier_confirm error:", e.response?.data || e.message || e);
+      console.error(
+        "[tg-bot] supplier_confirm error:",
+        e.response?.data || e.message || e
+      );
       await ctx.reply("Ошибка при подтверждении. Попробуйте позже.");
     }
   });
@@ -250,7 +264,12 @@ if (bot) {
 
     try {
       await ctx.answerCbQuery().catch(() => {});
-      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+      if (!API_BASE) {
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+        );
+        return;
+      }
 
       await axios.post(
         `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/reject`
@@ -264,7 +283,10 @@ if (bot) {
 
       await ctx.reply(`Бронь #${bookingId} отклонена ❌`);
     } catch (e) {
-      console.error("[tg-bot] supplier_reject error:", e.response?.data || e.message || e);
+      console.error(
+        "[tg-bot] supplier_reject error:",
+        e.response?.data || e.message || e
+      );
       await ctx.reply("Ошибка при отклонении. Попробуйте позже.");
     }
   });
@@ -282,7 +304,11 @@ if (bot) {
 
     try {
       if (!API_BASE) {
-        throw new Error("API_BASE_URL is not configured");
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+        );
+        resetSession(ctx);
+        return;
       }
 
       const resp = await axios.post(`${API_BASE}/api/telegram/link`, {
@@ -345,25 +371,27 @@ if (bot) {
         "Скоро здесь будет полноценный поиск по маркетплейсу Travella.",
       backKeyboard
     );
+  }
 
-    // Следующее текстовое сообщение пойдёт в этот обработчик:
-    bot.once("text", async (ctx2) => {
-      const q = (ctx2.message.text || "").trim();
-      if (q === BTN_BACK_MENU) {
-        resetSession(ctx2);
-        await ctx2.reply("Главное меню:", mainKeyboard);
-        return;
-      }
+  async function handleSearchQuery(ctx, q) {
+    // если пользователь передумал и нажал назад
+    if (q === BTN_BACK_MENU) {
+      resetSession(ctx);
+      await ctx.reply("Главное меню:", mainKeyboard);
+      return;
+    }
 
-      // TODO: здесь будет реальный вызов API поиска, например:
-      // const res = await axios.post(`${API_BASE}/api/marketplace/search`, { query: q });
+    // TODO: здесь будет реальный вызов API поиска, например:
+    // if (API_BASE) {
+    //   const res = await axios.post(`${API_BASE}/api/marketplace/search`, { query: q, source: "telegram" });
+    //   ...
+    // }
 
-      await ctx2.reply(
-        `Вы ищете: “${q}”.\n\nПолноценный поиск по маркетплейсу будет подключён позже.\nПока воспользуйтесь сайтом: https://travella.uz`,
-        mainKeyboard
-      );
-      resetSession(ctx2);
-    });
+    await ctx.reply(
+      `Вы ищете: “${q}”.\n\nПолноценный поиск по маркетплейсу будет подключён позже.\nПока воспользуйтесь сайтом: https://travella.uz`,
+      mainKeyboard
+    );
+    resetSession(ctx);
   }
 
   async function handleMyBookings(ctx) {
@@ -399,18 +427,24 @@ if (bot) {
     const chatId = ctx.from.id;
 
     try {
-      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+      if (!API_BASE) {
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+        );
+        return;
+      }
 
       const resp = await axios.get(
         `${API_BASE}/api/telegram/profile/provider/${chatId}`
       );
 
       if (!resp.data?.success) {
-        return ctx.reply(
+        await ctx.reply(
           "Вы ещё не привязали Telegram к аккаунту поставщика.\n" +
             "Сначала привяжите номер телефона через /start → «Я поставщик».",
           mainKeyboard
         );
+        return;
       }
 
       await ctx.reply(
@@ -420,7 +454,10 @@ if (bot) {
         ])
       );
     } catch (e) {
-      console.error("[tg-bot] showProviderPanel error:", e.response?.data || e.message || e);
+      console.error(
+        "[tg-bot] showProviderPanel error:",
+        e.response?.data || e.message || e
+      );
       await ctx.reply("Ошибка, попробуйте позже.");
     }
   }
@@ -430,7 +467,12 @@ if (bot) {
     const chatId = ctx.from.id;
 
     try {
-      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+      if (!API_BASE) {
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+        );
+        return;
+      }
 
       const resp = await axios.get(
         `${API_BASE}/api/telegram/provider/${chatId}/bookings`,
@@ -446,11 +488,6 @@ if (bot) {
       for (const b of list) {
         const start = b.start_date || b.date || "";
         const end = b.end_date || "";
-        const guests =
-          (b.persons_adults || 0) +
-          (b.persons_children || 0) +
-          (b.persons_infants || 0);
-
         const text =
           `🆕 <b>Заявка #${b.id}</b>\n` +
           `Тур: <b>${b.service_title}</b>\n` +
@@ -480,7 +517,10 @@ if (bot) {
         });
       }
     } catch (e) {
-      console.error("[tg-bot] handleProviderBookings error:", e.response?.data || e.message || e);
+      console.error(
+        "[tg-bot] handleProviderBookings error:",
+        e.response?.data || e.message || e
+      );
       await ctx.reply("Ошибка при загрузке заявок. Попробуйте позже.");
     }
   }
@@ -488,7 +528,6 @@ if (bot) {
 
 /**
  * Экспортируем бота для index.js
- * (index.js будет вызывать bot.launch() если нужно)
  */
 module.exports = {
   bot,
