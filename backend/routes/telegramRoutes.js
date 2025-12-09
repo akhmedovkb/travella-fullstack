@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
+const telegramProviderController = require("../controllers/telegramProviderController");
 
 const {
   tgSend,
@@ -271,5 +272,22 @@ router.get("/setWebhook", async (req, res) => {
     res.status(500).json({ ok: false, error: "set_webhook_failed" });
   }
 });
+
+// ПАНЕЛЬ ПОСТАВЩИКА
+router.get(
+  "/provider/:chatId/bookings",
+  telegramProviderController.getProviderBookings
+);
+
+router.post(
+  "/provider/:chatId/bookings/:bookingId/confirm",
+  telegramProviderController.confirmBooking
+);
+
+router.post(
+  "/provider/:chatId/bookings/:bookingId/reject",
+  telegramProviderController.rejectBooking
+);
+
 
 module.exports = router;
