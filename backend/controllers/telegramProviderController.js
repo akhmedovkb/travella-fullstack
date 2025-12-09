@@ -1,7 +1,6 @@
 // backend/controllers/telegramProviderController.js
 const pool = require("../db");
-const { sendMessage } = require("../utils/telegram");
-const format = require("pg-format");
+const { tgSend } = require("../utils/telegram");
 
 /**
  * Получить заявки поставщика по его Telegram chatId
@@ -112,7 +111,7 @@ async function confirmBooking(req, res) {
         `Тур: <b>${row.service_title}</b>\n` +
         `Дата: ${row.date}\n`;
 
-      sendMessage(row.client_chat_id, text);
+      tgSend(row.client_chat_id, text);
     }
 
     res.json({ success: true });
@@ -168,7 +167,7 @@ async function rejectBooking(req, res) {
         `❌ <b>Ваша бронь отклонена.</b>\n\n` +
         `Тур: <b>${row.service_title}</b>\n`;
 
-      sendMessage(row.client_chat_id, text);
+      tgSend(row.client_chat_id, text);
     }
 
     res.json({ success: true });
