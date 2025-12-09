@@ -27,11 +27,13 @@ const BTN_PROFILE = "👤 Профиль";
 const BTN_BECOME_PROVIDER = "🏢 Стать поставщиком";
 const BTN_BACK_MENU = "⬅️ В главное меню";
 const BTN_REGISTER = "📝 Регистрация";
+const BTN_SUPPLIER_PANEL = "🏢 Панель поставщика";
 
 // Главное меню (reply-keyboard)
 const mainKeyboard = Markup.keyboard([
   [BTN_FIND_SERVICE],
   [BTN_BOOKINGS, BTN_FAVORITES],
+  [BTN_SUPPLIER_PANEL],
   [BTN_REQUESTS],
   [BTN_PROFILE, BTN_BECOME_PROVIDER],
 ]).resize();
@@ -46,7 +48,7 @@ function resetSession(ctx) {
   ctx.session = { step: null, data: {} };
 }
 
-/** ============================ Мидлвары ============================ */
+/** ============================ Мидлвары и обработчики ============================ */
 if (bot) {
   bot.use(session());
 
@@ -115,7 +117,8 @@ if (bot) {
       // ignore
     }
 
-    const role = ctx.callbackQuery.data === "reg_role_client" ? "client" : "provider";
+    const role =
+      ctx.callbackQuery.data === "reg_role_client" ? "client" : "provider";
     ctx.session.step = "reg_wait_phone";
     ctx.session.data = { role };
 
@@ -141,18 +144,21 @@ if (bot) {
 
     const phone = ctx.message.contact?.phone_number;
     if (!phone) {
-      await ctx.reply("Не удалось прочитать номер телефона. Попробуйте отправить его текстом.");
+      await ctx.reply(
+        "Не удалось прочитать номер телефона. Попробуйте отправить его текстом."
+      );
       return;
     }
     await handlePhoneRegistration(ctx, phone);
   });
 
-  // Обработка текста, если мы ждём телефон
+  // Кнопка "Назад в меню"
   bot.hears(BTN_BACK_MENU, async (ctx) => {
     resetSession(ctx);
     await ctx.reply("Возвращаемся в главное меню:", mainKeyboard);
   });
 
+  /** ============================ Текстовые сообщения (меню) ============================ */
   bot.on("text", async (ctx) => {
     const step = ctx.session?.step;
 
@@ -160,7 +166,9 @@ if (bot) {
     if (step === "reg_wait_phone") {
       const phone = (ctx.message.text || "").trim();
       if (!phone) {
-        await ctx.reply("Пожалуйста, отправьте номер телефона или нажмите кнопку ниже.");
+        await ctx.reply(
+          "Пожалуйста, отправьте номер телефона или нажмите кнопку ниже."
+        );
         return;
       }
       await handlePhoneRegistration(ctx, phone);
@@ -178,6 +186,8 @@ if (bot) {
       await handleMyFavorites(ctx);
     } else if (text === BTN_REQUESTS) {
       await handleMyRequests(ctx);
+    } else if (text === BTN_SUPPLIER_PANEL) {
+      await showProviderPanel(ctx);
     } else if (text === BTN_PROFILE) {
       // если пользователь нажал "Профиль" после регистрации — просто подсказка
       await ctx.reply(
@@ -194,65 +204,132 @@ if (bot) {
     }
   });
 
+  /** ============================ Callback-кнопки панели поставщика ============================ */
+
+  // Открыть список заявок поставщика
+  bot.action("supplier_bookings", async (ctx) => {
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      await handleProviderBookings(ctx);
+    } catch (e) {
+      console.error("[tg-bot] supplier_bookings error:", e);
+    }
+  });
+
+  // Подтверждение брони
+  bot.action(/supplier_confirm_(\d+)/, async (ctx) => {
+    const bookingId = ctx.match[1];
+    const chatId = ctx.from.id;
+
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+
+      await axios.post(
+        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/confirm`
+      );
+
+      // Удаляем кнопки под этим сообщением
+      try {
+        await ctx.editMessageReplyMarkup();
+      } catch {
+        // ignore
+      }
+
+      await ctx.reply(`Бронь #${bookingId} подтверждена ✅`);
+    } catch (e) {
+      console.error("[tg-bot] supplier_confirm error:", e.response?.data || e.message || e);
+      await ctx.reply("Ошибка при подтверждении. Попробуйте позже.");
+    }
+  });
+
+  // Отклонение брони
+  bot.action(/supplier_reject_(\d+)/, async (ctx) => {
+    const bookingId = ctx.match[1];
+    const chatId = ctx.from.id;
+
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+
+      await axios.post(
+        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/reject`
+      );
+
+      try {
+        await ctx.editMessageReplyMarkup();
+      } catch {
+        // ignore
+      }
+
+      await ctx.reply(`Бронь #${bookingId} отклонена ❌`);
+    } catch (e) {
+      console.error("[tg-bot] supplier_reject error:", e.response?.data || e.message || e);
+      await ctx.reply("Ошибка при отклонении. Попробуйте позже.");
+    }
+  });
+
   /** ============================ Обработчики (регистрация) ============================ */
 
-async function handlePhoneRegistration(ctx, rawPhone) {
-  const role = ctx.session?.data?.role || "client"; // "client" | "provider"
-  const chatId = ctx.from?.id;
-  const username = ctx.from?.username || "";
-  const firstName = ctx.from?.first_name || "";
-  const phone = String(rawPhone || "").trim();
+  async function handlePhoneRegistration(ctx, rawPhone) {
+    const role = ctx.session?.data?.role || "client"; // "client" | "provider"
+    const chatId = ctx.from?.id;
+    const username = ctx.from?.username || "";
+    const firstName = ctx.from?.first_name || "";
+    const phone = String(rawPhone || "").trim();
 
-  const cleanPhone = phone.replace(/\s+/g, "");
+    const cleanPhone = phone.replace(/\s+/g, "");
 
-  try {
-    if (!API_BASE) {
-      throw new Error("API_BASE_URL is not configured");
-    }
+    try {
+      if (!API_BASE) {
+        throw new Error("API_BASE_URL is not configured");
+      }
 
-    const resp = await axios.post(`${API_BASE}/api/telegram/link`, {
-      role,
-      phone: cleanPhone,
-      chatId,
-      username,
-      firstName,
-    });
+      const resp = await axios.post(`${API_BASE}/api/telegram/link`, {
+        role,
+        phone: cleanPhone,
+        chatId,
+        username,
+        firstName,
+      });
 
-    if (resp.data?.notFound) {
+      if (resp.data?.notFound) {
+        await ctx.reply(
+          "Мы не нашли аккаунт Travella с таким номером телефона.\n" +
+            "Сначала зарегистрируйтесь на сайте travella.uz, а затем повторите привязку.",
+          mainKeyboard
+        );
+        resetSession(ctx);
+        return;
+      }
+
+      if (!resp.data?.success) {
+        throw new Error("Unexpected response from /api/telegram/link");
+      }
+
+      const name = resp.data.name || firstName || "";
+
       await ctx.reply(
-        "Мы не нашли аккаунт Travella с таким номером телефона.\n" +
-          "Сначала зарегистрируйтесь на сайте travella.uz, а затем повторите привязку.",
+        `Спасибо, ${name || "друг"}! 🙌\n\n` +
+          "Мы привязали ваш Telegram к аккаунту Travella.\n" +
+          "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления.\n\n" +
+          "В любой момент можете открыть главное меню и выбрать нужный раздел.",
         mainKeyboard
       );
       resetSession(ctx);
-      return;
+    } catch (e) {
+      console.error(
+        "[tg-bot] handlePhoneRegistration error:",
+        e.response?.data || e.message || e
+      );
+      await ctx.reply(
+        "Произошла ошибка при привязке телефона.\n" +
+          "Попробуйте позже или выполните привязку через сайт travella.uz.",
+        mainKeyboard
+      );
+      resetSession(ctx);
     }
-
-    if (!resp.data?.success) {
-      throw new Error("Unexpected response from /api/telegram/link");
-    }
-
-    const name = resp.data.name || firstName || "";
-
-    await ctx.reply(
-      `Спасибо, ${name || "друг"}! 🙌\n\n` +
-        "Мы привязали ваш Telegram к аккаунту Travella.\n" +
-        "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления.\n\n" +
-        "В любой момент можете открыть главное меню и выбрать нужный раздел.",
-      mainKeyboard
-    );
-    resetSession(ctx);
-  } catch (e) {
-    console.error("[tg-bot] handlePhoneRegistration error:", e.response?.data || e.message || e);
-    await ctx.reply(
-      "Произошла ошибка при привязке телефона.\n" +
-        "Попробуйте позже или выполните привязку через сайт travella.uz.",
-      mainKeyboard
-    );
-    resetSession(ctx);
   }
-}
-
 
   /** ============================ Обработчики (поиск / маркетплейс) ============================ */
 
@@ -314,11 +391,104 @@ async function handlePhoneRegistration(ctx, rawPhone) {
       mainKeyboard
     );
   }
+
+  /** ============================ Панель поставщика ============================ */
+
+  // Проверяем, что текущий chatId привязан к поставщику
+  async function showProviderPanel(ctx) {
+    const chatId = ctx.from.id;
+
+    try {
+      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+
+      const resp = await axios.get(
+        `${API_BASE}/api/telegram/profile/provider/${chatId}`
+      );
+
+      if (!resp.data?.success) {
+        return ctx.reply(
+          "Вы ещё не привязали Telegram к аккаунту поставщика.\n" +
+            "Сначала привяжите номер телефона через /start → «Я поставщик».",
+          mainKeyboard
+        );
+      }
+
+      await ctx.reply(
+        "Панель поставщика:",
+        Markup.inlineKeyboard([
+          [Markup.button.callback("📅 Мои заявки", "supplier_bookings")],
+        ])
+      );
+    } catch (e) {
+      console.error("[tg-bot] showProviderPanel error:", e.response?.data || e.message || e);
+      await ctx.reply("Ошибка, попробуйте позже.");
+    }
+  }
+
+  // Получить и вывести pending-заявки поставщика
+  async function handleProviderBookings(ctx) {
+    const chatId = ctx.from.id;
+
+    try {
+      if (!API_BASE) throw new Error("API_BASE_URL is not configured");
+
+      const resp = await axios.get(
+        `${API_BASE}/api/telegram/provider/${chatId}/bookings`,
+        { params: { status: "pending" } }
+      );
+
+      const list = resp.data?.bookings || [];
+      if (!list.length) {
+        await ctx.reply("Новых заявок на бронирование нет 👍");
+        return;
+      }
+
+      for (const b of list) {
+        const start = b.start_date || b.date || "";
+        const end = b.end_date || "";
+        const guests =
+          (b.persons_adults || 0) +
+          (b.persons_children || 0) +
+          (b.persons_infants || 0);
+
+        const text =
+          `🆕 <b>Заявка #${b.id}</b>\n` +
+          `Тур: <b>${b.service_title}</b>\n` +
+          `Клиент: ${b.client_name}\n` +
+          (start
+            ? `Даты: ${start}${end ? " — " + end : ""}\n`
+            : "") +
+          `Гости: ${b.persons_adults || 0} взр / ${
+            b.persons_children || 0
+          } дет / ${b.persons_infants || 0} инф\n` +
+          (b.client_message ? `Комментарий: ${b.client_message}` : "");
+
+        await ctx.reply(text, {
+          parse_mode: "HTML",
+          reply_markup: Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                "✅ Подтвердить",
+                `supplier_confirm_${b.id}`
+              ),
+              Markup.button.callback(
+                "❌ Отклонить",
+                `supplier_reject_${b.id}`
+              ),
+            ],
+          ]),
+        });
+      }
+    } catch (e) {
+      console.error("[tg-bot] handleProviderBookings error:", e.response?.data || e.message || e);
+      await ctx.reply("Ошибка при загрузке заявок. Попробуйте позже.");
+    }
+  }
 }
 
 /**
- * Экспортируем бота для telegramRoutes.js
- * (router будет вызывать bot.handleUpdate(update))
+ * Экспортируем бота для index.js
+ * (index.js будет вызывать bot.launch() если нужно)
  */
 module.exports = {
   bot,
