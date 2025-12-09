@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
+const telegramClientController = require("../controllers/telegramClientController");
 
 const {
   tgSend,
@@ -27,7 +28,7 @@ const WELCOME_TEXT =
 
 // ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
-  // 1) header token (если задавали secret_token при setWebhook)
+  // 1) header token (если задавали secret_token при )
   const hdr =
     req.get("X-Telegram-Bot-Api-Secret-Token") ||
     req.get("x-telegram-bot-api-secret-token") ||
@@ -227,9 +228,21 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
+// ----- JSON API для НОВОГО клиентского бота (TELEGRAM_CLIENT_BOT_TOKEN) -----
+
+// привязка аккаунта по телефону
+router.post("/link", telegramClientController.linkAccount);
+
+// быстрый профиль по chatId
+router.get(
+  "/profile/:role/:chatId",
+  telegramClientController.getProfileByChat
+);
+
+
 /**
  * Утилита для установки webhook через браузер:
- * GET /api/telegram/setWebhook?secret=<same_as_ENV>&useHeader=1
+ * GET /api/telegram/?secret=<same_as_ENV>&useHeader=1
  * - если useHeader=1 — добавит secret_token (HEADER_TOKEN) в Webhook (Bot API будет класть его в заголовок)
  * - URL берётся из API_BASE_URL или SITE_API_URL
  */
