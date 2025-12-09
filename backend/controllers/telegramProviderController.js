@@ -11,6 +11,11 @@ async function getProviderBookings(req, res) {
     const { chatId } = req.params;
     const status = req.query.status || "pending";
 
+    if (!chatId) {
+      return res.status(400).json({ error: "chatId is required" });
+    }
+
+    // Находим поставщика по telegram_chat_id
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
@@ -25,8 +30,10 @@ async function getProviderBookings(req, res) {
 
     const providerId = providerRes.rows[0].id;
 
+    // Берём брони этого поставщика
     const bookingsRes = await pool.query(
-      `SELECT
+      `
+      SELECT
          b.id,
          b.status,
          b.date,
@@ -34,21 +41,21 @@ async function getProviderBookings(req, res) {
          b.created_at,
          b.currency,
          b.tb_meta,
-         s.title        AS service_title,
-         c.full_name    AS client_name,
-         c.telegram_chat_id AS client_chat_id,
+         s.title              AS service_title,
+         b.requester_name     AS client_name,
+         b.requester_telegram AS client_chat_id,
          COALESCE(b.tb_meta->>'startDate', b.date::text) AS start_date,
          (b.tb_meta->>'endDate') AS end_date,
-         (b.tb_meta->>'adults')::int    AS persons_adults,
-         (b.tb_meta->>'children')::int  AS persons_children,
-         (b.tb_meta->>'infants')::int   AS persons_infants
+         COALESCE((b.tb_meta->>'adults')::int,   0) AS persons_adults,
+         COALESCE((b.tb_meta->>'children')::int, 0) AS persons_children,
+         COALESCE((b.tb_meta->>'infants')::int,  0) AS persons_infants
        FROM bookings b
        JOIN services s ON s.id = b.service_id
-       JOIN clients  c ON c.id = b.client_id
       WHERE b.provider_id = $1
         AND b.status = $2
       ORDER BY b.created_at DESC
-      LIMIT 20`,
+      LIMIT 20
+      `,
       [providerId, status]
     );
 
@@ -69,26 +76,34 @@ async function confirmBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
 
+    if (!chatId || !bookingId) {
+      return res.status(400).json({ error: "chatId and bookingId are required" });
+    }
+
+    // Проверяем, что бронь принадлежит этому провайдеру
     const bookingRes = await pool.query(
-      `SELECT
+      `
+      SELECT
          b.id,
          b.status,
          b.date,
          b.tb_meta,
-         s.title AS service_title,
-         c.telegram_chat_id AS client_chat_id
+         s.title              AS service_title,
+         b.requester_telegram AS client_chat_id
        FROM bookings b
-       JOIN services s ON s.id = b.service_id
+       JOIN services  s ON s.id = b.service_id
        JOIN providers p ON p.id = b.provider_id
-       JOIN clients  c ON c.id = b.client_id
       WHERE b.id = $1
         AND p.telegram_chat_id = $2
-      LIMIT 1`,
+      LIMIT 1
+      `,
       [bookingId, chatId]
     );
 
     if (bookingRes.rowCount === 0) {
-      return res.status(404).json({ error: "Booking not found for this provider" });
+      return res
+        .status(404)
+        .json({ error: "Booking not found for this provider" });
     }
 
     const row = bookingRes.rows[0];
@@ -99,17 +114,23 @@ async function confirmBooking(req, res) {
 
     await pool.query(
       `UPDATE bookings
-          SET status = 'confirmed', updated_at = NOW()
+          SET status = 'confirmed',
+              updated_at = NOW()
         WHERE id = $1`,
       [bookingId]
     );
 
-    // уведомляем клиента
+    // Уведомляем клиента в Telegram, если есть requester_telegram
     if (row.client_chat_id) {
+      const dateText =
+        row.tb_meta?.startDate || row.date
+          ? `Дата: ${row.tb_meta?.startDate || row.date}\n`
+          : "";
+
       const text =
         `✅ <b>Ваша бронь подтверждена!</b>\n\n` +
         `Тур: <b>${row.service_title}</b>\n` +
-        `Дата: ${row.date}\n`;
+        dateText;
 
       tgSend(row.client_chat_id, text);
     }
@@ -128,24 +149,31 @@ async function rejectBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
 
+    if (!chatId || !bookingId) {
+      return res.status(400).json({ error: "chatId and bookingId are required" });
+    }
+
     const bookingRes = await pool.query(
-      `SELECT
+      `
+      SELECT
          b.id,
          b.status,
-         s.title AS service_title,
-         c.telegram_chat_id AS client_chat_id
+         s.title              AS service_title,
+         b.requester_telegram AS client_chat_id
        FROM bookings b
-       JOIN services s ON s.id = b.service_id
+       JOIN services  s ON s.id = b.service_id
        JOIN providers p ON p.id = b.provider_id
-       JOIN clients  c ON c.id = b.client_id
       WHERE b.id = $1
         AND p.telegram_chat_id = $2
-      LIMIT 1`,
+      LIMIT 1
+      `,
       [bookingId, chatId]
     );
 
     if (bookingRes.rowCount === 0) {
-      return res.status(404).json({ error: "Booking not found for this provider" });
+      return res
+        .status(404)
+        .json({ error: "Booking not found for this provider" });
     }
 
     const row = bookingRes.rows[0];
@@ -156,7 +184,8 @@ async function rejectBooking(req, res) {
 
     await pool.query(
       `UPDATE bookings
-          SET status = 'rejected', updated_at = NOW()
+          SET status = 'rejected',
+              updated_at = NOW()
         WHERE id = $1`,
       [bookingId]
     );
