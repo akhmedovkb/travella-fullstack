@@ -19,7 +19,7 @@ const API_BASE =
     process.env.SITE_API_URL ||
     "").replace(/\/+$/, "") || "";
 
-// Текст кнопок (оставляем RU — их легко поменять)
+// Текст кнопок
 const BTN_FIND_SERVICE = "🔍 Найти услугу";
 const BTN_BOOKINGS = "📅 Мои брони";
 const BTN_FAVORITES = "❤️ Избранное";
@@ -30,8 +30,9 @@ const BTN_BACK_MENU = "⬅️ В главное меню";
 const BTN_REGISTER = "📝 Регистрация";
 const BTN_SUPPLIER_PANEL = "🏢 Панель поставщика";
 
-// Главное меню (reply-keyboard)
-const mainKeyboard = Markup.keyboard([
+// ======= Базовые клавиатуры (fallback) =======
+
+const defaultMainKeyboard = Markup.keyboard([
   [BTN_FIND_SERVICE],
   [BTN_BOOKINGS, BTN_FAVORITES],
   [BTN_SUPPLIER_PANEL],
@@ -39,7 +40,6 @@ const mainKeyboard = Markup.keyboard([
   [BTN_PROFILE, BTN_BECOME_PROVIDER],
 ]).resize();
 
-// Клавиатура “назад в меню”
 const backKeyboard = Markup.keyboard([[BTN_BACK_MENU]]).resize();
 
 // Создаём бота только если есть токен
@@ -64,9 +64,98 @@ function resetSession(ctx) {
   sessions.set(chatId, { step: null, data: {} });
 }
 
+/* ====================== Определение роли и динамическое меню ====================== */
+
+/**
+ * Вызывает API:
+ *  - /api/telegram/profile/provider/:chatId
+ *  - /api/telegram/profile/client/:chatId
+ * Возвращает { role: "provider" | "client" | "none", id?, name?, raw? }
+ */
+async function getUserRoleByChat(chatId) {
+  if (!API_BASE || !chatId) return { role: "none" };
+
+  // 1. Проверяем поставщика
+  try {
+    const prov = await axios.get(
+      `${API_BASE}/api/telegram/profile/provider/${chatId}`
+    );
+    if (prov.data?.success && prov.data.user) {
+      return {
+        role: "provider",
+        id: prov.data.user.id,
+        name: prov.data.user.name,
+        raw: prov.data.user,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Проверяем клиента
+  try {
+    const cli = await axios.get(
+      `${API_BASE}/api/telegram/profile/client/${chatId}`
+    );
+    if (cli.data?.success && cli.data.user) {
+      return {
+        role: "client",
+        id: cli.data.user.id,
+        name: cli.data.user.name,
+        raw: cli.data.user,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return { role: "none" };
+}
+
+/**
+ * Собрать клавиатуру для роли
+ */
+function buildMainKeyboardForRole(role) {
+  if (role === "provider") {
+    // Меню поставщика
+    return Markup.keyboard([
+      [BTN_FIND_SERVICE],
+      [BTN_SUPPLIER_PANEL],
+      [BTN_BOOKINGS, BTN_REQUESTS],
+      [BTN_FAVORITES],
+      [BTN_PROFILE],
+    ]).resize();
+  }
+
+  if (role === "client") {
+    // Меню клиента
+    return Markup.keyboard([
+      [BTN_FIND_SERVICE],
+      [BTN_BOOKINGS, BTN_FAVORITES],
+      [BTN_REQUESTS],
+      [BTN_PROFILE, BTN_BECOME_PROVIDER],
+    ]).resize();
+  }
+
+  // Не привязан — дефолтное меню
+  return defaultMainKeyboard;
+}
+
+/**
+ * Получить { role, kb } для текущего ctx
+ */
+async function getRoleAndKeyboard(ctx) {
+  const chatId = ctx.from?.id || ctx.chat?.id;
+  if (!API_BASE || !chatId) {
+    return { role: "none", kb: defaultMainKeyboard };
+  }
+  const info = await getUserRoleByChat(chatId);
+  return { role: info.role, kb: buildMainKeyboardForRole(info.role) };
+}
+
 /** ============================ Мидлвары и обработчики ============================ */
 if (bot) {
-  // Логирование простое (можно выключить, если мешает)
+  // Логирование
   bot.use(async (ctx, next) => {
     try {
       const from = ctx.from
@@ -83,6 +172,8 @@ if (bot) {
   bot.start(async (ctx) => {
     resetSession(ctx);
     const name = ctx.from?.first_name || ctx.from?.username || "";
+    const { kb } = await getRoleAndKeyboard(ctx);
+
     let text = "Добро пожаловать в Travella!";
 
     if (name) {
@@ -92,27 +183,59 @@ if (bot) {
     }
 
     text +=
-      "\n\nЗдесь скоро можно будет:\n" +
+      "\n\nЗдесь можно будет:\n" +
       "• искать услуги маркетплейса,\n" +
       "• смотреть свои брони и заявки,\n" +
       "• привязать аккаунт клиента или поставщика.\n\n" +
       "Выберите действие из меню ниже.";
 
-    await ctx.reply(text, mainKeyboard);
+    await ctx.reply(text, kb);
   });
 
-  // Команда /menu — просто показать клавиатуру
+  // /menu — показать актуальное меню для роли
   bot.command("menu", async (ctx) => {
     resetSession(ctx);
-    await ctx.reply("Главное меню:", mainKeyboard);
+    const { kb } = await getRoleAndKeyboard(ctx);
+    await ctx.reply("Главное меню:", kb);
+  });
+
+  // /whoami — показать роль
+  bot.command("whoami", async (ctx) => {
+    const chatId = ctx.from.id;
+    const info = await getUserRoleByChat(chatId);
+
+    if (info.role === "provider") {
+      await ctx.reply(
+        `Вы авторизованы как <b>ПОСТАВЩИК</b> 🏢\n\n` +
+          `ID: <code>${info.id}</code>\n` +
+          `Имя: ${info.name}`,
+        { parse_mode: "HTML" }
+      );
+      return;
+    }
+
+    if (info.role === "client") {
+      await ctx.reply(
+        `Вы авторизованы как <b>КЛИЕНТ</b> 🙋‍♂️\n\n` +
+          `ID: <code>${info.id}</code>\n` +
+          `Имя: ${info.name || "—"}`,
+        { parse_mode: "HTML" }
+      );
+      return;
+    }
+
+    const { kb } = await getRoleAndKeyboard(ctx);
+    await ctx.reply(
+      `Ваш Telegram пока не привязан к аккаунту Travella.\n\n` +
+        `Нажмите «👤 Профиль» → выберите роль и привяжите номер.`,
+      kb
+    );
   });
 
   /** ============================ Регистрация / профиль ============================ */
-  // Кнопка "Профиль" или "Регистрация" → выбор роли
+  // "Профиль" / "Регистрация" / "Стать поставщиком" → выбор роли
   bot.hears([BTN_PROFILE, BTN_REGISTER, BTN_BECOME_PROVIDER], async (ctx) => {
     resetSession(ctx);
-    const s = getSession(ctx);
-    s.step = "reg_choose_role";
     await ctx.reply(
       "Кем вы пользуетесь Travella?",
       Markup.inlineKeyboard([
@@ -173,7 +296,8 @@ if (bot) {
   // Кнопка "Назад в меню"
   bot.hears(BTN_BACK_MENU, async (ctx) => {
     resetSession(ctx);
-    await ctx.reply("Возвращаемся в главное меню:", mainKeyboard);
+    const { kb } = await getRoleAndKeyboard(ctx);
+    await ctx.reply("Возвращаемся в главное меню:", kb);
   });
 
   /** ============================ Текстовые сообщения (меню + шаги) ============================ */
@@ -210,19 +334,30 @@ if (bot) {
     } else if (text === BTN_REQUESTS) {
       await handleMyRequests(ctx);
     } else if (text === BTN_SUPPLIER_PANEL) {
+      // перед панелью — проверяем, что он реально поставщик
+      const info = await getUserRoleByChat(ctx.from.id);
+      if (info.role !== "provider") {
+        const { kb } = await getRoleAndKeyboard(ctx);
+        await ctx.reply(
+          "Ваш Telegram не привязан к аккаунту поставщика.\n" +
+            "Нажмите «👤 Профиль» и выберите «Я поставщик», чтобы привязать номер.",
+          kb
+        );
+        return;
+      }
       await showProviderPanel(ctx);
     } else if (text === BTN_PROFILE) {
-      // если пользователь нажал "Профиль" после регистрации — просто подсказка
+      const { kb } = await getRoleAndKeyboard(ctx);
       await ctx.reply(
         "Пока здесь только привязка по телефону.\n" +
           "Скоро здесь появится просмотр вашего профиля Travella.",
-        mainKeyboard
+        kb
       );
     } else {
-      // дефолт
+      const { kb } = await getRoleAndKeyboard(ctx);
       await ctx.reply(
         "Я пока не понимаю это сообщение.\nВыберите действие из меню ниже:",
-        mainKeyboard
+        kb
       );
     }
   });
@@ -318,13 +453,14 @@ if (bot) {
     const username = ctx.from?.username || "";
     const firstName = ctx.from?.first_name || "";
     const phone = String(rawPhone || "").trim();
-
     const cleanPhone = phone.replace(/\s+/g, "");
 
     try {
       if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
         await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
         );
         resetSession(ctx);
         return;
@@ -338,11 +474,13 @@ if (bot) {
         firstName,
       });
 
+      const { kb } = await getRoleAndKeyboard(ctx);
+
       if (resp.data?.notFound) {
         await ctx.reply(
           "Мы не нашли аккаунт Travella с таким номером телефона.\n" +
             "Сначала зарегистрируйтесь на сайте travella.uz, а затем повторите привязку.",
-          mainKeyboard
+          kb
         );
         resetSession(ctx);
         return;
@@ -359,7 +497,7 @@ if (bot) {
           "Мы привязали ваш Telegram к аккаунту Travella.\n" +
           "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления.\n\n" +
           "В любой момент можете открыть главное меню и выбрать нужный раздел.",
-        mainKeyboard
+        kb
       );
       resetSession(ctx);
     } catch (e) {
@@ -367,10 +505,11 @@ if (bot) {
         "[tg-bot] handlePhoneRegistration error:",
         e.response?.data || e.message || e
       );
+      const { kb } = await getRoleAndKeyboard(ctx);
       await ctx.reply(
         "Произошла ошибка при привязке телефона.\n" +
           "Попробуйте позже или выполните привязку через сайт travella.uz.",
-        mainKeyboard
+        kb
       );
       resetSession(ctx);
     }
@@ -394,59 +533,63 @@ if (bot) {
   }
 
   async function handleSearchQuery(ctx, q) {
-    const s = getSession(ctx);
-
     // если пользователь передумал и нажал назад
     if (q === BTN_BACK_MENU) {
       resetSession(ctx);
-      await ctx.reply("Главное меню:", mainKeyboard);
+      const { kb } = await getRoleAndKeyboard(ctx);
+      await ctx.reply("Главное меню:", kb);
       return;
     }
+
+    const { kb } = await getRoleAndKeyboard(ctx);
 
     // TODO: здесь будет реальный вызов API поиска
     await ctx.reply(
       `Вы ищете: “${q}”.\n\nПолноценный поиск по маркетплейсу будет подключён позже.\nПока воспользуйтесь сайтом: https://travella.uz`,
-      mainKeyboard
+      kb
     );
     resetSession(ctx);
   }
 
   async function handleMyBookings(ctx) {
-    // TODO: позже подтянем реальные брони по chat_id/телефону
+    const { kb } = await getRoleAndKeyboard(ctx);
     await ctx.reply(
       "Просмотр бронирований из бота пока в разработке.\n" +
         "Ваши брони можно посмотреть на сайте в разделе «Брони»:\n" +
         "https://travella.uz",
-      mainKeyboard
+      kb
     );
   }
 
   async function handleMyFavorites(ctx) {
+    const { kb } = await getRoleAndKeyboard(ctx);
     await ctx.reply(
       "Избранное в боте пока не подключено.\n" +
         "На сайте travella.uz вы можете добавлять услуги в избранное и управлять ими.",
-      mainKeyboard
+      kb
     );
   }
 
   async function handleMyRequests(ctx) {
+    const { kb } = await getRoleAndKeyboard(ctx);
     await ctx.reply(
       "Список заявок из бота пока в разработке.\n" +
         "На сайте вы можете посмотреть раздел «Запросы».",
-      mainKeyboard
+      kb
     );
   }
 
   /** ============================ Панель поставщика ============================ */
 
-  // Проверяем, что текущий chatId привязан к поставщику
   async function showProviderPanel(ctx) {
     const chatId = ctx.from.id;
 
     try {
       if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
         await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
         );
         return;
       }
@@ -456,10 +599,11 @@ if (bot) {
       );
 
       if (!resp.data?.success) {
+        const { kb } = await getRoleAndKeyboard(ctx);
         await ctx.reply(
-          "Вы ещё не привязали Telegram к аккаунту поставщика.\n" +
-            "Сначала привяжите номер телефона через /start → «Я поставщик».",
-          mainKeyboard
+          "Я не нашёл привязанный аккаунт поставщика.\n" +
+            "Сначала привяжите номер телефона через «👤 Профиль → Я поставщик».",
+          kb
         );
         return;
       }
@@ -475,7 +619,8 @@ if (bot) {
         "[tg-bot] showProviderPanel error:",
         e.response?.data || e.message || e
       );
-      await ctx.reply("Ошибка, попробуйте позже.");
+      const { kb } = await getRoleAndKeyboard(ctx);
+      await ctx.reply("Ошибка, попробуйте позже.", kb);
     }
   }
 
@@ -485,8 +630,10 @@ if (bot) {
 
     try {
       if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
         await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору."
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
         );
         return;
       }
@@ -538,7 +685,8 @@ if (bot) {
         "[tg-bot] handleProviderBookings error:",
         e.response?.data || e.message || e
       );
-      await ctx.reply("Ошибка при загрузке заявок. Попробуйте позже.");
+      const { kb } = await getRoleAndKeyboard(ctx);
+      await ctx.reply("Ошибка при загрузке заявок. Попробуйте позже.", kb);
     }
   }
 }
