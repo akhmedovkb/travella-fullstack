@@ -196,51 +196,63 @@ if (bot) {
 
   /** ============================ Обработчики (регистрация) ============================ */
 
-  async function handlePhoneRegistration(ctx, rawPhone) {
-    const role = ctx.session?.data?.role || "client";
-    const chatId = ctx.from?.id;
-    const username = ctx.from?.username || "";
-    const firstName = ctx.from?.first_name || "";
-    const phone = String(rawPhone || "").trim();
+async function handlePhoneRegistration(ctx, rawPhone) {
+  const role = ctx.session?.data?.role || "client"; // "client" | "provider"
+  const chatId = ctx.from?.id;
+  const username = ctx.from?.username || "";
+  const firstName = ctx.from?.first_name || "";
+  const phone = String(rawPhone || "").trim();
 
-    // Нормализуем + убираем пробелы
-    const cleanPhone = phone.replace(/\s+/g, "");
+  const cleanPhone = phone.replace(/\s+/g, "");
 
-    // 👉 ВАЖНО: сейчас мы НИЧЕГО не меняем в базе,
-    // а просто благодарим пользователя.
-    // Позже сюда добавим реальный запрос в БД / к API.
-    try {
-      // TODO: здесь можно будет:
-      // 1) искать клиента/поставщика по телефону в БД
-      // 2) обновлять telegram_chat_id у найденной записи
-      // 3) если не найдено — просить сначала зарегистрироваться на сайте
-
-      console.log("[tg-bot] registration request:", {
-        role,
-        chatId,
-        username,
-        firstName,
-        phone: cleanPhone,
-      });
-
-      await ctx.reply(
-        "Спасибо! 🙌\n\n" +
-          "Мы зафиксировали ваш номер телефона и Telegram.\n" +
-          "Скоро здесь появится полноценная привязка к аккаунту Travella и просмотр ваших бронирований.\n\n" +
-          "Пока можете пользоваться маркетплейсом на сайте:\n" +
-          "https://travella.uz",
-        mainKeyboard
-      );
-      resetSession(ctx);
-    } catch (e) {
-      console.error("[tg-bot] handlePhoneRegistration error:", e.message || e);
-      await ctx.reply(
-        "Произошла ошибка при обработке номера. Попробуйте позже или зарегистрируйтесь через сайт travella.uz.",
-        mainKeyboard
-      );
-      resetSession(ctx);
+  try {
+    if (!API_BASE) {
+      throw new Error("API_BASE_URL is not configured");
     }
+
+    const resp = await axios.post(`${API_BASE}/api/telegram/link`, {
+      role,
+      phone: cleanPhone,
+      chatId,
+      username,
+      firstName,
+    });
+
+    if (resp.data?.notFound) {
+      await ctx.reply(
+        "Мы не нашли аккаунт Travella с таким номером телефона.\n" +
+          "Сначала зарегистрируйтесь на сайте travella.uz, а затем повторите привязку.",
+        mainKeyboard
+      );
+      resetSession(ctx);
+      return;
+    }
+
+    if (!resp.data?.success) {
+      throw new Error("Unexpected response from /api/telegram/link");
+    }
+
+    const name = resp.data.name || firstName || "";
+
+    await ctx.reply(
+      `Спасибо, ${name || "друг"}! 🙌\n\n` +
+        "Мы привязали ваш Telegram к аккаунту Travella.\n" +
+        "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления.\n\n" +
+        "В любой момент можете открыть главное меню и выбрать нужный раздел.",
+      mainKeyboard
+    );
+    resetSession(ctx);
+  } catch (e) {
+    console.error("[tg-bot] handlePhoneRegistration error:", e.response?.data || e.message || e);
+    await ctx.reply(
+      "Произошла ошибка при привязке телефона.\n" +
+        "Попробуйте позже или выполните привязку через сайт travella.uz.",
+      mainKeyboard
+    );
+    resetSession(ctx);
   }
+}
+
 
   /** ============================ Обработчики (поиск / маркетплейс) ============================ */
 
