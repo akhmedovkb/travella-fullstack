@@ -1,6 +1,6 @@
 // backend/telegram/bot.js
 
-const { Telegraf, Markup, session } = require("telegraf");
+const { Telegraf, Markup } = require("telegraf");
 const dotenv = require("dotenv");
 const axios = require("axios");
 
@@ -14,7 +14,6 @@ if (!BOT_TOKEN) {
 }
 
 // Базовый URL бэкенда (используем для запросов позже)
-// Пример: https://travella-production.up.railway.app
 const API_BASE =
   (process.env.API_BASE_URL ||
     process.env.SITE_API_URL ||
@@ -46,14 +45,27 @@ const backKeyboard = Markup.keyboard([[BTN_BACK_MENU]]).resize();
 // Создаём бота только если есть токен
 const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
 
+/* ====================== Простая сессия в памяти (Map) ====================== */
+
+const sessions = new Map();
+
+function getSession(ctx) {
+  const chatId = ctx.from?.id || ctx.chat?.id;
+  if (!chatId) return { step: null, data: {} };
+  if (!sessions.has(chatId)) {
+    sessions.set(chatId, { step: null, data: {} });
+  }
+  return sessions.get(chatId);
+}
+
 function resetSession(ctx) {
-  ctx.session = { step: null, data: {} };
+  const chatId = ctx.from?.id || ctx.chat?.id;
+  if (!chatId) return;
+  sessions.set(chatId, { step: null, data: {} });
 }
 
 /** ============================ Мидлвары и обработчики ============================ */
 if (bot) {
-  bot.use(session());
-
   // Логирование простое (можно выключить, если мешает)
   bot.use(async (ctx, next) => {
     try {
@@ -99,7 +111,8 @@ if (bot) {
   // Кнопка "Профиль" или "Регистрация" → выбор роли
   bot.hears([BTN_PROFILE, BTN_REGISTER, BTN_BECOME_PROVIDER], async (ctx) => {
     resetSession(ctx);
-    ctx.session.step = "reg_choose_role";
+    const s = getSession(ctx);
+    s.step = "reg_choose_role";
     await ctx.reply(
       "Кем вы пользуетесь Travella?",
       Markup.inlineKeyboard([
@@ -121,8 +134,10 @@ if (bot) {
 
     const role =
       ctx.callbackQuery.data === "reg_role_client" ? "client" : "provider";
-    ctx.session.step = "reg_wait_phone";
-    ctx.session.data = { role };
+
+    const s = getSession(ctx);
+    s.step = "reg_wait_phone";
+    s.data = { role };
 
     const who = role === "client" ? "клиента" : "поставщика";
 
@@ -142,7 +157,8 @@ if (bot) {
 
   // Обработка контакта (когда жмут кнопку "отправить номер")
   bot.on("contact", async (ctx) => {
-    if (ctx.session?.step !== "reg_wait_phone") return;
+    const s = getSession(ctx);
+    if (s.step !== "reg_wait_phone") return;
 
     const phone = ctx.message.contact?.phone_number;
     if (!phone) {
@@ -162,7 +178,8 @@ if (bot) {
 
   /** ============================ Текстовые сообщения (меню + шаги) ============================ */
   bot.on("text", async (ctx) => {
-    const step = ctx.session?.step;
+    const s = getSession(ctx);
+    const step = s.step;
     const text = (ctx.message.text || "").trim();
 
     // 1) Если ждём телефон в процессе регистрации
@@ -294,7 +311,9 @@ if (bot) {
   /** ============================ Обработчики (регистрация) ============================ */
 
   async function handlePhoneRegistration(ctx, rawPhone) {
-    const role = ctx.session?.data?.role || "client"; // "client" | "provider"
+    const s = getSession(ctx);
+    const role = s.data?.role || "client"; // "client" | "provider"
+
     const chatId = ctx.from?.id;
     const username = ctx.from?.username || "";
     const firstName = ctx.from?.first_name || "";
@@ -360,8 +379,9 @@ if (bot) {
   /** ============================ Обработчики (поиск / маркетплейс) ============================ */
 
   async function handleSearchStart(ctx) {
-    // Скромный MVP: просто спрашиваем текст запроса и отдаем заглушку.
-    ctx.session.step = "search_wait_query";
+    const s = getSession(ctx);
+    s.step = "search_wait_query";
+
     await ctx.reply(
       "Введите, что вы ищете:\n\n" +
         "Например:\n" +
@@ -374,6 +394,8 @@ if (bot) {
   }
 
   async function handleSearchQuery(ctx, q) {
+    const s = getSession(ctx);
+
     // если пользователь передумал и нажал назад
     if (q === BTN_BACK_MENU) {
       resetSession(ctx);
@@ -381,12 +403,7 @@ if (bot) {
       return;
     }
 
-    // TODO: здесь будет реальный вызов API поиска, например:
-    // if (API_BASE) {
-    //   const res = await axios.post(`${API_BASE}/api/marketplace/search`, { query: q, source: "telegram" });
-    //   ...
-    // }
-
+    // TODO: здесь будет реальный вызов API поиска
     await ctx.reply(
       `Вы ищете: “${q}”.\n\nПолноценный поиск по маркетплейсу будет подключён позже.\nПока воспользуйтесь сайтом: https://travella.uz`,
       mainKeyboard
