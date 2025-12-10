@@ -70,6 +70,61 @@ async function getProviderBookings(req, res) {
 }
 
 /**
+ * Получить все отказные услуги поставщика (marketplace)
+ * GET /api/telegram/provider/:chatId/services
+ */
+async function getProviderServices(req, res) {
+  try {
+    const { chatId } = req.params;
+
+    if (!chatId) {
+      return res.status(400).json({ error: "chatId is required" });
+    }
+
+    // Находим поставщика по telegram_chat_id
+    const providerRes = await pool.query(
+      `SELECT id, name
+         FROM providers
+        WHERE telegram_chat_id = $1
+        LIMIT 1`,
+      [chatId]
+    );
+
+    if (providerRes.rowCount === 0) {
+      return res.status(404).json({ error: "Provider not found" });
+    }
+
+    const providerId = providerRes.rows[0].id;
+
+    // Все услуги этого провайдера, которые относятся к "отказным"
+    const servicesRes = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.title,
+        s.category,
+        s.status,
+        s.details
+      FROM services s
+      WHERE s.provider_id = $1
+        AND s.category LIKE 'refused_%'
+      ORDER BY s.id DESC
+      LIMIT 30
+      `,
+      [providerId]
+    );
+
+    return res.json({
+      success: true,
+      services: servicesRes.rows,
+    });
+  } catch (err) {
+    console.error("getProviderServices error:", err);
+    return res.status(500).json({ error: "Internal error" });
+  }
+}
+
+/**
  * POST /api/telegram/provider/:chatId/bookings/:bookingId/confirm
  */
 async function confirmBooking(req, res) {
@@ -77,7 +132,9 @@ async function confirmBooking(req, res) {
     const { chatId, bookingId } = req.params;
 
     if (!chatId || !bookingId) {
-      return res.status(400).json({ error: "chatId and bookingId are required" });
+      return res
+        .status(400)
+        .json({ error: "chatId and bookingId are required" });
     }
 
     // Проверяем, что бронь принадлежит этому провайдеру
@@ -150,7 +207,9 @@ async function rejectBooking(req, res) {
     const { chatId, bookingId } = req.params;
 
     if (!chatId || !bookingId) {
-      return res.status(400).json({ error: "chatId and bookingId are required" });
+      return res
+        .status(400)
+        .json({ error: "chatId and bookingId are required" });
     }
 
     const bookingRes = await pool.query(
@@ -208,6 +267,7 @@ async function rejectBooking(req, res) {
 
 module.exports = {
   getProviderBookings,
+  getProviderServices,
   confirmBooking,
   rejectBooking,
 };
