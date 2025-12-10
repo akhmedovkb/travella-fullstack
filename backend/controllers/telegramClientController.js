@@ -125,7 +125,7 @@ async function linkAccount(req, res) {
           id: row.id,
           name: row.name,
           existed: true,
-          // полезно знать боту: пользователь нажимал "клиент", но он уже поставщик
+          // полезно знать боту: пользователь мог нажать "клиент", но он уже поставщик
           requestedRole,
         });
       }
@@ -166,13 +166,16 @@ async function linkAccount(req, res) {
 
     // === Новый КЛИЕНТ из Telegram ===
     if (!requestedRole || requestedRole === "client") {
+      // email NOT NULL -> генерируем техничный email на основе телефона
+      const email = `tg_${normPhone}@telegram.local`;
+
       const insertClient = await pool.query(
         `
           INSERT INTO clients (name, email, phone, telegram_chat_id, telegram)
-          VALUES ($1, NULL, $2, $3, $4)
+          VALUES ($1, $2, $3, $4, $5)
           RETURNING id, name
         `,
-        [displayName, phone, chatId, username || null]
+        [displayName, email, phone, chatId, username || null]
       );
 
       const row = insertClient.rows[0];
