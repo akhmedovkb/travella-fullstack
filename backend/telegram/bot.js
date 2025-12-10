@@ -1,4 +1,4 @@
-// bot.js
+// backend/telegram/bot.js
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
 const axios = require("axios");
@@ -28,7 +28,7 @@ bot.use(session());
 
 function getMainMenuKeyboard(role) {
   // role: "client" | "provider"
-  // при желании можешь сделать разные меню для клиента/поставщика
+  // при желании можно сделать разные меню
   return {
     reply_markup: {
       keyboard: [
@@ -42,17 +42,14 @@ function getMainMenuKeyboard(role) {
 }
 
 async function askRole(ctx) {
-  await ctx.reply(
-    "Кем вы пользуетесь Travella?",
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🤖 Я клиент", callback_data: "role:client" }],
-          [{ text: "🏢 Я поставщик", callback_data: "role:provider" }],
-        ],
-      },
-    }
-  );
+  await ctx.reply("Кем вы пользуетесь Travella?", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🤖 Я клиент", callback_data: "role:client" }],
+        [{ text: "🏢 Я поставщик", callback_data: "role:provider" }],
+      ],
+    },
+  });
 }
 
 // Основная логика привязки телефона к аккаунту / созданию нового
@@ -137,8 +134,6 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       "В любой момент можете открыть главное меню и выбрать нужный раздел.",
       getMainMenuKeyboard(finalRole)
     );
-
-    return;
   } catch (e) {
     console.error(
       "[tg-bot] handlePhoneRegistration error:",
@@ -200,7 +195,7 @@ bot.start(async (ctx) => {
     // ❌ Аккаунт ещё не привязан → спрашиваем роль
     await ctx.reply(
       "Добро пожаловать в Travella! 👋\n\n" +
-        "Сначала давайте привяжем ваш аккаунт по номеру телефона.",
+        "Сначала давайте привяжем ваш аккаунт по номеру телефона."
     );
     await askRole(ctx);
   } catch (e) {
@@ -280,12 +275,7 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
   await handlePhoneRegistration(ctx, requestedRole, phone, false);
 });
 
-// ==== СТАРТ БОТА ====
+// ⚠️ ВАЖНО: здесь НЕТ bot.launch()
+// Запуском занимается index.js
 
-bot.launch().then(() => {
-  console.log("[tg-bot] Bot started");
-});
-
-// Для graceful shutdown (не обязательно, но аккуратно)
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+module.exports = { bot };
