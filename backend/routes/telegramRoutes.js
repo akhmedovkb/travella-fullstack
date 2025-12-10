@@ -15,19 +15,18 @@ const {
 } = require("../utils/telegram");
 
 // ---------- ENV / секреты ----------
-const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
-const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || "";          // если задашь при setWebhook: secret_token=...
+const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret";
+const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || "";
 console.log(
   `[tg] routes mounted: /api/telegram/webhook/${SECRET_PATH} (header token ${HEADER_TOKEN ? "ON" : "OFF"})`
 );
 
-// RU/UZ/EN привет после привязки
 const WELCOME_TEXT =
   "Вы подключили бот! Ожидайте сообщения по заявкам!\n" +
   "Botni uladingiz! Arizalar bo‘yicha xabarlarni kuting!\n" +
   "You have connected the bot! Please wait for request notifications!";
 
-// ---------- Общая проверка секрета (path || query || header) ----------
+// ---------- Общая проверка секрета ----------
 function verifySecret(req) {
   const hdr =
     req.get("X-Telegram-Bot-Api-Secret-Token") ||
@@ -43,7 +42,7 @@ function verifySecret(req) {
   return false;
 }
 
-// ---------- Универсальный хэндлер webhook (объединяем всё) ----------
+// ---------- Универсальный webhook ----------
 async function handleWebhook(req, res) {
   try {
     const hdr =
@@ -64,16 +63,16 @@ async function handleWebhook(req, res) {
 
     const update = req.body || {};
 
-    // 1) Нажатие inline-кнопки статуса лида
+    // 1) Callback-кнопки лида
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+
       if (/^noop:\d+$/.test(data)) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
       }
 
-      /* --- Назначение/снятие ответственного --- */
       let mAssign = data.match(/^lead:(\d+):assign:self$/);
       let mUn = data.match(/^lead:(\d+):unassign$/);
       if (mAssign || mUn) {
@@ -87,6 +86,7 @@ async function handleWebhook(req, res) {
           );
           prov = r.rows[0] || null;
         } catch {}
+
         if (!prov && mAssign) {
           await tgAnswerCallbackQuery(
             cq.id,
@@ -95,6 +95,7 @@ async function handleWebhook(req, res) {
           );
           return res.json({ ok: true });
         }
+
         await pool.query(
           `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
           [leadId, mUn ? null : prov.id]
@@ -126,7 +127,6 @@ async function handleWebhook(req, res) {
         return res.json({ ok: true });
       }
 
-      /* --- Смена статуса --- */
       const m = data.match(/^lead:(\d+):(working|closed)$/);
       if (!m) {
         await tgAnswerCallbackQuery(cq.id, "Неизвестное действие");
@@ -177,7 +177,7 @@ async function handleWebhook(req, res) {
       return res.json({ ok: true });
     }
 
-    // 2) Сообщение /start (линковка чатов провайдера/клиента)
+    // 2) /start p_<id> /start c_<id> для старого бота
     const msg =
       update.message ||
       update.edited_message ||
@@ -194,7 +194,7 @@ async function handleWebhook(req, res) {
       const payload = (mStart && mStart[1] ? mStart[1] : "").trim();
 
       if (mStart) {
-        const norm = payload.replace(/\s+/g, "").toLowerCase(); // "p_123" | "p-123" | "c_456" | "c-456"
+        const norm = payload.replace(/\s+/g, "").toLowerCase();
         let providerId = null;
         let clientId = null;
         const mp = norm.match(/^p[-_]?(\d+)$/);
@@ -218,7 +218,6 @@ async function handleWebhook(req, res) {
       }
     }
 
-    // 3) Остальные апдейты — ок
     return res.json({ ok: true });
   } catch (e) {
     console.error("[tg] webhook error:", e?.message || e);
@@ -226,7 +225,7 @@ async function handleWebhook(req, res) {
   }
 }
 
-// ---------- Маршруты (поддерживаем и path-секрет, и query-секрет) ----------
+// ---------- Маршруты webhook ----------
 router.post("/webhook/:secret", handleWebhook);
 router.post("/webhook", handleWebhook);
 
@@ -237,7 +236,7 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// ----- JSON API для НОВОГО клиентского бота (TELEGRAM_CLIENT_BOT_TOKEN) -----
+// ----- JSON API для НОВОГО клиентского бота -----
 
 // привязка аккаунта по телефону
 router.post("/link", telegramClientController.linkAccount);
@@ -248,20 +247,10 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
-// КЛИЕНТ: избранное / брони / заявки
-router.get(
-  "/client/:chatId/favorites",
-  telegramClientController.getClientFavorites
-);
-
-router.get(
-  "/client/:chatId/bookings",
-  telegramClientController.getClientBookings
-);
-
-router.get(
-  "/client/:chatId/requests",
-  telegramClientController.getClientRequests
+// поиск отказных услуг для бота
+router.post(
+  "/client/:chatId/search",
+  telegramClientController.searchRefusedServices
 );
 
 /**
@@ -274,10 +263,9 @@ router.get("/setWebhook", async (req, res) => {
     if (!token)
       return res.status(500).json({ ok: false, error: "token_missing" });
 
-    const base = (process.env.API_BASE_URL || process.env.SITE_API_URL || "").replace(
-      /\/+$/,
-      ""
-    );
+    const base = (
+      process.env.API_BASE_URL || process.env.SITE_API_URL || ""
+    ).replace(/\/+$/, "");
     if (!base)
       return res.status(500).json({ ok: false, error: "api_base_missing" });
 
@@ -298,10 +286,7 @@ router.get("/setWebhook", async (req, res) => {
     );
     res.json(resp.data);
   } catch (e) {
-    console.error(
-      "setWebhook error:",
-      e?.response?.data || e?.message || e
-    );
+    console.error("setWebhook error:", e?.response?.data || e?.message || e);
     res.status(500).json({ ok: false, error: "set_webhook_failed" });
   }
 });
@@ -322,7 +307,6 @@ router.post(
   telegramProviderController.rejectBooking
 );
 
-// marketplace-услуги поставщика
 router.get(
   "/provider/:chatId/services",
   telegramProviderController.getProviderServices
