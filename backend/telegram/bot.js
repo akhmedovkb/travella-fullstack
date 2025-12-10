@@ -374,6 +374,16 @@ if (bot) {
     }
   });
 
+  // Открыть список услуг marketplace (отказные)
+  bot.action("supplier_services", async (ctx) => {
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      await handleProviderServices(ctx);
+    } catch (e) {
+      console.error("[tg-bot] supplier_services error:", e);
+    }
+  });
+
   // Подтверждение брони
   bot.action(/supplier_confirm_(\d+)/, async (ctx) => {
     const bookingId = ctx.match[1];
@@ -612,6 +622,7 @@ if (bot) {
         "Панель поставщика:",
         Markup.inlineKeyboard([
           [Markup.button.callback("📅 Мои заявки", "supplier_bookings")],
+          [Markup.button.callback("📦 Мои услуги", "supplier_services")],
         ])
       );
     } catch (e) {
@@ -687,6 +698,78 @@ if (bot) {
       );
       const { kb } = await getRoleAndKeyboard(ctx);
       await ctx.reply("Ошибка при загрузке заявок. Попробуйте позже.", kb);
+    }
+  }
+
+  // Получить и вывести все отказные услуги поставщика (marketplace)
+  async function handleProviderServices(ctx) {
+    const chatId = ctx.from.id;
+
+    try {
+      if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
+        );
+        return;
+      }
+
+      const resp = await axios.get(
+        `${API_BASE}/api/telegram/provider/${chatId}/services`
+      );
+
+      const list = resp.data?.services || [];
+      if (!list.length) {
+        await ctx.reply("У вас пока нет отказных услуг в маркетплейсе.");
+        return;
+      }
+
+      const typeMap = {
+        refused_tour: "Отказной тур",
+        refused_hotel: "Отказной отель",
+        refused_flight: "Отказной авиабилет",
+        refused_ticket: "Отказной билет",
+      };
+
+      for (const s of list) {
+        const typeLabel = typeMap[s.category] || s.category || "Услуга";
+        const details = s.details || {};
+        const dirParts = [
+          details.directionCountry || details.country,
+          details.directionTo || details.city,
+        ].filter(Boolean);
+        const direction = dirParts.join(" → ");
+
+        let dates = "";
+        if (details.startDate && details.endDate) {
+          dates = `${details.startDate} — ${details.endDate}`;
+        } else if (details.startDate) {
+          dates = details.startDate;
+        }
+
+        const status = s.status || "draft";
+
+        let text =
+          `📦 <b>${typeLabel}</b>\n` +
+          `ID: <code>${s.id}</code>\n` +
+          `Название: ${s.title || "без названия"}\n`;
+        if (direction) text += `Направление: ${direction}\n`;
+        if (dates) text += `Даты: ${dates}\n`;
+        text += `Статус модерации: <b>${status}</b>`;
+
+        await ctx.reply(text, { parse_mode: "HTML" });
+      }
+    } catch (e) {
+      console.error(
+        "[tg-bot] handleProviderServices error:",
+        e.response?.data || e.message || e
+      );
+      const { kb } = await getRoleAndKeyboard(ctx);
+      await ctx.reply(
+        "Ошибка при загрузке услуг. Попробуйте позже.",
+        kb
+      );
     }
   }
 }
