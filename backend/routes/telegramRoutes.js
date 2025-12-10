@@ -279,11 +279,6 @@ router.get(
   telegramProviderController.getProviderBookings
 );
 
-router.get(
-  "/provider/:chatId/services",
-  telegramProviderController.getProviderServices
-);
-
 router.post(
   "/provider/:chatId/bookings/:bookingId/confirm",
   telegramProviderController.confirmBooking
@@ -292,6 +287,12 @@ router.post(
 router.post(
   "/provider/:chatId/bookings/:bookingId/reject",
   telegramProviderController.rejectBooking
+);
+
+// marketplace-услуги поставщика
+router.get(
+  "/provider/:chatId/services",
+  telegramProviderController.getProviderServices
 );
 
 
