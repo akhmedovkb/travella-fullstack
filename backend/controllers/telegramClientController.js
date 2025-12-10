@@ -285,93 +285,60 @@ async function getProfileByChat(req, res) {
 }
 
 /**
- * POST /api/telegram/client/:chatId/search
+ * GET /api/telegram/client/:chatId/search?type=refused_tour|refused_hotel|refused_flight|refused_ticket
  *
- * Варианты body:
- * 1) { category: 'refused_tour' | 'refused_hotel' | 'refused_flight' | 'refused_event', limit? }
- *    → список услуг
- *
- * 2) { serviceId: number }
- *    → подробная информация по одной услуге
+ * Возвращает список отказных услуг для Телеграм-бота.
+ * Используем те же услуги, что и на маркетплейсе: services.status='approved'.
  */
-async function searchRefusedServices(req, res) {
+async function searchCategory(req, res) {
+  const { chatId } = req.params; // сейчас не используется, но оставим на будущее
+  const { type } = req.query || {};
+
+  const allowed = [
+    "refused_tour",
+    "refused_hotel",
+    "refused_flight",
+    "refused_ticket",
+  ];
+
+  if (!type || !allowed.includes(type)) {
+    return res.status(400).json({ error: "invalid type" });
+  }
+
   try {
-    const { chatId } = req.params;
-    const { category, serviceId, limit } = req.body || {};
-
-    console.log("[tg-search] chatId:", chatId, "body:", req.body);
-
-    // --- Детали по конкретной услуге ---
-    if (serviceId) {
-      const q = await pool.query(
-        `
-          SELECT id, category, title, details
-            FROM services
-           WHERE id = $1
-           LIMIT 1
-        `,
-        [serviceId]
-      );
-
-      if (q.rowCount === 0) {
-        return res.status(404).json({ notFound: true });
-      }
-
-      return res.json({
-        success: true,
-        item: q.rows[0],
-      });
-    }
-
-    // --- Список по категории ---
-    const allowedCategories = [
-      "refused_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_event",
-    ];
-
-    let cat = category;
-    if (cat && !allowedCategories.includes(cat)) {
-      return res.status(400).json({ error: "invalid category" });
-    }
-
-    const hardLimit = Math.min(Number(limit) || 20, 50);
-
-    const params = [];
-    let where = `category = ANY($1)`;
-    params.push(allowedCategories);
-
-    if (cat) {
-      where = `category = $1`;
-      params[0] = cat;
-    }
-
-    // статус approved — чтобы не светить черновики
-    const sql = `
-      SELECT id, category, title, details
-        FROM services
-       WHERE ${where}
-         AND status = 'approved'
-       ORDER BY created_at DESC
-       LIMIT $2
-    `;
-    params.push(hardLimit);
-
-    const result = await pool.query(sql, params);
+    const result = await pool.query(
+      `
+        SELECT
+          s.id,
+          s.title,
+          s.category,
+          s.price,
+          s.details,
+          p.name AS provider_name
+        FROM services s
+        JOIN providers p ON p.id = s.provider_id
+       WHERE s.category = $1
+         AND s.status = 'approved'
+       ORDER BY s.id DESC
+       LIMIT 30
+      `,
+      [type]
+    );
 
     return res.json({
       success: true,
       items: result.rows,
+      chatId,
+      type,
     });
   } catch (e) {
-    console.error("POST /api/telegram/client/search error:", e);
-    res.status(500).json({ error: "Internal error" });
+    console.error("GET /api/telegram/client/:chatId/search error:", e);
+    return res.status(500).json({ error: "Internal error" });
   }
 }
 
 module.exports = {
   linkAccount,
   getProfileByChat,
-  searchRefusedServices,
+  searchCategory,
 };
