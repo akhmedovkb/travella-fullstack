@@ -1,291 +1,290 @@
-// bot.js
-require("dotenv").config();
-const { Telegraf, session } = require("telegraf");
-const axios = require("axios");
+// backend/controllers/telegramClientController.js
 
-// ==== CONFIG ====
+const pool = require("../db");
 
-const BOT_TOKEN =
-  process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
-  process.env.TELEGRAM_BOT_TOKEN;
+/**
+ * Технический bcrypt-хэш какого-то "левого" пароля,
+ * чтобы удовлетворить NOT NULL и формат для bcrypt.compare.
+ * Пользователь этот пароль не знает, и он ему не нужен,
+ * пока он не задаст себе нормальный пароль через веб.
+ *
+ * Это пример рабочего bcrypt-хэша для строки "password".
+ * (взят из официальных примеров bcrypt)
+ */
+const TELEGRAM_DUMMY_PASSWORD_HASH =
+  "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
-if (!BOT_TOKEN) {
-  throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN/TELEGRAM_BOT_TOKEN in env");
+/**
+ * Нормализация телефона: оставляем только цифры.
+ * "+998 97 716 37 15" -> "998977163715"
+ */
+function normalizePhone(raw) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/\D/g, "");
+  return digits || null;
 }
 
-const API_BASE = (
-  process.env.API_BASE_URL ||
-  process.env.SITE_API_URL ||
-  "http://localhost:8080"
-).replace(/\/+$/, "");
-
-// ==== INIT BOT ====
-
-const bot = new Telegraf(BOT_TOKEN);
-bot.use(session());
-
-// ==== HELPERS ====
-
-function getMainMenuKeyboard(role) {
-  // role: "client" | "provider"
-  // при желании можешь сделать разные меню для клиента/поставщика
-  return {
-    reply_markup: {
-      keyboard: [
-        [{ text: "🔍 Найти услугу" }, { text: "❤️ Избранное" }],
-        [{ text: "📄 Мои брони" }, { text: "📨 Мои заявки" }],
-        [{ text: "👤 Профиль" }, { text: "🏢 Стать поставщиком" }],
-      ],
-      resize_keyboard: true,
-    },
-  };
-}
-
-async function askRole(ctx) {
-  await ctx.reply(
-    "Кем вы пользуетесь Travella?",
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🤖 Я клиент", callback_data: "role:client" }],
-          [{ text: "🏢 Я поставщик", callback_data: "role:provider" }],
-        ],
-      },
-    }
+/**
+ * Ищем пользователя по телефону.
+ * ВАЖНО: сначала ищем среди providers (приоритет поставщика),
+ * потом среди clients.
+ *
+ * Если нашли — возвращаем { role: 'provider'|'client', id, name }.
+ * Если не нашли — возвращаем null.
+ */
+async function findUserByPhone(normPhone) {
+  // 1) Пытаемся найти поставщика
+  const prov = await pool.query(
+    `
+      SELECT id, name, phone
+        FROM providers
+       WHERE regexp_replace(phone, '\\D', '', 'g') = $1
+       LIMIT 1
+    `,
+    [normPhone]
   );
-}
 
-// Основная логика привязки телефона к аккаунту / созданию нового
-async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
-  try {
-    const chatId = ctx.chat.id;
-    const username = ctx.from.username || null;
-    const firstName = ctx.from.first_name || null;
-
-    const payload = {
-      role: requestedRole, // "client" | "provider"
-      phone,
-      chatId,
-      username,
-      firstName,
-    };
-
-    console.log("[bot] handlePhoneRegistration payload:", payload);
-
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/link`,
-      payload
-    );
-
-    console.log("[bot] /api/telegram/link response:", data);
-
-    if (!data || !data.success) {
-      await ctx.reply(
-        "Произошла ошибка при привязке телефона. Попробуйте позже."
-      );
-      return;
-    }
-
-    // фактическая роль по БД
-    // provider_lead считаем «профиль поставщика в процессе»
-    const finalRole =
-      data.role === "provider" || data.role === "provider_lead"
-        ? "provider"
-        : "client";
-
-    if (!ctx.session) ctx.session = {};
-    ctx.session.role = finalRole;
-    ctx.session.linked = true;
-
-    // ---- Текст в зависимости от кейса ----
-    if (data.existed && data.role === "client") {
-      await ctx.reply(
-        "Спасибо. 🙌\n\nМы привязали ваш Telegram к аккаунту клиента Travella.\n" +
-          "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления."
-      );
-    } else if (data.existed && data.role === "provider") {
-      // сюда попадём, даже если человек нажал «я клиент», но телефон уже у поставщика
-      await ctx.reply(
-        "Спасибо. 🙌\n\nМы привязали ваш Telegram к аккаунту поставщика Travella.\n" +
-          "Теперь бот сможет показывать ваши заявки и отправлять уведомления."
-      );
-
-      if (data.requestedRole === "client") {
-        await ctx.reply(
-          "Вы выбрали роль клиента, но по этому номеру уже есть аккаунт поставщика.\n" +
-            "Если хотите пользоваться Travella как клиент, зарегистрируйтесь отдельно на сайте travella.uz с другим номером или email."
-        );
-      }
-    } else if (data.created === "client") {
-      await ctx.reply(
-        "🎉 Добро пожаловать в Travella!\n\n" +
-          "Мы создали для вас клиентский аккаунт по этому номеру телефона.\n" +
-          "Позже вы сможете дополнить данные на сайте travella.uz."
-      );
-    } else if (data.created === "provider_lead") {
-      await ctx.reply(
-        "👋 Мы приняли вашу заявку как нового поставщика Travella.\n" +
-          "Наш менеджер свяжется с вами.\n" +
-          "Также вы можете заполнить форму на сайте."
-      );
-    } else {
-      await ctx.reply("Привязка выполнена.");
-    }
-
-    // ✅ СРАЗУ показываем главное меню и НИЧЕГО больше не спрашиваем
-    await ctx.reply(
-      "В любой момент можете открыть главное меню и выбрать нужный раздел.",
-      getMainMenuKeyboard(finalRole)
-    );
-
-    return;
-  } catch (e) {
-    console.error(
-      "[tg-bot] handlePhoneRegistration error:",
-      e?.response?.data || e
-    );
-    await ctx.reply(
-      "Произошла ошибка при привязке телефона. Попробуйте позже."
-    );
+  if (prov.rowCount > 0) {
+    const row = prov.rows[0];
+    return { role: "provider", id: row.id, name: row.name };
   }
+
+  // 2) Если поставщика нет — ищем клиента
+  const cli = await pool.query(
+    `
+      SELECT id, name, phone
+        FROM clients
+       WHERE regexp_replace(phone, '\\D', '', 'g') = $1
+       LIMIT 1
+    `,
+    [normPhone]
+  );
+
+  if (cli.rowCount > 0) {
+    const row = cli.rows[0];
+    return { role: "client", id: row.id, name: row.name };
+  }
+
+  return null;
 }
 
-// ==== /start ====
-
-bot.start(async (ctx) => {
-  const chatId = ctx.chat.id;
-
+/**
+ * POST /api/telegram/link
+ * body: { role: "client" | "provider", phone, chatId, username, firstName }
+ *
+ * ЛОГИКА:
+ * 1) Нормализуем телефон -> "998977163715"
+ * 2) Ищем по телефону сначала provider, потом client:
+ *    - если нашли provider → привязываем Telegram как к поставщику
+ *    - если нашли client   → привязываем Telegram как к клиенту
+ * 3) Если телефон нигде не найден:
+ *    - если role === 'provider' → создаём LEAD нового поставщика
+ *    - иначе (role отсутствует или 'client') → создаём нового клиента
+ *
+ * ВАЖНО: поставщик НЕ становится клиентом автоматически.
+ */
+async function linkAccount(req, res) {
   try {
-    // 1. пробуем узнать профиль как клиента
-    let role = null;
+    const { role, phone, chatId, username, firstName } = req.body || {};
+    const normPhone = normalizePhone(phone);
 
-    try {
-      const resClient = await axios.get(
-        `${API_BASE}/api/telegram/profile/client/${chatId}`
-      );
-      if (resClient.data && resClient.data.success) {
-        role = "client";
-      }
-    } catch (e) {
-      // 404 — это нормально, значит не клиент
+    if (!normPhone || !chatId) {
+      return res
+        .status(400)
+        .json({ error: "phone and chatId are required" });
     }
 
-    // 2. если не клиент — пробуем как поставщик
-    if (!role) {
-      try {
-        const resProv = await axios.get(
-          `${API_BASE}/api/telegram/profile/provider/${chatId}`
+    const requestedRole = role || "client"; // что выбрал пользователь в боте
+    const displayName =
+      firstName ||
+      username ||
+      "Telegram user";
+
+    console.log("[tg-link] body:", req.body);
+    console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
+
+    // 1) Пытаемся найти уже существующего пользователя по телефону
+    const found = await findUserByPhone(normPhone);
+
+    if (found) {
+      // ---- Телефон уже есть в базе ----
+      const foundRole = found.role; // 'provider' или 'client'
+
+      // Если телефон принадлежит ПОСТАВЩИКУ — считаем его поставщиком,
+      // даже если он нажимал "я клиент" в боте.
+      if (foundRole === "provider") {
+        const upd = await pool.query(
+          `
+            UPDATE providers
+               SET telegram_chat_id = $1,
+                   telegram        = COALESCE($2, telegram)
+             WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+             RETURNING id, name, phone
+          `,
+          [chatId, username || null, normPhone]
         );
-        if (resProv.data && resProv.data.success) {
-          role = "provider";
+
+        console.log("[tg-link] updated existing PROVIDER rows:", upd.rowCount);
+
+        if (upd.rowCount === 0) {
+          return res.status(404).json({ notFound: true });
         }
-      } catch (e) {
-        // тоже может быть 404 — не привязан как поставщик
+
+        const row = upd.rows[0];
+        return res.json({
+          success: true,
+          role: "provider",
+          id: row.id,
+          name: row.name,
+          existed: true,
+          // полезно знать боту: пользователь мог нажать "клиент", но он уже поставщик
+          requestedRole,
+        });
+      }
+
+      // Если телефон принадлежит клиенту
+      if (foundRole === "client") {
+        const upd = await pool.query(
+          `
+            UPDATE clients
+               SET telegram_chat_id = $1,
+                   telegram        = COALESCE($2, telegram)
+             WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+             RETURNING id, name, phone
+          `,
+          [chatId, username || null, normPhone]
+        );
+
+        console.log("[tg-link] updated existing CLIENT rows:", upd.rowCount);
+
+        if (upd.rowCount === 0) {
+          return res.status(404).json({ notFound: true });
+        }
+
+        const row = upd.rows[0];
+        return res.json({
+          success: true,
+          role: "client",
+          id: row.id,
+          name: row.name,
+          existed: true,
+          requestedRole,
+        });
       }
     }
 
-    if (role) {
-      // Уже привязан → сразу главное меню
-      if (!ctx.session) ctx.session = {};
-      ctx.session.role = role;
-      ctx.session.linked = true;
+    // ---- Телефон нигде не найден: создаём нового ----
+    // requestedRole влияет только здесь.
 
-      await ctx.reply(
-        "Добро пожаловать в Travella! 👋\nГлавное меню доступно ниже.",
-        getMainMenuKeyboard(role)
+    // === Новый КЛИЕНТ из Telegram ===
+    if (!requestedRole || requestedRole === "client") {
+      // email NOT NULL -> генерируем техничный email на основе телефона
+      const email = `tg_${normPhone}@telegram.local`;
+
+      const insertClient = await pool.query(
+        `
+          INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id, name
+        `,
+        [
+          displayName,
+          email,
+          phone,
+          TELEGRAM_DUMMY_PASSWORD_HASH,
+          chatId,
+          username || null,
+        ]
       );
-      return;
+
+      const row = insertClient.rows[0];
+      console.log("[tg-link] created NEW CLIENT from Telegram:", row);
+
+      return res.json({
+        success: true,
+        role: "client",
+        id: row.id,
+        name: row.name,
+        existed: false,
+        created: "client",
+        requestedRole,
+      });
     }
 
-    // ❌ Аккаунт ещё не привязан → спрашиваем роль
-    await ctx.reply(
-      "Добро пожаловать в Travella! 👋\n\n" +
-        "Сначала давайте привяжем ваш аккаунт по номеру телефона.",
-    );
-    await askRole(ctx);
+    // === Новый ПОСТАВЩИК: создаём lead, а не provider ===
+    if (requestedRole === "provider") {
+      // предполагаем, что есть таблица leads с полями (phone, name, source, status, created_at)
+      const insertLead = await pool.query(
+        `
+          INSERT INTO leads (phone, name, source, status, created_at)
+          VALUES ($1, $2, 'telegram_provider', 'new', NOW())
+          RETURNING id
+        `,
+        [phone, displayName]
+      );
+
+      const lead = insertLead.rows[0];
+      console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
+
+      return res.json({
+        success: true,
+        role: "provider_lead",
+        leadId: lead.id,
+        existed: false,
+        created: "provider_lead",
+        requestedRole,
+      });
+    }
+
+    return res.status(400).json({ error: "invalid role" });
   } catch (e) {
-    console.error("[tg-bot] /start error:", e?.response?.data || e);
-    await ctx.reply("Произошла ошибка. Попробуйте позже.");
+    console.error("POST /api/telegram/link error:", e);
+    res.status(500).json({ error: "Internal error" });
   }
-});
+}
 
-// ==== INLINE-роль: "Я клиент" / "Я поставщик" ====
-
-bot.action(/^role:(client|provider)$/, async (ctx) => {
+/**
+ * GET /api/telegram/profile/:role/:chatId
+ * Быстрый способ понять, кто это в Телеге (клиент/поставщик).
+ */
+async function getProfileByChat(req, res) {
   try {
-    const role = ctx.match[1]; // 'client' | 'provider'
+    const { role, chatId } = req.params;
+    if (!role || !chatId) {
+      return res.status(400).json({ error: "role & chatId required" });
+    }
 
-    if (!ctx.session) ctx.session = {};
-    ctx.session.requestedRole = role;
+    const table =
+      role === "provider" ? "providers" :
+      role === "client"   ? "clients"   :
+      null;
 
-    await ctx.answerCbQuery(); // убираем "часики" на кнопке
+    if (!table) {
+      return res.status(400).json({ error: "invalid role" });
+    }
 
-    await ctx.reply(
-      role === "client"
-        ? "Ок, будем привязывать аккаунт клиента.\n\n" +
-            "Отправьте, пожалуйста, номер телефона, который вы указали на сайте travella.uz.\n\n" +
-            "Можно просто прислать текстом:\n<code>+998901234567</code>\n\n" +
-            "или воспользоваться кнопкой ниже."
-        : "Ок, будем привязывать аккаунт поставщика.\n\n" +
-            "Отправьте, пожалуйста, номер телефона, который вы указали при регистрации на travella.uz\n" +
-            "или используйте кнопку ниже.",
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          keyboard: [
-            [
-              {
-                text: "📲 Отправить мой номер",
-                request_contact: true,
-              },
-            ],
-          ],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
-      }
+    const result = await pool.query(
+      `
+        SELECT id, name, phone, telegram_chat_id
+          FROM ${table}
+         WHERE telegram_chat_id = $1
+         LIMIT 1
+      `,
+      [chatId]
     );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ notFound: true });
+    }
+
+    res.json({ success: true, user: result.rows[0] });
   } catch (e) {
-    console.error("[tg-bot] role: action error:", e);
+    console.error("GET /api/telegram/profile error:", e);
+    res.status(500).json({ error: "Internal error" });
   }
-});
+}
 
-// ==== CONTACT (кнопка "Отправить мой номер") ====
-
-bot.on("contact", async (ctx) => {
-  const contact = ctx.message.contact;
-  if (!contact || !contact.phone_number) {
-    await ctx.reply("Не удалось прочитать номер телефона. Попробуйте ещё раз.");
-    return;
-  }
-
-  const phone = contact.phone_number;
-  const requestedRole = ctx.session?.requestedRole || "client";
-
-  await handlePhoneRegistration(ctx, requestedRole, phone, true);
-});
-
-// ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
-
-bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
-  // если пользователь на шаге привязки прислал номер текстом
-  if (!ctx.session || !ctx.session.requestedRole) {
-    // если мы вообще не ждём номер — игнор или своя логика
-    return;
-  }
-
-  const phone = ctx.message.text.trim();
-  const requestedRole = ctx.session.requestedRole;
-
-  await handlePhoneRegistration(ctx, requestedRole, phone, false);
-});
-
-// ==== СТАРТ БОТА ====
-
-bot.launch().then(() => {
-  console.log("[tg-bot] Bot started");
-});
-
-// Для graceful shutdown (не обязательно, но аккуратно)
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+module.exports = {
+  linkAccount,
+  getProfileByChat,
+};
