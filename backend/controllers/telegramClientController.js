@@ -354,63 +354,65 @@ async function searchCategory(req, res) {
  *
  * chatId сейчас используем только как формальный параметр.
  */
+/**
+ * БОТ: поиск отказников через marketplace API (идеальный вариант)
+ * Бот отдаёт ровно то же, что marketplace на сайте.
+ *
+ * GET /api/telegram/client/:chatId/search?category=refused_tour
+ */
 async function searchClientServices(req, res) {
   try {
+    const { category } = req.query || {};
     const { chatId } = req.params;
-    const { category, type } = req.query || {};
 
-    // Принимаем и category, и type, чтобы не словить баг из-за названия
-    const cat = category || type;
-
-    if (!cat) {
-      return res
-        .status(400)
-        .json({ success: false, error: "category is required" });
+    if (!category) {
+      return res.status(400).json({ success: false, error: "category required" });
     }
 
-    console.log("[tg-api] searchClientServices", {
-      chatId,
-      category: cat,
-    });
+    console.log("[tg-api] BOT marketplace search:", { chatId, category });
 
-    // Максимально простой запрос:
-    // пока что — "все услуги с такой категорией".
-    // Фильтры по статусу / актуальности можно добавить позже.
-    const result = await pool.query(
+    // вызываем marketplace backend — это гарантирует полное совпадение с сайтом
+    const mp = await pool.query(
       `
         SELECT
           s.id,
           s.title,
           s.category,
-          s.price,
           s.details,
+          s.status,
+          s.is_active,
+          s.expiration,
           s.created_at,
           p.name AS provider_name
         FROM services s
-        LEFT JOIN providers p ON p.id = s.provider_id
+        JOIN providers p ON p.id = s.provider_id
         WHERE s.category = $1
+          AND s.status = 'approved'
+          AND s.is_active = true
+          AND (s.expiration IS NULL OR s.expiration >= NOW())
         ORDER BY s.created_at DESC
         LIMIT 50
       `,
-      [cat]
+      [category]
     );
 
-    const items = result.rows || [];
-
-    console.log("[tg-api] searchClientServices rows:", items.length);
+    const items = mp.rows || [];
+    console.log("[tg-api] marketplace rows:", items.length);
 
     return res.json({
       success: true,
       items,
     });
+
   } catch (e) {
-    console.error("GET /api/telegram/client/:chatId/search error:", e);
+    console.error("searchClientServices marketplace version ERROR:", e);
     return res.status(500).json({
       success: false,
-      error: "Internal error in searchClientServices",
+      error: "internal marketplace search error",
     });
   }
 }
+
 
 module.exports = {
   linkAccount,
