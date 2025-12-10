@@ -3,7 +3,6 @@
 const { Telegraf, Markup } = require("telegraf");
 const dotenv = require("dotenv");
 const axios = require("axios");
-const pool = require("../db"); // для inline-поиска по services
 
 dotenv.config();
 
@@ -20,6 +19,15 @@ const API_BASE =
     process.env.SITE_API_URL ||
     "").replace(/\/+$/, "") || "";
 
+// Базовый URL фронта (для ссылок в inline-результатах)
+const FRONT_BASE =
+  (process.env.FRONTEND_URL ||
+    process.env.SITE_PUBLIC_URL ||
+    "https://travella.uz").replace(/\/+$/, "");
+
+// username бота для диплинков вида https://t.me/<username>?start=s_123
+const BOT_USERNAME = process.env.TELEGRAM_CLIENT_BOT_USERNAME || "";
+
 // Текст кнопок
 const BTN_FIND_SERVICE = "🔍 Найти услугу";
 const BTN_BOOKINGS = "📅 Мои брони";
@@ -30,13 +38,6 @@ const BTN_BECOME_PROVIDER = "🏢 Стать поставщиком";
 const BTN_BACK_MENU = "⬅️ В главное меню";
 const BTN_REGISTER = "📝 Регистрация";
 const BTN_SUPPLIER_PANEL = "🏢 Панель поставщика";
-
-// Кнопки для выбора типа отказной услуги (как в старом боте)
-const BTN_REF_TOUR = "Отказной тур";
-const BTN_REF_HOTEL = "Отказной отель";
-const BTN_REF_FLIGHT = "Отказной авиабиллет";
-const BTN_REF_EVENT = "Отказной билет";
-const BTN_SERVICES_MAIN = "Главное меню";
 
 // ======= Базовые клавиатуры (fallback) =======
 
@@ -49,13 +50,6 @@ const defaultMainKeyboard = Markup.keyboard([
 ]).resize();
 
 const backKeyboard = Markup.keyboard([[BTN_BACK_MENU]]).resize();
-
-// Клавиатура выбора типа отказной услуги (4 зелёные кнопки + Главное меню)
-const providerServicesKeyboard = Markup.keyboard([
-  [BTN_REF_TOUR, BTN_REF_HOTEL],
-  [BTN_REF_FLIGHT, BTN_REF_EVENT],
-  [BTN_SERVICES_MAIN],
-]).resize();
 
 // Создаём бота только если есть токен
 const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
@@ -339,13 +333,7 @@ if (bot) {
       return;
     }
 
-    // 3) Если находимся в режиме выбора типа услуги
-    if (step === "services_wait_category") {
-      await handleProviderServicesCategoryText(ctx, text);
-      return;
-    }
-
-    // 4) Обычное меню
+    // 3) Обычное меню
     if (text === BTN_FIND_SERVICE) {
       await handleSearchStart(ctx);
     } else if (text === BTN_BOOKINGS) {
@@ -392,16 +380,6 @@ if (bot) {
       await handleProviderBookings(ctx);
     } catch (e) {
       console.error("[tg-bot] supplier_bookings error:", e);
-    }
-  });
-
-  // Открыть меню "Мои услуги"
-  bot.action("supplier_services", async (ctx) => {
-    try {
-      await ctx.answerCbQuery().catch(() => {});
-      await showProviderServicesMenu(ctx);
-    } catch (e) {
-      console.error("[tg-bot] supplier_services error:", e);
     }
   });
 
@@ -475,6 +453,75 @@ if (bot) {
         e.response?.data || e.message || e
       );
       await ctx.reply("Ошибка при отклонении. Попробуйте позже.");
+    }
+  });
+
+  /** ============================ Inline-режим (поиск туров) ============================ */
+
+  bot.on("inline_query", async (ctx) => {
+    const iq = ctx.inlineQuery || {};
+    const q = (iq.query || "").trim();
+    const chatId = ctx.from?.id;
+
+    if (!API_BASE) {
+      // если API_BASE не настроен — просто молчим, чтобы не спамить ошибками
+      return ctx.answerInlineQuery([], {
+        cache_time: 5,
+        is_personal: true,
+      });
+    }
+
+    try {
+      const roleInfo = await getUserRoleByChat(chatId);
+      const role = roleInfo.role || "none";
+
+      const resp = await axios.get(
+        `${API_BASE}/api/marketplace/search`,
+        {
+          params: {
+            q: q || "",
+            limit: 20,
+            source: "telegram_inline",
+            viewerRole: role,
+          },
+        }
+      );
+
+      const list =
+        resp.data?.items ||
+        resp.data?.services ||
+        resp.data?.rows ||
+        [];
+
+      const results = buildInlineResults(list, role);
+
+      const finalResults =
+        results.length > 0
+          ? results
+          : noResultsInline(
+              q
+                ? "По запросу ничего не найдено в Travella."
+                : "Начните вводить название тура, города или отеля."
+            );
+
+      await ctx.answerInlineQuery(finalResults, {
+        cache_time: q ? 30 : 5,
+        is_personal: true,
+        switch_pm_text: "Привязать Travella аккаунт",
+        switch_pm_parameter: "link",
+      });
+    } catch (e) {
+      console.error(
+        "[tg-bot] inline_query error:",
+        e.response?.data || e.message || e
+      );
+      const fallback = noResultsInline(
+        "Ошибка при поиске. Попробуйте позже или зайдите на https://travella.uz"
+      );
+      await ctx.answerInlineQuery(fallback, {
+        cache_time: 5,
+        is_personal: true,
+      });
     }
   });
 
@@ -647,7 +694,6 @@ if (bot) {
         "Панель поставщика:",
         Markup.inlineKeyboard([
           [Markup.button.callback("📅 Мои заявки", "supplier_bookings")],
-          [Markup.button.callback("📦 Мои услуги", "supplier_services")],
         ])
       );
     } catch (e) {
@@ -726,209 +772,127 @@ if (bot) {
     }
   }
 
-  /** ============ Мои услуги (отказные туры/отели/авиабилеты/билеты) ============ */
+  /** ============================ Вспомогательные функции для inline ============================ */
 
-  // Показать клавиатуру выбора типа услуг (как на старом боте)
-  async function showProviderServicesMenu(ctx) {
-    const s = getSession(ctx);
-    s.step = "services_wait_category";
-    s.data = { mode: "services" };
+  function buildInlineResults(list, role) {
+    const results = [];
+    if (!Array.isArray(list)) return results;
 
-    await ctx.reply("Выберите нужное:", providerServicesKeyboard);
-  }
+    for (const s of list) {
+      const id = String(s.id ?? `svc_${results.length}_${Date.now()}`);
+      const title = s.title || "Услуга Travella";
 
-  // Обработка текстов в режиме выбора категории
-  async function handleProviderServicesCategoryText(ctx, text) {
-    // Пользователь нажал "Главное меню"
-    if (text === BTN_SERVICES_MAIN) {
-      resetSession(ctx);
-      const { kb } = await getRoleAndKeyboard(ctx);
-      await ctx.reply("Возвращаемся в главное меню:", kb);
-      return;
-    }
+      const details = s.details || {};
+      const providerName =
+        (s.provider &&
+          (s.provider.brand_name || s.provider.name || s.provider.company)) ||
+        "";
+      const direction =
+        details.direction ||
+        details.directionCity ||
+        details.directionCountry ||
+        details.direction_to ||
+        "";
+      const categoryLabel = s.category || "";
 
-    let category = null;
-    let human = text;
-
-    if (text === BTN_REF_TOUR) {
-      category = "refused_tour";
-    } else if (text === BTN_REF_HOTEL) {
-      category = "refused_hotel";
-    } else if (text === BTN_REF_FLIGHT) {
-      category = "refused_flight";
-    } else if (text === BTN_REF_EVENT) {
-      category = "refused_event";
-    }
-
-    if (!category) {
-      // Нажали что-то своё
-      await ctx.reply("Пожалуйста, выберите одну из кнопок выше.");
-      return;
-    }
-
-    await sendProviderServicesByCategory(ctx, category, human);
-  }
-
-  // Запросить и вывести услуги по выбранной категории
-  async function sendProviderServicesByCategory(ctx, category, humanLabel) {
-    const chatId = ctx.from.id;
-
-    try {
-      if (!API_BASE) {
-        const { kb } = await getRoleAndKeyboard(ctx);
-        await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
-          kb
-        );
-        return;
+      let priceText = "";
+      const price = s.price ?? details.price;
+      const currency = details.currency || s.currency || "USD";
+      if (price != null) {
+        priceText = `${price} ${currency}`;
       }
 
-      const resp = await axios.get(
-        `${API_BASE}/api/telegram/provider/${chatId}/services`,
-        { params: { category } }
-      );
+      const parts = [];
+      if (direction) parts.push(direction);
+      if (categoryLabel) parts.push(categoryLabel);
+      if (providerName) parts.push(providerName);
+      if (priceText) parts.push(priceText);
 
-      const list = resp.data?.services || [];
-      if (!list.length) {
-        await ctx.reply(`У вас пока нет услуг категории «${humanLabel}».`);
-        return;
+      const description = parts.join(" • ").slice(0, 250);
+
+      // Картинка-превью
+      let thumbUrl;
+      const images = Array.isArray(s.images)
+        ? s.images
+        : Array.isArray(details.images)
+        ? details.images
+        : [];
+      if (Array.isArray(images) && images.length) {
+        const first = images[0];
+        if (typeof first === "string" && /^https?:\/\//.test(first)) {
+          thumbUrl = first;
+        } else if (typeof first === "string" && FRONT_BASE) {
+          thumbUrl = `${FRONT_BASE}/${first.replace(/^\/+/, "")}`;
+        }
       }
 
-      for (const s of list) {
-        const details = s.details || {};
-        const title = details.title || s.title || "Без названия";
-        const dirCountry = details.directionCountry || "";
-        const dirTo = details.directionTo || "";
-        const direction =
-          dirCountry || dirTo
-            ? `${dirCountry}${dirTo ? " → " + dirTo : ""}`
-            : "";
+      const serviceUrl = `${FRONT_BASE}/services/${s.id}`;
 
-        const status = s.status || "-";
+      const inlineKeyboard = [];
 
-        const text =
-          `📦 <b>${humanLabel}</b>\n` +
-          `ID: <code>${s.id}</code>\n` +
-          `Название: <b>${title}</b>\n` +
-          (direction ? `Направление: ${direction}\n` : "") +
-          `Статус модерации: <b>${status}</b>`;
+      inlineKeyboard.push([
+        {
+          text: "🌐 Открыть в Travella",
+          url: serviceUrl,
+        },
+      ]);
 
-        await ctx.reply(text, { parse_mode: "HTML" });
-      }
-    } catch (e) {
-      console.error(
-        "[tg-bot] sendProviderServicesByCategory error:",
-        e.response?.data || e.message || e
-      );
-      const { kb } = await getRoleAndKeyboard(ctx);
-      await ctx.reply("Ошибка при загрузке услуг. Попробуйте позже.", kb);
-    }
-  }
-
-  /** ============================ INLINE-РЕЖИМ (встроенный бот) ============================ */
-
-  // @BOT_USERNAME <запрос> → список отказных услуг
-  bot.on("inline_query", async (ctx) => {
-    const q = (ctx.inlineQuery?.query || "").trim();
-
-    try {
-      // Ищем по services напрямую в БД
-      const result = await pool.query(
-        `
-        SELECT
-          s.id,
-          s.category,
-          s.status,
-          s.title,
-          s.details,
-          s.created_at,
-          p.name AS provider_name
-        FROM services s
-        JOIN providers p ON p.id = s.provider_id
-       WHERE s.status = 'published'
-         AND s.category IN ('refused_tour', 'refused_hotel', 'refused_flight', 'refused_event')
-         AND (
-               $1::text = ''
-            OR s.title ILIKE '%' || $1 || '%'
-            OR (s.details->>'title') ILIKE '%' || $1 || '%'
-            OR (s.details->>'directionCountry') ILIKE '%' || $1 || '%'
-            OR (s.details->>'directionTo') ILIKE '%' || $1 || '%'
-         )
-       ORDER BY s.created_at DESC
-       LIMIT 20
-        `,
-        [q]
-      );
-
-      const rows = result.rows || [];
-
-      if (!rows.length) {
-        await ctx.answerInlineQuery([], { cache_time: 5, is_personal: true });
-        return;
-      }
-
-      const articles = rows.map((s) => {
-        const details = s.details || {};
-        const title = details.title || s.title || "Без названия";
-        const dirCountry = details.directionCountry || "";
-        const dirTo = details.directionTo || "";
-        const direction =
-          dirCountry || dirTo
-            ? `${dirCountry}${dirTo ? " → " + dirTo : ""}`
-            : "";
-        const provider = s.provider_name || "";
-
-        const typeLabel =
-          s.category === "refused_tour"
-            ? "Отказной тур"
-            : s.category === "refused_hotel"
-            ? "Отказной отель"
-            : s.category === "refused_flight"
-            ? "Отказной авиабилет"
-            : "Отказной билет";
-
-        const price =
-          details.netPrice || details.price || details.totalPrice || "";
-
-        const messageText =
-          `📦 <b>${typeLabel}</b>\n` +
-          `Название: <b>${title}</b>\n` +
-          (direction ? `Направление: ${direction}\n` : "") +
-          (price ? `Цена (нетто): <b>${price}</b>\n` : "") +
-          (provider ? `Поставщик: ${provider}\n` : "") +
-          `\n#travella #${s.category}`;
-
-        return {
-          type: "article",
-          id: String(s.id),
-          title: `${typeLabel}: ${title}`,
-          description:
-            (direction ? direction + " · " : "") +
-            (price ? `нетто ${price}` : "").trim(),
-          input_message_content: {
-            message_text: messageText,
-            parse_mode: "HTML",
+      // Диплинк в бота для заявки: s_<id>
+      if (BOT_USERNAME && s.id) {
+        inlineKeyboard.push([
+          {
+            text: "📝 Оставить заявку",
+            url: `https://t.me/${BOT_USERNAME}?start=s_${s.id}`,
           },
-        };
-      });
-
-      await ctx.answerInlineQuery(articles, {
-        cache_time: 5,
-        is_personal: true,
-      });
-    } catch (e) {
-      console.error(
-        "[tg-bot] inline_query error:",
-        e.response?.data || e.message || e
-      );
-      // В случае ошибки — пустой ответ, чтобы не спамить
-      try {
-        await ctx.answerInlineQuery([], { cache_time: 5, is_personal: true });
-      } catch {
-        // ignore
+        ]);
       }
+
+      const messageText =
+        `📦 <b>${title}</b>\n` +
+        (description ? description + "\n\n" : "") +
+        `Подробнее: ${serviceUrl}`;
+
+      const resultItem = {
+        type: "article",
+        id,
+        title,
+        description,
+        input_message_content: {
+          message_text: messageText,
+          parse_mode: "HTML",
+        },
+        reply_markup: { inline_keyboard: inlineKeyboard },
+      };
+
+      if (thumbUrl) {
+        resultItem.thumb_url = thumbUrl;
+      }
+
+      results.push(resultItem);
     }
-  });
+
+    return results;
+  }
+
+  function noResultsInline(message) {
+    const text =
+      message ||
+      "По запросу ничего не найдено в Travella.\n" +
+        "Попробуйте другой запрос или зайдите на https://travella.uz";
+
+    return [
+      {
+        type: "article",
+        id: "no_results",
+        title: "Ничего не найдено",
+        description:
+          "Попробуйте другой запрос или откройте Travella в браузере.",
+        input_message_content: {
+          message_text: text,
+        },
+      },
+    ];
+  }
 }
 
 /**
