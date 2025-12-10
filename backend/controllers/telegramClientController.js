@@ -337,8 +337,77 @@ async function searchCategory(req, res) {
   }
 }
 
+/**
+ * GET /api/telegram/client/:chatId/search?category=refused_tour
+ * Ищет отказные услуги по категории для бота.
+ *
+ * Категории:
+ *   - refused_tour
+ *   - refused_hotel
+ *   - refused_flight  (или как у тебя называется)
+ *   - refused_ticket  (билет на мероприятие)
+ *
+ * chatId сейчас используем только как формальный параметр,
+ * при желании можно добавить проверку, что такой клиент реально существует.
+ */
+async function searchClientServices(req, res) {
+  try {
+    const { chatId } = req.params;
+    const { category } = req.query || {};
+
+    if (!category) {
+      return res.status(400).json({ success: false, error: "category is required" });
+    }
+
+    console.log("[tg-api] searchClientServices", {
+      chatId,
+      category,
+    });
+
+    // Берём те же услуги, что и маркетплейс:
+    //   - services.category = $1
+    //   - status = 'approved'
+    //   - показываем базовую инфу + details
+    const result = await pool.query(
+      `
+        SELECT
+          s.id,
+          s.title,
+          s.category,
+          s.price,
+          s.currency,
+          s.details,
+          s.created_at,
+          p.name AS provider_name
+        FROM services s
+        LEFT JOIN providers p ON p.id = s.provider_id
+        WHERE s.category = $1
+          AND s.status = 'approved'
+        ORDER BY s.created_at DESC
+        LIMIT 50
+      `,
+      [category]
+    );
+
+    const items = result.rows || [];
+
+    console.log("[tg-api] searchClientServices rows:", items.length);
+
+    return res.json({
+      success: true,
+      items,
+    });
+  } catch (e) {
+    console.error("GET /api/telegram/client/:chatId/search error:", e);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal error in searchClientServices" });
+  }
+}
+
 module.exports = {
   linkAccount,
   getProfileByChat,
   searchCategory,
+  searchClientServices,
 };
