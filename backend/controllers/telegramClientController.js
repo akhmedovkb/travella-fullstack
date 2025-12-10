@@ -3,6 +3,18 @@
 const pool = require("../db");
 
 /**
+ * Технический bcrypt-хэш какого-то "левого" пароля,
+ * чтобы удовлетворить NOT NULL и формат для bcrypt.compare.
+ * Пользователь этот пароль не знает, и он ему не нужен,
+ * пока он не задаст себе нормальный пароль через веб.
+ *
+ * Это пример рабочего bcrypt-хэша для строки "password".
+ * (взят из официальных примеров bcrypt)
+ */
+const TELEGRAM_DUMMY_PASSWORD_HASH =
+  "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
+
+/**
  * Нормализация телефона: оставляем только цифры.
  * "+998 97 716 37 15" -> "998977163715"
  */
@@ -171,11 +183,18 @@ async function linkAccount(req, res) {
 
       const insertClient = await pool.query(
         `
-          INSERT INTO clients (name, email, phone, telegram_chat_id, telegram)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id, name
         `,
-        [displayName, email, phone, chatId, username || null]
+        [
+          displayName,
+          email,
+          phone,
+          TELEGRAM_DUMMY_PASSWORD_HASH,
+          chatId,
+          username || null,
+        ]
       );
 
       const row = insertClient.rows[0];
