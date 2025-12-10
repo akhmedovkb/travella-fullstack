@@ -3,6 +3,7 @@
 const { Telegraf, Markup } = require("telegraf");
 const dotenv = require("dotenv");
 const axios = require("axios");
+const pool = require("../db"); // для inline-поиска по services
 
 dotenv.config();
 
@@ -10,6 +11,7 @@ const BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN;
 
 if (!BOT_TOKEN) {
   console.error("[tg-bot] ❌ TELEGRAM_CLIENT_BOT_TOKEN не задан в .env");
+  // не падаем process.exit, чтобы API мог работать без бота
 }
 
 // Базовый URL бэкенда (используем для запросов позже)
@@ -17,13 +19,6 @@ const API_BASE =
   (process.env.API_BASE_URL ||
     process.env.SITE_API_URL ||
     "").replace(/\/+$/, "") || "";
-
-// URL фронта / кабинета (для ссылок "открыть на сайте")
-const SITE_URL =
-  (process.env.SITE_PUBLIC_URL ||
-    process.env.FRONTEND_URL ||
-    "https://travella.uz").replace(/\/+$/, "");
-const DASHBOARD_URL = `${SITE_URL}/dashboard`;
 
 // Текст кнопок
 const BTN_FIND_SERVICE = "🔍 Найти услугу";
@@ -36,6 +31,13 @@ const BTN_BACK_MENU = "⬅️ В главное меню";
 const BTN_REGISTER = "📝 Регистрация";
 const BTN_SUPPLIER_PANEL = "🏢 Панель поставщика";
 
+// Кнопки для выбора типа отказной услуги (как в старом боте)
+const BTN_REF_TOUR = "Отказной тур";
+const BTN_REF_HOTEL = "Отказной отель";
+const BTN_REF_FLIGHT = "Отказной авиабиллет";
+const BTN_REF_EVENT = "Отказной билет";
+const BTN_SERVICES_MAIN = "Главное меню";
+
 // ======= Базовые клавиатуры (fallback) =======
 
 const defaultMainKeyboard = Markup.keyboard([
@@ -47,6 +49,13 @@ const defaultMainKeyboard = Markup.keyboard([
 ]).resize();
 
 const backKeyboard = Markup.keyboard([[BTN_BACK_MENU]]).resize();
+
+// Клавиатура выбора типа отказной услуги (4 зелёные кнопки + Главное меню)
+const providerServicesKeyboard = Markup.keyboard([
+  [BTN_REF_TOUR, BTN_REF_HOTEL],
+  [BTN_REF_FLIGHT, BTN_REF_EVENT],
+  [BTN_SERVICES_MAIN],
+]).resize();
 
 // Создаём бота только если есть токен
 const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
@@ -189,7 +198,7 @@ if (bot) {
     }
 
     text +=
-      "\n\nЗдесь можно:\n" +
+      "\n\nЗдесь можно будет:\n" +
       "• искать услуги маркетплейса,\n" +
       "• смотреть свои брони и заявки,\n" +
       "• привязать аккаунт клиента или поставщика.\n\n" +
@@ -330,7 +339,13 @@ if (bot) {
       return;
     }
 
-    // 3) Обычное меню
+    // 3) Если находимся в режиме выбора типа услуги
+    if (step === "services_wait_category") {
+      await handleProviderServicesCategoryText(ctx, text);
+      return;
+    }
+
+    // 4) Обычное меню
     if (text === BTN_FIND_SERVICE) {
       await handleSearchStart(ctx);
     } else if (text === BTN_BOOKINGS) {
@@ -370,37 +385,96 @@ if (bot) {
 
   /** ============================ Callback-кнопки панели поставщика ============================ */
 
-  // Старое действие без фильтра — оставляем для совместимости (pending)
+  // Открыть список заявок поставщика
   bot.action("supplier_bookings", async (ctx) => {
     try {
       await ctx.answerCbQuery().catch(() => {});
-      await handleProviderBookings(ctx, "pending");
+      await handleProviderBookings(ctx);
     } catch (e) {
       console.error("[tg-bot] supplier_bookings error:", e);
     }
   });
 
-  // Новые фильтры заявок
-  bot.action(
-    /supplier_bookings_(pending|confirmed|rejected|canceled)/,
-    async (ctx) => {
-      const status = ctx.match[1];
-      try {
-        await ctx.answerCbQuery().catch(() => {});
-        await handleProviderBookings(ctx, status);
-      } catch (e) {
-        console.error("[tg-bot] supplier_bookings_* error:", e);
-      }
-    }
-  );
-
-  // Открыть список услуг поставщика
+  // Открыть меню "Мои услуги"
   bot.action("supplier_services", async (ctx) => {
     try {
       await ctx.answerCbQuery().catch(() => {});
-      await handleProviderServices(ctx, null);
+      await showProviderServicesMenu(ctx);
     } catch (e) {
       console.error("[tg-bot] supplier_services error:", e);
+    }
+  });
+
+  // Подтверждение брони
+  bot.action(/supplier_confirm_(\d+)/, async (ctx) => {
+    const bookingId = ctx.match[1];
+    const chatId = ctx.from.id;
+
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
+        );
+        return;
+      }
+
+      await axios.post(
+        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/confirm`
+      );
+
+      // Удаляем кнопки под этим сообщением
+      try {
+        await ctx.editMessageReplyMarkup();
+      } catch {
+        // ignore
+      }
+
+      await ctx.reply(`Бронь #${bookingId} подтверждена ✅`);
+    } catch (e) {
+      console.error(
+        "[tg-bot] supplier_confirm error:",
+        e.response?.data || e.message || e
+      );
+      await ctx.reply("Ошибка при подтверждении. Попробуйте позже.");
+    }
+  });
+
+  // Отклонение брони
+  bot.action(/supplier_reject_(\d+)/, async (ctx) => {
+    const bookingId = ctx.match[1];
+    const chatId = ctx.from.id;
+
+    try {
+      await ctx.answerCbQuery().catch(() => {});
+      if (!API_BASE) {
+        const { kb } = await getRoleAndKeyboard(ctx);
+        await ctx.reply(
+          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
+          kb
+        );
+        return;
+      }
+
+      await axios.post(
+        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/reject`
+      );
+
+      try {
+        await ctx.editMessageReplyMarkup();
+      } catch {
+        // ignore
+      }
+
+      await ctx.reply(`Бронь #${bookingId} отклонена ❌`);
+    } catch (e) {
+      console.error(
+        "[tg-bot] supplier_reject error:",
+        e.response?.data || e.message || e
+      );
+      await ctx.reply("Ошибка при отклонении. Попробуйте позже.");
     }
   });
 
@@ -517,7 +591,7 @@ if (bot) {
     await ctx.reply(
       "Просмотр бронирований из бота пока в разработке.\n" +
         "Ваши брони можно посмотреть на сайте в разделе «Брони»:\n" +
-        `${SITE_URL}`,
+        "https://travella.uz",
       kb
     );
   }
@@ -541,36 +615,6 @@ if (bot) {
   }
 
   /** ============================ Панель поставщика ============================ */
-
-  function statusLabel(status) {
-    switch (status) {
-      case "pending":
-        return "🆕 Новые заявки";
-      case "confirmed":
-        return "✅ Подтверждённые";
-      case "rejected":
-        return "❌ Отклонённые";
-      case "canceled":
-        return "🚫 Отменённые";
-      default:
-        return status;
-    }
-  }
-
-  function categoryLabel(cat) {
-    switch (cat) {
-      case "refused_tour":
-        return "Отказной тур";
-      case "refused_hotel":
-        return "Отказной отель";
-      case "refused_flight":
-        return "Отказной авиабилет";
-      case "refused_event_ticket":
-        return "Отказной билет";
-      default:
-        return cat || "Услуга";
-    }
-  }
 
   async function showProviderPanel(ctx) {
     const chatId = ctx.from.id;
@@ -602,31 +646,8 @@ if (bot) {
       await ctx.reply(
         "Панель поставщика:",
         Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              "🆕 Мои заявки",
-              "supplier_bookings_pending"
-            ),
-          ],
-          [
-            Markup.button.callback(
-              "✅ Подтверждённые",
-              "supplier_bookings_confirmed"
-            ),
-            Markup.button.callback(
-              "❌ Отклонённые",
-              "supplier_bookings_rejected"
-            ),
-          ],
-          [
-            Markup.button.callback(
-              "🚫 Отменённые",
-              "supplier_bookings_canceled"
-            ),
-          ],
-          [
-            Markup.button.callback("📦 Мои услуги", "supplier_services"),
-          ],
+          [Markup.button.callback("📅 Мои заявки", "supplier_bookings")],
+          [Markup.button.callback("📦 Мои услуги", "supplier_services")],
         ])
       );
     } catch (e) {
@@ -639,8 +660,8 @@ if (bot) {
     }
   }
 
-  // Получить и вывести заявки поставщика по статусу
-  async function handleProviderBookings(ctx, status = "pending") {
+  // Получить и вывести pending-заявки поставщика
+  async function handleProviderBookings(ctx) {
     const chatId = ctx.from.id;
 
     try {
@@ -655,22 +676,20 @@ if (bot) {
 
       const resp = await axios.get(
         `${API_BASE}/api/telegram/provider/${chatId}/bookings`,
-        { params: { status } }
+        { params: { status: "pending" } }
       );
 
       const list = resp.data?.bookings || [];
       if (!list.length) {
-        await ctx.reply(`${statusLabel(status)}: заявок нет 👍`);
+        await ctx.reply("Новых заявок на бронирование нет 👍");
         return;
       }
-
-      await ctx.reply(`${statusLabel(status)}: ${list.length} шт.`);
 
       for (const b of list) {
         const start = b.start_date || b.date || "";
         const end = b.end_date || "";
         const text =
-          `📝 <b>Заявка #${b.id}</b>\n` +
+          `🆕 <b>Заявка #${b.id}</b>\n` +
           `Тур: <b>${b.service_title}</b>\n` +
           `Клиент: ${b.client_name}\n` +
           (start
@@ -679,30 +698,22 @@ if (bot) {
           `Гости: ${b.persons_adults || 0} взр / ${
             b.persons_children || 0
           } дет / ${b.persons_infants || 0} инф\n` +
-          (b.client_message ? `Комментарий: ${b.client_message}\n` : "") +
-          (DASHBOARD_URL
-            ? `\nПодробнее в кабинете: ${DASHBOARD_URL}`
-            : "");
-
-        const keyboard =
-          status === "pending"
-            ? Markup.inlineKeyboard([
-                [
-                  Markup.button.callback(
-                    "✅ Подтвердить",
-                    `supplier_confirm_${b.id}`
-                  ),
-                  Markup.button.callback(
-                    "❌ Отклонить",
-                    `supplier_reject_${b.id}`
-                  ),
-                ],
-              ])
-            : undefined;
+          (b.client_message ? `Комментарий: ${b.client_message}` : "");
 
         await ctx.reply(text, {
           parse_mode: "HTML",
-          reply_markup: keyboard,
+          reply_markup: Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                "✅ Подтвердить",
+                `supplier_confirm_${b.id}`
+              ),
+              Markup.button.callback(
+                "❌ Отклонить",
+                `supplier_reject_${b.id}`
+              ),
+            ],
+          ]),
         });
       }
     } catch (e) {
@@ -715,8 +726,51 @@ if (bot) {
     }
   }
 
-  // Получить и вывести marketplace-услуги поставщика
-  async function handleProviderServices(ctx, category = null) {
+  /** ============ Мои услуги (отказные туры/отели/авиабилеты/билеты) ============ */
+
+  // Показать клавиатуру выбора типа услуг (как на старом боте)
+  async function showProviderServicesMenu(ctx) {
+    const s = getSession(ctx);
+    s.step = "services_wait_category";
+    s.data = { mode: "services" };
+
+    await ctx.reply("Выберите нужное:", providerServicesKeyboard);
+  }
+
+  // Обработка текстов в режиме выбора категории
+  async function handleProviderServicesCategoryText(ctx, text) {
+    // Пользователь нажал "Главное меню"
+    if (text === BTN_SERVICES_MAIN) {
+      resetSession(ctx);
+      const { kb } = await getRoleAndKeyboard(ctx);
+      await ctx.reply("Возвращаемся в главное меню:", kb);
+      return;
+    }
+
+    let category = null;
+    let human = text;
+
+    if (text === BTN_REF_TOUR) {
+      category = "refused_tour";
+    } else if (text === BTN_REF_HOTEL) {
+      category = "refused_hotel";
+    } else if (text === BTN_REF_FLIGHT) {
+      category = "refused_flight";
+    } else if (text === BTN_REF_EVENT) {
+      category = "refused_event";
+    }
+
+    if (!category) {
+      // Нажали что-то своё
+      await ctx.reply("Пожалуйста, выберите одну из кнопок выше.");
+      return;
+    }
+
+    await sendProviderServicesByCategory(ctx, category, human);
+  }
+
+  // Запросить и вывести услуги по выбранной категории
+  async function sendProviderServicesByCategory(ctx, category, humanLabel) {
     const chatId = ctx.from.id;
 
     try {
@@ -734,138 +788,145 @@ if (bot) {
         { params: { category } }
       );
 
-      const list = resp.data?.items || [];
+      const list = resp.data?.services || [];
       if (!list.length) {
-        await ctx.reply("У вас пока нет сохранённых услуг marketplace 👍");
+        await ctx.reply(`У вас пока нет услуг категории «${humanLabel}».`);
         return;
       }
 
-      await ctx.reply(
-        `Ваши услуги marketplace: ${list.length} шт.\n` +
-          (DASHBOARD_URL
-            ? `Подробнее и редактирование — в кабинете: ${DASHBOARD_URL}`
-            : "")
-      );
-
       for (const s of list) {
-        const d = s.details || {};
-        const title = s.title || "Без названия";
+        const details = s.details || {};
+        const title = details.title || s.title || "Без названия";
+        const dirCountry = details.directionCountry || "";
+        const dirTo = details.directionTo || "";
+        const direction =
+          dirCountry || dirTo
+            ? `${dirCountry}${dirTo ? " → " + dirTo : ""}`
+            : "";
 
-        let direction = "";
-        if (d.directionCountry || d.directionTo || d.directionFrom) {
-          const parts = [];
-          if (d.directionCountry) parts.push(d.directionCountry);
-          if (d.directionFrom) parts.push(`из ${d.directionFrom}`);
-          if (d.directionTo) parts.push(`в ${d.directionTo}`);
-          direction = parts.join(" / ");
-        }
+        const status = s.status || "-";
 
-        let dates = "";
-        if (d.startDate || d.endDate) {
-          dates = `${d.startDate || ""}${
-            d.endDate ? " — " + d.endDate : ""
-          }`;
-        }
+        const text =
+          `📦 <b>${humanLabel}</b>\n` +
+          `ID: <code>${s.id}</code>\n` +
+          `Название: <b>${title}</b>\n` +
+          (direction ? `Направление: ${direction}\n` : "") +
+          `Статус модерации: <b>${status}</b>`;
 
-        const textLines = [
-          `📦 <b>${categoryLabel(s.category)}</b>`,
-          "",
-          `ID: <code>${s.id}</code>`,
-          `Название: <b>${title}</b>`,
-          direction ? `Направление: ${direction}` : null,
-          dates ? `Даты: ${dates}` : null,
-          s.status ? `Статус модерации: <code>${s.status}</code>` : null,
-        ].filter(Boolean);
-
-        await ctx.reply(textLines.join("\n"), { parse_mode: "HTML" });
+        await ctx.reply(text, { parse_mode: "HTML" });
       }
     } catch (e) {
       console.error(
-        "[tg-bot] handleProviderServices error:",
+        "[tg-bot] sendProviderServicesByCategory error:",
         e.response?.data || e.message || e
       );
       const { kb } = await getRoleAndKeyboard(ctx);
-      await ctx.reply(
-        "Ошибка при загрузке услуг marketplace. Попробуйте позже.",
-        kb
-      );
+      await ctx.reply("Ошибка при загрузке услуг. Попробуйте позже.", kb);
     }
   }
 
-  /** ============================ Callback confirm / reject ============================ */
+  /** ============================ INLINE-РЕЖИМ (встроенный бот) ============================ */
 
-  // Подтверждение брони
-  bot.action(/supplier_confirm_(\d+)/, async (ctx) => {
-    const bookingId = ctx.match[1];
-    const chatId = ctx.from.id;
+  // @BOT_USERNAME <запрос> → список отказных услуг
+  bot.on("inline_query", async (ctx) => {
+    const q = (ctx.inlineQuery?.query || "").trim();
 
     try {
-      await ctx.answerCbQuery().catch(() => {});
-      if (!API_BASE) {
-        const { kb } = await getRoleAndKeyboard(ctx);
-        await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
-          kb
-        );
+      // Ищем по services напрямую в БД
+      const result = await pool.query(
+        `
+        SELECT
+          s.id,
+          s.category,
+          s.status,
+          s.title,
+          s.details,
+          s.created_at,
+          p.name AS provider_name
+        FROM services s
+        JOIN providers p ON p.id = s.provider_id
+       WHERE s.status = 'published'
+         AND s.category IN ('refused_tour', 'refused_hotel', 'refused_flight', 'refused_event')
+         AND (
+               $1::text = ''
+            OR s.title ILIKE '%' || $1 || '%'
+            OR (s.details->>'title') ILIKE '%' || $1 || '%'
+            OR (s.details->>'directionCountry') ILIKE '%' || $1 || '%'
+            OR (s.details->>'directionTo') ILIKE '%' || $1 || '%'
+         )
+       ORDER BY s.created_at DESC
+       LIMIT 20
+        `,
+        [q]
+      );
+
+      const rows = result.rows || [];
+
+      if (!rows.length) {
+        await ctx.answerInlineQuery([], { cache_time: 5, is_personal: true });
         return;
       }
 
-      await axios.post(
-        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/confirm`
-      );
+      const articles = rows.map((s) => {
+        const details = s.details || {};
+        const title = details.title || s.title || "Без названия";
+        const dirCountry = details.directionCountry || "";
+        const dirTo = details.directionTo || "";
+        const direction =
+          dirCountry || dirTo
+            ? `${dirCountry}${dirTo ? " → " + dirTo : ""}`
+            : "";
+        const provider = s.provider_name || "";
 
-      // Удаляем кнопки под этим сообщением
+        const typeLabel =
+          s.category === "refused_tour"
+            ? "Отказной тур"
+            : s.category === "refused_hotel"
+            ? "Отказной отель"
+            : s.category === "refused_flight"
+            ? "Отказной авиабилет"
+            : "Отказной билет";
+
+        const price =
+          details.netPrice || details.price || details.totalPrice || "";
+
+        const messageText =
+          `📦 <b>${typeLabel}</b>\n` +
+          `Название: <b>${title}</b>\n` +
+          (direction ? `Направление: ${direction}\n` : "") +
+          (price ? `Цена (нетто): <b>${price}</b>\n` : "") +
+          (provider ? `Поставщик: ${provider}\n` : "") +
+          `\n#travella #${s.category}`;
+
+        return {
+          type: "article",
+          id: String(s.id),
+          title: `${typeLabel}: ${title}`,
+          description:
+            (direction ? direction + " · " : "") +
+            (price ? `нетто ${price}` : "").trim(),
+          input_message_content: {
+            message_text: messageText,
+            parse_mode: "HTML",
+          },
+        };
+      });
+
+      await ctx.answerInlineQuery(articles, {
+        cache_time: 5,
+        is_personal: true,
+      });
+    } catch (e) {
+      console.error(
+        "[tg-bot] inline_query error:",
+        e.response?.data || e.message || e
+      );
+      // В случае ошибки — пустой ответ, чтобы не спамить
       try {
-        await ctx.editMessageReplyMarkup();
+        await ctx.answerInlineQuery([], { cache_time: 5, is_personal: true });
       } catch {
         // ignore
       }
-
-      await ctx.reply(`Бронь #${bookingId} подтверждена ✅`);
-    } catch (e) {
-      console.error(
-        "[tg-bot] supplier_confirm error:",
-        e.response?.data || e.message || e
-      );
-      const { kb } = await getRoleAndKeyboard(ctx);
-      await ctx.reply("Ошибка при подтверждении. Попробуйте позже.", kb);
-    }
-  });
-
-  // Отклонение брони
-  bot.action(/supplier_reject_(\d+)/, async (ctx) => {
-    const bookingId = ctx.match[1];
-    const chatId = ctx.from.id;
-
-    try {
-      await ctx.answerCbQuery().catch(() => {});
-      if (!API_BASE) {
-        const { kb } = await getRoleAndKeyboard(ctx);
-        await ctx.reply(
-          "API_BASE_URL / SITE_API_URL не настроен на сервере. Обратитесь к администратору.",
-          kb
-        );
-        return;
-      }
-
-      await axios.post(
-        `${API_BASE}/api/telegram/provider/${chatId}/bookings/${bookingId}/reject`
-      );
-
-      try {
-        await ctx.editMessageReplyMarkup();
-      } catch {
-        // ignore
-      }
-
-      await ctx.reply(`Бронь #${bookingId} отклонена ❌`);
-    } catch (e) {
-      console.error(
-        "[tg-bot] supplier_reject error:",
-        e.response?.data || e.message || e
-      );
-      const { kb } = await getRoleAndKeyboard(ctx);
-      await ctx.reply("Ошибка при отклонении. Попробуйте позже.", kb);
     }
   });
 }
