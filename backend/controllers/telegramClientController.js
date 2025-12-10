@@ -2,10 +2,12 @@
 
 const pool = require("../db");
 
-// простая нормализация телефона: убираем пробелы, приводим 00.. → +..
+// Нормализация телефона: убираем всё, кроме цифр.
+// "+998 97 716 37 15" → "998977163715"
 function normalizePhone(raw) {
   if (!raw) return null;
-  return String(raw).replace(/\s+/g, "").replace(/^00/, "+");
+  const digits = String(raw).replace(/\D/g, "");
+  return digits || null;
 }
 
 /**
@@ -25,19 +27,32 @@ async function linkAccount(req, res) {
         .json({ error: "role, phone, chatId are required" });
     }
 
-    const table = role === "provider" ? "providers" : "clients";
-    const phoneColumn = "phone";
+    // защита от инъекции — разрешаем только 2 таблицы
+    const table =
+      role === "provider" ? "providers" :
+      role === "client"   ? "clients"   :
+      null;
 
+    if (!table) {
+      return res.status(400).json({ error: "invalid role" });
+    }
+
+    console.log("[tg-link] body:", req.body);
+    console.log("[tg-link] normPhone:", normPhone, "table:", table);
+
+    // Ищем по цифрам: regexp_replace(phone, '\D','','g') = normPhone
     const result = await pool.query(
       `
       UPDATE ${table}
          SET telegram_chat_id = $1,
              telegram        = COALESCE($2, telegram)
-       WHERE ${phoneColumn} = $3
-       RETURNING id, name
+       WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+       RETURNING id, name, phone
       `,
       [chatId, username || null, normPhone]
     );
+
+    console.log("[tg-link] updated rows:", result.rowCount);
 
     if (result.rowCount === 0) {
       // не нашли — пусть сначала регаются на сайте
@@ -68,7 +83,14 @@ async function getProfileByChat(req, res) {
       return res.status(400).json({ error: "role & chatId required" });
     }
 
-    const table = role === "provider" ? "providers" : "clients";
+    const table =
+      role === "provider" ? "providers" :
+      role === "client"   ? "clients"   :
+      null;
+
+    if (!table) {
+      return res.status(400).json({ error: "invalid role" });
+    }
 
     const result = await pool.query(
       `
