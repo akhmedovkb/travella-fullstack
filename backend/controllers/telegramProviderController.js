@@ -3,15 +3,14 @@ const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
 /**
+ * Получить заявки поставщика по его Telegram chatId
  * GET /api/telegram/provider/:chatId/bookings?status=pending
- * Заявки конкретного поставщика по его telegram_chat_id
  */
 async function getProviderBookings(req, res) {
   try {
     const { chatId } = req.params;
-    const status = req.query.status || "pending"; // pending / confirmed / rejected / canceled
+    const status = req.query.status || "pending";
 
-    // ищем поставщика по chatId
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
@@ -36,7 +35,7 @@ async function getProviderBookings(req, res) {
          b.currency,
          b.tb_meta,
          s.title        AS service_title,
-         c.full_name    AS client_name,
+         c.name         AS client_name,
          c.telegram_chat_id AS client_chat_id,
          COALESCE(b.tb_meta->>'startDate', b.date::text) AS start_date,
          (b.tb_meta->>'endDate') AS end_date,
@@ -179,15 +178,12 @@ async function rejectBooking(req, res) {
 }
 
 /**
- * GET /api/telegram/provider/:chatId/services?category=refused_tour
- * Все marketplace-услуги (отказные туры / отели / авиабилеты / билеты)
- * конкретного поставщика.
+ * Список услуг поставщика (отказные туры/отели/авиабилеты/билеты)
+ * GET /api/telegram/provider/:chatId/services
  */
 async function getProviderServices(req, res) {
   try {
     const { chatId } = req.params;
-    const category = req.query.category || null;
-    const status = req.query.status || null;
 
     const providerRes = await pool.query(
       `SELECT id, name
@@ -203,53 +199,34 @@ async function getProviderServices(req, res) {
 
     const providerId = providerRes.rows[0].id;
 
-    const allowedCategories = [
-      "refused_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_event_ticket",
-    ];
-
-    const where = ["s.provider_id = $1"];
-    const params = [providerId];
-
-    if (category && allowedCategories.includes(category)) {
-      params.push(category);
-      where.push(`s.category = $${params.length}`);
-    } else {
-      params.push(allowedCategories);
-      where.push(`s.category = ANY($${params.length})`);
-    }
-
-    if (status) {
-      params.push(status);
-      where.push(`s.status = $${params.length}`);
-    }
-
-    const sql = `
-      SELECT
-        s.id,
-        s.title,
-        s.category,
-        s.status,
-        s.created_at,
-        s.expiration_at,
-        s.details
-      FROM services s
-      WHERE ${where.join(" AND ")}
+    const servicesRes = await pool.query(
+      `SELECT
+         s.id,
+         s.category,
+         s.status,
+         s.title,
+         s.details,
+         s.created_at
+       FROM services s
+      WHERE s.provider_id = $1
+        AND s.category IN (
+          'refused_tour',
+          'refused_hotel',
+          'refused_flight',
+          'refused_event'
+        )
       ORDER BY s.created_at DESC
-      LIMIT 50
-    `;
-
-    const servicesRes = await pool.query(sql, params);
+      LIMIT 50`,
+      [providerId]
+    );
 
     return res.json({
       success: true,
-      items: servicesRes.rows,
+      services: servicesRes.rows,
     });
   } catch (err) {
     console.error("getProviderServices error:", err);
-    res.status(500).json({ error: "Internal error" });
+    return res.status(500).json({ error: "Internal error" });
   }
 }
 
