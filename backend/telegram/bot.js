@@ -1,28 +1,18 @@
 // backend/telegram/bot.js
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
-const axios = require("axios");
+const axiosBase = require("axios");
 
 // ==== CONFIG ====
 
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 const OLD_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
-console.log("=== BOT.JS LOADED ===");
-console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "<empty>");
-console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "<empty>");
-
-const BOT_TOKEN = CLIENT_TOKEN || OLD_TOKEN;
-
-if (!BOT_TOKEN) {
+if (!CLIENT_TOKEN && !OLD_TOKEN) {
   throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN/TELEGRAM_BOT_TOKEN in env");
 }
 
-if (CLIENT_TOKEN) {
-  console.log("[tg-bot] Using CLIENT token for Telegraf bot");
-} else {
-  console.log("[tg-bot] Using OLD token for Telegraf bot");
-}
+const BOT_TOKEN = CLIENT_TOKEN || OLD_TOKEN;
 
 const API_BASE = (
   process.env.API_BASE_URL ||
@@ -30,41 +20,31 @@ const API_BASE = (
   "http://localhost:8080"
 ).replace(/\/+$/, "");
 
-const PUBLIC_BASE = (
-  process.env.SITE_PUBLIC_URL ||
-  "https://travella.uz"
-).replace(/\/+$/, "");
-
+console.log("=== BOT.JS LOADED ===");
+console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "(none)");
+console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "(none)");
+console.log(
+  "[tg-bot] Using",
+  CLIENT_TOKEN ? "CLIENT" : "OLD",
+  "token for Telegraf bot"
+);
 console.log("[tg-bot] API_BASE =", API_BASE);
+
+// axios инстанс
+const axios = axiosBase.create({
+  baseURL: API_BASE,
+  timeout: 10000,
+});
 
 // ==== INIT BOT ====
 
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 
-// Логируем все апдейты (чтобы на проде видеть, что вообще приходит)
-bot.use(async (ctx, next) => {
-  try {
-    const u = ctx.update || {};
-    const info = {
-      type: ctx.updateType,
-      subTypes: ctx.updateSubTypes,
-    };
-    if (ctx.from) {
-      info.fromId = ctx.from.id;
-      info.username = ctx.from.username;
-    }
-    console.log("[tg-bot] update:", info);
-  } catch (e) {
-    console.error("[tg-bot] log middleware error:", e);
-  }
-  return next();
-});
-
 // ==== HELPERS ====
 
 function getMainMenuKeyboard(role) {
-  // role: "client" | "provider"
+  // пока меню одинаковое для ролей
   return {
     reply_markup: {
       keyboard: [
@@ -73,41 +53,6 @@ function getMainMenuKeyboard(role) {
         [{ text: "👤 Профиль" }, { text: "🏢 Стать поставщиком" }],
       ],
       resize_keyboard: true,
-    },
-  };
-}
-
-function getInlineCategoryKeyboard() {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "Отказной тур",
-            switch_inline_query_current_chat: "#refused_tour",
-          },
-          {
-            text: "Отказной отель",
-            switch_inline_query_current_chat: "#refused_hotel",
-          },
-        ],
-        [
-          {
-            text: "Отказной авиабилет",
-            switch_inline_query_current_chat: "#refused_flight",
-          },
-          {
-            text: "Отказной билет",
-            switch_inline_query_current_chat: "#refused_event",
-          },
-        ],
-        [
-          {
-            text: "Главное меню",
-            callback_data: "goto:main",
-          },
-        ],
-      ],
     },
   };
 }
@@ -123,98 +68,22 @@ async function askRole(ctx) {
   });
 }
 
-function humanCategory(category) {
-  switch (category) {
-    case "refused_tour":
-      return "Отказной тур";
-    case "refused_hotel":
-      return "Отказной отель";
-    case "refused_flight":
-      return "Отказной авиабилет";
-    case "refused_event":
-      return "Отказной билет на мероприятие";
-    default:
-      return category || "Услуга";
-  }
+function logUpdate(ctx, label = "update") {
+  try {
+    const fromId = ctx.from?.id;
+    const username = ctx.from?.username;
+    const type = ctx.updateType;
+    const subTypes = ctx.updateSubTypes;
+    console.log("[tg-bot]", label, {
+      type,
+      subTypes,
+      fromId,
+      username,
+    });
+  } catch (_) {}
 }
 
-/**
- * Короткая строка для списка услуг
- */
-function formatServiceShort(item) {
-  const cat = humanCategory(item.category);
-  const details = item.details || {};
-  const title = item.title || details.title || "Без названия";
-
-  const directionParts = [
-    details.directionFrom,
-    details.directionTo || details.directionCountry,
-  ].filter(Boolean);
-
-  const direction =
-    directionParts.length > 0 ? directionParts.join(" → ") : null;
-
-  let line = `${title}`;
-  if (direction) line += ` · ${direction}`;
-  return `${cat}: ${line}`;
-}
-
-/**
- * Детальное описание услуги для карточки (при клике)
- */
-function formatServiceDetails(item) {
-  const cat = humanCategory(item.category);
-  const details = item.details || {};
-  const title = item.title || details.title || "Без названия";
-
-  const lines = [];
-  lines.push(`${cat}`);
-  lines.push(`Название: ${title}`);
-
-  const directionParts = [
-    details.directionFrom,
-    details.directionTo || details.directionCountry,
-  ].filter(Boolean);
-  if (directionParts.length > 0) {
-    lines.push(`Маршрут: ${directionParts.join(" → ")}`);
-  }
-
-  if (details.startDate || details.endDate) {
-    lines.push(
-      `Даты: ${details.startDate || "?"} — ${details.endDate || "?"}`
-    );
-  }
-
-  if (details.hotel) lines.push(`Отель: ${details.hotel}`);
-  if (details.roomCategory) lines.push(`Категория номера: ${details.roomCategory}`);
-  if (details.accommodation) lines.push(`Размещение: ${details.accommodation}`);
-  if (details.food) lines.push(`Питание: ${details.food}`);
-  if (details.transfer) lines.push(`Трансфер: ${details.transfer}`);
-
-  if (details.netPrice || details.price) {
-    lines.push(
-      `Цена нетто: ${details.netPrice || details.price} ${
-        details.currency || ""
-      }`.trim()
-    );
-  }
-
-  if (details.expiration) {
-    lines.push(`Актуально до: ${details.expiration}`);
-  }
-
-  if (lines.length <= 3 && Object.keys(details).length > 0) {
-    lines.push(
-      "Доп. детали: " +
-        JSON.stringify(details, null, 2).substring(0, 800)
-    );
-  }
-
-  return lines.join("\n");
-}
-
-// ==== PHONE LINKING ====
-
+// Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
   try {
     const chatId = ctx.chat.id;
@@ -231,10 +100,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
 
     console.log("[bot] handlePhoneRegistration payload:", payload);
 
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/link`,
-      payload
-    );
+    const { data } = await axios.post(`/api/telegram/link`, payload);
 
     console.log("[bot] /api/telegram/link response:", data);
 
@@ -287,16 +153,9 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       await ctx.reply("Привязка выполнена.");
     }
 
-    // Главное меню
     await ctx.reply(
       "В любой момент можете открыть главное меню и выбрать нужный раздел.",
       getMainMenuKeyboard(finalRole)
-    );
-
-    // И сразу подсказка про inline-поиск отказных услуг
-    await ctx.reply(
-      "Быстрый поиск отказных туров / отелей / авиабилетов / билетов:",
-      getInlineCategoryKeyboard()
     );
   } catch (e) {
     console.error(
@@ -312,53 +171,66 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
 // ==== /start ====
 
 bot.start(async (ctx) => {
+  logUpdate(ctx, "/start");
   const chatId = ctx.chat.id;
 
   try {
-    console.log("[tg-bot] /start from", {
-      chatId,
-      username: ctx.from?.username,
-    });
-
     let role = null;
 
     try {
       const resClient = await axios.get(
-        `${API_BASE}/api/telegram/profile/client/${chatId}`
+        `/api/telegram/profile/client/${chatId}`
       );
-      console.log("[tg-bot] profile client resp:", resClient.status, resClient.data);
       if (resClient.data && resClient.data.success) {
         role = "client";
+        console.log(
+          "[tg-bot] profile client resp:",
+          resClient.status,
+          resClient.data
+        );
       }
-    } catch (e) {}
+    } catch (e) {
+      if (e?.response?.status !== 404) {
+        console.log(
+          "[tg-bot] profile client error:",
+          e?.response?.data || e.message || e
+        );
+      }
+    }
 
     if (!role) {
       try {
         const resProv = await axios.get(
-          `${API_BASE}/api/telegram/profile/provider/${chatId}`
+          `/api/telegram/profile/provider/${chatId}`
         );
-        console.log("[tg-bot] profile provider resp:", resProv.status, resProv.data);
         if (resProv.data && resProv.data.success) {
           role = "provider";
+          console.log(
+            "[tg-bot] profile provider resp:",
+            resProv.status,
+            resProv.data
+          );
         }
-      } catch (e) {}
+      } catch (e) {
+        if (e?.response?.status !== 404) {
+          console.log(
+            "[tg-bot] profile provider error:",
+            e?.response?.data || e.message || e
+          );
+        }
+      }
     }
-
-    console.log("[tg-bot] resolved role on /start:", role);
 
     if (role) {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
 
+      console.log("[tg-bot] resolved role on /start:", role);
+
       await ctx.reply(
         "Добро пожаловать в Travella! 👋\nГлавное меню доступно ниже.",
         getMainMenuKeyboard(role)
-      );
-
-      await ctx.reply(
-        "Быстрый поиск отказных туров / отелей / авиабилетов / билетов:",
-        getInlineCategoryKeyboard()
       );
       return;
     }
@@ -415,19 +287,10 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
   }
 });
 
-bot.action("goto:main", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    const role = ctx.session?.role || "client";
-    await ctx.reply("Главное меню ниже 👇", getMainMenuKeyboard(role));
-  } catch (e) {
-    console.error("[tg-bot] goto:main error:", e);
-  }
-});
-
-// ==== CONTACT ====
+// ==== CONTACT (кнопка "Отправить мой номер") ====
 
 bot.on("contact", async (ctx) => {
+  logUpdate(ctx, "contact");
   const contact = ctx.message.contact;
   if (!contact || !contact.phone_number) {
     await ctx.reply("Не удалось прочитать номер телефона. Попробуйте ещё раз.");
@@ -443,7 +306,9 @@ bot.on("contact", async (ctx) => {
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
 
 bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
-  if (!ctx.session || !ctx.session.requestedRole) return;
+  if (!ctx.session || !ctx.session.requestedRole) {
+    return;
+  }
 
   const phone = ctx.message.text.trim();
   const requestedRole = ctx.session.requestedRole;
@@ -453,162 +318,148 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
 
 // ==== ГЛАВНОЕ МЕНЮ: КНОПКИ ====
 
-bot.hears("🔍 Найти услугу", async (ctx) => {
-  if (!ctx.session) ctx.session = {};
-  ctx.session.search = null;
+bot.hears(/🔍 Найти услугу/i, async (ctx) => {
+  logUpdate(ctx, "hears Найти услугу");
 
-  await ctx.reply("Выберите тип услуги:", getInlineCategoryKeyboard());
+  await ctx.reply("Выберите тип услуги:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📍 Отказной тур", callback_data: "find:refused_tour" }],
+        [{ text: "🏨 Отказной отель", callback_data: "find:refused_hotel" }],
+        [{ text: "✈️ Отказной авиабилет", callback_data: "find:refused_flight" }],
+        [{ text: "🎫 Отказной билет", callback_data: "find:refused_ticket" }],
+      ],
+    },
+  });
 });
 
-// Остальные пункты меню пока с аккуратными текстами, чтобы ничего не ломать
-
-bot.hears("❤️ Избранное", async (ctx) => {
+// заглушки, чтобы не было 404
+bot.hears(/❤️ Избранное/i, async (ctx) => {
+  logUpdate(ctx, "hears Избранное");
   await ctx.reply(
-    "Избранное скоро появится в боте.\nПока вы можете добавлять и смотреть избранное на сайте travella.uz во вкладке «Избранное»."
+    "Избранное скоро появится в боте.\n" +
+      "Пока вы можете добавлять и смотреть избранное на сайте travella.uz во вкладке «Избранное»."
   );
 });
 
-bot.hears("📄 Мои брони", async (ctx) => {
+bot.hears(/📄 Мои брони/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои брони");
   await ctx.reply(
-    "Показ бронирований через бота мы ещё доделываем.\nПока все ваши брони доступны в личном кабинете на сайте travella.uz."
+    "Пока бронирование через бот мы ещё доделываем.\n" +
+      "Пока все ваши брони доступны в личном кабинете на сайте travella.uz."
   );
 });
 
-bot.hears("📨 Мои заявки", async (ctx) => {
+bot.hears(/📨 Мои заявки/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои заявки");
   await ctx.reply(
-    "Раздел «Мои заявки» вскоре появится в боте.\nСейчас заявки можно отслеживать в личном кабинете Travella."
+    "Пока раздел заявок в боте в разработке.\n" +
+      "Вы можете смотреть отклики и заявки на сайте travella.uz."
   );
 });
 
-bot.hears("👤 Профиль", async (ctx) => {
+bot.hears(/👤 Профиль/i, async (ctx) => {
+  logUpdate(ctx, "hears Профиль");
   await ctx.reply(
-    "Ваш профиль клиента можно дополнить и изменить на сайте travella.uz в разделе «Профиль»."
+    "Ваш профиль клиента можно дополнить и изменить на сайте travella.uz во вкладке «Профиль».\n\n" +
+      "Ссылка: https://travella.uz"
   );
 });
 
-bot.hears("🏢 Стать поставщиком", async (ctx) => {
+bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
+  logUpdate(ctx, "hears Стать поставщиком");
   await ctx.reply(
-    "Чтобы стать поставщиком Travella, заполните форму на сайте\nhttps://travella.uz и дождитесь модерации.\nМы также свяжемся с вами по указанным контактам."
+    "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
+      "https://travella.uz и дождитесь модерации.\n\n" +
+      "Мы также свяжемся с вами по указанным контактам."
   );
 });
 
-// ==== INLINE MODE (встроенный бот) ====
+// ==== ПОИСК ОТКАЗНЫХ УСЛУГ (реальный) ====
 
-// парсим категорию из inline-запроса
-function categoryFromInlineQuery(q) {
-  const t = (q || "").trim().toLowerCase();
-
-  if (t.startsWith("#refused_tour") || t.startsWith("#tour")) return "refused_tour";
-  if (t.startsWith("#refused_hotel") || t.startsWith("#hotel")) return "refused_hotel";
-  if (t.startsWith("#refused_flight") || t.startsWith("#flight") || t.startsWith("#avia"))
-    return "refused_flight";
-  if (t.startsWith("#refused_event") || t.startsWith("#event") || t.startsWith("#ticket"))
-    return "refused_event";
-
-  // если ничего не указано — показываем просто топ отказных туров
-  return null;
-}
-
-bot.on("inline_query", async (ctx) => {
+bot.action(/^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/, async (ctx) => {
   try {
-    const iq = ctx.inlineQuery;
-    const fromId = iq.from.id;
-    const q = iq.query || "";
+    const type = ctx.match[1];
+    await ctx.answerCbQuery();
+    logUpdate(ctx, `action search ${type}`);
 
-    console.log("[tg-bot] inline_query:", { fromId, q });
+    const chatId = ctx.chat.id;
 
-    const category = categoryFromInlineQuery(q);
+    await ctx.reply("Ищу подходящие предложения...");
 
-    const payload = {
-      limit: 20,
-    };
-    if (category) payload.category = category;
-
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/client/${fromId}/search`,
-      payload
+    const { data } = await axios.get(
+      `/api/telegram/client/${chatId}/search`,
+      { params: { type } }
     );
 
-    if (!data || !data.success || !Array.isArray(data.items) || data.items.length === 0) {
-      await ctx.answerInlineQuery([], {
-        cache_time: 5,
-        switch_pm_text: "Нет подходящих услуг",
-        switch_pm_parameter: "start",
-      });
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] search resp malformed:", data);
+      await ctx.reply(
+        "Произошла ошибка при загрузке услуг. Попробуйте позже."
+      );
       return;
     }
 
-    const results = data.items.map((item) => {
-      const details = item.details || {};
-      const title = item.title || details.title || "Без названия";
-      const short = formatServiceShort(item);
+    if (!data.items.length) {
+      await ctx.reply(
+        "К сожалению, по этой категории сейчас нет подходящих предложений."
+      );
+      return;
+    }
 
-      let thumb = null;
-      if (Array.isArray(details.images) && details.images.length > 0) {
-        thumb = details.images[0];
-      } else if (details.mainImage) {
-        thumb = details.mainImage;
+    const labelMap = {
+      refused_tour: "Отказной тур",
+      refused_hotel: "Отказной отель",
+      refused_flight: "Отказной авиабилет",
+      refused_ticket: "Отказной билет",
+    };
+
+    await ctx.reply(`Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`);
+
+    for (const svc of data.items.slice(0, 10)) {
+      const d = svc.details || {};
+      const title = svc.title || labelMap[type] || "Услуга";
+      const providerName = svc.provider_name || "Поставщик Travella";
+
+      const directionParts = [];
+      if (d.directionFrom && d.directionTo) {
+        directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
       }
+      if (d.directionCountry) {
+        directionParts.push(d.directionCountry);
+      }
+      const direction =
+        directionParts.length > 0 ? directionParts.join(" · ") : null;
 
-      const url = `${PUBLIC_BASE}/marketplace/service/${item.id}`;
+      const dates =
+        d.startDate && d.endDate
+          ? `Даты: ${d.startDate} → ${d.endDate}`
+          : null;
 
-      return {
-        type: "article",
-        id: String(item.id),
-        title,
-        description: short,
-        thumb_url: thumb || undefined,
-        input_message_content: {
-          message_text:
-            formatServiceDetails(item) +
-            `\n\nПодробнее: ${url}`,
-          parse_mode: "HTML",
-        },
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Открыть на Travella", url }],
-            [
-              {
-                text: "⚡ Быстрый запрос по этой услуге",
-                callback_data: `quickReq:${item.id}`,
-              },
-            ],
-          ],
-        },
-      };
-    });
+      const netPrice =
+        d.netPrice || d.price || d.grossPrice || d.amount || null;
 
-    await ctx.answerInlineQuery(results, {
-      cache_time: 5,
-      is_personal: true,
-    });
+      const lines = [];
+      lines.push(`*${title}*`);
+      if (direction) lines.push(direction);
+      if (dates) lines.push(dates);
+      if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
+      lines.push(`Поставщик: ${providerName}`);
+      lines.push("");
+      lines.push("Подробнее и бронирование: https://travella.uz");
+
+      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
+    }
   } catch (e) {
-    console.error("[tg-bot] inline_query error:", e?.response?.data || e);
-    try {
-      await ctx.answerInlineQuery([], {
-        cache_time: 2,
-        switch_pm_text: "Ошибка, откройте чат с ботом",
-        switch_pm_parameter: "start",
-      });
-    } catch {}
-  }
-});
-
-bot.action(/^quickReq:(\d+)$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    const id = ctx.match[1];
-    await ctx.reply(
-      "Скоро здесь появится быстрый запрос по услуге #" +
-        id +
-        ". Пока можете оставить заявку прямо на сайте travella.uz."
+    console.error(
+      "[tg-bot] error in search:",
+      e?.response?.data || e.message || e
     );
-  } catch (e) {
-    console.error("[tg-bot] quickReq error:", e);
+    await ctx.reply(
+      "Не удалось загрузить услуги. Попробуйте позже."
+    );
   }
 });
 
-// ⚠️ ВАЖНО: здесь НЕТ bot.launch()
-// Запуском занимается index.js, который импортирует { bot }
-
+// ⚠️ здесь НЕТ bot.launch() — запуск делаем из index.js
 module.exports = { bot };
