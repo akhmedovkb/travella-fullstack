@@ -7,7 +7,7 @@ const telegramProviderController = require("../controllers/telegramProviderContr
 
 const {
   tgSend,
-  tgAnswerCallbackQuery,       // ← убедись, что эти две функции экспортируются из utils/telegram
+  tgAnswerCallbackQuery,
   tgEditMessageReplyMarkup,
   linkProviderChat,
   linkClientChat,
@@ -29,17 +29,14 @@ const WELCOME_TEXT =
 
 // ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
-  // 1) header token (если задавали secret_token при )
   const hdr =
     req.get("X-Telegram-Bot-Api-Secret-Token") ||
     req.get("x-telegram-bot-api-secret-token") ||
     "";
   if (HEADER_TOKEN && hdr === HEADER_TOKEN) return true;
 
-  // 2) path /webhook/<SECRET>
   if (req.params && req.params.secret && req.params.secret === SECRET_PATH) return true;
 
-  // 3) query ?secret=<SECRET>
   const q = req.query || {};
   if (q.secret && q.secret === SECRET_PATH) return true;
 
@@ -49,7 +46,6 @@ function verifySecret(req) {
 // ---------- Универсальный хэндлер webhook (объединяем всё) ----------
 async function handleWebhook(req, res) {
   try {
-    // Telegram ждёт 200 всегда; логируем попадание
     const hdr =
       req.get("X-Telegram-Bot-Api-Secret-Token") ||
       req.get("x-telegram-bot-api-secret-token") ||
@@ -76,12 +72,12 @@ async function handleWebhook(req, res) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
       }
+
       /* --- Назначение/снятие ответственного --- */
       let mAssign = data.match(/^lead:(\d+):assign:self$/);
       let mUn = data.match(/^lead:(\d+):unassign$/);
       if (mAssign || mUn) {
         const leadId = Number((mAssign || mUn)[1]);
-        // кто нажал кнопку: попробуем найти его провайдера по telegram_chat_id
         const who = cq.from?.id;
         let prov = null;
         try {
@@ -92,25 +88,34 @@ async function handleWebhook(req, res) {
           prov = r.rows[0] || null;
         } catch {}
         if (!prov && mAssign) {
-          await tgAnswerCallbackQuery(cq.id, "Привяжите бота к профилю провайдера (/start p_<id>)", { show_alert: true });
+          await tgAnswerCallbackQuery(
+            cq.id,
+            "Привяжите бота к профилю провайдера (/start p_<id>)",
+            { show_alert: true }
+          );
           return res.json({ ok: true });
         }
         await pool.query(
           `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
           [leadId, mUn ? null : prov.id]
         );
-        await tgAnswerCallbackQuery(cq.id, mUn ? "Ответственный снят" : `Назначено: ${prov.name}`);
+        await tgAnswerCallbackQuery(
+          cq.id,
+          mUn ? "Ответственный снят" : `Назначено: ${prov.name}`
+        );
 
-        // подтянем телефон и текущее состояние статуса для клавиатуры
-        const row = (await pool.query(
-          `SELECT phone, status FROM leads WHERE id = $1`,
-          [leadId]
-        )).rows[0] || {};
+        const row =
+          (
+            await pool.query(
+              `SELECT phone, status FROM leads WHERE id = $1`,
+              [leadId]
+            )
+          ).rows[0] || {};
         const kb = buildLeadKB({
           state: row.status || "new",
           id: leadId,
           phone: row.phone || "",
-          adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/,"")}/admin/leads`,
+          adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "")}/admin/leads`,
           assigneeName: mUn ? null : prov.name,
         });
         await tgEditMessageReplyMarkup({
@@ -130,14 +135,19 @@ async function handleWebhook(req, res) {
       const leadId = Number(m[1]);
       const newStatus = m[2];
 
-      await pool.query(`UPDATE leads SET status = $2 WHERE id = $1`, [leadId, newStatus]);
+      await pool.query(`UPDATE leads SET status = $2 WHERE id = $1`, [
+        leadId,
+        newStatus,
+      ]);
       await tgAnswerCallbackQuery(
         cq.id,
-        newStatus === "working" ? `Лид #${leadId} взят в работу` : `Лид #${leadId} закрыт`
+        newStatus === "working"
+          ? `Лид #${leadId} взят в работу`
+          : `Лид #${leadId} закрыт`
       );
 
-      // подтянем телефон и имя ответственного
-      let phone = "", assigneeName = null;
+      let phone = "",
+        assigneeName = null;
       try {
         const r = await pool.query(
           `SELECT l.phone, p.name AS assignee_name
@@ -150,12 +160,11 @@ async function handleWebhook(req, res) {
         assigneeName = r.rows[0]?.assignee_name || null;
       } catch {}
 
-      // заменяем клавиатуру на «итоговую» (одна инертная кнопка + контакты + админка)
       const kb = buildLeadKB({
         state: newStatus,
         id: leadId,
         phone,
-        adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/,"")}/admin/leads`,
+        adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "")}/admin/leads`,
         assigneeName,
       });
 
@@ -213,14 +222,13 @@ async function handleWebhook(req, res) {
     return res.json({ ok: true });
   } catch (e) {
     console.error("[tg] webhook error:", e?.message || e);
-    // Возвращаем 200, чтобы Telegram не ретраил бесконечно
     return res.json({ ok: true });
   }
 }
 
 // ---------- Маршруты (поддерживаем и path-секрет, и query-секрет) ----------
-router.post("/webhook/:secret", handleWebhook); // /api/telegram/webhook/<SECRET>
-router.post("/webhook", handleWebhook);         // /api/telegram/webhook?secret=...
+router.post("/webhook/:secret", handleWebhook);
+router.post("/webhook", handleWebhook);
 
 // debug ping
 router.get("/webhook/:secret/_debug/ping", (req, res) => {
@@ -240,35 +248,60 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
+// КЛИЕНТ: избранное / брони / заявки
+router.get(
+  "/client/:chatId/favorites",
+  telegramClientController.getClientFavorites
+);
+
+router.get(
+  "/client/:chatId/bookings",
+  telegramClientController.getClientBookings
+);
+
+router.get(
+  "/client/:chatId/requests",
+  telegramClientController.getClientRequests
+);
 
 /**
  * Утилита для установки webhook через браузер:
  * GET /api/telegram/?secret=<same_as_ENV>&useHeader=1
- * - если useHeader=1 — добавит secret_token (HEADER_TOKEN) в Webhook (Bot API будет класть его в заголовок)
- * - URL берётся из API_BASE_URL или SITE_API_URL
  */
 router.get("/setWebhook", async (req, res) => {
   try {
     const token = process.env.TELEGRAM_BOT_TOKEN || "";
-    if (!token) return res.status(500).json({ ok: false, error: "token_missing" });
+    if (!token)
+      return res.status(500).json({ ok: false, error: "token_missing" });
 
-    const base = (process.env.API_BASE_URL || process.env.SITE_API_URL || "").replace(/\/+$/, "");
-    if (!base) return res.status(500).json({ ok: false, error: "api_base_missing" });
+    const base = (process.env.API_BASE_URL || process.env.SITE_API_URL || "").replace(
+      /\/+$/,
+      ""
+    );
+    if (!base)
+      return res.status(500).json({ ok: false, error: "api_base_missing" });
 
     const secret = req.query.secret || SECRET_PATH;
     const useHeader = String(req.query.useHeader || "0") === "1";
 
-    // по умолчанию используем query-секрет
-    const url = `${base}/api/telegram/webhook?secret=${encodeURIComponent(secret)}`;
+    const url = `${base}/api/telegram/webhook?secret=${encodeURIComponent(
+      secret
+    )}`;
 
     const axios = (await import("axios")).default;
     const payload = { url };
     if (useHeader && HEADER_TOKEN) payload.secret_token = HEADER_TOKEN;
 
-    const resp = await axios.post(`https://api.telegram.org/bot${token}/setWebhook`, payload);
+    const resp = await axios.post(
+      `https://api.telegram.org/bot${token}/setWebhook`,
+      payload
+    );
     res.json(resp.data);
   } catch (e) {
-    console.error("setWebhook error:", e?.response?.data || e?.message || e);
+    console.error(
+      "setWebhook error:",
+      e?.response?.data || e?.message || e
+    );
     res.status(500).json({ ok: false, error: "set_webhook_failed" });
   }
 });
@@ -294,6 +327,5 @@ router.get(
   "/provider/:chatId/services",
   telegramProviderController.getProviderServices
 );
-
 
 module.exports = router;
