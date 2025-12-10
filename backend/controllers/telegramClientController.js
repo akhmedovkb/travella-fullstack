@@ -375,7 +375,6 @@ async function searchClientServices(req, res) {
           s.title,
           s.category,
           s.price,
-          s.currency,
           s.details,
           s.created_at,
           p.name AS provider_name
