@@ -279,6 +279,11 @@ router.get(
   telegramProviderController.getProviderBookings
 );
 
+router.get(
+  "/provider/:chatId/services",
+  telegramProviderController.getProviderServices
+);
+
 router.post(
   "/provider/:chatId/bookings/:bookingId/confirm",
   telegramProviderController.confirmBooking
