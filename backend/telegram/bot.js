@@ -2,7 +2,6 @@
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
 const axios = require("axios");
-const pool = require("../db");
 
 // ==== CONFIG ====
 
@@ -13,24 +12,21 @@ console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "<empty>");
 console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "<empty>");
 
+if (!CLIENT_TOKEN && !OLD_TOKEN) {
+  throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN / TELEGRAM_BOT_TOKEN in env");
+}
+
+// Используем НОВЫЙ клиентский токен
 const BOT_TOKEN = CLIENT_TOKEN || OLD_TOKEN;
-if (!BOT_TOKEN) {
-  throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN/TELEGRAM_BOT_TOKEN in env");
-}
-if (CLIENT_TOKEN) {
-  console.log("[tg-bot] Using CLIENT token for Telegraf bot");
-} else {
-  console.log(
-    "[tg-bot] WARNING: using OLD TELEGRAM_BOT_TOKEN for Telegraf (fallback)"
-  );
-}
+console.log("[tg-bot] Using CLIENT token for Telegraf bot");
 
 const API_BASE = (
   process.env.API_BASE_URL ||
   process.env.SITE_API_URL ||
   "http://localhost:8080"
 ).replace(/\/+$/, "");
-const SITE_PUBLIC_URL = (process.env.SITE_PUBLIC_URL || "https://travella.uz").replace(
+
+const SITE_URL = (process.env.SITE_PUBLIC_URL || "https://travella.uz").replace(
   /\/+$/,
   ""
 );
@@ -42,10 +38,29 @@ console.log("[tg-bot] API_BASE =", API_BASE);
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 
+// Логируем все апдейты (очень помогает в дебаге)
+bot.use(async (ctx, next) => {
+  try {
+    const type = ctx.updateType;
+    const subTypes = ctx.updateSubTypes;
+    const fromId = ctx.chat && ctx.chat.id;
+    const username = ctx.from && ctx.from.username;
+    console.log("[tg-bot] update:", {
+      type,
+      subTypes,
+      fromId,
+      username,
+    });
+  } catch (e) {
+    console.warn("[tg-bot] log middleware error:", e?.message || e);
+  }
+  return next();
+});
+
 // ==== HELPERS ====
 
+// Главное меню (пока одинаковое для клиента и поставщика)
 function getMainMenuKeyboard(role) {
-  // role: "client" | "provider"
   return {
     reply_markup: {
       keyboard: [
@@ -69,70 +84,10 @@ async function askRole(ctx) {
   });
 }
 
-/** Загрузка услуги из БД по id (минимальный набор полей) */
-async function loadServiceById(serviceId) {
-  const res = await pool.query(
-    `
-      SELECT
-        s.id,
-        s.title,
-        s.description,
-        p.name AS provider_name
-      FROM services s
-      LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1
-      LIMIT 1
-    `,
-    [serviceId]
-  );
-  return res.rows[0] || null;
-}
-
-/** Отрисовать карточку услуги в чате с кнопками */
-async function sendServiceCard(ctx, serviceId) {
-  try {
-    const svc = await loadServiceById(serviceId);
-    if (!svc) {
-      await ctx.reply("Эта услуга не найдена или уже неактуальна.");
-      return;
-    }
-
-    let text = `🧾 Услуга #${svc.id}\n\n${svc.title || "Без названия"}`;
-    if (svc.provider_name) {
-      text += `\nПоставщик: ${svc.provider_name}`;
-    }
-
-    if (svc.description) {
-      const cut =
-        svc.description.length > 400
-          ? svc.description.slice(0, 400) + "…"
-          : svc.description;
-      text += `\n\n${cut}`;
-    }
-
-    const kb = {
-      inline_keyboard: [
-        [
-          { text: "🔐 Запросить бронь", callback_data: `book:${svc.id}` },
-          { text: "❓ Задать вопрос", callback_data: `question:${svc.id}` },
-        ],
-      ],
-    };
-
-    if (SITE_PUBLIC_URL) {
-      kb.inline_keyboard.push([
-        {
-          text: "🌐 Открыть на сайте",
-          url: `${SITE_PUBLIC_URL}/service/${svc.id}`,
-        },
-      ]);
-    }
-
-    await ctx.reply(text, { reply_markup: kb });
-  } catch (e) {
-    console.error("[tg-bot] sendServiceCard error:", e);
-    await ctx.reply("Не удалось загрузить эту услугу. Попробуйте позже.");
-  }
+// Универсальный helper для запросов к нашему API
+async function apiGet(path) {
+  const url = `${API_BASE}${path}`;
+  return axios.get(url, { timeout: 10000 });
 }
 
 // Основная логика привязки телефона к аккаунту / созданию нового
@@ -150,14 +105,11 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       firstName,
     };
 
-    console.log("[bot] handlePhoneRegistration payload:", payload);
+    console.log("[tg-bot] handlePhoneRegistration payload:", payload);
 
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/link`,
-      payload
-    );
+    const { data } = await axios.post(`${API_BASE}/api/telegram/link`, payload);
 
-    console.log("[bot] /api/telegram/link response:", data);
+    console.log("[tg-bot] /api/telegram/link response:", data);
 
     if (!data || !data.success) {
       await ctx.reply(
@@ -212,17 +164,11 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       await ctx.reply("Привязка выполнена.");
     }
 
-    // ✅ СРАЗУ показываем главное меню
+    // ✅ СРАЗУ показываем главное меню и НИЧЕГО больше не спрашиваем
     await ctx.reply(
       "В любой момент можете открыть главное меню и выбрать нужный раздел.",
       getMainMenuKeyboard(finalRole)
     );
-
-    // если deep-link был s_<id> — показываем карточку
-    const deepServiceId = ctx.session?.deepServiceId;
-    if (deepServiceId) {
-      await sendServiceCard(ctx, deepServiceId);
-    }
   } catch (e) {
     console.error(
       "[tg-bot] handlePhoneRegistration error:",
@@ -238,35 +184,12 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
 
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
+  console.log(
+    "[tg-bot] /start from",
+    { chatId, username: ctx.from && ctx.from.username }
+  );
 
   try {
-    const text = ctx.message?.text || "";
-    // выцепляем payload после /start
-    let payload = ctx.startPayload || "";
-    if (!payload) {
-      const m = text.match(/^\/start(?:@\S+)?(?:\s+(.+))?$/i);
-      if (m && m[1]) payload = m[1].trim();
-    }
-
-    let deepServiceId = null;
-    if (payload) {
-      const norm = payload.replace(/\s+/g, "").toLowerCase();
-      const ms = norm.match(/^s[-_]?(\d+)$/); // s_123, s-123, s123
-      if (ms) deepServiceId = Number(ms[1]);
-    }
-
-    if (!ctx.session) ctx.session = {};
-    if (deepServiceId) {
-      ctx.session.deepServiceId = deepServiceId;
-    }
-
-    console.log("[tg-bot] /start from", {
-      chatId,
-      username: ctx.from.username,
-      payload,
-      deepServiceId,
-    });
-
     // 1. пробуем узнать профиль как клиента
     let role = null;
 
@@ -274,20 +197,14 @@ bot.start(async (ctx) => {
       const resClient = await axios.get(
         `${API_BASE}/api/telegram/profile/client/${chatId}`
       );
-      console.log(
-        "[tg-bot] profile client resp:",
-        resClient.status,
-        resClient.data
-      );
+      console.log("[tg-bot] profile client resp:", resClient.status, resClient.data);
       if (resClient.data && resClient.data.success) {
         role = "client";
       }
     } catch (e) {
-      if (e.response?.status !== 404) {
-        console.warn(
-          "[tg-bot] profile client error:",
-          e.response?.data || e.message
-        );
+      // 404 — это нормально, значит не клиент
+      if (e.response && e.response.status !== 404) {
+        console.warn("[tg-bot] profile client error:", e.response.data || e.message);
       }
     }
 
@@ -297,25 +214,19 @@ bot.start(async (ctx) => {
         const resProv = await axios.get(
           `${API_BASE}/api/telegram/profile/provider/${chatId}`
         );
-        console.log(
-          "[tg-bot] profile provider resp:",
-          resProv.status,
-          resProv.data
-        );
+        console.log("[tg-bot] profile provider resp:", resProv.status, resProv.data);
         if (resProv.data && resProv.data.success) {
           role = "provider";
         }
       } catch (e) {
-        if (e.response?.status !== 404) {
+        if (e.response && e.response.status !== 404) {
           console.warn(
             "[tg-bot] profile provider error:",
-            e.response?.data || e.message
+            e.response.data || e.message
           );
         }
       }
     }
-
-    console.log("[tg-bot] resolved role on /start:", role || "<none>");
 
     if (role) {
       // Уже привязан → сразу главное меню
@@ -327,11 +238,6 @@ bot.start(async (ctx) => {
         "Добро пожаловать в Travella! 👋\nГлавное меню доступно ниже.",
         getMainMenuKeyboard(role)
       );
-
-      // если deep-link введён — показываем карточку
-      if (ctx.session.deepServiceId) {
-        await sendServiceCard(ctx, ctx.session.deepServiceId);
-      }
       return;
     }
 
@@ -393,7 +299,9 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
 bot.on("contact", async (ctx) => {
   const contact = ctx.message.contact;
   if (!contact || !contact.phone_number) {
-    await ctx.reply("Не удалось прочитать номер телефона. Попробуйте ещё раз.");
+    await ctx.reply(
+      "Не удалось прочитать номер телефона. Попробуйте ещё раз."
+    );
     return;
   }
 
@@ -418,258 +326,170 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
   await handlePhoneRegistration(ctx, requestedRole, phone, false);
 });
 
-// ==== ОБРАБОТЧИКИ ГЛАВНОГО МЕНЮ ====
+// ==== ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ ====
 
-// Мои брони
-bot.hears("📄 Мои брони", async (ctx) => {
-  try {
-    const chatId = ctx.chat.id;
-    const role = ctx.session?.role || "client";
-
-    if (role === "provider") {
-      // панель поставщика
-      const { data } = await axios.get(
-        `${API_BASE}/api/telegram/provider/${chatId}/bookings`
-      );
-
-      if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-        await ctx.reply("У вас пока нет бронирований как у поставщика.");
-        return;
-      }
-
-      const lines = data.items.slice(0, 10).map((b) => {
-        const period =
-          b.start_date && b.end_date
-            ? `${b.start_date} — ${b.end_date}`
-            : b.start_date || "";
-        return (
-          `#${b.id} · статус: ${b.status || "—"}\n` +
-          (b.service_title ? `Услуга: ${b.service_title}\n` : "") +
-          (period ? `Даты: ${period}\n` : "") +
-          (b.client_name ? `Клиент: ${b.client_name}\n` : "")
-        );
-      });
-
-      await ctx.reply(
-        "Ваши брони как поставщика (последние):\n\n" + lines.join("\n")
-      );
-      return;
-    }
-
-    // клиент
-    const { data } = await axios.get(
-      `${API_BASE}/api/telegram/client/${chatId}/bookings`
-    );
-
-    if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-      await ctx.reply("У вас пока нет броней на Travella.");
-      return;
-    }
-
-    const lines = data.items.slice(0, 10).map((b) => {
-      const period =
-        b.start_date && b.end_date
-          ? `${b.start_date} — ${b.end_date}`
-          : b.start_date || "";
-      return (
-        `#${b.id} · статус: ${b.status || "—"}\n` +
-        (b.service_title ? `Услуга: ${b.service_title}\n` : "") +
-        (b.provider_name ? `Поставщик: ${b.provider_name}\n` : "") +
-        (period ? `Даты: ${period}\n` : "")
-      );
-    });
-
-    await ctx.reply("Ваши последние брони:\n\n" + lines.join("\n"));
-  } catch (e) {
-    console.error("[tg-bot] error in 'Мои брони':", e.response?.data || e);
-    await ctx.reply("Не удалось загрузить брони. Попробуйте позже.");
-  }
-});
-
-// Мои заявки
-bot.hears("📨 Мои заявки", async (ctx) => {
-  try {
-    const chatId = ctx.chat.id;
-    const role = ctx.session?.role || "client";
-
-    if (role === "provider") {
-      // TODO: можно будет добавить SQL по заявкам для провайдера
-      await ctx.reply(
-        "Раздел заявок для поставщиков скоро будет доступен в боте.\n" +
-          "Пока что смотрите заявки в личном кабинете Travella."
-      );
-      return;
-    }
-
-    const { data } = await axios.get(
-      `${API_BASE}/api/telegram/client/${chatId}/requests`
-    );
-
-    if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-      await ctx.reply("У вас пока нет заявок на Travella.");
-      return;
-    }
-
-    const lines = data.items.slice(0, 10).map((r) => {
-      return (
-        `#${r.id} · статус: ${r.status || "—"}\n` +
-        (r.service_title ? `Услуга: ${r.service_title}\n` : "") +
-        (r.provider_name ? `Поставщик: ${r.provider_name}\n` : "") +
-        (r.message ? `Комментарий: ${r.message}\n` : "") +
-        (r.created_at ? `Создано: ${r.created_at}\n` : "")
-      );
-    });
-
-    await ctx.reply("Ваши последние заявки:\n\n" + lines.join("\n"));
-  } catch (e) {
-    console.error("[tg-bot] error in 'Мои заявки':", e.response?.data || e);
-    await ctx.reply("Не удалось загрузить заявки. Попробуйте позже.");
-  }
-});
-
-// Избранное (клиент)
-bot.hears("❤️ Избранное", async (ctx) => {
-  try {
-    const chatId = ctx.chat.id;
-    const role = ctx.session?.role || "client";
-
-    if (role === "provider") {
-      await ctx.reply(
-        "Избранное для поставщиков пока недоступно в боте.\n" +
-          "Скоро мы добавим этот раздел."
-      );
-      return;
-    }
-
-    const { data } = await axios.get(
-      `${API_BASE}/api/telegram/client/${chatId}/favorites`
-    );
-
-    if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-      await ctx.reply("У вас пока нет избранных услуг на Travella.");
-      return;
-    }
-
-    const lines = data.items.slice(0, 10).map((f) => {
-      const locParts = [];
-      if (f.country) locParts.push(f.country);
-      if (f.city) locParts.push(f.city);
-      const loc = locParts.join(", ");
-      return (
-        `${f.service_title || "Услуга"}\n` +
-        (loc ? `Локация: ${loc}\n` : "") +
-        (f.provider_name ? `Поставщик: ${f.provider_name}\n` : "")
-      );
-    });
-
-    await ctx.reply("Ваше избранное:\n\n" + lines.join("\n"));
-  } catch (e) {
-    console.error("[tg-bot] error in 'Избранное':", e.response?.data || e);
-    await ctx.reply("Не удалось загрузить избранное. Попробуйте позже.");
-  }
-});
-
-// Профиль
-bot.hears("👤 Профиль", async (ctx) => {
+// Общий helper для Избранного / Брони / Заявки
+async function handleClientList(ctx, kind) {
+  const chatId = ctx.chat.id;
   const role = ctx.session?.role || "client";
-  await ctx.reply(
-    role === "provider"
-      ? "Ваш профиль поставщика можно отредактировать в личном кабинете Travella."
-      : "Ваш профиль клиента можно дополнить и изменить на сайте travella.uz."
-  );
-});
 
-// Стать поставщиком
-bot.hears("🏢 Стать поставщиком", async (ctx) => {
-  await ctx.reply(
-    "Чтобы стать поставщиком Travella, заполните форму на сайте https://travella.uz и дождитесь модерации.\n" +
-      "Мы также свяжемся с вами по указанным контактам."
-  );
-});
+  const prettyName =
+    kind === "favorites"
+      ? "избранное"
+      : kind === "bookings"
+      ? "брони"
+      : "заявки";
 
-// Найти услугу (пока без inline-поиска; сделаем отдельно)
+  try {
+    await ctx.reply(`Загружаю ${prettyName}…`);
+
+    // сейчас делаем только клиентский профиль
+    const path = `/api/telegram/client/${chatId}/${kind}`;
+
+    const resp = await apiGet(path);
+    const data = resp.data || {};
+
+    console.log(`[tg-bot] ${kind} resp:`, data);
+
+    if (data.notFound) {
+      await ctx.reply(
+        "Телеграм ещё не привязан к клиентскому аккаунту. Нажмите /start и привяжите номер."
+      );
+      return;
+    }
+
+    const list =
+      Array.isArray(data.items) && data.items.length
+        ? data.items
+        : Array.isArray(data[kind]) && data[kind].length
+        ? data[kind]
+        : [];
+
+    if (!list.length) {
+      if (kind === "favorites") {
+        await ctx.reply("У вас пока нет избранных услуг.");
+      } else if (kind === "bookings") {
+        await ctx.reply("У вас пока нет бронирований через Travella.");
+      } else {
+        await ctx.reply("У вас пока нет активных заявок.");
+      }
+      return;
+    }
+
+    // Собираем человекочитаемый список (до 5 строк)
+    const lines = list.slice(0, 5).map((item, idx) => {
+      const title =
+        item.title ||
+        item.service_title ||
+        item.serviceName ||
+        item.name ||
+        `Услуга #${item.id || idx + 1}`;
+
+      const status = item.status ? ` — ${item.status}` : "";
+
+      // Пробуем вытащить какие-то даты
+      const dateField =
+        item.start_date ||
+        item.startDate ||
+        item.date_from ||
+        item.date ||
+        null;
+
+      const dateStr = dateField ? ` (${String(dateField).slice(0, 10)})` : "";
+
+      return `${idx + 1}. ${title}${status}${dateStr}`;
+    });
+
+    let header = "";
+    if (kind === "favorites") {
+      header = `Найдено ${list.length} избранных услуг:`;
+    } else if (kind === "bookings") {
+      header = `Найдено ${list.length} бронирований:`;
+    } else {
+      header = `Найдено ${list.length} заявок:`;
+    }
+
+    const extra =
+      list.length > 5 ? `\n… и ещё ${list.length - 5} в вашем аккаунте.` : "";
+
+    await ctx.reply(`${header}\n\n${lines.join("\n")}${extra}`);
+  } catch (e) {
+    console.error(`[tg-bot] error in '${kind}':`, e?.response?.data || e);
+    await ctx.reply(
+      `Не удалось загрузить ${prettyName}. Попробуйте позже.`
+    );
+  }
+}
+
+// 🔍 Найти услугу
 bot.hears("🔍 Найти услугу", async (ctx) => {
   await ctx.reply(
     "Поиск услуг через бот мы готовим.\n" +
-      "Сейчас вы можете найти и забронировать услуги на сайте https://travella.uz."
+      "Сейчас вы можете найти и забронировать услуги на сайте Travella:",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Открыть Travella",
+              url: SITE_URL,
+            },
+          ],
+        ],
+      },
+    }
   );
 });
 
-// ==== CALLBACK-КНОПКИ ДЛЯ КАРТОЧКИ УСЛУГИ ====
+// ❤️ Избранное
+bot.hears("❤️ Избранное", (ctx) => handleClientList(ctx, "favorites"));
 
-// Запросить бронь
-bot.action(/^book:(\d+)$/, async (ctx) => {
-  const serviceId = Number(ctx.match[1]);
-  const chatId = ctx.from?.id || ctx.chat?.id;
-  try {
-    await ctx.answerCbQuery("Отправляем запрос на бронь...");
+// 📄 Мои брони
+bot.hears("📄 Мои брони", (ctx) => handleClientList(ctx, "bookings"));
 
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/client/${chatId}/service/${serviceId}/request`,
-      { type: "booking" }
-    );
+// 📨 Мои заявки
+bot.hears("📨 Мои заявки", (ctx) => handleClientList(ctx, "requests"));
 
-    if (!data || !data.success) {
-      await ctx.reply(
-        "Не удалось создать заявку на бронь. Возможно, Telegram ещё не привязан к клиентскому аккаунту."
-      );
-      return;
+// 👤 Профиль
+bot.hears("👤 Профиль", async (ctx) => {
+  await ctx.reply(
+    "Ваш профиль клиента можно дополнить и изменить на сайте Travella:",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Открыть профиль на сайте",
+              url: SITE_URL,
+            },
+          ],
+        ],
+      },
     }
-
-    await ctx.reply(
-      `Заявка на бронь отправлена! 🎉\nНомер заявки: #${data.requestId}`
-    );
-  } catch (e) {
-    console.error("[tg-bot] book:<id> error:", e.response?.data || e);
-    const status = e.response?.status;
-    if (status === 404) {
-      await ctx.reply(
-        "Похоже, ваш Telegram ещё не привязан к клиентскому аккаунту Travella.\n" +
-          "Нажмите /start и завершите привязку, затем повторите попытку."
-      );
-    } else {
-      await ctx.reply("Не удалось создать заявку. Попробуйте позже.");
-    }
-  }
+  );
 });
 
-// Задать вопрос
-bot.action(/^question:(\d+)$/, async (ctx) => {
-  const serviceId = Number(ctx.match[1]);
-  const chatId = ctx.from?.id || ctx.chat?.id;
-  try {
-    await ctx.answerCbQuery("Отправляем вопрос поставщику...");
-
-    const { data } = await axios.post(
-      `${API_BASE}/api/telegram/client/${chatId}/service/${serviceId}/request`,
-      { type: "question" }
-    );
-
-    if (!data || !data.success) {
-      await ctx.reply(
-        "Не удалось отправить вопрос. Возможно, Telegram ещё не привязан к клиентскому аккаунту."
-      );
-      return;
+// 🏢 Стать поставщиком
+bot.hears("🏢 Стать поставщиком", async (ctx) => {
+  await ctx.reply(
+    "Чтобы стать поставщиком Travella, заполните форму на сайте " +
+      `${SITE_URL} и дождитесь модерации.\n\n` +
+      "Мы также свяжемся с вами по указанным контактам.",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Стать поставщиком",
+              url: SITE_URL,
+            },
+          ],
+        ],
+      },
     }
-
-    await ctx.reply(
-      `Ваш вопрос по услуге отправлен поставщику. ✉️\nНомер обращения: #${data.requestId}`
-    );
-  } catch (e) {
-    console.error("[tg-bot] question:<id> error:", e.response?.data || e);
-    const status = e.response?.status;
-    if (status === 404) {
-      await ctx.reply(
-        "Похоже, ваш Telegram ещё не привязан к клиентскому аккаунту Travella.\n" +
-          "Нажмите /start и завершите привязку, затем повторите попытку."
-      );
-    } else {
-      await ctx.reply("Не удалось отправить вопрос. Попробуйте позже.");
-    }
-  }
+  );
 });
 
 // ⚠️ ВАЖНО: здесь НЕТ bot.launch()
-// Запуском занимается index.js
-
+// Запуском занимается backend/index.js
 module.exports = { bot };
