@@ -101,7 +101,12 @@ async function linkAccount(req, res) {
       "Telegram user";
 
     console.log("[tg-link] body:", req.body);
-    console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
+    console.log(
+      "[tg-link] normPhone:",
+      normPhone,
+      "requestedRole:",
+      requestedRole
+    );
 
     // 1) Пытаемся найти уже существующего пользователя по телефону
     const found = await findUserByPhone(normPhone);
@@ -344,30 +349,33 @@ async function searchCategory(req, res) {
  * Категории:
  *   - refused_tour
  *   - refused_hotel
- *   - refused_flight  (или как у тебя называется)
- *   - refused_ticket  (билет на мероприятие)
+ *   - refused_flight
+ *   - refused_ticket
  *
- * chatId сейчас используем только как формальный параметр,
- * при желании можно добавить проверку, что такой клиент реально существует.
+ * chatId сейчас используем только как формальный параметр.
  */
 async function searchClientServices(req, res) {
   try {
     const { chatId } = req.params;
-    const { category } = req.query || {};
+    const { category, type } = req.query || {};
 
-    if (!category) {
-      return res.status(400).json({ success: false, error: "category is required" });
+    // Принимаем и category, и type, чтобы не словить баг из-за названия
+    const cat = category || type;
+
+    if (!cat) {
+      return res
+        .status(400)
+        .json({ success: false, error: "category is required" });
     }
 
     console.log("[tg-api] searchClientServices", {
       chatId,
-      category,
+      category: cat,
     });
 
-    // Берём те же услуги, что и маркетплейс:
-    //   - services.category = $1
-    //   - status = 'approved'
-    //   - показываем базовую инфу + details
+    // Максимально простой запрос:
+    // пока что — "все услуги с такой категорией".
+    // Фильтры по статусу / актуальности можно добавить позже.
     const result = await pool.query(
       `
         SELECT
@@ -381,11 +389,10 @@ async function searchClientServices(req, res) {
         FROM services s
         LEFT JOIN providers p ON p.id = s.provider_id
         WHERE s.category = $1
-          AND s.status = 'approved'
         ORDER BY s.created_at DESC
         LIMIT 50
       `,
-      [category]
+      [cat]
     );
 
     const items = result.rows || [];
@@ -398,9 +405,10 @@ async function searchClientServices(req, res) {
     });
   } catch (e) {
     console.error("GET /api/telegram/client/:chatId/search error:", e);
-    return res
-      .status(500)
-      .json({ success: false, error: "Internal error in searchClientServices" });
+    return res.status(500).json({
+      success: false,
+      error: "Internal error in searchClientServices",
+    });
   }
 }
 
