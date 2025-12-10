@@ -5,12 +5,15 @@ const axios = require("axios");
 
 // ==== CONFIG ====
 
-const BOT_TOKEN =
-  process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
-  process.env.TELEGRAM_BOT_TOKEN;
+// ✅ теперь только клиентский токен
+const BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN;
+
+console.log("[tg-bot] init:", {
+  hasClientToken: !!process.env.TELEGRAM_CLIENT_BOT_TOKEN,
+});
 
 if (!BOT_TOKEN) {
-  throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN/TELEGRAM_BOT_TOKEN in env");
+  throw new Error("TELEGRAM_CLIENT_BOT_TOKEN is not set (client bot)");
 }
 
 const API_BASE = (
@@ -28,7 +31,6 @@ bot.use(session());
 
 function getMainMenuKeyboard(role) {
   // role: "client" | "provider"
-  // при желании можно сделать разные меню
   return {
     reply_markup: {
       keyboard: [
@@ -84,7 +86,6 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
     }
 
     // фактическая роль по БД
-    // provider_lead считаем «профиль поставщика в процессе»
     const finalRole =
       data.role === "provider" || data.role === "provider_lead"
         ? "provider"
@@ -94,14 +95,12 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
     ctx.session.role = finalRole;
     ctx.session.linked = true;
 
-    // ---- Текст в зависимости от кейса ----
     if (data.existed && data.role === "client") {
       await ctx.reply(
         "Спасибо. 🙌\n\nМы привязали ваш Telegram к аккаунту клиента Travella.\n" +
           "Теперь бот сможет показывать ваши брони, заявки и отправлять уведомления."
       );
     } else if (data.existed && data.role === "provider") {
-      // сюда попадём, даже если человек нажал «я клиент», но телефон уже у поставщика
       await ctx.reply(
         "Спасибо. 🙌\n\nМы привязали ваш Telegram к аккаунту поставщика Travella.\n" +
           "Теперь бот сможет показывать ваши заявки и отправлять уведомления."
@@ -129,7 +128,6 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       await ctx.reply("Привязка выполнена.");
     }
 
-    // ✅ СРАЗУ показываем главное меню и НИЧЕГО больше не спрашиваем
     await ctx.reply(
       "В любой момент можете открыть главное меню и выбрать нужный раздел.",
       getMainMenuKeyboard(finalRole)
@@ -151,7 +149,6 @@ bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
 
   try {
-    // 1. пробуем узнать профиль как клиента
     let role = null;
 
     try {
@@ -161,11 +158,8 @@ bot.start(async (ctx) => {
       if (resClient.data && resClient.data.success) {
         role = "client";
       }
-    } catch (e) {
-      // 404 — это нормально, значит не клиент
-    }
+    } catch (e) {}
 
-    // 2. если не клиент — пробуем как поставщик
     if (!role) {
       try {
         const resProv = await axios.get(
@@ -174,13 +168,10 @@ bot.start(async (ctx) => {
         if (resProv.data && resProv.data.success) {
           role = "provider";
         }
-      } catch (e) {
-        // тоже может быть 404 — не привязан как поставщик
-      }
+      } catch (e) {}
     }
 
     if (role) {
-      // Уже привязан → сразу главное меню
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
@@ -192,7 +183,6 @@ bot.start(async (ctx) => {
       return;
     }
 
-    // ❌ Аккаунт ещё не привязан → спрашиваем роль
     await ctx.reply(
       "Добро пожаловать в Travella! 👋\n\n" +
         "Сначала давайте привяжем ваш аккаунт по номеру телефона."
@@ -208,12 +198,12 @@ bot.start(async (ctx) => {
 
 bot.action(/^role:(client|provider)$/, async (ctx) => {
   try {
-    const role = ctx.match[1]; // 'client' | 'provider'
+    const role = ctx.match[1];
 
     if (!ctx.session) ctx.session = {};
     ctx.session.requestedRole = role;
 
-    await ctx.answerCbQuery(); // убираем "часики" на кнопке
+    await ctx.answerCbQuery();
 
     await ctx.reply(
       role === "client"
@@ -245,7 +235,7 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
   }
 });
 
-// ==== CONTACT (кнопка "Отправить мой номер") ====
+// ==== CONTACT ====
 
 bot.on("contact", async (ctx) => {
   const contact = ctx.message.contact;
@@ -263,9 +253,7 @@ bot.on("contact", async (ctx) => {
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
 
 bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
-  // если пользователь на шаге привязки прислал номер текстом
   if (!ctx.session || !ctx.session.requestedRole) {
-    // если мы вообще не ждём номер — игнор или своя логика
     return;
   }
 
@@ -275,7 +263,7 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
   await handlePhoneRegistration(ctx, requestedRole, phone, false);
 });
 
-// ⚠️ ВАЖНО: здесь НЕТ bot.launch()
-// Запуском занимается index.js
+// ⚠️ здесь по-прежнему НЕТ bot.launch()
+// index.js делает launch
 
 module.exports = { bot };
