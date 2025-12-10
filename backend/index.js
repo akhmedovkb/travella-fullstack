@@ -244,6 +244,7 @@ app.get("/", (_req, res) => res.send("🚀 Travella API OK"));
 let bot = null;
 try {
   ({ bot } = require("./telegram/bot"));
+  console.log("[tg-bot] index.js: bot module loaded =", !!bot);
 } catch (e) {
   console.warn(
     "[tg-bot] bot module not loaded:",
@@ -252,6 +253,8 @@ try {
 }
 
 if (bot) {
+  console.log("[tg-bot] index.js: calling bot.launch()");
+
   bot
     .launch()
     .then(() => {
@@ -266,16 +269,14 @@ if (bot) {
 
       if (
         desc &&
-        desc.includes(
-          "Conflict: terminated by other getUpdates request"
-        )
+        desc.includes("Conflict: terminated by other getUpdates request")
       ) {
         console.warn(
           "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
             "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
           desc
         );
-        // НИЧЕГО не кидаем дальше — просто не запускаем polling
+        // НЕ бросаем ошибку — просто не запускаем polling
       } else {
         console.error(
           "[tg-bot] launch error — бот будет отключён, но API продолжит работать:",
