@@ -15,18 +15,19 @@ const {
 } = require("../utils/telegram");
 
 // ---------- ENV / секреты ----------
-const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret";
-const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || "";
+const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
+const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || "";          // если задашь при setWebhook: secret_token=...
 console.log(
   `[tg] routes mounted: /api/telegram/webhook/${SECRET_PATH} (header token ${HEADER_TOKEN ? "ON" : "OFF"})`
 );
 
+// RU/UZ/EN привет после привязки
 const WELCOME_TEXT =
   "Вы подключили бот! Ожидайте сообщения по заявкам!\n" +
   "Botni uladingiz! Arizalar bo‘yicha xabarlarni kuting!\n" +
   "You have connected the bot! Please wait for request notifications!";
 
-// ---------- Общая проверка секрета ----------
+// ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
   const hdr =
     req.get("X-Telegram-Bot-Api-Secret-Token") ||
@@ -42,7 +43,7 @@ function verifySecret(req) {
   return false;
 }
 
-// ---------- Универсальный webhook ----------
+// ---------- Универсальный хэндлер webhook (объединяем всё) ----------
 async function handleWebhook(req, res) {
   try {
     const hdr =
@@ -63,11 +64,10 @@ async function handleWebhook(req, res) {
 
     const update = req.body || {};
 
-    // 1) Callback-кнопки лида
+    // 1) callback_query для лидов
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
-
       if (/^noop:\d+$/.test(data)) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
@@ -86,7 +86,6 @@ async function handleWebhook(req, res) {
           );
           prov = r.rows[0] || null;
         } catch {}
-
         if (!prov && mAssign) {
           await tgAnswerCallbackQuery(
             cq.id,
@@ -95,7 +94,6 @@ async function handleWebhook(req, res) {
           );
           return res.json({ ok: true });
         }
-
         await pool.query(
           `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
           [leadId, mUn ? null : prov.id]
@@ -177,7 +175,7 @@ async function handleWebhook(req, res) {
       return res.json({ ok: true });
     }
 
-    // 2) /start p_<id> /start c_<id> для старого бота
+    // 2) /start p_<id> / c_<id> для линковки
     const msg =
       update.message ||
       update.edited_message ||
@@ -225,7 +223,7 @@ async function handleWebhook(req, res) {
   }
 }
 
-// ---------- Маршруты webhook ----------
+// ---------- Маршруты вебхука ----------
 router.post("/webhook/:secret", handleWebhook);
 router.post("/webhook", handleWebhook);
 
@@ -247,15 +245,14 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
-// поиск отказных услуг для бота
-router.post(
+// 🔍 ПОИСК отказных услуг для бота
+router.get(
   "/client/:chatId/search",
-  telegramClientController.searchRefusedServices
+  telegramClientController.searchCategory
 );
 
 /**
- * Утилита для установки webhook через браузер:
- * GET /api/telegram/?secret=<same_as_ENV>&useHeader=1
+ * setWebhook утилита (старый бот)
  */
 router.get("/setWebhook", async (req, res) => {
   try {
@@ -307,6 +304,7 @@ router.post(
   telegramProviderController.rejectBooking
 );
 
+// marketplace-услуги поставщика
 router.get(
   "/provider/:chatId/services",
   telegramProviderController.getProviderServices
