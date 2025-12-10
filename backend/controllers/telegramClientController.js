@@ -1,5 +1,4 @@
 // backend/controllers/telegramClientController.js
-
 const pool = require("../db");
 
 /**
@@ -22,6 +21,25 @@ function normalizePhone(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, "");
   return digits || null;
+}
+
+/**
+ * Вспомогалка: получить client.id по telegram_chat_id.
+ * Возвращает число или null.
+ */
+async function getClientIdByChat(chatId) {
+  const res = await pool.query(
+    `
+      SELECT id
+        FROM clients
+       WHERE telegram_chat_id = $1
+       LIMIT 1
+    `,
+    [String(chatId)]
+  );
+
+  if (res.rowCount === 0) return null;
+  return res.rows[0].id;
 }
 
 /**
@@ -284,7 +302,127 @@ async function getProfileByChat(req, res) {
   }
 }
 
+/**
+ * GET /api/telegram/client/:chatId/favorites
+ * Клиентские избранные услуги.
+ *
+ * Возвращает:
+ * { success: true, clientId, items: [ ... ] }
+ */
+async function getClientFavorites(req, res) {
+  try {
+    const { chatId } = req.params;
+    const clientId = await getClientIdByChat(chatId);
+
+    if (!clientId) {
+      return res.status(404).json({ notFound: true, reason: "client_not_found" });
+    }
+
+    // Берём последние избранные услуги клиента.
+    // Таблица предполагается wishlist (как в API избранного).
+    const favRes = await pool.query(
+      `
+        SELECT *
+          FROM wishlist
+         WHERE client_id = $1
+         ORDER BY id DESC
+         LIMIT 50
+      `,
+      [clientId]
+    );
+
+    res.json({
+      success: true,
+      clientId,
+      items: favRes.rows,
+    });
+  } catch (e) {
+    console.error("GET /api/telegram/client/:chatId/favorites error:", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+}
+
+/**
+ * GET /api/telegram/client/:chatId/bookings
+ * Брони клиента.
+ *
+ * Возвращает:
+ * { success: true, clientId, items: [ ... ] }
+ */
+async function getClientBookings(req, res) {
+  try {
+    const { chatId } = req.params;
+    const clientId = await getClientIdByChat(chatId);
+
+    if (!clientId) {
+      return res.status(404).json({ notFound: true, reason: "client_not_found" });
+    }
+
+    // Очень аккуратно: не завязываемся на названия колонок кроме id и client_id
+    const bookingsRes = await pool.query(
+      `
+        SELECT *
+          FROM bookings
+         WHERE client_id = $1
+         ORDER BY id DESC
+         LIMIT 50
+      `,
+      [clientId]
+    );
+
+    res.json({
+      success: true,
+      clientId,
+      items: bookingsRes.rows,
+    });
+  } catch (e) {
+    console.error("GET /api/telegram/client/:chatId/bookings error:", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+}
+
+/**
+ * GET /api/telegram/client/:chatId/requests
+ * Заявки клиента (обычно "запросы на бронирование").
+ *
+ * Возвращает:
+ * { success: true, clientId, items: [ ... ] }
+ */
+async function getClientRequests(req, res) {
+  try {
+    const { chatId } = req.params;
+    const clientId = await getClientIdByChat(chatId);
+
+    if (!clientId) {
+      return res.status(404).json({ notFound: true, reason: "client_not_found" });
+    }
+
+    const reqRes = await pool.query(
+      `
+        SELECT *
+          FROM requests
+         WHERE client_id = $1
+         ORDER BY id DESC
+         LIMIT 50
+      `,
+      [clientId]
+    );
+
+    res.json({
+      success: true,
+      clientId,
+      items: reqRes.rows,
+    });
+  } catch (e) {
+    console.error("GET /api/telegram/client/:chatId/requests error:", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+}
+
 module.exports = {
   linkAccount,
   getProfileByChat,
+  getClientFavorites,
+  getClientBookings,
+  getClientRequests,
 };
