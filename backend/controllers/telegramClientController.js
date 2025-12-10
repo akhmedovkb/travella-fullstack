@@ -5,12 +5,18 @@ const pool = require("../db");
 /**
  * Технический bcrypt-хэш какого-то "левого" пароля,
  * чтобы удовлетворить NOT NULL и формат для bcrypt.compare.
+ * Пользователь этот пароль не знает, и он ему не нужен,
+ * пока он не задаст себе нормальный пароль через веб.
+ *
+ * Это пример рабочего bcrypt-хэша для строки "password".
+ * (взят из официальных примеров bcrypt)
  */
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
 /**
  * Нормализация телефона: оставляем только цифры.
+ * "+998 97 716 37 15" -> "998977163715"
  */
 function normalizePhone(raw) {
   if (!raw) return null;
@@ -20,10 +26,14 @@ function normalizePhone(raw) {
 
 /**
  * Ищем пользователя по телефону.
- * Сначала providers, потом clients.
+ * ВАЖНО: сначала ищем среди providers (приоритет поставщика),
+ * потом среди clients.
+ *
+ * Если нашли — возвращаем { role: 'provider'|'client', id, name }.
+ * Если не нашли — возвращаем null.
  */
 async function findUserByPhone(normPhone) {
-  // 1) provider
+  // 1) Пытаемся найти поставщика
   const prov = await pool.query(
     `
       SELECT id, name, phone
@@ -39,7 +49,7 @@ async function findUserByPhone(normPhone) {
     return { role: "provider", id: row.id, name: row.name };
   }
 
-  // 2) client
+  // 2) Если поставщика нет — ищем клиента
   const cli = await pool.query(
     `
       SELECT id, name, phone
@@ -61,6 +71,17 @@ async function findUserByPhone(normPhone) {
 /**
  * POST /api/telegram/link
  * body: { role: "client" | "provider", phone, chatId, username, firstName }
+ *
+ * ЛОГИКА:
+ * 1) Нормализуем телефон -> "998977163715"
+ * 2) Ищем по телефону сначала provider, потом client:
+ *    - если нашли provider → привязываем Telegram как к поставщику
+ *    - если нашли client   → привязываем Telegram как к клиенту
+ * 3) Если телефон нигде не найден:
+ *    - если role === 'provider' → создаём LEAD нового поставщика
+ *    - иначе (role отсутствует или 'client') → создаём нового клиента
+ *
+ * ВАЖНО: поставщик НЕ становится клиентом автоматически.
  */
 async function linkAccount(req, res) {
   try {
@@ -73,7 +94,7 @@ async function linkAccount(req, res) {
         .json({ error: "phone and chatId are required" });
     }
 
-    const requestedRole = role || "client";
+    const requestedRole = role || "client"; // что выбрал пользователь в боте
     const displayName =
       firstName ||
       username ||
@@ -82,11 +103,15 @@ async function linkAccount(req, res) {
     console.log("[tg-link] body:", req.body);
     console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
 
+    // 1) Пытаемся найти уже существующего пользователя по телефону
     const found = await findUserByPhone(normPhone);
 
     if (found) {
-      const foundRole = found.role;
+      // ---- Телефон уже есть в базе ----
+      const foundRole = found.role; // 'provider' или 'client'
 
+      // Если телефон принадлежит ПОСТАВЩИКУ — считаем его поставщиком,
+      // даже если он нажимал "я клиент" в боте.
       if (foundRole === "provider") {
         const upd = await pool.query(
           `
@@ -112,10 +137,12 @@ async function linkAccount(req, res) {
           id: row.id,
           name: row.name,
           existed: true,
+          // полезно знать боту: пользователь мог нажать "клиент", но он уже поставщик
           requestedRole,
         });
       }
 
+      // Если телефон принадлежит клиенту
       if (foundRole === "client") {
         const upd = await pool.query(
           `
@@ -146,8 +173,12 @@ async function linkAccount(req, res) {
       }
     }
 
-    // Новый клиент
+    // ---- Телефон нигде не найден: создаём нового ----
+    // requestedRole влияет только здесь.
+
+    // === Новый КЛИЕНТ из Telegram ===
     if (!requestedRole || requestedRole === "client") {
+      // email NOT NULL -> генерируем техничный email на основе телефона
       const email = `tg_${normPhone}@telegram.local`;
 
       const insertClient = await pool.query(
@@ -180,8 +211,9 @@ async function linkAccount(req, res) {
       });
     }
 
-    // Новый поставщик → лид
+    // === Новый ПОСТАВЩИК: создаём lead, а не provider ===
     if (requestedRole === "provider") {
+      // предполагаем, что есть таблица leads с полями (phone, name, source, status, created_at)
       const insertLead = await pool.query(
         `
           INSERT INTO leads (phone, name, source, status, created_at)
@@ -213,6 +245,7 @@ async function linkAccount(req, res) {
 
 /**
  * GET /api/telegram/profile/:role/:chatId
+ * Быстрый способ понять, кто это в Телеге (клиент/поставщик).
  */
 async function getProfileByChat(req, res) {
   try {
@@ -253,78 +286,87 @@ async function getProfileByChat(req, res) {
 
 /**
  * POST /api/telegram/client/:chatId/search
- * Поиск всех отказных услуг для бота:
- * - refused_tour
- * - refused_hotel
- * - refused_flight
- * - refused_event
+ *
+ * Варианты body:
+ * 1) { category: 'refused_tour' | 'refused_hotel' | 'refused_flight' | 'refused_event', limit? }
+ *    → список услуг
+ *
+ * 2) { serviceId: number }
+ *    → подробная информация по одной услуге
  */
 async function searchRefusedServices(req, res) {
   try {
     const { chatId } = req.params;
-    const { query, type } = req.body || {};
+    const { category, serviceId, limit } = req.body || {};
 
-    const q = (query || "").trim();
-    if (!q) {
-      return res.json({ success: true, items: [] });
+    console.log("[tg-search] chatId:", chatId, "body:", req.body);
+
+    // --- Детали по конкретной услуге ---
+    if (serviceId) {
+      const q = await pool.query(
+        `
+          SELECT id, category, title, details
+            FROM services
+           WHERE id = $1
+           LIMIT 1
+        `,
+        [serviceId]
+      );
+
+      if (q.rowCount === 0) {
+        return res.status(404).json({ notFound: true });
+      }
+
+      return res.json({
+        success: true,
+        item: q.rows[0],
+      });
     }
 
-    // категории отказных услуг
-    let categories;
-    if (!type || type === "all") {
-      categories = [
-        "refused_tour",
-        "refused_hotel",
-        "refused_flight",
-        "refused_event",
-      ];
-    } else {
-      categories = [`refused_${type}`];
+    // --- Список по категории ---
+    const allowedCategories = [
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_event",
+    ];
+
+    let cat = category;
+    if (cat && !allowedCategories.includes(cat)) {
+      return res.status(400).json({ error: "invalid category" });
     }
 
-    const like = `%${q.toLowerCase()}%`;
+    const hardLimit = Math.min(Number(limit) || 20, 50);
 
-    console.log("[tg-search] chatId:", chatId, "q:", q, "categories:", categories);
+    const params = [];
+    let where = `category = ANY($1)`;
+    params.push(allowedCategories);
 
+    if (cat) {
+      where = `category = $1`;
+      params[0] = cat;
+    }
+
+    // статус approved — чтобы не светить черновики
     const sql = `
-      SELECT
-        s.id,
-        s.category,
-        s.title,
-        s.details,
-        s.price_from,
-        s.currency,
-        s.status,
-        s.created_at,
-        p.name AS provider_name
-      FROM services s
-      JOIN providers p ON p.id = s.provider_id
-      WHERE s.category = ANY($1)
-        AND s.status = 'approved'
-        AND (
-          LOWER(COALESCE(s.title, '')) LIKE $2
-          OR LOWER(COALESCE(s.details::text, '')) LIKE $2
-        )
-      ORDER BY s.created_at DESC
-      LIMIT 30
+      SELECT id, category, title, details
+        FROM services
+       WHERE ${where}
+         AND status = 'approved'
+       ORDER BY created_at DESC
+       LIMIT $2
     `;
+    params.push(hardLimit);
 
-    const result = await pool.query(sql, [categories, like]);
+    const result = await pool.query(sql, params);
 
-    const items = result.rows.map((row) => ({
-      id: row.id,
-      category: row.category,
-      title: row.title,
-      details: row.details,
-      price_from: row.price_from,
-      currency: row.currency,
-      provider_name: row.provider_name,
-    }));
-
-    return res.json({ success: true, items });
+    return res.json({
+      success: true,
+      items: result.rows,
+    });
   } catch (e) {
-    console.error("POST /api/telegram/client/:chatId/search error:", e);
-    return res.status(500).json({ success: false, error: "internal_error" });
+    console.error("POST /api/telegram/client/search error:", e);
+    res.status(500).json({ error: "Internal error" });
   }
 }
 
