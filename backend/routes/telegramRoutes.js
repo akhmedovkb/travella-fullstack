@@ -245,6 +245,13 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
+// поиск отказных услуг по категории
+// GET /api/telegram/client/:chatId/search?category=refused_tour
+router.get(
+  "/client/:chatId/search",
+  telegramClientController.searchClientServices
+);
+
 // 🔍 ПОИСК отказных услуг для бота
 router.get(
   "/client/:chatId/search",
