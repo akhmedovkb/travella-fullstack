@@ -13,22 +13,47 @@ function normalizePhone(raw) {
 }
 
 /**
- * Авто-определение: есть ли такой телефон среди клиентов/поставщиков.
- * Возвращает либо { role: 'client'|'provider', id, name }, либо null.
+ * Ищем пользователя по телефону.
+ * ВАЖНО: сначала ищем среди providers (приоритет поставщика),
+ * потом среди clients.
+ *
+ * Если нашли — возвращаем { role: 'provider'|'client', id, name }.
+ * Если не нашли — возвращаем null.
  */
 async function findUserByPhone(normPhone) {
-  const sql = `
-    SELECT 'client' AS role, id, name
-      FROM clients
-     WHERE regexp_replace(phone, '\\D', '', 'g') = $1
-    UNION ALL
-    SELECT 'provider' AS role, id, name
-      FROM providers
-     WHERE regexp_replace(phone, '\\D', '', 'g') = $1
-    LIMIT 1
-  `;
-  const r = await pool.query(sql, [normPhone]);
-  return r.rows[0] || null;
+  // 1) Пытаемся найти поставщика
+  const prov = await pool.query(
+    `
+      SELECT id, name, phone
+        FROM providers
+       WHERE regexp_replace(phone, '\\D', '', 'g') = $1
+       LIMIT 1
+    `,
+    [normPhone]
+  );
+
+  if (prov.rowCount > 0) {
+    const row = prov.rows[0];
+    return { role: "provider", id: row.id, name: row.name };
+  }
+
+  // 2) Если поставщика нет — ищем клиента
+  const cli = await pool.query(
+    `
+      SELECT id, name, phone
+        FROM clients
+       WHERE regexp_replace(phone, '\\D', '', 'g') = $1
+       LIMIT 1
+    `,
+    [normPhone]
+  );
+
+  if (cli.rowCount > 0) {
+    const row = cli.rows[0];
+    return { role: "client", id: row.id, name: row.name };
+  }
+
+  return null;
 }
 
 /**
@@ -37,11 +62,14 @@ async function findUserByPhone(normPhone) {
  *
  * ЛОГИКА:
  * 1) Нормализуем телефон -> "998977163715"
- * 2) Ищем в clients+providers:
- *    - если нашли -> обновляем telegram_chat_id и telegram, возвращаем { success, role, existed: true }
- * 3) Если НЕ нашли:
- *    - если role === 'client' (или role отсутствует) -> создаём НОВОГО клиента в clients
- *    - если role === 'provider' -> создаём lead в таблице leads
+ * 2) Ищем по телефону сначала provider, потом client:
+ *    - если нашли provider → привязываем Telegram как к поставщику
+ *    - если нашли client   → привязываем Telegram как к клиенту
+ * 3) Если телефон нигде не найден:
+ *    - если role === 'provider' → создаём LEAD нового поставщика
+ *    - иначе (role отсутствует или 'client') → создаём нового клиента
+ *
+ * ВАЖНО: поставщик НЕ становится клиентом автоматически.
  */
 async function linkAccount(req, res) {
   try {
@@ -54,66 +82,101 @@ async function linkAccount(req, res) {
         .json({ error: "phone and chatId are required" });
     }
 
+    const requestedRole = role || "client"; // что выбрал пользователь в боте
     const displayName =
       firstName ||
       username ||
       "Telegram user";
 
     console.log("[tg-link] body:", req.body);
-    console.log("[tg-link] normPhone:", normPhone);
+    console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
 
-    // 1) Пытаемся найти уже существующего клиента/поставщика по телефону
+    // 1) Пытаемся найти уже существующего пользователя по телефону
     const found = await findUserByPhone(normPhone);
 
-    // ---- 1.1. Телефон уже есть в базе: обновляем telegram_* и выходим ----
     if (found) {
-      const foundRole = found.role; // 'client' | 'provider'
-      const table = foundRole === "provider" ? "providers" : "clients";
+      // ---- Телефон уже есть в базе ----
+      const foundRole = found.role; // 'provider' или 'client'
 
-      const upd = await pool.query(
-        `
-        UPDATE ${table}
-           SET telegram_chat_id = $1,
-               telegram        = COALESCE($2, telegram)
-         WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
-         RETURNING id, name, phone
-        `,
-        [chatId, username || null, normPhone]
-      );
+      // Если телефон принадлежит ПОСТАВЩИКУ — считаем его поставщиком,
+      // даже если он нажимал "я клиент" в боте.
+      if (foundRole === "provider") {
+        const upd = await pool.query(
+          `
+            UPDATE providers
+               SET telegram_chat_id = $1,
+                   telegram        = COALESCE($2, telegram)
+             WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+             RETURNING id, name, phone
+          `,
+          [chatId, username || null, normPhone]
+        );
 
-      console.log("[tg-link] updated existing user rows:", upd.rowCount);
+        console.log("[tg-link] updated existing PROVIDER rows:", upd.rowCount);
 
-      if (upd.rowCount === 0) {
-        // теоретически не должно случиться, но на всякий случай
-        return res.status(404).json({ notFound: true });
+        if (upd.rowCount === 0) {
+          return res.status(404).json({ notFound: true });
+        }
+
+        const row = upd.rows[0];
+        return res.json({
+          success: true,
+          role: "provider",
+          id: row.id,
+          name: row.name,
+          existed: true,
+          // полезно знать боту: пользователь нажимал "клиент", но он уже поставщик
+          requestedRole,
+        });
       }
 
-      const row = upd.rows[0];
-      return res.json({
-        success: true,
-        role: foundRole,
-        id: row.id,
-        name: row.name,
-        existed: true,
-      });
+      // Если телефон принадлежит клиенту
+      if (foundRole === "client") {
+        const upd = await pool.query(
+          `
+            UPDATE clients
+               SET telegram_chat_id = $1,
+                   telegram        = COALESCE($2, telegram)
+             WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+             RETURNING id, name, phone
+          `,
+          [chatId, username || null, normPhone]
+        );
+
+        console.log("[tg-link] updated existing CLIENT rows:", upd.rowCount);
+
+        if (upd.rowCount === 0) {
+          return res.status(404).json({ notFound: true });
+        }
+
+        const row = upd.rows[0];
+        return res.json({
+          success: true,
+          role: "client",
+          id: row.id,
+          name: row.name,
+          existed: true,
+          requestedRole,
+        });
+      }
     }
 
-    // ---- 1.2. Телефон НЕ найден в базе ни среди клиентов, ни среди поставщиков ----
-    // Дальше решаем по присланной "role"
+    // ---- Телефон нигде не найден: создаём нового ----
+    // requestedRole влияет только здесь.
 
-    // === Новый клиент из Telegram ===
-    if (!role || role === "client") {
+    // === Новый КЛИЕНТ из Telegram ===
+    if (!requestedRole || requestedRole === "client") {
       const insertClient = await pool.query(
         `
-        INSERT INTO clients (name, email, phone, telegram_chat_id, telegram)
-        VALUES ($1, NULL, $2, $3, $4)
-        RETURNING id, name
+          INSERT INTO clients (name, email, phone, telegram_chat_id, telegram)
+          VALUES ($1, NULL, $2, $3, $4)
+          RETURNING id, name
         `,
         [displayName, phone, chatId, username || null]
       );
 
       const row = insertClient.rows[0];
-      console.log("[tg-link] created NEW client from Telegram:", row);
+      console.log("[tg-link] created NEW CLIENT from Telegram:", row);
 
       return res.json({
         success: true,
@@ -122,23 +185,24 @@ async function linkAccount(req, res) {
         name: row.name,
         existed: false,
         created: "client",
+        requestedRole,
       });
     }
 
-    // === Новый поставщик: не создаём сразу аккаунт, а заводим LEAD ===
-    if (role === "provider") {
-      // таблица leads уже используется в telegramRoutes -> buildLeadKB
+    // === Новый ПОСТАВЩИК: создаём lead, а не provider ===
+    if (requestedRole === "provider") {
+      // предполагаем, что есть таблица leads с полями (phone, name, source, status, created_at)
       const insertLead = await pool.query(
         `
-        INSERT INTO leads (phone, name, source, status, created_at)
-        VALUES ($1, $2, 'telegram_provider', 'new', NOW())
-        RETURNING id
+          INSERT INTO leads (phone, name, source, status, created_at)
+          VALUES ($1, $2, 'telegram_provider', 'new', NOW())
+          RETURNING id
         `,
         [phone, displayName]
       );
 
       const lead = insertLead.rows[0];
-      console.log("[tg-link] created NEW PROVIDER lead from Telegram:", lead);
+      console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
 
       return res.json({
         success: true,
@@ -146,10 +210,10 @@ async function linkAccount(req, res) {
         leadId: lead.id,
         existed: false,
         created: "provider_lead",
+        requestedRole,
       });
     }
 
-    // На всякий случай — неизвестная роль
     return res.status(400).json({ error: "invalid role" });
   } catch (e) {
     console.error("POST /api/telegram/link error:", e);
@@ -179,10 +243,10 @@ async function getProfileByChat(req, res) {
 
     const result = await pool.query(
       `
-      SELECT id, name, phone, telegram_chat_id
-        FROM ${table}
-       WHERE telegram_chat_id = $1
-       LIMIT 1
+        SELECT id, name, phone, telegram_chat_id
+          FROM ${table}
+         WHERE telegram_chat_id = $1
+         LIMIT 1
       `,
       [chatId]
     );
