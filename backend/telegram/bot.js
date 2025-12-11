@@ -915,9 +915,26 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
-      // В списке под заголовком показываем только отель
+      // В списке под заголовком показываем короткую сводку:
+      // ОТЕЛЬ / РАЗМЕЩЕНИЕ / ЦЕНА
       const hotelName = d.hotel || d.hotelName || "";
-      const description = hotelName || "";
+
+      const descParts = [];
+
+      if (hotelName) {
+        descParts.push(`ОТЕЛЬ: ${hotelName}`);
+      }
+
+      if (d.accommodation) {
+        descParts.push(`РАЗМЕЩЕНИЕ: ${d.accommodation}`);
+      }
+
+      const priceInline = pickPrice(d, svc, roleForInline);
+      if (priceInline !== null && priceInline !== undefined) {
+        descParts.push(`ЦЕНА: ${priceInline}`);
+      }
+
+      const description = descParts.join(" · ") || hotelName || "";
 
       const thumbUrl = getFirstImageUrl(svc);
       console.log(
@@ -928,6 +945,7 @@ bot.on("inline_query", async (ctx) => {
         "images =",
         svc.images
       );
+
 
       return {
         type: "article",
