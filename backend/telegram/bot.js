@@ -256,7 +256,7 @@ function buildServiceMessage(svc, category, role = "client") {
   // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
   const providerName = escapeMarkdown(providerNameRaw);
-  const providerTelegram = svc.provider_telegram || null;
+    const providerTelegram = svc.provider_telegram || null;
 
   let providerLine;
   let telegramLine = null;
@@ -266,12 +266,15 @@ function buildServiceMessage(svc, category, role = "client") {
     let username = String(providerTelegram).trim();
     username = username.replace(/^@/, "");
     username = username.replace(/^https?:\/\/t\.me\//i, "");
-    const safeUsername = username; // в самом нике markdown-символов обычно нет
+    const safeUsername = username;
+
+    // экранируем @username для Markdown, чтобы подчёркивания не ломали разметку
+    const escapedAtUsername = escapeMarkdown("@" + safeUsername);
 
     // название поставщика кликабельно, но через tg:// (без web-preview)
     providerLine = `Поставщик: [${providerName}](tg://resolve?domain=${safeUsername})`;
-    // отдельная строка "Telegram: @username"
-    telegramLine = `Telegram: @${safeUsername}`;
+    // отдельная строка "Telegram: @username" (уже экранированная)
+    telegramLine = `Telegram: ${escapedAtUsername}`;
   } else {
     providerLine = `Поставщик: ${providerName}`;
   }
