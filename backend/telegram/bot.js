@@ -459,7 +459,7 @@ bot.action(
         if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
         lines.push(`Поставщик: ${providerName}`);
         lines.push("");
-        lines.push("Подробнее и бронирование: https://travella.uz`);
+        lines.push("Подробнее и бронирование: https://travella.uz");
 
         await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
       }
@@ -568,7 +568,7 @@ bot.on("inline_query", async (ctx) => {
       if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
       lines.push(`Поставщик: ${providerName}`);
       lines.push("");
-      lines.push("Подробнее и бронирование: https://travella.uz`);
+      lines.push("Подробнее и бронирование: https://travella.uz");
 
       return {
         type: "article",
