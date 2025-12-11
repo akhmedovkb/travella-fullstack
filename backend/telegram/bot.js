@@ -21,11 +21,6 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
-// Шаблон ссылки на конкретную услугу, {id} будет заменён на ID
-// Пример: https://travella.uz/service/{id}
-const SERVICE_URL_TEMPLATE =
-  process.env.TELEGRAM_SERVICE_URL_TEMPLATE || "";
-
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
@@ -54,10 +49,6 @@ console.log(
 console.log("[tg-bot] API_BASE =", API_BASE);
 console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log(
-  "[tg-bot] SERVICE_URL_TEMPLATE =",
-  SERVICE_URL_TEMPLATE || "(not set)"
-);
-console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
   MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
 );
@@ -74,6 +65,19 @@ const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 
 // ==== HELPERS ====
+
+// экранирование текста для Telegram Markdown (V1)
+function escapeMarkdown(text) {
+  if (text === null || text === undefined) return "";
+  return String(text)
+    .replace(/_/g, "\\_")
+    .replace(/\*/g, "\\*")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/`/g, "\\`");
+}
 
 function getMainMenuKeyboard(role) {
   // пока меню одинаковое для ролей
@@ -137,15 +141,18 @@ function buildServiceMessage(svc, category) {
     }
   }
 
-  const title = svc.title || CATEGORY_LABELS[category] || "Услуга";
+  const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
+  const title = escapeMarkdown(titleRaw);
 
   // Направление
   const directionParts = [];
   if (d.directionFrom && d.directionTo) {
-    directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
+    directionParts.push(
+      `${escapeMarkdown(d.directionFrom)} → ${escapeMarkdown(d.directionTo)}`
+    );
   }
   if (d.directionCountry) {
-    directionParts.push(d.directionCountry);
+    directionParts.push(escapeMarkdown(d.directionCountry));
   }
   const direction =
     directionParts.length > 0 ? directionParts.join(" · ") : null;
@@ -153,62 +160,51 @@ function buildServiceMessage(svc, category) {
   // Даты
   const dates =
     d.startFlightDate && d.endFlightDate
-      ? `Даты: ${d.startFlightDate} → ${d.endFlightDate}`
+      ? `Даты: ${escapeMarkdown(d.startFlightDate)} → ${escapeMarkdown(
+          d.endFlightDate
+        )}`
       : d.startDate && d.endDate
-      ? `Даты: ${d.startDate} → ${d.endDate}`
+      ? `Даты: ${escapeMarkdown(d.startDate)} → ${escapeMarkdown(d.endDate)}`
       : null;
 
   // Отель + размещение
   const hotel = d.hotel || d.hotelName || null;
   const accommodation = d.accommodation || null;
 
+  const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
+  const accommodationSafe = accommodation
+    ? escapeMarkdown(accommodation)
+    : null;
+
   // Цена
-  const netPrice =
+  const netPriceRaw =
     d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
+  const netPrice = netPriceRaw !== null ? escapeMarkdown(netPriceRaw) : null;
 
   // Поставщик
-  const providerName = svc.provider_name || "Поставщик Travella";
-  const providerTelegramRaw = svc.provider_telegram || null;
+  const providerNameRaw = svc.provider_name || "Поставщик Travella";
+  const providerName = escapeMarkdown(providerNameRaw);
+  const providerTelegram = svc.provider_telegram || null;
   let providerLine;
 
-  if (providerTelegramRaw) {
-    let username = String(providerTelegramRaw).trim();
-
-    // варианты: "@user", "t.me/user", "https://t.me/user"
-    if (username.startsWith("https://t.me/")) {
-      username = username.replace("https://t.me/", "");
-    } else if (username.startsWith("http://t.me/")) {
-      username = username.replace("http://t.me/", "");
-    } else if (username.startsWith("t.me/")) {
-      username = username.replace("t.me/", "");
-    }
-    username = username.replace(/^@/, "");
-
-    if (username) {
-      providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
-    } else {
-      providerLine = `Поставщик: ${providerName}`;
-    }
+  if (providerTelegram) {
+    const username = String(providerTelegram).replace(/^@/, "");
+    // username в URL не трогаем, а label экранирован
+    providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
   } else {
     providerLine = `Поставщик: ${providerName}`;
-  }
-
-  // Ссылка на конкретную услугу
-  let serviceUrl = SITE_URL;
-  if (SERVICE_URL_TEMPLATE && svc.id) {
-    serviceUrl = SERVICE_URL_TEMPLATE.replace("{id}", String(svc.id));
   }
 
   const lines = [];
   lines.push(`*${title}*`);
   if (direction) lines.push(direction);
   if (dates) lines.push(dates);
-  if (hotel) lines.push(`Отель: ${hotel}`);
-  if (accommodation) lines.push(`Размещение: ${accommodation}`);
+  if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
+  if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
   if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
   lines.push(providerLine);
   lines.push("");
-  lines.push(`Подробнее и бронирование: ${serviceUrl}`);
+  lines.push(`Подробнее и бронирование: ${SITE_URL}`);
 
   const text = lines.join("\n");
 
@@ -217,8 +213,13 @@ function buildServiceMessage(svc, category) {
       ? svc.images[0].url || svc.images[0].src || svc.images[0]
       : null;
 
+  // пока прямой страницы услуги нет — оставляем общий SITE_URL
+  const serviceUrl = SITE_URL;
+
   return { text, photoUrl, serviceUrl };
 }
+
+// ==== Регистрация / привязка телефона ====
 
 // Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
@@ -641,15 +642,18 @@ bot.on("text", async (ctx, next) => {
           "Сейчас функция быстрого запроса временно недоступна."
         );
       } else {
+        const safeFirst = escapeMarkdown(from.first_name || "");
+        const safeLast = escapeMarkdown(from.last_name || "");
+        const safeUsername = escapeMarkdown(from.username || "нет username");
+        const safeMsg = escapeMarkdown(msg);
+
         const textForManager =
           "🆕 *Новый быстрый запрос из бота Travella*\n\n" +
-          `Тур ID: *${serviceId}*\n` +
-          `От: ${from.first_name || ""} ${from.last_name || ""} (@${
-            from.username || "нет username"
-          })\n` +
+          `Тур ID: *${escapeMarkdown(serviceId)}*\n` +
+          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
           `Telegram chatId: \`${chatId}\`\n\n` +
           "*Сообщение клиента:*\n" +
-          msg;
+          safeMsg;
 
         await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
           parse_mode: "Markdown",
@@ -813,23 +817,38 @@ bot.on("inline_query", async (ctx) => {
 
       const directionParts = [];
       if (d.directionFrom && d.directionTo) {
-        directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
+        directionParts.push(
+          `${escapeMarkdown(d.directionFrom)} → ${escapeMarkdown(
+            d.directionTo
+          )}`
+        );
       }
       if (d.directionCountry) {
-        directionParts.push(d.directionCountry);
+        directionParts.push(escapeMarkdown(d.directionCountry));
       }
       const direction =
         directionParts.length > 0 ? directionParts.join(" · ") : "";
 
       const dates =
         d.startFlightDate && d.endFlightDate
-          ? `Даты: ${d.startFlightDate} → ${d.endFlightDate}`
+          ? `Даты: ${escapeMarkdown(d.startFlightDate)} → ${escapeMarkdown(
+              d.endFlightDate
+            )}`
           : d.startDate && d.endDate
-          ? `Даты: ${d.startDate} → ${d.endDate}`
+          ? `Даты: ${escapeMarkdown(d.startDate)} → ${escapeMarkdown(
+              d.endDate
+            )}`
           : "";
 
+      const netPriceRaw =
+        d.netPrice ||
+        d.price ||
+        d.grossPrice ||
+        d.amount ||
+        svc.price ||
+        null;
       const netPrice =
-        d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
+        netPriceRaw !== null ? escapeMarkdown(netPriceRaw) : null;
 
       const descriptionParts = [];
       if (direction) descriptionParts.push(direction);
@@ -841,7 +860,10 @@ bot.on("inline_query", async (ctx) => {
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        title: svc.title || CATEGORY_LABELS[category] || "Услуга",
+        title:
+          svc.title ||
+          CATEGORY_LABELS[category] ||
+          "Услуга",
         description,
         thumb_url: photoUrl || undefined,
         input_message_content: {
