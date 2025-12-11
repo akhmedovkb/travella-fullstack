@@ -927,29 +927,23 @@ bot.on("inline_query", async (ctx) => {
       // В списке под заголовком показываем только отель
       const hotelName = d.hotel || d.hotelName || "";
       const description = hotelName || "";
-      
-const thumbUrl = getFirstImageUrl(svc);
-console.log('[inline] thumb test', svc.id, 'thumbUrl =', thumbUrl, 'images =', svc.images);
 
-return {
-  type: "article",
-  id: String(svc.id) + "_" + idx,
-  title: svc.title || CATEGORY_LABELS[category] || "Услуга",
-  description,
-  thumb_url: thumbUrl || undefined,
-  input_message_content: {
-    message_text: text,
-    parse_mode: "Markdown",
-  },
-  ...
-};
+      const thumbUrl = getFirstImageUrl(svc);
+      console.log(
+        "[inline] thumb test",
+        svc.id,
+        "thumbUrl =",
+        thumbUrl,
+        "images =",
+        svc.images
+      );
 
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
         title: svc.title || CATEGORY_LABELS[category] || "Услуга",
         description,
-        thumb_url: getFirstImageUrl(svc) || undefined,
+        thumb_url: thumbUrl || undefined,
         input_message_content: {
           message_text: text,
           parse_mode: "Markdown",
@@ -958,7 +952,10 @@ return {
           inline_keyboard: [
             [
               { text: "Подробнее на сайте", url: serviceUrl },
-              { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+              {
+                text: "📩 Быстрый запрос",
+                callback_data: `request:${svc.id}`,
+              },
             ],
           ],
         },
