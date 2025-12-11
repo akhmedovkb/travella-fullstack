@@ -94,36 +94,18 @@ async function linkAccount(req, res) {
     if (found) {
       const foundRole = found.role; // 'provider' | 'client'
 
-// ----- ПРОВАЙДЕР -----
-if (foundRole === "provider") {
-  const upd = await pool.query(
-    `
-      UPDATE providers
-         SET telegram_chat_id = $1,
-             social           = COALESCE($2, social)
-       WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
-       RETURNING id, name, phone, social
-    `,
-    [chatId, username ? `@${username}` : null, normPhone]
-  );
-
-  console.log("[tg-link] updated existing PROVIDER rows:", upd.rowCount);
-
-  if (upd.rowCount === 0) {
-    return res.status(404).json({ notFound: true });
-  }
-
-  const row = upd.rows[0];
-  return res.json({
-    success: true,
-    role: "provider",
-    id: row.id,
-    name: row.name,
-    existed: true,
-    requestedRole,
-  });
-}
-
+      // ----- ПРОВАЙДЕР -----
+      if (foundRole === "provider") {
+        const upd = await pool.query(
+          `
+            UPDATE providers
+               SET telegram_chat_id = $1,
+                   social           = COALESCE($2, social)
+             WHERE regexp_replace(phone, '\\D', '', 'g') = $3
+             RETURNING id, name, phone, social
+          `,
+          [chatId, username ? `@${username}` : null, normPhone]
+        );
 
         console.log("[tg-link] updated existing PROVIDER rows:", upd.rowCount);
 
@@ -149,7 +131,7 @@ if (foundRole === "provider") {
             UPDATE clients
                SET telegram_chat_id = $1,
                    telegram        = COALESCE($2, telegram)
-             WHERE regexp_replace(phone, '\\\\D', '', 'g') = $3
+             WHERE regexp_replace(phone, '\\D', '', 'g') = $3
              RETURNING id, name, phone
           `,
           [chatId, username || null, normPhone]
