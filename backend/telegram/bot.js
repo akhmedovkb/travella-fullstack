@@ -129,8 +129,8 @@ function buildServiceMessage(svc, category) {
   }
 
   const title = svc.title || CATEGORY_LABELS[category] || "Услуга";
-  const providerName = svc.provider_name || "Поставщик Travella";
 
+  // Направление
   const directionParts = [];
   if (d.directionFrom && d.directionTo) {
     directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
@@ -141,6 +141,7 @@ function buildServiceMessage(svc, category) {
   const direction =
     directionParts.length > 0 ? directionParts.join(" · ") : null;
 
+  // Даты
   const dates =
     d.startFlightDate && d.endFlightDate
       ? `Даты: ${d.startFlightDate} → ${d.endFlightDate}`
@@ -148,15 +149,34 @@ function buildServiceMessage(svc, category) {
       ? `Даты: ${d.startDate} → ${d.endDate}`
       : null;
 
+  // Отель + размещение
+  const hotel = d.hotel || d.hotelName || null;
+  const accommodation = d.accommodation || null;
+
+  // Цена
   const netPrice =
     d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
+
+  // Поставщик
+  const providerName = svc.provider_name || "Поставщик Travella";
+  const providerTelegram = svc.provider_telegram || null;
+  let providerLine;
+
+  if (providerTelegram) {
+    const username = String(providerTelegram).replace(/^@/, "");
+    providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
+  } else {
+    providerLine = `Поставщик: ${providerName}`;
+  }
 
   const lines = [];
   lines.push(`*${title}*`);
   if (direction) lines.push(direction);
   if (dates) lines.push(dates);
+  if (hotel) lines.push(`Отель: ${hotel}`);
+  if (accommodation) lines.push(`Размещение: ${accommodation}`);
   if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
-  lines.push(`Поставщик: ${providerName}`);
+  lines.push(providerLine);
   lines.push("");
   lines.push(`Подробнее и бронирование: ${SITE_URL}`);
 
@@ -172,6 +192,7 @@ function buildServiceMessage(svc, category) {
 
   return { text, photoUrl, serviceUrl };
 }
+
 
 // Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
