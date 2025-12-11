@@ -21,6 +21,11 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
+// Шаблон ссылки на конкретную услугу, {id} будет заменён на ID
+// Пример: https://travella.uz/service/{id}
+const SERVICE_URL_TEMPLATE =
+  process.env.TELEGRAM_SERVICE_URL_TEMPLATE || "";
+
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
@@ -48,6 +53,10 @@ console.log(
 );
 console.log("[tg-bot] API_BASE =", API_BASE);
 console.log("[tg-bot] SITE_URL =", SITE_URL);
+console.log(
+  "[tg-bot] SERVICE_URL_TEMPLATE =",
+  SERVICE_URL_TEMPLATE || "(not set)"
+);
 console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
   MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
@@ -159,14 +168,35 @@ function buildServiceMessage(svc, category) {
 
   // Поставщик
   const providerName = svc.provider_name || "Поставщик Travella";
-  const providerTelegram = svc.provider_telegram || null;
+  const providerTelegramRaw = svc.provider_telegram || null;
   let providerLine;
 
-  if (providerTelegram) {
-    const username = String(providerTelegram).replace(/^@/, "");
-    providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
+  if (providerTelegramRaw) {
+    let username = String(providerTelegramRaw).trim();
+
+    // варианты: "@user", "t.me/user", "https://t.me/user"
+    if (username.startsWith("https://t.me/")) {
+      username = username.replace("https://t.me/", "");
+    } else if (username.startsWith("http://t.me/")) {
+      username = username.replace("http://t.me/", "");
+    } else if (username.startsWith("t.me/")) {
+      username = username.replace("t.me/", "");
+    }
+    username = username.replace(/^@/, "");
+
+    if (username) {
+      providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
+    } else {
+      providerLine = `Поставщик: ${providerName}`;
+    }
   } else {
     providerLine = `Поставщик: ${providerName}`;
+  }
+
+  // Ссылка на конкретную услугу
+  let serviceUrl = SITE_URL;
+  if (SERVICE_URL_TEMPLATE && svc.id) {
+    serviceUrl = SERVICE_URL_TEMPLATE.replace("{id}", String(svc.id));
   }
 
   const lines = [];
@@ -178,7 +208,7 @@ function buildServiceMessage(svc, category) {
   if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
   lines.push(providerLine);
   lines.push("");
-  lines.push(`Подробнее и бронирование: ${SITE_URL}`);
+  lines.push(`Подробнее и бронирование: ${serviceUrl}`);
 
   const text = lines.join("\n");
 
@@ -187,12 +217,8 @@ function buildServiceMessage(svc, category) {
       ? svc.images[0].url || svc.images[0].src || svc.images[0]
       : null;
 
-  // пока прямой страницы услуги нет — оставляем общий SITE_URL
-  const serviceUrl = SITE_URL;
-
   return { text, photoUrl, serviceUrl };
 }
-
 
 // Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
