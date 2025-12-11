@@ -155,7 +155,7 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
-  // 🔥 поддержка base64 (data:image/...)
+  // 🔥 НОВОЕ: поддержка base64 (data:image/...)
   if (v.startsWith("data:image")) {
     // отдаём URL-обёртку, которая вернёт бинарную картинку
     return `${API_BASE.replace(
@@ -187,6 +187,41 @@ function pickPrice(details, svc, role) {
   }
   // клиент — брутто
   return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
+}
+
+/** безопасный парсинг дат для сортировки */
+function parseDateSafe(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  let d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d;
+
+  // пробуем формат 2026.01.02
+  const s2 = s.replace(/\./g, "-");
+  d = new Date(s2);
+  if (!Number.isNaN(d.getTime())) return d;
+
+  return null;
+}
+
+/** достаём дату вылета/старта тура из svc.details для сортировки */
+function getStartDateForSort(svc) {
+  let d = svc.details || {};
+  if (typeof d === "string") {
+    try {
+      d = JSON.parse(d);
+    } catch {
+      d = {};
+    }
+  }
+  const raw =
+    d.startFlightDate ||
+    d.departureFlightDate ||
+    d.startDate ||
+    d.start_flight_date; // на всякий случай старые ключи
+  return parseDateSafe(raw);
 }
 
 /**
@@ -899,36 +934,24 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-    // ==== Сортировка по ближайшей дате ====
-function extractStartDate(svc) {
-  let d = svc.details || {};
-  if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch { d = {}; }
-  }
+    // 🔹 СОРТИРОВКА: сначала те, у кого ближайшая дата вылета/старта
+    const now = new Date();
+    const itemsSorted = [...data.items].sort((a, b) => {
+      const da = getStartDateForSort(a);
+      const db = getStartDateForSort(b);
 
-  const date =
-    d.startFlightDate ||
-    d.startDate ||
-    d.dateFrom || // на всякий случай
-    null;
+      // те, у кого нет дат — в конец
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
 
-  if (!date) return null;
-  const ts = Date.parse(date);
-  return isNaN(ts) ? null : ts;
-}
+      const diffA = da.getTime() - now.getTime();
+      const diffB = db.getTime() - now.getTime();
 
-// сортировка: маленькая дата → раньше
-data.items.sort((a, b) => {
-  const da = extractStartDate(a);
-  const db = extractStartDate(b);
-  if (da === null && db === null) return 0;
-  if (da === null) return 1;
-  if (db === null) return -1;
-  return da - db;
-});
+      return diffA - diffB;
+    });
 
-    
-    const results = data.items.slice(0, 25).map((svc, idx) => {
+    const results = itemsSorted.slice(0, 25).map((svc, idx) => {
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
         category,
@@ -944,46 +967,46 @@ data.items.sort((a, b) => {
         }
       }
 
-      // 🔹 Короткая сводка в превью (4 строки):
-      // 1) ДАТЫ, 2) ОТЕЛЬ, 3) РАЗМЕЩЕНИЕ, 4) ЦЕНА
+      // 🔹 Короткая сводка в превью:
+      // ОТЕЛЬ · РАЗМЕЩЕНИЕ · ДАТЫ · ЦЕНА
       const truncate = (str, n = 40) =>
         str && str.length > n ? str.slice(0, n - 1) + "…" : str;
 
       const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelName = truncate(hotelNameRaw, 40);
+      const hotelName = truncate(hotelNameRaw, 35);
 
       const accommodationRaw = d.accommodation || "";
-      const accommodation = truncate(accommodationRaw, 40);
+      const accommodation = truncate(accommodationRaw, 25);
 
       const startFlight = d.startFlightDate || d.startDate;
       const endFlight = d.endFlightDate || d.endDate;
 
-      const lines = [];
+      const descParts = [];
+
+      if (hotelName) {
+        descParts.push(`ОТЕЛЬ: ${hotelName}`);
+      }
+
+      if (accommodation) {
+        descParts.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
+      }
 
       if (startFlight && endFlight) {
         const sf = String(startFlight).replace(/-/g, ".");
         const ef = String(endFlight).replace(/-/g, ".");
-        lines.push(`ДАТЫ: ${sf} → ${ef}`);
-      }
-
-      if (hotelName) {
-        lines.push(`ОТЕЛЬ: ${hotelName}`);
-      }
-
-      if (accommodation) {
-        lines.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
+        descParts.push(`ДАТЫ: ${sf} → ${ef}`);
       }
 
       const priceInline = pickPrice(d, svc, roleForInline);
       if (priceInline !== null && priceInline !== undefined) {
-        lines.push(`ЦЕНА: ${priceInline}`);
+        descParts.push(`ЦЕНА: ${priceInline}`);
       }
 
-      let description = lines.join("\n") || hotelName || "";
+      let description = descParts.join(" · ") || hotelName || "";
 
       // ограничиваем длину описания для Telegram inline-preview
-      if (description.length > 200) {
-        description = description.slice(0, 197) + "…";
+      if (description.length > 140) {
+        description = description.slice(0, 137) + "…";
       }
 
       const thumbUrl = getFirstImageUrl(svc);
