@@ -370,7 +370,7 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   logUpdate(ctx, "hears Стать поставщиком");
   await ctx.reply(
     "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
-      "https://travella.uz и дождитесь модерации.\n\n" +
+      "https://travella.уз и дождитесь модерации.\n\n" +
       "Мы также свяжемся с вами по указанным контактам."
   );
 });
@@ -450,7 +450,7 @@ bot.action(
         if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
         lines.push(`Поставщик: ${providerName}`);
         lines.push("");
-        lines.push("Подробнее и бронирование: https://travella.uz");
+        lines.push("Подробнее и бронирование: https://travella.uz`);
 
         await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
       }
@@ -465,6 +465,204 @@ bot.action(
     }
   }
 );
+
+// ==== INLINE QUERY: встроенный поиск отказных услуг ====
+
+// маппинг текста запроса → категория отказа
+function resolveInlineCategory(query) {
+  const q = (query || "").trim().toLowerCase();
+
+  if (!q) return null; // пустой запрос → вернём все категории
+
+  if (q.includes("тур") || q.includes("tour")) return "refused_tour";
+  if (q.includes("отел") || q.includes("hotel") || q.includes("otel"))
+    return "refused_hotel";
+  if (q.includes("авиа") || q.includes("flight") || q.includes("avia"))
+    return "refused_flight";
+  if (q.includes("билет") || q.includes("ticket"))
+    return "refused_ticket";
+
+  // по умолчанию — туры
+  return "refused_tour";
+}
+
+// форматируем услугу в текст для отправки в чат
+function formatServiceMessage(svc, category) {
+  const d = svc.details || {};
+  const labelMap = {
+    refused_tour: "Отказной тур",
+    refused_hotel: "Отказной отель",
+    refused_flight: "Отказной авиабилет",
+    refused_ticket: "Отказной билет",
+  };
+
+  const title = svc.title || labelMap[category] || "Услуга";
+  const providerName = svc.provider_name || "Поставщик Travella";
+
+  const directionParts = [];
+  if (d.directionFrom && d.directionTo) {
+    directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
+  }
+  if (d.directionCountry) {
+    directionParts.push(d.directionCountry);
+  }
+  const direction =
+    directionParts.length > 0 ? directionParts.join(" · ") : null;
+
+  const dates =
+    d.startDate && d.endDate
+      ? `Даты: ${d.startDate} → ${d.endDate}`
+      : null;
+
+  const netPrice =
+    d.netPrice || d.price || d.grossPrice || d.amount || null;
+
+  const lines = [];
+  lines.push(`*${title}*`);
+  if (direction) lines.push(direction);
+  if (dates) lines.push(dates);
+  if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
+  lines.push(`Поставщик: ${providerName}`);
+  lines.push("");
+  lines.push("Подробнее и бронирование: https://travella.uz");
+
+  return lines.join("\n");
+}
+
+// этот текст пойдёт в превью в списке inline-результатов (одно-две строки)
+function buildInlineDescription(svc, category) {
+  const d = svc.details || {};
+  const parts = [];
+
+  if (d.directionFrom && d.directionTo) {
+    parts.push(`${d.directionFrom} → ${d.directionTo}`);
+  } else if (d.directionCountry) {
+    parts.push(d.directionCountry);
+  }
+
+  if (d.startDate && d.endDate) {
+    parts.push(`${d.startDate} – ${d.endDate}`);
+  }
+
+  const netPrice =
+    d.netPrice || d.price || d.grossPrice || d.amount || null;
+  if (netPrice) {
+    parts.push(`от ${netPrice}`);
+  }
+
+  if (parts.length === 0) {
+    const labelMap = {
+      refused_tour: "Отказной тур",
+      refused_hotel: "Отказной отель",
+      refused_flight: "Отказной авиабилет",
+      refused_ticket: "Отказной билет",
+    };
+    return labelMap[category] || "Предложение Travella";
+  }
+
+  return parts.join(" · ");
+}
+
+bot.on("inline_query", async (ctx) => {
+  try {
+    const q = ctx.inlineQuery.query || "";
+    const fromId = ctx.from?.id;
+    console.log("[tg-bot] inline_query:", {
+      fromId,
+      q,
+    });
+
+    // Определяем категорию из текста запроса
+    const singleCategory = resolveInlineCategory(q);
+
+    // Если пустой запрос — тащим все категории по чуть-чуть
+    const categories = singleCategory
+      ? [singleCategory]
+      : ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
+
+    const allItems = [];
+
+    // Берём свежие услуги по каждой категории
+    for (const cat of categories) {
+      try {
+        const resp = await axios.get(
+          `/api/telegram/client/${fromId || 0}/search`,
+          { params: { category: cat } }
+        );
+        if (resp.data && resp.data.success && Array.isArray(resp.data.items)) {
+          resp.data.items.forEach((row) =>
+            allItems.push({ ...row, _category: cat })
+          );
+        }
+      } catch (e) {
+        console.error(
+          "[tg-bot] inline search error for category",
+          cat,
+          e?.response?.data || e.message || e
+        );
+      }
+    }
+
+    if (!allItems.length) {
+      // Пустой ответ — Telegram всё равно ждёт массив
+      return ctx.answerInlineQuery([], { cache_time: 2 });
+    }
+
+    // Ограничим, например, 20 результатами
+    const limited = allItems.slice(0, 20);
+
+    const results = limited.map((svc, idx) => {
+      const category = svc._category || svc.category || singleCategory;
+      const title =
+        svc.title ||
+        (category === "refused_tour"
+          ? "Отказной тур"
+          : category === "refused_hotel"
+          ? "Отказной отель"
+          : category === "refused_flight"
+          ? "Отказной авиабилет"
+          : "Отказной билет");
+
+      const description = buildInlineDescription(svc, category);
+      const messageText = formatServiceMessage(svc, category);
+
+      return {
+        type: "article",
+        id: String(svc.id || `${category}-${idx}`),
+        title,
+        description,
+        input_message_content: {
+          message_text: messageText,
+          parse_mode: "Markdown",
+        },
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "Открыть на Travella",
+                url: "https://travella.uz",
+              },
+            ],
+          ],
+        },
+      };
+    });
+
+    return ctx.answerInlineQuery(results, {
+      cache_time: 3, // почти realtime
+      is_personal: true,
+    });
+  } catch (e) {
+    console.error(
+      "[tg-bot] inline_query handler error:",
+      e?.response?.data || e.message || e
+    );
+    // даже при ошибке нужно что-то ответить
+    try {
+      await ctx.answerInlineQuery([], { cache_time: 2 });
+    } catch (_) {}
+  }
+});
 
 // ⚠️ здесь НЕТ bot.launch() — запуск делаем из index.js
 module.exports = { bot };
