@@ -9,6 +9,7 @@ const pool = require("../db");
  * пока он не задаст себе нормальный пароль через веб.
  *
  * Это пример рабочего bcrypt-хэша для строки "password".
+ * (взят из официальных примеров bcrypt)
  */
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
@@ -25,11 +26,11 @@ function normalizePhone(raw) {
 
 /**
  * Ищем пользователя по телефону.
- * Сначала ищем среди providers (приоритет поставщика),
+ * ВАЖНО: сначала ищем среди providers (приоритет поставщика),
  * потом среди clients.
  *
- * Если нашли — { role: 'provider'|'client', id, name }.
- * Если не нашли — null.
+ * Если нашли — возвращаем { role: 'provider'|'client', id, name }.
+ * Если не нашли — возвращаем null.
  */
 async function findUserByPhone(normPhone) {
   // 1) Пытаемся найти поставщика
@@ -71,12 +72,16 @@ async function findUserByPhone(normPhone) {
  * POST /api/telegram/link
  * body: { role: "client" | "provider", phone, chatId, username, firstName }
  *
+ * ЛОГИКА:
  * 1) Нормализуем телефон -> "998977163715"
- * 2) Ищем по телефону сначала provider, потом client.
- * 3) Если нашли — привязываем telegram_chat_id.
- * 4) Если не нашли:
- *    - role === 'provider' → создаём lead
- *    - иначе → создаём клиента
+ * 2) Ищем по телефону сначала provider, потом client:
+ *    - если нашли provider → привязываем Telegram как к поставщику
+ *    - если нашли client   → привязываем Telegram как к клиенту
+ * 3) Если телефон нигде не найден:
+ *    - если role === 'provider' → создаём LEAD нового поставщика
+ *    - иначе (role отсутствует или 'client') → создаём нового клиента
+ *
+ * ВАЖНО: поставщик НЕ становится клиентом автоматически.
  */
 async function linkAccount(req, res) {
   try {
@@ -89,7 +94,7 @@ async function linkAccount(req, res) {
         .json({ error: "phone and chatId are required" });
     }
 
-    const requestedRole = role || "client";
+    const requestedRole = role || "client"; // что выбрал пользователь в боте
     const displayName =
       firstName ||
       username ||
@@ -102,8 +107,11 @@ async function linkAccount(req, res) {
     const found = await findUserByPhone(normPhone);
 
     if (found) {
+      // ---- Телефон уже есть в базе ----
       const foundRole = found.role; // 'provider' или 'client'
 
+      // Если телефон принадлежит ПОСТАВЩИКУ — считаем его поставщиком,
+      // даже если он нажимал "я клиент" в боте.
       if (foundRole === "provider") {
         const upd = await pool.query(
           `
@@ -129,10 +137,12 @@ async function linkAccount(req, res) {
           id: row.id,
           name: row.name,
           existed: true,
+          // полезно знать боту: пользователь мог нажать "клиент", но он уже поставщик
           requestedRole,
         });
       }
 
+      // Если телефон принадлежит клиенту
       if (foundRole === "client") {
         const upd = await pool.query(
           `
@@ -164,8 +174,11 @@ async function linkAccount(req, res) {
     }
 
     // ---- Телефон нигде не найден: создаём нового ----
+    // requestedRole влияет только здесь.
 
+    // === Новый КЛИЕНТ из Telegram ===
     if (!requestedRole || requestedRole === "client") {
+      // email NOT NULL -> генерируем техничный email на основе телефона
       const email = `tg_${normPhone}@telegram.local`;
 
       const insertClient = await pool.query(
@@ -198,7 +211,9 @@ async function linkAccount(req, res) {
       });
     }
 
+    // === Новый ПОСТАВЩИК: создаём lead, а не provider ===
     if (requestedRole === "provider") {
+      // предполагаем, что есть таблица leads с полями (phone, name, source, status, created_at)
       const insertLead = await pool.query(
         `
           INSERT INTO leads (phone, name, source, status, created_at)
@@ -270,12 +285,12 @@ async function getProfileByChat(req, res) {
 }
 
 /**
- * (Опционально) старый вариант:
- * GET /api/telegram/client/:chatId/search?type=refused_tour|...
- * Оставляю на всякий случай — вдруг где-то ещё дергается.
+ * GET /api/telegram/client/:chatId/search?type=refused_tour|refused_hotel|refused_flight|refused_ticket
+ *
+ * Старая версия (можно оставить, если где-то используется).
  */
 async function searchCategory(req, res) {
-  const { chatId } = req.params; // сейчас не используется
+  const { chatId } = req.params; // сейчас не используется, но оставим на будущее
   const { type } = req.query || {};
 
   const allowed = [
@@ -302,7 +317,7 @@ async function searchCategory(req, res) {
         FROM services s
         JOIN providers p ON p.id = s.provider_id
        WHERE s.category = $1
-         AND s.status   = 'approved'
+         AND s.status = 'approved'
        ORDER BY s.id DESC
        LIMIT 30
       `,
@@ -316,17 +331,23 @@ async function searchCategory(req, res) {
       type,
     });
   } catch (e) {
-    console.error("GET /api/telegram/client/:chatId/search (searchCategory) error:", e);
+    console.error("GET /api/telegram/client/:chatId/search error:", e);
     return res.status(500).json({ error: "Internal error" });
   }
 }
 
 /**
- * НОВЫЙ основной маршрут для бота:
- * GET /api/telegram/client/:chatId/search?category=refused_tour|...
+ * GET /api/telegram/client/:chatId/search?category=refused_tour
+ * Ищет отказные услуги по категории для бота.
  *
- * Используется в bot.js, когда жмём кнопку
- * "Отказной тур / отель / авиабилет / билет".
+ * Категории:
+ *   - refused_tour
+ *   - refused_hotel
+ *   - refused_flight
+ *   - refused_ticket
+ *
+ * chatId сейчас используем только как формальный параметр,
+ * при желании можно добавить проверку, что такой клиент реально существует.
  */
 async function searchClientServices(req, res) {
   try {
@@ -344,6 +365,7 @@ async function searchClientServices(req, res) {
       category,
     });
 
+    // Никаких currency / is_active — только то, что точно есть в таблице.
     const result = await pool.query(
       `
         SELECT
@@ -355,11 +377,11 @@ async function searchClientServices(req, res) {
           s.created_at,
           p.name AS provider_name
         FROM services s
-   LEFT JOIN providers p ON p.id = s.provider_id
-       WHERE s.category = $1
-         AND s.status   = 'approved'
-       ORDER BY s.created_at DESC
-       LIMIT 50
+        LEFT JOIN providers p ON p.id = s.provider_id
+        WHERE s.category = $1
+          AND s.status = 'approved'
+        ORDER BY s.created_at DESC
+        LIMIT 50
       `,
       [category]
     );
@@ -373,9 +395,10 @@ async function searchClientServices(req, res) {
     });
   } catch (e) {
     console.error("GET /api/telegram/client/:chatId/search error:", e);
-    return res
-      .status(500)
-      .json({ success: false, error: "Internal error in searchClientServices" });
+    return res.status(500).json({
+      success: false,
+      error: "Internal error in searchClientServices",
+    });
   }
 }
 
