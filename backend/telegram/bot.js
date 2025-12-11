@@ -155,6 +155,15 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
+  // 🔥 НОВОЕ: поддержка base64 (data:image/...)
+  if (v.startsWith("data:image")) {
+    // отдаём URL-обёртку, которая вернёт бинарную картинку
+    return `${API_BASE.replace(
+      /\/+$/,
+      ""
+    )}/api/telegram/service-image/${svc.id}`;
+  }
+
   // Полный URL
   if (v.startsWith("http://") || v.startsWith("https://")) {
     return v;
@@ -174,22 +183,10 @@ function pickPrice(details, svc, role) {
   const d = details || {};
   if (role === "provider") {
     // поставщик видит нетто
-    return (
-      d.netPrice ??
-      d.price ??
-      d.grossPrice ??
-      svc.price ??
-      null
-    );
+    return d.netPrice ?? d.price ?? d.grossPrice ?? svc.price ?? null;
   }
   // клиент — брутто
-  return (
-    d.grossPrice ??
-    d.price ??
-    d.netPrice ??
-    svc.price ??
-    null
-  );
+  return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
 }
 
 /**
@@ -268,7 +265,7 @@ function buildServiceMessage(svc, category, role = "client") {
     username = username.replace(/^@/, "");
     username = username.replace(/^https?:\/\/t\.me\//i, "");
 
-    const rawUsername = username;               // в ссылку
+    const rawUsername = username; // в ссылку
     const mdUsername = escapeMarkdown(username); // в текст
 
     // название поставщика кликабельно, но через tg:// (без web-preview)
@@ -299,7 +296,6 @@ function buildServiceMessage(svc, category, role = "client") {
 
   return { text, photoUrl, serviceUrl };
 }
-
 
 // ==== Регистрация / привязка телефона ====
 
@@ -572,7 +568,6 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   );
 });
 
-
 // заглушки, чтобы не было 404
 bot.hears(/❤️ Избранное/i, async (ctx) => {
   logUpdate(ctx, "hears Избранное");
@@ -652,9 +647,7 @@ bot.action(
         return;
       }
 
-      await ctx.reply(
-        `Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`
-      );
+      await ctx.reply(`Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`);
 
       for (const svc of data.items.slice(0, 10)) {
         const { text, photoUrl, serviceUrl } = buildServiceMessage(
@@ -690,9 +683,7 @@ bot.action(
         "[tg-bot] error in search:",
         e?.response?.data || e.message || e
       );
-      await ctx.reply(
-        "Не удалось загрузить услуги. Попробуйте позже."
-      );
+      await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
     }
   }
 );
