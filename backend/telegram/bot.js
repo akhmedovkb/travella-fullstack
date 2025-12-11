@@ -915,9 +915,19 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
-      // В списке под заголовком показываем короткую сводку:
-      // ОТЕЛЬ / РАЗМЕЩЕНИЕ / ЦЕНА
-      const hotelName = d.hotel || d.hotelName || "";
+      // 🔹 Короткая сводка в превью:
+      // ОТЕЛЬ · РАЗМЕЩЕНИЕ · ДАТЫ · ЦЕНА
+      const truncate = (str, n = 40) =>
+        str && str.length > n ? str.slice(0, n - 1) + "…" : str;
+
+      const hotelNameRaw = d.hotel || d.hotelName || "";
+      const hotelName = truncate(hotelNameRaw, 35);
+
+      const accommodationRaw = d.accommodation || "";
+      const accommodation = truncate(accommodationRaw, 25);
+
+      const startFlight = d.startFlightDate || d.startDate;
+      const endFlight = d.endFlightDate || d.endDate;
 
       const descParts = [];
 
@@ -925,8 +935,14 @@ bot.on("inline_query", async (ctx) => {
         descParts.push(`ОТЕЛЬ: ${hotelName}`);
       }
 
-      if (d.accommodation) {
-        descParts.push(`РАЗМЕЩЕНИЕ: ${d.accommodation}`);
+      if (accommodation) {
+        descParts.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
+      }
+
+      if (startFlight && endFlight) {
+        const sf = String(startFlight).replace(/-/g, ".");
+        const ef = String(endFlight).replace(/-/g, ".");
+        descParts.push(`ДАТЫ: ${sf} → ${ef}`);
       }
 
       const priceInline = pickPrice(d, svc, roleForInline);
@@ -934,7 +950,12 @@ bot.on("inline_query", async (ctx) => {
         descParts.push(`ЦЕНА: ${priceInline}`);
       }
 
-      const description = descParts.join(" · ") || hotelName || "";
+      let description = descParts.join(" · ") || hotelName || "";
+
+      // ограничиваем длину описания для Telegram inline-preview
+      if (description.length > 140) {
+        description = description.slice(0, 137) + "…";
+      }
 
       const thumbUrl = getFirstImageUrl(svc);
       console.log(
@@ -945,7 +966,6 @@ bot.on("inline_query", async (ctx) => {
         "images =",
         svc.images
       );
-
 
       return {
         type: "article",
