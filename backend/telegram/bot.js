@@ -169,11 +169,39 @@ function getFirstImageUrl(svc) {
   return null;
 }
 
+// выбор цены в зависимости от роли
+// client  -> показываем брутто (grossPrice), fallback'и дальше
+// provider -> показываем нетто (netPrice), fallback'и дальше
+function pickPrice(details, svc, viewerRole) {
+  const d = details || {};
+  if (viewerRole === "provider") {
+    return (
+      d.netPrice ||
+      d.price ||
+      d.grossPrice ||
+      d.amount ||
+      svc.price ||
+      null
+    );
+  }
+  // client (по умолчанию)
+  return (
+    d.grossPrice ||
+    d.price ||
+    d.netPrice ||
+    d.amount ||
+    svc.price ||
+    null
+  );
+}
+
 /**
  * Преобразуем услугу из /api/telegram/client/:chatId/search
  * в красивый текст + url картинки + url на сайт
+ *
+ * viewerRole: "client" | "provider"
  */
-function buildServiceMessage(svc, category) {
+function buildServiceMessage(svc, category, viewerRole = "client") {
   let d = svc.details || {};
   if (typeof d === "string") {
     try {
@@ -218,10 +246,11 @@ function buildServiceMessage(svc, category) {
     ? escapeMarkdown(accommodation)
     : null;
 
-  // Цена
-  const netPriceRaw =
-    d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
-  const netPrice = netPriceRaw !== null ? escapeMarkdown(netPriceRaw) : null;
+  // Цена (по роли)
+  const rawPrice = pickPrice(d, svc, viewerRole);
+  const price = rawPrice !== null && rawPrice !== undefined
+    ? escapeMarkdown(rawPrice)
+    : null;
 
   // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
@@ -245,7 +274,7 @@ function buildServiceMessage(svc, category) {
   if (dates) lines.push(dates);
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
-  if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
+  if (price) lines.push(`Цена: *${price}*`);
   lines.push(providerLine);
   lines.push("");
   lines.push(`Подробнее и бронирование: ${SITE_URL}`);
@@ -563,12 +592,10 @@ bot.action(
   async (ctx) => {
     try {
       const category = ctx.match[1]; // refused_tour | refused_hotel | ...
-
       await ctx.answerCbQuery();
       logUpdate(ctx, `action search ${category}`);
 
       const chatId = ctx.chat.id;
-
       await ctx.reply("Ищу подходящие предложения...");
 
       const { data } = await axios.get(
@@ -595,10 +622,16 @@ bot.action(
         `Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`
       );
 
+      const viewerRole =
+        ctx.session && ctx.session.role === "provider"
+          ? "provider"
+          : "client";
+
       for (const svc of data.items.slice(0, 10)) {
         const { text, photoUrl, serviceUrl } = buildServiceMessage(
           svc,
-          category
+          category,
+          viewerRole
         );
 
         const keyboard = {
@@ -636,7 +669,6 @@ bot.action(
 );
 
 // ==== Быстрый запрос по кнопке "📩 Быстрый запрос" ====
-// Отправляем заявку в чат менеджера, без бэкенда
 
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
@@ -707,7 +739,6 @@ bot.on("text", async (ctx, next) => {
         );
       }
 
-      // Сбрасываем состояние
       ctx.session.state = null;
       ctx.session.pendingRequestServiceId = null;
       return;
@@ -716,13 +747,11 @@ bot.on("text", async (ctx, next) => {
     console.error("[tg-bot] error handling quick request text:", e);
   }
 
-  // если это не быстрый запрос — пропускаем дальше к остальным обработчикам
   return next();
 });
 
 // ==== Команда /tour_123 — показать конкретный тур по ID ====
 
-// Вспомогательная функция: ищем услугу по ID через уже готовый search API
 async function findServiceByIdViaSearch(chatId, serviceId) {
   for (const category of REFUSED_CATEGORIES) {
     try {
@@ -767,9 +796,16 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
     }
 
     const { svc, category } = found;
+
+    const viewerRole =
+      ctx.session && ctx.session.role === "provider"
+        ? "provider"
+        : "client";
+
     const { text, photoUrl, serviceUrl } = buildServiceMessage(
       svc,
-      category
+      category,
+      viewerRole
     );
 
     const keyboard = {
@@ -799,8 +835,7 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
   }
 });
 
-// ==== INLINE-ПОИСК (встроенный бот, как на скрине) ====
-// @BOT_NAME в любом чате -> список отказных услуг
+// ==== INLINE-ПОИСК (встроенный бот) ====
 
 bot.on("inline_query", async (ctx) => {
   try {
@@ -808,8 +843,7 @@ bot.on("inline_query", async (ctx) => {
 
     const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
 
-    // Определяем категорию по тексту запроса
-    let category = "refused_tour"; // по умолчанию — туры
+    let category = "refused_tour"; // по умолчанию
 
     if (q.includes("отель") || q.includes("hotel") || q.includes("#hotel")) {
       category = "refused_hotel";
@@ -829,7 +863,7 @@ bot.on("inline_query", async (ctx) => {
       category = "refused_tour";
     }
 
-    const chatId = ctx.from.id; // для API это формальный параметр
+    const chatId = ctx.from.id; // формально
 
     const { data } = await axios.get(
       `/api/telegram/client/${chatId}/search`,
@@ -842,10 +876,14 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
+    // inline-режим всегда считаем "client" (брутто)
+    const viewerRole = "client";
+
     const results = data.items.slice(0, 25).map((svc, idx) => {
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
-        category
+        category,
+        viewerRole
       );
 
       let d = svc.details || {};
@@ -882,20 +920,16 @@ bot.on("inline_query", async (ctx) => {
             )}`
           : "";
 
-      const netPriceRaw =
-        d.netPrice ||
-        d.price ||
-        d.grossPrice ||
-        d.amount ||
-        svc.price ||
-        null;
-      const netPrice =
-        netPriceRaw !== null ? escapeMarkdown(netPriceRaw) : null;
+      const rawPrice = pickPrice(d, svc, viewerRole);
+      const price =
+        rawPrice !== null && rawPrice !== undefined
+          ? escapeMarkdown(rawPrice)
+          : null;
 
       const descriptionParts = [];
       if (direction) descriptionParts.push(direction);
       if (dates) descriptionParts.push(dates);
-      if (netPrice) descriptionParts.push(`Цена нетто: ${netPrice}`);
+      if (price) descriptionParts.push(`Цена: ${price}`);
 
       const description = descriptionParts.join(" | ") || "Отказная услуга";
 
@@ -937,5 +971,5 @@ bot.on("inline_query", async (ctx) => {
   }
 });
 
-// ⚠️ здесь НЕТ bot.launch() — запуск делаем из index.js
+// ⚠️ здесь НЕТ bot.launch() — запуск из index.js
 module.exports = { bot };
