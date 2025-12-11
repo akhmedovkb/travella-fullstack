@@ -339,30 +339,37 @@ async function searchClientServices(req, res) {
       category,
     });
 
-    const result = await pool.query(
-      `
-        SELECT
-          s.id,
-          s.title,
-          s.category,
-          s.price,
-          s.details,
-          s.images,
-          s.created_at,
-          p.name AS provider_name
-        FROM services s
-        LEFT JOIN providers p ON p.id = s.provider_id
-        WHERE s.category = $1
-          AND s.status = 'approved'
-          AND (
-            (s.details->>'isActive') IS NULL
-            OR (s.details->>'isActive')::boolean = true
-          )
-        ORDER BY s.created_at DESC
-        LIMIT 50
-      `,
-      [category]
-    );
+const result = await pool.query(
+  `
+    SELECT
+      s.id,
+      s.title,
+      s.category,
+      s.status,
+      s.price,
+      s.details,
+      s.images,
+      s.created_at,
+      p.name AS provider_name
+    FROM services s
+    LEFT JOIN providers p ON p.id = s.provider_id
+    WHERE s.category = $1
+      AND s.status IN ('approved', 'published', 'active')
+      AND (
+        s.details IS NULL
+        OR (s.details::jsonb->>'isActive') IS NULL
+        OR LOWER(s.details::jsonb->>'isActive') = 'true'
+      )
+      AND (
+        (s.details::jsonb->>'expiration') IS NULL
+        OR (s.details::jsonb->>'expiration')::timestamp > NOW()
+      )
+    ORDER BY s.created_at DESC
+    LIMIT 50
+  `,
+  [category]
+);
+
 
     const items = result.rows || [];
     console.log("[tg-api] searchClientServices rows:", items.length);
