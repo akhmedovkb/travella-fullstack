@@ -20,6 +20,12 @@ const API_BASE = (
   "http://localhost:8080"
 ).replace(/\/+$/, "");
 
+// Базовый публичный URL сайта для диплинков
+const SITE_PUBLIC_URL = (
+  process.env.SITE_PUBLIC_URL ||
+  "https://travella.uz"
+).replace(/\/+$/, "");
+
 console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "(none)");
 console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "(none)");
@@ -29,6 +35,7 @@ console.log(
   "token for Telegraf bot"
 );
 console.log("[tg-bot] API_BASE =", API_BASE);
+console.log("[tg-bot] SITE_PUBLIC_URL =", SITE_PUBLIC_URL);
 
 // axios инстанс
 const axios = axiosBase.create({
@@ -43,8 +50,8 @@ bot.use(session());
 
 // ==== HELPERS ====
 
+// главное меню (пока одинаковое для ролей)
 function getMainMenuKeyboard(role) {
-  // пока меню одинаковое для ролей
   return {
     reply_markup: {
       keyboard: [
@@ -83,7 +90,8 @@ function logUpdate(ctx, label = "update") {
   } catch (_) {}
 }
 
-// Основная логика привязки телефона к аккаунту / созданию нового
+// ==== ПРИВЯЗКА ТЕЛЕФОНА ====
+
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
   try {
     const chatId = ctx.chat.id;
@@ -169,6 +177,8 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
 }
 
 // ==== /start ====
+
+// быстрый профиль клиента/поставщика по chatId мы уже делаем через /api/telegram/profile/...
 
 bot.start(async (ctx) => {
   logUpdate(ctx, "/start");
@@ -370,12 +380,38 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   logUpdate(ctx, "hears Стать поставщиком");
   await ctx.reply(
     "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
-      "https://travella.уз и дождитесь модерации.\n\n" +
+      "https://travella.uz и дождитесь модерации.\n\n" +
       "Мы также свяжемся с вами по указанным контактам."
   );
 });
 
-// ==== ПОИСК ОТКАЗНЫХ УСЛУГ (реальный) ====
+// ==== ПОМОЩНИК ДЛЯ ДИПЛИНКА ====
+
+// Один helper для формирования URL услуги на сайте.
+// Сейчас делаю максимально безопасно: /marketplace?service=<id>
+// Если потом захочешь /r/123 или /refused/123 — меняется только эта функция.
+function buildServiceUrl(svc, category) {
+  const id = svc.id || svc.service_id;
+  if (!id) return SITE_PUBLIC_URL;
+
+  const d = svc.details || {};
+
+  // Если когда-нибудь заведёшь slug в details
+  if (d.publicSlug) {
+    return `${SITE_PUBLIC_URL}/r/${encodeURIComponent(d.publicSlug)}`;
+  }
+
+  // Для отказников можно потенциально сделать отдельную страницу
+  if (category && String(category).startsWith("refused_")) {
+    // Пока всё равно ведём на marketplace с параметром
+    return `${SITE_PUBLIC_URL}/marketplace?service=${encodeURIComponent(id)}`;
+  }
+
+  // Общий fallback
+  return `${SITE_PUBLIC_URL}/marketplace?service=${encodeURIComponent(id)}`;
+}
+
+// ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
 
 bot.action(
   /^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
@@ -443,6 +479,8 @@ bot.action(
         const netPrice =
           d.netPrice || d.price || d.grossPrice || d.amount || null;
 
+        const url = buildServiceUrl(svc, category);
+
         const lines = [];
         lines.push(`*${title}*`);
         if (direction) lines.push(direction);
@@ -450,7 +488,7 @@ bot.action(
         if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
         lines.push(`Поставщик: ${providerName}`);
         lines.push("");
-        lines.push("Подробнее и бронирование: https://travella.uz`);
+        lines.push("Подробнее и бронирование: " + url);
 
         await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
       }
@@ -517,6 +555,8 @@ function formatServiceMessage(svc, category) {
   const netPrice =
     d.netPrice || d.price || d.grossPrice || d.amount || null;
 
+  const url = buildServiceUrl(svc, category);
+
   const lines = [];
   lines.push(`*${title}*`);
   if (direction) lines.push(direction);
@@ -524,7 +564,7 @@ function formatServiceMessage(svc, category) {
   if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
   lines.push(`Поставщик: ${providerName}`);
   lines.push("");
-  lines.push("Подробнее и бронирование: https://travella.uz");
+  lines.push("Подробнее и бронирование: " + url);
 
   return lines.join("\n");
 }
@@ -625,6 +665,7 @@ bot.on("inline_query", async (ctx) => {
 
       const description = buildInlineDescription(svc, category);
       const messageText = formatServiceMessage(svc, category);
+      const url = buildServiceUrl(svc, category);
 
       return {
         type: "article",
@@ -640,7 +681,7 @@ bot.on("inline_query", async (ctx) => {
             [
               {
                 text: "Открыть на Travella",
-                url: "https://travella.uz",
+                url,
               },
             ],
           ],
