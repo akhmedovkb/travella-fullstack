@@ -148,7 +148,7 @@ function getFirstImageUrl(svc) {
   let v = arr[0];
 
   if (v && typeof v === "object") {
-    v = v.url || v.src || v.path || v.location || v.href || null;
+    v = v.url || v.src || v.path || v.location || v.href || v.imageUrl || null;
   }
 
   if (typeof v !== "string") return null;
@@ -165,7 +165,7 @@ function getFirstImageUrl(svc) {
     return SITE_URL + v;
   }
 
-  // Всё остальное — невалидно для Telegram
+  // Всё остальное — считаем невалидным (чтобы не ловить 400 от Telegram)
   return null;
 }
 
@@ -223,16 +223,18 @@ function buildServiceMessage(svc, category) {
     d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
   const netPrice = netPriceRaw !== null ? escapeMarkdown(netPriceRaw) : null;
 
-  // Поставщик
+  // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
   const providerName = escapeMarkdown(providerNameRaw);
   const providerTelegram = svc.provider_telegram || null;
   let providerLine;
 
   if (providerTelegram) {
-    const username = String(providerTelegram).replace(/^@/, "");
-    // username в URL не трогаем, а label экранирован
-    providerLine = `Поставщик: [${providerName}](https://t.me/${username})`;
+    const usernameRaw = String(providerTelegram).replace(/^@/, "");
+    const usernameLabelEscaped = escapeMarkdown("@" + usernameRaw);
+    providerLine =
+      `Поставщик: ${providerName}\n` +
+      `Telegram: [${usernameLabelEscaped}](https://t.me/${usernameRaw})`;
   } else {
     providerLine = `Поставщик: ${providerName}`;
   }
@@ -250,7 +252,7 @@ function buildServiceMessage(svc, category) {
 
   const text = lines.join("\n");
 
-  // ✅ используем безопасный helper вместо raw svc.images[0]
+  // ✅ Картинка строго из services.images
   const photoUrl = getFirstImageUrl(svc);
 
   // пока прямой страницы услуги нет — оставляем общий SITE_URL
