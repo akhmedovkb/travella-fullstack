@@ -155,7 +155,7 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
-  // 🔥 НОВОЕ: поддержка base64 (data:image/...)
+  // 🔥 поддержка base64 (data:image/...)
   if (v.startsWith("data:image")) {
     // отдаём URL-обёртку, которая вернёт бинарную картинку
     return `${API_BASE.replace(
@@ -915,46 +915,46 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
-      // 🔹 Короткая сводка в превью:
-      // ОТЕЛЬ · РАЗМЕЩЕНИЕ · ДАТЫ · ЦЕНА
+      // 🔹 Короткая сводка в превью (4 строки):
+      // 1) ДАТЫ, 2) ОТЕЛЬ, 3) РАЗМЕЩЕНИЕ, 4) ЦЕНА
       const truncate = (str, n = 40) =>
         str && str.length > n ? str.slice(0, n - 1) + "…" : str;
 
       const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelName = truncate(hotelNameRaw, 35);
+      const hotelName = truncate(hotelNameRaw, 40);
 
       const accommodationRaw = d.accommodation || "";
-      const accommodation = truncate(accommodationRaw, 25);
+      const accommodation = truncate(accommodationRaw, 40);
 
       const startFlight = d.startFlightDate || d.startDate;
       const endFlight = d.endFlightDate || d.endDate;
 
-      const descParts = [];
-
-      if (hotelName) {
-        descParts.push(`ОТЕЛЬ: ${hotelName}`);
-      }
-
-      if (accommodation) {
-        descParts.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
-      }
+      const lines = [];
 
       if (startFlight && endFlight) {
         const sf = String(startFlight).replace(/-/g, ".");
         const ef = String(endFlight).replace(/-/g, ".");
-        descParts.push(`ДАТЫ: ${sf} → ${ef}`);
+        lines.push(`ДАТЫ: ${sf} → ${ef}`);
+      }
+
+      if (hotelName) {
+        lines.push(`ОТЕЛЬ: ${hotelName}`);
+      }
+
+      if (accommodation) {
+        lines.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
       }
 
       const priceInline = pickPrice(d, svc, roleForInline);
       if (priceInline !== null && priceInline !== undefined) {
-        descParts.push(`ЦЕНА: ${priceInline}`);
+        lines.push(`ЦЕНА: ${priceInline}`);
       }
 
-      let description = descParts.join(" · ") || hotelName || "";
+      let description = lines.join("\n") || hotelName || "";
 
       // ограничиваем длину описания для Telegram inline-preview
-      if (description.length > 140) {
-        description = description.slice(0, 137) + "…";
+      if (description.length > 200) {
+        description = description.slice(0, 197) + "…";
       }
 
       const thumbUrl = getFirstImageUrl(svc);
