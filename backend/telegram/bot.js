@@ -127,6 +127,48 @@ const CATEGORY_LABELS = {
   refused_ticket: "Отказной билет",
 };
 
+// безопасно достаём первую картинку из услуги
+function getFirstImageUrl(svc) {
+  let arr = svc.images;
+
+  if (!arr) return null;
+
+  // если в БД лежит строка с JSON или просто строка
+  if (typeof arr === "string") {
+    try {
+      const parsed = JSON.parse(arr);
+      arr = parsed;
+    } catch {
+      arr = [arr];
+    }
+  }
+
+  if (!Array.isArray(arr) || !arr.length) return null;
+
+  let v = arr[0];
+
+  if (v && typeof v === "object") {
+    v = v.url || v.src || v.path || v.location || v.href || null;
+  }
+
+  if (typeof v !== "string") return null;
+  v = v.trim();
+  if (!v) return null;
+
+  // Полный URL
+  if (v.startsWith("http://") || v.startsWith("https://")) {
+    return v;
+  }
+
+  // Относительный путь от корня сайта
+  if (v.startsWith("/")) {
+    return SITE_URL + v;
+  }
+
+  // Всё остальное — невалидно для Telegram
+  return null;
+}
+
 /**
  * Преобразуем услугу из /api/telegram/client/:chatId/search
  * в красивый текст + url картинки + url на сайт
