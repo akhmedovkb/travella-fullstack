@@ -27,6 +27,13 @@ const WELCOME_TEXT =
   "Botni uladingiz! Arizalar bo‘yicha xabarlarni kuting!\n" +
   "You have connected the bot! Please wait for request notifications!";
 
+// Публичный URL сайта (для редиректов относительных путей картинок)
+const SITE_PUBLIC_URL = (
+  process.env.SITE_PUBLIC_URL ||
+  process.env.SITE_URL ||
+  ""
+).replace(/\/+$/, "");
+
 // ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
   const hdr =
@@ -232,6 +239,100 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
   if (!verifySecret(req)) return res.sendStatus(403);
   console.log("[tg] ping", new Date().toISOString(), { path: req.originalUrl });
   res.json({ ok: true, ts: new Date().toISOString() });
+});
+
+/**
+ * 🔥 ВРЕМЕННЫЙ РОУТ ДЛЯ КАРТИНОК ИЗ services.images (base64)
+ *
+ * GET /api/telegram/service-image/:id
+ * Находит услугу в таблице services по id, берёт первую запись из images,
+ * если это data:image/...;base64,... — декодирует и отдаёт бинарную картинку.
+ */
+router.get("/service-image/:id", async (req, res) => {
+  try {
+    const serviceId = Number(req.params.id);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      return res.status(400).send("Bad service id");
+    }
+
+    const result = await pool.query(
+      "SELECT images FROM services WHERE id = $1 LIMIT 1",
+      [serviceId]
+    );
+    if (!result.rows.length) {
+      return res.status(404).send("Service not found");
+    }
+
+    let images = result.rows[0].images;
+    if (!images) {
+      return res.status(404).send("No images");
+    }
+
+    if (typeof images === "string") {
+      try {
+        const parsed = JSON.parse(images);
+        images = parsed;
+      } catch {
+        images = [images];
+      }
+    }
+
+    if (!Array.isArray(images) || !images.length) {
+      return res.status(404).send("No images");
+    }
+
+    let v = images[0];
+
+    if (v && typeof v === "object") {
+      v = v.url || v.src || v.path || v.location || v.href || null;
+    }
+
+    if (!v || typeof v !== "string") {
+      return res.status(404).send("No valid image");
+    }
+
+    v = v.trim();
+    if (!v) {
+      return res.status(404).send("Empty image");
+    }
+
+    // Если уже http/https — можно сделать редирект (на случай если в БД URL)
+    if (v.startsWith("http://") || v.startsWith("https://")) {
+      return res.redirect(v);
+    }
+
+    // Если относительный путь — редиректим на сайт
+    if (v.startsWith("/") && SITE_PUBLIC_URL) {
+      return res.redirect(SITE_PUBLIC_URL + v);
+    }
+
+    // Основной случай: data:image/...;base64,XXXX
+    if (!v.startsWith("data:image")) {
+      return res.status(400).send("Unsupported image format");
+    }
+
+    const m = v.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!m) {
+      return res.status(400).send("Invalid data URL format");
+    }
+
+    const mimeType = m[1] || "image/jpeg";
+    const b64 = m[2];
+    let buf;
+    try {
+      buf = Buffer.from(b64, "base64");
+    } catch {
+      return res.status(400).send("Invalid base64 data");
+    }
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", buf.length);
+    res.setHeader("Cache-Control", "public, max-age=86400"); // кэшируем на день
+    return res.send(buf);
+  } catch (e) {
+    console.error("[tg] /service-image error:", e?.message || e);
+    return res.status(500).send("Internal error");
+  }
 });
 
 // ----- JSON API для НОВОГО клиентского бота -----
