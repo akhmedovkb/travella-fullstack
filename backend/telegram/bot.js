@@ -20,12 +20,6 @@ const API_BASE = (
   "http://localhost:8080"
 ).replace(/\/+$/, "");
 
-// Базовый публичный URL сайта для диплинков
-const SITE_PUBLIC_URL = (
-  process.env.SITE_PUBLIC_URL ||
-  "https://travella.uz"
-).replace(/\/+$/, "");
-
 console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "(none)");
 console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "(none)");
@@ -35,7 +29,6 @@ console.log(
   "token for Telegraf bot"
 );
 console.log("[tg-bot] API_BASE =", API_BASE);
-console.log("[tg-bot] SITE_PUBLIC_URL =", SITE_PUBLIC_URL);
 
 // axios инстанс
 const axios = axiosBase.create({
@@ -50,8 +43,8 @@ bot.use(session());
 
 // ==== HELPERS ====
 
-// главное меню (пока одинаковое для ролей)
 function getMainMenuKeyboard(role) {
+  // пока меню одинаковое для ролей
   return {
     reply_markup: {
       keyboard: [
@@ -90,8 +83,7 @@ function logUpdate(ctx, label = "update") {
   } catch (_) {}
 }
 
-// ==== ПРИВЯЗКА ТЕЛЕФОНА ====
-
+// Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
   try {
     const chatId = ctx.chat.id;
@@ -177,8 +169,6 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
 }
 
 // ==== /start ====
-
-// быстрый профиль клиента/поставщика по chatId мы уже делаем через /api/telegram/profile/...
 
 bot.start(async (ctx) => {
   logUpdate(ctx, "/start");
@@ -385,32 +375,6 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   );
 });
 
-// ==== ПОМОЩНИК ДЛЯ ДИПЛИНКА ====
-
-// Один helper для формирования URL услуги на сайте.
-// Сейчас делаю максимально безопасно: /marketplace?service=<id>
-// Если потом захочешь /r/123 или /refused/123 — меняется только эта функция.
-function buildServiceUrl(svc, category) {
-  const id = svc.id || svc.service_id;
-  if (!id) return SITE_PUBLIC_URL;
-
-  const d = svc.details || {};
-
-  // Если когда-нибудь заведёшь slug в details
-  if (d.publicSlug) {
-    return `${SITE_PUBLIC_URL}/r/${encodeURIComponent(d.publicSlug)}`;
-  }
-
-  // Для отказников можно потенциально сделать отдельную страницу
-  if (category && String(category).startsWith("refused_")) {
-    // Пока всё равно ведём на marketplace с параметром
-    return `${SITE_PUBLIC_URL}/marketplace?service=${encodeURIComponent(id)}`;
-  }
-
-  // Общий fallback
-  return `${SITE_PUBLIC_URL}/marketplace?service=${encodeURIComponent(id)}`;
-}
-
 // ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
 
 bot.action(
@@ -426,7 +390,6 @@ bot.action(
 
       await ctx.reply("Ищу подходящие предложения...");
 
-      // ВАЖНО: передаём именно ?category=..., как ждёт backend
       const { data } = await axios.get(
         `/api/telegram/client/${chatId}/search`,
         { params: { category } }
@@ -457,7 +420,15 @@ bot.action(
       await ctx.reply(`Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`);
 
       for (const svc of data.items.slice(0, 10)) {
-        const d = svc.details || {};
+        let d = svc.details || {};
+        if (typeof d === "string") {
+          try {
+            d = JSON.parse(d);
+          } catch {
+            d = {};
+          }
+        }
+
         const title = svc.title || labelMap[category] || "Услуга";
         const providerName = svc.provider_name || "Поставщик Travella";
 
@@ -472,14 +443,14 @@ bot.action(
           directionParts.length > 0 ? directionParts.join(" · ") : null;
 
         const dates =
-          d.startDate && d.endDate
+          d.startFlightDate && d.endFlightDate
+            ? `Даты: ${d.startFlightDate} → ${d.endFlightDate}`
+            : d.startDate && d.endDate
             ? `Даты: ${d.startDate} → ${d.endDate}`
             : null;
 
         const netPrice =
-          d.netPrice || d.price || d.grossPrice || d.amount || null;
-
-        const url = buildServiceUrl(svc, category);
+          d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
 
         const lines = [];
         lines.push(`*${title}*`);
@@ -488,7 +459,7 @@ bot.action(
         if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
         lines.push(`Поставщик: ${providerName}`);
         lines.push("");
-        lines.push("Подробнее и бронирование: " + url);
+        lines.push("Подробнее и бронирование: https://travella.uz`);
 
         await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
       }
@@ -504,203 +475,127 @@ bot.action(
   }
 );
 
-// ==== INLINE QUERY: встроенный поиск отказных услуг ====
+// ==== INLINE-ПОИСК (встроенный бот, как на скрине) ====
+// @BOT_NAME в любом чате -> список отказных услуг
 
-// маппинг текста запроса → категория отказа
-function resolveInlineCategory(query) {
-  const q = (query || "").trim().toLowerCase();
+bot.on("inline_query", async (ctx) => {
+  try {
+    logUpdate(ctx, "inline_query");
 
-  if (!q) return null; // пустой запрос → вернём все категории
+    const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
 
-  if (q.includes("тур") || q.includes("tour")) return "refused_tour";
-  if (q.includes("отел") || q.includes("hotel") || q.includes("otel"))
-    return "refused_hotel";
-  if (q.includes("авиа") || q.includes("flight") || q.includes("avia"))
-    return "refused_flight";
-  if (q.includes("билет") || q.includes("ticket"))
-    return "refused_ticket";
+    // Определяем категорию по тексту запроса
+    let category = "refused_tour"; // по умолчанию — туры
 
-  // по умолчанию — туры
-  return "refused_tour";
-}
+    if (q.includes("отель") || q.includes("hotel") || q.includes("#hotel")) {
+      category = "refused_hotel";
+    } else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) {
+      category = "refused_flight";
+    } else if (q.includes("билет") || q.includes("ticket")) {
+      category = "refused_ticket";
+    } else if (q.includes("tour") || q.includes("тур") || q.includes("turov")) {
+      category = "refused_tour";
+    }
 
-// форматируем услугу в текст для отправки в чат
-function formatServiceMessage(svc, category) {
-  const d = svc.details || {};
-  const labelMap = {
-    refused_tour: "Отказной тур",
-    refused_hotel: "Отказной отель",
-    refused_flight: "Отказной авиабилет",
-    refused_ticket: "Отказной билет",
-  };
+    const chatId = ctx.from.id; // для API это формальный параметр
 
-  const title = svc.title || labelMap[category] || "Услуга";
-  const providerName = svc.provider_name || "Поставщик Travella";
+    const { data } = await axios.get(
+      `/api/telegram/client/${chatId}/search`,
+      { params: { category } }
+    );
 
-  const directionParts = [];
-  if (d.directionFrom && d.directionTo) {
-    directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
-  }
-  if (d.directionCountry) {
-    directionParts.push(d.directionCountry);
-  }
-  const direction =
-    directionParts.length > 0 ? directionParts.join(" · ") : null;
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] inline search resp malformed:", data);
+      await ctx.answerInlineQuery([], { cache_time: 3 });
+      return;
+    }
 
-  const dates =
-    d.startDate && d.endDate
-      ? `Даты: ${d.startDate} → ${d.endDate}`
-      : null;
-
-  const netPrice =
-    d.netPrice || d.price || d.grossPrice || d.amount || null;
-
-  const url = buildServiceUrl(svc, category);
-
-  const lines = [];
-  lines.push(`*${title}*`);
-  if (direction) lines.push(direction);
-  if (dates) lines.push(dates);
-  if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
-  lines.push(`Поставщик: ${providerName}`);
-  lines.push("");
-  lines.push("Подробнее и бронирование: " + url);
-
-  return lines.join("\n");
-}
-
-// этот текст пойдёт в превью в списке inline-результатов (одно-две строки)
-function buildInlineDescription(svc, category) {
-  const d = svc.details || {};
-  const parts = [];
-
-  if (d.directionFrom && d.directionTo) {
-    parts.push(`${d.directionFrom} → ${d.directionTo}`);
-  } else if (d.directionCountry) {
-    parts.push(d.directionCountry);
-  }
-
-  if (d.startDate && d.endDate) {
-    parts.push(`${d.startDate} – ${d.endDate}`);
-  }
-
-  const netPrice =
-    d.netPrice || d.price || d.grossPrice || d.amount || null;
-  if (netPrice) {
-    parts.push(`от ${netPrice}`);
-  }
-
-  if (parts.length === 0) {
     const labelMap = {
       refused_tour: "Отказной тур",
       refused_hotel: "Отказной отель",
       refused_flight: "Отказной авиабилет",
       refused_ticket: "Отказной билет",
     };
-    return labelMap[category] || "Предложение Travella";
-  }
 
-  return parts.join(" · ");
-}
-
-bot.on("inline_query", async (ctx) => {
-  try {
-    const q = ctx.inlineQuery.query || "";
-    const fromId = ctx.from?.id;
-    console.log("[tg-bot] inline_query:", {
-      fromId,
-      q,
-    });
-
-    // Определяем категорию из текста запроса
-    const singleCategory = resolveInlineCategory(q);
-
-    // Если пустой запрос — тащим все категории по чуть-чуть
-    const categories = singleCategory
-      ? [singleCategory]
-      : ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
-
-    const allItems = [];
-
-    // Берём свежие услуги по каждой категории
-    for (const cat of categories) {
-      try {
-        const resp = await axios.get(
-          `/api/telegram/client/${fromId || 0}/search`,
-          { params: { category: cat } }
-        );
-        if (resp.data && resp.data.success && Array.isArray(resp.data.items)) {
-          resp.data.items.forEach((row) =>
-            allItems.push({ ...row, _category: cat })
-          );
+    const results = data.items.slice(0, 25).map((svc, idx) => {
+      let d = svc.details || {};
+      if (typeof d === "string") {
+        try {
+          d = JSON.parse(d);
+        } catch {
+          d = {};
         }
-      } catch (e) {
-        console.error(
-          "[tg-bot] inline search error for category",
-          cat,
-          e?.response?.data || e.message || e
-        );
       }
-    }
 
-    if (!allItems.length) {
-      // Пустой ответ — Telegram всё равно ждёт массив
-      return ctx.answerInlineQuery([], { cache_time: 2 });
-    }
+      const title = svc.title || labelMap[category] || "Услуга";
+      const providerName = svc.provider_name || "Поставщик Travella";
 
-    // Ограничим, например, 20 результатами
-    const limited = allItems.slice(0, 20);
+      const directionParts = [];
+      if (d.directionFrom && d.directionTo) {
+        directionParts.push(`${d.directionFrom} → ${d.directionTo}`);
+      }
+      if (d.directionCountry) {
+        directionParts.push(d.directionCountry);
+      }
+      const direction =
+        directionParts.length > 0 ? directionParts.join(" · ") : "";
 
-    const results = limited.map((svc, idx) => {
-      const category = svc._category || svc.category || singleCategory;
-      const title =
-        svc.title ||
-        (category === "refused_tour"
-          ? "Отказной тур"
-          : category === "refused_hotel"
-          ? "Отказной отель"
-          : category === "refused_flight"
-          ? "Отказной авиабилет"
-          : "Отказной билет");
+      const dates =
+        d.startFlightDate && d.endFlightDate
+          ? `Даты: ${d.startFlightDate} → ${d.endFlightDate}`
+          : d.startDate && d.endDate
+          ? `Даты: ${d.startDate} → ${d.endDate}`
+          : "";
 
-      const description = buildInlineDescription(svc, category);
-      const messageText = formatServiceMessage(svc, category);
-      const url = buildServiceUrl(svc, category);
+      const netPrice =
+        d.netPrice || d.price || d.grossPrice || d.amount || svc.price || null;
+
+      const thumbUrl = Array.isArray(svc.images) && svc.images.length
+        ? (svc.images[0].url || svc.images[0].src || svc.images[0])
+        : undefined;
+
+      const descriptionParts = [];
+      if (direction) descriptionParts.push(direction);
+      if (dates) descriptionParts.push(dates);
+      if (netPrice) descriptionParts.push(`Цена нетто: ${netPrice}`);
+
+      const description = descriptionParts.join(" | ");
+
+      const lines = [];
+      lines.push(`*${title}*`);
+      if (direction) lines.push(direction);
+      if (dates) lines.push(dates);
+      if (netPrice) lines.push(`Цена (нетто): *${netPrice}*`);
+      lines.push(`Поставщик: ${providerName}`);
+      lines.push("");
+      lines.push("Подробнее и бронирование: https://travella.uz`);
 
       return {
         type: "article",
-        id: String(svc.id || `${category}-${idx}`),
+        id: String(svc.id) + "_" + idx,
         title,
-        description,
+        description: description || providerName,
+        thumb_url: thumbUrl,
         input_message_content: {
-          message_text: messageText,
+          message_text: lines.join("\n"),
           parse_mode: "Markdown",
-        },
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "Открыть на Travella",
-                url,
-              },
-            ],
-          ],
         },
       };
     });
 
-    return ctx.answerInlineQuery(results, {
-      cache_time: 3, // почти realtime
+    await ctx.answerInlineQuery(results, {
+      cache_time: 5,
       is_personal: true,
+      switch_pm_text: "Открыть главное меню бота",
+      switch_pm_parameter: "start",
     });
   } catch (e) {
     console.error(
-      "[tg-bot] inline_query handler error:",
+      "[tg-bot] inline_query error:",
       e?.response?.data || e.message || e
     );
-    // даже при ошибке нужно что-то ответить
     try {
-      await ctx.answerInlineQuery([], { cache_time: 2 });
+      await ctx.answerInlineQuery([], { cache_time: 3 });
     } catch (_) {}
   }
 });
