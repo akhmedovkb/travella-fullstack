@@ -250,10 +250,8 @@ function buildServiceMessage(svc, category) {
 
   const text = lines.join("\n");
 
-  const photoUrl =
-    Array.isArray(svc.images) && svc.images.length
-      ? svc.images[0].url || svc.images[0].src || svc.images[0]
-      : null;
+  // ✅ используем безопасный helper вместо raw svc.images[0]
+  const photoUrl = getFirstImageUrl(svc);
 
   // пока прямой страницы услуги нет — оставляем общий SITE_URL
   const serviceUrl = SITE_URL;
@@ -902,10 +900,7 @@ bot.on("inline_query", async (ctx) => {
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        title:
-          svc.title ||
-          CATEGORY_LABELS[category] ||
-          "Услуга",
+        title: svc.title || CATEGORY_LABELS[category] || "Услуга",
         description,
         thumb_url: photoUrl || undefined,
         input_message_content: {
