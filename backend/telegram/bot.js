@@ -198,107 +198,42 @@ function pickPrice(details, svc, role) {
  *
  * role: "client" | "provider"
  */
-function buildServiceMessage(svc, category, role = "client") {
-  let d = svc.details || {};
-  if (typeof d === "string") {
-    try {
-      d = JSON.parse(d);
-    } catch {
-      d = {};
+bot.hears(/🔍 Найти услугу/i, async (ctx) => {
+  logUpdate(ctx, "hears Найти услугу");
+
+  // обычный выбор категории
+  await ctx.reply("Выберите тип услуги:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📍 Отказной тур", callback_data: "find:refused_tour" }],
+        [{ text: "🏨 Отказной отель", callback_data: "find:refused_hotel" }],
+        [{ text: "✈️ Отказной авиабилет", callback_data: "find:refused_flight" }],
+        [{ text: "🎫 Отказной билет", callback_data: "find:refused_ticket" }],
+      ],
+    },
+  });
+
+  // 🔽 ДОПОЛНИТЕЛЬНО: кнопка для inline-списка
+  await ctx.reply(
+    "Хотите вставить отказной тур в любой чат?\n" +
+      "Нажмите кнопку ниже, выберите тур и он отправится в этот чат.",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "📤 Выбрать отказной тур",
+              // сюда можешь подставить свой хэштег, если хочешь фильтровать по тексту
+              switch_inline_query_current_chat: "#allotkaztur ",
+              // или "" — тогда покажет все туры по умолчанию
+            },
+          ],
+        ],
+      },
     }
-  }
+  );
+});
 
-  const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
-  const title = escapeMarkdown(titleRaw);
-
-  // Направление
-  const directionParts = [];
-  if (d.directionFrom && d.directionTo) {
-    directionParts.push(
-      `${escapeMarkdown(d.directionFrom)} → ${escapeMarkdown(
-        d.directionTo
-      )}`
-    );
-  }
-  if (d.directionCountry) {
-    directionParts.push(escapeMarkdown(d.directionCountry));
-  }
-  const direction =
-    directionParts.length > 0 ? directionParts.join(" · ") : null;
-
-  // Даты
-  const dates =
-    d.startFlightDate && d.endFlightDate
-      ? `Даты: ${escapeMarkdown(d.startFlightDate)} → ${escapeMarkdown(
-          d.endFlightDate
-        )}`
-      : d.startDate && d.endDate
-      ? `Даты: ${escapeMarkdown(d.startDate)} → ${escapeMarkdown(
-          d.endDate
-        )}`
-      : null;
-
-  // Отель + размещение
-  const hotel = d.hotel || d.hotelName || null;
-  const accommodation = d.accommodation || null;
-
-  const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
-  const accommodationSafe = accommodation
-    ? escapeMarkdown(accommodation)
-    : null;
-
-  // Цена (по роли)
-  const priceRaw = pickPrice(d, svc, role);
-  const price = priceRaw !== null && priceRaw !== undefined
-    ? escapeMarkdown(priceRaw)
-    : null;
-
-  // Поставщик + Telegram
-  const providerNameRaw = svc.provider_name || "Поставщик Travella";
-  const providerName = escapeMarkdown(providerNameRaw);
-    const providerTelegram = svc.provider_telegram || null;
-
-  let providerLine;
-  let telegramLine = null;
-
-  if (providerTelegram) {
-    // social может быть "@user" или "https://t.me/user"
-    let username = String(providerTelegram).trim();
-    username = username.replace(/^@/, "");
-    username = username.replace(/^https?:\/\/t\.me\//i, "");
-    const safeUsername = username;
-
-    // экранируем @username для Markdown, чтобы подчёркивания не ломали разметку
-    const escapedAtUsername = escapeMarkdown("@" + safeUsername);
-
-    // название поставщика кликабельно, но через tg:// (без web-preview)
-    providerLine = `Поставщик: [${providerName}](tg://resolve?domain=${safeUsername})`;
-    // отдельная строка "Telegram: @username" (уже экранированная)
-    telegramLine = `Telegram: ${escapedAtUsername}`;
-  } else {
-    providerLine = `Поставщик: ${providerName}`;
-  }
-
-  const lines = [];
-  lines.push(`*${title}*`);
-  if (direction) lines.push(direction);
-  if (dates) lines.push(dates);
-  if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
-  if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
-  if (price) lines.push(`Цена: *${price}*`); // без нетто/брутто
-  lines.push(providerLine);
-  if (telegramLine) lines.push(telegramLine);
-  lines.push("");
-  lines.push(`Подробнее и бронирование: ${SITE_URL}`);
-
-  const text = lines.join("\n");
-  const photoUrl = getFirstImageUrl(svc);
-
-  // пока прямой страницы услуги нет — оставляем общий SITE_URL
-  const serviceUrl = SITE_URL;
-
-  return { text, photoUrl, serviceUrl };
-}
 
 // ==== Регистрация / привязка телефона ====
 
