@@ -862,15 +862,16 @@ bot.on("inline_query", async (ctx) => {
     } else if (q.includes("билет") || q.includes("ticket")) {
       category = "refused_ticket";
     } else if (
-      q.includes("tour") ||
       q.includes("тур") ||
-      q.includes("turov")
+      q.includes("tour") ||
+      q.includes("turov") ||
+      q.includes("tur") // чтобы ловить #allotkaztur и подобные
     ) {
       category = "refused_tour";
     }
 
     const chatId = ctx.from.id; // для API это формальный параметр
-    const roleForInline = "client"; // inline-бот в первую очередь для клиентов
+    const roleForInline = "client"; // inline-бот — витрина для клиентов
 
     const { data } = await axios.get(
       `/api/telegram/client/${chatId}/search`,
@@ -899,53 +900,16 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
-      const directionParts = [];
-      if (d.directionFrom && d.directionTo) {
-        directionParts.push(
-          `${escapeMarkdown(d.directionFrom)} → ${escapeMarkdown(
-            d.directionTo
-          )}`
-        );
-      }
-      if (d.directionCountry) {
-        directionParts.push(escapeMarkdown(d.directionCountry));
-      }
-      const direction =
-        directionParts.length > 0 ? directionParts.join(" · ") : "";
-
-      const dates =
-        d.startFlightDate && d.endFlightDate
-          ? `Даты: ${escapeMarkdown(d.startFlightDate)} → ${escapeMarkdown(
-              d.endFlightDate
-            )}`
-          : d.startDate && d.endDate
-          ? `Даты: ${escapeMarkdown(d.startDate)} → ${escapeMarkdown(
-              d.endDate
-            )}`
-          : "";
-
-      const priceRaw = pickPrice(d, svc, roleForInline);
-      const price =
-        priceRaw !== null && priceRaw !== undefined
-          ? escapeMarkdown(priceRaw)
-          : null;
-
-      const descriptionParts = [];
-      if (direction) descriptionParts.push(direction);
-      if (dates) descriptionParts.push(dates);
-      if (price) descriptionParts.push(`Цена: ${price}`);
-
-      const description = descriptionParts.join(" | ") || "Отказная услуга";
+      // В списке под заголовком показываем только отель
+      const hotelName = d.hotel || d.hotelName || "";
+      const description = hotelName || "";
 
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        title:
-          svc.title ||
-          CATEGORY_LABELS[category] ||
-          "Услуга",
+        title: svc.title || CATEGORY_LABELS[category] || "Услуга",
         description,
-        thumb_url: photoUrl || undefined,
+        thumb_url: getFirstImageUrl(svc) || undefined,
         input_message_content: {
           message_text: text,
           parse_mode: "Markdown",
