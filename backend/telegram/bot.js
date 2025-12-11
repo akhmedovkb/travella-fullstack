@@ -899,6 +899,35 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
+    // ==== Сортировка по ближайшей дате ====
+function extractStartDate(svc) {
+  let d = svc.details || {};
+  if (typeof d === "string") {
+    try { d = JSON.parse(d); } catch { d = {}; }
+  }
+
+  const date =
+    d.startFlightDate ||
+    d.startDate ||
+    d.dateFrom || // на всякий случай
+    null;
+
+  if (!date) return null;
+  const ts = Date.parse(date);
+  return isNaN(ts) ? null : ts;
+}
+
+// сортировка: маленькая дата → раньше
+data.items.sort((a, b) => {
+  const da = extractStartDate(a);
+  const db = extractStartDate(b);
+  if (da === null && db === null) return 0;
+  if (da === null) return 1;
+  if (db === null) return -1;
+  return da - db;
+});
+
+    
     const results = data.items.slice(0, 25).map((svc, idx) => {
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
