@@ -155,9 +155,8 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
-  // 🔥 НОВОЕ: поддержка base64 (data:image/...)
+  // 🔥 поддержка base64 (data:image/...)
   if (v.startsWith("data:image")) {
-    // отдаём URL-обёртку, которая вернёт бинарную картинку
     return `${API_BASE.replace(
       /\/+$/,
       ""
@@ -189,7 +188,7 @@ function pickPrice(details, svc, role) {
   return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
 }
 
-/** безопасный парсинг дат для сортировки */
+// безопасный парсинг дат для сортировки
 function parseDateSafe(value) {
   if (!value) return null;
   const s = String(value).trim();
@@ -206,7 +205,7 @@ function parseDateSafe(value) {
   return null;
 }
 
-/** достаём дату вылета/старта тура из svc.details для сортировки */
+// достаём дату вылета/старта тура из svc.details для сортировки
 function getStartDateForSort(svc) {
   let d = svc.details || {};
   if (typeof d === "string") {
@@ -220,7 +219,7 @@ function getStartDateForSort(svc) {
     d.startFlightDate ||
     d.departureFlightDate ||
     d.startDate ||
-    d.start_flight_date; // на всякий случай старые ключи
+    d.start_flight_date;
   return parseDateSafe(raw);
 }
 
@@ -270,11 +269,12 @@ function buildServiceMessage(svc, category, role = "client") {
         )}`
       : null;
 
-  // Отель + размещение
+  // Отель
   const hotel = d.hotel || d.hotelName || null;
-  const accommodation = d.accommodation || null;
-
   const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
+
+  // Размещение (в полном тексте — оставляем)
+  const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation
     ? escapeMarkdown(accommodation)
     : null;
@@ -295,17 +295,14 @@ function buildServiceMessage(svc, category, role = "client") {
   let telegramLine = null;
 
   if (providerTelegram) {
-    // может быть "@user" или "https://t.me/user"
     let username = String(providerTelegram).trim();
     username = username.replace(/^@/, "");
     username = username.replace(/^https?:\/\/t\.me\//i, "");
 
-    const rawUsername = username; // в ссылку
-    const mdUsername = escapeMarkdown(username); // в текст
+    const rawUsername = username;
+    const mdUsername = escapeMarkdown(username);
 
-    // название поставщика кликабельно, но через tg:// (без web-preview)
     providerLine = `Поставщик: [${providerName}](tg://resolve?domain=${rawUsername})`;
-    // отдельная строка "Telegram: @username"
     telegramLine = `Telegram: @${mdUsername}`;
   } else {
     providerLine = `Поставщик: ${providerName}`;
@@ -317,16 +314,15 @@ function buildServiceMessage(svc, category, role = "client") {
   if (dates) lines.push(dates);
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
-  if (price) lines.push(`Цена: *${price}*`); // без слова нетто/брутто
+  if (price) lines.push(`Цена: *${price}*`);
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
   lines.push("");
   lines.push(`Подробнее и бронирование: ${SITE_URL}`);
 
   const text = lines.join("\n");
-  const photoUrl = getFirstImageUrl(svc); // берём из services.images
+  const photoUrl = getFirstImageUrl(svc);
 
-  // пока прямой страницы услуги нет — оставляем общий SITE_URL
   const serviceUrl = SITE_URL;
 
   return { text, photoUrl, serviceUrl };
@@ -342,7 +338,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
     const firstName = ctx.from.first_name || null;
 
     const payload = {
-      role: requestedRole, // "client" | "provider"
+      role: requestedRole,
       phone,
       chatId,
       username,
@@ -572,7 +568,6 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
 bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   logUpdate(ctx, "hears Найти услугу");
 
-  // обычный выбор категории
   await ctx.reply("Выберите тип услуги:", {
     reply_markup: {
       inline_keyboard: [
@@ -584,7 +579,6 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
     },
   });
 
-  // 🔽 ДОПОЛНИТЕЛЬНО: кнопка для inline-списка в текущем чате
   await ctx.reply(
     "Хотите вставить отказной тур в любой чат?\n" +
       "Нажмите кнопку ниже, выберите тур и он отправится в этот чат.",
@@ -603,7 +597,7 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   );
 });
 
-// заглушки, чтобы не было 404
+// заглушки
 bot.hears(/❤️ Избранное/i, async (ctx) => {
   logUpdate(ctx, "hears Избранное");
   await ctx.reply(
@@ -640,19 +634,18 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   logUpdate(ctx, "hears Стать поставщиком");
   await ctx.reply(
     "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
-      "https://travella.uz и дождитесь модерации.\n\n" +
+      "https://travella.уз и дождитесь модерации.\n\n" +
       "Мы также свяжемся с вами по указанным контактам."
   );
 });
 
 // ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
-// Красивый формат + фото + inline-кнопки
 
 bot.action(
   /^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
   async (ctx) => {
     try {
-      const category = ctx.match[1]; // refused_tour | refused_hotel | ...
+      const category = ctx.match[1];
 
       await ctx.answerCbQuery();
       logUpdate(ctx, `action search ${category}`);
@@ -723,8 +716,7 @@ bot.action(
   }
 );
 
-// ==== Быстрый запрос по кнопке "📩 Быстрый запрос" ====
-// Отправляем заявку в чат менеджера, без бэкенда
+// ==== Быстрый запрос ====
 
 bot.action(/^request:(\d+)$/, async (ctx) => {
   try {
@@ -752,8 +744,6 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
     console.error("[tg-bot] request: action error:", e);
   }
 });
-
-// Обработка текста, когда ждём быстрый запрос
 
 bot.on("text", async (ctx, next) => {
   try {
@@ -795,7 +785,6 @@ bot.on("text", async (ctx, next) => {
         );
       }
 
-      // Сбрасываем состояние
       ctx.session.state = null;
       ctx.session.pendingRequestServiceId = null;
       return;
@@ -804,13 +793,11 @@ bot.on("text", async (ctx, next) => {
     console.error("[tg-bot] error handling quick request text:", e);
   }
 
-  // если это не быстрый запрос — пропускаем дальше к остальным обработчикам
   return next();
 });
 
-// ==== Команда /tour_123 — показать конкретный тур по ID ====
+// ==== /tour_123 ====
 
-// Вспомогательная функция: ищем услугу по ID через уже готовый search API
 async function findServiceByIdViaSearch(chatId, serviceId) {
   for (const category of REFUSED_CATEGORIES) {
     try {
@@ -889,8 +876,7 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
   }
 });
 
-// ==== INLINE-ПОИСК (встроенный бот, как на скрине) ====
-// @BOT_NAME в любом чате -> список отказных услуг
+// ==== INLINE-ПОИСК ====
 
 bot.on("inline_query", async (ctx) => {
   try {
@@ -898,8 +884,8 @@ bot.on("inline_query", async (ctx) => {
 
     const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
 
-    // Определяем категорию по тексту запроса
-    let category = "refused_tour"; // по умолчанию — туры
+    // Определяем категорию по тексту
+    let category = "refused_tour";
 
     if (q.includes("отель") || q.includes("hotel") || q.includes("#hotel")) {
       category = "refused_hotel";
@@ -915,13 +901,13 @@ bot.on("inline_query", async (ctx) => {
       q.includes("тур") ||
       q.includes("tour") ||
       q.includes("turov") ||
-      q.includes("tur") // чтобы ловить #allotkaztur и подобные
+      q.includes("tur")
     ) {
       category = "refused_tour";
     }
 
-    const chatId = ctx.from.id; // для API это формальный параметр
-    const roleForInline = "client"; // inline-бот — витрина для клиентов
+    const chatId = ctx.from.id;
+    const roleForInline = "client";
 
     const { data } = await axios.get(
       `/api/telegram/client/${chatId}/search`,
@@ -934,21 +920,16 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-    // 🔹 СОРТИРОВКА: сначала те, у кого ближайшая дата вылета/старта
-    const now = new Date();
+    // сортировка по дате (самая ранняя сверху)
     const itemsSorted = [...data.items].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
 
-      // те, у кого нет дат — в конец
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
 
-      const diffA = da.getTime() - now.getTime();
-      const diffB = db.getTime() - now.getTime();
-
-      return diffA - diffB;
+      return da.getTime() - db.getTime();
     });
 
     const results = itemsSorted.slice(0, 25).map((svc, idx) => {
@@ -967,44 +948,36 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
-      // 🔹 Короткая сводка в превью:
-      // ОТЕЛЬ · РАЗМЕЩЕНИЕ · ДАТЫ · ЦЕНА
       const truncate = (str, n = 40) =>
         str && str.length > n ? str.slice(0, n - 1) + "…" : str;
-
-      const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelName = truncate(hotelNameRaw, 35);
-
-      const accommodationRaw = d.accommodation || "";
-      const accommodation = truncate(accommodationRaw, 25);
 
       const startFlight = d.startFlightDate || d.startDate;
       const endFlight = d.endFlightDate || d.endDate;
 
-      const descParts = [];
-
-      if (hotelName) {
-        descParts.push(`ОТЕЛЬ: ${hotelName}`);
-      }
-
-      if (accommodation) {
-        descParts.push(`РАЗМЕЩЕНИЕ: ${accommodation}`);
-      }
-
+      let datesLine = "";
       if (startFlight && endFlight) {
         const sf = String(startFlight).replace(/-/g, ".");
         const ef = String(endFlight).replace(/-/g, ".");
-        descParts.push(`ДАТЫ: ${sf} → ${ef}`);
+        datesLine = `ДАТЫ: ${sf} → ${ef}`;
       }
+
+      const hotelNameRaw = d.hotel || d.hotelName || "";
+      const hotelLine = hotelNameRaw
+        ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}`
+        : "";
 
       const priceInline = pickPrice(d, svc, roleForInline);
-      if (priceInline !== null && priceInline !== undefined) {
-        descParts.push(`ЦЕНА: ${priceInline}`);
-      }
+      const priceLine =
+        priceInline !== null && priceInline !== undefined
+          ? `ЦЕНА: ${priceInline}`
+          : "";
 
-      let description = descParts.join(" · ") || hotelName || "";
+      const descParts = [];
+      if (datesLine) descParts.push(datesLine);
+      if (hotelLine) descParts.push(hotelLine);
+      if (priceLine) descParts.push(priceLine);
 
-      // ограничиваем длину описания для Telegram inline-preview
+      let description = descParts.join(" · ");
       if (description.length > 140) {
         description = description.slice(0, 137) + "…";
       }
