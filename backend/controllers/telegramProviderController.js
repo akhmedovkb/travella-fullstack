@@ -1,4 +1,5 @@
 // backend/controllers/telegramProviderController.js
+
 const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
@@ -437,12 +438,12 @@ async function createServiceFromBot(req, res) {
       details && typeof details === "object" ? details : {};
     const safeImages = Array.isArray(images) ? images : [];
 
-    // ✅ КРИТИЧНО: pg не всегда сериализует массив как JSON.
-    // Без JSON.stringify() может уйти Postgres array literal "{...}" и сломать ::jsonb.
+    // ✅ критично: сериализуем в JSON строки, чтобы ::jsonb не ломался
     const safeDetailsJson = JSON.stringify(safeDetails);
     const safeImagesJson = JSON.stringify(safeImages);
 
-    // выставляем статусы модерации: отправлено на модерацию
+    // ✅ ВАЖНО: чтобы админка /admin/moderation увидела услугу в "Ожидают"
+    // ставим status = 'pending' (а не submitted)
     const insertRes = await pool.query(
       `
         INSERT INTO services (
@@ -464,7 +465,7 @@ async function createServiceFromBot(req, res) {
           $4,
           $5::jsonb,
           $6::jsonb,
-          'submitted',
+          'pending',
           'pending',
           NOW(),
           NOW()
