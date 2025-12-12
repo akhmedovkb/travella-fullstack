@@ -426,6 +426,12 @@ router.get(
   telegramProviderController.getProviderServices
 );
 
+// создание услуги из Telegram-бота (шаговый мастер)
+router.post(
+  "/provider/:chatId/services",
+  telegramProviderController.createServiceFromBot
+);
+
 // действия по услугам поставщика из бота
 router.post(
   "/provider/:chatId/services/:serviceId/unpublish",
