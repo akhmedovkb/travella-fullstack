@@ -1,4 +1,4 @@
-//backend/routes/telegramRoutes.js
+// backend/routes/telegramRoutes.js
 
 const express = require("express");
 const router = express.Router();
@@ -17,9 +17,11 @@ const {
 
 // ---------- ENV / секреты ----------
 const SECRET_PATH = process.env.TELEGRAM_WEBHOOK_SECRET || "devsecret"; // для URL /webhook/<SECRET>
-const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || "";          // если задашь при setWebhook: secret_token=...
+const HEADER_TOKEN = process.env.TELEGRAM_WEBHOOK_TOKEN || ""; // если задашь при setWebhook: secret_token=...
 console.log(
-  `[tg] routes mounted: /api/telegram/webhook/${SECRET_PATH} (header token ${HEADER_TOKEN ? "ON" : "OFF"})`
+  `[tg] routes mounted: /api/telegram/webhook/${SECRET_PATH} (header token ${
+    HEADER_TOKEN ? "ON" : "OFF"
+  })`
 );
 
 // RU/UZ/EN привет после привязки
@@ -380,7 +382,9 @@ router.get("/setWebhook", async (req, res) => {
       process.env.API_BASE_URL || process.env.SITE_API_URL || ""
     ).replace(/\/+$/, "");
     if (!base)
-      return res.status(500).json({ ok: false, error: "api_base_missing" });
+      return res
+        .status(500)
+        .json({ ok: false, error: "api_base_missing" });
 
     const secret = req.query.secret || SECRET_PATH;
     const useHeader = String(req.query.useHeader || "0") === "1";
@@ -424,12 +428,6 @@ router.post(
 router.get(
   "/provider/:chatId/services",
   telegramProviderController.getProviderServices
-);
-
-// создание услуги из мастера Telegram
-router.post(
-  "/provider/:chatId/services",
-  telegramProviderController.createServiceFromBot
 );
 
 // создание услуги из Telegram-бота (шаговый мастер)
