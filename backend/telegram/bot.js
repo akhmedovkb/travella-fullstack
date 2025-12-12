@@ -239,8 +239,7 @@ function getStartDateForSort(svc) {
 }
 
 /**
- * Преобразуем услугу из /api/telegram/client/:chatId/search
- * в красивый текст + url картинки + url на сайт
+ * Преобразуем услугу в красивый текст + url картинки + url на сайт
  *
  * role: "client" | "provider"
  */
@@ -288,7 +287,7 @@ function buildServiceMessage(svc, category, role = "client") {
   const hotel = d.hotel || d.hotelName || null;
   const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
 
-  // Размещение (в полном тексте — оставляем)
+  // Размещение
   const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation
     ? escapeMarkdown(accommodation)
@@ -481,7 +480,10 @@ async function finishCreateServiceFromWizard(ctx) {
     );
     resetServiceWizard(ctx);
   } catch (e) {
-    console.error("[tg-bot] finishCreateServiceFromWizard error:", e?.response?.data || e);
+    console.error(
+      "[tg-bot] finishCreateServiceFromWizard error:",
+      e?.response?.data || e
+    );
     await ctx.reply(
       "Произошла ошибка при сохранении услуги. Попробуйте позже."
     );
