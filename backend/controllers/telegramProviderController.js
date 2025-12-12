@@ -1,5 +1,12 @@
-const pool = require("../db");
+// backend/controllers/telegramProviderController.jsconst pool = require("../db");
 const { tgSend } = require("../utils/telegram");
+
+const REFUSED_CATEGORIES = [
+  "refused_tour",
+  "refused_hotel",
+  "refused_flight",
+  "refused_ticket",
+];
 
 /**
  * Получить заявки поставщика по его Telegram chatId
@@ -208,12 +215,7 @@ async function getProviderServices(req, res) {
     const providerId = providerRes.rows[0].id;
 
     // 2) Берём его услуги из services
-    const categories = [
-      "refused_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_ticket",
-    ];
+    const categories = REFUSED_CATEGORIES;
 
     const servicesRes = await pool.query(
       `
@@ -386,6 +388,98 @@ async function archiveServiceFromBot(req, res) {
   return serviceActionFromBot(req, res, "archive");
 }
 
+/**
+ * Создание услуги из Telegram-бота (шаговый мастер)
+ * POST /api/telegram/provider/:chatId/services
+ *
+ * body: { category, title, price, details, images }
+ */
+async function createServiceFromBot(req, res) {
+  try {
+    const { chatId } = req.params;
+    const { category, title, price, details, images } = req.body || {};
+
+    if (!category || !REFUSED_CATEGORIES.includes(category)) {
+      return res
+        .status(400)
+        .json({ success: false, error: "BAD_CATEGORY" });
+    }
+
+    if (!title || typeof title !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, error: "TITLE_REQUIRED" });
+    }
+
+    // Находим поставщика
+    const providerRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    if (providerRes.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
+    const providerId = providerRes.rows[0].id;
+
+    // Парсим цену
+    let priceNum = null;
+    if (price !== undefined && price !== null && price !== "") {
+      const n = Number(price);
+      if (!Number.isNaN(n)) {
+        priceNum = n;
+      }
+    }
+
+    const safeDetails =
+      details && typeof details === "object" ? details : {};
+    const safeImages = Array.isArray(images) ? images : [];
+
+    // выставляем статусы модерации: отправлено на модерацию
+    const insertRes = await pool.query(
+      `
+        INSERT INTO services (
+          provider_id,
+          title,
+          category,
+          price,
+          details,
+          images,
+          status,
+          moderation_status,
+          submitted_at,
+          created_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5::jsonb,
+          $6::jsonb,
+          'submitted',
+          'pending',
+          NOW(),
+          NOW()
+        )
+        RETURNING id, title, category, status, moderation_status, details, images
+      `,
+      [providerId, title, category, priceNum, safeDetails, safeImages]
+    );
+
+    return res.json({
+      success: true,
+      service: insertRes.rows[0],
+    });
+  } catch (err) {
+    console.error("[telegram] createServiceFromBot error:", err);
+    return res
+      .status(500)
+      .json({ success: false, error: "SERVER_ERROR" });
+  }
+}
+
 module.exports = {
   getProviderBookings,
   confirmBooking,
@@ -394,4 +488,5 @@ module.exports = {
   unpublishServiceFromBot,
   extendService7FromBot,
   archiveServiceFromBot,
+  createServiceFromBot,
 };
