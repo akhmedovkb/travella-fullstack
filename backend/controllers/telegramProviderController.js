@@ -88,7 +88,9 @@ async function confirmBooking(req, res) {
     );
 
     if (bookingRes.rowCount === 0) {
-      return res.status(404).json({ error: "Booking not found for this provider" });
+      return res
+        .status(404)
+        .json({ error: "Booking not found for this provider" });
     }
 
     const row = bookingRes.rows[0];
@@ -145,7 +147,9 @@ async function rejectBooking(req, res) {
     );
 
     if (bookingRes.rowCount === 0) {
-      return res.status(404).json({ error: "Booking not found for this provider" });
+      return res
+        .status(404)
+        .json({ error: "Booking not found for this provider" });
     }
 
     const row = bookingRes.rows[0];
@@ -180,11 +184,14 @@ async function rejectBooking(req, res) {
 /**
  * Список услуг поставщика (отказные туры/отели/авиабилеты/билеты)
  * GET /api/telegram/provider/:chatId/services
+ *
+ * Используется bot.js в команде "🧳 Мои услуги"
  */
 async function getProviderServices(req, res) {
   try {
     const { chatId } = req.params;
 
+    // 1) Находим поставщика по telegram_chat_id
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
@@ -194,39 +201,53 @@ async function getProviderServices(req, res) {
     );
 
     if (providerRes.rowCount === 0) {
-      return res.status(404).json({ error: "Provider not found" });
+      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
     const providerId = providerRes.rows[0].id;
 
+    // 2) Берём его услуги из services
+    const categories = [
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_ticket",
+    ];
+
     const servicesRes = await pool.query(
-      `SELECT
-         s.id,
-         s.category,
-         s.status,
-         s.title,
-         s.details,
-         s.created_at
-       FROM services s
-      WHERE s.provider_id = $1
-        AND s.category IN (
-          'refused_tour',
-          'refused_hotel',
-          'refused_flight',
-          'refused_event'
-        )
-      ORDER BY s.created_at DESC
-      LIMIT 50`,
-      [providerId]
+      `
+        SELECT
+          s.id,
+          s.category,
+          s.status,
+          s.title,
+          s.price,
+          s.details,
+          s.images,
+          s.expiration_at AS expiration,
+          s.created_at,
+          p.name   AS provider_name,
+          p.social AS provider_telegram
+        FROM services s
+        LEFT JOIN providers p ON p.id = s.provider_id
+       WHERE s.provider_id = $1
+         AND s.category = ANY($2::text[])
+       ORDER BY s.created_at DESC
+       LIMIT 100
+      `,
+      [providerId, categories]
     );
 
     return res.json({
       success: true,
-      services: servicesRes.rows,
+      items: servicesRes.rows,
     });
   } catch (err) {
-    console.error("getProviderServices error:", err);
-    return res.status(500).json({ error: "Internal error" });
+    console.error("[telegram] getProviderServices error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
   }
 }
 
