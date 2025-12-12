@@ -80,7 +80,21 @@ function escapeMarkdown(text) {
 }
 
 function getMainMenuKeyboard(role) {
-  // пока меню одинаковое для ролей
+  // 👇 для поставщика показываем "Мои услуги" вместо "Стать поставщиком"
+  if (role === "provider") {
+    return {
+      reply_markup: {
+        keyboard: [
+          [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
+          [{ text: "📄 Мои брони" }, { text: "📨 Мои заявки" }],
+          [{ text: "👤 Профиль" }],
+        ],
+        resize_keyboard: true,
+      },
+    };
+  }
+
+  // 👇 для клиента оставляем старое меню
   return {
     reply_markup: {
       keyboard: [
@@ -92,6 +106,7 @@ function getMainMenuKeyboard(role) {
     },
   };
 }
+
 
 async function askRole(ctx) {
   await ctx.reply("Кем вы пользуетесь Travella?", {
