@@ -323,6 +323,10 @@ async function searchCategory(req, res) {
  * Основной поиск для бота и inline-бота
  * GET /api/telegram/client/:chatId/search?category=refused_tour
  */
+/**
+ * Основной поиск для бота и inline-бота
+ * GET /api/telegram/client/:chatId/search?category=refused_tour
+ */
 async function searchClientServices(req, res) {
   try {
     const { chatId } = req.params; // формально
@@ -349,6 +353,7 @@ async function searchClientServices(req, res) {
           s.price,
           s.details,
           s.images,
+          s.expiration_at,
           s.created_at,
           p.name   AS provider_name,
           p.social AS provider_telegram
@@ -356,14 +361,32 @@ async function searchClientServices(req, res) {
         LEFT JOIN providers p ON p.id = s.provider_id
         WHERE s.category = $1
           AND s.status IN ('approved', 'published', 'active')
+          -- 1) Явно снятые с продажи услуги (isActive=false) НЕ показываем
           AND (
             s.details IS NULL
             OR (s.details::jsonb->>'isActive') IS NULL
             OR LOWER(s.details::jsonb->>'isActive') = 'true'
           )
+          -- 2) Тайм-лимит: expiration_at в таблице services
+          AND (
+            s.expiration_at IS NULL
+            OR s.expiration_at > NOW()
+          )
+          -- 3) Тайм-лимит: expiration в JSON details (старый формат)
           AND (
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
+          )
+          -- 4) Даты тура/перелёта: если тур уже закончился, не показываем
+          AND (
+            COALESCE(
+              (s.details::jsonb->>'endFlightDate')::date,
+              (s.details::jsonb->>'endDate')::date
+            ) IS NULL
+            OR COALESCE(
+              (s.details::jsonb->>'endFlightDate')::date,
+              (s.details::jsonb->>'endDate')::date
+            ) >= CURRENT_DATE
           )
         ORDER BY s.created_at DESC
         LIMIT 50
@@ -386,6 +409,7 @@ async function searchClientServices(req, res) {
     });
   }
 }
+
 
 /* ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРОВАЙДЕРСКОЙ ПАНЕЛИ В БОТЕ ===== */
 
