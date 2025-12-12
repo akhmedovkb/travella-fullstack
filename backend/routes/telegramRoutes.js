@@ -346,16 +346,17 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
-// поиск отказных услуг по категории
+// поиск отказных услуг по категории (НОВЫЙ bot)
 // GET /api/telegram/client/:chatId/search?category=refused_tour
 router.get(
   "/client/:chatId/search",
   telegramClientController.searchClientServices
 );
 
-// 🔍 ПОИСК отказных услуг для бота
+// 🔍 Старый простой поиск по категории (если ещё используется где-то)
+// GET /api/telegram/client/:chatId/search-category?type=refused_tour
 router.get(
-  "/client/:chatId/search",
+  "/client/:chatId/search-category",
   telegramClientController.searchCategory
 );
 
@@ -412,10 +413,26 @@ router.post(
   telegramProviderController.rejectBooking
 );
 
-// marketplace-услуги поставщика
+// marketplace-услуги поставщика (для нового бота)
 router.get(
   "/provider/:chatId/services",
-  telegramProviderController.getProviderServices
+  telegramClientController.getProviderServices
+);
+
+// действия с услугами поставщика из бота
+router.post(
+  "/provider/service/:serviceId/toggle-active",
+  telegramClientController.toggleProviderServiceActive
+);
+
+router.post(
+  "/provider/service/:serviceId/extend-7",
+  telegramClientController.extendProviderServiceExpiration7
+);
+
+router.post(
+  "/provider/service/:serviceId/archive",
+  telegramClientController.archiveProviderService
 );
 
 module.exports = router;
