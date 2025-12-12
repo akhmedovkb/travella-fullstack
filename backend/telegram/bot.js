@@ -1,4 +1,3 @@
-// backend/telegram/bot.js
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
 const axiosBase = require("axios");
@@ -107,7 +106,6 @@ function getMainMenuKeyboard(role) {
   };
 }
 
-
 async function askRole(ctx) {
   await ctx.reply("Кем вы пользуетесь Travella?", {
     reply_markup: {
@@ -141,52 +139,6 @@ const CATEGORY_LABELS = {
   refused_flight: "Отказной авиабилет",
   refused_ticket: "Отказной билет",
 };
-
-// Клавиатура управления услугой поставщика в боте
-function buildProviderServiceKeyboard(svc, details) {
-  const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
-
-  let d = details || {};
-  if (typeof d === "string") {
-    try {
-      d = JSON.parse(d);
-    } catch {
-      d = {};
-    }
-  }
-
-  const isActive = d.isActive !== false; // по умолчанию true
-  const toggleText = isActive
-    ? "🔴 Снять с продажи"
-    : "🟢 Сделать актуальным";
-
-  return {
-    inline_keyboard: [
-      [
-        {
-          text: "Открыть в кабинете",
-          url: manageUrl,
-        },
-      ],
-      [
-        {
-          text: toggleText,
-          callback_data: `svc_toggle:${svc.id}`,
-        },
-        {
-          text: "♻️ Продлить на 7 дней",
-          callback_data: `svc_extend7:${svc.id}`,
-        },
-      ],
-      [
-        {
-          text: "🗑 Архивировать",
-          callback_data: `svc_archive:${svc.id}`,
-        },
-      ],
-    ],
-  };
-}
 
 // безопасно достаём первую картинку из услуги (services.images)
 function getFirstImageUrl(svc) {
@@ -387,6 +339,33 @@ function buildServiceMessage(svc, category, role = "client") {
   const serviceUrl = SITE_URL;
 
   return { text, photoUrl, serviceUrl };
+}
+
+// ---- helper: доопределить роль поставщика по chatId, если сессия пуста ----
+async function ensureProviderRole(ctx) {
+  if (ctx.session?.role === "provider") {
+    return "provider";
+  }
+  const chatId = ctx.chat.id;
+  try {
+    const resProv = await axios.get(
+      `/api/telegram/profile/provider/${chatId}`
+    );
+    if (resProv.data && resProv.data.success) {
+      if (!ctx.session) ctx.session = {};
+      ctx.session.role = "provider";
+      ctx.session.linked = true;
+      return "provider";
+    }
+  } catch (e) {
+    if (e?.response?.status !== 404) {
+      console.log(
+        "[tg-bot] ensureProviderRole error:",
+        e?.response?.data || e.message || e
+      );
+    }
+  }
+  return ctx.session?.role || null;
 }
 
 // ==== Регистрация / привязка телефона ====
@@ -705,34 +684,12 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
 bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   logUpdate(ctx, "hears Мои услуги");
 
-  const chatId = ctx.chat.id;
   let role = ctx.session?.role || null;
-
-  // Если в сессии роли нет или она не provider — пробуем восстановить её из БД
   if (role !== "provider") {
-    try {
-      const resProv = await axios.get(
-        `/api/telegram/profile/provider/${chatId}`
-      );
-
-      if (resProv.data && resProv.data.success) {
-        role = "provider";
-        if (!ctx.session) ctx.session = {};
-        ctx.session.role = "provider";
-        ctx.session.linked = true;
-        console.log("[tg-bot] role restored from DB on 'Мои услуги': provider");
-      }
-    } catch (e) {
-      if (e?.response?.status !== 404) {
-        console.log(
-          "[tg-bot] restore provider role error:",
-          e?.response?.data || e.message || e
-        );
-      }
-    }
+    // если бот перезапустился и сессия очистилась – перепроверяем по API
+    role = await ensureProviderRole(ctx);
   }
 
-  // Если даже после проверки в БД не нашли поставщика — показываем то же самое сообщение
   if (role !== "provider") {
     await ctx.reply(
       "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
@@ -741,7 +698,8 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     return;
   }
 
-  // ----- дальше твой существующий код без изменений -----
+  const chatId = ctx.chat.id;
+
   try {
     await ctx.reply("Загружаю ваши услуги маркетплейса...");
 
@@ -767,6 +725,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       `Найдено услуг: ${data.items.length}. Показываю первые 10 (по ближайшей дате).`
     );
 
+    // сортировка по ближайшей дате (используем уже написанный getStartDateForSort)
     const itemsSorted = [...data.items].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
@@ -774,11 +733,13 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
-      return da.getTime() - db.getTime();
+      return da.getTime() - db.getTime(); // раньше дата -> выше
     });
 
     for (const svc of itemsSorted.slice(0, 10)) {
       const category = svc.category || svc.type || "refused_tour";
+
+      // аккуратно распарсим details
       let details = svc.details || {};
       if (typeof details === "string") {
         try {
@@ -813,6 +774,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
 
       const msg = headerLines.join("\n") + "\n\n" + text;
 
+      // ссылка в кабинет — можешь потом сделать спец. страницу, пока просто dashboard с query
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
       const keyboard = {
@@ -821,6 +783,22 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
             {
               text: "Открыть в кабинете",
               url: manageUrl,
+            },
+          ],
+          [
+            {
+              text: "Снять с продажи",
+              callback_data: `svc:${svc.id}:unpublish`,
+            },
+            {
+              text: "Продлить на 7 дней",
+              callback_data: `svc:${svc.id}:extend7`,
+            },
+          ],
+          [
+            {
+              text: "Архивировать",
+              callback_data: `svc:${svc.id}:archive`,
             },
           ],
         ],
@@ -848,225 +826,57 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   }
 });
 
+// ==== ДЕЙСТВИЯ С УСЛУГАМИ ПРОВАЙДЕРА (снять / продлить / архивировать) ====
 
-// ==== ДЕЙСТВИЯ С УСЛУГАМИ ПОСТАВЩИКА (toggle/extend/archive) ====
-
-bot.action(/^svc_toggle:(\d+)$/, async (ctx) => {
+bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
+    const action = ctx.match[2];
     const chatId = ctx.chat.id;
 
-    await ctx.answerCbQuery("Обновляю статус...");
+    await ctx.answerCbQuery();
 
-    const { data } = await axios.post(
-      `/api/telegram/provider/service/${serviceId}/toggle-active`,
-      { chatId }
-    );
-
-    if (!data || !data.success || !data.service) {
-      await ctx.reply("Не удалось обновить статус услуги. Попробуйте позже.");
-      return;
-    }
-
-    const svc = data.service;
-    const category = svc.category || svc.type || "refused_tour";
-
-    let details = svc.details || {};
-    if (typeof details === "string") {
-      try {
-        details = JSON.parse(details);
-      } catch {
-        details = {};
-      }
-    }
-
-    const { text } = buildServiceMessage(svc, category, "provider");
-
-    const status = svc.status || "draft";
-    const isActive =
-      typeof details.isActive === "boolean" ? details.isActive : null;
-    const expiration = details.expiration || svc.expiration || null;
-
-    const headerLines = [];
-    headerLines.push(
-      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
-    );
-    headerLines.push(
-      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
-    );
-    if (expiration) {
-      headerLines.push(`Актуально до: ${expiration}`);
-    }
-
-    const msg = headerLines.join("\n") + "\n\n" + text;
-    const keyboard = buildProviderServiceKeyboard(svc, details);
-
-    const message = ctx.callbackQuery.message;
-    if (message.photo && message.photo.length) {
-      await ctx.editMessageCaption(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+    let endpoint;
+    if (action === "unpublish") {
+      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/unpublish`;
+    } else if (action === "extend7") {
+      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/extend7`;
     } else {
-      await ctx.editMessageText(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/archive`;
     }
 
-    await ctx.answerCbQuery("Статус обновлён.");
-  } catch (e) {
-    console.error("[tg-bot] svc_toggle error:", e?.response?.data || e);
-    try {
-      await ctx.answerCbQuery("Ошибка при обновлении статуса.");
-    } catch (_) {}
-  }
-});
+    const { data } = await axios.post(endpoint);
 
-bot.action(/^svc_extend7:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    const chatId = ctx.chat.id;
-
-    await ctx.answerCbQuery("Продлеваю актуальность...");
-
-    const { data } = await axios.post(
-      `/api/telegram/provider/service/${serviceId}/extend-7`,
-      { chatId }
-    );
-
-    if (!data || !data.success || !data.service) {
+    if (!data || !data.success) {
+      console.log("[tg-bot] svc action error resp:", data);
       await ctx.reply(
-        "Не удалось продлить актуальность услуги. Попробуйте позже."
+        "Не удалось обновить услугу. Попробуйте позже или через кабинет."
       );
       return;
     }
 
-    const svc = data.service;
-    const category = svc.category || svc.type || "refused_tour";
-
-    let details = svc.details || {};
-    if (typeof details === "string") {
-      try {
-        details = JSON.parse(details);
-      } catch {
-        details = {};
-      }
-    }
-
-    const { text } = buildServiceMessage(svc, category, "provider");
-
-    const status = svc.status || "draft";
-    const isActive =
-      typeof details.isActive === "boolean" ? details.isActive : null;
-    const expiration = details.expiration || svc.expiration || null;
-
-    const headerLines = [];
-    headerLines.push(
-      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
-    );
-    headerLines.push(
-      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
-    );
-    if (expiration) {
-      headerLines.push(`Актуально до: ${expiration}`);
-    }
-
-    const msg = headerLines.join("\n") + "\n\n" + text;
-    const keyboard = buildProviderServiceKeyboard(svc, details);
-
-    const message = ctx.callbackQuery.message;
-    if (message.photo && message.photo.length) {
-      await ctx.editMessageCaption(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+    let msg;
+    if (action === "unpublish") {
+      msg =
+        "Услуга снята с продажи. Она больше не показывается в поиске Travella.";
+    } else if (action === "extend7") {
+      msg =
+        "Актуальность услуги продлена на 7 дней. Таймер обновлён в кабинете.";
     } else {
-      await ctx.editMessageText(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+      msg =
+        "Услуга архивирована и скрыта из маркетплейса. Вы всегда можете открыть её в кабинете.";
     }
 
-    await ctx.answerCbQuery("Актуальность продлена на 7 дней.");
+    await ctx.reply(msg);
   } catch (e) {
-    console.error("[tg-bot] svc_extend7 error:", e?.response?.data || e);
+    console.error(
+      "[tg-bot] svc action handler error:",
+      e?.response?.data || e
+    );
     try {
-      await ctx.answerCbQuery("Ошибка при продлении.");
-    } catch (_) {}
-  }
-});
-
-bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    const chatId = ctx.chat.id;
-
-    await ctx.answerCbQuery("Архивирую услугу...");
-
-    const { data } = await axios.post(
-      `/api/telegram/provider/service/${serviceId}/archive`,
-      { chatId }
-    );
-
-    if (!data || !data.success || !data.service) {
-      await ctx.reply(
-        "Не удалось архивировать услугу. Попробуйте позже."
-      );
-      return;
-    }
-
-    const svc = data.service;
-    const category = svc.category || svc.type || "refused_tour";
-
-    let details = svc.details || {};
-    if (typeof details === "string") {
-      try {
-        details = JSON.parse(details);
-      } catch {
-        details = {};
-      }
-    }
-
-    const { text } = buildServiceMessage(svc, category, "provider");
-
-    const status = svc.status || "draft";
-    const isActive =
-      typeof details.isActive === "boolean" ? details.isActive : null;
-    const expiration = details.expiration || svc.expiration || null;
-
-    const headerLines = [];
-    headerLines.push(
-      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
-    );
-    headerLines.push(
-      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
-    );
-    if (expiration) {
-      headerLines.push(`Актуально до: ${expiration}`);
-    }
-
-    const msg = headerLines.join("\n") + "\n\n" + text;
-    const keyboard = buildProviderServiceKeyboard(svc, details);
-
-    const message = ctx.callbackQuery.message;
-    if (message.photo && message.photo.length) {
-      await ctx.editMessageCaption(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
+      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", {
+        show_alert: true,
       });
-    } else {
-      await ctx.editMessageText(msg, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
-    }
-
-    await ctx.answerCbQuery("Услуга отправлена в архив.");
-  } catch (e) {
-    console.error("[tg-bot] svc_archive error:", e?.response?.data || e);
-    try {
-      await ctx.answerCbQuery("Ошибка при архивировании.");
     } catch (_) {}
   }
 });
