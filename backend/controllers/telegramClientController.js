@@ -387,9 +387,261 @@ async function searchClientServices(req, res) {
   }
 }
 
+/* ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРОВАЙДЕРСКОЙ ПАНЕЛИ В БОТЕ ===== */
+
+function parseDetails(details) {
+  if (!details) return {};
+  if (typeof details === "object") return { ...details };
+  try {
+    return JSON.parse(details);
+  } catch {
+    return {};
+  }
+}
+
+function formatDateYYYYMMDD(date) {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function loadProviderServiceByChat(serviceId, chatId) {
+  const q = `
+    SELECT
+      s.id,
+      s.title,
+      s.category,
+      s.status,
+      s.details,
+      s.images,
+      s.expiration,
+      s.created_at,
+      p.name   AS provider_name,
+      p.social AS provider_telegram
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+   WHERE s.id = $1
+     AND p.telegram_chat_id = $2
+   LIMIT 1
+  `;
+  const { rows } = await pool.query(q, [serviceId, chatId]);
+  return rows[0] || null;
+}
+
+/**
+ * GET /api/telegram/provider/:chatId/services
+ * Список маркетплейс-услуг (отказные туры/отели/авиабилеты/билеты)
+ * для поставщика, привязанного к telegram_chat_id = :chatId
+ */
+async function getProviderServices(req, res) {
+  const { chatId } = req.params;
+
+  try {
+    const refusedCategories = [
+      "refused_tour",
+      "refused_hotel",
+      "refused_flight",
+      "refused_ticket",
+    ];
+
+    const q = `
+      SELECT
+        s.id,
+        s.title,
+        s.category,
+        s.status,
+        s.details,
+        s.images,
+        s.expiration,
+        s.created_at,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      JOIN providers p ON p.id = s.provider_id
+     WHERE p.telegram_chat_id = $1
+       AND s.category = ANY($2)
+     ORDER BY s.created_at DESC
+    `;
+
+    const { rows } = await pool.query(q, [chatId, refusedCategories]);
+
+    return res.json({
+      success: true,
+      items: rows || [],
+    });
+  } catch (e) {
+    console.error("[telegram] getProviderServices error:", e);
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
+  }
+}
+
+/**
+ * POST /api/telegram/provider/service/:serviceId/toggle-active
+ * body: { chatId }
+ * Переключаем details.isActive (true/false)
+ */
+async function toggleProviderServiceActive(req, res) {
+  const serviceId = Number(req.params.serviceId);
+  const chatId = String(req.body.chatId || "");
+
+  if (!serviceId || !chatId) {
+    return res.status(400).json({ success: false, error: "BAD_INPUT" });
+  }
+
+  try {
+    const row = await loadProviderServiceByChat(serviceId, chatId);
+    if (!row) {
+      return res
+        .status(404)
+        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
+    }
+
+    const details = parseDetails(row.details);
+    const currentActive = details.isActive !== false; // по умолчанию true
+    details.isActive = !currentActive;
+
+    await pool.query(`UPDATE services SET details = $1 WHERE id = $2`, [
+      JSON.stringify(details),
+      serviceId,
+    ]);
+
+    const updated = await loadProviderServiceByChat(serviceId, chatId);
+
+    return res.json({
+      success: true,
+      service: updated,
+    });
+  } catch (e) {
+    console.error("[telegram] toggleProviderServiceActive error:", e);
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
+  }
+}
+
+/**
+ * POST /api/telegram/provider/service/:serviceId/extend-7
+ * body: { chatId }
+ * Продлеваем expiration ещё на 7 дней
+ */
+async function extendProviderServiceExpiration7(req, res) {
+  const serviceId = Number(req.params.serviceId);
+  const chatId = String(req.body.chatId || "");
+
+  if (!serviceId || !chatId) {
+    return res.status(400).json({ success: false, error: "BAD_INPUT" });
+  }
+
+  try {
+    const row = await loadProviderServiceByChat(serviceId, chatId);
+    if (!row) {
+      return res
+        .status(404)
+        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
+    }
+
+    const details = parseDetails(row.details);
+
+    let baseDate = null;
+    if (details.expiration) {
+      const d = new Date(details.expiration);
+      if (!Number.isNaN(d.getTime())) baseDate = d;
+    }
+    if (!baseDate && row.expiration) {
+      const d = new Date(row.expiration);
+      if (!Number.isNaN(d.getTime())) baseDate = d;
+    }
+    if (!baseDate) {
+      baseDate = new Date();
+    }
+
+    const newDate = new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const newExpiration = formatDateYYYYMMDD(newDate);
+
+    details.expiration = newExpiration;
+
+    await pool.query(
+      `UPDATE services SET details = $1, expiration = $2 WHERE id = $3`,
+      [JSON.stringify(details), newExpiration, serviceId]
+    );
+
+    const updated = await loadProviderServiceByChat(serviceId, chatId);
+
+    return res.json({
+      success: true,
+      service: updated,
+    });
+  } catch (e) {
+    console.error(
+      "[telegram] extendProviderServiceExpiration7 error:",
+      e
+    );
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
+  }
+}
+
+/**
+ * POST /api/telegram/provider/service/:serviceId/archive
+ * body: { chatId }
+ * Переводим статус в archived + isActive = false
+ */
+async function archiveProviderService(req, res) {
+  const serviceId = Number(req.params.serviceId);
+  const chatId = String(req.body.chatId || "");
+
+  if (!serviceId || !chatId) {
+    return res.status(400).json({ success: false, error: "BAD_INPUT" });
+  }
+
+  try {
+    const row = await loadProviderServiceByChat(serviceId, chatId);
+    if (!row) {
+      return res
+        .status(404)
+        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
+    }
+
+    const details = parseDetails(row.details);
+    details.isActive = false;
+
+    await pool.query(
+      `UPDATE services SET details = $1, status = $2 WHERE id = $3`,
+      [JSON.stringify(details), "archived", serviceId]
+    );
+
+    const updated = await loadProviderServiceByChat(serviceId, chatId);
+
+    return res.json({
+      success: true,
+      service: updated,
+    });
+  } catch (e) {
+    console.error("[telegram] archiveProviderService error:", e);
+    return res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+    });
+  }
+}
+
 module.exports = {
   linkAccount,
   getProfileByChat,
   searchCategory,
   searchClientServices,
+  // новое:
+  getProviderServices,
+  toggleProviderServiceActive,
+  extendProviderServiceExpiration7,
+  archiveProviderService,
 };
