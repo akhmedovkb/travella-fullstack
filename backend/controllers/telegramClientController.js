@@ -455,7 +455,7 @@ async function getProviderServices(req, res) {
         s.status,
         s.details,
         s.images,
-        s.expiration,
+        s.expiration_at AS expiration,
         s.created_at,
         p.name   AS provider_name,
         p.social AS provider_telegram
