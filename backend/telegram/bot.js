@@ -705,7 +705,34 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
 bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   logUpdate(ctx, "hears Мои услуги");
 
-  const role = ctx.session?.role || "client";
+  const chatId = ctx.chat.id;
+  let role = ctx.session?.role || null;
+
+  // Если в сессии роли нет или она не provider — пробуем восстановить её из БД
+  if (role !== "provider") {
+    try {
+      const resProv = await axios.get(
+        `/api/telegram/profile/provider/${chatId}`
+      );
+
+      if (resProv.data && resProv.data.success) {
+        role = "provider";
+        if (!ctx.session) ctx.session = {};
+        ctx.session.role = "provider";
+        ctx.session.linked = true;
+        console.log("[tg-bot] role restored from DB on 'Мои услуги': provider");
+      }
+    } catch (e) {
+      if (e?.response?.status !== 404) {
+        console.log(
+          "[tg-bot] restore provider role error:",
+          e?.response?.data || e.message || e
+        );
+      }
+    }
+  }
+
+  // Если даже после проверки в БД не нашли поставщика — показываем то же самое сообщение
   if (role !== "provider") {
     await ctx.reply(
       "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
@@ -714,8 +741,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     return;
   }
 
-  const chatId = ctx.chat.id;
-
+  // ----- дальше твой существующий код без изменений -----
   try {
     await ctx.reply("Загружаю ваши услуги маркетплейса...");
 
@@ -741,7 +767,6 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       `Найдено услуг: ${data.items.length}. Показываю первые 10 (по ближайшей дате).`
     );
 
-    // сортировка по ближайшей дате (используем уже написанный getStartDateForSort)
     const itemsSorted = [...data.items].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
@@ -749,13 +774,11 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
-      return da.getTime() - db.getTime(); // раньше дата -> выше
+      return da.getTime() - db.getTime();
     });
 
     for (const svc of itemsSorted.slice(0, 10)) {
       const category = svc.category || svc.type || "refused_tour";
-
-      // аккуратно распарсим details
       let details = svc.details || {};
       if (typeof details === "string") {
         try {
@@ -790,7 +813,18 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
 
       const msg = headerLines.join("\n") + "\n\n" + text;
 
-      const keyboard = buildProviderServiceKeyboard(svc, details);
+      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: "Открыть в кабинете",
+              url: manageUrl,
+            },
+          ],
+        ],
+      };
 
       if (photoUrl) {
         await ctx.replyWithPhoto(photoUrl, {
@@ -813,6 +847,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
   }
 });
+
 
 // ==== ДЕЙСТВИЯ С УСЛУГАМИ ПОСТАВЩИКА (toggle/extend/archive) ====
 
