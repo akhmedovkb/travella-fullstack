@@ -407,6 +407,17 @@ function normalizeDateInput(raw) {
   return `${y}-${mm}-${dd}`;
 }
 
+function isPastDate(yyyyMMdd) {
+  if (!yyyyMMdd) return false;
+  const d = new Date(yyyyMMdd + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return false;
+
+  const today = new Date();
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()); // сегодня 00:00
+
+  return d < t0;
+}
+
 // собираем details для refused_tour из draft
 function buildDetailsForRefusedTour(draft, priceNum) {
   return {
@@ -529,6 +540,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
     if (!ctx.session) ctx.session = {};
     ctx.session.role = finalRole;
     ctx.session.linked = true;
+    ctx.session.requestedRole = null; // ✅ чтобы даты/цифры не воспринимались как телефон
 
     if (data.existed && data.role === "client") {
       await ctx.reply(
@@ -716,15 +728,28 @@ bot.on("contact", async (ctx) => {
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
 
 bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
+  // ✅ если мы в мастере создания услуги — НЕ трогаем этот ввод
+  const state = ctx.session?.state || null;
+  if (state && String(state).startsWith("svc_create_")) {
+    return; // пропускаем дальше (мастер обработает в bot.on("text"))
+  }
+
   if (!ctx.session || !ctx.session.requestedRole) {
     return;
   }
 
-  const phone = ctx.message.text.trim();
+  // ✅ дополнительно защищаемся от дат формата YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD
+  const txt = String(ctx.message.text || "").trim();
+  if (/^\d{4}[.\-/]\d{2}[.\-/]\d{2}$/.test(txt)) {
+    return; // это дата, не телефон
+  }
+
+  const phone = txt;
   const requestedRole = ctx.session.requestedRole;
 
   await handlePhoneRegistration(ctx, requestedRole, phone, false);
 });
+
 
 // ==== ГЛАВНОЕ МЕНЮ: КНОПКИ ====
 
@@ -1360,6 +1385,15 @@ bot.on("text", async (ctx, next) => {
             );
             return;
           }
+        
+          if (isPastDate(norm)) {
+            await ctx.reply(
+              "Эта дата уже прошла ❌\n" +
+                "Введите, пожалуйста, дату начала тура сегодня или позже (ГГГГ-ММ-ДД)."
+            );
+            return;
+          }
+        
           draft.startDate = norm;
           ctx.session.state = "svc_create_tour_end";
           await ctx.reply(
