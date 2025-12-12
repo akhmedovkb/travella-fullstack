@@ -684,12 +684,7 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
 bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   logUpdate(ctx, "hears Мои услуги");
 
-  let role = ctx.session?.role || null;
-  if (role !== "provider") {
-    // если бот перезапустился и сессия очистилась – перепроверяем по API
-    role = await ensureProviderRole(ctx);
-  }
-
+  const role = ctx.session?.role || "client";
   if (role !== "provider") {
     await ctx.reply(
       "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
@@ -756,9 +751,32 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       );
 
       const status = svc.status || "draft";
-      const isActive =
-        typeof details.isActive === "boolean" ? details.isActive : null;
-      const expiration = details.expiration || svc.expiration || null;
+
+      // === ЛОГИКА АКТУАЛЬНОСТИ ===
+      let isActive =
+        typeof details.isActive === "boolean" ? details.isActive : true;
+
+      // тайм-лимит: expiration_at в таблице или expiration в details
+      const expirationRaw = details.expiration || svc.expiration || null;
+      if (expirationRaw) {
+        const exp = new Date(expirationRaw);
+        if (!Number.isNaN(exp.getTime()) && exp < new Date()) {
+          isActive = false;
+        }
+      }
+
+      // даты тура / перелёта: если тур уже прошёл, считаем неактуальным
+      const endRaw =
+        details.endFlightDate ||
+        details.returnFlightDate ||
+        details.endDate ||
+        null;
+      if (endRaw) {
+        const ed = new Date(endRaw);
+        if (!Number.isNaN(ed.getTime()) && ed < new Date()) {
+          isActive = false;
+        }
+      }
 
       const headerLines = [];
 
@@ -766,15 +784,15 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
         `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
       );
       headerLines.push(
-        `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
+        `Статус: ${status}${!isActive ? " (неактуально)" : ""}`
       );
-      if (expiration) {
-        headerLines.push(`Актуально до: ${expiration}`);
+      if (expirationRaw) {
+        headerLines.push(`Актуально до: ${expirationRaw}`);
       }
 
       const msg = headerLines.join("\n") + "\n\n" + text;
 
-      // ссылка в кабинет — можешь потом сделать спец. страницу, пока просто dashboard с query
+      // ссылка в кабинет — пока просто dashboard с query
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
       const keyboard = {
@@ -783,22 +801,6 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
             {
               text: "Открыть в кабинете",
               url: manageUrl,
-            },
-          ],
-          [
-            {
-              text: "Снять с продажи",
-              callback_data: `svc:${svc.id}:unpublish`,
-            },
-            {
-              text: "Продлить на 7 дней",
-              callback_data: `svc:${svc.id}:extend7`,
-            },
-          ],
-          [
-            {
-              text: "Архивировать",
-              callback_data: `svc:${svc.id}:archive`,
             },
           ],
         ],
@@ -825,6 +827,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
   }
 });
+
 
 // ==== ДЕЙСТВИЯ С УСЛУГАМИ ПРОВАЙДЕРА (снять / продлить / архивировать) ====
 
