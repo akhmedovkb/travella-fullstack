@@ -1,4 +1,3 @@
-// backend/routes/telegramRoutes.js
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
@@ -42,7 +41,8 @@ function verifySecret(req) {
     "";
   if (HEADER_TOKEN && hdr === HEADER_TOKEN) return true;
 
-  if (req.params && req.params.secret && req.params.secret === SECRET_PATH) return true;
+  if (req.params && req.params.secret && req.params.secret === SECRET_PATH)
+    return true;
 
   const q = req.query || {};
   if (q.secret && q.secret === SECRET_PATH) return true;
@@ -121,7 +121,10 @@ async function handleWebhook(req, res) {
           state: row.status || "new",
           id: leadId,
           phone: row.phone || "",
-          adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "")}/admin/leads`,
+          adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(
+            /\/+$/,
+            ""
+          )}/admin/leads`,
           assigneeName: mUn ? null : prov.name,
         });
         await tgEditMessageReplyMarkup({
@@ -169,7 +172,10 @@ async function handleWebhook(req, res) {
         state: newStatus,
         id: leadId,
         phone,
-        adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "")}/admin/leads`,
+        adminUrl: `${(process.env.SITE_PUBLIC_URL || "").replace(
+          /\/+$/,
+          ""
+        )}/admin/leads`,
         assigneeName,
       });
 
@@ -346,15 +352,14 @@ router.get(
   telegramClientController.getProfileByChat
 );
 
-// поиск отказных услуг по категории (НОВЫЙ bot)
+// поиск отказных услуг по категории
 // GET /api/telegram/client/:chatId/search?category=refused_tour
 router.get(
   "/client/:chatId/search",
   telegramClientController.searchClientServices
 );
 
-// 🔍 Старый простой поиск по категории (если ещё используется где-то)
-// GET /api/telegram/client/:chatId/search-category?type=refused_tour
+// 🔍 ПОИСК отказных услуг для бота (старый метод)
 router.get(
   "/client/:chatId/search-category",
   telegramClientController.searchCategory
@@ -413,26 +418,26 @@ router.post(
   telegramProviderController.rejectBooking
 );
 
-// marketplace-услуги поставщика (для нового бота)
+// marketplace-услуги поставщика
 router.get(
   "/provider/:chatId/services",
-  telegramClientController.getProviderServices
+  telegramProviderController.getProviderServices
 );
 
-// действия с услугами поставщика из бота
+// действия по услугам поставщика из бота
 router.post(
-  "/provider/service/:serviceId/toggle-active",
-  telegramClientController.toggleProviderServiceActive
-);
-
-router.post(
-  "/provider/service/:serviceId/extend-7",
-  telegramClientController.extendProviderServiceExpiration7
+  "/provider/:chatId/services/:serviceId/unpublish",
+  telegramProviderController.unpublishServiceFromBot
 );
 
 router.post(
-  "/provider/service/:serviceId/archive",
-  telegramClientController.archiveProviderService
+  "/provider/:chatId/services/:serviceId/extend7",
+  telegramProviderController.extendService7FromBot
+);
+
+router.post(
+  "/provider/:chatId/services/:serviceId/archive",
+  telegramProviderController.archiveServiceFromBot
 );
 
 module.exports = router;
