@@ -142,6 +142,52 @@ const CATEGORY_LABELS = {
   refused_ticket: "Отказной билет",
 };
 
+// Клавиатура управления услугой поставщика в боте
+function buildProviderServiceKeyboard(svc, details) {
+  const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+  let d = details || {};
+  if (typeof d === "string") {
+    try {
+      d = JSON.parse(d);
+    } catch {
+      d = {};
+    }
+  }
+
+  const isActive = d.isActive !== false; // по умолчанию true
+  const toggleText = isActive
+    ? "🔴 Снять с продажи"
+    : "🟢 Сделать актуальным";
+
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "Открыть в кабинете",
+          url: manageUrl,
+        },
+      ],
+      [
+        {
+          text: toggleText,
+          callback_data: `svc_toggle:${svc.id}`,
+        },
+        {
+          text: "♻️ Продлить на 7 дней",
+          callback_data: `svc_extend7:${svc.id}`,
+        },
+      ],
+      [
+        {
+          text: "🗑 Архивировать",
+          callback_data: `svc_archive:${svc.id}`,
+        },
+      ],
+    ],
+  };
+}
+
 // безопасно достаём первую картинку из услуги (services.images)
 function getFirstImageUrl(svc) {
   let arr = svc.images;
@@ -744,19 +790,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
 
       const msg = headerLines.join("\n") + "\n\n" + text;
 
-      // ссылка в кабинет — можешь потом сделать спец. страницу, пока просто dashboard с query
-      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
-
-      const keyboard = {
-        inline_keyboard: [
-          [
-            {
-              text: "Открыть в кабинете",
-              url: manageUrl,
-            },
-          ],
-        ],
-      };
+      const keyboard = buildProviderServiceKeyboard(svc, details);
 
       if (photoUrl) {
         await ctx.replyWithPhoto(photoUrl, {
@@ -777,6 +811,228 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       e?.response?.data || e.message || e
     );
     await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+  }
+});
+
+// ==== ДЕЙСТВИЯ С УСЛУГАМИ ПОСТАВЩИКА (toggle/extend/archive) ====
+
+bot.action(/^svc_toggle:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const chatId = ctx.chat.id;
+
+    await ctx.answerCbQuery("Обновляю статус...");
+
+    const { data } = await axios.post(
+      `/api/telegram/provider/service/${serviceId}/toggle-active`,
+      { chatId }
+    );
+
+    if (!data || !data.success || !data.service) {
+      await ctx.reply("Не удалось обновить статус услуги. Попробуйте позже.");
+      return;
+    }
+
+    const svc = data.service;
+    const category = svc.category || svc.type || "refused_tour";
+
+    let details = svc.details || {};
+    if (typeof details === "string") {
+      try {
+        details = JSON.parse(details);
+      } catch {
+        details = {};
+      }
+    }
+
+    const { text } = buildServiceMessage(svc, category, "provider");
+
+    const status = svc.status || "draft";
+    const isActive =
+      typeof details.isActive === "boolean" ? details.isActive : null;
+    const expiration = details.expiration || svc.expiration || null;
+
+    const headerLines = [];
+    headerLines.push(
+      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
+    );
+    headerLines.push(
+      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
+    );
+    if (expiration) {
+      headerLines.push(`Актуально до: ${expiration}`);
+    }
+
+    const msg = headerLines.join("\n") + "\n\n" + text;
+    const keyboard = buildProviderServiceKeyboard(svc, details);
+
+    const message = ctx.callbackQuery.message;
+    if (message.photo && message.photo.length) {
+      await ctx.editMessageCaption(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.editMessageText(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    }
+
+    await ctx.answerCbQuery("Статус обновлён.");
+  } catch (e) {
+    console.error("[tg-bot] svc_toggle error:", e?.response?.data || e);
+    try {
+      await ctx.answerCbQuery("Ошибка при обновлении статуса.");
+    } catch (_) {}
+  }
+});
+
+bot.action(/^svc_extend7:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const chatId = ctx.chat.id;
+
+    await ctx.answerCbQuery("Продлеваю актуальность...");
+
+    const { data } = await axios.post(
+      `/api/telegram/provider/service/${serviceId}/extend-7`,
+      { chatId }
+    );
+
+    if (!data || !data.success || !data.service) {
+      await ctx.reply(
+        "Не удалось продлить актуальность услуги. Попробуйте позже."
+      );
+      return;
+    }
+
+    const svc = data.service;
+    const category = svc.category || svc.type || "refused_tour";
+
+    let details = svc.details || {};
+    if (typeof details === "string") {
+      try {
+        details = JSON.parse(details);
+      } catch {
+        details = {};
+      }
+    }
+
+    const { text } = buildServiceMessage(svc, category, "provider");
+
+    const status = svc.status || "draft";
+    const isActive =
+      typeof details.isActive === "boolean" ? details.isActive : null;
+    const expiration = details.expiration || svc.expiration || null;
+
+    const headerLines = [];
+    headerLines.push(
+      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
+    );
+    headerLines.push(
+      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
+    );
+    if (expiration) {
+      headerLines.push(`Актуально до: ${expiration}`);
+    }
+
+    const msg = headerLines.join("\n") + "\n\n" + text;
+    const keyboard = buildProviderServiceKeyboard(svc, details);
+
+    const message = ctx.callbackQuery.message;
+    if (message.photo && message.photo.length) {
+      await ctx.editMessageCaption(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.editMessageText(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    }
+
+    await ctx.answerCbQuery("Актуальность продлена на 7 дней.");
+  } catch (e) {
+    console.error("[tg-bot] svc_extend7 error:", e?.response?.data || e);
+    try {
+      await ctx.answerCbQuery("Ошибка при продлении.");
+    } catch (_) {}
+  }
+});
+
+bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const chatId = ctx.chat.id;
+
+    await ctx.answerCbQuery("Архивирую услугу...");
+
+    const { data } = await axios.post(
+      `/api/telegram/provider/service/${serviceId}/archive`,
+      { chatId }
+    );
+
+    if (!data || !data.success || !data.service) {
+      await ctx.reply(
+        "Не удалось архивировать услугу. Попробуйте позже."
+      );
+      return;
+    }
+
+    const svc = data.service;
+    const category = svc.category || svc.type || "refused_tour";
+
+    let details = svc.details || {};
+    if (typeof details === "string") {
+      try {
+        details = JSON.parse(details);
+      } catch {
+        details = {};
+      }
+    }
+
+    const { text } = buildServiceMessage(svc, category, "provider");
+
+    const status = svc.status || "draft";
+    const isActive =
+      typeof details.isActive === "boolean" ? details.isActive : null;
+    const expiration = details.expiration || svc.expiration || null;
+
+    const headerLines = [];
+    headerLines.push(
+      `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
+    );
+    headerLines.push(
+      `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
+    );
+    if (expiration) {
+      headerLines.push(`Актуально до: ${expiration}`);
+    }
+
+    const msg = headerLines.join("\n") + "\n\n" + text;
+    const keyboard = buildProviderServiceKeyboard(svc, details);
+
+    const message = ctx.callbackQuery.message;
+    if (message.photo && message.photo.length) {
+      await ctx.editMessageCaption(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.editMessageText(msg, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+    }
+
+    await ctx.answerCbQuery("Услуга отправлена в архив.");
+  } catch (e) {
+    console.error("[tg-bot] svc_archive error:", e?.response?.data || e);
+    try {
+      await ctx.answerCbQuery("Ошибка при архивировании.");
+    } catch (_) {}
   }
 });
 
