@@ -1,4 +1,5 @@
-// backend/controllers/telegramProviderController.jsconst pool = require("../db");
+// backend/controllers/telegramProviderController.js
+const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
 const REFUSED_CATEGORIES = [
