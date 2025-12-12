@@ -654,6 +654,132 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   );
 });
 
+// ==== МОИ УСЛУГИ (панель поставщика) ====
+
+bot.hears(/🧳 Мои услуги/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои услуги");
+
+  const role = ctx.session?.role || "client";
+  if (role !== "provider") {
+    await ctx.reply(
+      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
+        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
+    );
+    return;
+  }
+
+  const chatId = ctx.chat.id;
+
+  try {
+    await ctx.reply("Загружаю ваши услуги маркетплейса...");
+
+    const { data } = await axios.get(
+      `/api/telegram/provider/${chatId}/services`
+    );
+
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] provider services malformed:", data);
+      await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+      return;
+    }
+
+    if (!data.items.length) {
+      await ctx.reply(
+        "У вас пока нет услуг в маркетплейсе.\n" +
+          "Добавьте их в личном кабинете на сайте travella.uz."
+      );
+      return;
+    }
+
+    await ctx.reply(
+      `Найдено услуг: ${data.items.length}. Показываю первые 10 (по ближайшей дате).`
+    );
+
+    // сортировка по ближайшей дате (используем уже написанный getStartDateForSort)
+    const itemsSorted = [...data.items].sort((a, b) => {
+      const da = getStartDateForSort(a);
+      const db = getStartDateForSort(b);
+
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.getTime() - db.getTime(); // раньше дата -> выше
+    });
+
+    for (const svc of itemsSorted.slice(0, 10)) {
+      const category = svc.category || svc.type || "refused_tour";
+
+      // аккуратно распарсим details
+      let details = svc.details || {};
+      if (typeof details === "string") {
+        try {
+          details = JSON.parse(details);
+        } catch {
+          details = {};
+        }
+      }
+
+      const { text, photoUrl } = buildServiceMessage(
+        svc,
+        category,
+        "provider"
+      );
+
+      const status = svc.status || "draft";
+      const isActive =
+        typeof details.isActive === "boolean" ? details.isActive : null;
+      const expiration = details.expiration || svc.expiration || null;
+
+      const headerLines = [];
+
+      headerLines.push(
+        `#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`
+      );
+      headerLines.push(
+        `Статус: ${status}${isActive === false ? " (неактуально)" : ""}`
+      );
+      if (expiration) {
+        headerLines.push(`Актуально до: ${expiration}`);
+      }
+
+      const msg = headerLines.join("\n") + "\n\n" + text;
+
+      // ссылка в кабинет — можешь потом сделать спец. страницу, пока просто dashboard с query
+      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: "Открыть в кабинете",
+              url: manageUrl,
+            },
+          ],
+        ],
+      };
+
+      if (photoUrl) {
+        await ctx.replyWithPhoto(photoUrl, {
+          caption: msg,
+          parse_mode: "Markdown",
+          reply_markup: keyboard,
+        });
+      } else {
+        await ctx.reply(msg, {
+          parse_mode: "Markdown",
+          reply_markup: keyboard,
+        });
+      }
+    }
+  } catch (e) {
+    console.error(
+      "[tg-bot] provider services error:",
+      e?.response?.data || e.message || e
+    );
+    await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+  }
+});
+
 // ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
 
 bot.action(
