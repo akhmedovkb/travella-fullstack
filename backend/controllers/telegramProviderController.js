@@ -1,4 +1,3 @@
-// backend/controllers/telegramProviderController.js
 const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
@@ -201,7 +200,9 @@ async function getProviderServices(req, res) {
     );
 
     if (providerRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+      return res
+        .status(404)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
     const providerId = providerRes.rows[0].id;
@@ -251,9 +252,146 @@ async function getProviderServices(req, res) {
   }
 }
 
+/**
+ * Общий helper для действий по услуге от бота:
+ * action: "unpublish" | "extend7" | "archive"
+ */
+async function serviceActionFromBot(req, res, action) {
+  try {
+    const { chatId, serviceId } = req.params;
+    const svcId = Number(serviceId);
+
+    if (!Number.isFinite(svcId) || svcId <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, error: "BAD_SERVICE_ID" });
+    }
+
+    // Находим поставщика
+    const providerRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    if (providerRes.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
+    const providerId = providerRes.rows[0].id;
+
+    // Проверяем, что услуга принадлежит ему
+    const svcRes = await pool.query(
+      `SELECT id, status, details, expiration_at
+         FROM services
+        WHERE id = $1 AND provider_id = $2
+        LIMIT 1`,
+      [svcId, providerId]
+    );
+    if (svcRes.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, error: "SERVICE_NOT_FOUND" });
+    }
+
+    let updated;
+
+    if (action === "unpublish") {
+      // Снять с продажи: ставим isActive=false и expiration в прошлое
+      const updRes = await pool.query(
+        `
+          UPDATE services
+             SET
+               details = jsonb_set(
+                 jsonb_set(COALESCE(details::jsonb, '{}'::jsonb),
+                           '{isActive}', 'false'::jsonb, true),
+                 '{expiration}',
+                 to_jsonb(NOW()::timestamp)::jsonb,
+                 true
+               ),
+               expiration_at = NOW()
+           WHERE id = $1
+             AND provider_id = $2
+           RETURNING id, status, details, expiration_at
+        `,
+        [svcId, providerId]
+      );
+      updated = updRes.rows[0];
+    } else if (action === "extend7") {
+      // Продлить на 7 дней: expiration_at и details.expiration
+      const updRes = await pool.query(
+        `
+          UPDATE services
+             SET
+               expiration_at = COALESCE(expiration_at, NOW()) + interval '7 days',
+               details = jsonb_set(
+                 COALESCE(details::jsonb, '{}'::jsonb),
+                 '{expiration}',
+                 to_jsonb(
+                   (COALESCE(expiration_at, NOW()) + interval '7 days')::timestamp
+                 )::jsonb,
+                 true
+               )
+           WHERE id = $1
+             AND provider_id = $2
+           RETURNING id, status, details, expiration_at
+        `,
+        [svcId, providerId]
+      );
+      updated = updRes.rows[0];
+    } else if (action === "archive") {
+      // Архив: статус archived + isActive=false
+      const updRes = await pool.query(
+        `
+          UPDATE services
+             SET
+               status = 'archived',
+               expiration_at = COALESCE(expiration_at, NOW()),
+               details = jsonb_set(
+                 COALESCE(details::jsonb, '{}'::jsonb),
+                 '{isActive}',
+                 'false'::jsonb,
+                 true
+               )
+           WHERE id = $1
+             AND provider_id = $2
+           RETURNING id, status, details, expiration_at
+        `,
+        [svcId, providerId]
+      );
+      updated = updRes.rows[0];
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, error: "UNKNOWN_ACTION" });
+    }
+
+    return res.json({ success: true, service: updated });
+  } catch (err) {
+    console.error("[telegram] serviceActionFromBot error:", err);
+    return res
+      .status(500)
+      .json({ success: false, error: "SERVER_ERROR" });
+  }
+}
+
+async function unpublishServiceFromBot(req, res) {
+  return serviceActionFromBot(req, res, "unpublish");
+}
+
+async function extendService7FromBot(req, res) {
+  return serviceActionFromBot(req, res, "extend7");
+}
+
+async function archiveServiceFromBot(req, res) {
+  return serviceActionFromBot(req, res, "archive");
+}
+
 module.exports = {
   getProviderBookings,
   confirmBooking,
   rejectBooking,
   getProviderServices,
+  unpublishServiceFromBot,
+  extendService7FromBot,
+  archiveServiceFromBot,
 };
