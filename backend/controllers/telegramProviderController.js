@@ -449,8 +449,7 @@ async function createServiceFromBot(req, res) {
           images,
           status,
           moderation_status,
-          submitted_at,
-          created_at
+          submitted_at
         )
         VALUES (
           $1,
@@ -461,7 +460,6 @@ async function createServiceFromBot(req, res) {
           $6::jsonb,
           'submitted',
           'pending',
-          NOW(),
           NOW()
         )
         RETURNING id, title, category, status, moderation_status, details, images
