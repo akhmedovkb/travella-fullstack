@@ -368,6 +368,270 @@ async function ensureProviderRole(ctx) {
   return ctx.session?.role || null;
 }
 
+// ==== ВИЗАРД СОЗДАНИЯ / РЕДАКТИРОВАНИЯ УСЛУГИ ЧЕРЕЗ БОТА ====
+
+// сервисный хелпер: начать визард
+async function startServiceWizard(ctx, mode, category, svc) {
+  if (!ctx.session) ctx.session = {};
+
+  let details = (svc && svc.details) || {};
+  if (typeof details === "string") {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      details = {};
+    }
+  }
+
+  ctx.session.serviceWizard = {
+    mode, // "create" | "edit"
+    category,
+    serviceId: svc ? svc.id : null,
+    step: 1,
+    draft: {
+      title: svc?.title || "",
+      directionFrom: details.directionFrom || "",
+      directionTo: details.directionTo || "",
+      startDate: details.startDate || details.startFlightDate || "",
+      endDate: details.endDate || details.endFlightDate || "",
+      hotel: details.hotel || details.hotelName || "",
+      netPrice: details.netPrice || svc?.price || "",
+      expiration: details.expiration || svc?.expiration || "",
+    },
+  };
+
+  const basePrompt =
+    mode === "create"
+      ? "Создаём новую услугу маркетплейса.\n\n"
+      : `Редактируем услугу #${svc.id}.\n\n`;
+
+  await ctx.reply(
+    basePrompt +
+      "Шаг 1/8 — введите *название услуги* (например: Тур в Анталью 7 ночей).\n\n" +
+      (ctx.session.serviceWizard.draft.title
+        ? `Сейчас: ${ctx.session.serviceWizard.draft.title}\nЕсли хотите оставить без изменений, отправьте "-".`
+        : ""),
+    { parse_mode: "Markdown" }
+  );
+}
+
+// обработка ввода текста в визарде
+async function handleServiceWizardText(ctx) {
+  const wiz = ctx.session?.serviceWizard;
+  if (!wiz) return;
+
+  const text = (ctx.message.text || "").trim();
+
+  // общая команда отмены
+  if (/^отмена$/i.test(text)) {
+    ctx.session.serviceWizard = null;
+    await ctx.reply("Ок, создание/редактирование услуги отменено.");
+    return;
+  }
+
+  // helper: если "-", оставляем старое значение (для режима edit)
+  const applyValue = (fieldName, value) => {
+    if (wiz.mode === "edit" && value === "-") {
+      // оставляем старое
+      return;
+    }
+    wiz.draft[fieldName] = value;
+  };
+
+  switch (wiz.step) {
+    case 1: {
+      applyValue("title", text);
+      wiz.step = 2;
+      await ctx.reply(
+        "Шаг 2/8 — *Город отправления* (например: Ташкент).\n\n" +
+          (wiz.draft.directionFrom
+            ? `Сейчас: ${wiz.draft.directionFrom}\nОтправьте новый город или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 2: {
+      applyValue("directionFrom", text);
+      wiz.step = 3;
+      await ctx.reply(
+        "Шаг 3/8 — *Город прибытия* (например: Анталья / Стамбул).\n\n" +
+          (wiz.draft.directionTo
+            ? `Сейчас: ${wiz.draft.directionTo}\nОтправьте новый город или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 3: {
+      applyValue("directionTo", text);
+      wiz.step = 4;
+      await ctx.reply(
+        "Шаг 4/8 — *Дата вылета / заезда* (формат: ГГГГ-ММ-ДД).\n\n" +
+          (wiz.draft.startDate
+            ? `Сейчас: ${wiz.draft.startDate}\nОтправьте новую дату или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 4: {
+      applyValue("startDate", text);
+      wiz.step = 5;
+      await ctx.reply(
+        "Шаг 5/8 — *Дата возврата / выезда* (ГГГГ-ММ-ДД).\n" +
+          "Если нет точной даты, отправьте \"-\".\n\n" +
+          (wiz.draft.endDate
+            ? `Сейчас: ${wiz.draft.endDate}\nОтправьте новую дату или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 5: {
+      if (wiz.mode === "edit" && text === "-") {
+        // оставляем старую
+      } else if (text === "-") {
+        wiz.draft.endDate = "";
+      } else {
+        wiz.draft.endDate = text;
+      }
+
+      wiz.step = 6;
+      await ctx.reply(
+        "Шаг 6/8 — *Название отеля / авиакомпании / мероприятия* (если есть).\n" +
+          "Если не нужно, отправьте \"-\".\n\n" +
+          (wiz.draft.hotel
+            ? `Сейчас: ${wiz.draft.hotel}\nОтправьте новое название или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 6: {
+      if (wiz.mode === "edit" && text === "-") {
+        // оставить
+      } else if (text === "-") {
+        wiz.draft.hotel = "";
+      } else {
+        wiz.draft.hotel = text;
+      }
+
+      wiz.step = 7;
+      await ctx.reply(
+        "Шаг 7/8 — *Цена нетто* (только число, без валюты).\n\n" +
+          (wiz.draft.netPrice
+            ? `Сейчас: ${wiz.draft.netPrice}\nОтправьте новую цену или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 7: {
+      if (wiz.mode === "edit" && text === "-") {
+        // оставить
+      } else {
+        wiz.draft.netPrice = text;
+      }
+
+      wiz.step = 8;
+      await ctx.reply(
+        "Шаг 8/8 — *До какой даты предложение актуально?* (ГГГГ-ММ-ДД)\n" +
+          "Если без таймлимита — отправьте \"-\".\n\n" +
+          (wiz.draft.expiration
+            ? `Сейчас: ${wiz.draft.expiration}\nОтправьте новую дату или "-".`
+            : ""),
+        { parse_mode: "Markdown" }
+      );
+      break;
+    }
+
+    case 8: {
+      if (wiz.mode === "edit" && text === "-") {
+        // оставляем
+      } else if (text === "-") {
+        wiz.draft.expiration = "";
+      } else {
+        wiz.draft.expiration = text;
+      }
+
+      // сохраняем в API
+      const chatId = ctx.chat.id;
+      const payload = {
+        category: wiz.category,
+        title: wiz.draft.title || "Отказная услуга",
+        details: {
+          directionFrom: wiz.draft.directionFrom || null,
+          directionTo: wiz.draft.directionTo || null,
+          startDate: wiz.draft.startDate || null,
+          endDate: wiz.draft.endDate || null,
+          hotel: wiz.draft.hotel || null,
+          netPrice: wiz.draft.netPrice || null,
+          expiration: wiz.draft.expiration || null,
+          isActive: true,
+        },
+      };
+
+      try {
+        let resp;
+        if (wiz.mode === "create") {
+          resp = await axios.post(
+            `/api/telegram/provider/${chatId}/services`,
+            payload
+          );
+        } else {
+          resp = await axios.patch(
+            `/api/telegram/provider/${chatId}/services/${wiz.serviceId}`,
+            payload
+          );
+        }
+
+        if (!resp.data || !resp.data.success) {
+          console.log("[tg-bot] service wizard save resp:", resp.data);
+          await ctx.reply(
+            "Не удалось сохранить услугу. Попробуйте позже или через кабинет."
+          );
+        } else {
+          if (wiz.mode === "create") {
+            await ctx.reply(
+              "✅ Услуга создана и отправлена в маркетплейс Travella.\n" +
+                "Проверить и дополнить её можно в кабинете поставщика."
+            );
+          } else {
+            await ctx.reply(
+              "✅ Изменения по услуге сохранены.\n" +
+                "Посмотреть подробности можно в кабинете поставщика."
+            );
+          }
+        }
+      } catch (e) {
+        console.error(
+          "[tg-bot] service wizard save error:",
+          e?.response?.data || e
+        );
+        await ctx.reply(
+          "Произошла ошибка при сохранении услуги. Попробуйте позже."
+        );
+      }
+
+      ctx.session.serviceWizard = null;
+      break;
+    }
+
+    default: {
+      ctx.session.serviceWizard = null;
+      await ctx.reply("Визард завершён. Если нужно — начните заново.");
+      break;
+    }
+  }
+}
+
 // ==== Регистрация / привязка телефона ====
 
 // Основная логика привязки телефона к аккаунту / созданию нового
@@ -724,17 +988,41 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     if (!data.items.length) {
       await ctx.reply(
         "У вас пока нет услуг в маркетплейсе.\n" +
-          "Добавьте их в личном кабинете на сайте travella.uz."
+          "Вы можете создать их прямо через этого бота или в личном кабинете.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "➕ Создать услугу через бот",
+                  callback_data: "svc_new",
+                },
+              ],
+              [
+                {
+                  text: "➕ Создать услугу в кабинете",
+                  url: `${SITE_URL}/dashboard/services/marketplace?from=tg`,
+                },
+              ],
+            ],
+          },
+        }
       );
       return;
     }
 
-    // кнопка "создать услугу" (открывает кабинет)
+    // кнопка "создать услугу" (бот + кабинет)
     await ctx.reply(
-      "Чтобы создать новую услугу MARKETPLACE, откройте кабинет по кнопке ниже:",
+      "Чтобы создать новую услугу MARKETPLACE, пользуйтесь кнопками ниже:",
       {
         reply_markup: {
           inline_keyboard: [
+            [
+              {
+                text: "➕ Создать услугу через бот",
+                callback_data: "svc_new",
+              },
+            ],
             [
               {
                 text: "➕ Создать услугу в кабинете",
@@ -836,7 +1124,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
           ],
           [
             {
-              text: "✏️ Редактировать",
+              text: "✏️ Редактировать в кабинете",
               url: manageUrl,
             },
             {
@@ -852,6 +1140,12 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
             {
               text: "📁 Архивировать",
               callback_data: `svc:${svc.id}:archive`,
+            },
+          ],
+          [
+            {
+              text: "✏️ Редактировать через бот",
+              callback_data: `svc:${svc.id}:edit`,
             },
           ],
         ],
@@ -876,6 +1170,97 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       e?.response?.data || e.message || e
     );
     await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+  }
+});
+
+// ==== СОЗДАНИЕ УСЛУГИ ЧЕРЕЗ БОТ ====
+
+bot.action("svc_new", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await ctx.reply(
+        "Создавать услуги через бот могут только поставщики Travella."
+      );
+      return;
+    }
+
+    await ctx.reply("Какую услугу хотите добавить?", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
+          [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
+          [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
+          [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] svc_new action error:", e);
+  }
+});
+
+bot.action(
+  /^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
+  async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+      const category = ctx.match[1];
+      const role = await ensureProviderRole(ctx);
+      if (role !== "provider") {
+        await ctx.reply(
+          "Создавать услуги через бот могут только поставщики Travella."
+        );
+        return;
+      }
+
+      await startServiceWizard(ctx, "create", category, null);
+    } catch (e) {
+      console.error("[tg-bot] svc_new_cat action error:", e);
+    }
+  }
+);
+
+// ==== РЕДАКТИРОВАНИЕ УСЛУГИ ЧЕРЕЗ БОТ ====
+
+bot.action(/^svc:(\d+):edit$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const serviceId = Number(ctx.match[1]);
+    const chatId = ctx.chat.id;
+
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await ctx.reply(
+        "Редактировать услуги через бот могут только поставщики Travella."
+      );
+      return;
+    }
+
+    const { data } = await axios.get(
+      `/api/telegram/provider/${chatId}/services`
+    );
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] svc edit: services resp malformed:", data);
+      await ctx.reply(
+        "Не удалось загрузить список ваших услуг. Попробуйте позже."
+      );
+      return;
+    }
+
+    const svc = data.items.find((s) => Number(s.id) === serviceId);
+    if (!svc) {
+      await ctx.reply(
+        "Не нашёл услугу с таким ID среди ваших услуг. Возможно, она уже удалена или архивирована."
+      );
+      return;
+    }
+
+    const category = svc.category || "refused_tour";
+    await startServiceWizard(ctx, "edit", category, svc);
+  } catch (e) {
+    console.error("[tg-bot] svc edit action error:", e);
   }
 });
 
@@ -1042,6 +1427,13 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
 
 bot.on("text", async (ctx, next) => {
   try {
+    // 1) сначала — если активен визард услуги
+    if (ctx.session && ctx.session.serviceWizard) {
+      await handleServiceWizardText(ctx);
+      return;
+    }
+
+    // 2) затем — быстрый запрос менеджеру
     if (
       ctx.session &&
       ctx.session.state === "awaiting_request_message" &&
@@ -1085,7 +1477,7 @@ bot.on("text", async (ctx, next) => {
       return;
     }
   } catch (e) {
-    console.error("[tg-bot] error handling quick request text:", e);
+    console.error("[tg-bot] error handling text:", e);
   }
 
   return next();
