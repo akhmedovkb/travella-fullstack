@@ -142,8 +142,10 @@ const CATEGORY_LABELS = {
   refused_ticket: "Отказной билет",
 };
 
-// безопасно достаём первую картинку из услуги (services.images)
-function getFirstImageUrl(svc) {
+// ✅ получаем "картинку" для Telegram
+// - для обычных сообщений можно вернуть Telegram file_id (если tg:<fileId>)
+// - для inline thumb_url можно использовать только https URL (file_id НЕ подойдёт)
+function getFirstImageUrl(svc, { forInline = false } = {}) {
   let arr = svc.images;
 
   if (!arr) return null;
@@ -170,16 +172,21 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
+  // ✅ tg:<fileId> — умеем показывать фото в обычных сообщениях
+  if (v.startsWith("tg:")) {
+    if (forInline) return null; // thumb_url не может быть file_id
+    const fileId = v.slice(3).trim();
+    return fileId || null;
+  }
+
   // 🔥 поддержка base64 (data:image/...)
   if (v.startsWith("data:image")) {
-    return `${API_BASE.replace(
-      /\/+$/,
-      ""
-    )}/api/telegram/service-image/${svc.id}`;
+    return `${API_BASE.replace(/\/+$/, "")}/api/telegram/service-image/${svc.id}`;
   }
 
   // Полный URL
   if (v.startsWith("http://") || v.startsWith("https://")) {
+    // thumb_url лучше только https, но оставляем как есть
     return v;
   }
 
@@ -188,7 +195,6 @@ function getFirstImageUrl(svc) {
     return SITE_URL + v;
   }
 
-  // Всё остальное — для Telegram не годится
   return null;
 }
 
@@ -284,7 +290,7 @@ function buildServiceMessage(svc, category, role = "client") {
   const hotel = d.hotel || d.hotelName || null;
   const hotelSafe = hotel ? escapeMarkdown(hotel) : null;
 
-  // Размещение (в полном тексте — оставляем)
+  // Размещение
   const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
 
@@ -330,8 +336,9 @@ function buildServiceMessage(svc, category, role = "client") {
   lines.push(`Подробнее и бронирование: ${SITE_URL}`);
 
   const text = lines.join("\n");
-  const photoUrl = getFirstImageUrl(svc);
 
+  // ✅ для обычных сообщений можно file_id
+  const photoUrl = getFirstImageUrl(svc, { forInline: false });
   const serviceUrl = SITE_URL;
 
   return { text, photoUrl, serviceUrl };
@@ -400,16 +407,22 @@ function normalizeDateInput(raw) {
   return `${y}-${mm}-${dd}`;
 }
 
-// ✅ helper: начало сегодняшнего дня (локально) + сравнение дат
-function startOfToday() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+// ✅ сравнение дат без сюрпризов таймзоны
+function toUtcDay(dateStr) {
+  const m = String(dateStr || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  return Date.UTC(y, mo - 1, d);
 }
 
-function isPastYmd(ymd) {
-  const d = parseDateSafe(ymd);
-  if (!d) return false;
-  return d.getTime() < startOfToday().getTime();
+function isPastDate(dateStr) {
+  const v = toUtcDay(dateStr);
+  if (v === null) return false;
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return v < todayUtc;
 }
 
 // собираем details для refused_tour из draft
@@ -424,7 +437,8 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     hotel: draft.hotel || "",
     accommodation: draft.accommodation || "",
     netPrice: priceNum,
-    changeable: typeof draft.changeable === "boolean" ? draft.changeable : null,
+    changeable:
+      typeof draft.changeable === "boolean" ? draft.changeable : null,
     visaIncluded:
       typeof draft.visaIncluded === "boolean" ? draft.visaIncluded : null,
     expiration: draft.expiration || null,
@@ -437,8 +451,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const draft = ctx.session?.serviceDraft;
     if (!draft || draft.category !== "refused_tour") {
       await ctx.reply(
-        "Не удалось создать услугу: мастер сбросился или нет данных.\n" +
-          "Нажмите «🧳 Мои услуги» → «➕ Создать услугу в боте» и попробуйте снова."
+        "Не удалось создать услугу: нет данных мастера. Попробуйте ещё раз."
       );
       resetServiceWizard(ctx);
       return;
@@ -485,18 +498,16 @@ async function finishCreateServiceFromWizard(ctx) {
     );
     resetServiceWizard(ctx);
   } catch (e) {
-    console.error(
-      "[tg-bot] finishCreateServiceFromWizard error:",
-      e?.response?.data || e
+    console.error("[tg-bot] finishCreateServiceFromWizard error:", e?.response?.data || e);
+    await ctx.reply(
+      "Произошла ошибка при сохранении услуги. Попробуйте позже."
     );
-    await ctx.reply("Произошла ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
 }
 
 /* ===================== Регистрация / привязка телефона ===================== */
 
-// Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
   try {
     const chatId = ctx.chat.id;
@@ -571,8 +582,13 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       getMainMenuKeyboard(finalRole)
     );
   } catch (e) {
-    console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
-    await ctx.reply("Произошла ошибка при привязке телефона. Попробуйте позже.");
+    console.error(
+      "[tg-bot] handlePhoneRegistration error:",
+      e?.response?.data || e
+    );
+    await ctx.reply(
+      "Произошла ошибка при привязке телефона. Попробуйте позже."
+    );
   }
 }
 
@@ -589,11 +605,18 @@ bot.start(async (ctx) => {
       const resClient = await axios.get(`/api/telegram/profile/client/${chatId}`);
       if (resClient.data && resClient.data.success) {
         role = "client";
-        console.log("[tg-bot] profile client resp:", resClient.status, resClient.data);
+        console.log(
+          "[tg-bot] profile client resp:",
+          resClient.status,
+          resClient.data
+        );
       }
     } catch (e) {
       if (e?.response?.status !== 404) {
-        console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
+        console.log(
+          "[tg-bot] profile client error:",
+          e?.response?.data || e.message || e
+        );
       }
     }
 
@@ -602,11 +625,18 @@ bot.start(async (ctx) => {
         const resProv = await axios.get(`/api/telegram/profile/provider/${chatId}`);
         if (resProv.data && resProv.data.success) {
           role = "provider";
-          console.log("[tg-bot] profile provider resp:", resProv.status, resProv.data);
+          console.log(
+            "[tg-bot] profile provider resp:",
+            resProv.status,
+            resProv.data
+          );
         }
       } catch (e) {
         if (e?.response?.status !== 404) {
-          console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
+          console.log(
+            "[tg-bot] profile provider error:",
+            e?.response?.data || e.message || e
+          );
         }
       }
     }
@@ -753,947 +783,4 @@ bot.hears(/📄 Мои брони/i, async (ctx) => {
   logUpdate(ctx, "hears Мои брони");
   await ctx.reply(
     "Пока бронирование через бот мы ещё доделываем.\n" +
-      "Пока все ваши брони доступны в личном кабинете на сайте travella.uz."
-  );
-});
-
-bot.hears(/📨 Мои заявки/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои заявки");
-  await ctx.reply(
-    "Пока раздел заявок в боте в разработке.\n" +
-      "Вы можете смотреть отклики и заявки на сайте travella.uz."
-  );
-});
-
-bot.hears(/👤 Профиль/i, async (ctx) => {
-  logUpdate(ctx, "hears Профиль");
-
-  const role = ctx.session?.role || "client";
-
-  if (role === "provider") {
-    await ctx.reply(
-      "Ваш профиль поставщика Travella можно дополнить и изменить в личном кабинете.\n\n" +
-        "Ссылка: https://travella.uz/dashboard/profile"
-    );
-    return;
-  }
-
-  await ctx.reply(
-    "Ваш профиль клиента можно дополнить и изменить на сайте travella.uz во вкладке «Профиль».\n\n" +
-      "Ссылка: https://travella.uz"
-  );
-});
-
-bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
-  logUpdate(ctx, "hears Стать поставщиком");
-  await ctx.reply(
-    "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
-      "https://travella.уз и дождитесь модерации.\n\n" +
-      "Мы также свяжемся с вами по указанным контактам."
-  );
-});
-
-// ==== МОИ УСЛУГИ (панель поставщика) ====
-
-bot.hears(/🧳 Мои услуги/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои услуги");
-
-  // 👇 доопределяем роль по chatId, чтобы не требовать /start каждый раз
-  const role = await ensureProviderRole(ctx);
-
-  if (role !== "provider") {
-    await ctx.reply(
-      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
-        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
-    );
-    return;
-  }
-
-  const chatId = ctx.chat.id;
-
-  try {
-    // кнопка создания через бот + ссылка в кабинет
-    await ctx.reply(
-      "Вы можете создать новую отказную услугу прямо в боте или в кабинете Travella:",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "➕ Создать услугу в боте",
-                callback_data: "svc_new",
-              },
-            ],
-            [
-              {
-                text: "🌐 Открыть кабинет Travella",
-                url: `${SITE_URL}/dashboard/services/marketplace?from=tg`,
-              },
-            ],
-          ],
-        },
-      }
-    );
-
-    await ctx.reply("Загружаю ваши услуги маркетплейса...");
-
-    const { data } = await axios.get(`/api/telegram/provider/${chatId}/services`);
-
-    if (!data || !data.success || !Array.isArray(data.items)) {
-      console.log("[tg-bot] provider services malformed:", data);
-      await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
-      return;
-    }
-
-    if (!data.items.length) {
-      await ctx.reply(
-        "У вас пока нет услуг в маркетплейсе.\n" +
-          "Добавьте их через бот или в личном кабинете на сайте travella.uz."
-      );
-      return;
-    }
-
-    await ctx.reply(
-      `Найдено услуг: ${data.items.length}. Показываю первые 10 (по ближайшей дате).`
-    );
-
-    // сортировка по ближайшей дате
-    const itemsSorted = [...data.items].sort((a, b) => {
-      const da = getStartDateForSort(a);
-      const db = getStartDateForSort(b);
-
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return da.getTime() - db.getTime();
-    });
-
-    for (const svc of itemsSorted.slice(0, 10)) {
-      const category = svc.category || svc.type || "refused_tour";
-
-      let details = svc.details || {};
-      if (typeof details === "string") {
-        try {
-          details = JSON.parse(details);
-        } catch {
-          details = {};
-        }
-      }
-
-      const { text, photoUrl } = buildServiceMessage(svc, category, "provider");
-      const status = svc.status || "draft";
-
-      let isActive =
-        typeof details.isActive === "boolean" ? details.isActive : true;
-
-      const expirationRaw = details.expiration || svc.expiration || null;
-      if (expirationRaw) {
-        const exp = new Date(expirationRaw);
-        if (!Number.isNaN(exp.getTime()) && exp < new Date()) {
-          isActive = false;
-        }
-      }
-
-      const endRaw =
-        details.endFlightDate ||
-        details.returnFlightDate ||
-        details.endDate ||
-        null;
-      if (endRaw) {
-        const ed = new Date(endRaw);
-        if (!Number.isNaN(ed.getTime()) && ed < new Date()) {
-          isActive = false;
-        }
-      }
-
-      const headerLines = [];
-      headerLines.push(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`);
-      headerLines.push(`Статус: ${status}${!isActive ? " (неактуально)" : ""}`);
-      if (expirationRaw) {
-        headerLines.push(`Актуально до: ${expirationRaw}`);
-      }
-
-      const msg = headerLines.join("\n") + "\n\n" + text;
-
-      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
-
-      const keyboard = {
-        inline_keyboard: [
-          [{ text: "Открыть в кабинете", url: manageUrl }],
-          [{ text: "🛑 Снять с продажи", callback_data: `svc:${svc.id}:unpublish` }],
-          [
-            { text: "♻️ Продлить на 7 дней", callback_data: `svc:${svc.id}:extend7` },
-            { text: "📁 Архивировать", callback_data: `svc:${svc.id}:archive` },
-          ],
-        ],
-      };
-
-      if (photoUrl) {
-        await ctx.replyWithPhoto(photoUrl, {
-          caption: msg,
-          parse_mode: "Markdown",
-          reply_markup: keyboard,
-        });
-      } else {
-        await ctx.reply(msg, {
-          parse_mode: "Markdown",
-          reply_markup: keyboard,
-        });
-      }
-    }
-  } catch (e) {
-    console.error("[tg-bot] provider services error:", e?.response?.data || e.message || e);
-    await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
-  }
-});
-
-// ==== НОВОЕ: старт мастера создания услуги ====
-
-bot.action("svc_new", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    const role = await ensureProviderRole(ctx);
-    if (role !== "provider") {
-      await ctx.reply(
-        "Создавать услуги через бот могут только поставщики Travella.\n" +
-          "Зарегистрируйтесь как поставщик на сайте travella.uz."
-      );
-      return;
-    }
-
-    if (!ctx.session) ctx.session = {};
-    ctx.session.serviceDraft = { category: null, images: [] };
-    ctx.session.state = "svc_create_choose_category";
-
-    await ctx.reply("Выберите категорию отказной услуги:", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
-          [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
-          [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
-          [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
-        ],
-      },
-    });
-  } catch (e) {
-    console.error("[tg-bot] svc_new action error:", e);
-  }
-});
-
-bot.action(
-  /^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
-  async (ctx) => {
-    try {
-      await ctx.answerCbQuery();
-      const category = ctx.match[1];
-
-      if (!ctx.session) ctx.session = {};
-      if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
-      ctx.session.serviceDraft.category = category;
-
-      // Полный мастер сейчас реализован ТОЛЬКО для refused_tour
-      if (category !== "refused_tour") {
-        await ctx.reply(
-          "Пока создание через бот доступно только для категории «Отказной тур».\n" +
-            "Для остальных категорий воспользуйтесь, пожалуйста, кабинетом Travella."
-        );
-        resetServiceWizard(ctx);
-        return;
-      }
-
-      ctx.session.state = "svc_create_title";
-
-      await ctx.reply(
-        "Создаём новую услугу: *Отказной тур*.\n\n" +
-          "Отправьте, пожалуйста, *название тура* (как вы хотите показывать его в Travella).",
-        { parse_mode: "Markdown" }
-      );
-    } catch (e) {
-      console.error("[tg-bot] svc_new_cat action error:", e);
-    }
-  }
-);
-
-// ==== ДЕЙСТВИЯ С УСЛУГАМИ ПРОВАЙДЕРА (снять / продлить / архивировать) ====
-
-bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    const action = ctx.match[2];
-    const chatId = ctx.chat.id;
-
-    await ctx.answerCbQuery();
-
-    let endpoint;
-    if (action === "unpublish") {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/unpublish`;
-    } else if (action === "extend7") {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/extend7`;
-    } else {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/archive`;
-    }
-
-    const { data } = await axios.post(endpoint);
-
-    if (!data || !data.success) {
-      console.log("[tg-bot] svc action error resp:", data);
-      await ctx.reply(
-        "Не удалось обновить услугу. Попробуйте позже или через кабинет."
-      );
-      return;
-    }
-
-    let msg;
-    if (action === "unpublish") {
-      msg = "Услуга снята с продажи. Она больше не показывается в поиске Travella.";
-    } else if (action === "extend7") {
-      msg = "Актуальность услуги продлена на 7 дней. Таймер обновлён в кабинете.";
-    } else {
-      msg =
-        "Услуга архивирована и скрыта из маркетплейса. Вы всегда можете открыть её в кабинете.";
-    }
-
-    await ctx.reply(msg);
-  } catch (e) {
-    console.error("[tg-bot] svc action handler error:", e?.response?.data || e);
-    try {
-      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
-    } catch (_) {}
-  }
-});
-
-// ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
-
-bot.action(
-  /^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
-  async (ctx) => {
-    try {
-      const category = ctx.match[1];
-
-      await ctx.answerCbQuery();
-      logUpdate(ctx, `action search ${category}`);
-
-      const chatId = ctx.chat.id;
-      const role = ctx.session?.role || "client";
-
-      await ctx.reply("Ищу подходящие предложения...");
-
-      const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
-        params: { category },
-      });
-
-      if (!data || !data.success || !Array.isArray(data.items)) {
-        console.log("[tg-bot] search resp malformed:", data);
-        await ctx.reply("Произошла ошибка при загрузке услуг. Попробуйте позже.");
-        return;
-      }
-
-      if (!data.items.length) {
-        await ctx.reply("К сожалению, по этой категории сейчас нет подходящих предложений.");
-        return;
-      }
-
-      await ctx.reply(`Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`);
-
-      for (const svc of data.items.slice(0, 10)) {
-        const { text, photoUrl, serviceUrl } = buildServiceMessage(
-          svc,
-          category,
-          role
-        );
-
-        const keyboard = {
-          inline_keyboard: [
-            [
-              { text: "Подробнее на сайте", url: serviceUrl },
-              { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-            ],
-          ],
-        };
-
-        if (photoUrl) {
-          await ctx.replyWithPhoto(photoUrl, {
-            caption: text,
-            parse_mode: "Markdown",
-            reply_markup: keyboard,
-          });
-        } else {
-          await ctx.reply(text, {
-            parse_mode: "Markdown",
-            reply_markup: keyboard,
-          });
-        }
-      }
-    } catch (e) {
-      console.error("[tg-bot] error in search:", e?.response?.data || e.message || e);
-      await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
-    }
-  }
-);
-
-// ==== Быстрый запрос ====
-
-bot.action(/^request:(\d+)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    if (!ctx.session) ctx.session = {};
-    ctx.session.pendingRequestServiceId = serviceId;
-    ctx.session.state = "awaiting_request_message";
-
-    if (!MANAGER_CHAT_ID) {
-      await ctx.answerCbQuery();
-      await ctx.reply(
-        "Функция быстрого запроса пока недоступна (не задан TELEGRAM_MANAGER_CHAT_ID)."
-      );
-      return;
-    }
-
-    await ctx.answerCbQuery();
-    await ctx.reply(
-      "📩 Быстрый запрос\n\n" +
-        "Напишите, пожалуйста, сообщение по этому туру (пожелания, даты, количество человек)\n" +
-        "и оставьте контактный номер, если он отличается от Telegram.",
-      { parse_mode: "Markdown" }
-    );
-  } catch (e) {
-    console.error("[tg-bot] request: action error:", e);
-  }
-});
-
-// ==== ОБРАБОТКА ТЕКСТА ====
-
-bot.on("text", async (ctx, next) => {
-  try {
-    const state = ctx.session?.state || null;
-    const text = (ctx.message.text || "").trim();
-
-    // ✅ анти-молчание: если пользователь вводит что-то похожее на шаг мастера,
-    // но state потерялся (перезапуск бота) — не молчим, а подсказываем.
-    if (!state) {
-      const looksLikeWizardInput =
-        /^\d{4}[.\-/]\d{2}[.\-/]\d{2}$/.test(text) || // дата
-        ["да", "нет", "пропустить", "отмена"].includes(text.toLowerCase());
-      if (looksLikeWizardInput) {
-        await ctx.reply(
-          "Похоже мастер создания услуги сбросился (бот мог перезапуститься).\n\n" +
-            "Откройте: «🧳 Мои услуги» → «➕ Создать услугу в боте» и продолжим заново.\n" +
-            "Чтобы отменить мастер в любой момент — напишите: отмена"
-        );
-        return;
-      }
-    }
-
-    // 1) быстрый запрос
-    if (
-      state === "awaiting_request_message" &&
-      ctx.session.pendingRequestServiceId
-    ) {
-      const serviceId = ctx.session.pendingRequestServiceId;
-      const msg = ctx.message.text;
-      const from = ctx.from || {};
-      const chatId = ctx.chat.id;
-
-      if (!MANAGER_CHAT_ID) {
-        await ctx.reply("Сейчас функция быстрого запроса временно недоступна.");
-      } else {
-        const safeFirst = escapeMarkdown(from.first_name || "");
-        const safeLast = escapeMarkdown(from.last_name || "");
-        const safeUsername = escapeMarkdown(from.username || "нет username");
-        const safeMsg = escapeMarkdown(msg);
-
-        const textForManager =
-          "🆕 *Новый быстрый запрос из бота Travella*\n\n" +
-          `Тур ID: *${escapeMarkdown(serviceId)}*\n` +
-          `От: ${safeFirst} ${safeLast} (@${safeUsername})\n` +
-          `Telegram chatId: \`${chatId}\`\n\n` +
-          "*Сообщение клиента:*\n" +
-          safeMsg;
-
-        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
-          parse_mode: "Markdown",
-        });
-
-        await ctx.reply(
-          "Спасибо! 🙌\n\nВаш запрос отправлен менеджеру Travella.\n" +
-            "Мы свяжемся с вами в ближайшее время."
-        );
-      }
-
-      ctx.session.state = null;
-      ctx.session.pendingRequestServiceId = null;
-      return;
-    }
-
-    // 2) мастер создания отказного тура
-    if (state && state.startsWith("svc_create_")) {
-      if (text.toLowerCase() === "отмена") {
-        resetServiceWizard(ctx);
-        await ctx.reply("Создание услуги отменено.");
-        return;
-      }
-
-      if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
-      const draft = ctx.session.serviceDraft;
-
-      switch (state) {
-        case "svc_create_title":
-          if (text.length < 3) {
-            await ctx.reply("Название слишком короткое. Напишите, пожалуйста, нормальное название тура.");
-            return;
-          }
-          draft.title = text;
-          ctx.session.state = "svc_create_tour_country";
-          await ctx.reply("Укажите *страну направления* (например, Таиланд):", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_tour_country":
-          if (text.length < 2) {
-            await ctx.reply("Не понял страну. Напишите, пожалуйста, ещё раз.");
-            return;
-          }
-          draft.country = text;
-          ctx.session.state = "svc_create_tour_from";
-          await ctx.reply("Укажите *город вылета* (например, Ташкент):", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_tour_from":
-          if (text.length < 2) {
-            await ctx.reply("Не понял город вылета. Напишите, пожалуйста, ещё раз.");
-            return;
-          }
-          draft.fromCity = text;
-          ctx.session.state = "svc_create_tour_to";
-          await ctx.reply("Укажите *город прибытия* (например, Бангкок):", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_tour_to":
-          if (text.length < 2) {
-            await ctx.reply("Не понял город прибытия. Напишите, пожалуйста, ещё раз.");
-            return;
-          }
-          draft.toCity = text;
-          ctx.session.state = "svc_create_tour_start";
-          await ctx.reply(
-            "Укажите *дату начала тура* в формате ГГГГ-ММ-ДД (например, 2025-12-09):",
-            { parse_mode: "Markdown" }
-          );
-          return;
-
-        case "svc_create_tour_start": {
-          const norm = normalizeDateInput(text);
-          if (!norm) {
-            await ctx.reply(
-              "Не понял дату начала тура 😔\n" +
-                "Напишите в формате ГГГГ-ММ-ДД, например 2025-12-09."
-            );
-            return;
-          }
-          // ✅ валидация: прошедшая дата
-          if (isPastYmd(norm)) {
-            await ctx.reply(
-              "Дата начала не может быть в прошлом.\n" +
-                "Введите дату начиная с сегодняшнего дня (формат ГГГГ-ММ-ДД)."
-            );
-            return;
-          }
-
-          draft.startDate = norm;
-          ctx.session.state = "svc_create_tour_end";
-          await ctx.reply("Укажите *дату окончания тура* в формате ГГГГ-ММ-ДД:", {
-            parse_mode: "Markdown",
-          });
-          return;
-        }
-
-        case "svc_create_tour_end": {
-          const normEnd = normalizeDateInput(text);
-          if (!normEnd) {
-            await ctx.reply(
-              "Не понял дату окончания тура 😔\n" + "Напишите в формате ГГГГ-ММ-ДД."
-            );
-            return;
-          }
-          // ✅ валидация: прошедшая дата
-          if (isPastYmd(normEnd)) {
-            await ctx.reply(
-              "Дата окончания не может быть в прошлом.\n" +
-                "Введите дату начиная с сегодняшнего дня (формат ГГГГ-ММ-ДД)."
-            );
-            return;
-          }
-          // ✅ валидация: end >= start
-          const sd = parseDateSafe(draft.startDate);
-          const ed = parseDateSafe(normEnd);
-          if (sd && ed && ed.getTime() < sd.getTime()) {
-            await ctx.reply(
-              "Дата окончания не может быть раньше даты начала.\n" +
-                "Введите дату окончания ещё раз (ГГГГ-ММ-ДД)."
-            );
-            return;
-          }
-
-          draft.endDate = normEnd;
-          ctx.session.state = "svc_create_tour_hotel";
-          await ctx.reply("Укажите *отель* (как в ваучере, можно с категорией):", {
-            parse_mode: "Markdown",
-          });
-          return;
-        }
-
-        case "svc_create_tour_hotel":
-          if (text.length < 2) {
-            await ctx.reply("Не понял отель. Напишите, пожалуйста, ещё раз.");
-            return;
-          }
-          draft.hotel = text;
-          ctx.session.state = "svc_create_tour_accommodation";
-          await ctx.reply("Опишите *размещение* (тип номера, размещение ADT/CHD/INF):", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_tour_accommodation":
-          if (text.length < 2) {
-            await ctx.reply("Описание размещения слишком короткое. Напишите подробнее.");
-            return;
-          }
-          draft.accommodation = text;
-          ctx.session.state = "svc_create_price";
-          await ctx.reply("Укажите *цену нетто* (например 1130 или 1130 USD):", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_price":
-          draft.price = text;
-          // ✅ простая валидация цены
-          if (normalizePrice(text) === null) {
-            await ctx.reply(
-              "Не понял цену 😔\nВведите число, например 1130 или 1130 USD."
-            );
-            return;
-          }
-          ctx.session.state = "svc_create_changeable";
-          await ctx.reply("Можно ли *менять туриста* в туре? Напишите `да` или `нет`.", {
-            parse_mode: "Markdown",
-          });
-          return;
-
-        case "svc_create_changeable": {
-          const v = parseYesNo(text);
-          if (v === null) {
-            await ctx.reply("Пожалуйста, напишите только `да` или `нет`.");
-            return;
-          }
-          draft.changeable = v;
-          ctx.session.state = "svc_create_visa";
-          await ctx.reply("Включена ли *виза*? Напишите `да` или `нет`.", {
-            parse_mode: "Markdown",
-          });
-          return;
-        }
-
-        case "svc_create_visa": {
-          const v2 = parseYesNo(text);
-          if (v2 === null) {
-            await ctx.reply("Пожалуйста, напишите только `да` или `нет`.");
-            return;
-          }
-          draft.visaIncluded = v2;
-          ctx.session.state = "svc_create_expiration";
-          await ctx.reply(
-            "До какой даты тур *актуален*? Укажите дату ГГГГ-ММ-ДД или напишите `нет`.",
-            { parse_mode: "Markdown" }
-          );
-          return;
-        }
-
-        case "svc_create_expiration": {
-          const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateInput(text);
-
-          if (normExp === null && lower !== "нет") {
-            await ctx.reply(
-              "Не понял дату актуальности 😔\n" +
-                "Напишите в формате ГГГГ-ММ-ДД (например 2025-12-15) или `нет`."
-            );
-            return;
-          }
-
-          // ✅ если дата задана — не в прошлом
-          if (normExp && isPastYmd(normExp)) {
-            await ctx.reply(
-              "Дата актуальности не может быть в прошлом.\n" +
-                "Введите дату начиная с сегодняшнего дня или напишите `нет`."
-            );
-            return;
-          }
-
-          draft.expiration = normExp; // может быть null
-          ctx.session.state = "svc_create_photo";
-          await ctx.reply(
-            "Отправьте одно *фото тура* одним сообщением или напишите `пропустить`.",
-            { parse_mode: "Markdown" }
-          );
-          return;
-        }
-
-        case "svc_create_photo":
-          if (text.trim().toLowerCase() === "пропустить") {
-            draft.images = [];
-            await finishCreateServiceFromWizard(ctx);
-            return;
-          }
-          await ctx.reply("Пожалуйста, отправьте фото сообщением с картинкой или напишите `пропустить`.");
-          return;
-
-        default:
-          break;
-      }
-    }
-  } catch (e) {
-    console.error("[tg-bot] error handling text:", e);
-  }
-
-  return next();
-});
-
-// ==== ОБРАБОТКА ФОТО ДЛЯ МАСТЕРА ====
-
-bot.on("photo", async (ctx, next) => {
-  try {
-    const state = ctx.session?.state || null;
-
-    if (state === "svc_create_photo" && ctx.session?.serviceDraft) {
-      const photos = ctx.message.photo || [];
-      if (!photos.length) {
-        await ctx.reply("Не удалось прочитать фото. Попробуйте ещё раз.");
-        return;
-      }
-
-      const largest = photos[photos.length - 1];
-      const fileId = largest.file_id;
-
-      // сохраняем "tg:fileId"
-      ctx.session.serviceDraft.images = [`tg:${fileId}`];
-
-      await finishCreateServiceFromWizard(ctx);
-      return;
-    }
-  } catch (e) {
-    console.error("[tg-bot] photo handler error:", e);
-  }
-
-  return next();
-});
-
-// ==== /tour_123 ====
-
-async function findServiceByIdViaSearch(chatId, serviceId) {
-  for (const category of REFUSED_CATEGORIES) {
-    try {
-      const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
-        params: { category },
-      });
-
-      if (!data || !data.success || !Array.isArray(data.items)) continue;
-
-      const svc = data.items.find((s) => Number(s.id) === Number(serviceId));
-      if (svc) {
-        return { svc, category };
-      }
-    } catch (e) {
-      console.error(
-        "[tg-bot] findServiceByIdViaSearch error:",
-        e?.response?.data || e.message || e
-      );
-    }
-  }
-  return null;
-}
-
-bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    const chatId = ctx.chat.id;
-    const role = ctx.session?.role || "client";
-
-    await ctx.reply("Ищу тур по этому ID...");
-
-    const found = await findServiceByIdViaSearch(chatId, serviceId);
-
-    if (!found) {
-      await ctx.reply(
-        "Не нашёл тур с таким ID.\n" +
-          "Возможно, он уже снят с продажи или не относится к отказным."
-      );
-      return;
-    }
-
-    const { svc, category } = found;
-    const { text, photoUrl, serviceUrl } = buildServiceMessage(
-      svc,
-      category,
-      role
-    );
-
-    const keyboard = {
-      inline_keyboard: [
-        [
-          { text: "Подробнее на сайте", url: serviceUrl },
-          { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-        ],
-      ],
-    };
-
-    if (photoUrl) {
-      await ctx.replyWithPhoto(photoUrl, {
-        caption: text,
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
-    } else {
-      await ctx.reply(text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
-    }
-  } catch (e) {
-    console.error("[tg-bot] /tour_ handler error:", e);
-    await ctx.reply("Не удалось загрузить тур. Попробуйте позже.");
-  }
-});
-
-// ==== INLINE-ПОИСК ====
-
-bot.on("inline_query", async (ctx) => {
-  try {
-    logUpdate(ctx, "inline_query");
-
-    const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
-
-    // Определяем категорию по тексту
-    let category = "refused_tour";
-
-    if (q.includes("отель") || q.includes("hotel") || q.includes("#hotel")) {
-      category = "refused_hotel";
-    } else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) {
-      category = "refused_flight";
-    } else if (q.includes("билет") || q.includes("ticket")) {
-      category = "refused_ticket";
-    } else if (q.includes("тур") || q.includes("tour") || q.includes("turov") || q.includes("tur")) {
-      category = "refused_tour";
-    }
-
-    const chatId = ctx.from.id;
-    const roleForInline = "client";
-
-    const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
-      params: { category },
-    });
-
-    if (!data || !data.success || !Array.isArray(data.items)) {
-      console.log("[tg-bot] inline search resp malformed:", data);
-      await ctx.answerInlineQuery([], { cache_time: 3 });
-      return;
-    }
-
-    // сортировка по дате (самая ранняя сверху)
-    const itemsSorted = [...data.items].sort((a, b) => {
-      const da = getStartDateForSort(a);
-      const db = getStartDateForSort(b);
-
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-
-      return da.getTime() - db.getTime();
-    });
-
-    const results = itemsSorted.slice(0, 25).map((svc, idx) => {
-      const { text, serviceUrl } = buildServiceMessage(svc, category, roleForInline);
-
-      let d = svc.details || {};
-      if (typeof d === "string") {
-        try {
-          d = JSON.parse(d);
-        } catch {
-          d = {};
-        }
-      }
-
-      const truncate = (str, n = 40) =>
-        str && str.length > n ? str.slice(0, n - 1) + "…" : str;
-
-      const startFlight = d.startFlightDate || d.startDate;
-      const endFlight = d.endFlightDate || d.endDate;
-
-      let datesLine = "";
-      if (startFlight && endFlight) {
-        const sf = String(startFlight).replace(/-/g, ".");
-        const ef = String(endFlight).replace(/-/g, ".");
-        datesLine = `ДАТЫ: ${sf} → ${ef}`;
-      }
-
-      const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelLine = hotelNameRaw ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}` : "";
-
-      const priceInline = pickPrice(d, svc, roleForInline);
-      const priceLine =
-        priceInline !== null && priceInline !== undefined ? `ЦЕНА: ${priceInline}` : "";
-
-      const descParts = [];
-      if (datesLine) descParts.push(datesLine);
-      if (hotelLine) descParts.push(hotelLine);
-      if (priceLine) descParts.push(priceLine);
-
-      let description = descParts.join(" · ");
-      if (description.length > 140) {
-        description = description.slice(0, 137) + "…";
-      }
-
-      const thumbUrl = getFirstImageUrl(svc);
-
-      return {
-        type: "article",
-        id: String(svc.id) + "_" + idx,
-        title: svc.title || CATEGORY_LABELS[category] || "Услуга",
-        description,
-        thumb_url: thumbUrl || undefined,
-        input_message_content: {
-          message_text: text,
-          parse_mode: "Markdown",
-        },
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "Подробнее на сайте", url: serviceUrl },
-              { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-            ],
-          ],
-        },
-      };
-    });
-
-    await ctx.answerInlineQuery(results, {
-      cache_time: 5,
-      is_personal: true,
-      switch_pm_text: "Открыть главное меню бота",
-      switch_pm_parameter: "start",
-    });
-  } catch (e) {
-    console.error("[tg-bot] inline_query error:", e?.response?.data || e.message || e);
-    try {
-      await ctx.answerInlineQuery([], { cache_time: 3 });
-    } catch (_) {}
-  }
-});
-
-// ⚠️ здесь НЕТ bot.launch() — запуск делаем из index.js
-module.exports = { bot };
+      "Пока все ваши брони доступны в личном кабин
