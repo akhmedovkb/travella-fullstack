@@ -911,3 +911,32 @@ async function notifyModerationUnpublished({ service }) {
     console.error("[tg] notifyModerationUnpublished failed:", e?.message || e);
   }
 }
+
+// ====================== ADMIN NOTIFY HELPERS ======================
+// Не ломает существующие exports: просто добавляет новое поле.
+
+function _tgGetAdminChatIds() {
+  const raw = process.env.TELEGRAM_ADMIN_CHAT_IDS || "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n));
+}
+
+async function tgSendToAdmins(text, extra = {}) {
+  const ids = _tgGetAdminChatIds();
+  if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
+
+  const results = await Promise.allSettled(
+    ids.map((chatId) => tgSend(chatId, text, extra))
+  );
+
+  return { ok: true, count: ids.length, results };
+}
+
+// ✅ КЛЮЧЕВОЕ: так мы НЕ трогаем существующий module.exports объект,
+// а просто добавляем новое поле — ничего не ломается.
+module.exports.tgSendToAdmins = tgSendToAdmins;
+
