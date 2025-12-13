@@ -77,80 +77,128 @@ async function decideLead(req, res) {
   const id = Number(req.params.id);
   const { decision } = req.body || {};
 
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ ok: false, error: "bad_id" });
+  }
   if (!["approved_provider", "approved_client", "rejected"].includes(decision)) {
-    return res.status(400).json({ ok: false });
+    return res.status(400).json({ ok: false, error: "bad_decision" });
   }
 
-  const client = await pool.connect();
+  const db = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await db.query("BEGIN");
 
-    const leadRes = await client.query(
+    const leadRes = await db.query(
       `SELECT * FROM leads WHERE id=$1 FOR UPDATE`,
       [id]
     );
 
     if (!leadRes.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ ok: false });
+      await db.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "lead_not_found" });
     }
 
     const lead = leadRes.rows[0];
 
+    // если уже принято решение — не даём повторно
+    if (lead.decision) {
+      await db.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: "already_decided" });
+    }
+
+    const name = lead.name || "Telegram user";
+    const phone = lead.phone || "";
+    const chatId = lead.telegram_chat_id || null;
+    const username = lead.telegram_username || null;
+
+    // нормализация телефона для поиска дублей
+    const phoneDigits = String(phone).replace(/\D/g, "");
+
     if (decision === "approved_client") {
-      await client.query(
-        `INSERT INTO clients(name, phone, password_hash, telegram_chat_id)
-         VALUES($1,$2,$3,$4)
-         ON CONFLICT DO NOTHING`,
-        [
-          lead.name || "Telegram user",
-          lead.phone,
-          TELEGRAM_DUMMY_PASSWORD_HASH,
-          lead.telegram_chat_id,
-        ]
+      // проверим, нет ли уже такого клиента
+      const exists = await db.query(
+        `SELECT id FROM clients
+          WHERE regexp_replace(phone,'\\D','','g') = $1
+          LIMIT 1`,
+        [phoneDigits]
       );
+
+      if (!exists.rowCount) {
+        const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
+
+        await db.query(
+          `INSERT INTO clients (name, email, phone, password_hash, telegram_chat_id, telegram)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [
+            name,
+            email,
+            phone,
+            TELEGRAM_DUMMY_PASSWORD_HASH,
+            chatId,
+            username,
+          ]
+        );
+      }
     }
 
     if (decision === "approved_provider") {
-      await client.query(
-        `INSERT INTO providers(name, phone, password, telegram_chat_id)
-         VALUES($1,$2,'telegram',$3)
-         ON CONFLICT DO NOTHING`,
-        [
-          lead.name || "Telegram user",
-          lead.phone,
-          lead.telegram_chat_id,
-        ]
+      // проверим, нет ли уже такого провайдера
+      const exists = await db.query(
+        `SELECT id FROM providers
+          WHERE regexp_replace(phone,'\\D','','g') = $1
+          LIMIT 1`,
+        [phoneDigits]
       );
+
+      if (!exists.rowCount) {
+        const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
+
+        await db.query(
+          `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            name,
+            "provider",                  // type NOT NULL
+            phone,
+            email,                       // email NOT NULL
+            "telegram",                  // password NOT NULL (у тебя поле password)
+            username ? `@${username}` : null,
+            chatId,
+          ]
+        );
+      }
     }
 
-    await client.query(
+    await db.query(
       `UPDATE leads
           SET decision=$2, decided_at=NOW(), status='closed'
         WHERE id=$1`,
       [id, decision]
     );
 
-    await client.query("COMMIT");
+    await db.query("COMMIT");
 
-    if (lead.telegram_chat_id) {
-      await tgSend(
-        lead.telegram_chat_id,
-        decision === "rejected"
-          ? "❌ Ваша заявка отклонена."
-          : "✅ Ваша заявка одобрена! Добро пожаловать в Travella."
-      );
+    // уведомление в Telegram
+    if (chatId) {
+      if (decision === "approved_provider") {
+        await tgSend(chatId, "✅ Ваша заявка одобрена! Вы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard");
+      } else if (decision === "approved_client") {
+        await tgSend(chatId, "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz");
+      } else {
+        await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
+      }
     }
 
-    res.json({ ok: true });
+    return res.json({ ok: true });
   } catch (e) {
-    await client.query("ROLLBACK");
+    await db.query("ROLLBACK");
     console.error("decideLead error:", e);
-    res.status(500).json({ ok: false });
+    return res.status(500).json({ ok: false, error: "decide_failed" });
   } finally {
-    client.release();
+    db.release();
   }
 }
+
 
 /* ================= EXPORT ================= */
 module.exports = {
