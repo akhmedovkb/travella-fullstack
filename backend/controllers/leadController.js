@@ -1,159 +1,177 @@
-// backend/controllers/leadController.js
-const pool = require("../db");
-const { notifyLeadNew } = require("../utils/telegram");
+const { tgSend } = require("../utils/telegram");
 
-// POST /api/leads  (публично с лендингов)
-exports.createLead = async (req, res) => {
-  try {
-    const {
-      name = "",
-      phone = "",
-      city = "",
-      pax = null,
-      comment = "",
-      page = "",
-      lang = "",
-      service = "",
-      utm_source = "",
-      utm_medium = "",
-      utm_campaign = "",
-      utm_content = "",
-      utm_term = "",
-    } = req.body || {};
+// PATCH /api/leads/:id/decision
+exports.decideLead = async (req, res) => {
+  const id = Number(req.params.id);
+  const { decision } = req.body || {};
 
-   const utm = {
-      source: utm_source || undefined,
-      medium: utm_medium || undefined,
-      campaign: utm_campaign || undefined,
-      content: utm_content || undefined,
-      term: utm_term || undefined,
-    };
-
-    const q = await pool.query(
-      `INSERT INTO leads(name, phone, city, pax, comment, page, lang, service, utm)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING id, created_at, status`,
-      [name, phone, city, pax, comment, page, lang, service, utm]
-    );
-    // телеграм-уведомление админам (не влияет на ответ API)
-    try {
-      const lead = {
-        id: q.rows[0]?.id,
-        created_at: q.rows[0]?.created_at,
-        status: q.rows[0]?.status,
-        name, phone, city, pax, comment, page, lang, service,
-      };
-      await notifyLeadNew({ lead });
-    } catch (e) {
-      console.warn("[tg] lead notify failed:", e?.message || e);
-    }
-
-    return res.json({ ok: true, id: q.rows[0].id });
-  } catch (e) {
-    console.error("createLead error:", e);
-    return res.status(500).json({ ok: false, error: "create_failed" });
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ ok: false, error: "bad_id" });
   }
-};
 
-// GET /api/leads  (под админ/модератором)
-exports.listLeads = async (req, res) => {
-  try {
-    const { status, q = "", page = "", lang = "" } = req.query || {};
-
-    const where = [];
-    const vals = [];
-    let i = 1;
-
-    if (status && status !== "all") {
-      where.push(`status = $${i++}`);
-      vals.push(status);
-    }
-    if (page && page !== "any") {
-      where.push(`page = $${i++}`);
-      vals.push(page);
-    }
-    if (lang) {
-      // точное совпадение кода языка (ru/uz/en)
-      where.push(`lang = $${i++}`);
-      vals.push(lang);
-    }
-    if (q) {
-      where.push(
-        `(coalesce(name,'') ILIKE $${i} OR coalesce(phone,'') ILIKE $${i} OR coalesce(comment,'') ILIKE $${i} OR coalesce(page,'') ILIKE $${i})`
-      );
-      vals.push(`%${q}%`);
-      i++;
-    }
-
-    const sqlWhere = where.length ? `WHERE ${where.join(" AND ")}` : "";
-    const sql =
-      `SELECT l.id, l.created_at, l.name, l.phone, l.city, l.pax, l.comment,
-              l.page, l.lang, l.status, l.service, l.utm,
-              l.assignee_provider_id,
-              p.name AS assignee_name
-         FROM leads l
-    LEFT JOIN providers p ON p.id = l.assignee_provider_id
-         ${sqlWhere}
-        ORDER BY created_at DESC
-        LIMIT 200`;
-
-    const r = await pool.query(sql, vals);
-    return res.json({ ok: true, items: r.rows });
-  } catch (e) {
-    console.error("listLeads error:", e);
-    return res.status(500).json({ ok: false, error: "list_failed", items: [] });
+  if (!["approved_provider", "approved_client", "rejected"].includes(decision)) {
+    return res.status(400).json({ ok: false, error: "bad_decision" });
   }
-};
 
-// PATCH /api/leads/:id  (смена статуса)
-exports.updateLeadStatus = async (req, res) => {
+  const client = await pool.connect();
   try {
-    const id = Number(req.params.id);
-    const { status } = req.body || {};
-    if (!Number.isFinite(id) || !status) {
-      return res.status(400).json({ ok: false, error: "bad_request" });
-    }
+    await client.query("BEGIN");
 
-    await pool.query(`UPDATE leads SET status=$2 WHERE id=$1`, [id, status]);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error("updateLeadStatus error:", e);
-    return res.status(500).json({ ok: false, error: "update_failed" });
-  }
-};
-
-// GET /api/leads/pages  — список уникальных страниц с лидами
-exports.listLeadPages = async (_req, res) => {
-  try {
-    const q = await pool.query(
-      `SELECT page, COUNT(*)::int AS cnt
+    // 1. Забираем лид
+    const leadRes = await client.query(
+      `SELECT *
          FROM leads
-        WHERE coalesce(page,'') <> ''
-        GROUP BY page
-        ORDER BY cnt DESC, page ASC
-        LIMIT 500`
+        WHERE id = $1
+        FOR UPDATE`,
+      [id]
     );
-    return res.json({ ok: true, items: q.rows });
-  } catch (e) {
-    console.error("listLeadPages error:", e);
-    return res.status(500).json({ ok: false, items: [] });
-  }
-}
-// PATCH /api/leads/:id/assignee { assignee_provider_id: number|null }
-exports.updateLeadAssignee = async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const { assignee_provider_id } = req.body || {};
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ ok: false, error: "bad_request" });
+
+    if (leadRes.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, error: "lead_not_found" });
     }
-    await pool.query(
-      `UPDATE leads SET assignee_provider_id = $2 WHERE id = $1`,
-      [id, Number.isFinite(assignee_provider_id) ? assignee_provider_id : null]
+
+    const lead = leadRes.rows[0];
+
+    if (lead.decision) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ ok: false, error: "already_decided" });
+    }
+
+    const phone = lead.phone;
+    const name = lead.name || "Telegram user";
+    const chatId = lead.telegram_chat_id;
+    const username = lead.telegram_username;
+
+    let createdEntity = null;
+
+    // ===== APPROVED CLIENT =====
+    if (decision === "approved_client") {
+      const exists = await client.query(
+        `SELECT id FROM clients
+          WHERE regexp_replace(phone,'\\D','','g') = regexp_replace($1,'\\D','','g')
+          LIMIT 1`,
+        [phone]
+      );
+
+      if (exists.rowCount === 0) {
+        const email = `tg_${Date.now()}@telegram.local`;
+
+        const ins = await client.query(
+          `
+          INSERT INTO clients (
+            name,
+            phone,
+            email,
+            password_hash,
+            telegram_chat_id,
+            telegram
+          )
+          VALUES ($1,$2,$3,$4,$5,$6)
+          RETURNING id
+          `,
+          [
+            name,
+            phone,
+            email,
+            process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
+              "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu",
+            chatId,
+            username || null,
+          ]
+        );
+
+        createdEntity = { role: "client", id: ins.rows[0].id };
+      }
+    }
+
+    // ===== APPROVED PROVIDER =====
+    if (decision === "approved_provider") {
+      const exists = await client.query(
+        `SELECT id FROM providers
+          WHERE regexp_replace(phone,'\\D','','g') = regexp_replace($1,'\\D','','g')
+          LIMIT 1`,
+        [phone]
+      );
+
+      if (exists.rowCount === 0) {
+        const email = `tg_${Date.now()}@telegram.local`;
+
+        const ins = await client.query(
+          `
+          INSERT INTO providers (
+            name,
+            phone,
+            email,
+            password,
+            telegram_chat_id,
+            social,
+            type,
+            created_at
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,'provider',NOW())
+          RETURNING id
+          `,
+          [
+            name,
+            phone,
+            email,
+            "telegram",
+            chatId,
+            username ? `@${username}` : null,
+          ]
+        );
+
+        createdEntity = { role: "provider", id: ins.rows[0].id };
+      }
+    }
+
+    // ===== UPDATE LEAD =====
+    await client.query(
+      `
+      UPDATE leads
+         SET decision   = $2,
+             decided_at = NOW(),
+             status     = 'closed'
+       WHERE id = $1
+      `,
+      [id, decision]
     );
-    return res.json({ ok: true });
+
+    await client.query("COMMIT");
+
+    // ===== TELEGRAM NOTIFY =====
+    if (chatId) {
+      if (decision === "approved_provider") {
+        await tgSend(
+          chatId,
+          `✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard`
+        );
+      }
+      if (decision === "approved_client") {
+        await tgSend(
+          chatId,
+          `✅ Ваша заявка одобрена!\n\nТеперь вы можете пользоваться сервисами Travella.\n👉 https://travella.uz`
+        );
+      }
+      if (decision === "rejected") {
+        await tgSend(
+          chatId,
+          `❌ К сожалению, ваша заявка была отклонена.\n\nЕсли вы считаете это ошибкой — свяжитесь с поддержкой Travella.`
+        );
+      }
+    }
+
+    return res.json({
+      ok: true,
+      decision,
+      created: createdEntity,
+    });
   } catch (e) {
-    console.error("updateLeadAssignee error:", e);
-    return res.status(500).json({ ok: false, error: "update_failed" });
+    await client.query("ROLLBACK");
+    console.error("decideLead error:", e);
+    return res.status(500).json({ ok: false, error: "decide_failed" });
+  } finally {
+    client.release();
   }
 };
