@@ -1,6 +1,6 @@
 // backend/controllers/telegramProviderController.js
-
 const pool = require("../db");
+const axiosBase = require("axios");
 const { tgSend } = require("../utils/telegram");
 
 const REFUSED_CATEGORIES = [
@@ -9,6 +9,95 @@ const REFUSED_CATEGORIES = [
   "refused_flight",
   "refused_ticket",
 ];
+
+const TG_TOKEN =
+  process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
+  process.env.TELEGRAM_BOT_TOKEN ||
+  "";
+
+const tgAxios = axiosBase.create({
+  timeout: 15000,
+});
+
+// ---------- helpers ----------
+function guessMimeByPath(path) {
+  const p = String(path || "").toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".webp")) return "image/webp";
+  if (p.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function tgFileIdToDataUrl(fileId) {
+  if (!TG_TOKEN) return null;
+  if (!fileId) return null;
+
+  // 1) getFile
+  const getFileUrl = `https://api.telegram.org/bot${TG_TOKEN}/getFile`;
+  const r1 = await tgAxios.get(getFileUrl, { params: { file_id: fileId } });
+
+  const filePath = r1?.data?.result?.file_path;
+  if (!filePath) return null;
+
+  // 2) download
+  const dlUrl = `https://api.telegram.org/file/bot${TG_TOKEN}/${filePath}`;
+  const r2 = await tgAxios.get(dlUrl, { responseType: "arraybuffer" });
+
+  const buf = Buffer.from(r2.data);
+
+  // safety: не тащим гигантские файлы в base64
+  const MAX = 6 * 1024 * 1024; // 6MB
+  if (buf.length > MAX) return null;
+
+  const mime = guessMimeByPath(filePath);
+  const b64 = buf.toString("base64");
+  return `data:${mime};base64,${b64}`;
+}
+
+async function normalizeImagesForDb(images) {
+  // В БД хотим хранить либо:
+  // - data:image/...;base64,...
+  // - http(s)://...
+  // - /relative/path (если у тебя такое бывает)
+  // А tg:<fileId> конвертим в dataURL
+  if (!Array.isArray(images)) return [];
+
+  const out = [];
+  for (const it of images) {
+    if (typeof it === "string") {
+      const s = it.trim();
+      if (!s) continue;
+
+      // tg:fileId -> dataURL
+      if (s.startsWith("tg:")) {
+        const fileId = s.slice(3).trim();
+        try {
+          const dataUrl = await tgFileIdToDataUrl(fileId);
+          if (dataUrl) {
+            out.push(dataUrl);
+            continue;
+          }
+          // если не получилось — не падаем, но и мусор не кладём
+        } catch (e) {
+          console.log("[telegram] tgFileIdToDataUrl failed:", e?.message || e);
+        }
+        continue;
+      }
+
+      out.push(s);
+      continue;
+    }
+
+    // если прилетит объект — попробуем вытащить url
+    if (it && typeof it === "object") {
+      const v =
+        it.url || it.src || it.path || it.location || it.href || null;
+      if (typeof v === "string" && v.trim()) out.push(v.trim());
+    }
+  }
+
+  return out;
+}
 
 /**
  * Получить заявки поставщика по его Telegram chatId
@@ -199,7 +288,6 @@ async function getProviderServices(req, res) {
   try {
     const { chatId } = req.params;
 
-    // 1) Находим поставщика по telegram_chat_id
     const providerRes = await pool.query(
       `SELECT id, name
          FROM providers
@@ -216,7 +304,6 @@ async function getProviderServices(req, res) {
 
     const providerId = providerRes.rows[0].id;
 
-    // 2) Берём его услуги из services
     const categories = REFUSED_CATEGORIES;
 
     const servicesRes = await pool.query(
@@ -271,7 +358,6 @@ async function serviceActionFromBot(req, res, action) {
         .json({ success: false, error: "BAD_SERVICE_ID" });
     }
 
-    // Находим поставщика
     const providerRes = await pool.query(
       `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
       [chatId]
@@ -283,7 +369,6 @@ async function serviceActionFromBot(req, res, action) {
     }
     const providerId = providerRes.rows[0].id;
 
-    // Проверяем, что услуга принадлежит ему
     const svcRes = await pool.query(
       `SELECT id, status, details, expiration_at
          FROM services
@@ -300,7 +385,6 @@ async function serviceActionFromBot(req, res, action) {
     let updated;
 
     if (action === "unpublish") {
-      // Снять с продажи: ставим isActive=false и expiration в прошлое
       const updRes = await pool.query(
         `
           UPDATE services
@@ -321,7 +405,6 @@ async function serviceActionFromBot(req, res, action) {
       );
       updated = updRes.rows[0];
     } else if (action === "extend7") {
-      // Продлить на 7 дней: expiration_at и details.expiration
       const updRes = await pool.query(
         `
           UPDATE services
@@ -343,7 +426,6 @@ async function serviceActionFromBot(req, res, action) {
       );
       updated = updRes.rows[0];
     } else if (action === "archive") {
-      // Архив: статус archived + isActive=false
       const updRes = await pool.query(
         `
           UPDATE services
@@ -413,7 +495,6 @@ async function createServiceFromBot(req, res) {
         .json({ success: false, error: "TITLE_REQUIRED" });
     }
 
-    // Находим поставщика
     const providerRes = await pool.query(
       `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
       [chatId]
@@ -425,7 +506,6 @@ async function createServiceFromBot(req, res) {
     }
     const providerId = providerRes.rows[0].id;
 
-    // Парсим цену
     let priceNum = null;
     if (price !== undefined && price !== null && price !== "") {
       const n = Number(price);
@@ -434,16 +514,17 @@ async function createServiceFromBot(req, res) {
       }
     }
 
-    const safeDetails =
-      details && typeof details === "object" ? details : {};
-    const safeImages = Array.isArray(images) ? images : [];
+    const safeDetails = details && typeof details === "object" ? details : {};
+    const safeImagesArr = Array.isArray(images) ? images : [];
 
-    // ✅ критично: сериализуем в JSON строки, чтобы ::jsonb не ломался
+    // ✅ ключевое: преобразуем tg:fileId в data:image;base64
+    const normalizedImages = await normalizeImagesForDb(safeImagesArr);
+
+    // ✅ КРИТИЧНО: jsonb — всегда строкой
     const safeDetailsJson = JSON.stringify(safeDetails);
-    const safeImagesJson = JSON.stringify(safeImages);
+    const safeImagesJson = JSON.stringify(normalizedImages);
 
-    // ✅ ВАЖНО: чтобы админка /admin/moderation увидела услугу в "Ожидают"
-    // ставим status = 'pending' (а не submitted)
+    // ⚠️ статус делаем pending, чтобы админка точно увидела в "Ожидают"
     const insertRes = await pool.query(
       `
         INSERT INTO services (
