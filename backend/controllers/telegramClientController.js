@@ -1,5 +1,6 @@
 // backend/controllers/telegramClientController.js
 const pool = require("../db");
+const { tgSendToAdmins } = require("../utils/telegram");
 
 /**
  * Технический bcrypt-хэш какого-то "левого" пароля,
@@ -88,7 +89,7 @@ async function linkAccount(req, res) {
       requestedRole
     );
 
-    // 1) Уже есть в базе?
+    // 1) Уже есть в базе (providers/clients)?
     const found = await findUserByPhone(normPhone);
 
     if (found) {
@@ -191,61 +192,80 @@ async function linkAccount(req, res) {
       });
     }
 
-// 🔒 ПРОВЕРКА: есть ли уже активный lead по этому номеру
-const existingLead = await pool.query(
-  `
-  SELECT id
-  FROM leads
-  WHERE regexp_replace(phone,'\\D','','g') = $1
-    AND status = 'new'
-    AND decision IS NULL
-  LIMIT 1
-  `,
-  [normPhone]
-);
+    // ===== новый ПОСТАВЩИК: создаём lead =====
+    if (requestedRole === "provider") {
+      // 🔒 защита от дублей: если уже есть активный lead (new, decision null) по этому номеру
+      const existingLead = await pool.query(
+        `
+          SELECT id
+            FROM leads
+           WHERE regexp_replace(phone,'\\D','','g') = $1
+             AND status = 'new'
+             AND decision IS NULL
+           LIMIT 1
+        `,
+        [normPhone]
+      );
 
-if (existingLead.rowCount > 0) {
-  return res.json({
-    success: true,
-    role: "provider_lead",
-    leadId: existingLead.rows[0].id,
-    existed: true,
-  });
-}
-    
-// --- новый ПОСТАВЩИК: создаём lead ---
-if (requestedRole === "provider") {
-  const insertLead = await pool.query(
-    `
-      INSERT INTO leads (
-        phone,
-        name,
-        source,
-        status,
-        created_at,
-        telegram_chat_id,
-        telegram_username,
-        telegram_first_name,
-        requested_role
-      )
-      VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'provider')
-      RETURNING id
-    `,
-    [phone, displayName, chatId, username || null, firstName || null]
-  );
+      if (existingLead.rowCount > 0) {
+        const leadId = existingLead.rows[0].id;
 
-  const lead = insertLead.rows[0];
-  console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
+        return res.json({
+          success: true,
+          role: "provider_lead",
+          leadId,
+          existed: true,
+          created: null,
+          requestedRole,
+        });
+      }
 
-  return res.json({
-    success: true,
-    role: "provider_lead",
-    leadId: lead.id,
-    existed: false,
-    created: "provider_lead",
-    requestedRole,
-  });
-}
+      const insertLead = await pool.query(
+        `
+          INSERT INTO leads (
+            phone,
+            name,
+            source,
+            status,
+            created_at,
+            telegram_chat_id,
+            telegram_username,
+            telegram_first_name,
+            requested_role
+          )
+          VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'provider')
+          RETURNING id
+        `,
+        [phone, displayName, chatId, username || null, firstName || null]
+      );
+
+      const lead = insertLead.rows[0];
+      console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
+
+      // ✅ уведомляем админов (если настроен TELEGRAM_ADMIN_CHAT_IDS)
+      try {
+        await tgSendToAdmins(
+          `🆕 Новый поставщик (Telegram)\n` +
+            `ID лида: ${lead.id}\n` +
+            `Имя: ${displayName}\n` +
+            `Телефон: ${phone}\n` +
+            `Chat ID: ${chatId}\n` +
+            `Источник: telegram_provider\n` +
+            `Открыть: https://travella.uz/admin/leads`
+        );
+      } catch (e) {
+        console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
+      }
+
+      return res.json({
+        success: true,
+        role: "provider_lead",
+        leadId: lead.id,
+        existed: false,
+        created: "provider_lead",
+        requestedRole,
+      });
+    }
 
     return res.status(400).json({ error: "invalid role" });
   } catch (e) {
@@ -389,23 +409,19 @@ async function searchClientServices(req, res) {
         LEFT JOIN providers p ON p.id = s.provider_id
         WHERE s.category = $1
           AND s.status IN ('approved', 'published', 'active')
-          -- 1) Явно снятые с продажи услуги (isActive=false) НЕ показываем
           AND (
             s.details IS NULL
             OR (s.details::jsonb->>'isActive') IS NULL
             OR LOWER(s.details::jsonb->>'isActive') = 'true'
           )
-          -- 2) Тайм-лимит: expiration_at в таблице services
           AND (
             s.expiration_at IS NULL
             OR s.expiration_at > NOW()
           )
-          -- 3) Тайм-лимит: expiration в JSON details (старый формат)
           AND (
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
           )
-          -- 4) Даты тура/перелёта: если тур уже закончился, не показываем
           AND (
             COALESCE(
               (s.details::jsonb->>'endFlightDate')::date,
@@ -484,8 +500,6 @@ async function loadProviderServiceByChat(serviceId, chatId) {
 
 /**
  * GET /api/telegram/provider/:chatId/services
- * Список маркетплейс-услуг (отказные туры/отели/авиабилеты/билеты)
- * для поставщика, привязанного к telegram_chat_id = :chatId
  */
 async function getProviderServices(req, res) {
   const { chatId } = req.params;
@@ -534,8 +548,6 @@ async function getProviderServices(req, res) {
 
 /**
  * POST /api/telegram/provider/service/:serviceId/toggle-active
- * body: { chatId }
- * Переключаем details.isActive (true/false)
  */
 async function toggleProviderServiceActive(req, res) {
   const serviceId = Number(req.params.serviceId);
@@ -554,7 +566,7 @@ async function toggleProviderServiceActive(req, res) {
     }
 
     const details = parseDetails(row.details);
-    const currentActive = details.isActive !== false; // по умолчанию true
+    const currentActive = details.isActive !== false;
     details.isActive = !currentActive;
 
     await pool.query(`UPDATE services SET details = $1 WHERE id = $2`, [
@@ -579,8 +591,6 @@ async function toggleProviderServiceActive(req, res) {
 
 /**
  * POST /api/telegram/provider/service/:serviceId/extend-7
- * body: { chatId }
- * Продлеваем expiration ещё на 7 дней
  */
 async function extendProviderServiceExpiration7(req, res) {
   const serviceId = Number(req.params.serviceId);
@@ -609,9 +619,7 @@ async function extendProviderServiceExpiration7(req, res) {
       const d = new Date(row.expiration);
       if (!Number.isNaN(d.getTime())) baseDate = d;
     }
-    if (!baseDate) {
-      baseDate = new Date();
-    }
+    if (!baseDate) baseDate = new Date();
 
     const newDate = new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
     const newExpiration = formatDateYYYYMMDD(newDate);
@@ -630,10 +638,7 @@ async function extendProviderServiceExpiration7(req, res) {
       service: updated,
     });
   } catch (e) {
-    console.error(
-      "[telegram] extendProviderServiceExpiration7 error:",
-      e
-    );
+    console.error("[telegram] extendProviderServiceExpiration7 error:", e);
     return res.status(500).json({
       success: false,
       error: "SERVER_ERROR",
@@ -643,8 +648,6 @@ async function extendProviderServiceExpiration7(req, res) {
 
 /**
  * POST /api/telegram/provider/service/:serviceId/archive
- * body: { chatId }
- * Переводим статус в archived + isActive = false
  */
 async function archiveProviderService(req, res) {
   const serviceId = Number(req.params.serviceId);
@@ -690,7 +693,6 @@ module.exports = {
   getProfileByChat,
   searchCategory,
   searchClientServices,
-  // новое:
   getProviderServices,
   toggleProviderServiceActive,
   extendProviderServiceExpiration7,
