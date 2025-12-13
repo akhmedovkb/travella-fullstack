@@ -191,29 +191,39 @@ async function linkAccount(req, res) {
       });
     }
 
-    // --- новый ПОСТАВЩИК: создаём lead ---
-    if (requestedRole === "provider") {
-      const insertLead = await pool.query(
-        `
-          INSERT INTO leads (phone, name, source, status, created_at)
-          VALUES ($1, $2, 'telegram_provider', 'new', NOW())
-          RETURNING id
-        `,
-        [phone, displayName]
-      );
+// --- новый ПОСТАВЩИК: создаём lead ---
+if (requestedRole === "provider") {
+  const insertLead = await pool.query(
+    `
+      INSERT INTO leads (
+        phone,
+        name,
+        source,
+        status,
+        created_at,
+        telegram_chat_id,
+        telegram_username,
+        telegram_first_name,
+        requested_role
+      )
+      VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'provider')
+      RETURNING id
+    `,
+    [phone, displayName, chatId, username || null, firstName || null]
+  );
 
-      const lead = insertLead.rows[0];
-      console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
+  const lead = insertLead.rows[0];
+  console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
 
-      return res.json({
-        success: true,
-        role: "provider_lead",
-        leadId: lead.id,
-        existed: false,
-        created: "provider_lead",
-        requestedRole,
-      });
-    }
+  return res.json({
+    success: true,
+    role: "provider_lead",
+    leadId: lead.id,
+    existed: false,
+    created: "provider_lead",
+    requestedRole,
+  });
+}
 
     return res.status(400).json({ error: "invalid role" });
   } catch (e) {
