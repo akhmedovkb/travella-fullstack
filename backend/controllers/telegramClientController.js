@@ -323,10 +323,6 @@ async function searchCategory(req, res) {
  * Основной поиск для бота и inline-бота
  * GET /api/telegram/client/:chatId/search?category=refused_tour
  */
-/**
- * Основной поиск для бота и inline-бота
- * GET /api/telegram/client/:chatId/search?category=refused_tour
- */
 async function searchClientServices(req, res) {
   try {
     const { chatId } = req.params; // формально
@@ -409,7 +405,6 @@ async function searchClientServices(req, res) {
     });
   }
 }
-
 
 /* ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРОВАЙДЕРСКОЙ ПАНЕЛИ В БОТЕ ===== */
 
