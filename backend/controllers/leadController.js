@@ -2,6 +2,7 @@
 
 const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
+const { tgSendToAdmins } = require("../utils/telegram");
 
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
@@ -27,6 +28,22 @@ async function createLead(req, res) {
        RETURNING id, created_at, status`,
       [name, phone, city, pax, comment, page, lang, service]
     );
+
+    // ✅ уведомление админам (без риска сломать создание лида)
+    try {
+      await tgSendToAdmins(
+        `🆕 Новый лид (сайт)\n` +
+          `ID: ${q.rows[0].id}\n` +
+          `Имя: ${name || "—"}\n` +
+          `Телефон: ${phone || "—"}\n` +
+          `Город/даты: ${city || "—"}\n` +
+          `Страница: ${page || "—"}\n` +
+          `Язык: ${lang || "—"}\n` +
+          `Открыть: https://travella.uz/admin/leads`
+      );
+    } catch (e) {
+      console.error("[lead] tgSendToAdmins failed:", e?.message || e);
+    }
 
     return res.json({ ok: true, id: q.rows[0].id });
   } catch (e) {
