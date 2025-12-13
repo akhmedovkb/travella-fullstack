@@ -1,18 +1,27 @@
-// backend/routes/leadRoutes.js
-
 const express = require("express");
 const router = express.Router();
-const { createLead, listLeads, updateLeadStatus, listLeadPages } = require("../controllers/leadController");
+
+const {
+  createLead,
+  listLeads,
+  updateLeadStatus,
+  listLeadPages,
+  decideLead,               // 👈 НОВОЕ
+} = require("../controllers/leadController");
+
 const authenticateToken = require("../middleware/authenticateToken");
 
-// Публичная точка для форм лендинга
+// Публично (лендинги / бот)
 router.post("/", createLead);
 
-// Список лидов — только авторизованные (админ/модератор/провайдер по твоим правилам)
+// Админка
 router.get("/", authenticateToken, listLeads);
 router.get("/pages", authenticateToken, listLeadPages);
 
-// Обновление статуса
+// Старое обновление статуса (оставляем)
 router.patch("/:id", authenticateToken, updateLeadStatus);
+
+// 🔥 НОВОЕ: принять / отклонить лид
+router.patch("/:id/decision", authenticateToken, decideLead);
 
 module.exports = router;
