@@ -229,26 +229,24 @@ export default function AdminLeads() {
 
                   <td className="py-2 pr-4">
                     {isTelegram && undecided ? (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          onClick={() =>
-                            decide(r.id, "approved_provider")
-                          }
-                          className="px-3 py-1 rounded bg-green-600 text-white"
+                          onClick={() => decide(r.id, "approved_provider")}
+                          className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
                         >
-                          Принять как поставщика
+                          Принять (поставщик)
                         </button>
+                      
                         <button
-                          onClick={() =>
-                            decide(r.id, "approved_client")
-                          }
-                          className="px-3 py-1 rounded bg-blue-600 text-white"
+                          onClick={() => decide(r.id, "approved_client")}
+                          className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
                         >
-                          Принять как клиента
+                          Принять (клиент)
                         </button>
+                      
                         <button
                           onClick={() => decide(r.id, "rejected")}
-                          className="px-3 py-1 rounded bg-red-600 text-white"
+                          className="px-2 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap"
                         >
                           Отклонить
                         </button>
