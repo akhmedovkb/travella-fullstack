@@ -77,3 +77,17 @@ export async function listLeadPages() {
   });
   return json(res);
 }
+
+/** Принять/отклонить лид (Telegram заявки) */
+export async function decideLead(id, decision) {
+  const res = await fetch(`${API_BASE}/api/leads/${id}/decision`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(),
+    },
+    body: JSON.stringify({ decision }),
+  });
+  return json(res);
+}
