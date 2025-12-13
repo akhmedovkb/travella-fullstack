@@ -5,7 +5,6 @@ import {
   listLeads,
   updateLeadStatus as apiUpdateStatus,
   listLeadPages,
-  // ⬇️ добавь в frontend/src/api/leads.js
   decideLead as apiDecideLead,
 } from "../../api/leads";
 
