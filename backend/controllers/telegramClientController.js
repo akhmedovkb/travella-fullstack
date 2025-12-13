@@ -191,6 +191,28 @@ async function linkAccount(req, res) {
       });
     }
 
+// 🔒 ПРОВЕРКА: есть ли уже активный lead по этому номеру
+const existingLead = await pool.query(
+  `
+  SELECT id
+  FROM leads
+  WHERE regexp_replace(phone,'\\D','','g') = $1
+    AND status = 'new'
+    AND decision IS NULL
+  LIMIT 1
+  `,
+  [normPhone]
+);
+
+if (existingLead.rowCount > 0) {
+  return res.json({
+    success: true,
+    role: "provider_lead",
+    leadId: existingLead.rows[0].id,
+    existed: true,
+  });
+}
+    
 // --- новый ПОСТАВЩИК: создаём lead ---
 if (requestedRole === "provider") {
   const insertLead = await pool.query(
