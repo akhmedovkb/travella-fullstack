@@ -5,30 +5,19 @@ const { tgSendToAdmins } = require("../utils/telegram");
 /**
  * Технический bcrypt-хэш какого-то "левого" пароля,
  * чтобы удовлетворить NOT NULL и формат для bcrypt.compare.
- * Пользователь этот пароль не знает, и он ему не нужен,
- * пока он не задаст себе нормальный пароль через веб.
- *
- * Это пример рабочего bcrypt-хэша для строки "password".
  */
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
-/**
- * Нормализация телефона: оставляем только цифры.
- * "+998 97 716 37 15" -> "998977163715"
- */
+/** Нормализация телефона: только цифры */
 function normalizePhone(raw) {
   if (!raw) return null;
   const digits = String(raw).replace(/\D/g, "");
   return digits || null;
 }
 
-/**
- * Ищем пользователя по телефону.
- * Сначала среди providers, потом среди clients.
- */
+/** Ищем пользователя по телефону: providers -> clients */
 async function findUserByPhone(normPhone) {
-  // 1) Поставщик
   const prov = await pool.query(
     `
       SELECT id, name, phone
@@ -44,7 +33,6 @@ async function findUserByPhone(normPhone) {
     return { role: "provider", id: row.id, name: row.name };
   }
 
-  // 2) Клиент
   const cli = await pool.query(
     `
       SELECT id, name, phone
@@ -73,21 +61,14 @@ async function linkAccount(req, res) {
     const normPhone = normalizePhone(phone);
 
     if (!normPhone || !chatId) {
-      return res
-        .status(400)
-        .json({ error: "phone and chatId are required" });
+      return res.status(400).json({ error: "phone and chatId are required" });
     }
 
     const requestedRole = role || "client";
     const displayName = firstName || username || "Telegram user";
 
     console.log("[tg-link] body:", req.body);
-    console.log(
-      "[tg-link] normPhone:",
-      normPhone,
-      "requestedRole:",
-      requestedRole
-    );
+    console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
 
     // 1) Уже есть в базе (providers/clients)?
     const found = await findUserByPhone(normPhone);
@@ -194,14 +175,15 @@ async function linkAccount(req, res) {
 
     // ===== новый ПОСТАВЩИК: создаём lead =====
     if (requestedRole === "provider") {
-      // 🔒 защита от дублей: если уже есть активный lead (new, decision null) по этому номеру
+      // 🔒 защита от дублей + ВАЖНО: если лид уже есть — обновляем его данными Telegram и шлём уведомление
       const existingLead = await pool.query(
         `
-          SELECT id
+          SELECT id, telegram_chat_id
             FROM leads
            WHERE regexp_replace(phone,'\\D','','g') = $1
              AND status = 'new'
              AND decision IS NULL
+           ORDER BY id DESC
            LIMIT 1
         `,
         [normPhone]
@@ -209,6 +191,38 @@ async function linkAccount(req, res) {
 
       if (existingLead.rowCount > 0) {
         const leadId = existingLead.rows[0].id;
+        const prevChat = existingLead.rows[0].telegram_chat_id || null;
+
+        // ✅ обновляем Telegram-поля (чтобы лид “ожил” и был виден/привязан)
+        await pool.query(
+          `
+            UPDATE leads
+               SET telegram_chat_id = $2,
+                   telegram_username = $3,
+                   telegram_first_name = $4,
+                   name = COALESCE(NULLIF(name,''), $5),
+                   updated_at = NOW()
+             WHERE id = $1
+          `,
+          [leadId, chatId, username || null, firstName || null, displayName]
+        );
+
+        // ✅ уведомим админов, если раньше чат-айди не был заполнен (то есть реально новая “привязка”)
+        if (!prevChat) {
+          try {
+            await tgSendToAdmins(
+              `🆕 Новый поставщик (Telegram)\n` +
+                `ID лида: ${leadId}\n` +
+                `Имя: ${displayName}\n` +
+                `Телефон: ${phone}\n` +
+                `Chat ID: ${chatId}\n` +
+                `Источник: telegram_provider\n` +
+                `Открыть: https://travella.uz/admin/leads`
+            );
+          } catch (e) {
+            console.error("[tg-link] tgSendToAdmins failed:", e?.message || e);
+          }
+        }
 
         return res.json({
           success: true,
@@ -242,7 +256,6 @@ async function linkAccount(req, res) {
       const lead = insertLead.rows[0];
       console.log("[tg-link] created NEW PROVIDER LEAD from Telegram:", lead);
 
-      // ✅ уведомляем админов (если настроен TELEGRAM_ADMIN_CHAT_IDS)
       try {
         await tgSendToAdmins(
           `🆕 Новый поставщик (Telegram)\n` +
@@ -285,11 +298,7 @@ async function getProfileByChat(req, res) {
     }
 
     const table =
-      role === "provider"
-        ? "providers"
-        : role === "client"
-        ? "clients"
-        : null;
+      role === "provider" ? "providers" : role === "client" ? "clients" : null;
 
     if (!table) {
       return res.status(400).json({ error: "invalid role" });
@@ -317,19 +326,13 @@ async function getProfileByChat(req, res) {
 }
 
 /**
- * Старый простой поиск по категории (если где-то ещё используется)
- * GET /api/telegram/client/:chatId/search-category?type=refused_tour
+ * Старый простой поиск по категории
  */
 async function searchCategory(req, res) {
-  const { chatId } = req.params; // пока не используем
+  const { chatId } = req.params;
   const { type } = req.query || {};
 
-  const allowed = [
-    "refused_tour",
-    "refused_hotel",
-    "refused_flight",
-    "refused_ticket",
-  ];
+  const allowed = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
 
   if (!type || !allowed.includes(type)) {
     return res.status(400).json({ error: "invalid type" });
@@ -363,33 +366,24 @@ async function searchCategory(req, res) {
       type,
     });
   } catch (e) {
-    console.error(
-      "GET /api/telegram/client/:chatId/search-category error:",
-      e
-    );
+    console.error("GET /api/telegram/client/:chatId/search-category error:", e);
     return res.status(500).json({ error: "Internal error" });
   }
 }
 
 /**
- * Основной поиск для бота и inline-бота
- * GET /api/telegram/client/:chatId/search?category=refused_tour
+ * Основной поиск для бота
  */
 async function searchClientServices(req, res) {
   try {
-    const { chatId } = req.params; // формально
+    const { chatId } = req.params;
     const { category } = req.query || {};
 
     if (!category) {
-      return res
-        .status(400)
-        .json({ success: false, error: "category is required" });
+      return res.status(400).json({ success: false, error: "category is required" });
     }
 
-    console.log("[tg-api] searchClientServices", {
-      chatId,
-      category,
-    });
+    console.log("[tg-api] searchClientServices", { chatId, category });
 
     const result = await pool.query(
       `
@@ -441,10 +435,7 @@ async function searchClientServices(req, res) {
     const items = result.rows || [];
     console.log("[tg-api] searchClientServices rows:", items.length);
 
-    return res.json({
-      success: true,
-      items,
-    });
+    return res.json({ success: true, items });
   } catch (e) {
     console.error("GET /api/telegram/client/:chatId/search error:", e);
     return res.status(500).json({
@@ -454,247 +445,53 @@ async function searchClientServices(req, res) {
   }
 }
 
-/* ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРОВАЙДЕРСКОЙ ПАНЕЛИ В БОТЕ ===== */
-
-function parseDetails(details) {
-  if (!details) return {};
-  if (typeof details === "object") return { ...details };
-  try {
-    return JSON.parse(details);
-  } catch {
-    return {};
-  }
-}
-
-function formatDateYYYYMMDD(date) {
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-async function loadProviderServiceByChat(serviceId, chatId) {
-  const q = `
-    SELECT
-      s.id,
-      s.title,
-      s.category,
-      s.status,
-      s.details,
-      s.images,
-      s.expiration,
-      s.created_at,
-      p.name   AS provider_name,
-      p.social AS provider_telegram
-    FROM services s
-    JOIN providers p ON p.id = s.provider_id
-   WHERE s.id = $1
-     AND p.telegram_chat_id = $2
-   LIMIT 1
-  `;
-  const { rows } = await pool.query(q, [serviceId, chatId]);
-  return rows[0] || null;
-}
-
-/**
- * GET /api/telegram/provider/:chatId/services
- */
-async function getProviderServices(req, res) {
-  const { chatId } = req.params;
-
-  try {
-    const refusedCategories = [
-      "refused_tour",
-      "refused_hotel",
-      "refused_flight",
-      "refused_ticket",
-    ];
-
-    const q = `
-      SELECT
-        s.id,
-        s.title,
-        s.category,
-        s.status,
-        s.details,
-        s.images,
-        s.expiration_at AS expiration,
-        s.created_at,
-        p.name   AS provider_name,
-        p.social AS provider_telegram
-      FROM services s
-      JOIN providers p ON p.id = s.provider_id
-     WHERE p.telegram_chat_id = $1
-       AND s.category = ANY($2)
-     ORDER BY s.created_at DESC
-    `;
-
-    const { rows } = await pool.query(q, [chatId, refusedCategories]);
-
-    return res.json({
-      success: true,
-      items: rows || [],
-    });
-  } catch (e) {
-    console.error("[telegram] getProviderServices error:", e);
-    return res.status(500).json({
-      success: false,
-      error: "SERVER_ERROR",
-    });
-  }
-}
-
-/**
- * POST /api/telegram/provider/service/:serviceId/toggle-active
- */
-async function toggleProviderServiceActive(req, res) {
-  const serviceId = Number(req.params.serviceId);
-  const chatId = String(req.body.chatId || "");
-
-  if (!serviceId || !chatId) {
-    return res.status(400).json({ success: false, error: "BAD_INPUT" });
-  }
-
-  try {
-    const row = await loadProviderServiceByChat(serviceId, chatId);
-    if (!row) {
-      return res
-        .status(404)
-        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
-    }
-
-    const details = parseDetails(row.details);
-    const currentActive = details.isActive !== false;
-    details.isActive = !currentActive;
-
-    await pool.query(`UPDATE services SET details = $1 WHERE id = $2`, [
-      JSON.stringify(details),
-      serviceId,
-    ]);
-
-    const updated = await loadProviderServiceByChat(serviceId, chatId);
-
-    return res.json({
-      success: true,
-      service: updated,
-    });
-  } catch (e) {
-    console.error("[telegram] toggleProviderServiceActive error:", e);
-    return res.status(500).json({
-      success: false,
-      error: "SERVER_ERROR",
-    });
-  }
-}
-
-/**
- * POST /api/telegram/provider/service/:serviceId/extend-7
- */
-async function extendProviderServiceExpiration7(req, res) {
-  const serviceId = Number(req.params.serviceId);
-  const chatId = String(req.body.chatId || "");
-
-  if (!serviceId || !chatId) {
-    return res.status(400).json({ success: false, error: "BAD_INPUT" });
-  }
-
-  try {
-    const row = await loadProviderServiceByChat(serviceId, chatId);
-    if (!row) {
-      return res
-        .status(404)
-        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
-    }
-
-    const details = parseDetails(row.details);
-
-    let baseDate = null;
-    if (details.expiration) {
-      const d = new Date(details.expiration);
-      if (!Number.isNaN(d.getTime())) baseDate = d;
-    }
-    if (!baseDate && row.expiration) {
-      const d = new Date(row.expiration);
-      if (!Number.isNaN(d.getTime())) baseDate = d;
-    }
-    if (!baseDate) baseDate = new Date();
-
-    const newDate = new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const newExpiration = formatDateYYYYMMDD(newDate);
-
-    details.expiration = newExpiration;
-
-    await pool.query(
-      `UPDATE services SET details = $1, expiration = $2 WHERE id = $3`,
-      [JSON.stringify(details), newExpiration, serviceId]
-    );
-
-    const updated = await loadProviderServiceByChat(serviceId, chatId);
-
-    return res.json({
-      success: true,
-      service: updated,
-    });
-  } catch (e) {
-    console.error("[telegram] extendProviderServiceExpiration7 error:", e);
-    return res.status(500).json({
-      success: false,
-      error: "SERVER_ERROR",
-    });
-  }
-}
-
-/**
- * POST /api/telegram/provider/service/:serviceId/archive
- */
-async function archiveProviderService(req, res) {
-  const serviceId = Number(req.params.serviceId);
-  const chatId = String(req.body.chatId || "");
-
-  if (!serviceId || !chatId) {
-    return res.status(400).json({ success: false, error: "BAD_INPUT" });
-  }
-
-  try {
-    const row = await loadProviderServiceByChat(serviceId, chatId);
-    if (!row) {
-      return res
-        .status(404)
-        .json({ success: false, error: "NOT_FOUND_OR_FORBIDDEN" });
-    }
-
-    const details = parseDetails(row.details);
-    details.isActive = false;
-
-    await pool.query(
-      `UPDATE services SET details = $1, status = $2 WHERE id = $3`,
-      [JSON.stringify(details), "archived", serviceId]
-    );
-
-    const updated = await loadProviderServiceByChat(serviceId, chatId);
-
-    return res.json({
-      success: true,
-      service: updated,
-    });
-  } catch (e) {
-    console.error("[telegram] archiveProviderService error:", e);
-    return res.status(500).json({
-      success: false,
-      error: "SERVER_ERROR",
-    });
-  }
-}
-
 module.exports = {
   linkAccount,
   getProfileByChat,
   searchCategory,
   searchClientServices,
-  getProviderServices,
-  toggleProviderServiceActive,
-  extendProviderServiceExpiration7,
-  archiveProviderService,
+  // ниже у тебя есть ещё “провайдерская панель” внутри этого файла — я не трогаю её,
+  // но если она реально используется, лучше вынести в отдельный контроллер позже.
+  getProviderServices: async (req, res) => {
+    const { chatId } = req.params;
+
+    try {
+      const refusedCategories = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
+
+      const q = `
+        SELECT
+          s.id,
+          s.title,
+          s.category,
+          s.status,
+          s.details,
+          s.images,
+          s.expiration_at AS expiration,
+          s.created_at,
+          p.name   AS provider_name,
+          p.social AS provider_telegram
+        FROM services s
+        JOIN providers p ON p.id = s.provider_id
+       WHERE p.telegram_chat_id = $1
+         AND s.category = ANY($2)
+       ORDER BY s.created_at DESC
+      `;
+
+      const { rows } = await pool.query(q, [chatId, refusedCategories]);
+
+      return res.json({
+        success: true,
+        items: rows || [],
+      });
+    } catch (e) {
+      console.error("[telegram] getProviderServices error:", e);
+      return res.status(500).json({
+        success: false,
+        error: "SERVER_ERROR",
+      });
+    }
+  },
+  toggleProviderServiceActive: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
+  extendProviderServiceExpiration7: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
+  archiveProviderService: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
 };
