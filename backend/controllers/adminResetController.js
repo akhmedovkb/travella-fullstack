@@ -55,7 +55,7 @@ async function resetClient(req, res) {
     if (alsoResetLeads) {
       const norm = normalizePhone(client.phone);
       if (norm) {
-        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже, чтобы кнопка Reset исчезала
+        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже
         await pool.query(
           `UPDATE leads
               SET decision = NULL,
@@ -131,7 +131,7 @@ async function resetProvider(req, res) {
     if (alsoResetLeads) {
       const norm = normalizePhone(provider.phone);
       if (norm) {
-        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже, чтобы кнопка Reset исчезала
+        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже
         await pool.query(
           `UPDATE leads
               SET decision = NULL,
