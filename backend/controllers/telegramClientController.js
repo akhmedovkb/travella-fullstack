@@ -200,8 +200,7 @@ async function linkAccount(req, res) {
                SET telegram_chat_id = $2,
                    telegram_username = $3,
                    telegram_first_name = $4,
-                   name = COALESCE(NULLIF(name,''), $5),
-                   updated_at = NOW()
+                   name = COALESCE(NULLIF(name,''), $5)
              WHERE id = $1
           `,
           [leadId, chatId, username || null, firstName || null, displayName]
