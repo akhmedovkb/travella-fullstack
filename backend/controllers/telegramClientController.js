@@ -72,6 +72,30 @@ async function linkAccount(req, res) {
 
     // 1) Уже есть в базе (providers/clients)?
     const found = await findUserByPhone(normPhone);
+    // 🔒 Если поставщик уже существует и chatId совпадает — не создаём lead
+      if (found && found.role === "provider") {
+        const prov = await pool.query(
+          `SELECT id, telegram_chat_id
+             FROM providers
+            WHERE id = $1
+            LIMIT 1`,
+          [found.id]
+        );
+      
+        if (
+          prov.rowCount &&
+          String(prov.rows[0].telegram_chat_id) === String(chatId)
+        ) {
+          return res.json({
+            success: true,
+            role: "provider",
+            id: found.id,
+            existed: true,
+            alreadyLinked: true,
+            message: "already_registered_provider",
+          });
+        }
+      }
 
     if (found) {
       const foundRole = found.role; // 'provider' | 'client'
