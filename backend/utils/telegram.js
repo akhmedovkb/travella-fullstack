@@ -2,7 +2,10 @@
 const pool = require("../db");
 const axios = require("axios");
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ""; // старый бот (travella_uz_bot)
+const BOT_TOKEN =
+  process.env.TELEGRAM_CLIENT_BOT_TOKEN ||
+  process.env.TELEGRAM_BOT_TOKEN ||
+  "";
 const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || ""; // новый бот (OTKAZNYX...)
 const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
