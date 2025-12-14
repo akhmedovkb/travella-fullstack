@@ -28,7 +28,7 @@ module.exports = async function requireAdmin(req, res, next) {
 
     if (tokenSaysAdmin || tokenSaysModerator) return next();
 
-    // fallback: по БД (провайдер)
+    // fallback: проверяем провайдера по БД
     const providerId = Number(req.user.id || req.user.provider_id);
     if (!Number.isInteger(providerId)) {
       return res.status(403).json({ ok: false, error: "admin_only" });
