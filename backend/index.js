@@ -148,6 +148,10 @@ app.use("/api/meta", metaRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+// ✅ NEW: Admin reset tools (reset client/provider telegram binding, etc.)
+const adminResetRoutes = require("./routes/adminResetRoutes");
+app.use("/api/admin", adminResetRoutes);
+
 // Секции маркетплейса
 const marketplaceSectionsRoutes = require("./routes/marketplaceSectionsRoutes");
 app.use("/api/marketplace/sections", marketplaceSectionsRoutes);
