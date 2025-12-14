@@ -1,21 +1,13 @@
 // backend/routes/adminResetRoutes.js
 const router = require("express").Router();
 const authenticateToken = require("../middleware/authenticateToken");
-const {
-  resetClient,
-  resetProvider,
-} = require("../controllers/adminResetController");
+const requireAdmin = require("../middleware/requireAdmin");
 
-// Только админ
-function adminOnly(req, res, next) {
-  const role = req.user?.role || req.user?.type || null;
-  if (role !== "admin") {
-    return res.status(403).json({ ok: false, error: "admin_only" });
-  }
-  next();
-}
+const { resetClient, resetProvider } = require("../controllers/adminResetController");
 
-router.post("/reset-client", authenticateToken, adminOnly, resetClient);
-router.post("/reset-provider", authenticateToken, adminOnly, resetProvider);
+// Эти роуты должны быть доступны админам/модераторам так же,
+// как и остальные /api/admin/*
+router.post("/reset-client", authenticateToken, requireAdmin, resetClient);
+router.post("/reset-provider", authenticateToken, requireAdmin, resetProvider);
 
 module.exports = router;
