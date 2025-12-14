@@ -128,6 +128,14 @@ async function decideLead(req, res) {
 
     const phoneDigits = String(phone).replace(/\D/g, "");
 
+    function normalizeProviderType(raw) {
+      const v = String(raw || "").trim().toLowerCase();
+      if (!v) return "agent";
+      // исторически в лидах могло храниться "provider" — приводим к "agent"
+      if (v === "provider") return "agent";
+      return v;
+    }
+
     if (decision === "approved_client") {
       const exists = await db.query(
         `SELECT id FROM clients
@@ -165,12 +173,16 @@ async function decideLead(req, res) {
       if (!exists.rowCount) {
         const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
 
+        // requested_role в lead (например: agent/guide/transport/hotel)
+        // Важно: для турагентов хотим хранить type="agent" (а не "provider")
+        const providerType = normalizeProviderType(lead.requested_role);
+
         await db.query(
           `INSERT INTO providers (name, type, phone, email, password, social, telegram_chat_id)
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
             name,
-            "provider",
+            providerType,
             phone,
             email,
             "telegram",
@@ -193,7 +205,6 @@ async function decideLead(req, res) {
     // ✅ уведомляем пользователя в Telegram (если есть chatId)
     if (chatId) {
       if (decision === "approved_provider") {
-        // ✅ ВЕРСИЯ С КНОПКАМИ (как ты просил)
         await tgSend(
           chatId,
           "✅ Ваша заявка одобрена!\n\nВы зарегистрированы как поставщик Travella.",
