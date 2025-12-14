@@ -9,6 +9,9 @@ import {
   decideLead as apiDecideLead,
 } from "../../api/leads";
 
+// ✅ добавили axios-инстанс для вызова /api/admin/reset-*
+import api from "../../api";
+
 const STATUSES = [
   { val: "", label: "— все статусы —" },
   { val: "new", label: "new" },
@@ -235,6 +238,71 @@ export default function AdminLeads() {
       : "Принять (авто: поставщик)";
   }
 
+  // ✅ helpers для Reset-кнопок
+  function isClientLead(r) {
+    const rr = String(r.requested_role || "").trim().toLowerCase();
+    const src = String(r.source || "").trim().toLowerCase();
+    return rr === "client" || src === "telegram_client";
+  }
+
+  function isProviderLead(r) {
+    const rr = String(r.requested_role || "").trim().toLowerCase();
+    const src = String(r.source || "").trim().toLowerCase();
+    return rr === "agent" || rr === "provider" || src === "telegram_provider";
+  }
+
+  async function resetClientByLead(r) {
+    const phone = r.phone || "";
+    if (!phone) {
+      alert("У лида нет телефона — reset невозможен.");
+      return;
+    }
+    const ok = window.confirm(
+      `Сбросить Telegram-привязку КЛИЕНТА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
+    );
+    if (!ok) return;
+
+    try {
+      await api.post("/api/admin/reset-client", {
+        phone,
+        alsoResetLeads: true,
+      });
+      await fetchLeads();
+    } catch (e) {
+      const msg =
+        e?.response?.data?.error ||
+        e?.message ||
+        "Reset client failed";
+      alert(msg);
+    }
+  }
+
+  async function resetProviderByLead(r) {
+    const phone = r.phone || "";
+    if (!phone) {
+      alert("У лида нет телефона — reset невозможен.");
+      return;
+    }
+    const ok = window.confirm(
+      `Сбросить Telegram-привязку ПОСТАВЩИКА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
+    );
+    if (!ok) return;
+
+    try {
+      await api.post("/api/admin/reset-provider", {
+        phone,
+        alsoResetLeads: true,
+      });
+      await fetchLeads();
+    } catch (e) {
+      const msg =
+        e?.response?.data?.error ||
+        e?.message ||
+        "Reset provider failed";
+      alert(msg);
+    }
+  }
+
   return (
     <main className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Лиды</h1>
@@ -343,7 +411,9 @@ export default function AdminLeads() {
                     ) : null}
                   </td>
 
-                  <td className="py-2 pr-4 whitespace-nowrap">{r.phone || "—"}</td>
+                  <td className="py-2 pr-4 whitespace-nowrap">
+                    {r.phone || "—"}
+                  </td>
 
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-2">
@@ -383,7 +453,9 @@ export default function AdminLeads() {
                       <div className="space-y-1">
                         <div className="text-xs text-gray-700">
                           chat_id:{" "}
-                          <span className="font-mono">{String(r.telegram_chat_id)}</span>
+                          <span className="font-mono">
+                            {String(r.telegram_chat_id)}
+                          </span>
                         </div>
                         {r.telegram_username ? (
                           <div className="text-xs text-gray-500">
@@ -397,36 +469,61 @@ export default function AdminLeads() {
                   </td>
 
                   <td className="py-2 pr-4">
-                    {canAutoAccept ? (
+                    {isTelegramLead ? (
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => decide(r.id, auto)}
-                          className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
-                          title="Выбирает approved_client или approved_provider автоматически"
-                        >
-                          {autoLabel(auto)}
-                        </button>
+                        {canAutoAccept ? (
+                          <>
+                            <button
+                              onClick={() => decide(r.id, auto)}
+                              className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
+                              title="Выбирает approved_client или approved_provider автоматически"
+                            >
+                              {autoLabel(auto)}
+                            </button>
 
-                        <button
-                          onClick={() => decide(r.id, "approved_client")}
-                          className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300 whitespace-nowrap"
-                        >
-                          Принять (клиент)
-                        </button>
+                            <button
+                              onClick={() => decide(r.id, "approved_client")}
+                              className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300 whitespace-nowrap"
+                            >
+                              Принять (клиент)
+                            </button>
 
-                        <button
-                          onClick={() => decide(r.id, "approved_provider")}
-                          className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300 whitespace-nowrap"
-                        >
-                          Принять (поставщик)
-                        </button>
+                            <button
+                              onClick={() => decide(r.id, "approved_provider")}
+                              className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300 whitespace-nowrap"
+                            >
+                              Принять (поставщик)
+                            </button>
 
-                        <button
-                          onClick={() => decide(r.id, "rejected")}
-                          className="px-2 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap"
-                        >
-                          Отклонить
-                        </button>
+                            <button
+                              onClick={() => decide(r.id, "rejected")}
+                              className="px-2 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700 whitespace-nowrap"
+                            >
+                              Отклонить
+                            </button>
+                          </>
+                        ) : null}
+
+                        {/* ✅ Reset кнопки (видны только для Telegram лидов) */}
+                        {isClientLead(r) ? (
+                          <button
+                            onClick={() => resetClientByLead(r)}
+                            className="px-2 py-1 text-xs rounded bg-orange-500 text-white hover:bg-orange-600 whitespace-nowrap"
+                            title="Сбросить telegram_chat_id у клиента и вернуть telegram-lead в new"
+                          >
+                            Reset client
+                          </button>
+                        ) : null}
+
+                        {isProviderLead(r) ? (
+                          <button
+                            onClick={() => resetProviderByLead(r)}
+                            className="px-2 py-1 text-xs rounded bg-rose-600 text-white hover:bg-rose-700 whitespace-nowrap"
+                            title="Сбросить telegram_chat_id у поставщика и вернуть telegram-lead в new"
+                          >
+                            Reset provider
+                          </button>
+                        ) : null}
                       </div>
                     ) : (
                       <span className="text-gray-400">—</span>
