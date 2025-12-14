@@ -1,24 +1,37 @@
-// backend/utils/telegram.js
-
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
 const axios = require("axios");
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ""; // старый бот (travella_uz_bot)
+const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || ""; // новый бот (OTKAZNYX...)
 const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 const enabled = !!BOT_TOKEN;
+
 // Админские чаты (можно передать один id или список через запятую/пробел)
 const ADMIN_CHAT_IDS =
-  (process.env.ADMIN_TG_CHAT_IDS || process.env.ADMIN_TG_CHAT || "")
+  (process.env.ADMIN_TG_CHAT_IDS ||
+    process.env.ADMIN_TG_CHAT ||
+    process.env.TELEGRAM_ADMIN_CHAT_IDS ||
+    process.env.TELEGRAM_ADMIN_CHAT ||
+    "")
     .split(/[,\s]+/)
     .map((x) => x.trim())
     .filter(Boolean);
 
 /* ================== low-level helpers ================== */
 
-async function tgSend(chatId, text, extra = {}) {
-  if (!enabled || !chatId || !text) return false;
+/**
+ * tgSend: по умолчанию шлёт через старого бота (TELEGRAM_BOT_TOKEN)
+ * но можно передать 4-м аргументом tokenOverride — чтобы шлём через другой токен.
+ * Это НЕ ломает существующие вызовы.
+ */
+async function tgSend(chatId, text, extra = {}, tokenOverride = "") {
+  const token = tokenOverride || BOT_TOKEN;
+  const api = token ? `https://api.telegram.org/bot${token}` : "";
+
+  if (!token || !api || !chatId || !text) return false;
+
   try {
     const payload = {
       chat_id: chatId,
@@ -27,13 +40,16 @@ async function tgSend(chatId, text, extra = {}) {
       disable_web_page_preview: true,
       ...extra,
     };
-    const res = await axios.post(`${API}/sendMessage`, payload);
+    const res = await axios.post(`${api}/sendMessage`, payload);
     if (!res?.data?.ok) {
       console.error("[tg] sendMessage not ok:", res?.data);
     }
     return Boolean(res?.data?.ok);
   } catch (e) {
-    console.error("[tg] sendMessage error:", e?.response?.data || e?.message || e);
+    console.error(
+      "[tg] sendMessage error:",
+      e?.response?.data || e?.message || e
+    );
     return false;
   }
 }
@@ -47,7 +63,10 @@ async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}) {
       show_alert: Boolean(opts.show_alert),
     });
   } catch (e) {
-    console.error("[tg] answerCallbackQuery error:", e?.response?.data || e?.message || e);
+    console.error(
+      "[tg] answerCallbackQuery error:",
+      e?.response?.data || e?.message || e
+    );
   }
 }
 
@@ -60,7 +79,10 @@ async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
       reply_markup,
     });
   } catch (e) {
-    console.error("[tg] editMessageReplyMarkup error:", e?.response?.data || e?.message || e);
+    console.error(
+      "[tg] editMessageReplyMarkup error:",
+      e?.response?.data || e?.message || e
+    );
   }
 }
 
@@ -82,13 +104,18 @@ function _toIntlDigitsForWA(phone) {
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
   const intl = _toIntlDigitsForWA(phone);
   const wa = intl ? `https://wa.me/${intl}` : null;
- // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
- const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
+  // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
+  const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
 
   const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
   const assignRow = assigneeName
-    ? [{ text: `👤 Ответственный: ${assigneeName}`, callback_data: `noop:${id}` },
-       { text: "↩️ Снять", callback_data: `lead:${id}:unassign` }]
+    ? [
+        {
+          text: `👤 Ответственный: ${assigneeName}`,
+          callback_data: `noop:${id}`,
+        },
+        { text: "↩️ Снять", callback_data: `lead:${id}:unassign` },
+      ]
     : [{ text: "👤 Назначить мне", callback_data: `lead:${id}:assign:self` }];
 
   if (state === "working") {
@@ -115,7 +142,7 @@ function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
     inline_keyboard: [
       [
         { text: "🟦 В работу", callback_data: `lead:${id}:working` },
-        { text: "✅ Закрыт",   callback_data: `lead:${id}:closed`  },
+        { text: "✅ Закрыт", callback_data: `lead:${id}:closed` },
       ],
       assignRow,
       contactRow.length ? contactRow : undefined,
@@ -176,15 +203,32 @@ function fmtDates(arr) {
     const [a, b] = [dates[0], dates[dates.length - 1]];
     const d1 = new Date(a);
     const d2 = new Date(b);
-    const sameMonth = d1.getUTCFullYear() === d2.getUTCFullYear() && d1.getUTCMonth() === d2.getUTCMonth();
-    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const sameMonth =
+      d1.getUTCFullYear() === d2.getUTCFullYear() &&
+      d1.getUTCMonth() === d2.getUTCMonth();
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const pad = (n) => String(n).padStart(2, "0");
     const dd1 = pad(d1.getUTCDate());
     const dd2 = pad(d2.getUTCDate());
     const mm1 = monthNames[d1.getUTCMonth()];
     const mm2 = monthNames[d2.getUTCMonth()];
     const YYYY = d2.getUTCFullYear();
-    return sameMonth ? `${dd1}–${dd2} ${mm2} ${YYYY}` : `${dd1} ${mm1} – ${dd2} ${mm2} ${YYYY}`;
+    return sameMonth
+      ? `${dd1}–${dd2} ${mm2} ${YYYY}`
+      : `${dd1} ${mm1} – ${dd2} ${mm2} ${YYYY}`;
   } catch {
     return "";
   }
@@ -202,25 +246,36 @@ function lineContact(emoji, label, name, phone, username) {
 /* ================== LINK CHAT IDS ================== */
 async function linkProviderChat(providerId, chatId) {
   if (!providerId || !chatId) return;
-  await pool.query(`UPDATE providers SET telegram_chat_id=$2 WHERE id=$1`, [providerId, chatId]);
+  await pool.query(`UPDATE providers SET telegram_chat_id=$2 WHERE id=$1`, [
+    providerId,
+    chatId,
+  ]);
 }
 async function linkClientChat(clientId, chatId) {
   if (!clientId || !chatId) return;
-  await pool.query(`UPDATE clients SET telegram_chat_id=$2 WHERE id=$1`, [clientId, chatId]);
+  await pool.query(`UPDATE clients SET telegram_chat_id=$2 WHERE id=$1`, [
+    clientId,
+    chatId,
+  ]);
 }
 async function getProviderChatId(providerId) {
   if (!providerId) return null;
-  const q = await pool.query(`SELECT telegram_chat_id FROM providers WHERE id=$1`, [providerId]);
+  const q = await pool.query(
+    `SELECT telegram_chat_id FROM providers WHERE id=$1`,
+    [providerId]
+  );
   return q.rows[0]?.telegram_chat_id || null;
 }
 async function getClientChatId(clientId) {
   if (!clientId) return null;
-  const q = await pool.query(`SELECT telegram_chat_id FROM clients WHERE id=$1`, [clientId]);
+  const q = await pool.query(
+    `SELECT telegram_chat_id FROM clients WHERE id=$1`,
+    [clientId]
+  );
   return q.rows[0]?.telegram_chat_id || null;
 }
 
 /* ================== ACTORS HELPERS ================== */
-/** Подтянуть максимум данных по брони, чтобы красиво сформировать «от кого» и контакты. */
 async function getBookingActors(input) {
   const bookingId = typeof input === "object" ? input?.id : input;
   if (!bookingId) return null;
@@ -229,7 +284,6 @@ async function getBookingActors(input) {
     `
     SELECT
       b.id, COALESCE(b.status,'') AS status,
-      -- даты из booking_dates, с запасным кейсом на b.date
       COALESCE(
         (SELECT array_agg(d.date::date ORDER BY d.date)
            FROM booking_dates d
@@ -241,19 +295,16 @@ async function getBookingActors(input) {
 
       s.id AS service_id, s.title AS service_title,
 
-      -- основной провайдер (исполнитель)
       p.id   AS provider__id,
       p.name AS provider__name,
       p.phone AS provider__phone,
       p.telegram_chat_id AS provider__chat,
 
-      -- исходный клиент
       c.id   AS client__id,
       c.name AS client__name,
       c.phone AS client__phone,
       c.telegram_chat_id AS client__chat,
 
-      -- агент-заявитель (если колонка requester_provider_id есть — ок; если нет, запрос всё равно не упадёт)
       p2.id   AS agent__id,
       p2.name AS agent__name,
       p2.phone AS agent__phone,
@@ -308,8 +359,6 @@ async function getBookingActors(input) {
   };
 }
 
-
-/** Подтянуть максимум данных по inbox-заявке */
 async function getRequestActors(requestId) {
   const q = await pool.query(
     `
@@ -321,19 +370,16 @@ async function getRequestActors(requestId) {
       s.title AS service_title,
       s.provider_id AS to_provider_id,
 
-      -- исходный клиент (может быть настоящий клиент)
       c.id    AS client_id,
       c.name  AS client_name,
       c.phone AS client_phone,
       c.telegram_chat_id AS client_chat,
 
-      -- «клиент» может оказаться провайдером (агентом): матчим по email/phone
       p2.id    AS agent_id,
       p2.name  AS agent_name,
       p2.phone AS agent_phone,
       p2.telegram_chat_id AS agent_chat,
 
-      -- провайдер, которому адресована заявка
       p.id AS provider_id,
       p.telegram_chat_id AS provider_chat
     FROM requests r
@@ -358,8 +404,22 @@ async function getRequestActors(requestId) {
   ]);
 
   const from = row.agent_id
-    ? { kind: "agent", id: row.agent_id, name: row.agent_name, phone: row.agent_phone, chatId: row.agent_chat, username: unameAgent }
-    : { kind: "client", id: row.client_id, name: row.client_name, phone: row.client_phone, chatId: row.client_chat, username: unameClient };
+    ? {
+        kind: "agent",
+        id: row.agent_id,
+        name: row.agent_name,
+        phone: row.agent_phone,
+        chatId: row.agent_chat,
+        username: unameAgent,
+      }
+    : {
+        kind: "client",
+        id: row.client_id,
+        name: row.client_name,
+        phone: row.client_phone,
+        chatId: row.client_chat,
+        username: unameClient,
+      };
 
   return {
     row,
@@ -368,8 +428,7 @@ async function getRequestActors(requestId) {
   };
 }
 
-/* ================== BOOKINGS (улучшенные тексты) ================== */
-/** Новая бронь → провайдеру (гид/транспорт/любой исполнитель) */
+/* ================== BOOKINGS ================== */
 async function notifyNewRequest({ booking }) {
   try {
     const a = await getBookingActors(booking);
@@ -379,19 +438,23 @@ async function notifyNewRequest({ booking }) {
     const dates = fmtDates(a.dates);
     const lines = [];
 
-    // Заголовок
     lines.push(`<b>🆕 Заявка на бронь №${a.id}</b>`);
     lines.push(`🏷️ Услуга: <b>${esc(title)}</b>`);
     lines.push(`📅 Даты: <b>${dates}</b>`);
 
-    // «От кого»
     if (a.agent) {
-      lines.push(lineContact("🧑‍💼", "Агент", a.agent.name, a.agent.phone, a.agent.username));
+      lines.push(
+        lineContact("🧑‍💼", "Агент", a.agent.name, a.agent.phone, a.agent.username)
+      );
       if (a.client?.name || a.client?.phone || a.client?.username) {
-        lines.push(lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username));
+        lines.push(
+          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
+        );
       }
     } else {
-      lines.push(lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username));
+      lines.push(
+        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
+      );
     }
 
     lines.push("");
@@ -399,19 +462,18 @@ async function notifyNewRequest({ booking }) {
 
     await tgSend(a.provider.chatId, lines.join("\n"));
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyNewRequest failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/** Провайдер отправил оффер (цену) → клиенту/заявителю */
 async function notifyQuote({ booking, price, currency, note }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
 
-    // кому отправляем: если есть агент-заявитель → ему, иначе клиенту
-    const dest = a.agent?.chatId ? { chatId: a.agent.chatId, isProv: true } : { chatId: a.client?.chatId, isProv: false };
+    const dest = a.agent?.chatId
+      ? { chatId: a.agent.chatId, isProv: true }
+      : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
     const lines = [];
@@ -421,79 +483,65 @@ async function notifyQuote({ booking, price, currency, note }) {
     lines.push(`💵 Цена: <b>${Number(price) || 0} ${esc(currency || "USD")}</b>`);
     if (note) lines.push(`📝 Комментарий: ${esc(note)}`);
 
-    // от кого пришло предложение
-    lines.push(lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username));
+    lines.push(
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username)
+    );
 
     lines.push("");
     lines.push(`🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`);
 
     await tgSend(dest.chatId, lines.join("\n"));
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
-}
+    console.error("[tg] notifyQuote failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-/** Подтверждение → обеим сторонам (и агенту, если есть) */
 async function notifyConfirmed({ booking }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
 
-    // Базовые строки (общие для всех получателей)
     const base = [];
     base.push(`<b>✅ Бронь подтверждена №${a.id}</b>`);
     if (a.serviceTitle) base.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
     base.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
 
-    // Кто заявитель (как в ноти о новой заявке)
     const applicantLines = [];
     if (a.agent) {
-      applicantLines.push(
-        lineContact("🧑‍💼", "Агент",  a.agent.name,  a.agent.phone,  a.agent.username)
-      );
+      applicantLines.push(lineContact("🧑‍💼", "Агент", a.agent.name, a.agent.phone, a.agent.username));
       if (a.client?.name || a.client?.phone || a.client?.username) {
-        applicantLines.push(
-          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
-        );
+        applicantLines.push(lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username));
       }
     } else {
-      applicantLines.push(
-        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
-      );
+      applicantLines.push(lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username));
     }
 
-    // Текст для провайдера (и для агента, если он есть): показываем заявителя
     const textForProvider = [...base, ...applicantLines, "", `🔗 Открыть: ${urlProvider("bookings")}`].join("\n");
-    const textForAgent    = textForProvider;
+    const textForAgent = textForProvider;
 
-    // Текст для клиента: полезнее показать контакт поставщика
-    const textForClient   = [
+    const textForClient = [
       ...base,
       lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
       "",
-      `🔗 Открыть: ${urlClient("bookings")}`
+      `🔗 Открыть: ${urlClient("bookings")}`,
     ].join("\n");
 
-    if (a.client?.chatId)   { await tgSend(a.client.chatId,   textForClient); }
-    if (a.provider?.chatId) { await tgSend(a.provider.chatId, textForProvider); }
-    if (a.agent?.chatId)    { await tgSend(a.agent.chatId,    textForAgent); }
+    if (a.client?.chatId) await tgSend(a.client.chatId, textForClient);
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, textForProvider);
+    if (a.agent?.chatId) await tgSend(a.agent.chatId, textForAgent);
   } catch (e) {
     console.error("[tg] notifyConfirmed failed:", e?.response?.data || e?.message || e);
   }
 }
 
-/** Отклонение → заявителю (клиенту или агенту) */
-/** Отклонение → заявителю (клиенту или агенту) + показываем, КТО поставщик */
 async function notifyRejected({ booking, reason }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
 
-    // кому шлём: если есть агент-заявитель → ему, иначе клиенту
     const dest = a.agent?.chatId
-      ? { chatId: a.agent.chatId, isProv: true }   // заявитель — провайдер (агент)
-      : { chatId: a.client?.chatId, isProv: false }; // заявитель — клиент
-
+      ? { chatId: a.agent.chatId, isProv: true }
+      : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
     const lines = [];
@@ -502,10 +550,7 @@ async function notifyRejected({ booking, reason }) {
     lines.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
     if (reason) lines.push(`📝 Причина: ${esc(reason)}`);
 
-    // ⬇️ добавили подробный блок про Поставщика для получателя (клиента/агента)
-    lines.push(
-      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username)
-    );
+    lines.push(lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username));
 
     lines.push("");
     lines.push(`🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`);
@@ -516,13 +561,14 @@ async function notifyRejected({ booking, reason }) {
   }
 }
 
-
-/** Отмена системой/провайдером → клиенту/заявителю */
 async function notifyCancelled({ booking }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
-    const dest = a.agent?.chatId ? { chatId: a.agent.chatId, isProv: true } : { chatId: a.client?.chatId, isProv: false };
+
+    const dest = a.agent?.chatId
+      ? { chatId: a.agent.chatId, isProv: true }
+      : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
     const text =
@@ -530,32 +576,31 @@ async function notifyCancelled({ booking }) {
       (a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>\n` : "") +
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`;
+
     await tgSend(dest.chatId, text);
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyCancelled failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/** Отмена клиентом/заявителем → провайдеру */
 async function notifyCancelledByRequester({ booking }) {
   try {
     const a = await getBookingActors(booking);
     if (!a?.provider?.chatId) return;
+
     const text =
       `<b>⚠️ Заявитель отменил бронь №${a.id}</b>\n` +
       (a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>\n` : "") +
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${urlProvider("bookings")}`;
+
     await tgSend(a.provider.chatId, text);
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyCancelledByRequester failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/* ================== REQUESTS (быстрые заявки / inbox) ================== */
-/** Новая заявка → провайдеру (любой тип провайдера) */
+/* ================== REQUESTS ================== */
 async function notifyReqNew({ request_id }) {
   try {
     const a = await getRequestActors(request_id);
@@ -565,7 +610,6 @@ async function notifyReqNew({ request_id }) {
     lines.push(`<b>🆕 Новая заявка №${a.row.id}</b>`);
     if (a.row.service_title) lines.push(`🏷️ Услуга: <b>${esc(a.row.service_title)}</b>`);
 
-    // от кого (клиент или агент)
     if (a.from?.kind === "agent") {
       lines.push(lineContact("🧑‍💼", "Агент", a.from.name, a.from.phone, a.from.username));
     } else {
@@ -578,12 +622,10 @@ async function notifyReqNew({ request_id }) {
 
     await tgSend(a.toProviderChat, lines.join("\n"));
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyReqNew failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/** Статус заявки изменён провайдером → заявителю (клиенту или провайдеру-агенту) */
 async function notifyReqStatusChanged({ request_id, status }) {
   try {
     const a = await getRequestActors(request_id);
@@ -591,9 +633,9 @@ async function notifyReqStatusChanged({ request_id, status }) {
 
     const statusMap = {
       processed: "ℹ️ Заявка обработана",
-      accepted:  "✅ Заявка принята",
-      rejected:  "❌ Заявка отклонена",
-      new:       "🆕 Заявка создана",
+      accepted: "✅ Заявка принята",
+      rejected: "❌ Заявка отклонена",
+      new: "🆕 Заявка создана",
     };
     const title = statusMap[status] || `ℹ️ Статус: ${status}`;
 
@@ -608,12 +650,10 @@ async function notifyReqStatusChanged({ request_id, status }) {
 
     await tgSend(a.from.chatId, lines.join("\n"));
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyReqStatusChanged failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/** Заявитель удалил/отменил заявку → провайдеру */
 async function notifyReqCancelledByRequester({ request_id }) {
   try {
     const a = await getRequestActors(request_id);
@@ -623,14 +663,13 @@ async function notifyReqCancelledByRequester({ request_id }) {
       `<b>⚠️ Заявка отменена заявителем №${a.row.id}</b>\n` +
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${urlProvider("requests")}`;
+
     await tgSend(a.toProviderChat, text);
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
+    console.error("[tg] notifyReqCancelledByRequester failed:", e?.response?.data || e?.message || e);
+  }
 }
 
-}
-
-/** Провайдер удалил заявку → заявителю */
 async function notifyReqDeletedByProvider({ request_id }) {
   try {
     const a = await getRequestActors(request_id);
@@ -641,11 +680,11 @@ async function notifyReqDeletedByProvider({ request_id }) {
       `<b>🗑️ Заявка удалена провайдером №${a.row.id}</b>\n` +
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${link}`;
+
     await tgSend(a.from.chatId, text);
   } catch (e) {
-  console.error("[tg] notify<Имя> failed:", e?.response?.data || e?.message || e);
-}
-
+    console.error("[tg] notifyReqDeletedByProvider failed:", e?.response?.data || e?.message || e);
+  }
 }
 
 /* ================== LEADS ================== */
@@ -667,25 +706,23 @@ async function notifyLeadNew({ lead }) {
     const lines = [];
     lines.push(`<b>🔔 Новый лид</b>`);
     lines.push(`🏷️ Сервис: <b>${esc(_leadServiceLabel(lead.service))}</b>`);
-    if (lead.page)   lines.push(`🧭 Страница: ${esc(lead.page)}`);
-    if (lead.lang)   lines.push(`🌐 Язык: ${esc(lead.lang)}`);
+    if (lead.page) lines.push(`🧭 Страница: ${esc(lead.page)}`);
+    if (lead.lang) lines.push(`🌐 Язык: ${esc(lead.lang)}`);
 
-    // контакты
     const who = [];
-    if (lead.name)  who.push(`<b>${esc(lead.name)}</b>`);
+    if (lead.name) who.push(`<b>${esc(lead.name)}</b>`);
     if (lead.phone) who.push(esc(lead.phone));
     lines.push(`👤 Контакт: ${who.length ? who.join(" · ") : "—"}`);
 
-    if (lead.city)        lines.push(`📍 Город/даты: ${esc(lead.city)}`);
+    if (lead.city) lines.push(`📍 Город/даты: ${esc(lead.city)}`);
     if (lead.pax != null) lines.push(`👥 Кол-во: <b>${esc(String(lead.pax))}</b>`);
-    if (lead.comment)     lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
+    if (lead.comment) lines.push(`📝 Комментарий: ${esc(lead.comment)}`);
 
     lines.push("");
     lines.push(`🔗 Открыть: ${urlAdmin("leads")}`);
 
     const text = lines.join("\n");
 
-    // клавиатура state=new (ответственный ещё не выбран)
     const reply_markup = buildLeadKB({
       state: "new",
       id: lead.id,
@@ -709,7 +746,7 @@ module.exports = {
   buildLeadKB,
   linkProviderChat,
   linkClientChat,
-    // ADMIN / MODERATION:
+  // ADMIN / MODERATION:
   notifyModerationNew,
   notifyModerationApproved,
   notifyModerationRejected,
@@ -730,14 +767,12 @@ module.exports = {
   notifyLeadNew,
 };
 
-
 /* ================== MODERATION (ADMIN) ================== */
 async function getAdminChatIds() {
-  // 1) из ENV
-  const fromEnv = ADMIN_CHAT_IDS.map((v) => (Number(v) || v)).filter(Boolean);
-  // 2) из БД (провайдеры с админскими флагами/ролями)
+  const fromEnv = ADMIN_CHAT_IDS.map((v) => Number(v)).filter(Number.isFinite);
+
   try {
-   const q = await pool.query(`
+    const q = await pool.query(`
       SELECT DISTINCT telegram_chat_id
         FROM providers
        WHERE telegram_chat_id IS NOT NULL
@@ -787,20 +822,25 @@ function _serviceLines(s) {
     lines.push(`🏢 Поставщик: <b>${esc(s.provider_name)}</b>${t}`);
   }
   if (d.netPrice != null || d.grossPrice != null) {
-    lines.push(`💵 Netto: <b>${_fmtMoney(d.netPrice)}</b> / Gross: <b>${_fmtMoney(d.grossPrice)}</b>`);
+    lines.push(
+      `💵 Netto: <b>${_fmtMoney(d.netPrice)}</b> / Gross: <b>${_fmtMoney(
+        d.grossPrice
+      )}</b>`
+    );
   }
   return lines;
 }
 
-// i18n-вариант для блоков RU / UZ / EN
 function _serviceLinesI18n(s, lang) {
   const d = typeof s.details === "object" ? s.details : {};
-  const title = s.title || (lang === "en" ? "Service" : lang === "uz" ? "Xizmat" : "Услуга");
-  const labels = {
-    ru: { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" },
-    uz: { cat: "Kategoriya", supp: "Ta’minotchi", net: "Netto", gross: "Gross" },
-    en: { cat: "Category",  supp: "Supplier",   net: "Net",   gross: "Gross" },
-  }[lang] || { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" };
+  const title =
+    s.title || (lang === "en" ? "Service" : lang === "uz" ? "Xizmat" : "Услуга");
+  const labels =
+    {
+      ru: { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" },
+      uz: { cat: "Kategoriya", supp: "Ta’minotchi", net: "Netto", gross: "Gross" },
+      en: { cat: "Category", supp: "Supplier", net: "Net", gross: "Gross" },
+    }[lang] || { cat: "Категория", supp: "Поставщик", net: "Netto", gross: "Gross" };
 
   const out = [];
   out.push(`🏷️ <b>${esc(title)}</b>`);
@@ -810,7 +850,11 @@ function _serviceLinesI18n(s, lang) {
     out.push(`🏢 ${labels.supp}: <b>${esc(s.provider_name)}</b>${t}`);
   }
   if (d.netPrice != null || d.grossPrice != null) {
-    out.push(`💵 ${labels.net}: <b>${_fmtMoney(d.netPrice)}</b> / ${labels.gross}: <b>${_fmtMoney(d.grossPrice)}</b>`);
+    out.push(
+      `💵 ${labels.net}: <b>${_fmtMoney(d.netPrice)}</b> / ${labels.gross}: <b>${_fmtMoney(
+        d.grossPrice
+      )}</b>`
+    );
   }
   return out;
 }
@@ -838,7 +882,6 @@ async function notifyModerationNew({ service }) {
 async function notifyModerationApproved({ service }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги (RU/UZ/EN) — с переводом лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const textProvider =
@@ -847,7 +890,7 @@ async function notifyModerationApproved({ service }) {
         `✅ Service approved\n${_serviceLinesI18n(s, "en").join("\n")}`;
       await tgSend(chatId, textProvider);
     }
-    // 2) как и раньше — уведомим админов (для лога модерации)
+
     const linesAdmin = [
       `<b>✅ Услуга одобрена</b>`,
       ..._serviceLines(s),
@@ -863,7 +906,6 @@ async function notifyModerationApproved({ service }) {
 async function notifyModerationRejected({ service, reason }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги (RU/UZ/EN) — с переводом лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const reasonLine = reason ? `📝 Причина: ${esc(reason)}` : "";
@@ -873,7 +915,7 @@ async function notifyModerationRejected({ service, reason }) {
         `❌ Service rejected\n${_serviceLinesI18n(s, "en").join("\n")}\n${reasonLine}`;
       await tgSend(chatId, textProvider);
     }
-    // 2) админам — как и раньше
+
     const linesAdmin = [
       `<b>❌ Услуга отклонена</b>`,
       ..._serviceLines(s),
@@ -890,7 +932,6 @@ async function notifyModerationRejected({ service, reason }) {
 async function notifyModerationUnpublished({ service }) {
   try {
     const s = await _enrichService(service);
-    // 1) автору услуги — уведомление о снятии (RU/UZ/EN) с переводами лейблов
     const chatId = await getProviderChatId(s.provider_id);
     if (chatId) {
       const textProvider =
@@ -899,7 +940,7 @@ async function notifyModerationUnpublished({ service }) {
         `📦 Listing unpublished\n${_serviceLinesI18n(s, "en").join("\n")}`;
       await tgSend(chatId, textProvider);
     }
-    // 2) админам — как и раньше
+
     const linesAdmin = [
       `<b>📦 Услуга снята с публикации</b>`,
       ..._serviceLines(s),
@@ -912,31 +953,41 @@ async function notifyModerationUnpublished({ service }) {
   }
 }
 
-// ====================== ADMIN NOTIFY HELPERS ======================
-// Не ломает существующие exports: просто добавляет новое поле.
+/* ====================== ADMIN NOTIFY HELPERS ====================== */
 
 function _tgGetAdminChatIds() {
-  const raw = process.env.TELEGRAM_ADMIN_CHAT_IDS || "";
+  const raw =
+    process.env.TELEGRAM_ADMIN_CHAT_IDS ||
+    process.env.ADMIN_TG_CHAT_IDS ||
+    process.env.ADMIN_TG_CHAT ||
+    process.env.TELEGRAM_ADMIN_CHAT ||
+    "";
+
   return raw
-    .split(",")
+    .split(/[,\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
     .map((x) => Number(x))
     .filter((n) => Number.isFinite(n));
 }
 
+/**
+ * ✅ ВАЖНОЕ ИСПРАВЛЕНИЕ:
+ * Админ-уведомления (лиды) шлём через новый бот, если он есть.
+ * Иначе — через старый.
+ */
 async function tgSendToAdmins(text, extra = {}) {
   const ids = _tgGetAdminChatIds();
   if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
 
+  const token = CLIENT_BOT_TOKEN || BOT_TOKEN;
+
   const results = await Promise.allSettled(
-    ids.map((chatId) => tgSend(chatId, text, extra))
+    ids.map((chatId) => tgSend(chatId, text, extra, token))
   );
 
   return { ok: true, count: ids.length, results };
 }
 
-// ✅ КЛЮЧЕВОЕ: так мы НЕ трогаем существующий module.exports объект,
-// а просто добавляем новое поле — ничего не ломается.
+// НЕ ломает exports — добавляем поле
 module.exports.tgSendToAdmins = tgSendToAdmins;
-
