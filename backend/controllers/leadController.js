@@ -1,8 +1,7 @@
 //backend/controllers/leadController.js
 
 const pool = require("../db");
-const { tgSend } = require("../utils/telegram");
-const { tgSendToAdmins } = require("../utils/telegram");
+const { tgSend, tgSendToAdmins } = require("../utils/telegram");
 
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
@@ -117,7 +116,6 @@ async function decideLead(req, res) {
 
     const lead = leadRes.rows[0];
 
-    // если уже принято решение — не даём повторно
     if (lead.decision) {
       await db.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "already_decided" });
@@ -128,11 +126,9 @@ async function decideLead(req, res) {
     const chatId = lead.telegram_chat_id || null;
     const username = lead.telegram_username || null;
 
-    // нормализация телефона для поиска дублей
     const phoneDigits = String(phone).replace(/\D/g, "");
 
     if (decision === "approved_client") {
-      // проверим, нет ли уже такого клиента
       const exists = await db.query(
         `SELECT id FROM clients
           WHERE regexp_replace(phone,'\\D','','g') = $1
@@ -159,7 +155,6 @@ async function decideLead(req, res) {
     }
 
     if (decision === "approved_provider") {
-      // проверим, нет ли уже такого провайдера
       const exists = await db.query(
         `SELECT id FROM providers
           WHERE regexp_replace(phone,'\\D','','g') = $1
@@ -175,10 +170,10 @@ async function decideLead(req, res) {
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
             name,
-            "provider",                  // type NOT NULL
+            "provider",
             phone,
-            email,                       // email NOT NULL
-            "telegram",                  // password NOT NULL (у тебя поле password)
+            email,
+            "telegram",
             username ? `@${username}` : null,
             chatId,
           ]
@@ -195,12 +190,17 @@ async function decideLead(req, res) {
 
     await db.query("COMMIT");
 
-    // уведомление в Telegram
     if (chatId) {
       if (decision === "approved_provider") {
-        await tgSend(chatId, "✅ Ваша заявка одобрена! Вы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard");
+        await tgSend(
+          chatId,
+          "✅ Ваша заявка одобрена! Вы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard"
+        );
       } else if (decision === "approved_client") {
-        await tgSend(chatId, "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz");
+        await tgSend(
+          chatId,
+          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
+        );
       } else {
         await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
       }
@@ -215,7 +215,6 @@ async function decideLead(req, res) {
     db.release();
   }
 }
-
 
 /* ================= EXPORT ================= */
 module.exports = {
