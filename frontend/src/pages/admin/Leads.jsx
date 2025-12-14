@@ -143,14 +143,17 @@ export default function AdminLeads() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // ✅ добавили toast
+  // toast
   const [toast, setToast] = useState("");
-
   function showToast(msg) {
     setToast(msg);
     window.clearTimeout(showToast._t);
     showToast._t = window.setTimeout(() => setToast(""), 2500);
   }
+
+  // whoami debug (самодостаточно)
+  const [whoami, setWhoami] = useState(null);
+  const [whoamiErr, setWhoamiErr] = useState("");
 
   const status = params.get("status") || "";
   const lang = params.get("lang") || "";
@@ -230,7 +233,6 @@ export default function AdminLeads() {
   function getAutoDecision(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
     const src = String(r.source || "").trim().toLowerCase();
-
     if (rr === "client" || src === "telegram_client") return "approved_client";
     return "approved_provider";
   }
@@ -241,57 +243,108 @@ export default function AdminLeads() {
       : "Принять (авто: поставщик)";
   }
 
-  // ===================== RESET (самодостаточно) =====================
-  function getAuthToken() {
+  // ===================== RESET (самодостаточно, но максимально совместимо) =====================
+  function getAPIBase() {
     return (
-      localStorage.getItem("token") ||
-      localStorage.getItem("adminToken") ||
-      localStorage.getItem("accessToken") ||
+      import.meta.env.VITE_API_BASE ||
+      import.meta.env.VITE_API_URL ||
+      import.meta.env.VITE_BACKEND_URL ||
       ""
     );
   }
 
-async function adminPost(path, body) {
-  const token = getAuthToken();
-
-  // 🔑 используем тот же API_BASE, что и весь проект
-  const API_BASE =
-    import.meta.env.VITE_API_BASE ||
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_BACKEND_URL;
-
-  if (!API_BASE) {
-    throw new Error("API_BASE is not defined");
+  function safeJsonParse(s) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return null;
+    }
   }
 
-  const url = `${API_BASE}${path}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: "include",
-    body: JSON.stringify(body || {}),
-  });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {}
-
-  if (!res.ok) {
-    const msg =
-      data?.error ||
-      data?.message ||
-      `Request failed (${res.status})`;
-    throw new Error(msg);
+  function pickTokenFromObject(obj) {
+    if (!obj || typeof obj !== "object") return "";
+    return (
+      obj.token ||
+      obj.accessToken ||
+      obj.access_token ||
+      obj.jwt ||
+      obj?.data?.token ||
+      ""
+    );
   }
 
-  return data;
-}
+  function getAuthToken() {
+    // 1) прямые ключи (localStorage)
+    const directKeys = [
+      "token",
+      "adminToken",
+      "accessToken",
+      "jwt",
+      "authToken",
+      "providerToken",
+      "clientToken",
+    ];
 
+    for (const k of directKeys) {
+      const v = localStorage.getItem(k);
+      if (v && String(v).trim()) return String(v).trim();
+    }
+
+    // 2) sessionStorage (часто там)
+    for (const k of directKeys) {
+      const v = sessionStorage.getItem(k);
+      if (v && String(v).trim()) return String(v).trim();
+    }
+
+    // 3) JSON-объекты (часто auth/user/session)
+    const jsonKeys = ["auth", "user", "session", "admin", "profile"];
+    for (const k of jsonKeys) {
+      const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
+      if (!raw) continue;
+      const obj = safeJsonParse(raw);
+      const t = pickTokenFromObject(obj);
+      if (t && String(t).trim()) return String(t).trim();
+    }
+
+    return "";
+  }
+
+  async function adminPost(path, body) {
+    const API_BASE = getAPIBase();
+    if (!API_BASE) throw new Error("API_BASE is not defined");
+
+    const url = `${API_BASE}${path}`;
+    const token = getAuthToken();
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify(body || {}),
+    });
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      // ignore
+    }
+
+    if (!res.ok) {
+      // Показать реальную причину (включая debug из requireAdmin)
+      const msg =
+        data?.message ||
+        data?.error ||
+        `Request failed (${res.status})`;
+      const extra = data?.debug ? `\n\nDEBUG:\n${JSON.stringify(data.debug, null, 2)}` : "";
+      throw new Error(msg + extra);
+    }
+
+    return data;
+  }
 
   function isClientLead(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
@@ -307,10 +360,8 @@ async function adminPost(path, body) {
 
   async function resetClientByLead(r) {
     const phone = r.phone || "";
-    if (!phone) {
-      alert("У лида нет телефона — reset невозможен.");
-      return;
-    }
+    if (!phone) return alert("У лида нет телефона — reset невозможен.");
+
     const ok = window.confirm(
       `Сбросить Telegram-привязку КЛИЕНТА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
     );
@@ -331,10 +382,8 @@ async function adminPost(path, body) {
 
   async function resetProviderByLead(r) {
     const phone = r.phone || "";
-    if (!phone) {
-      alert("У лида нет телефона — reset невозможен.");
-      return;
-    }
+    if (!phone) return alert("У лида нет телефона — reset невозможен.");
+
     const ok = window.confirm(
       `Сбросить Telegram-привязку ПОСТАВЩИКА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
     );
@@ -352,13 +401,44 @@ async function adminPost(path, body) {
       alert(e?.message || "Reset provider failed");
     }
   }
+
+  async function fetchWhoami() {
+    try {
+      setWhoamiErr("");
+      setWhoami(null);
+
+      const API_BASE = getAPIBase();
+      if (!API_BASE) throw new Error("API_BASE is not defined");
+
+      const token = getAuthToken();
+      const res = await fetch(`${API_BASE}/api/_debug/whoami`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {}
+
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || `whoami failed (${res.status})`);
+      }
+
+      setWhoami(data);
+    } catch (e) {
+      setWhoamiErr(e?.message || "whoami failed");
+    }
+  }
   // ===================== /RESET =====================
 
   return (
     <main className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Лиды</h1>
 
-      {/* ✅ toast */}
+      {/* toast */}
       {toast ? (
         <div className="mb-3">
           <span className="inline-flex items-center px-3 py-2 rounded bg-green-50 text-green-800 border border-green-200 text-sm">
@@ -366,6 +446,33 @@ async function adminPost(path, body) {
           </span>
         </div>
       ) : null}
+
+      {/* ✅ whoami debug */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          onClick={fetchWhoami}
+          className="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-sm"
+          title="Проверить, кем сервер видит текущую сессию/токен"
+        >
+          Whoami
+        </button>
+
+        {whoamiErr ? (
+          <span className="text-sm text-red-600">{whoamiErr}</span>
+        ) : null}
+
+        {whoami ? (
+          <span className="text-sm text-gray-700">
+            role: <span className="font-mono">{String(whoami.role || "")}</span>{" "}
+            | roles:{" "}
+            <span className="font-mono">
+              {Array.isArray(whoami.roles) ? whoami.roles.join(",") : ""}
+            </span>{" "}
+            | is_admin: <span className="font-mono">{String(!!whoami.is_admin)}</span>{" "}
+            | id: <span className="font-mono">{String(whoami.id)}</span>
+          </span>
+        ) : null}
+      </div>
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <select
@@ -453,7 +560,6 @@ async function adminPost(path, body) {
               const isTelegramLead = !!r.telegram_chat_id;
               const undecided = !r.decision;
               const canAutoAccept = isTelegramLead && undecided;
-
               const auto = getAutoDecision(r);
 
               return (
