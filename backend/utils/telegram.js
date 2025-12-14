@@ -971,19 +971,15 @@ function _tgGetAdminChatIds() {
     .filter((n) => Number.isFinite(n));
 }
 
-/**
- * ✅ ВАЖНОЕ ИСПРАВЛЕНИЕ:
- * Админ-уведомления (лиды) шлём через новый бот, если он есть.
- * Иначе — через старый.
- */
+// ====================== ADMIN NOTIFY HELPERS ======================
+
 async function tgSendToAdmins(text, extra = {}) {
-  const ids = _tgGetAdminChatIds();
+  // единый источник админских чатов: ENV + БД (как в модерации)
+  const ids = await getAdminChatIds();
   if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
 
-  const token = CLIENT_BOT_TOKEN || BOT_TOKEN;
-
   const results = await Promise.allSettled(
-    ids.map((chatId) => tgSend(chatId, text, extra, token))
+    ids.map((chatId) => tgSend(chatId, text, extra))
   );
 
   return { ok: true, count: ids.length, results };
