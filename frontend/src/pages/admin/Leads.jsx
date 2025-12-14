@@ -251,33 +251,47 @@ export default function AdminLeads() {
     );
   }
 
-  async function adminPost(path, body) {
-    const token = getAuthToken();
+async function adminPost(path, body) {
+  const token = getAuthToken();
 
-    const res = await fetch(path, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      credentials: "include",
-      body: JSON.stringify(body || {}),
-    });
+  // 🔑 используем тот же API_BASE, что и весь проект
+  const API_BASE =
+    import.meta.env.VITE_API_BASE ||
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_BACKEND_URL;
 
-    let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      // ignore
-    }
-
-    if (!res.ok) {
-      const msg = data?.error || data?.message || `Request failed (${res.status})`;
-      throw new Error(msg);
-    }
-
-    return data;
+  if (!API_BASE) {
+    throw new Error("API_BASE is not defined");
   }
+
+  const url = `${API_BASE}${path}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {}
+
+  if (!res.ok) {
+    const msg =
+      data?.error ||
+      data?.message ||
+      `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
 
   function isClientLead(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
