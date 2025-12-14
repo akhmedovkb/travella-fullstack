@@ -3,10 +3,11 @@ const pool = require("../db");
 const { tgSendToAdmins } = require("../utils/telegram");
 
 /**
- * Технический bcrypt-хэш какого-то "левого" пароля,
- * чтобы удовлетворить NOT NULL и формат для bcrypt.compare.
+ * Технический bcrypt-хэш "левого" пароля (для соблюдения NOT NULL и bcrypt.compare).
+ * Пользователь этот пароль не знает и не использует (до установки через веб).
  */
 const TELEGRAM_DUMMY_PASSWORD_HASH =
+  process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
 /** Нормализация телефона: только цифры */
@@ -18,34 +19,44 @@ function normalizePhone(raw) {
 
 /** Ищем пользователя по телефону: providers -> clients */
 async function findUserByPhone(normPhone) {
+  // 1) Поставщик
   const prov = await pool.query(
     `
-      SELECT id, name, phone
+      SELECT id, name, phone, telegram_chat_id
         FROM providers
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
     `,
     [normPhone]
   );
-
   if (prov.rowCount > 0) {
     const row = prov.rows[0];
-    return { role: "provider", id: row.id, name: row.name };
+    return {
+      role: "provider",
+      id: row.id,
+      name: row.name,
+      telegram_chat_id: row.telegram_chat_id,
+    };
   }
 
+  // 2) Клиент
   const cli = await pool.query(
     `
-      SELECT id, name, phone
+      SELECT id, name, phone, telegram_chat_id
         FROM clients
        WHERE regexp_replace(phone, '\\D', '', 'g') = $1
        LIMIT 1
     `,
     [normPhone]
   );
-
   if (cli.rowCount > 0) {
     const row = cli.rows[0];
-    return { role: "client", id: row.id, name: row.name };
+    return {
+      role: "client",
+      id: row.id,
+      name: row.name,
+      telegram_chat_id: row.telegram_chat_id,
+    };
   }
 
   return null;
@@ -72,54 +83,28 @@ async function linkAccount(req, res) {
 
     // 1) Уже есть в базе (providers/clients)?
     const found = await findUserByPhone(normPhone);
-    // 🔒 Если поставщик уже существует и chatId совпадает — не создаём lead
-      if (found && found.role === "provider") {
-        const prov = await pool.query(
-          `SELECT id, telegram_chat_id
-             FROM providers
-            WHERE id = $1
-            LIMIT 1`,
-          [found.id]
-        );
-      
-        if (
-          prov.rowCount &&
-          String(prov.rows[0].telegram_chat_id) === String(chatId)
-        ) {
-          return res.json({
-            success: true,
-            role: "provider",
-            id: found.id,
-            existed: true,
-            alreadyLinked: true,
-            message: "already_registered_provider",
-          });
-        }
-      }
 
     if (found) {
-      const foundRole = found.role; // 'provider' | 'client'
-
-      // ----- ПРОВАЙДЕР -----
-      if (foundRole === "provider") {
+      // ===== ПРОВАЙДЕР НАЙДЕН =====
+      if (found.role === "provider") {
+        // Всегда актуализируем telegram_chat_id и social (это важно для уведомлений)
         const upd = await pool.query(
           `
             UPDATE providers
                SET telegram_chat_id = $1,
                    social           = COALESCE($2, social)
-             WHERE regexp_replace(phone, '\\D', '', 'g') = $3
-             RETURNING id, name, phone, social
+             WHERE id = $3
+             RETURNING id, name, phone, telegram_chat_id, social
           `,
-          [chatId, username ? `@${username}` : null, normPhone]
+          [chatId, username ? `@${username}` : null, found.id]
         );
 
-        console.log("[tg-link] updated existing PROVIDER rows:", upd.rowCount);
-
-        if (upd.rowCount === 0) {
+        if (!upd.rowCount) {
           return res.status(404).json({ notFound: true });
         }
 
         const row = upd.rows[0];
+
         return res.json({
           success: true,
           role: "provider",
@@ -127,29 +112,29 @@ async function linkAccount(req, res) {
           name: row.name,
           existed: true,
           requestedRole,
+          alreadyLinked: String(found.telegram_chat_id) === String(chatId),
         });
       }
 
-      // ----- КЛИЕНТ -----
-      if (foundRole === "client") {
+      // ===== КЛИЕНТ НАЙДЕН =====
+      if (found.role === "client") {
         const upd = await pool.query(
           `
             UPDATE clients
                SET telegram_chat_id = $1,
                    telegram        = COALESCE($2, telegram)
-             WHERE regexp_replace(phone, '\\D', '', 'g') = $3
-             RETURNING id, name, phone
+             WHERE id = $3
+             RETURNING id, name, phone, telegram_chat_id
           `,
-          [chatId, username || null, normPhone]
+          [chatId, username || null, found.id]
         );
 
-        console.log("[tg-link] updated existing CLIENT rows:", upd.rowCount);
-
-        if (upd.rowCount === 0) {
+        if (!upd.rowCount) {
           return res.status(404).json({ notFound: true });
         }
 
         const row = upd.rows[0];
+
         return res.json({
           success: true,
           role: "client",
@@ -157,6 +142,7 @@ async function linkAccount(req, res) {
           name: row.name,
           existed: true,
           requestedRole,
+          alreadyLinked: String(found.telegram_chat_id) === String(chatId),
         });
       }
     }
@@ -197,9 +183,9 @@ async function linkAccount(req, res) {
       });
     }
 
-    // ===== новый ПОСТАВЩИК: создаём lead =====
+    // ===== новый ПОСТАВЩИК: создаём (или реюзаем) lead =====
     if (requestedRole === "provider") {
-      // 🔒 защита от дублей + ВАЖНО: если лид уже есть — обновляем его данными Telegram и шлём уведомление
+      // 1) если есть активный lead — обновляем telegram-поля, чтобы ничего не “пропадало”
       const existingLead = await pool.query(
         `
           SELECT id, telegram_chat_id
@@ -217,7 +203,6 @@ async function linkAccount(req, res) {
         const leadId = existingLead.rows[0].id;
         const prevChat = existingLead.rows[0].telegram_chat_id || null;
 
-        // ✅ обновляем Telegram-поля (чтобы лид “ожил” и был виден/привязан)
         await pool.query(
           `
             UPDATE leads
@@ -230,8 +215,8 @@ async function linkAccount(req, res) {
           [leadId, chatId, username || null, firstName || null, displayName]
         );
 
-        // ✅ уведомим админов, если раньше чат-айди не был заполнен (то есть реально новая “привязка”)
-        if (!prevChat) {
+        // уведомим админов, если это новая привязка/смена chatId (чтобы не было “тихо”)
+        if (!prevChat || String(prevChat) !== String(chatId)) {
           try {
             await tgSendToAdmins(
               `🆕 Новый поставщик (Telegram)\n` +
@@ -257,6 +242,7 @@ async function linkAccount(req, res) {
         });
       }
 
+      // 2) иначе создаём новый lead
       const insertLead = await pool.query(
         `
           INSERT INTO leads (
@@ -306,7 +292,7 @@ async function linkAccount(req, res) {
     return res.status(400).json({ error: "invalid role" });
   } catch (e) {
     console.error("POST /api/telegram/link error:", e);
-    res.status(500).json({ error: "Internal error" });
+    return res.status(500).json({ error: "Internal error" });
   }
 }
 
@@ -341,21 +327,27 @@ async function getProfileByChat(req, res) {
       return res.status(404).json({ notFound: true });
     }
 
-    res.json({ success: true, user: result.rows[0] });
+    return res.json({ success: true, user: result.rows[0] });
   } catch (e) {
     console.error("GET /api/telegram/profile error:", e);
-    res.status(500).json({ error: "Internal error" });
+    return res.status(500).json({ error: "Internal error" });
   }
 }
 
 /**
- * Старый простой поиск по категории
+ * Старый простой поиск по категории (если где-то ещё используется)
+ * GET /api/telegram/client/:chatId/search-category?type=refused_tour
  */
 async function searchCategory(req, res) {
-  const { chatId } = req.params;
+  const { chatId } = req.params; // формально
   const { type } = req.query || {};
 
-  const allowed = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
+  const allowed = [
+    "refused_tour",
+    "refused_hotel",
+    "refused_flight",
+    "refused_ticket",
+  ];
 
   if (!type || !allowed.includes(type)) {
     return res.status(400).json({ error: "invalid type" });
@@ -389,21 +381,27 @@ async function searchCategory(req, res) {
       type,
     });
   } catch (e) {
-    console.error("GET /api/telegram/client/:chatId/search-category error:", e);
+    console.error(
+      "GET /api/telegram/client/:chatId/search-category error:",
+      e
+    );
     return res.status(500).json({ error: "Internal error" });
   }
 }
 
 /**
- * Основной поиск для бота
+ * Основной поиск для бота и inline-бота
+ * GET /api/telegram/client/:chatId/search?category=refused_tour
  */
 async function searchClientServices(req, res) {
   try {
-    const { chatId } = req.params;
+    const { chatId } = req.params; // формально
     const { category } = req.query || {};
 
     if (!category) {
-      return res.status(400).json({ success: false, error: "category is required" });
+      return res
+        .status(400)
+        .json({ success: false, error: "category is required" });
     }
 
     console.log("[tg-api] searchClientServices", { chatId, category });
@@ -473,48 +471,4 @@ module.exports = {
   getProfileByChat,
   searchCategory,
   searchClientServices,
-  // ниже у тебя есть ещё “провайдерская панель” внутри этого файла — я не трогаю её,
-  // но если она реально используется, лучше вынести в отдельный контроллер позже.
-  getProviderServices: async (req, res) => {
-    const { chatId } = req.params;
-
-    try {
-      const refusedCategories = ["refused_tour", "refused_hotel", "refused_flight", "refused_ticket"];
-
-      const q = `
-        SELECT
-          s.id,
-          s.title,
-          s.category,
-          s.status,
-          s.details,
-          s.images,
-          s.expiration_at AS expiration,
-          s.created_at,
-          p.name   AS provider_name,
-          p.social AS provider_telegram
-        FROM services s
-        JOIN providers p ON p.id = s.provider_id
-       WHERE p.telegram_chat_id = $1
-         AND s.category = ANY($2)
-       ORDER BY s.created_at DESC
-      `;
-
-      const { rows } = await pool.query(q, [chatId, refusedCategories]);
-
-      return res.json({
-        success: true,
-        items: rows || [],
-      });
-    } catch (e) {
-      console.error("[telegram] getProviderServices error:", e);
-      return res.status(500).json({
-        success: false,
-        error: "SERVER_ERROR",
-      });
-    }
-  },
-  toggleProviderServiceActive: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
-  extendProviderServiceExpiration7: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
-  archiveProviderService: async (req, res) => res.status(501).json({ success: false, error: "NOT_IMPLEMENTED_HERE" }),
 };
