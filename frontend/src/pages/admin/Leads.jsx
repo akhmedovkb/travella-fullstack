@@ -9,9 +9,6 @@ import {
   decideLead as apiDecideLead,
 } from "../../api/leads";
 
-// ✅ добавили axios-инстанс для вызова /api/admin/reset-*
-import api from "../../api";
-
 const STATUSES = [
   { val: "", label: "— все статусы —" },
   { val: "new", label: "new" },
@@ -238,7 +235,48 @@ export default function AdminLeads() {
       : "Принять (авто: поставщик)";
   }
 
-  // ✅ helpers для Reset-кнопок
+  // ===================== ✅ RESET (самодостаточно, без src/api/index.js) =====================
+  function getAuthToken() {
+    // если у тебя токен хранится под другим ключом — добавь сюда
+    return (
+      localStorage.getItem("token") ||
+      localStorage.getItem("adminToken") ||
+      localStorage.getItem("accessToken") ||
+      ""
+    );
+  }
+
+  async function adminPost(path, body) {
+    const token = getAuthToken();
+
+    const res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify(body || {}),
+    });
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      // ignore
+    }
+
+    if (!res.ok) {
+      const msg =
+        data?.error ||
+        data?.message ||
+        `Request failed (${res.status})`;
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
   function isClientLead(r) {
     const rr = String(r.requested_role || "").trim().toLowerCase();
     const src = String(r.source || "").trim().toLowerCase();
@@ -262,19 +300,12 @@ export default function AdminLeads() {
     );
     if (!ok) return;
 
-    try {
-      await api.post("/api/admin/reset-client", {
-        phone,
-        alsoResetLeads: true,
-      });
-      await fetchLeads();
-    } catch (e) {
-      const msg =
-        e?.response?.data?.error ||
-        e?.message ||
-        "Reset client failed";
-      alert(msg);
-    }
+    await adminPost("/api/admin/reset-client", {
+      phone,
+      alsoResetLeads: true,
+    });
+
+    await fetchLeads();
   }
 
   async function resetProviderByLead(r) {
@@ -288,20 +319,14 @@ export default function AdminLeads() {
     );
     if (!ok) return;
 
-    try {
-      await api.post("/api/admin/reset-provider", {
-        phone,
-        alsoResetLeads: true,
-      });
-      await fetchLeads();
-    } catch (e) {
-      const msg =
-        e?.response?.data?.error ||
-        e?.message ||
-        "Reset provider failed";
-      alert(msg);
-    }
+    await adminPost("/api/admin/reset-provider", {
+      phone,
+      alsoResetLeads: true,
+    });
+
+    await fetchLeads();
   }
+  // ===================== /RESET =====================
 
   return (
     <main className="p-6">
@@ -411,9 +436,7 @@ export default function AdminLeads() {
                     ) : null}
                   </td>
 
-                  <td className="py-2 pr-4 whitespace-nowrap">
-                    {r.phone || "—"}
-                  </td>
+                  <td className="py-2 pr-4 whitespace-nowrap">{r.phone || "—"}</td>
 
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-2">
@@ -453,9 +476,7 @@ export default function AdminLeads() {
                       <div className="space-y-1">
                         <div className="text-xs text-gray-700">
                           chat_id:{" "}
-                          <span className="font-mono">
-                            {String(r.telegram_chat_id)}
-                          </span>
+                          <span className="font-mono">{String(r.telegram_chat_id)}</span>
                         </div>
                         {r.telegram_username ? (
                           <div className="text-xs text-gray-500">
@@ -504,7 +525,7 @@ export default function AdminLeads() {
                           </>
                         ) : null}
 
-                        {/* ✅ Reset кнопки (видны только для Telegram лидов) */}
+                        {/* ✅ Reset кнопки */}
                         {isClientLead(r) ? (
                           <button
                             onClick={() => resetClientByLead(r)}
