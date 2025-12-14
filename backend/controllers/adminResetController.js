@@ -55,11 +55,15 @@ async function resetClient(req, res) {
     if (alsoResetLeads) {
       const norm = normalizePhone(client.phone);
       if (norm) {
+        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже, чтобы кнопка Reset исчезала
         await pool.query(
           `UPDATE leads
               SET decision = NULL,
                   decided_at = NULL,
-                  status = 'new'
+                  status = 'new',
+                  telegram_chat_id = NULL,
+                  telegram_username = NULL,
+                  telegram_first_name = NULL
             WHERE regexp_replace(phone,'\\D','','g') = $1
               AND (source = 'telegram_client' OR requested_role = 'client')`,
           [norm]
@@ -127,11 +131,15 @@ async function resetProvider(req, res) {
     if (alsoResetLeads) {
       const norm = normalizePhone(provider.phone);
       if (norm) {
+        // ✅ ВАЖНО: обнуляем telegram_* в leads тоже, чтобы кнопка Reset исчезала
         await pool.query(
           `UPDATE leads
               SET decision = NULL,
                   decided_at = NULL,
-                  status = 'new'
+                  status = 'new',
+                  telegram_chat_id = NULL,
+                  telegram_username = NULL,
+                  telegram_first_name = NULL
             WHERE regexp_replace(phone,'\\D','','g') = $1
               AND (source = 'telegram_provider' OR requested_role IN ('agent','provider'))`,
           [norm]
