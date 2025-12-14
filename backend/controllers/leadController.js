@@ -190,21 +190,33 @@ async function decideLead(req, res) {
 
     await db.query("COMMIT");
 
-    if (chatId) {
-      if (decision === "approved_provider") {
-        await tgSend(
-          chatId,
-          "✅ Ваша заявка одобрена! Вы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard"
-        );
-      } else if (decision === "approved_client") {
-        await tgSend(
-          chatId,
-          "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz"
-        );
-      } else {
-        await tgSend(chatId, "❌ К сожалению, ваша заявка была отклонена.");
-      }
-    }
+if (chatId) {
+  const clientBotToken = process.env.TELEGRAM_CLIENT_BOT_TOKEN;
+
+  if (decision === "approved_provider") {
+    await tgSend(
+      chatId,
+      "✅ Ваша заявка одобрена! Вы зарегистрированы как поставщик Travella.\n\n👉 https://travella.uz/dashboard",
+      {},
+      clientBotToken
+    );
+  } else if (decision === "approved_client") {
+    await tgSend(
+      chatId,
+      "✅ Ваша заявка одобрена! Добро пожаловать в Travella.\n\n👉 https://travella.uz",
+      {},
+      clientBotToken
+    );
+  } else {
+    await tgSend(
+      chatId,
+      "❌ К сожалению, ваша заявка была отклонена.",
+      {},
+      clientBotToken
+    );
+  }
+}
+
 
     return res.json({ ok: true });
   } catch (e) {
