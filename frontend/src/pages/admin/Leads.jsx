@@ -143,6 +143,15 @@ export default function AdminLeads() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  // ✅ добавили toast
+  const [toast, setToast] = useState("");
+
+  function showToast(msg) {
+    setToast(msg);
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(""), 2500);
+  }
+
   const status = params.get("status") || "";
   const lang = params.get("lang") || "";
   const page = params.get("page") || "";
@@ -222,9 +231,6 @@ export default function AdminLeads() {
     const rr = String(r.requested_role || "").trim().toLowerCase();
     const src = String(r.source || "").trim().toLowerCase();
 
-    // Авто-логика:
-    // - если requested_role=client ИЛИ source=telegram_client => approved_client
-    // - иначе => approved_provider
     if (rr === "client" || src === "telegram_client") return "approved_client";
     return "approved_provider";
   }
@@ -235,9 +241,8 @@ export default function AdminLeads() {
       : "Принять (авто: поставщик)";
   }
 
-  // ===================== ✅ RESET (самодостаточно, без src/api/index.js) =====================
+  // ===================== RESET (самодостаточно) =====================
   function getAuthToken() {
-    // если у тебя токен хранится под другим ключом — добавь сюда
     return (
       localStorage.getItem("token") ||
       localStorage.getItem("adminToken") ||
@@ -267,10 +272,7 @@ export default function AdminLeads() {
     }
 
     if (!res.ok) {
-      const msg =
-        data?.error ||
-        data?.message ||
-        `Request failed (${res.status})`;
+      const msg = data?.error || data?.message || `Request failed (${res.status})`;
       throw new Error(msg);
     }
 
@@ -300,12 +302,17 @@ export default function AdminLeads() {
     );
     if (!ok) return;
 
-    await adminPost("/api/admin/reset-client", {
-      phone,
-      alsoResetLeads: true,
-    });
+    try {
+      const data = await adminPost("/api/admin/reset-client", {
+        phone,
+        alsoResetLeads: true,
+      });
 
-    await fetchLeads();
+      showToast(`✅ Reset client OK (clientId: ${data?.clientId ?? "?"})`);
+      await fetchLeads();
+    } catch (e) {
+      alert(e?.message || "Reset client failed");
+    }
   }
 
   async function resetProviderByLead(r) {
@@ -319,18 +326,32 @@ export default function AdminLeads() {
     );
     if (!ok) return;
 
-    await adminPost("/api/admin/reset-provider", {
-      phone,
-      alsoResetLeads: true,
-    });
+    try {
+      const data = await adminPost("/api/admin/reset-provider", {
+        phone,
+        alsoResetLeads: true,
+      });
 
-    await fetchLeads();
+      showToast(`✅ Reset provider OK (providerId: ${data?.providerId ?? "?"})`);
+      await fetchLeads();
+    } catch (e) {
+      alert(e?.message || "Reset provider failed");
+    }
   }
   // ===================== /RESET =====================
 
   return (
     <main className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Лиды</h1>
+
+      {/* ✅ toast */}
+      {toast ? (
+        <div className="mb-3">
+          <span className="inline-flex items-center px-3 py-2 rounded bg-green-50 text-green-800 border border-green-200 text-sm">
+            {toast}
+          </span>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <select
@@ -525,7 +546,6 @@ export default function AdminLeads() {
                           </>
                         ) : null}
 
-                        {/* ✅ Reset кнопки */}
                         {isClientLead(r) ? (
                           <button
                             onClick={() => resetClientByLead(r)}
