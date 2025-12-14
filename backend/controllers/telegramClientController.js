@@ -62,6 +62,15 @@ async function findUserByPhone(normPhone) {
   return null;
 }
 
+function normalizeRequestedRole(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v) return "client";
+  // На уровне Telegram API роль часто приходит как "provider".
+  // В БД же для турагента хотим хранить "agent".
+  if (v === "provider") return "agent";
+  return v;
+}
+
 /**
  * POST /api/telegram/link
  * body: { role: "client" | "provider", phone, chatId, username, firstName }
@@ -75,11 +84,16 @@ async function linkAccount(req, res) {
       return res.status(400).json({ error: "phone and chatId are required" });
     }
 
-    const requestedRole = role || "client";
+    const requestedRole = normalizeRequestedRole(role || "client");
     const displayName = firstName || username || "Telegram user";
 
     console.log("[tg-link] body:", req.body);
-    console.log("[tg-link] normPhone:", normPhone, "requestedRole:", requestedRole);
+    console.log(
+      "[tg-link] normPhone:",
+      normPhone,
+      "requestedRole:",
+      requestedRole
+    );
 
     // 1) Уже есть в базе (providers/clients)?
     const found = await findUserByPhone(normPhone);
@@ -184,7 +198,7 @@ async function linkAccount(req, res) {
     }
 
     // ===== новый ПОСТАВЩИК: создаём (или реюзаем) lead =====
-    if (requestedRole === "provider") {
+    if (requestedRole === "agent") {
       // 1) если есть активный lead — обновляем telegram-поля, чтобы ничего не “пропадало”
       const existingLead = await pool.query(
         `
@@ -256,7 +270,7 @@ async function linkAccount(req, res) {
             telegram_first_name,
             requested_role
           )
-          VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'provider')
+          VALUES ($1, $2, 'telegram_provider', 'new', NOW(), $3, $4, $5, 'agent')
           RETURNING id
         `,
         [phone, displayName, chatId, username || null, firstName || null]
