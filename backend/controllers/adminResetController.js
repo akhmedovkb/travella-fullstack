@@ -9,7 +9,7 @@ function normalizePhone(raw) {
 
 async function resetClient(req, res) {
   try {
-    const { phone, id, mode = "telegram_only", alsoResetLeads = true } = req.body || {};
+    const { phone, id, alsoResetLeads = true } = req.body || {};
 
     if (!phone && !id) {
       return res.status(400).json({ ok: false, error: "phone_or_id_required" });
@@ -42,7 +42,7 @@ async function resetClient(req, res) {
       return res.status(404).json({ ok: false, error: "client_not_found" });
     }
 
-    // 1) Сбрасываем телеграм-поля
+    // Сбрасываем Telegram-привязку клиента
     await pool.query(
       `UPDATE clients
           SET telegram_chat_id = NULL,
@@ -51,7 +51,7 @@ async function resetClient(req, res) {
       [client.id]
     );
 
-    // 2) (опционально) сбрасываем лиды, чтобы можно было пройти approval заново
+    // (опционально) сбрасываем телеграм-лиды клиента
     if (alsoResetLeads) {
       const norm = normalizePhone(client.phone);
       if (norm) {
@@ -71,7 +71,7 @@ async function resetClient(req, res) {
       ok: true,
       reset: "client",
       clientId: client.id,
-      mode,
+      alsoResetLeads,
     });
   } catch (e) {
     console.error("resetClient error:", e);
@@ -81,7 +81,7 @@ async function resetClient(req, res) {
 
 async function resetProvider(req, res) {
   try {
-    const { phone, id, mode = "telegram_only", alsoResetLeads = true } = req.body || {};
+    const { phone, id, alsoResetLeads = true } = req.body || {};
 
     if (!phone && !id) {
       return res.status(400).json({ ok: false, error: "phone_or_id_required" });
@@ -114,7 +114,7 @@ async function resetProvider(req, res) {
       return res.status(404).json({ ok: false, error: "provider_not_found" });
     }
 
-    // 1) Сбрасываем телеграм-поля
+    // Сбрасываем Telegram-привязку поставщика
     await pool.query(
       `UPDATE providers
           SET telegram_chat_id = NULL,
@@ -123,7 +123,7 @@ async function resetProvider(req, res) {
       [provider.id]
     );
 
-    // 2) (опционально) сбрасываем лиды
+    // (опционально) сбрасываем телеграм-лиды поставщика
     if (alsoResetLeads) {
       const norm = normalizePhone(provider.phone);
       if (norm) {
@@ -143,7 +143,7 @@ async function resetProvider(req, res) {
       ok: true,
       reset: "provider",
       providerId: provider.id,
-      mode,
+      alsoResetLeads,
     });
   } catch (e) {
     console.error("resetProvider error:", e);
