@@ -106,6 +106,18 @@ async function resetClient(req, res) {
       );
     }
 
+    // ✅ cross-reset: если сбрасываем клиента по tgChat — убираем возможную привязку провайдера
+    // (иначе бот может находить пользователя в providers/clients "не тем" путём)
+    if (tgChat) {
+      await pool.query(
+        `UPDATE providers
+            SET telegram_chat_id = NULL,
+                social = NULL
+          WHERE telegram_chat_id = $1`,
+        [tgChat]
+      );
+    }
+
     // 4) (опционально) сбрасываем telegram_* в leads (даже если client не найден)
     let leadsReset = 0;
 
@@ -248,6 +260,18 @@ async function resetProvider(req, res) {
                 social = NULL
           WHERE id = $1`,
         [provider.id]
+      );
+    }
+
+    // ✅ cross-reset: если сбрасываем провайдера по tgChat — убираем возможную "клиентскую" привязку
+    // (иначе бот может продолжать находить пользователя в clients и отвечать как клиент)
+    if (tgChat) {
+      await pool.query(
+        `UPDATE clients
+            SET telegram_chat_id = NULL,
+                telegram = NULL
+          WHERE telegram_chat_id = $1`,
+        [tgChat]
       );
     }
 
