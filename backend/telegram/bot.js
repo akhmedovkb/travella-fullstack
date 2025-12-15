@@ -735,6 +735,12 @@ bot.on("contact", async (ctx) => {
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
 
 bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
+  // ✅ если идёт мастер создания услуги — НЕ перехватываем дату как “телефон”
+  const st = ctx.session?.state || null;
+  if (st && String(st).startsWith("svc_create_")) {
+    return; // пусть обработает bot.on("text") мастер
+  }
+
   if (!ctx.session || !ctx.session.requestedRole) {
     return;
   }
