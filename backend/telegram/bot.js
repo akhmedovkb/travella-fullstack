@@ -790,6 +790,21 @@ bot.hears(/❤️ Избранное/i, async (ctx) => {
 
 bot.hears(/📄 Мои брони/i, async (ctx) => {
   logUpdate(ctx, "hears Мои брони");
+
+  // если не привязан — просим привязку
+  const maybeProvider = await ensureProviderRole(ctx);
+  const linked = !!ctx.session?.linked;
+  const role = maybeProvider || ctx.session?.role || null;
+
+  if (!linked && !role) {
+    await ctx.reply(
+      "Чтобы показать ваши брони, нужно привязать аккаунт Travella по номеру телефона."
+    );
+    await askRole(ctx);
+    return;
+  }
+
+  // дальше — как было
   await ctx.reply(
     "Пока бронирование через бот мы ещё доделываем.\n" +
       "Пока все ваши брони доступны в личном кабинете на сайте travella.uz."
@@ -798,6 +813,21 @@ bot.hears(/📄 Мои брони/i, async (ctx) => {
 
 bot.hears(/📨 Мои заявки/i, async (ctx) => {
   logUpdate(ctx, "hears Мои заявки");
+
+  // если не привязан — просим привязку
+  const maybeProvider = await ensureProviderRole(ctx);
+  const linked = !!ctx.session?.linked;
+  const role = maybeProvider || ctx.session?.role || null;
+
+  if (!linked && !role) {
+    await ctx.reply(
+      "Чтобы показать ваши заявки, нужно привязать аккаунт Travella по номеру телефона."
+    );
+    await askRole(ctx);
+    return;
+  }
+
+  // дальше — как было
   await ctx.reply(
     "Пока раздел заявок в боте в разработке.\n" +
       "Вы можете смотреть отклики и заявки на сайте travella.uz."
