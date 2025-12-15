@@ -37,6 +37,14 @@ const SITE_PUBLIC_URL = (
   ""
 ).replace(/\/+$/, "");
 
+// API public url (fallback для редиректов, если SITE_PUBLIC_URL не задан)
+const API_PUBLIC_URL = (
+  process.env.API_PUBLIC_URL ||
+  process.env.API_BASE_URL ||
+  process.env.SITE_API_URL ||
+  ""
+).replace(/\/+$/, "");
+
 // ---------- Общая проверка секрета (path || query || header) ----------
 function verifySecret(req) {
   const hdr =
@@ -311,9 +319,11 @@ router.get("/service-image/:id", async (req, res) => {
       return res.redirect(v);
     }
 
-    // Если относительный путь — редиректим на сайт
-    if (v.startsWith("/") && SITE_PUBLIC_URL) {
-      return res.redirect(SITE_PUBLIC_URL + v);
+    // Если относительный путь — редиректим на сайт или на API (что задано)
+    if (v.startsWith("/")) {
+      if (SITE_PUBLIC_URL) return res.redirect(SITE_PUBLIC_URL + v);
+      if (API_PUBLIC_URL) return res.redirect(API_PUBLIC_URL + v);
+      return res.status(400).send("Relative image path, but no public base url");
     }
 
     // Основной случай: data:image/...;base64,XXXX
