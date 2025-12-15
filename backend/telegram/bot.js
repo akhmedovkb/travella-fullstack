@@ -7,13 +7,13 @@ const axiosBase = require("axios");
 // ==== CONFIG ====
 
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-const OLD_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
-if (!CLIENT_TOKEN && !OLD_TOKEN) {
-  throw new Error("No TELEGRAM_CLIENT_BOT_TOKEN/TELEGRAM_BOT_TOKEN in env");
+if (!CLIENT_TOKEN) {
+  throw new Error("TELEGRAM_CLIENT_BOT_TOKEN is required for backend/telegram/bot.js");
 }
 
-const BOT_TOKEN = CLIENT_TOKEN || OLD_TOKEN;
+const BOT_TOKEN = CLIENT_TOKEN;
+
 
 // Публичный URL Travella для кнопок "Подробнее"
 const SITE_URL = (
