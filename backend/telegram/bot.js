@@ -745,22 +745,31 @@ bot.on("contact", async (ctx) => {
 
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
 
-bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx) => {
-  // ✅ если идёт мастер создания услуги — НЕ перехватываем дату как “телефон”
+bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
   const st = ctx.session?.state || null;
+
+  // ✅ 1) Если идёт мастер — НЕ глотаем сообщение, а пропускаем дальше в bot.on("text")
   if (st && String(st).startsWith("svc_create_")) {
-    return; // пусть обработает bot.on("text") мастер
+    return next();
   }
 
+  // ✅ 2) Если это похоже на дату (2025-12-09 / 2025.12.09 / 2025/12/09) — тоже пропускаем дальше
+  const t = String(ctx.message?.text || "").trim();
+  if (normalizeDateInput(t)) {
+    return next();
+  }
+
+  // ✅ 3) Телефон регистрируем только если пользователь реально в режиме привязки
   if (!ctx.session || !ctx.session.requestedRole) {
-    return;
+    return next();
   }
 
-  const phone = ctx.message.text.trim();
+  const phone = t;
   const requestedRole = ctx.session.requestedRole;
 
   await handlePhoneRegistration(ctx, requestedRole, phone, false);
 });
+
 
 // ==== ГЛАВНОЕ МЕНЮ: КНОПКИ ====
 
