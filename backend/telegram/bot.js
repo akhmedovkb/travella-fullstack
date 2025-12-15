@@ -39,6 +39,18 @@ const API_BASE = (
   "http://localhost:8080"
 ).replace(/\/+$/, "");
 
+// ВАЖНО: Telegram скачивает photoUrl снаружи. Поэтому для картинок нужен публичный URL (https://...).
+const API_PUBLIC_BASE = (
+  process.env.API_PUBLIC_URL ||
+  process.env.SITE_API_PUBLIC_URL ||
+  process.env.API_BASE_PUBLIC_URL ||
+  process.env.SITE_API_URL || // если он у тебя публичный
+  ""
+).replace(/\/+$/, "");
+
+console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
+
+
 console.log("=== BOT.JS LOADED ===");
 console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] Using TELEGRAM_CLIENT_BOT_TOKEN (polling)");
@@ -280,9 +292,11 @@ function getFirstImageUrl(svc) {
 
   // base64 (data:image/...) — отдаём через наш прокси-роут
   if (v.startsWith("data:image")) {
-    return `${API_BASE.replace(/\/+$/, "")}/api/telegram/service-image/${svc.id}`;
+    // Telegram должен видеть URL снаружи (не 127.0.0.1)
+    if (!API_PUBLIC_BASE) return null;
+    return `${API_PUBLIC_BASE}/api/telegram/service-image/${svc.id}`;
   }
-
+  
   // Полный URL
   if (v.startsWith("http://") || v.startsWith("https://")) {
     return v;
