@@ -40,13 +40,15 @@ const API_BASE = (
 ).replace(/\/+$/, "");
 
 console.log("=== BOT.JS LOADED ===");
-console.log("[tg-bot] CLIENT TOKEN RAW:", CLIENT_TOKEN || "(none)");
-console.log("[tg-bot] OLD TOKEN RAW   :", OLD_TOKEN || "(none)");
+console.log("=== BOT.JS LOADED ===");
+console.log("[tg-bot] Using TELEGRAM_CLIENT_BOT_TOKEN (polling)");
+console.log("[tg-bot] API_BASE =", API_BASE);
+console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log(
-  "[tg-bot] Using",
-  CLIENT_TOKEN ? "CLIENT" : "OLD",
-  "token for Telegraf bot"
+  "[tg-bot] MANAGER_CHAT_ID =",
+  MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
 );
+
 console.log("[tg-bot] API_BASE =", API_BASE);
 console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log(
