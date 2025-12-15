@@ -151,7 +151,15 @@ async function resetClient(req, res) {
 
     // Если ничего не нашли и leads не обновили — тогда 404 (как раньше)
     if (!clientFound && leadsReset === 0) {
-      return res.status(404).json({ ok: false, error: "client_not_found" });
+      return res.json({
+        ok: true,
+        reset: "client",
+        clientFound: false,
+        clientId: null,
+        alsoResetLeads,
+        leadsReset,
+        note: "client_not_found_but_ok",
+      });
     }
 
     return res.json({
@@ -286,9 +294,16 @@ async function resetProvider(req, res) {
 
     // Если ничего не нашли и leads не обновили — тогда 404 (как раньше)
     if (!providerFound && leadsReset === 0) {
-      return res.status(404).json({ ok: false, error: "provider_not_found" });
+      return res.json({
+        ok: true,
+        reset: "provider",
+        providerFound: false,
+        providerId: null,
+        alsoResetLeads,
+        leadsReset,
+        note: "provider_not_found_but_ok",
+      });
     }
-
     return res.json({
       ok: true,
       reset: "provider",
