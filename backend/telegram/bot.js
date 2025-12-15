@@ -920,60 +920,46 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   );
 });
 
-// ==== МОИ УСЛУГИ (панель поставщика) ====
+// ==== МОИ УСЛУГИ: подменю (3 кнопки) ====
 
-bot.hears(/🧳 Мои услуги/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои услуги");
-
-  const role = await ensureProviderRole(ctx);
-
-  if (role !== "provider") {
-    await ctx.reply(
-      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
-        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
-    );
-    return;
-  }
-
-  const chatId = ctx.chat.id;
-
+bot.action("prov_services:list", async (ctx) => {
   try {
-    await ctx.reply(
-      "Вы можете создать новую отказную услугу прямо в боте или в кабинете Travella:",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "➕ Создать услугу в боте", callback_data: "svc_new" }],
-            [
-              {
-                text: "🌐 Открыть кабинет Travella",
-                url: `${SITE_URL}/dashboard/services/marketplace?from=tg`,
-              },
-            ],
-          ],
-        },
-      }
-    );
+    await ctx.answerCbQuery();
 
-    await ctx.reply("Загружаю ваши услуги маркетплейса...");
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(
+        ctx,
+        "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
+          "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
+      );
+      return;
+    }
+
+    const chatId = ctx.chat?.id || ctx.from?.id;
+    if (!chatId) return;
+
+    await safeReply(ctx, "Загружаю ваши услуги маркетплейса...");
 
     const { data } = await axios.get(`/api/telegram/provider/${chatId}/services`);
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] provider services malformed:", data);
-      await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+      await safeReply(ctx, "Не удалось загрузить услуги. Попробуйте позже.");
       return;
     }
 
     if (!data.items.length) {
-      await ctx.reply(
+      await safeReply(
+        ctx,
         "У вас пока нет услуг в маркетплейсе.\n" +
-          "Добавьте их через бот или в личном кабинете на сайте travella.uz."
+          "Нажмите «➕ Создать услугу» и добавьте первую."
       );
       return;
     }
 
-    await ctx.reply(
+    await safeReply(
+      ctx,
       `Найдено услуг: ${data.items.length}. Показываю первые 10 (по ближайшей дате).`
     );
 
@@ -1004,15 +990,12 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       const status = svc.status || "draft";
 
       // === ЛОГИКА АКТУАЛЬНОСТИ ===
-      let isActive =
-        typeof details.isActive === "boolean" ? details.isActive : true;
+      let isActive = typeof details.isActive === "boolean" ? details.isActive : true;
 
       const expirationRaw = details.expiration || svc.expiration || null;
       if (expirationRaw) {
         const exp = new Date(expirationRaw);
-        if (!Number.isNaN(exp.getTime()) && exp < new Date()) {
-          isActive = false;
-        }
+        if (!Number.isNaN(exp.getTime()) && exp < new Date()) isActive = false;
       }
 
       const endRaw =
@@ -1020,11 +1003,10 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
         details.returnFlightDate ||
         details.endDate ||
         null;
+
       if (endRaw) {
         const ed = new Date(endRaw);
-        if (!Number.isNaN(ed.getTime()) && ed < new Date()) {
-          isActive = false;
-        }
+        if (!Number.isNaN(ed.getTime()) && ed < new Date()) isActive = false;
       }
 
       const headerLines = [];
@@ -1064,27 +1046,66 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
             });
           }
         } catch (e) {
-          console.error("[tg-bot] replyWithPhoto failed, fallback to text:", e?.response?.data || e?.message || e);
-          await ctx.reply(msg, {
-            parse_mode: "Markdown",
-            reply_markup: keyboard,
-          });
+          console.error(
+            "[tg-bot] replyWithPhoto failed, fallback to text:",
+            e?.response?.data || e?.message || e
+          );
+          await safeReply(ctx, msg, { parse_mode: "Markdown", reply_markup: keyboard });
         }
       } else {
-        await ctx.reply(msg, {
-          parse_mode: "Markdown",
-          reply_markup: keyboard,
-        });
+        await safeReply(ctx, msg, { parse_mode: "Markdown", reply_markup: keyboard });
       }
     }
   } catch (e) {
-    console.error(
-      "[tg-bot] provider services error:",
-      e?.response?.data || e.message || e
-    );
-    await ctx.reply("Не удалось загрузить услуги. Попробуйте позже.");
+    console.error("[tg-bot] prov_services:list error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "Не удалось загрузить услуги. Попробуйте позже.");
   }
 });
+
+bot.action("prov_services:back", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    // ✅ убираем inline-кнопки у того сообщения, где нажали "Назад"
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch (_) {}
+
+    const role = await ensureProviderRole(ctx);
+    const finalRole = role === "provider" ? "provider" : (ctx.session?.role || "client");
+
+    await safeReply(ctx, "Главное меню:", getMainMenuKeyboard(finalRole));
+  } catch (e) {
+    console.error("[tg-bot] prov_services:back error:", e);
+  }
+});
+
+// ==== МОИ УСЛУГИ (панель поставщика) ====
+
+bot.hears(/🧳 Мои услуги/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои услуги");
+
+  const role = await ensureProviderRole(ctx);
+
+  if (role !== "provider") {
+    await ctx.reply(
+      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
+        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
+    );
+    return;
+  }
+
+  await ctx.reply("Выберите действие:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📦 Мои услуги", callback_data: "prov_services:list" }],
+        [{ text: "➕ Создать услугу", callback_data: "svc_new" }],
+        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+      ],
+    },
+  });
+});
+
 
 // ==== НОВОЕ: старт мастера создания услуги ====
 
