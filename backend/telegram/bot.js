@@ -121,6 +121,17 @@ async function askRole(ctx) {
   });
 }
 
+async function safeReply(ctx, text, extra) {
+  // обычное сообщение — можно reply
+  if (ctx.chat?.id) return ctx.reply(text, extra);
+
+  // callback из inline — шлём в ЛС пользователю
+  const uid = ctx.from?.id;
+  if (!uid) return;
+
+  return bot.telegram.sendMessage(uid, text, extra);
+}
+
 function logUpdate(ctx, label = "update") {
   try {
     const fromId = ctx.from?.id;
@@ -1252,8 +1263,13 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
 
     if (!MANAGER_CHAT_ID) {
       await ctx.answerCbQuery();
-      await ctx.reply(
-        "Функция быстрого запроса пока недоступна (не задан TELEGRAM_MANAGER_CHAT_ID)."
+      await ctx.answerCbQuery();
+      await safeReply(
+        ctx,
+        "📩 Быстрый запрос\n\n" +
+          "Напишите, пожалуйста, сообщение по этому туру (пожелания, даты, количество человек)\n" +
+          "и оставьте контактный номер, если он отличается от Telegram.",
+        { parse_mode: "Markdown" }
       );
       return;
     }
