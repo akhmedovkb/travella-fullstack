@@ -257,37 +257,37 @@ try {
 }
 
 if (bot) {
-  console.log("[tg-bot] index.js: calling bot.launch()");
+  console.log("[tg-bot] index.js: starting bot (polling) ...");
 
-  bot
-    .launch()
-    .then(() => {
-      console.log("🤖 Telegram bot started");
-    })
-    .catch((e) => {
+  (async () => {
+    try {
+      // 🔥 критично: выключаем webhook у CLIENT-бота перед polling
+      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+      console.log("[tg-bot] webhook deleted (drop pending updates)");
+
+      await bot.launch();
+      console.log("🤖 Telegram bot started (polling)");
+    } catch (e) {
       const desc =
         (e && e.response && e.response.description) ||
         e?.description ||
         e?.message ||
         String(e);
 
-      if (
-        desc &&
-        desc.includes("Conflict: terminated by other getUpdates request")
-      ) {
+      if (desc && desc.includes("Conflict: terminated by other getUpdates request")) {
         console.warn(
           "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
             "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
           desc
         );
-        // НЕ бросаем ошибку — просто не запускаем polling
       } else {
         console.error(
-          "[tg-bot] launch error — бот будет отключён, но API продолжит работать:",
+          "[tg-bot] start error — бот будет отключён, но API продолжит работать:",
           desc
         );
       }
-    });
+    }
+  })();
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
@@ -296,6 +296,7 @@ if (bot) {
     "⚠️ Telegram bot is disabled — no module or no TELEGRAM_CLIENT_BOT_TOKEN"
   );
 }
+
 
 /** ===================== EntryFees ===================== */
 // публичные
