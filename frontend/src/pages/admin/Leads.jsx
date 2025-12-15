@@ -360,20 +360,27 @@ export default function AdminLeads() {
 
   async function resetClientByLead(r) {
     const phone = r.phone || "";
-    if (!phone) return alert("У лида нет телефона — reset невозможен.");
+    if (!phone && !r.telegram_chat_id) {
+      return alert("У лида нет телефона и telegram_chat_id — reset невозможен.");
+    }
 
     const ok = window.confirm(
-      `Сбросить Telegram-привязку КЛИЕНТА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
+      `Сбросить Telegram-привязку КЛИЕНТА?\n\nТелефон: ${phone || "—"}\nLead ID: ${r.id}\nchat_id: ${r.telegram_chat_id || "—"}`
     );
     if (!ok) return;
 
     try {
       const data = await adminPost("/api/admin/reset-client", {
-        phone,
+        leadId: r.id,
+        telegramChatId: r.telegram_chat_id || null,
+        phone: phone || "",
         alsoResetLeads: true,
       });
 
-      showToast(`✅ Reset client OK (clientId: ${data?.clientId ?? "?"})`);
+      showToast(
+        `✅ Reset client OK (clientId: ${data?.clientId ?? "—"})` +
+          (data?.clientFound === false ? " (client not found, lead reset ok)" : "")
+      );
       await fetchLeads();
     } catch (e) {
       alert(e?.message || "Reset client failed");
@@ -382,25 +389,33 @@ export default function AdminLeads() {
 
   async function resetProviderByLead(r) {
     const phone = r.phone || "";
-    if (!phone) return alert("У лида нет телефона — reset невозможен.");
+    if (!phone && !r.telegram_chat_id) {
+      return alert("У лида нет телефона и telegram_chat_id — reset невозможен.");
+    }
 
     const ok = window.confirm(
-      `Сбросить Telegram-привязку ПОСТАВЩИКА?\n\nТелефон: ${phone}\nLead ID: ${r.id}`
+      `Сбросить Telegram-привязку ПОСТАВЩИКА?\n\nТелефон: ${phone || "—"}\nLead ID: ${r.id}\nchat_id: ${r.telegram_chat_id || "—"}`
     );
     if (!ok) return;
 
     try {
       const data = await adminPost("/api/admin/reset-provider", {
-        phone,
+        leadId: r.id,
+        telegramChatId: r.telegram_chat_id || null,
+        phone: phone || "",
         alsoResetLeads: true,
       });
 
-      showToast(`✅ Reset provider OK (providerId: ${data?.providerId ?? "?"})`);
+      showToast(
+        `✅ Reset provider OK (providerId: ${data?.providerId ?? "—"})` +
+          (data?.providerFound === false ? " (provider not found, lead reset ok)" : "")
+      );
       await fetchLeads();
     } catch (e) {
       alert(e?.message || "Reset provider failed");
     }
   }
+
 
   async function fetchWhoami() {
     try {
