@@ -1048,17 +1048,24 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
       };
 
       if (photoUrl) {
-        // ✅ tg:file_id — отправляем как file_id
-        if (photoUrl.startsWith("tgfile:")) {
-          const fileId = photoUrl.replace(/^tgfile:/, "");
-          await ctx.replyWithPhoto(fileId, {
-            caption: msg,
-            parse_mode: "Markdown",
-            reply_markup: keyboard,
-          });
-        } else {
-          await ctx.replyWithPhoto(photoUrl, {
-            caption: msg,
+        try {
+          if (photoUrl.startsWith("tgfile:")) {
+            const fileId = photoUrl.replace(/^tgfile:/, "");
+            await ctx.replyWithPhoto(fileId, {
+              caption: msg,
+              parse_mode: "Markdown",
+              reply_markup: keyboard,
+            });
+          } else {
+            await ctx.replyWithPhoto(photoUrl, {
+              caption: msg,
+              parse_mode: "Markdown",
+              reply_markup: keyboard,
+            });
+          }
+        } catch (e) {
+          console.error("[tg-bot] replyWithPhoto failed, fallback to text:", e?.response?.data || e?.message || e);
+          await ctx.reply(msg, {
             parse_mode: "Markdown",
             reply_markup: keyboard,
           });
