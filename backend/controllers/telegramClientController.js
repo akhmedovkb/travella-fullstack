@@ -372,6 +372,7 @@ async function searchCategory(req, res) {
       `
         SELECT
           s.id,
+          s.provider_id,
           s.title,
           s.category,
           s.price,
@@ -424,6 +425,7 @@ async function searchClientServices(req, res) {
       `
         SELECT
           s.id,
+          s.provider_id,
           s.title,
           s.category,
           s.status,
