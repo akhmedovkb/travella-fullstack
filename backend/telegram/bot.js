@@ -471,7 +471,8 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     hotel: draft.hotel || "",
     accommodation: draft.accommodation || "",
     netPrice: priceNum,
-    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    grossPrice:
+      typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
     isActive: true,
   };
@@ -503,10 +504,16 @@ async function promptWizardState(ctx, state) {
   switch (state) {
     case "svc_create_title":
       await ctx.reply(
-        "Создаём новую услугу: *Отказной тур*.\n\n" +
-          "Отправьте, пожалуйста, *название тура* (как вы хотите показывать его в Travella).",
+        "🆕 Создаём *Отказной тур*.\n\n" +
+          "✍️ Отправьте *название тура* (как оно будет видно в Travella).",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
+      return;
+    case "svc_create_tour_country":
+      await ctx.reply("🌍 Укажите *страну направления* (например, Таиланд):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
       return;
 
     case "svc_create_tour_from":
@@ -525,16 +532,23 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_tour_start":
       await ctx.reply(
-        "📅 Укажите *дату начала тура* *(YYYY.MM.DD)*\nНапример: *2025.12.09*",
+        "📅 Укажите *дату начала тура*\n" +
+        "✅ Форматы: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+          "Например: *2025-12-09*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
 
     case "svc_create_tour_end":
-      await ctx.reply(""📅 Укажите *дату окончания тура* *(YYYY.MM.DD)*", {
+      await ctx.reply(
+        "📅 Укажите *дату окончания тура*\n" +
+          "✅ Форматы: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+          "Например: *2025-12-15*",
+        {
         parse_mode: "Markdown",
         ...wizNavKeyboard(),
-      });
+                  }
+      );
       return;
 
     case "svc_create_tour_hotel":
@@ -545,30 +559,37 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_create_tour_accommodation":
-       await ctx.reply("🛏 Укажите *размещение* (например: *DBL*):", {
-         parse_mode: "Markdown",
-         ...wizNavKeyboard(),
-       });
+      await ctx.reply(
+        "🛏 Укажите *размещение*\n" +
+          "Например: *DBL*, *SGL*, *2ADL+1CHD* и т.д.",
+        {
+          parse_mode: "Markdown",
+          ...wizNavKeyboard(),
+        }
+      );
       return;
 
     case "svc_create_price":
       await ctx.reply(
-        "💰 Укажите *цену нетто* (за тур, в валюте)\nНапример: *1130* или *1130 USD*",
+        "💰 Укажите *цену НЕТТО* (за тур)\n" +
+          "Например: *1130* или *1130 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
 
-     case "svc_create_gross_price":
-       await ctx.reply(
-         "💳 Укажите *цену брутто* (за тур, в валюте)\nНапример: *1250* или *1250 USD*",
-         { parse_mode: "Markdown", ...wizNavKeyboard() }
-       );
-       return;
+    case "svc_create_gross_price":
+      await ctx.reply(
+        "💳 Укажите *цену БРУТТО* (за тур)\n" +
+          "Например: *1250* или *1250 USD*",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
 
     case "svc_create_expiration":
       await ctx.reply(
-           "⏳ До какой даты тур *актуален*?\n" +
-           "Укажите дату *(YYYY.MM.DD)* или напишите `нет`.",
+        "⏳ До какой даты тур *актуален*?\n" +
+          "✅ Форматы: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+          "Или напишите `нет`.",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -1585,6 +1606,13 @@ bot.on("text", async (ctx, next) => {
         case "svc_create_title":
           draft.title = text;
           pushWizardState(ctx, "svc_create_title");
+          ctx.session.state = "svc_create_tour_country";
+          await promptWizardState(ctx, "svc_create_tour_country");
+          return;
+
+        case "svc_create_tour_country":
+          draft.country = text;
+          pushWizardState(ctx, "svc_create_tour_country");
           ctx.session.state = "svc_create_tour_from";
           await promptWizardState(ctx, "svc_create_tour_from");
           return;
@@ -1608,7 +1636,7 @@ bot.on("text", async (ctx, next) => {
           if (!norm) {
             await ctx.reply(
               "Не понял дату начала тура 😔\n" +
-                "Напишите в формате YYYY.MM.DD, например 2025-12-09.",
+                "Введите *YYYY-MM-DD* или *YYYY.MM.DD*, например *2025-12-09*.",
               wizNavKeyboard()
             );
             return;
@@ -1616,7 +1644,7 @@ bot.on("text", async (ctx, next) => {
           if (isPastYMD(norm)) {
             await ctx.reply(
               "Дата начала уже в прошлом.\n" +
-                "Пожалуйста, укажите будущую дату в формате YYYY.MM.DD.",
+                "Пожалуйста, укажите будущую дату (*YYYY-MM-DD* или *YYYY.MM.DD*).",
               wizNavKeyboard()
             );
             return;
@@ -1682,13 +1710,13 @@ bot.on("text", async (ctx, next) => {
           await promptWizardState(ctx, "svc_create_gross_price");
           return;
 
-       case "svc_create_gross_price": {
-         draft.grossPrice = text;
-         pushWizardState(ctx, "svc_create_gross_price");
-         ctx.session.state = "svc_create_expiration";
-         await promptWizardState(ctx, "svc_create_expiration");
-         return;
-       }
+        case "svc_create_gross_price": {
+          draft.grossPrice = text;
+          pushWizardState(ctx, "svc_create_gross_price");
+          ctx.session.state = "svc_create_expiration";
+          await promptWizardState(ctx, "svc_create_expiration");
+          return;
+        }
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
@@ -1697,7 +1725,7 @@ bot.on("text", async (ctx, next) => {
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "Не понял дату актуальности 😔\n" +
-                "Напишите в формате YYYY.MM.DD (например 2025.12.15) или `нет`.",
+                "Введите *YYYY-MM-DD* или *YYYY.MM.DD* (например *2025-12-15*) или `нет`.",
               wizNavKeyboard()
             );
             return;
