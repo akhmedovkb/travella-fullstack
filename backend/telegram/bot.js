@@ -453,19 +453,23 @@ function buildServiceMessage(svc, category, role = "client") {
   let providerLine;
   let telegramLine = null;
 
+  const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
+  const providerProfileUrl = providerId ? `${SITE_URL}/profile/provider/${providerId}` : null;
+
+  if (providerProfileUrl) {
+    providerLine = `Поставщик: [${providerName}](${providerProfileUrl})`;
+  } else {
+    providerLine = `Поставщик: ${providerName}`;
+  }
+
   if (providerTelegram) {
     let username = String(providerTelegram).trim();
     username = username.replace(/^@/, "");
     username = username.replace(/^https?:\/\/t\.me\//i, "");
-
-    const rawUsername = username;
     const mdUsername = escapeMarkdown(username);
-
-    providerLine = `Поставщик: [${providerName}](tg://resolve?domain=${rawUsername})`;
     telegramLine = `Telegram: @${mdUsername}`;
-  } else {
-    providerLine = `Поставщик: ${providerName}`;
   }
+
 
   // ✅ URL на конкретную карточку (как на сайте)
   const serviceUrl = `${SITE_URL}?service=${svc.id}`;
