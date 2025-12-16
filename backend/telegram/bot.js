@@ -26,6 +26,9 @@ const SITE_URL = (
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
+// Валюта для отображения цен в боте
+const PRICE_CURRENCY = (process.env.PRICE_CURRENCY || "USD").trim();
+
 // Для /tour_123 и inline-поиска — с какими категориями работаем
 const REFUSED_CATEGORIES = [
   "refused_tour",
@@ -58,6 +61,7 @@ console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
   MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
 );
+console.log("[tg-bot] PRICE_CURRENCY =", PRICE_CURRENCY);
 
 // axios инстанс
 const axios = axiosBase.create({
@@ -83,6 +87,47 @@ function escapeMarkdown(text) {
     .replace(/\(/g, "\\(")
     .replace(/\)/g, "\\)")
     .replace(/`/g, "\\`");
+}
+
+// ✅ Бережная нормализация заголовка:
+// - если слово капсом и длинее 3 букв → делаем "С Заглавной"
+// - короткие аббревиатуры (<=3) оставляем как есть (ОАЭ, UAE и т.п.)
+function normalizeTitleSoft(str) {
+  if (!str) return str;
+  const s = String(str).trim();
+  if (!s) return s;
+
+  // если в строке уже есть нижний регистр — считаем, что всё ок
+  if (/[a-zа-яё]/.test(s)) return s;
+
+  // заменяем только "слова" из букв
+  return s.replace(/[A-Za-zА-ЯЁа-яё]+/g, (w) => {
+    if (w.length <= 3) return w; // аббревиатуры
+    // если слово целиком в верхнем регистре — нормализуем
+    if (w === w.toUpperCase()) {
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }
+    return w;
+  });
+}
+
+// ✅ Санитизация странных разделителей дат (’n / 'n / &n) → стрелка
+function normalizeDateSeparator(s) {
+  if (!s) return s;
+  return String(s)
+    .replace(/\s*['’]n\s*/gi, " → ")
+    .replace(/\s*&n\s*/gi, " → ")
+    .replace(/\s+→\s+/g, " → ")
+    .trim();
+}
+
+function formatPriceWithCurrency(value) {
+  if (value === null || value === undefined) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+  // если уже есть валюта — не дублируем
+  if (/\b(usd|u\.?s\.?d\.?|eur|rub|uzs|\$|€|₽|сум)\b/i.test(v)) return v;
+  return `${v} ${PRICE_CURRENCY}`;
 }
 
 function getMainMenuKeyboard(role) {
@@ -329,8 +374,10 @@ function buildServiceMessage(svc, category, role = "client") {
     }
   }
 
+  // ✅ заголовок делаем аккуратнее (без крика капсом), но бережно
   const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
-  const title = escapeMarkdown(titleRaw);
+  const titlePretty = normalizeTitleSoft(titleRaw);
+  const title = escapeMarkdown(titlePretty);
 
   // Направление
   const directionParts = [];
@@ -348,11 +395,13 @@ function buildServiceMessage(svc, category, role = "client") {
   // Даты
   const dates =
     d.startFlightDate && d.endFlightDate
-      ? `Даты: ${escapeMarkdown(d.startFlightDate)} → ${escapeMarkdown(
-          d.endFlightDate
+      ? `Даты: ${escapeMarkdown(normalizeDateSeparator(d.startFlightDate))} → ${escapeMarkdown(
+          normalizeDateSeparator(d.endFlightDate)
         )}`
       : d.startDate && d.endDate
-      ? `Даты: ${escapeMarkdown(d.startDate)} → ${escapeMarkdown(d.endDate)}`
+      ? `Даты: ${escapeMarkdown(normalizeDateSeparator(d.startDate))} → ${escapeMarkdown(
+          normalizeDateSeparator(d.endDate)
+        )}`
       : null;
 
   // Отель
@@ -363,11 +412,12 @@ function buildServiceMessage(svc, category, role = "client") {
   const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
 
-  // Цена (по роли)
+  // Цена (по роли) + валюта
   const priceRaw = pickPrice(d, svc, role);
+  const priceWithCur = formatPriceWithCurrency(priceRaw);
   const price =
-    priceRaw !== null && priceRaw !== undefined
-      ? escapeMarkdown(priceRaw)
+    priceWithCur !== null && priceWithCur !== undefined
+      ? escapeMarkdown(priceWithCur)
       : null;
 
   // Поставщик + Telegram
@@ -1993,15 +2043,17 @@ bot.on("inline_query", async (ctx) => {
       if (startFlight && endFlight) {
         const sf = String(startFlight).replace(/-/g, ".");
         const ef = String(endFlight).replace(/-/g, ".");
-        datesLine = `ДАТЫ: ${sf} → ${ef}`;
+        // ✅ страховка от старого "’n" / "'n" / "&n"
+        const raw = `ДАТЫ: ${sf} → ${ef}`;
+        datesLine = normalizeDateSeparator(raw);
       }
 
       const hotelNameRaw = d.hotel || d.hotelName || "";
       const hotelLine = hotelNameRaw ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}` : "";
 
       const priceInline = pickPrice(d, svc, roleForInline);
-      const priceLine =
-        priceInline !== null && priceInline !== undefined ? `ЦЕНА: ${priceInline}` : "";
+      const priceWithCur = formatPriceWithCurrency(priceInline);
+      const priceLine = priceWithCur ? `ЦЕНА: ${priceWithCur}` : "";
 
       const descParts = [];
       if (datesLine) descParts.push(datesLine);
@@ -2022,7 +2074,8 @@ bot.on("inline_query", async (ctx) => {
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        title: svc.title || CATEGORY_LABELS[category] || "Услуга",
+        // ✅ делаем title нормальным (без крика капсом), но не ломаем аббревиатуры
+        title: normalizeTitleSoft(svc.title) || CATEGORY_LABELS[category] || "Услуга",
         description,
         thumb_url: thumbUrl || undefined,
         input_message_content: {
