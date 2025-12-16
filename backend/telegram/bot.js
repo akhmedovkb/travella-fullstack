@@ -111,14 +111,20 @@ function normalizeTitleSoft(str) {
   });
 }
 
-// ✅ Санитизация странных разделителей дат (’n / 'n / &n) → стрелка
-function normalizeDateSeparator(s) {
+// ✅ Санитизация странных разделителей (’n / 'n / &n) → стрелка
+// Используем для дат И направления
+function normalizeWeirdSeparator(s) {
   if (!s) return s;
   return String(s)
     .replace(/\s*['’]n\s*/gi, " → ")
     .replace(/\s*&n\s*/gi, " → ")
     .replace(/\s+→\s+/g, " → ")
     .trim();
+}
+
+// ✅ совместимость со старым названием (если где-то осталось)
+function normalizeDateSeparator(s) {
+  return normalizeWeirdSeparator(s);
 }
 
 function formatPriceWithCurrency(value) {
@@ -158,8 +164,7 @@ function getMainMenuKeyboard(role) {
 
 async function askRole(ctx) {
   await ctx.reply(
-    "👋 Добро пожаловать в *Travella*!\n\n" +
-      "Выберите роль, чтобы продолжить 👇",
+    "👋 Добро пожаловать в *Travella*!\n\n" + "Выберите роль, чтобы продолжить 👇",
     {
       parse_mode: "Markdown",
       reply_markup: {
@@ -349,15 +354,15 @@ function getFirstImageUrl(svc) {
   return null;
 }
 
-// ✅ выбираем цену в зависимости от роли (строго: поставщик=net, клиент=gross)
+// выбираем цену в зависимости от роли
 function pickPrice(details, svc, role) {
   const d = details || {};
   if (role === "provider") {
-    // поставщик видит НЕТТО (и только НЕТТО)
-    return d.netPrice ?? d.price ?? svc.price ?? null;
+    // поставщик видит нетто
+    return d.netPrice ?? d.price ?? d.grossPrice ?? svc.price ?? null;
   }
-  // клиент видит БРУТТО (и только БРУТТО)
-  return d.grossPrice ?? d.price ?? svc.price ?? null;
+  // клиент — брутто
+  return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
 }
 
 /**
@@ -375,38 +380,52 @@ function buildServiceMessage(svc, category, role = "client") {
   }
 
   // ✅ заголовок
-  const titleRaw = svc.title || d.title || CATEGORY_LABELS[category] || "Услуга";
+  const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
   const titlePretty = normalizeTitleSoft(titleRaw);
   const title = escapeMarkdown(titlePretty);
 
-  // Категория капсом (маркетплейс-стандарт)
-  const catLabel = CATEGORY_LABELS[category] || "Услуга";
-  const catCaps = escapeMarkdown(String(catLabel).toUpperCase());
-
-  // Направление
+  // Направление (страна/города) + чистим странные ’n
   const directionParts = [];
-  if (d.directionFrom && d.directionTo) {
+  const from = d.directionFrom ? normalizeWeirdSeparator(d.directionFrom) : null;
+  const to = d.directionTo ? normalizeWeirdSeparator(d.directionTo) : null;
+  const country = d.directionCountry ? normalizeWeirdSeparator(d.directionCountry) : null;
+
+  if (from && to) {
     directionParts.push(
-      `${escapeMarkdown(d.directionFrom)} → ${escapeMarkdown(d.directionTo)}`
+      `${escapeMarkdown(from)} → ${escapeMarkdown(to)}`
     );
+  } else if (from) {
+    directionParts.push(escapeMarkdown(from));
+  } else if (to) {
+    directionParts.push(escapeMarkdown(to));
   }
-  if (d.directionCountry) {
-    directionParts.push(escapeMarkdown(d.directionCountry));
-  }
+  if (country) directionParts.push(escapeMarkdown(country));
+
   const direction =
     directionParts.length > 0 ? directionParts.join(" · ") : null;
 
-  // Даты
-  const dates =
-    d.startFlightDate && d.endFlightDate
-      ? `Даты: ${escapeMarkdown(normalizeDateSeparator(d.startFlightDate))} → ${escapeMarkdown(
-          normalizeDateSeparator(d.endFlightDate)
-        )}`
-      : d.startDate && d.endDate
-      ? `Даты: ${escapeMarkdown(normalizeDateSeparator(d.startDate))} → ${escapeMarkdown(
-          normalizeDateSeparator(d.endDate)
-        )}`
-      : null;
+  // Даты: маркетплейс-стандарт (если есть обе — покажем диапазон; если одна — "Дата:")
+  const startRaw =
+    d.startFlightDate ||
+    d.departureFlightDate ||
+    d.startDate ||
+    null;
+
+  const endRaw =
+    d.endFlightDate ||
+    d.returnFlightDate ||
+    d.endDate ||
+    null;
+
+  const startClean = startRaw ? normalizeWeirdSeparator(startRaw) : null;
+  const endClean = endRaw ? normalizeWeirdSeparator(endRaw) : null;
+
+  let dates = null;
+  if (startClean && endClean && String(startClean) !== String(endClean)) {
+    dates = `Даты: ${escapeMarkdown(startClean)} → ${escapeMarkdown(endClean)}`;
+  } else if (startClean) {
+    dates = `Дата: ${escapeMarkdown(startClean)}`;
+  }
 
   // Отель
   const hotel = d.hotel || d.hotelName || null;
@@ -416,7 +435,7 @@ function buildServiceMessage(svc, category, role = "client") {
   const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
 
-  // ✅ Цена (по роли) + валюта
+  // Цена (по роли) + валюта
   const priceRaw = pickPrice(d, svc, role);
   const priceWithCur = formatPriceWithCurrency(priceRaw);
   const price =
@@ -424,8 +443,7 @@ function buildServiceMessage(svc, category, role = "client") {
       ? escapeMarkdown(priceWithCur)
       : null;
 
-  // ✅ подпись цены строго по роли
-  const priceLabel = role === "provider" ? "Netto" : "Gross"; // можно заменить на "Цена" для клиента
+  const priceLabel = role === "provider" ? "Цена (netto)" : "Цена";
 
   // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
@@ -449,27 +467,21 @@ function buildServiceMessage(svc, category, role = "client") {
     providerLine = `Поставщик: ${providerName}`;
   }
 
+  // ✅ URL на конкретную карточку (как на сайте)
+  const serviceUrl = `${SITE_URL}?service=${svc.id}`;
+  // Если у тебя уже есть прямой маршрут — лучше так:
+  // const serviceUrl = `${SITE_URL}/service/${svc.id}`;
+
   const lines = [];
-
-  // ✅ маркетплейс-стандарт: категория капсом + название
-  lines.push(`*${catCaps}*`);
   lines.push(`*${title}*`);
-
   if (direction) lines.push(direction);
   if (dates) lines.push(dates);
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
-
-  // ✅ вместо "Цена:" — Netto/Gross по роли
   if (price) lines.push(`${priceLabel}: *${price}*`);
-
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
   lines.push("");
-
-  // ✅ ссылка “как в маркетплейсе”: ведём на сайт (не ломаем роуты)
-  // Если у тебя уже есть конкретная страница услуги — поменяешь 1 строку здесь.
-  const serviceUrl = `${SITE_URL}?service=${encodeURIComponent(String(svc.id))}`;
   lines.push(`Подробнее и бронирование: ${serviceUrl}`);
 
   const text = lines.join("\n");
@@ -483,7 +495,9 @@ async function ensureProviderRole(ctx) {
   if (ctx.session?.role === "provider") {
     return "provider";
   }
-  const chatId = ctx.chat.id;
+  const chatId = ctx.chat?.id;
+  if (!chatId) return ctx.session?.role || null;
+
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${chatId}`);
     if (resProv.data && resProv.data.success) {
@@ -501,6 +515,26 @@ async function ensureProviderRole(ctx) {
     }
   }
   return ctx.session?.role || null;
+}
+
+// ✅ для inline_query (там нет ctx.chat, есть ctx.from.id)
+async function resolveRoleByUserId(userId, ctx) {
+  try {
+    const resProv = await axios.get(`/api/telegram/profile/provider/${userId}`);
+    if (resProv.data && resProv.data.success) {
+      if (ctx && ctx.session) {
+        ctx.session.role = "provider";
+        ctx.session.linked = true;
+      }
+      return "provider";
+    }
+  } catch (e) {
+    // ignore 404
+    if (e?.response?.status !== 404) {
+      console.log("[tg-bot] resolveRoleByUserId error:", e?.response?.data || e.message || e);
+    }
+  }
+  return "client";
 }
 
 /* ===================== SERVICE WIZARD (создание refused_tour) ===================== */
@@ -639,16 +673,14 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_price":
       await ctx.reply(
-        "💰 Укажите *цену НЕТТО* (за тур)\n" +
-          "Пример: *1130* или *1130 USD*",
+        "💰 Укажите *цену НЕТТО* (за тур)\n" + "Пример: *1130* или *1130 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
 
     case "svc_create_gross_price":
       await ctx.reply(
-        "💳 Укажите *цену БРУТТО* (за тур)\n" +
-          "Пример: *1250* или *1250 USD*",
+        "💳 Укажите *цену БРУТТО* (за тур)\n" + "Пример: *1250* или *1250 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -691,8 +723,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const priceNum = normalizePrice(draft.price);
     if (priceNum === null) {
       await ctx.reply(
-        "😕 Не понял цену.\n" +
-          "Введите число, например: *1130* или *1130 USD*.",
+        "😕 Не понял цену.\n" + "Введите число, например: *1130* или *1130 USD*.",
         { parse_mode: "Markdown" }
       );
       ctx.session.state = "svc_create_price";
@@ -828,7 +859,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       await ctx.reply(
         "🎉 Добро пожаловать!\n\n" +
           "Мы создали для вас *клиентский аккаунт* по этому номеру.\n" +
-          "Данные можно дополнить на сайте.",
+          "Данные можно дополннить на сайте.",
         { parse_mode: "Markdown" }
       );
     } else if (data.created === "provider_lead") {
@@ -1523,6 +1554,7 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
 
 // ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
 
+// ✅ FIX: роль определяем через ensureProviderRole, иначе агент видел gross
 bot.action(
   /^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
   async (ctx) => {
@@ -1532,8 +1564,11 @@ bot.action(
       await ctx.answerCbQuery();
       logUpdate(ctx, `action search ${category}`);
 
+      // ✅ правильная роль
+      const maybeProvider = await ensureProviderRole(ctx);
+      const role = maybeProvider || ctx.session?.role || "client";
+
       const chatId = ctx.chat.id;
-      const role = ctx.session?.role || "client";
 
       await ctx.reply("⏳ Ищу подходящие предложения...");
 
@@ -1769,8 +1804,7 @@ bot.on("text", async (ctx, next) => {
           }
           if (isPastYMD(normEnd)) {
             await ctx.reply(
-              "⚠️ Эта дата уже в прошлом.\n" +
-                "Укажите будущую дату окончания.",
+              "⚠️ Эта дата уже в прошлом.\n" + "Укажите будущую дату окончания.",
               { parse_mode: "Markdown", ...wizNavKeyboard() }
             );
             return;
@@ -1927,7 +1961,10 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
     const chatId = ctx.chat.id;
-    const role = ctx.session?.role || "client";
+
+    // ✅ FIX: корректная роль (агент должен видеть net)
+    const maybeProvider = await ensureProviderRole(ctx);
+    const role = maybeProvider || ctx.session?.role || "client";
 
     await ctx.reply("⏳ Ищу по ID...");
 
@@ -2011,7 +2048,9 @@ bot.on("inline_query", async (ctx) => {
     }
 
     const chatId = ctx.from.id;
-    const roleForInline = "client";
+
+    // ✅ FIX: если inline делает агент — показываем net, иначе gross
+    const roleForInline = await resolveRoleByUserId(chatId, ctx);
 
     const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
       params: { category },
@@ -2060,9 +2099,11 @@ bot.on("inline_query", async (ctx) => {
       if (startFlight && endFlight) {
         const sf = String(startFlight).replace(/-/g, ".");
         const ef = String(endFlight).replace(/-/g, ".");
-        // ✅ страховка от старого "’n" / "'n" / "&n"
         const raw = `ДАТЫ: ${sf} → ${ef}`;
-        datesLine = normalizeDateSeparator(raw);
+        datesLine = normalizeWeirdSeparator(raw);
+      } else if (startFlight) {
+        const sf = String(startFlight).replace(/-/g, ".");
+        datesLine = `ДАТА: ${normalizeWeirdSeparator(sf)}`;
       }
 
       const hotelNameRaw = d.hotel || d.hotelName || "";
@@ -2070,7 +2111,8 @@ bot.on("inline_query", async (ctx) => {
 
       const priceInline = pickPrice(d, svc, roleForInline);
       const priceWithCur = formatPriceWithCurrency(priceInline);
-      const priceLine = priceWithCur ? `ЦЕНА: ${priceWithCur}` : "";
+      const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
+      const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
 
       const descParts = [];
       if (datesLine) descParts.push(datesLine);
@@ -2091,7 +2133,6 @@ bot.on("inline_query", async (ctx) => {
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        // ✅ делаем title нормальным (без крика капсом), но не ломаем аббревиатуры
         title: normalizeTitleSoft(svc.title) || CATEGORY_LABELS[category] || "Услуга",
         description,
         thumb_url: thumbUrl || undefined,
