@@ -349,15 +349,15 @@ function getFirstImageUrl(svc) {
   return null;
 }
 
-// выбираем цену в зависимости от роли
+// ✅ выбираем цену в зависимости от роли (строго: поставщик=net, клиент=gross)
 function pickPrice(details, svc, role) {
   const d = details || {};
   if (role === "provider") {
-    // поставщик видит нетто
-    return d.netPrice ?? d.price ?? d.grossPrice ?? svc.price ?? null;
+    // поставщик видит НЕТТО (и только НЕТТО)
+    return d.netPrice ?? d.price ?? svc.price ?? null;
   }
-  // клиент — брутто
-  return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
+  // клиент видит БРУТТО (и только БРУТТО)
+  return d.grossPrice ?? d.price ?? svc.price ?? null;
 }
 
 /**
@@ -374,10 +374,14 @@ function buildServiceMessage(svc, category, role = "client") {
     }
   }
 
-  // ✅ заголовок делаем аккуратнее (без крика капсом), но бережно
-  const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
+  // ✅ заголовок
+  const titleRaw = svc.title || d.title || CATEGORY_LABELS[category] || "Услуга";
   const titlePretty = normalizeTitleSoft(titleRaw);
   const title = escapeMarkdown(titlePretty);
+
+  // Категория капсом (маркетплейс-стандарт)
+  const catLabel = CATEGORY_LABELS[category] || "Услуга";
+  const catCaps = escapeMarkdown(String(catLabel).toUpperCase());
 
   // Направление
   const directionParts = [];
@@ -412,13 +416,16 @@ function buildServiceMessage(svc, category, role = "client") {
   const accommodation = d.accommodation || null;
   const accommodationSafe = accommodation ? escapeMarkdown(accommodation) : null;
 
-  // Цена (по роли) + валюта
+  // ✅ Цена (по роли) + валюта
   const priceRaw = pickPrice(d, svc, role);
   const priceWithCur = formatPriceWithCurrency(priceRaw);
   const price =
     priceWithCur !== null && priceWithCur !== undefined
       ? escapeMarkdown(priceWithCur)
       : null;
+
+  // ✅ подпись цены строго по роли
+  const priceLabel = role === "provider" ? "Netto" : "Gross"; // можно заменить на "Цена" для клиента
 
   // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
@@ -443,20 +450,30 @@ function buildServiceMessage(svc, category, role = "client") {
   }
 
   const lines = [];
+
+  // ✅ маркетплейс-стандарт: категория капсом + название
+  lines.push(`*${catCaps}*`);
   lines.push(`*${title}*`);
+
   if (direction) lines.push(direction);
   if (dates) lines.push(dates);
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
-  if (price) lines.push(`Цена: *${price}*`);
+
+  // ✅ вместо "Цена:" — Netto/Gross по роли
+  if (price) lines.push(`${priceLabel}: *${price}*`);
+
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
   lines.push("");
-  lines.push(`Подробнее и бронирование: ${SITE_URL}`);
+
+  // ✅ ссылка “как в маркетплейсе”: ведём на сайт (не ломаем роуты)
+  // Если у тебя уже есть конкретная страница услуги — поменяешь 1 строку здесь.
+  const serviceUrl = `${SITE_URL}?service=${encodeURIComponent(String(svc.id))}`;
+  lines.push(`Подробнее и бронирование: ${serviceUrl}`);
 
   const text = lines.join("\n");
   const photoUrl = getFirstImageUrl(svc);
-  const serviceUrl = SITE_URL;
 
   return { text, photoUrl, serviceUrl };
 }
