@@ -9,11 +9,12 @@ const axiosBase = require("axios");
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
 if (!CLIENT_TOKEN) {
-  throw new Error("TELEGRAM_CLIENT_BOT_TOKEN is required for backend/telegram/bot.js");
+  throw new Error(
+    "TELEGRAM_CLIENT_BOT_TOKEN is required for backend/telegram/bot.js"
+  );
 }
 
 const BOT_TOKEN = CLIENT_TOKEN;
-
 
 // Публичный URL Travella для кнопок "Подробнее"
 const SITE_URL = (
@@ -48,20 +49,10 @@ const API_PUBLIC_BASE = (
   ""
 ).replace(/\/+$/, "");
 
-console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
-
-
-console.log("=== BOT.JS LOADED ===");
 console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] Using TELEGRAM_CLIENT_BOT_TOKEN (polling)");
 console.log("[tg-bot] API_BASE =", API_BASE);
-console.log("[tg-bot] SITE_URL =", SITE_URL);
-console.log(
-  "[tg-bot] MANAGER_CHAT_ID =",
-  MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
-);
-
-console.log("[tg-bot] API_BASE =", API_BASE);
+console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
 console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
@@ -296,7 +287,7 @@ function getFirstImageUrl(svc) {
     if (!API_PUBLIC_BASE) return null;
     return `${API_PUBLIC_BASE}/api/telegram/service-image/${svc.id}`;
   }
-  
+
   // Полный URL
   if (v.startsWith("http://") || v.startsWith("https://")) {
     return v;
@@ -372,7 +363,9 @@ function buildServiceMessage(svc, category, role = "client") {
   // Цена (по роли)
   const priceRaw = pickPrice(d, svc, role);
   const price =
-    priceRaw !== null && priceRaw !== undefined ? escapeMarkdown(priceRaw) : null;
+    priceRaw !== null && priceRaw !== undefined
+      ? escapeMarkdown(priceRaw)
+      : null;
 
   // Поставщик + Telegram
   const providerNameRaw = svc.provider_name || "Поставщик Travella";
@@ -446,12 +439,14 @@ function resetServiceWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.state = null;
   ctx.session.serviceDraft = null;
+  ctx.session.wizardStack = null;
 }
 
 function parseYesNo(text) {
   const t = text.trim().toLowerCase();
   if (["да", "ha", "xa", "yes", "y"].includes(t)) return true;
-  if (["нет", "yo'q", "yoq", "yo‘q", "yok", "no", "n"].includes(t)) return false;
+  if (["нет", "yo'q", "yoq", "yo‘q", "yok", "no", "n"].includes(t))
+    return false;
   return null;
 }
 
@@ -482,6 +477,128 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     expiration: draft.expiration || null,
     isActive: true,
   };
+}
+
+function wizNavKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+          { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+        ],
+      ],
+    },
+  };
+}
+
+function pushWizardState(ctx, prevState) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
+  if (prevState && String(prevState).startsWith("svc_create_")) {
+    ctx.session.wizardStack.push(prevState);
+  }
+}
+
+async function promptWizardState(ctx, state) {
+  // На каждом шаге даём одинаковые кнопки "Назад/Отмена"
+  switch (state) {
+    case "svc_create_title":
+      await ctx.reply(
+        "Создаём новую услугу: *Отказной тур*.\n\n" +
+          "Отправьте, пожалуйста, *название тура* (как вы хотите показывать его в Travella).",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_tour_country":
+      await ctx.reply("Укажите *страну направления* (например, Таиланд):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_from":
+      await ctx.reply("Укажите *город вылета* (например, Ташкент):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_to":
+      await ctx.reply("Укажите *город прибытия* (например, Бангкок):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_start":
+      await ctx.reply(
+        "Укажите *дату начала тура* в формате ГГГГ-ММ-ДД (например, 2025-12-09):",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_tour_end":
+      await ctx.reply("Укажите *дату окончания тура* в формате ГГГГ-ММ-ДД:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_hotel":
+      await ctx.reply("Укажите *отель* (как в ваучере, можно с категорией):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_tour_accommodation":
+      await ctx.reply(
+        "Опишите *размещение* (тип номера, размещение ADT/CHD/INF):",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_price":
+      await ctx.reply(
+        "Укажите *цену нетто* (за тур, в валюте, например 1130 или 1130 USD):",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_changeable":
+      await ctx.reply("Можно ли *менять туриста* в туре? Напишите `да` или `нет`.", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_visa":
+      await ctx.reply("Включена ли *виза* в этот тур? Напишите `да` или `нет`.", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_create_expiration":
+      await ctx.reply(
+        "До какой даты тур *актуален*? Укажите дату ГГГГ-ММ-ДД или напишите `нет`, если только по дате вылета.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_photo":
+      await ctx.reply(
+        "Отправьте одно *фото тура* одним сообщением или напишите `пропустить`.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    default:
+      await ctx.reply("Продолжим создание услуги.", wizNavKeyboard());
+      return;
+  }
 }
 
 async function finishCreateServiceFromWizard(ctx) {
@@ -534,15 +651,25 @@ async function finishCreateServiceFromWizard(ctx) {
       `Готово! ✅\n\nУслуга #${data.service.id} создана и отправлена на модерацию.\n` +
         "После одобрения она появится в поиске Travella и в боте."
     );
+
     resetServiceWizard(ctx);
+
+    // вернём в подменю "Мои услуги"
+    await ctx.reply("Что дальше?", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
   } catch (e) {
     console.error(
       "[tg-bot] finishCreateServiceFromWizard error:",
       e?.response?.data || e
     );
-    await ctx.reply(
-      "Произошла ошибка при сохранении услуги. Попробуйте позже."
-    );
+    await ctx.reply("Произошла ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
 }
@@ -550,7 +677,7 @@ async function finishCreateServiceFromWizard(ctx) {
 /* ===================== Регистрация / привязка телефона ===================== */
 
 // Основная логика привязки телефона к аккаунту / созданию нового
-async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
+async function handlePhoneRegistration(ctx, requestedRole, phone) {
   try {
     const chatId = ctx.chat.id;
     const username = ctx.from.username || null;
@@ -571,9 +698,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
     console.log("[bot] /api/telegram/link response:", data);
 
     if (!data || !data.success) {
-      await ctx.reply(
-        "Произошла ошибка при привязке телефона. Попробуйте позже."
-      );
+      await ctx.reply("Произошла ошибка при привязке телефона. Попробуйте позже.");
       return;
     }
 
@@ -624,13 +749,8 @@ async function handlePhoneRegistration(ctx, requestedRole, phone, fromContact) {
       getMainMenuKeyboard(finalRole)
     );
   } catch (e) {
-    console.error(
-      "[tg-bot] handlePhoneRegistration error:",
-      e?.response?.data || e
-    );
-    await ctx.reply(
-      "Произошла ошибка при привязке телефона. Попробуйте позже."
-    );
+    console.error("[tg-bot] handlePhoneRegistration error:", e?.response?.data || e);
+    await ctx.reply("Произошла ошибка при привязке телефона. Попробуйте позже.");
   }
 }
 
@@ -647,14 +767,10 @@ bot.start(async (ctx) => {
       const resClient = await axios.get(`/api/telegram/profile/client/${chatId}`);
       if (resClient.data && resClient.data.success) {
         role = "client";
-        console.log("[tg-bot] profile client resp:", resClient.status, resClient.data);
       }
     } catch (e) {
       if (e?.response?.status !== 404) {
-        console.log(
-          "[tg-bot] profile client error:",
-          e?.response?.data || e.message || e
-        );
+        console.log("[tg-bot] profile client error:", e?.response?.data || e.message || e);
       }
     }
 
@@ -663,7 +779,6 @@ bot.start(async (ctx) => {
         const resProv = await axios.get(`/api/telegram/profile/provider/${chatId}`);
         if (resProv.data && resProv.data.success) {
           role = "provider";
-          console.log("[tg-bot] profile provider resp:", resProv.status, resProv.data);
         }
       } catch (e) {
         if (e?.response?.status !== 404) {
@@ -679,8 +794,6 @@ bot.start(async (ctx) => {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
-
-      console.log("[tg-bot] resolved role on /start:", role);
 
       await ctx.reply(
         "Добро пожаловать в Travella! 👋\nГлавное меню доступно ниже.",
@@ -724,12 +837,7 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
         parse_mode: "HTML",
         reply_markup: {
           keyboard: [
-            [
-              {
-                text: "📲 Отправить мой номер",
-                request_contact: true,
-              },
-            ],
+            [{ text: "📲 Отправить мой номер", request_contact: true }],
           ],
           resize_keyboard: true,
           one_time_keyboard: true,
@@ -754,7 +862,7 @@ bot.on("contact", async (ctx) => {
   const phone = contact.phone_number;
   const requestedRole = ctx.session?.requestedRole || "client";
 
-  await handlePhoneRegistration(ctx, requestedRole, phone, true);
+  await handlePhoneRegistration(ctx, requestedRole, phone);
 });
 
 // ==== ТЕКСТОВЫЙ ВВОД ТЕЛЕФОНА ====
@@ -767,7 +875,7 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
     return next();
   }
 
-  // ✅ 2) Если это похоже на дату (2025-12-09 / 2025.12.09 / 2025/12/09) — тоже пропускаем дальше
+  // ✅ 2) Если это похоже на дату — тоже пропускаем дальше
   const t = String(ctx.message?.text || "").trim();
   if (normalizeDateInput(t)) {
     return next();
@@ -781,9 +889,8 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
   const phone = t;
   const requestedRole = ctx.session.requestedRole;
 
-  await handlePhoneRegistration(ctx, requestedRole, phone, false);
+  await handlePhoneRegistration(ctx, requestedRole, phone);
 });
-
 
 // ==== ГЛАВНОЕ МЕНЮ: КНОПКИ ====
 
@@ -807,19 +914,13 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [
-            {
-              text: "📤 Выбрать отказной тур",
-              switch_inline_query_current_chat: "#allotkaztur ",
-            },
-          ],
+          [{ text: "📤 Выбрать отказной тур", switch_inline_query_current_chat: "#allotkaztur " }],
         ],
       },
     }
   );
 });
 
-// заглушки
 bot.hears(/❤️ Избранное/i, async (ctx) => {
   logUpdate(ctx, "hears Избранное");
   await ctx.reply(
@@ -831,7 +932,6 @@ bot.hears(/❤️ Избранное/i, async (ctx) => {
 bot.hears(/📄 Мои брони/i, async (ctx) => {
   logUpdate(ctx, "hears Мои брони");
 
-  // если не привязан — просим привязку
   const maybeProvider = await ensureProviderRole(ctx);
   const linked = !!ctx.session?.linked;
   const role = maybeProvider || ctx.session?.role || null;
@@ -844,7 +944,6 @@ bot.hears(/📄 Мои брони/i, async (ctx) => {
     return;
   }
 
-  // дальше — как было
   await ctx.reply(
     "Пока бронирование через бот мы ещё доделываем.\n" +
       "Пока все ваши брони доступны в личном кабинете на сайте travella.uz."
@@ -854,7 +953,6 @@ bot.hears(/📄 Мои брони/i, async (ctx) => {
 bot.hears(/📨 Мои заявки/i, async (ctx) => {
   logUpdate(ctx, "hears Мои заявки");
 
-  // если не привязан — просим привязку
   const maybeProvider = await ensureProviderRole(ctx);
   const linked = !!ctx.session?.linked;
   const role = maybeProvider || ctx.session?.role || null;
@@ -867,7 +965,6 @@ bot.hears(/📨 Мои заявки/i, async (ctx) => {
     return;
   }
 
-  // дальше — как было
   await ctx.reply(
     "Пока раздел заявок в боте в разработке.\n" +
       "Вы можете смотреть отклики и заявки на сайте travella.uz."
@@ -877,11 +974,7 @@ bot.hears(/📨 Мои заявки/i, async (ctx) => {
 bot.hears(/👤 Профиль/i, async (ctx) => {
   logUpdate(ctx, "hears Профиль");
 
-  // 1) Если сессии нет/потерялась — попробуем "лениво" определить поставщика по chatId
   const maybeProvider = await ensureProviderRole(ctx);
-
-  // 2) Если бот НЕ уверен, что пользователь привязан — показываем шаг привязки
-  //    (после reset provider как раз будет этот сценарий)
   const linked = !!ctx.session?.linked;
   const role = maybeProvider || ctx.session?.role || null;
 
@@ -894,7 +987,6 @@ bot.hears(/👤 Профиль/i, async (ctx) => {
     return;
   }
 
-  // 3) Если это поставщик — даём ссылку на профиль поставщика
   if (role === "provider") {
     await ctx.reply(
       "Ваш профиль поставщика Travella можно дополнить и изменить в личном кабинете.\n\n" +
@@ -903,41 +995,107 @@ bot.hears(/👤 Профиль/i, async (ctx) => {
     return;
   }
 
-  // 4) Иначе — клиент
   await ctx.reply(
     "Ваш профиль клиента можно дополнить и изменить на сайте travella.uz во вкладке «Профиль».\n\n" +
       `Ссылка: ${SITE_URL}`
   );
 });
 
-
 bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
   logUpdate(ctx, "hears Стать поставщиком");
   await ctx.reply(
     "Чтобы стать поставщиком Travella, заполните форму на сайте\n" +
-      "https://travella.уз и дождитесь модерации.\n\n" +
+      "https://travella.uz и дождитесь модерации.\n\n" +
       "Мы также свяжемся с вами по указанным контактам."
   );
 });
 
-// ==== МОИ УСЛУГИ: подменю (3 кнопки) ====
+/* ===================== МОИ УСЛУГИ: ПОДМЕНЮ 3 КНОПКИ ===================== */
 
+bot.hears(/🧳 Мои услуги/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои услуги");
+
+  const role = await ensureProviderRole(ctx);
+
+  if (role !== "provider") {
+    await ctx.reply(
+      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
+        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
+    );
+    return;
+  }
+
+  // показываем подменю
+  await ctx.reply("Выберите действие:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+        [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+      ],
+    },
+  });
+});
+
+// Назад из подменю — в главное меню
+bot.action("prov_services:back", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch (_) {}
+
+    const role = (await ensureProviderRole(ctx)) || ctx.session?.role || "client";
+    await safeReply(ctx, "Главное меню:", getMainMenuKeyboard(role));
+  } catch (e) {
+    console.error("[tg-bot] prov_services:back error:", e?.response?.data || e);
+  }
+});
+
+// Создать услугу из подменю — просто как svc_new
+bot.action("prov_services:create", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    // запускаем тот же флоу, что и кнопка svc_new
+    await ctx.reply("Ок, давайте создадим новую услугу в боте.");
+    // имитируем нажатие svc_new
+    // (просто вызываем ту же логику ниже)
+    if (!ctx.session) ctx.session = {};
+    ctx.session.serviceDraft = { category: null, images: [] };
+    ctx.session.wizardStack = [];
+    ctx.session.state = "svc_create_choose_category";
+
+    await ctx.reply("Выберите категорию отказной услуги:", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
+          [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
+          [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
+          [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:list" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] prov_services:create error:", e?.response?.data || e);
+  }
+});
+
+// Листинг услуг из подменю
 bot.action("prov_services:list", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-
     const role = await ensureProviderRole(ctx);
     if (role !== "provider") {
       await safeReply(
         ctx,
-        "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
-          "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
+        "Раздел доступен только поставщикам.",
+        getMainMenuKeyboard("client")
       );
       return;
     }
 
-    const chatId = ctx.chat?.id || ctx.from?.id;
-    if (!chatId) return;
+    const chatId = ctx.chat.id;
 
     await safeReply(ctx, "Загружаю ваши услуги маркетплейса...");
 
@@ -953,7 +1111,16 @@ bot.action("prov_services:list", async (ctx) => {
       await safeReply(
         ctx,
         "У вас пока нет услуг в маркетплейсе.\n" +
-          "Нажмите «➕ Создать услугу» и добавьте первую."
+          "Нажмите «➕ Создать услугу» или добавьте через кабинет.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+              [{ text: "🌐 Открыть кабинет Travella", url: `${SITE_URL}/dashboard/services/marketplace?from=tg` }],
+              [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+            ],
+          },
+        }
       );
       return;
     }
@@ -990,12 +1157,15 @@ bot.action("prov_services:list", async (ctx) => {
       const status = svc.status || "draft";
 
       // === ЛОГИКА АКТУАЛЬНОСТИ ===
-      let isActive = typeof details.isActive === "boolean" ? details.isActive : true;
+      let isActive =
+        typeof details.isActive === "boolean" ? details.isActive : true;
 
       const expirationRaw = details.expiration || svc.expiration || null;
       if (expirationRaw) {
         const exp = new Date(expirationRaw);
-        if (!Number.isNaN(exp.getTime()) && exp < new Date()) isActive = false;
+        if (!Number.isNaN(exp.getTime()) && exp < new Date()) {
+          isActive = false;
+        }
       }
 
       const endRaw =
@@ -1003,10 +1173,11 @@ bot.action("prov_services:list", async (ctx) => {
         details.returnFlightDate ||
         details.endDate ||
         null;
-
       if (endRaw) {
         const ed = new Date(endRaw);
-        if (!Number.isNaN(ed.getTime()) && ed < new Date()) isActive = false;
+        if (!Number.isNaN(ed.getTime()) && ed < new Date()) {
+          isActive = false;
+        }
       }
 
       const headerLines = [];
@@ -1050,64 +1221,90 @@ bot.action("prov_services:list", async (ctx) => {
             "[tg-bot] replyWithPhoto failed, fallback to text:",
             e?.response?.data || e?.message || e
           );
-          await safeReply(ctx, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+          await ctx.reply(msg, {
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
         }
       } else {
-        await safeReply(ctx, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+        await ctx.reply(msg, {
+          parse_mode: "Markdown",
+          reply_markup: keyboard,
+        });
       }
     }
+
+    // В конце — снова подменю
+    await safeReply(ctx, "Что дальше?", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
   } catch (e) {
-    console.error("[tg-bot] prov_services:list error:", e?.response?.data || e?.message || e);
+    console.error("[tg-bot] provider services error:", e?.response?.data || e.message || e);
     await safeReply(ctx, "Не удалось загрузить услуги. Попробуйте позже.");
   }
 });
 
-bot.action("prov_services:back", async (ctx) => {
+/* ===================== МАСТЕР: НОВОЕ — Назад/Отмена ===================== */
+
+bot.action("svc_wiz:cancel", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    resetServiceWizard(ctx);
+    await safeReply(ctx, "Создание услуги отменено.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] svc_wiz:cancel error:", e?.response?.data || e);
+  }
+});
+
+bot.action("svc_wiz:back", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // ✅ убираем inline-кнопки у того сообщения, где нажали "Назад"
-    try {
-      await ctx.editMessageReplyMarkup(undefined);
-    } catch (_) {}
+    const cur = ctx.session?.state || null;
+    if (!cur || !String(cur).startsWith("svc_create_")) {
+      return;
+    }
 
-    const role = await ensureProviderRole(ctx);
-    const finalRole = role === "provider" ? "provider" : (ctx.session?.role || "client");
+    const stack = ctx.session?.wizardStack || [];
+    const prev = stack.length ? stack.pop() : null;
 
-    await safeReply(ctx, "Главное меню:", getMainMenuKeyboard(finalRole));
+    if (!prev) {
+      // если некуда назад — выходим в подменю
+      resetServiceWizard(ctx);
+      await safeReply(ctx, "Возвращаюсь назад.", {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+            [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+            [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+          ],
+        },
+      });
+      return;
+    }
+
+    ctx.session.state = prev;
+    await promptWizardState(ctx, prev);
   } catch (e) {
-    console.error("[tg-bot] prov_services:back error:", e);
+    console.error("[tg-bot] svc_wiz:back error:", e?.response?.data || e);
   }
 });
 
-// ==== МОИ УСЛУГИ (панель поставщика) ====
-
-bot.hears(/🧳 Мои услуги/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои услуги");
-
-  const role = await ensureProviderRole(ctx);
-
-  if (role !== "provider") {
-    await ctx.reply(
-      "Раздел «Мои услуги» доступен только поставщикам Travella.\n" +
-        "Если вы хотите размещать свои туры и отели, зарегистрируйтесь как поставщик на сайте travella.uz."
-    );
-    return;
-  }
-
-  await ctx.reply("Выберите действие:", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📦 Мои услуги", callback_data: "prov_services:list" }],
-        [{ text: "➕ Создать услугу", callback_data: "svc_new" }],
-        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
-      ],
-    },
-  });
-});
-
-
-// ==== НОВОЕ: старт мастера создания услуги ====
+/* ===================== НОВОЕ: старт мастера создания услуги ===================== */
 
 bot.action("svc_new", async (ctx) => {
   try {
@@ -1123,6 +1320,7 @@ bot.action("svc_new", async (ctx) => {
 
     if (!ctx.session) ctx.session = {};
     ctx.session.serviceDraft = { category: null, images: [] };
+    ctx.session.wizardStack = [];
     ctx.session.state = "svc_create_choose_category";
 
     await ctx.reply("Выберите категорию отказной услуги:", {
@@ -1132,6 +1330,7 @@ bot.action("svc_new", async (ctx) => {
           [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
           [{ text: "✈️ Отказной авиабилет", callback_data: "svc_new_cat:refused_flight" }],
           [{ text: "🎫 Отказной билет", callback_data: "svc_new_cat:refused_ticket" }],
+          [{ text: "❌ Отмена", callback_data: "svc_wiz:cancel" }],
         ],
       },
     });
@@ -1161,13 +1360,10 @@ bot.action(
         return;
       }
 
+      // стартуем мастер
+      ctx.session.wizardStack = [];
       ctx.session.state = "svc_create_title";
-
-      await ctx.reply(
-        "Создаём новую услугу: *Отказной тур*.\n\n" +
-          "Отправьте, пожалуйста, *название тура* (как вы хотите показывать его в Travella).",
-        { parse_mode: "Markdown" }
-      );
+      await promptWizardState(ctx, "svc_create_title");
     } catch (e) {
       console.error("[tg-bot] svc_new_cat action error:", e);
     }
@@ -1205,8 +1401,7 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
 
     let msg;
     if (action === "unpublish") {
-      msg =
-        "Услуга снята с продажи. Она больше не показывается в поиске Travella.";
+      msg = "Услуга снята с продажи. Она больше не показывается в поиске Travella.";
     } else if (action === "extend7") {
       msg = "Актуальность услуги продлена на 7 дней. Таймер обновлён в кабинете.";
     } else {
@@ -1250,20 +1445,14 @@ bot.action(
       }
 
       if (!data.items.length) {
-        await ctx.reply(
-          "К сожалению, по этой категории сейчас нет подходящих предложений."
-        );
+        await ctx.reply("К сожалению, по этой категории сейчас нет подходящих предложений.");
         return;
       }
 
       await ctx.reply(`Нашёл ${data.items.length} предложений.\nТоп 10 ниже:`);
 
       for (const svc of data.items.slice(0, 10)) {
-        const { text, photoUrl, serviceUrl } = buildServiceMessage(
-          svc,
-          category,
-          role
-        );
+        const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, role);
 
         const keyboard = {
           inline_keyboard: [
@@ -1275,25 +1464,30 @@ bot.action(
         };
 
         if (photoUrl) {
-          if (photoUrl.startsWith("tgfile:")) {
-            const fileId = photoUrl.replace(/^tgfile:/, "");
-            await ctx.replyWithPhoto(fileId, {
-              caption: text,
-              parse_mode: "Markdown",
-              reply_markup: keyboard,
-            });
-          } else {
-            await ctx.replyWithPhoto(photoUrl, {
-              caption: text,
-              parse_mode: "Markdown",
-              reply_markup: keyboard,
-            });
+          try {
+            if (photoUrl.startsWith("tgfile:")) {
+              const fileId = photoUrl.replace(/^tgfile:/, "");
+              await ctx.replyWithPhoto(fileId, {
+                caption: text,
+                parse_mode: "Markdown",
+                reply_markup: keyboard,
+              });
+            } else {
+              await ctx.replyWithPhoto(photoUrl, {
+                caption: text,
+                parse_mode: "Markdown",
+                reply_markup: keyboard,
+              });
+            }
+          } catch (e) {
+            console.error(
+              "[tg-bot] replyWithPhoto failed in search, fallback to text:",
+              e?.response?.data || e?.message || e
+            );
+            await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
           }
         } else {
-          await ctx.reply(text, {
-            parse_mode: "Markdown",
-            reply_markup: keyboard,
-          });
+          await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
         }
       }
     } catch (e) {
@@ -1312,21 +1506,10 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
     ctx.session.pendingRequestServiceId = serviceId;
     ctx.session.state = "awaiting_request_message";
 
-    if (!MANAGER_CHAT_ID) {
-      await ctx.answerCbQuery();
-      await ctx.answerCbQuery();
-      await safeReply(
-        ctx,
-        "📩 Быстрый запрос\n\n" +
-          "Напишите, пожалуйста, сообщение по этому туру (пожелания, даты, количество человек)\n" +
-          "и оставьте контактный номер, если он отличается от Telegram.",
-        { parse_mode: "Markdown" }
-      );
-      return;
-    }
-
     await ctx.answerCbQuery();
-    await ctx.reply(
+
+    await safeReply(
+      ctx,
       "📩 Быстрый запрос\n\n" +
         "Напишите, пожалуйста, сообщение по этому туру (пожелания, даты, количество человек)\n" +
         "и оставьте контактный номер, если он отличается от Telegram.",
@@ -1385,9 +1568,19 @@ bot.on("text", async (ctx, next) => {
     if (state && state.startsWith("svc_create_")) {
       const text = ctx.message.text.trim();
 
+      // текстовая отмена тоже работает
       if (text.toLowerCase() === "отмена") {
         resetServiceWizard(ctx);
         await ctx.reply("Создание услуги отменено.");
+        await ctx.reply("Выберите действие:", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+              [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+            ],
+          },
+        });
         return;
       }
 
@@ -1397,35 +1590,30 @@ bot.on("text", async (ctx, next) => {
       switch (state) {
         case "svc_create_title":
           draft.title = text;
+          pushWizardState(ctx, "svc_create_title");
           ctx.session.state = "svc_create_tour_country";
-          await ctx.reply("Укажите *страну направления* (например, Таиланд):", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_tour_country");
           return;
 
         case "svc_create_tour_country":
           draft.country = text;
+          pushWizardState(ctx, "svc_create_tour_country");
           ctx.session.state = "svc_create_tour_from";
-          await ctx.reply("Укажите *город вылета* (например, Ташкент):", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_tour_from");
           return;
 
         case "svc_create_tour_from":
           draft.fromCity = text;
+          pushWizardState(ctx, "svc_create_tour_from");
           ctx.session.state = "svc_create_tour_to";
-          await ctx.reply("Укажите *город прибытия* (например, Бангкок):", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_tour_to");
           return;
 
         case "svc_create_tour_to":
           draft.toCity = text;
+          pushWizardState(ctx, "svc_create_tour_to");
           ctx.session.state = "svc_create_tour_start";
-          await ctx.reply(
-            "Укажите *дату начала тура* в формате ГГГГ-ММ-ДД (например, 2025-12-09):",
-            { parse_mode: "Markdown" }
-          );
+          await promptWizardState(ctx, "svc_create_tour_start");
           return;
 
         case "svc_create_tour_start": {
@@ -1433,23 +1621,23 @@ bot.on("text", async (ctx, next) => {
           if (!norm) {
             await ctx.reply(
               "Не понял дату начала тура 😔\n" +
-                "Напишите в формате ГГГГ-ММ-ДД, например 2025-12-09."
+                "Напишите в формате ГГГГ-ММ-ДД, например 2025-12-09.",
+              wizNavKeyboard()
             );
             return;
           }
-          // ✅ запрет прошедших дат (чтобы не было “молчит”)
           if (isPastYMD(norm)) {
             await ctx.reply(
               "Дата начала уже в прошлом.\n" +
-                "Пожалуйста, укажите будущую дату в формате ГГГГ-ММ-ДД."
+                "Пожалуйста, укажите будущую дату в формате ГГГГ-ММ-ДД.",
+              wizNavKeyboard()
             );
             return;
           }
           draft.startDate = norm;
+          pushWizardState(ctx, "svc_create_tour_start");
           ctx.session.state = "svc_create_tour_end";
-          await ctx.reply("Укажите *дату окончания тура* в формате ГГГГ-ММ-ДД:", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_tour_end");
           return;
         }
 
@@ -1457,8 +1645,8 @@ bot.on("text", async (ctx, next) => {
           const normEnd = normalizeDateInput(text);
           if (!normEnd) {
             await ctx.reply(
-              "Не понял дату окончания тура 😔\n" +
-                "Напишите в формате ГГГГ-ММ-ДД."
+              "Не понял дату окончания тура 😔\n" + "Напишите в формате ГГГГ-ММ-ДД.",
+              wizNavKeyboard()
             );
             return;
           }
@@ -1466,79 +1654,73 @@ bot.on("text", async (ctx, next) => {
             await ctx.reply(
               "Дата окончания раньше даты начала.\n" +
                 `Начало: ${draft.startDate}\n` +
-                "Пожалуйста, укажите корректную дату окончания."
+                "Пожалуйста, укажите корректную дату окончания.",
+              wizNavKeyboard()
             );
             return;
           }
           if (isPastYMD(normEnd)) {
             await ctx.reply(
               "Дата окончания уже в прошлом.\n" +
-                "Пожалуйста, укажите будущую дату окончания."
+                "Пожалуйста, укажите будущую дату окончания.",
+              wizNavKeyboard()
             );
             return;
           }
           draft.endDate = normEnd;
+          pushWizardState(ctx, "svc_create_tour_end");
           ctx.session.state = "svc_create_tour_hotel";
-          await ctx.reply("Укажите *отель* (как в ваучере, можно с категорией):", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_tour_hotel");
           return;
         }
 
         case "svc_create_tour_hotel":
           draft.hotel = text;
+          pushWizardState(ctx, "svc_create_tour_hotel");
           ctx.session.state = "svc_create_tour_accommodation";
-          await ctx.reply(
-            "Опишите *размещение* (тип номера, размещение ADT/CHD/INF):",
-            { parse_mode: "Markdown" }
-          );
+          await promptWizardState(ctx, "svc_create_tour_accommodation");
           return;
 
         case "svc_create_tour_accommodation":
           draft.accommodation = text;
+          pushWizardState(ctx, "svc_create_tour_accommodation");
           ctx.session.state = "svc_create_price";
-          await ctx.reply(
-            "Укажите *цену нетто* (за тур, в валюте, например 1130 или 1130 USD):",
-            { parse_mode: "Markdown" }
-          );
+          await promptWizardState(ctx, "svc_create_price");
           return;
 
         case "svc_create_price":
           draft.price = text;
+          pushWizardState(ctx, "svc_create_price");
           ctx.session.state = "svc_create_changeable";
-          await ctx.reply("Можно ли *менять туриста* в туре? Напишите `да` или `нет`.", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_changeable");
           return;
 
         case "svc_create_changeable": {
           const v = parseYesNo(text);
           if (v === null) {
             await ctx.reply(
-              "Пожалуйста, напишите только `да` или `нет` про возможность смены туриста."
+              "Пожалуйста, напишите только `да` или `нет` про возможность смены туриста.",
+              wizNavKeyboard()
             );
             return;
           }
           draft.changeable = v;
+          pushWizardState(ctx, "svc_create_changeable");
           ctx.session.state = "svc_create_visa";
-          await ctx.reply("Включена ли *виза* в этот тур? Напишите `да` или `нет`.", {
-            parse_mode: "Markdown",
-          });
+          await promptWizardState(ctx, "svc_create_visa");
           return;
         }
 
         case "svc_create_visa": {
           const v2 = parseYesNo(text);
           if (v2 === null) {
-            await ctx.reply("Пожалуйста, напишите только `да` или `нет` про визу.");
+            await ctx.reply("Пожалуйста, напишите только `да` или `нет` про визу.", wizNavKeyboard());
             return;
           }
           draft.visaIncluded = v2;
+          pushWizardState(ctx, "svc_create_visa");
           ctx.session.state = "svc_create_expiration";
-          await ctx.reply(
-            "До какой даты тур *актуален*? Укажите дату ГГГГ-ММ-ДД или напишите `нет`, если только по дате вылета.",
-            { parse_mode: "Markdown" }
-          );
+          await promptWizardState(ctx, "svc_create_expiration");
           return;
         }
 
@@ -1549,7 +1731,8 @@ bot.on("text", async (ctx, next) => {
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "Не понял дату актуальности 😔\n" +
-                "Напишите в формате ГГГГ-ММ-ДД (например 2025-12-15) или `нет`."
+                "Напишите в формате ГГГГ-ММ-ДД (например 2025-12-15) или `нет`.",
+              wizNavKeyboard()
             );
             return;
           }
@@ -1557,17 +1740,16 @@ bot.on("text", async (ctx, next) => {
           if (normExp && isPastYMD(normExp)) {
             await ctx.reply(
               "Дата актуальности уже в прошлом.\n" +
-                "Укажите будущую дату (ГГГГ-ММ-ДД) или напишите `нет`."
+                "Укажите будущую дату (ГГГГ-ММ-ДД) или напишите `нет`.",
+              wizNavKeyboard()
             );
             return;
           }
 
           draft.expiration = normExp; // может быть null
+          pushWizardState(ctx, "svc_create_expiration");
           ctx.session.state = "svc_create_photo";
-          await ctx.reply(
-            "Отправьте одно *фото тура* одним сообщением или напишите `пропустить`.",
-            { parse_mode: "Markdown" }
-          );
+          await promptWizardState(ctx, "svc_create_photo");
           return;
         }
 
@@ -1578,7 +1760,8 @@ bot.on("text", async (ctx, next) => {
             return;
           }
           await ctx.reply(
-            "Пожалуйста, отправьте фото сообщением с картинкой или напишите `пропустить`."
+            "Пожалуйста, отправьте фото сообщением с картинкой или напишите `пропустить`.",
+            wizNavKeyboard()
           );
           return;
 
@@ -1588,9 +1771,10 @@ bot.on("text", async (ctx, next) => {
     }
   } catch (e) {
     console.error("[tg-bot] error handling text:", e);
-    // ✅ чтобы не было “молчит” при любых неожиданных ошибках
     try {
-      await ctx.reply("Произошла ошибка. Попробуйте ещё раз или начните заново через «🧳 Мои услуги» → «➕ Создать услугу в боте».");
+      await ctx.reply(
+        "Произошла ошибка. Попробуйте ещё раз или начните заново через «🧳 Мои услуги» → «➕ Создать услугу»."
+      );
     } catch (_) {}
   }
 
@@ -1682,25 +1866,30 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
     };
 
     if (photoUrl) {
-      if (photoUrl.startsWith("tgfile:")) {
-        const fileId = photoUrl.replace(/^tgfile:/, "");
-        await ctx.replyWithPhoto(fileId, {
-          caption: text,
-          parse_mode: "Markdown",
-          reply_markup: keyboard,
-        });
-      } else {
-        await ctx.replyWithPhoto(photoUrl, {
-          caption: text,
-          parse_mode: "Markdown",
-          reply_markup: keyboard,
-        });
+      try {
+        if (photoUrl.startsWith("tgfile:")) {
+          const fileId = photoUrl.replace(/^tgfile:/, "");
+          await ctx.replyWithPhoto(fileId, {
+            caption: text,
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
+        } else {
+          await ctx.replyWithPhoto(photoUrl, {
+            caption: text,
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
+        }
+      } catch (e) {
+        console.error(
+          "[tg-bot] replyWithPhoto failed in /tour, fallback to text:",
+          e?.response?.data || e?.message || e
+        );
+        await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
       }
     } else {
-      await ctx.reply(text, {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
     }
   } catch (e) {
     console.error("[tg-bot] /tour_ handler error:", e);
@@ -1724,7 +1913,12 @@ bot.on("inline_query", async (ctx) => {
       category = "refused_flight";
     } else if (q.includes("билет") || q.includes("ticket")) {
       category = "refused_ticket";
-    } else if (q.includes("тур") || q.includes("tour") || q.includes("turov") || q.includes("tur")) {
+    } else if (
+      q.includes("тур") ||
+      q.includes("tour") ||
+      q.includes("turov") ||
+      q.includes("tur")
+    ) {
       category = "refused_tour";
     }
 
