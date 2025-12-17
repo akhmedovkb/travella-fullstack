@@ -29,11 +29,16 @@ const ADMIN_CHAT_IDS =
  * но можно передать 4-м аргументом tokenOverride — чтобы шлём через другой токен.
  * Это НЕ ломает существующие вызовы.
  */
-async function tgSend(chatId, text, extra = {}, tokenOverride = "") {
+async function tgSend(chatId, text, extra = {}, tokenOverride = "", throwOnError = false) {
   const token = tokenOverride || BOT_TOKEN;
   const api = token ? `https://api.telegram.org/bot${token}` : "";
 
-  if (!token || !api || !chatId || !text) return false;
+  if (!token || !api || !chatId || !text) {
+    const err = new Error("tgSend: missing token/api/chatId/text");
+    if (throwOnError) throw err;
+    return false;
+  }
+
 
   try {
     const payload = {
@@ -46,6 +51,10 @@ async function tgSend(chatId, text, extra = {}, tokenOverride = "") {
     const res = await axios.post(`${api}/sendMessage`, payload);
     if (!res?.data?.ok) {
       console.error("[tg] sendMessage not ok:", res?.data);
+      const err = new Error("tgSend: sendMessage not ok");
+      err.details = res?.data;
+      if (throwOnError) throw err;
+      return false;
     }
     return Boolean(res?.data?.ok);
   } catch (e) {
@@ -53,6 +62,7 @@ async function tgSend(chatId, text, extra = {}, tokenOverride = "") {
       "[tg] sendMessage error:",
       e?.response?.data || e?.message || e
     );
+    if (throwOnError) throw e;
     return false;
   }
 }
