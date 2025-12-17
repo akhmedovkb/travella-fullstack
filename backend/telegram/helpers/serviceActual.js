@@ -30,6 +30,28 @@ function normalizeDateInput(raw) {
   return `${y}-${mm}-${dd}`;
 }
 
+// ✅ Дата+время: 2025-12-15 21:30 / 2025.12.15 21:30 / 2025-12-15T21:30
+// Возвращает ISO-строку: YYYY-MM-DDTHH:mm (или YYYY-MM-DD если времени нет)
+function normalizeDateTimeInput(raw) {
+  if (!raw) return null;
+  const txt = String(raw).trim();
+  if (/^нет$/i.test(txt)) return null;
+
+  // 1) Если пришла просто дата — оставим как раньше
+  const ymdOnly = normalizeDateInput(txt);
+  if (ymdOnly) return ymdOnly;
+
+  // 2) Дата + время
+  const m = txt.match(
+    /^(\d{4})[.\-/](\d{2})[.\-/](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+  if (!m) return null;
+
+  const [, y, mo, d, hh, mm] = m;
+  // seconds игнорируем, чтобы стабильно хранить
+  return `${y}-${mo}-${d}T${hh}:${mm}`;
+}
+
 function parseDateFlexible(value) {
   if (!value) return null;
   const s = String(value).trim();
@@ -46,6 +68,12 @@ function parseDateFlexible(value) {
     if (d2) return d2;
   }
 
+  // ✅ если это YYYY-MM-DD HH:mm / YYYY.MM.DD HH:mm / YYYY-MM-DDTHH:mm
+  const dt = normalizeDateTimeInput(s);
+  if (dt) {
+    const d3 = parseDateSafe(dt);
+    if (d3) return d3;
+  }
   return null;
 }
 
@@ -90,4 +118,6 @@ module.exports = {
   parseDateFlexible,
   isServiceActual,
   normalizeDateInput, // пригодится для "плашки" истечения
+  normalizeDateTimeInput,
 };
+
