@@ -1214,6 +1214,12 @@ bot.start(async (ctx) => {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = role;
       ctx.session.linked = true;
+     
+      // ✅ Пришли из inline по кнопке "Открыть главное меню бота"
+      if (startPayloadRaw === "start") {
+        await ctx.reply("🏠 Главное меню:", getMainMenuKeyboard(role));
+        return;
+      }
 
       // ✅ Спец-ветки для inline-empty подсказок
       if (startPayloadRaw === "my_empty") {
@@ -1277,16 +1283,21 @@ bot.start(async (ctx) => {
     await ctx.reply("✅ Аккаунт найден.\n\nВыберите раздел в меню ниже 👇", getMainMenuKeyboard(role));
        return;
     }
-      // ✅ Если не нашли роль (аккаунт не привязан)
-    // Пришёл из inline-empty — покажем понятное пояснение и предложим привязку
-    if (startPayloadRaw === "my_empty" || startPayloadRaw === "search_empty") {
+    // ✅ Если не нашли роль (аккаунт не привязан)
+    // Пришёл из inline (start / empty) — покажем понятное пояснение и предложим привязку
+    if (
+      startPayloadRaw === "start" ||
+      startPayloadRaw === "my_empty" ||
+      startPayloadRaw === "search_empty"
+    ) {
       await ctx.reply(
-        "👋 Чтобы бот показывал ваши услуги/поиск — нужно привязать аккаунт по номеру телефона.\n\n" +
+        "👋 Чтобы бот работал корректно, нужно привязать аккаунт по номеру телефона.\n\n" +
           "Сейчас сделаем это 👇"
       );
       await askRole(ctx);
       return;
     }
+
 
     await ctx.reply(
       "👋 Добро пожаловать в Travella!\n\n" +
@@ -2605,7 +2616,12 @@ bot.on("inline_query", async (ctx) => {
     if (isMy) {
       // "Мои услуги" доступны только провайдеру
       if (roleForInline !== "provider") {
-        await ctx.answerInlineQuery([], { cache_time: 3, is_personal: true });
+        await ctx.answerInlineQuery([], {
+          cache_time: 3,
+          is_personal: true,
+          switch_pm_text: "🧳 Мои услуги доступны поставщикам. Открыть бота",
+          switch_pm_parameter: "start",
+        });
         return;
       }
       const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
