@@ -1264,28 +1264,18 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   logUpdate(ctx, "hears Найти услугу");
 
-  await ctx.reply("🔎 Выберите тип услуги:", {
+  await ctx.reply("🔎 Выберите тип услуги (отправка в текущий чат):", {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📍 Отказной тур", callback_data: "find:refused_tour" }],
-        [{ text: "🏨 Отказной отель", callback_data: "find:refused_hotel" }],
-        [{ text: "✈️ Отказной авиабилет", callback_data: "find:refused_flight" }],
-        [{ text: "🎫 Отказной билет", callback_data: "find:refused_ticket" }],
+        [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour " }],
+        [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#hotel " }],
+        [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#flight " }],
+        [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#ticket " }],
       ],
     },
   });
 
-  await ctx.reply(
-    "📤 Хотите отправить отказной тур в любой чат?\n" +
-      "Нажмите кнопку ниже, выберите тур — и он отправится в текущий чат.",
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📤 Выбрать отказной тур", switch_inline_query_current_chat: "#allotkaztur " }],
-        ],
-      },
-    }
-  );
+  await ctx.reply("💡 Нажмите кнопку, выберите карточку — бот отправит её в этот чат.");
 });
 
 bot.hears(/❤️ Избранное/i, async (ctx) => {
@@ -2549,19 +2539,21 @@ bot.on("inline_query", async (ctx) => {
 
     let category = "refused_tour";
 
-    if (q.includes("отель") || q.includes("hotel") || q.includes("#hotel")) {
-      category = "refused_hotel";
-    } else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) {
-      category = "refused_flight";
-    } else if (q.includes("билет") || q.includes("ticket")) {
-      category = "refused_ticket";
-    } else if (
-      q.includes("тур") ||
-      q.includes("tour") ||
-      q.includes("turov") ||
-      q.includes("tur")
-    ) {
-      category = "refused_tour";
+        // ✅ стабильные теги (кнопки из главного меню)
+    if (q.startsWith("#hotel")) category = "refused_hotel";
+    else if (q.startsWith("#flight")) category = "refused_flight";
+    else if (q.startsWith("#ticket")) category = "refused_ticket";
+    else if (q.startsWith("#tour")) category = "refused_tour";
+    else if (q.startsWith("#my")) {
+      // оставляем как есть — "мои услуги"
+    } else {
+      // fallback по словам
+      if (q.includes("отель") || q.includes("hotel")) category = "refused_hotel";
+      else if (q.includes("авиа") || q.includes("flight") || q.includes("avia"))
+        category = "refused_flight";
+      else if (q.includes("билет") || q.includes("ticket"))
+        category = "refused_ticket";
+      else category = "refused_tour";
     }
 
     const chatId = ctx.from.id;
