@@ -567,12 +567,167 @@ async function createServiceFromBot(req, res) {
       .json({ success: false, error: "SERVER_ERROR" });
   }
 }
+/**
+ * Получить одну услугу поставщика по serviceId (для редактирования в боте)
+ * GET /api/telegram/provider/:chatId/services/:serviceId
+ */
+async function getProviderServiceByIdFromBot(req, res) {
+  try {
+    const { chatId, serviceId } = req.params;
+    const svcId = Number(serviceId);
+
+    if (!Number.isFinite(svcId) || svcId <= 0) {
+      return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
+    }
+
+    const providerRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    if (providerRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
+    const providerId = providerRes.rows[0].id;
+
+    const svcRes = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.provider_id,
+        s.category,
+        s.status,
+        s.title,
+        s.price,
+        s.details,
+        s.images,
+        s.expiration_at AS expiration,
+        s.created_at,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1 AND s.provider_id = $2
+      LIMIT 1
+      `,
+      [svcId, providerId]
+    );
+
+    if (svcRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
+    }
+
+    return res.json({ success: true, service: svcRes.rows[0] });
+  } catch (err) {
+    console.error("[telegram] getProviderServiceByIdFromBot error:", err);
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+  }
+}
+
+/**
+ * Редактирование услуги из Telegram-бота (частичное обновление)
+ * PATCH /api/telegram/provider/:chatId/services/:serviceId
+ *
+ * body: { title?, price?, details? }
+ */
+async function updateServiceFromBot(req, res) {
+  try {
+    const { chatId, serviceId } = req.params;
+    const svcId = Number(serviceId);
+
+    if (!Number.isFinite(svcId) || svcId <= 0) {
+      return res.status(400).json({ success: false, error: "BAD_SERVICE_ID" });
+    }
+
+    const providerRes = await pool.query(
+      `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
+      [chatId]
+    );
+    if (providerRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
+    }
+    const providerId = providerRes.rows[0].id;
+
+    const svcRes = await pool.query(
+      `SELECT id, category, title, price, details, images, expiration_at
+         FROM services
+        WHERE id = $1 AND provider_id = $2
+        LIMIT 1`,
+      [svcId, providerId]
+    );
+
+    if (svcRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "SERVICE_NOT_FOUND" });
+    }
+
+    const existing = svcRes.rows[0];
+
+    // редактирование только для отказных категорий
+    if (!REFUSED_CATEGORIES.includes(existing.category)) {
+      return res.status(400).json({ success: false, error: "CATEGORY_NOT_EDITABLE" });
+    }
+
+    const body = req.body || {};
+    const nextTitle =
+      typeof body.title === "string" && body.title.trim() ? body.title.trim() : existing.title;
+
+    let nextPrice = existing.price;
+    if (body.price !== undefined && body.price !== null && body.price !== "") {
+      const n = Number(body.price);
+      if (!Number.isNaN(n)) nextPrice = n;
+    }
+
+    // details: мерджим поверх существующих (shallow)
+    let prevDetails = existing.details || {};
+    if (typeof prevDetails === "string") {
+      try { prevDetails = JSON.parse(prevDetails); } catch { prevDetails = {}; }
+    }
+    const patchDetails = body.details && typeof body.details === "object" ? body.details : {};
+    const mergedDetails = { ...(prevDetails || {}), ...(patchDetails || {}) };
+
+    // синхронизируем expiration_at если пришёл details.expiration
+    let nextExpirationAt = existing.expiration_at || null;
+    if (mergedDetails && mergedDetails.expiration) {
+      const d = new Date(mergedDetails.expiration);
+      if (!Number.isNaN(d.getTime())) {
+        nextExpirationAt = d.toISOString(); // postgres сам приведёт
+      }
+    }
+
+    const updRes = await pool.query(
+      `
+      UPDATE services
+         SET
+           title = $3,
+           price = $4,
+           details = $5::jsonb,
+           expiration_at = $6
+       WHERE id = $1 AND provider_id = $2
+       RETURNING id, title, price, category, status, details, images, expiration_at
+      `,
+      [
+        svcId,
+        providerId,
+        nextTitle,
+        nextPrice,
+        JSON.stringify(mergedDetails),
+        nextExpirationAt,
+      ]
+    );
+
+    return res.json({ success: true, service: updRes.rows[0] });
+  } catch (err) {
+    console.error("[telegram] updateServiceFromBot error:", err);
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+  }
+}
 
 module.exports = {
   getProviderBookings,
   confirmBooking,
   rejectBooking,
   getProviderServices,
+  getProviderServiceByIdFromBot,
+  updateServiceFromBot,
   unpublishServiceFromBot,
   extendService7FromBot,
   archiveServiceFromBot,
