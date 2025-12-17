@@ -1579,22 +1579,57 @@ bot.action("svc_edit:cancel", async (ctx) => {
 bot.action("svc_edit:back", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    const stack = ctx.session?.editStateStack || [];
+
+    // если сессии нет — просто откроем меню редактирования
+    if (!ctx.session?.editDraft) {
+      await safeReply(ctx, "⚠️ Сессия редактирования устарела. Откройте «🧳 Мои услуги» и нажмите ✏️.");
+      resetEditWizard(ctx);
+      return;
+    }
+
+    const stack = ctx.session.editStateStack || [];
     const prev = stack.length ? stack.pop() : null;
+
+    // если некуда назад — возвращаем в меню редактирования
     if (!prev) {
       ctx.session.state = null;
       await openEditMenu(ctx);
       return;
     }
+
+    // ставим предыдущее состояние
     ctx.session.state = prev;
+
+    // ✅ ВАЖНО: после "назад" показываем понятный шаг
+    // если назад в один из "prompt'овых" стейтов — повторяем вопрос
+    if (prev === "svc_edit_dates_start") {
+      await safeReply(ctx, "📅 Введите *дату начала* (YYYY-MM-DD или YYYY.MM.DD):", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+    }
+
+    if (prev === "svc_edit_dates_end") {
+      const start = ctx.session.editDraft?.details?.startDate || "—";
+      await safeReply(ctx, `📅 Введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):\nНачало: ${start}`, {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+    }
+
+    // если непонятно куда вернулись — просто открываем меню редактирования
+    await openEditMenu(ctx);
   } catch (e) {
     console.error("[tg-bot] svc_edit:back error:", e?.response?.data || e);
   }
 });
 
+
 /* ===================== РЕДАКТИРОВАНИЕ: выбор поля ===================== */
 
-bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
+bot.action(/^svc_edit_field:(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
@@ -1605,43 +1640,67 @@ bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
       return;
     }
 
-    ctx.session.editField = field;
+    // Выбираем правильный state + текст подсказки
+    let nextState = null;
+    let prompt = null;
 
-    const prompts = {
-      title: "✍️ Введите новое *название тура*:",
-      startDate: "📅 Новая *дата начала* (YYYY-MM-DD):",
-      endDate: "📅 Новая *дата окончания* (YYYY-MM-DD):",
-      hotel: "🏨 Новое *название отеля*:",
-      accommodation: "🛏 Новое *размещение*:",
-      netPrice: "💰 Новая *цена NETTO*:",
-      grossPrice: "💳 Новая *цена BRUTTO*:",
-      expiration: "⏳ Новая *дата актуальности* или `нет`:",
-    };
+    switch (field) {
+      case "title":
+        nextState = "svc_edit_title";
+        prompt = "✍️ Введите новое *название тура*:";
+        break;
 
-    const prompt = prompts[field];
+      case "dates":
+        nextState = "svc_edit_dates_start";
+        prompt = "📅 Введите *дату начала* (YYYY-MM-DD или YYYY.MM.DD):";
+        break;
 
-    if (!prompt) {
-      await safeReply(ctx, "⚠️ Неизвестное поле.");
-      return;
+      case "hotel":
+        nextState = "svc_edit_hotel";
+        prompt = "🏨 Новое *название отеля*:";
+        break;
+
+      case "accommodation":
+        nextState = "svc_edit_accommodation";
+        prompt = "🛏 Новое *размещение*:";
+        break;
+
+      case "netPrice":
+        nextState = "svc_edit_netPrice";
+        prompt = "💰 Новая *цена NETTO*:";
+        break;
+
+      case "grossPrice":
+        nextState = "svc_edit_grossPrice";
+        prompt = "💳 Новая *цена BRUTTO*:";
+        break;
+
+      case "expiration":
+        nextState = "svc_edit_expiration";
+        prompt = "⏳ Новая *дата актуальности* (YYYY-MM-DD) или `нет`:";
+        break;
+
+      case "isActive":
+        nextState = "svc_edit_isActive";
+        prompt = "✅ Активно? Ответьте `да` или `нет`:";
+        break;
+
+      default:
+        await safeReply(ctx, "⚠️ Неизвестное поле.");
+        return;
     }
 
-    ctx.session.state = "svc_edit_value";
+    ctx.session.state = nextState;
 
     await safeReply(ctx, prompt, {
       parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "⬅️ Назад", callback_data: "svc_edit:back" },
-            { text: "❌ Отмена", callback_data: "svc_edit:cancel" },
-          ],
-        ],
-      },
+      ...editNavKeyboard(),
     });
   } catch (e) {
-    console.error("[tg-bot] svc_edit field error:", e?.message || e);
+    console.error("[tg-bot] svc_edit_field error:", e?.message || e);
   }
 });
+
 
 /* ===================== НОВОЕ: старт мастера создания услуги ===================== */
 
