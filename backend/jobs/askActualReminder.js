@@ -4,6 +4,20 @@ const db = require("../db");
 const { tgSend } = require("../utils/telegram");
 const { isServiceActual, parseDateFlexible } = require("../telegram/helpers/serviceActual");
 
+function safeJsonParseMaybe(v) {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 async function askActualReminder() {
   const now = new Date();
 
@@ -34,34 +48,71 @@ async function askActualReminder() {
       if (diffH < cooldownHours) continue;
     }
 
+    const parsedDetails = safeJsonParseMaybe(details);
+    
     // актуальность
     if (!isServiceActual(details, row)) continue;
+
+    if (!isServiceActual(parsedDetails, row)) continue;
+
+    /**
+     * 🔒 Антидубль:
+     * атомарно "бронируем" право на отправку
+     * (если другой инстанс уже обновил tg_last_actual_check_at — rowCount = 0)
+     */
+    const lockRes = await db.query(
+      `
+      UPDATE services
+      SET tg_last_actual_check_at = NOW()
+      WHERE id = $1
+        AND (
+          tg_last_actual_check_at IS NULL
+          OR tg_last_actual_check_at < NOW() - INTERVAL '24 hours'
+        )
+      RETURNING id
+      `,
+      [id]
+    );
+
+    if (lockRes.rowCount === 0) {
+      // другой процесс уже отправил
+      continue;
+    }
 
     const text =
       `⏳ *Отказ ещё актуален?*\n\n` +
       `🧳 ${title}\n\n` +
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
-    await tgSend(telegram_chat_id, text, {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
-            { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
+    try {
+      await tgSend(telegram_chat_id, text, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
+              { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
+            ],
+            [
+              { text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` },
+            ],
           ],
-          [
-            { text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` },
-          ],
-        ],
-      },
-    });
+        },
+      });
+    } catch (e) {
+      console.error("[askActualReminder] tgSend failed:", {
+        serviceId: id,
+        chatId: telegram_chat_id,
+        error: e?.message || e,
+      });
 
-    // фиксируем, что спросили
-    await db.query(
-      `UPDATE services SET tg_last_actual_check_at = NOW() WHERE id = $1`,
-      [id]
-    );
+      // ❗ если отправка не удалась — откатываем lock,
+      // чтобы можно было попробовать снова позже
+      await db.query(
+        `UPDATE services SET tg_last_actual_check_at = NULL WHERE id = $1`,
+        [id]
+      );
+    }
   }
 }
 
