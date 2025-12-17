@@ -311,56 +311,6 @@ function getStartDateForSort(svc) {
 // - если details.isActive === false -> неактуально
 // - если expiration (details.expiration или svc.expiration) в прошлом -> неактуально
 // - если endDate/returnFlightDate/endFlightDate в прошлом -> неактуально
-function parseDateFlexible(value) {
-  if (!value) return null;
-  const s = String(value).trim();
-  if (!s) return null;
-
-  // сначала пробуем существующий безопасный парсер
-  const d1 = parseDateSafe(s);
-  if (d1) return d1;
-
-  // если это YYYY-MM-DD или YYYY.MM.DD — приводим к YYYY-MM-DD и пробуем ещё раз
-  const ymd = normalizeDateInput(s);
-  if (ymd) {
-    const d2 = parseDateSafe(ymd);
-    if (d2) return d2;
-  }
-
-  return null;
-}
-
-function isServiceActual(detailsRaw, svc) {
-  let d = detailsRaw || {};
-  if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch { d = {}; }
-  }
-
-  // isActive
-  if (typeof d.isActive === "boolean" && d.isActive === false) return false;
-
-  const now = new Date();
-
-  // expiration
-  const expirationRaw = d.expiration || svc?.expiration || null;
-  if (expirationRaw) {
-    const exp = parseDateFlexible(expirationRaw);
-    if (exp && exp.getTime() < now.getTime()) return false;
-  }
-
-  // end date (tour/hotel) or return flight date
-  const endRaw =
-    d.endFlightDate ||
-    d.returnFlightDate ||
-    d.endDate ||
-    null;
-  if (endRaw) {
-    const endD = parseDateFlexible(endRaw);
-    if (endD && endD.getTime() < now.getTime()) return false;
-  }
-
-  return true;
-}
 
 /**
  * Картинки
