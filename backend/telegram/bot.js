@@ -1019,6 +1019,16 @@ async function finishCreateServiceFromWizard(ctx) {
 // Основная логика привязки телефона к аккаунту / созданию нового
 async function handlePhoneRegistration(ctx, requestedRole, phone) {
   try {
+    // ✅ Привязка телефона безопаснее только в личных сообщениях
+    // (в группах ctx.chat.id = id группы, и контакт/сообщения могут вести себя неожиданно)
+    if (ctx.chat?.type && ctx.chat.type !== "private") {
+      await ctx.reply(
+        "📌 Привязка номера доступна только в личных сообщениях с ботом.\n" +
+          "Откройте бота и нажмите /start."
+      );
+      return;
+    }
+
     const chatId = ctx.chat.id;
     const username = ctx.from.username || null;
     const firstName = ctx.from.first_name || null;
@@ -1105,13 +1115,15 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
 
 bot.start(async (ctx) => {
   logUpdate(ctx, "/start");
-  const chatId = ctx.chat.id;
+  const actorId = getActorId(ctx);
 
   try {
     let role = null;
 
     try {
-      const resClient = await axios.get(`/api/telegram/profile/client/${chatId}`);
+      const resClient = await axios.get(
+        `/api/telegram/profile/client/${actorId}`
+      );
       if (resClient.data && resClient.data.success) {
         role = "client";
       }
@@ -1123,7 +1135,9 @@ bot.start(async (ctx) => {
 
     if (!role) {
       try {
-        const resProv = await axios.get(`/api/telegram/profile/provider/${chatId}`);
+        const resProv = await axios.get(
+          `/api/telegram/profile/provider/${actorId}`
+        );
         if (resProv.data && resProv.data.success) {
           role = "provider";
         }
@@ -1204,6 +1218,14 @@ bot.on("contact", async (ctx) => {
     return;
   }
 
+  // ✅ Привязка контакта — только в личке
+  if (ctx.chat?.type && ctx.chat.type !== "private") {
+    await ctx.reply(
+      "📌 Привязка номера доступна только в личных сообщениях с ботом.\nОткройте бота и нажмите /start."
+    );
+    return;
+  }
+  
   const phone = contact.phone_number;
   const requestedRole = ctx.session?.requestedRole || "client";
 
