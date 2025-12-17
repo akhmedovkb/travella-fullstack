@@ -440,6 +440,18 @@ router.get(
   telegramProviderController.getProviderServices
 );
 
+// одна услуга поставщика (для редактирования в боте)
+router.get(
+  "/provider/:chatId/services/:serviceId",
+  telegramProviderController.getProviderServiceByIdFromBot
+);
+
+// редактирование услуги из бота (частичное)
+router.patch(
+  "/provider/:chatId/services/:serviceId",
+  telegramProviderController.updateServiceFromBot
+);
+
 // создание услуги из Telegram-бота (шаговый мастер)
 router.post(
   "/provider/:chatId/services",
