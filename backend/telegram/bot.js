@@ -3,6 +3,12 @@
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
 const axiosBase = require("axios");
+const {
+  parseDateFlexible,
+  isServiceActual,
+  normalizeDateInput: normalizeDateInputHelper,
+  normalizeDateTimeInput: normalizeDateTimeInputHelper,
+} = require("./helpers/serviceActual");
 
 // ==== CONFIG ====
 
@@ -68,6 +74,23 @@ const axios = axiosBase.create({
   baseURL: API_BASE,
   timeout: 10000,
 });
+
+const INLINE_CACHE_TTL_MS = 8000;
+const inlineCache = new Map();
+
+function cacheGet(key) {
+  const v = inlineCache.get(key);
+  if (!v) return null;
+  if (Date.now() - v.ts > INLINE_CACHE_TTL_MS) {
+    inlineCache.delete(key);
+    return null;
+  }
+  return v.data;
+}
+
+function cacheSet(key, data) {
+  inlineCache.set(key, { ts: Date.now(), data });
+}
 
 // ==== INIT BOT ====
 
@@ -241,6 +264,17 @@ function normalizeDateInput(raw) {
   return `${y}-${mm}-${dd}`;
 }
 
+// ✅ Дата+время для "Актуально до"
+function normalizeDateTimeInput(raw) {
+  // используем shared helper из serviceActual.js
+  return normalizeDateTimeInputHelper(raw);
+}
+
+function isPastDateTime(value) {
+  const dt = parseDateFlexible(value);
+  if (!dt) return false;
+  return dt.getTime() < Date.now();
+}
 function dateAtLocalMidnight(ymd) {
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
@@ -264,6 +298,39 @@ function isBeforeYMD(a, b) {
   const db = dateAtLocalMidnight(b);
   if (!da || !db) return false;
   return da.getTime() < db.getTime();
+}
+
+function ymdLocal(dt) {
+  if (!dt) return null;
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getExpiryBadge(detailsRaw, svc) {
+  let d = detailsRaw || {};
+  if (typeof d === "string") {
+    try { d = JSON.parse(d); } catch { d = {}; }
+  }
+
+  const expirationRaw = d.expiration || svc?.expiration || null;
+  if (!expirationRaw) return null;
+
+  const exp = parseDateFlexible(expirationRaw);
+  if (!exp) return null;
+
+  const today = new Date();
+  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const tomorrow0 = new Date(today0.getTime() + 24 * 60 * 60 * 1000);
+
+  const exp0 = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate());
+
+  if (exp0.getTime() === today0.getTime()) return "⏳ истекает сегодня";
+  if (exp0.getTime() === tomorrow0.getTime()) return "⏳ истекает завтра";
+
+  // можно расширить: "через N дней"
+  return null;
 }
 
 // безопасный парсинг дат для сортировки
@@ -306,56 +373,6 @@ function getStartDateForSort(svc) {
 // - если details.isActive === false -> неактуально
 // - если expiration (details.expiration или svc.expiration) в прошлом -> неактуально
 // - если endDate/returnFlightDate/endFlightDate в прошлом -> неактуально
-function parseDateFlexible(value) {
-  if (!value) return null;
-  const s = String(value).trim();
-  if (!s) return null;
-
-  // сначала пробуем существующий безопасный парсер
-  const d1 = parseDateSafe(s);
-  if (d1) return d1;
-
-  // если это YYYY-MM-DD или YYYY.MM.DD — приводим к YYYY-MM-DD и пробуем ещё раз
-  const ymd = normalizeDateInput(s);
-  if (ymd) {
-    const d2 = parseDateSafe(ymd);
-    if (d2) return d2;
-  }
-
-  return null;
-}
-
-function isServiceActual(detailsRaw, svc) {
-  let d = detailsRaw || {};
-  if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch { d = {}; }
-  }
-
-  // isActive
-  if (typeof d.isActive === "boolean" && d.isActive === false) return false;
-
-  const now = new Date();
-
-  // expiration
-  const expirationRaw = d.expiration || svc?.expiration || null;
-  if (expirationRaw) {
-    const exp = parseDateFlexible(expirationRaw);
-    if (exp && exp.getTime() < now.getTime()) return false;
-  }
-
-  // end date (tour/hotel) or return flight date
-  const endRaw =
-    d.endFlightDate ||
-    d.returnFlightDate ||
-    d.endDate ||
-    null;
-  if (endRaw) {
-    const endD = parseDateFlexible(endRaw);
-    if (endD && endD.getTime() < now.getTime()) return false;
-  }
-
-  return true;
-}
 
 /**
  * Картинки
@@ -551,6 +568,8 @@ function buildServiceMessage(svc, category, role = "client") {
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
   if (price) lines.push(`${priceLabel}: *${price}*`);
+  const badge = getExpiryBadge(d, svc);
+  if (badge) lines.push(escapeMarkdown(badge));
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
   lines.push("");
@@ -741,7 +760,7 @@ async function promptEditState(ctx, state) {
       return;
 
     case "svc_edit_expiration":
-      await safeReply(ctx, "⏳ Введите новую *дату актуальности* (YYYY-MM-DD / YYYY.MM.DD) или `нет`:", {
+      await safeReply(ctx, "⏳ Введите новую *дату и время актуальности* (YYYY-MM-DD HH:mm / YYYY.MM.DD HH:mm) или `нет`:", {
         parse_mode: "Markdown",
         ...editNavKeyboard(),
       });
@@ -959,8 +978,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_expiration":
       await ctx.reply(
-        "⏳ До какой даты тур *актуален*?\n" +
-          "✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+       "⏳ До какой даты и времени тур *актуален*?\n" +
+       "✅ Формат: *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm*\n" +
           "Или напишите `нет`.",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
@@ -2206,10 +2225,10 @@ bot.on("text", async (ctx, next) => {
       
         if (state === "svc_edit_expiration") {
           const lower = text.toLowerCase();
-          const normExp = normalizeDateInput(text);
+          const normExp = normalizeDateTimeInput(text);
       
-          if (normExp === null && lower !== "нет") {
-            await ctx.reply("😕 Не понял дату. Введите YYYY-MM-DD / YYYY.MM.DD или `нет`.", { ...editNavKeyboard() });
+        if (normExp && isPastDateTime(normExp)) {
+          await ctx.reply("⚠️ Дата/время актуальности в прошлом. Укажите будущую или `нет`.", { ...editNavKeyboard() });
             return;
           }
           if (normExp && isPastYMD(normExp)) {
@@ -2380,18 +2399,18 @@ bot.on("text", async (ctx, next) => {
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateInput(text);
+          const normExp = normalizeDateTimeInput(text);
 
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "😕 Не понял дату актуальности.\n" +
-                "Введите *YYYY-MM-DD* или *YYYY.MM.DD* (например *2025-12-15*) или `нет`.",
+                "Введите *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm* (например *2025-12-15 21:30*) или `нет`.",
               { parse_mode: "Markdown", ...wizNavKeyboard() }
             );
             return;
           }
 
-          if (normExp && isPastYMD(normExp)) {
+          if (normExp && isPastDateTime(normExp)) {
             await ctx.reply(
               "⚠️ Дата актуальности уже в прошлом.\n" +
                 "Укажите будущую дату или напишите `нет`.",
@@ -2594,27 +2613,37 @@ bot.on("inline_query", async (ctx) => {
 
     // ✅ FIX: если inline делает агент — показываем net, иначе gross
     const roleForInline = await resolveRoleByUserId(chatId, ctx);
-
-    let data = null;
-    if (isMy) {
-      // "Мои услуги" доступны только провайдеру
-      if (roleForInline !== "provider") {
-        await ctx.answerInlineQuery([], {
-          cache_time: 3,
-          is_personal: true,
-          switch_pm_text: "🧳 Мои услуги доступны поставщикам. Открыть бота",
-          switch_pm_parameter: "start",
-        });
-        return;
-      }
-      const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
-      data = resp.data;
-    } else {
-      const resp = await axios.get(`/api/telegram/client/${chatId}/search`, {
-        params: { category },
+    // ✅ 1) "Мои услуги" доступны только провайдеру (оставляем как было)
+    if (isMy && roleForInline !== "provider") {
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "🧳 Мои услуги доступны поставщикам. Открыть бота",
+        switch_pm_parameter: "start",
       });
-      data = resp.data;
-    };
+      return;
+    }
+
+    // ✅ 2) КЭШ на 8 секунд (меньше дергаем API)
+    const cacheKey = isMy
+      ? `my:${chatId}`
+      : `search:${chatId}:${category}`;
+
+    let data = cacheGet(cacheKey);
+
+    if (!data) {
+      if (isMy) {
+        const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
+        data = resp.data;
+      } else {
+        const resp = await axios.get(`/api/telegram/client/${chatId}/search`, {
+          params: { category },
+        });
+        data = resp.data;
+      }
+      cacheSet(cacheKey, data);
+    }
+
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
@@ -2731,7 +2760,9 @@ bot.on("inline_query", async (ctx) => {
       const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
       const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
 
+      const badge = getExpiryBadge(d, svc);
       const descParts = [];
+      if (badge) descParts.push(badge);
       if (datesLine) descParts.push(datesLine);
       if (hotelLine) descParts.push(hotelLine);
       if (priceLine) descParts.push(priceLine);
