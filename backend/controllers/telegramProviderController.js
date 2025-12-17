@@ -2,6 +2,7 @@
 const pool = require("../db");
 const axiosBase = require("axios");
 const { tgSend } = require("../utils/telegram");
+const MAX_TITLE_LEN = 100;
 
 const REFUSED_CATEGORIES = [
   "refused_tour",
@@ -472,6 +473,15 @@ async function archiveServiceFromBot(req, res) {
   return serviceActionFromBot(req, res, "archive");
 }
 
+// ---------- helpers: safe string limits ----------
+function clampString(s, maxLen) {
+  if (s === null || s === undefined) return "";
+  const str = String(s).trim();
+  if (!maxLen || maxLen <= 0) return str;
+  return str.length > maxLen ? str.slice(0, maxLen) : str;
+}
+
+
 /**
  * Создание услуги из Telegram-бота (шаговый мастер)
  * POST /api/telegram/provider/:chatId/services
@@ -494,6 +504,11 @@ async function createServiceFromBot(req, res) {
         .status(400)
         .json({ success: false, error: "TITLE_REQUIRED" });
     }
+
+   
+    // ✅ FIX: services.title в БД часто varchar(100)
+    // чтобы не падать на "value too long for type character varying(100)"
+    const safeTitle = clampString(title, MAX_TITLE_LEN);
 
     const providerRes = await pool.query(
       `SELECT id FROM providers WHERE telegram_chat_id = $1 LIMIT 1`,
@@ -553,7 +568,7 @@ async function createServiceFromBot(req, res) {
         )
         RETURNING id, title, category, status, moderation_status, details, images
       `,
-      [providerId, title, category, priceNum, safeDetailsJson, safeImagesJson]
+      [providerId, safeTitle, category, priceNum, safeDetailsJson, safeImagesJson]
     );
 
     return res.json({
@@ -669,7 +684,13 @@ async function updateServiceFromBot(req, res) {
     const body = req.body || {};
     const nextTitle =
       typeof body.title === "string" && body.title.trim() ? body.title.trim() : existing.title;
+    const nextTitleRaw =
+      typeof body.title === "string" && body.title.trim()
+        ? body.title.trim()
+        : existing.title;
 
+    // ✅ FIX: clamp title to DB limit (varchar(100))
+    const nextTitle = clampString(nextTitleRaw, MAX_TITLE_LEN);
     let nextPrice = existing.price;
     if (body.price !== undefined && body.price !== null && body.price !== "") {
       const n = Number(body.price);
