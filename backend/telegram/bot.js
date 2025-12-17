@@ -3,6 +3,11 @@
 require("dotenv").config();
 const { Telegraf, session } = require("telegraf");
 const axiosBase = require("axios");
+const {
+  parseDateFlexible,
+  isServiceActual,
+  normalizeDateInput: normalizeDateInputHelper,
+} = require("./helpers/serviceActual");
 
 // ==== CONFIG ====
 
