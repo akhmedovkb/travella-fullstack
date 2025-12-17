@@ -599,6 +599,126 @@ function wizNavKeyboard() {
   };
 }
 
+function editNavKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "⬅️ Назад", callback_data: "svc_edit:back" },
+          { text: "❌ Отмена", callback_data: "svc_edit:cancel" },
+        ],
+      ],
+    },
+  };
+}
+
+function resetEditWizard(ctx) {
+  if (!ctx.session) return;
+  ctx.session.editStateStack = null;
+  ctx.session.editDraft = null;
+  // state оставим null
+  ctx.session.state = null;
+}
+
+function pushEditState(ctx, prevState) {
+  if (!ctx.session) ctx.session = {};
+  if (!ctx.session.editStateStack) ctx.session.editStateStack = [];
+  if (prevState && String(prevState).startsWith("svc_edit_")) {
+    ctx.session.editStateStack.push(prevState);
+  }
+}
+
+function safeJsonParseMaybe(obj) {
+  if (!obj) return {};
+  if (typeof obj === "object") return obj;
+  if (typeof obj === "string") {
+    try { return JSON.parse(obj); } catch { return {}; }
+  }
+  return {};
+}
+
+async function openEditMenu(ctx) {
+  const draft = ctx.session?.editDraft;
+  if (!draft || !draft.serviceId) {
+    await safeReply(ctx, "⚠️ Не вижу услугу для редактирования. Откройте «🧳 Мои услуги» и нажмите ✏️.");
+    resetEditWizard(ctx);
+    return;
+  }
+
+  const d = draft.details || {};
+
+  const lines = [];
+  lines.push(`✏️ Редактирование услуги #${draft.serviceId}`);
+  lines.push(`Категория: ${CATEGORY_LABELS[draft.category] || draft.category || "—"}`);
+  if (draft.title) lines.push(`Название: ${draft.title}`);
+  if (d.startDate || d.departureFlightDate) lines.push(`Начало: ${d.startDate || d.departureFlightDate}`);
+  if (d.endDate || d.returnFlightDate) lines.push(`Конец: ${d.endDate || d.returnFlightDate}`);
+  if (d.hotel) lines.push(`Отель: ${d.hotel}`);
+  if (d.accommodation) lines.push(`Размещение: ${d.accommodation}`);
+  if (d.netPrice != null) lines.push(`Netto: ${d.netPrice}`);
+  if (d.grossPrice != null) lines.push(`Brutto: ${d.grossPrice}`);
+  if (d.expiration) lines.push(`Актуально до: ${d.expiration}`);
+  if (typeof d.isActive === "boolean") lines.push(`Активно: ${d.isActive ? "да" : "нет"}`);
+
+  await safeReply(ctx, lines.join("\n"), {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📝 Название", callback_data: "svc_edit_field:title" }],
+        [{ text: "📅 Даты (начало/конец)", callback_data: "svc_edit_field:dates" }],
+        [{ text: "🏨 Отель", callback_data: "svc_edit_field:hotel" }],
+        [{ text: "🛏 Размещение", callback_data: "svc_edit_field:accommodation" }],
+        [
+          { text: "💰 Цена NETTO", callback_data: "svc_edit_field:netPrice" },
+          { text: "💳 Цена BRUTTO", callback_data: "svc_edit_field:grossPrice" },
+        ],
+        [{ text: "⏳ Актуально до", callback_data: "svc_edit_field:expiration" }],
+        [{ text: "✅/⛔ Активность", callback_data: "svc_edit_field:isActive" }],
+        [{ text: "⬅️ Назад к моим услугам", callback_data: "prov_services:list" }],
+      ],
+    },
+  });
+}
+
+async function saveEditedService(ctx) {
+  const draft = ctx.session?.editDraft;
+  if (!draft || !draft.serviceId) {
+    await safeReply(ctx, "⚠️ Не вижу данных для сохранения.");
+    resetEditWizard(ctx);
+    return;
+  }
+
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const payload = {
+    title: draft.title,
+    price: draft.price,         // не критично, но оставим
+    details: draft.details || {},
+  };
+
+  const { data } = await axios.patch(
+    `/api/telegram/provider/${chatId}/services/${draft.serviceId}`,
+    payload
+  );
+
+  if (!data || !data.success) {
+    console.log("[tg-bot] saveEditedService bad resp:", data);
+    await safeReply(ctx, "⚠️ Не удалось сохранить изменения. Попробуйте позже.");
+    return;
+  }
+
+  // обновим draft из ответа
+  const svc = data.service;
+  draft.title = svc.title;
+  draft.price = svc.price;
+  draft.details = safeJsonParseMaybe(svc.details);
+
+  await safeReply(ctx, "✅ Изменения сохранены.");
+  ctx.session.state = null;
+  ctx.session.editStateStack = [];
+  await openEditMenu(ctx);
+}
+
 function pushWizardState(ctx, prevState) {
   if (!ctx.session) ctx.session = {};
   if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
@@ -1003,7 +1123,7 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
   const st = ctx.session?.state || null;
 
   // ✅ 1) Если идёт мастер — НЕ глотаем сообщение, а пропускаем дальше в bot.on("text")
-  if (st && String(st).startsWith("svc_create_")) {
+  if (st && (String(st).startsWith("svc_create_") || String(st).startsWith("svc_edit_"))) {
     return next();
   }
 
@@ -1439,6 +1559,90 @@ bot.action("svc_wiz:back", async (ctx) => {
   }
 });
 
+bot.action("svc_edit:cancel", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    resetEditWizard(ctx);
+    await safeReply(ctx, "❌ Редактирование отменено.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] svc_edit:cancel error:", e?.response?.data || e);
+  }
+});
+
+bot.action("svc_edit:back", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const stack = ctx.session?.editStateStack || [];
+    const prev = stack.length ? stack.pop() : null;
+    if (!prev) {
+      ctx.session.state = null;
+      await openEditMenu(ctx);
+      return;
+    }
+    ctx.session.state = prev;
+  } catch (e) {
+    console.error("[tg-bot] svc_edit:back error:", e?.response?.data || e);
+  }
+});
+
+/* ===================== РЕДАКТИРОВАНИЕ: выбор поля ===================== */
+
+bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    const field = ctx.match[1];
+
+    if (!ctx.session?.editDraft) {
+      await safeReply(ctx, "⚠️ Сессия редактирования устарела.");
+      return;
+    }
+
+    ctx.session.editField = field;
+
+    const prompts = {
+      title: "✍️ Введите новое *название тура*:",
+      startDate: "📅 Новая *дата начала* (YYYY-MM-DD):",
+      endDate: "📅 Новая *дата окончания* (YYYY-MM-DD):",
+      hotel: "🏨 Новое *название отеля*:",
+      accommodation: "🛏 Новое *размещение*:",
+      netPrice: "💰 Новая *цена NETTO*:",
+      grossPrice: "💳 Новая *цена BRUTTO*:",
+      expiration: "⏳ Новая *дата актуальности* или `нет`:",
+    };
+
+    const prompt = prompts[field];
+
+    if (!prompt) {
+      await safeReply(ctx, "⚠️ Неизвестное поле.");
+      return;
+    }
+
+    ctx.session.state = "svc_edit_value";
+
+    await safeReply(ctx, prompt, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "⬅️ Назад", callback_data: "svc_edit:back" },
+            { text: "❌ Отмена", callback_data: "svc_edit:cancel" },
+          ],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] svc_edit field error:", e?.message || e);
+  }
+});
+
 /* ===================== НОВОЕ: старт мастера создания услуги ===================== */
 
 bot.action("svc_new", async (ctx) => {
@@ -1555,40 +1759,53 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
   }
 });
 
-// ==== РЕДАКТИРОВАНИЕ УСЛУГИ (пока через кабинет) ====
+// ==== РЕДАКТИРОВАНИЕ УСЛУГИ В БОТЕ ====
 
 bot.action(/^svc:(\d+):edit$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
     await ctx.answerCbQuery();
 
-    if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Редактирование доступно только поставщикам.");
       return;
     }
 
-    // ведём сразу в кабинет на нужную услугу
-    const editUrl = `${SITE_URL}/dashboard?from=tg&service=${serviceId}`;
+    const chatId = ctx.chat.id;
 
-    await safeReply(
-      ctx,
-      `✏️ Редактирование услуги #${serviceId}\n\nОткрываю в кабинете 👇`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🌐 Открыть редактор", url: editUrl }],
-            [{ text: "⬅️ Назад к моим услугам", callback_data: "prov_services:list" }],
-          ],
-        },
-      }
+    // грузим услугу с backend
+    const { data } = await axios.get(
+      `/api/telegram/provider/${chatId}/services/${serviceId}`
     );
+
+    if (!data || !data.success || !data.service) {
+      console.log("[tg-bot] svc edit load bad resp:", data);
+      await safeReply(ctx, "⚠️ Не удалось загрузить услугу. Попробуйте позже.");
+      return;
+    }
+
+    const svc = data.service;
+    const details = safeJsonParseMaybe(svc.details);
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.editDraft = {
+      serviceId: svc.id,
+      category: svc.category,
+      title: svc.title || "",
+      price: svc.price ?? null,
+      details,
+    };
+    ctx.session.editStateStack = [];
+    ctx.session.state = null;
+
+    await openEditMenu(ctx);
   } catch (e) {
-    console.error("[tg-bot] svc edit handler error:", e?.response?.data || e);
-    try {
-      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
-    } catch (_) {}
+    console.error("[tg-bot] svc edit error:", e?.response?.data || e);
+    await safeReply(ctx, "⚠️ Ошибка редактирования. Попробуйте позже.");
   }
 });
+
 
 // ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
 
@@ -1743,6 +1960,136 @@ bot.on("text", async (ctx, next) => {
       ctx.session.pendingRequestServiceId = null;
       return;
     }
+
+          // 2) редактирование услуги (svc_edit_*)
+      if (state && state.startsWith("svc_edit_") && ctx.session?.editDraft) {
+        const text = ctx.message.text.trim();
+        const draft = ctx.session.editDraft;
+        const details = draft.details || {};
+      
+        // текстовая отмена
+        if (text.toLowerCase() === "отмена") {
+          resetEditWizard(ctx);
+          await ctx.reply("❌ Редактирование отменено.");
+          return;
+        }
+      
+        if (state === "svc_edit_title") {
+          draft.title = text;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_dates_start") {
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату. Введите YYYY-MM-DD или YYYY.MM.DD.", { ...editNavKeyboard() });
+            return;
+          }
+          if (isPastYMD(norm)) {
+            await ctx.reply("⚠️ Эта дата в прошлом. Укажите будущую дату.", { ...editNavKeyboard() });
+            return;
+          }
+          details.startDate = norm;
+          draft.details = details;
+          ctx.session.state = "svc_edit_dates_end";
+          await ctx.reply("📅 Теперь введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):", { parse_mode: "Markdown", ...editNavKeyboard() });
+          return;
+        }
+      
+        if (state === "svc_edit_dates_end") {
+          const normEnd = normalizeDateInput(text);
+          if (!normEnd) {
+            await ctx.reply("😕 Не понял дату. Введите YYYY-MM-DD или YYYY.MM.DD.", { ...editNavKeyboard() });
+            return;
+          }
+          if (details.startDate && isBeforeYMD(normEnd, details.startDate)) {
+            await ctx.reply(`⚠️ Конец раньше начала.\nНачало: ${details.startDate}`, { ...editNavKeyboard() });
+            return;
+          }
+          if (isPastYMD(normEnd)) {
+            await ctx.reply("⚠️ Эта дата в прошлом. Укажите будущую дату.", { ...editNavKeyboard() });
+            return;
+          }
+          details.endDate = normEnd;
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_hotel") {
+          details.hotel = text;
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_accommodation") {
+          details.accommodation = text;
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_netPrice") {
+          const n = normalizePrice(text);
+          if (n === null) {
+            await ctx.reply("😕 Не понял цену. Введите число, например 1130.", { ...editNavKeyboard() });
+            return;
+          }
+          details.netPrice = n;
+          draft.price = n; // чтобы price в services тоже был в унисон
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_grossPrice") {
+          const n = normalizePrice(text);
+          if (n === null) {
+            await ctx.reply("😕 Не понял цену. Введите число, например 1250.", { ...editNavKeyboard() });
+            return;
+          }
+          details.grossPrice = n;
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_expiration") {
+          const lower = text.toLowerCase();
+          const normExp = normalizeDateInput(text);
+      
+          if (normExp === null && lower !== "нет") {
+            await ctx.reply("😕 Не понял дату. Введите YYYY-MM-DD / YYYY.MM.DD или `нет`.", { ...editNavKeyboard() });
+            return;
+          }
+          if (normExp && isPastYMD(normExp)) {
+            await ctx.reply("⚠️ Дата актуальности в прошлом. Укажите будущую или `нет`.", { ...editNavKeyboard() });
+            return;
+          }
+          details.expiration = normExp; // может быть null
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        if (state === "svc_edit_isActive") {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", { ...editNavKeyboard() });
+            return;
+          }
+          details.isActive = yn;
+          draft.details = details;
+          await saveEditedService(ctx);
+          return;
+        }
+      
+        // fallback
+        await openEditMenu(ctx);
+        return;
+      }
 
     // 2) мастер создания отказного тура
     if (state && state.startsWith("svc_create_")) {
