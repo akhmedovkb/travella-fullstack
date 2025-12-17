@@ -1937,11 +1937,14 @@ bot.action(
       const maybeProvider = await ensureProviderRole(ctx);
       const role = maybeProvider || ctx.session?.role || "client";
 
-      const chatId = ctx.chat.id;
-
+      const actorId = getActorId(ctx); // ✅ всегда ctx.from.id (или fallback)
+      if (!actorId) {
+        await ctx.reply("⚠️ Не удалось определить пользователя. Попробуйте позже.");
+        return;
+      }
       await ctx.reply("⏳ Ищу подходящие предложения...");
 
-      const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
+      const { data } = await axios.get(`/api/telegram/client/${actorId}/search`, {
         params: { category },
       });
 
@@ -2442,10 +2445,10 @@ bot.on("photo", async (ctx, next) => {
 
 // ==== /tour_123 ====
 
-async function findServiceByIdViaSearch(chatId, serviceId) {
+async function findServiceByIdViaSearch(actorId, serviceId) {
   for (const category of REFUSED_CATEGORIES) {
     try {
-      const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
+      const { data } = await axios.get(`/api/telegram/client/${actorId}/search`, {
         params: { category },
       });
 
@@ -2465,10 +2468,15 @@ async function findServiceByIdViaSearch(chatId, serviceId) {
   return null;
 }
 
+
 bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
-    const chatId = ctx.chat.id;
+    const actorId = getActorId(ctx);
+      if (!actorId) {
+        await ctx.reply("⚠️ Не удалось определить пользователя. Попробуйте позже.");
+        return;
+      }
 
     // ✅ FIX: корректная роль (агент должен видеть net)
     const maybeProvider = await ensureProviderRole(ctx);
@@ -2476,7 +2484,7 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
 
     await ctx.reply("⏳ Ищу по ID...");
 
-    const found = await findServiceByIdViaSearch(chatId, serviceId);
+    const found = await findServiceByIdViaSearch(actorId, serviceId);
 
     if (!found) {
       await ctx.reply(
