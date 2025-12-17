@@ -1,4 +1,4 @@
-//backend/jobs/askActualReminder.js.txt
+//backend/jobs/askActualReminder.js
 
 const db = require("../db");
 const { tgSend } = require("../utils/telegram");
