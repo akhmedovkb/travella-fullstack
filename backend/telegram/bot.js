@@ -2505,7 +2505,9 @@ bot.on("inline_query", async (ctx) => {
 
     const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
     const isMy = q.startsWith("#my");
-
+    
+// подсказка, если выдача пустая — ведём в ЛС (switch_pm_*)
+    
     let category = "refused_tour";
 
         // ✅ стабильные теги (кнопки из главного меню)
@@ -2548,7 +2550,12 @@ bot.on("inline_query", async (ctx) => {
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
-      await ctx.answerInlineQuery([], { cache_time: 3 });
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "⚠️ Ошибка загрузки. Открыть бота",
+        switch_pm_parameter: "start",
+      });
       return;
     }
 
@@ -2564,17 +2571,27 @@ bot.on("inline_query", async (ctx) => {
     });
 
     if (!itemsActual.length) {
-      await ctx.answerInlineQuery([], {
-        cache_time: 3,
-        is_personal: true,
-        switch_pm_text: "Открыть главное меню бота",
-        switch_pm_parameter: "start",
-      });
+      // ✅ Разные подсказки для "#my" и для обычного поиска
+      if (isMy) {
+        await ctx.answerInlineQuery([], {
+          cache_time: 3,
+          is_personal: true,
+          switch_pm_text: "🛑 Нет актуальных моих услуг. Открыть бота",
+          switch_pm_parameter: "my_empty",
+        });
+      } else {
+        await ctx.answerInlineQuery([], {
+          cache_time: 3,
+          is_personal: true,
+          switch_pm_text: "😕 Нет актуальных предложений. Открыть бота",
+          switch_pm_parameter: "search_empty",
+        });
+      }
       return;
     }
 
     const itemsSorted = [...itemsActual].sort((a, b) => {
-      const da = getStartDateForSort(a);
+     const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
 
       if (!da && !db) return 0;
