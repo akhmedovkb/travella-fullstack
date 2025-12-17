@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const { askActualReminder } = require("./jobs/askActualReminder");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
 
 dotenv.config();
@@ -256,8 +257,67 @@ try {
   );
 }
 
+/** ===================== Ask Actual Reminder Scheduler ===================== */
+// 10:00 / 14:00 / 18:00 по Ташкенту, без cron
+const REM_TZ = "Asia/Tashkent";
+const REM_HOURS = new Set([10, 14, 18]);
+let lastReminderKey = null; // чтобы не запускать дважды в одну минуту на одном инстансе
+
+function getTZParts(date = new Date(), timeZone = REM_TZ) {
+  const dtf = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = dtf.formatToParts(date);
+  const map = {};
+  for (const p of parts) {
+    if (p.type !== "literal") map[p.type] = p.value;
+  }
+  const ymd = `${map.year}-${map.month}-${map.day}`;
+  return {
+    ymd,
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
+}
+
+function startAskActualReminderScheduler() {
+  console.log("[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent");
+
+  setInterval(async () => {
+    try {
+      const { ymd, hour, minute } = getTZParts(new Date(), REM_TZ);
+      if (minute !== 0) return;
+      if (!REM_HOURS.has(hour)) return;
+
+      const key = `${ymd}:${hour}`;
+      if (lastReminderKey === key) return;
+      lastReminderKey = key;
+
+      await askActualReminder();
+      console.log("[askActualReminder] sent tick:", key);
+    } catch (e) {
+      console.error("[askActualReminder] tick error:", e?.message || e);
+    }
+  }, 30 * 1000); // проверяем 2 раза в минуту, но gate не даст дубль
+}
+/** ===================== /Ask Actual Reminder Scheduler ===================== */
+
 if (bot) {
   console.log("[tg-bot] index.js: starting bot (polling) ...");
+
+  // ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
+  try {
+    startAskActualReminderScheduler();
+  } catch (e) {
+    console.warn("[askActualReminder] scheduler start failed:", e?.message || e);
+  }
 
   (async () => {
     try {
