@@ -2565,6 +2565,26 @@ bot.on("inline_query", async (ctx) => {
         roleForInline
       );
 
+      // ✅ если это "#my" (мои услуги) — вместо "Подробнее" показываем "Редактировать"
+      // управление ведём через уже существующий action: svc:<id>:edit
+      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+      const keyboardForMy = {
+        inline_keyboard: [
+          [{ text: "✏️ Редактировать", callback_data: `svc:${svc.id}:edit` }],
+          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+        ],
+      };
+
+      const keyboardForClient = {
+        inline_keyboard: [
+          [
+            { text: "Подробнее на сайте", url: serviceUrl },
+            { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+          ],
+        ],
+      };
+
       let d = svc.details || {};
       if (typeof d === "string") {
         try {
@@ -2625,14 +2645,7 @@ bot.on("inline_query", async (ctx) => {
           message_text: text,
           parse_mode: "Markdown",
         },
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "Подробнее на сайте", url: serviceUrl },
-              { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-            ],
-          ],
-        },
+        reply_markup: isMy ? keyboardForMy : keyboardForClient,
       };
     });
 
