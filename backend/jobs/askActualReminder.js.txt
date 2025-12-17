@@ -1,0 +1,66 @@
+const db = require("../db");
+const { tgSend } = require("../utils/telegram");
+const { isServiceActual, parseDateFlexible } = require("../telegram/helpers/serviceActual");
+
+async function askActualReminder() {
+  const now = new Date();
+
+  // не чаще одного раза в 24 часа на одну услугу
+  const cooldownHours = 24;
+
+  const res = await db.query(`
+    SELECT
+      s.id,
+      s.title,
+      s.details,
+      s.tg_last_actual_check_at,
+      p.telegram_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE
+      s.category LIKE 'refused_%'
+      AND s.status = 'approved'
+      AND p.telegram_chat_id IS NOT NULL
+  `);
+
+  for (const row of res.rows) {
+    const { id, title, details, tg_last_actual_check_at, telegram_chat_id } = row;
+
+    // cooldown
+    if (tg_last_actual_check_at) {
+      const diffH = (now - new Date(tg_last_actual_check_at)) / 36e5;
+      if (diffH < cooldownHours) continue;
+    }
+
+    // актуальность
+    if (!isServiceActual(details, row)) continue;
+
+    const text =
+      `⏳ *Отказ ещё актуален?*\n\n` +
+      `🧳 ${title}\n\n` +
+      `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
+
+    await tgSend(telegram_chat_id, text, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
+            { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
+          ],
+          [
+            { text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` },
+          ],
+        ],
+      },
+    });
+
+    // фиксируем, что спросили
+    await db.query(
+      `UPDATE services SET tg_last_actual_check_at = NOW() WHERE id = $1`,
+      [id]
+    );
+  }
+}
+
+module.exports = { askActualReminder };
