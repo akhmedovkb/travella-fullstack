@@ -2000,6 +2000,106 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
   }
 });
 
+/* ===================== Напоминание "Отказ ещё актуален?" ===================== */
+/**
+ * callback_data:
+ *  - svc_actual:<id>:yes
+ *  - svc_actual:<id>:no
+ *  - svc_actual:<id>:extend7
+ */
+async function setServiceIsActive(ctx, serviceId, isActive) {
+  const actorId = getActorId(ctx);
+  if (!actorId) return;
+
+  // грузим текущую услугу, чтобы НЕ затереть другие поля details
+  const { data } = await axios.get(
+    `/api/telegram/provider/${actorId}/services/${serviceId}`
+  );
+
+  if (!data || !data.success || !data.service) {
+    console.log("[tg-bot] setServiceIsActive load bad resp:", data);
+    await safeReply(ctx, "⚠️ Не удалось загрузить услугу. Попробуйте позже.");
+    return;
+  }
+
+  const svc = data.service;
+  const details = safeJsonParseMaybe(svc.details);
+
+  details.isActive = !!isActive;
+
+  const payload = {
+    title: svc.title,
+    price: svc.price,
+    details,
+  };
+
+  const { data: upd } = await axios.patch(
+    `/api/telegram/provider/${actorId}/services/${serviceId}`,
+    payload
+  );
+
+  if (!upd || !upd.success) {
+    console.log("[tg-bot] setServiceIsActive patch bad resp:", upd);
+    await safeReply(ctx, "⚠️ Не удалось сохранить. Попробуйте позже.");
+    return;
+  }
+
+  await safeReply(
+    ctx,
+    isActive
+      ? "✅ Отмечено: услуга актуальна."
+      : "🛑 Отмечено: услуга неактуальна (скроется из поиска/inline)."
+  );
+}
+
+bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const action = ctx.match[2];
+
+    await ctx.answerCbQuery();
+
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Действие доступно только поставщикам.");
+      return;
+    }
+
+    const actorId = getActorId(ctx);
+    if (!actorId) return;
+
+    if (action === "extend7") {
+      // используем твой существующий эндпоинт продления
+      const endpoint = `/api/telegram/provider/${actorId}/services/${serviceId}/extend7`;
+      const { data } = await axios.post(endpoint);
+
+      if (!data || !data.success) {
+        console.log("[tg-bot] svc_actual extend7 bad resp:", data);
+        await safeReply(ctx, "⚠️ Не удалось продлить. Попробуйте позже.");
+        return;
+      }
+
+      await safeReply(ctx, "♻️ Продлено на 7 дней. Таймер актуальности обновлён.");
+      return;
+    }
+
+    if (action === "yes") {
+      await setServiceIsActive(ctx, serviceId, true);
+      return;
+    }
+
+    if (action === "no") {
+      await setServiceIsActive(ctx, serviceId, false);
+      return;
+    }
+  } catch (e) {
+    console.error("[tg-bot] svc_actual handler error:", e?.response?.data || e);
+    try {
+      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
+    } catch (_) {}
+  }
+});
+
 // ==== РЕДАКТИРОВАНИЕ УСЛУГИ В БОТЕ ====
 
 bot.action(/^svc:(\d+):edit$/, async (ctx) => {
