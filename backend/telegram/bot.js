@@ -72,7 +72,13 @@ const axios = axiosBase.create({
 // ==== INIT BOT ====
 
 const bot = new Telegraf(BOT_TOKEN);
-bot.use(session());
+// ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
+bot.use(
+  session({
+    getSessionKey: (ctx) =>
+      String(ctx?.from?.id || ctx?.chat?.id || "anon"),
+  })
+);
 
 // ==== HELPERS ====
 
@@ -1436,11 +1442,11 @@ bot.action("prov_services:list", async (ctx) => {
       return;
     }
 
-    const chatId = ctx.chat.id;
+    const actorId = getActorId(ctx);
 
     await safeReply(ctx, "⏳ Загружаю ваши услуги...");
 
-    const { data } = await axios.get(`/api/telegram/provider/${chatId}/services`);
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] provider services malformed:", data);
