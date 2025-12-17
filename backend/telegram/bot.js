@@ -1698,8 +1698,7 @@ bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
     }
 
     // ✅ При выборе поля "назад" должен возвращать в меню редактирования
-    if (!ctx.session.editStateStack) ctx.session.editStateStack = [];
-    ctx.session.editStateStack.push("svc_edit_menu");
+    ctx.session.editStateStack = ["svc_edit_menu"];
 
     // ✅ маппинг на реальные состояния, которые у тебя уже обработаны в bot.on("text")
     let nextState = "svc_edit_menu";
@@ -2072,9 +2071,8 @@ bot.on("text", async (ctx, next) => {
           details.startDate = norm;
           draft.details = details;
         
-          // ✅ чтобы "⬅️ Назад" из ввода конца вернул в ввод начала
-          if (!ctx.session.editStateStack) ctx.session.editStateStack = [];
-          ctx.session.editStateStack.push("svc_edit_dates_start");
+        // ✅ чтобы "⬅️ Назад" из ввода конца вернул в ввод начала
+        pushEditState(ctx, "svc_edit_dates_start");
         
           ctx.session.state = "svc_edit_dates_end";
           await ctx.reply(
