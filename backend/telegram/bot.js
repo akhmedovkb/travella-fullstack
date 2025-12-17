@@ -1172,6 +1172,10 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
 bot.start(async (ctx) => {
   logUpdate(ctx, "/start");
   const actorId = getActorId(ctx);
+  if (!actorId) {
+    await ctx.reply("⚠️ Не удалось определить пользователя. Попробуйте позже.");
+    return;
+  }
 
 // ✅ payload из switch_pm_parameter (когда пользователь нажимает "Открыть бота" из inline)
   const startPayloadRaw = (ctx.startPayload || "").trim();
