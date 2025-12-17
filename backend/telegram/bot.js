@@ -1062,17 +1062,15 @@ bot.hears(/❤️ Избранное/i, async (ctx) => {
   );
 });
 
-bot.hears(/📄 Мои брони/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои брони");
+bot.hears(/📄 (Мои брони|Бронирования)/i, async (ctx) => {
+  logUpdate(ctx, "hears Бронирования");
 
   const maybeProvider = await ensureProviderRole(ctx);
   const linked = !!ctx.session?.linked;
   const role = maybeProvider || ctx.session?.role || null;
 
   if (!linked && !role) {
-    await ctx.reply(
-      "📌 Чтобы показать ваши бронирования, нужно привязать аккаунт по номеру телефона."
-    );
+    await ctx.reply("📌 Чтобы показать ваши бронирования, нужно привязать аккаунт по номеру телефона.");
     await askRole(ctx);
     return;
   }
@@ -1084,17 +1082,15 @@ bot.hears(/📄 Мои брони/i, async (ctx) => {
   );
 });
 
-bot.hears(/📨 Мои заявки/i, async (ctx) => {
-  logUpdate(ctx, "hears Мои заявки");
+bot.hears(/📨 (Мои заявки|Заявки)/i, async (ctx) => {
+  logUpdate(ctx, "hears Заявки");
 
   const maybeProvider = await ensureProviderRole(ctx);
   const linked = !!ctx.session?.linked;
   const role = maybeProvider || ctx.session?.role || null;
 
   if (!linked && !role) {
-    await ctx.reply(
-      "📌 Чтобы показать ваши заявки, нужно привязать аккаунт по номеру телефона."
-    );
+    await ctx.reply("📌 Чтобы показать ваши заявки, нужно привязать аккаунт по номеру телефона.");
     await askRole(ctx);
     return;
   }
@@ -1105,6 +1101,7 @@ bot.hears(/📨 Мои заявки/i, async (ctx) => {
       `${SITE_URL}`
   );
 });
+
 
 bot.hears(/👤 Профиль/i, async (ctx) => {
   logUpdate(ctx, "hears Профиль");
