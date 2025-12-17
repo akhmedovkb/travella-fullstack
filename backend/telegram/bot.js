@@ -1595,9 +1595,11 @@ bot.action("prov_services:list", async (ctx) => {
     }
 
     const actorId = getActorId(ctx);
-
+    if (!actorId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
     await safeReply(ctx, "⏳ Загружаю ваши услуги...");
-
     const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
 
     if (!data || !data.success || !Array.isArray(data.items)) {
@@ -1652,32 +1654,9 @@ bot.action("prov_services:list", async (ctx) => {
       }
 
       const { text, photoUrl } = buildServiceMessage(svc, category, "provider");
-
       const status = svc.status || "draft";
-
-      // === ЛОГИКА АКТУАЛЬНОСТИ ===
-      let isActive =
-        typeof details.isActive === "boolean" ? details.isActive : true;
-
+      const isActive = isServiceActual(details, svc);
       const expirationRaw = details.expiration || svc.expiration || null;
-      if (expirationRaw) {
-        const exp = new Date(expirationRaw);
-        if (!Number.isNaN(exp.getTime()) && exp < new Date()) {
-          isActive = false;
-        }
-      }
-
-      const endRaw =
-        details.endFlightDate ||
-        details.returnFlightDate ||
-        details.endDate ||
-        null;
-      if (endRaw) {
-        const ed = new Date(endRaw);
-        if (!Number.isNaN(ed.getTime()) && ed < new Date()) {
-          isActive = false;
-        }
-      }
 
       const headerLines = [];
       headerLines.push(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`);
