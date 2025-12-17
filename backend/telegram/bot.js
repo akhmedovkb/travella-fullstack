@@ -7,6 +7,7 @@ const {
   parseDateFlexible,
   isServiceActual,
   normalizeDateInput: normalizeDateInputHelper,
+  normalizeDateTimeInput: normalizeDateTimeInputHelper,
 } = require("./helpers/serviceActual");
 
 // ==== CONFIG ====
@@ -263,6 +264,17 @@ function normalizeDateInput(raw) {
   return `${y}-${mm}-${dd}`;
 }
 
+// ✅ Дата+время для "Актуально до"
+function normalizeDateTimeInput(raw) {
+  // используем shared helper из serviceActual.js
+  return normalizeDateTimeInputHelper(raw);
+}
+
+function isPastDateTime(value) {
+  const dt = parseDateFlexible(value);
+  if (!dt) return false;
+  return dt.getTime() < Date.now();
+}
 function dateAtLocalMidnight(ymd) {
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
@@ -748,7 +760,7 @@ async function promptEditState(ctx, state) {
       return;
 
     case "svc_edit_expiration":
-      await safeReply(ctx, "⏳ Введите новую *дату актуальности* (YYYY-MM-DD / YYYY.MM.DD) или `нет`:", {
+      await safeReply(ctx, "⏳ Введите новую *дату и время актуальности* (YYYY-MM-DD HH:mm / YYYY.MM.DD HH:mm) или `нет`:", {
         parse_mode: "Markdown",
         ...editNavKeyboard(),
       });
@@ -966,8 +978,8 @@ async function promptWizardState(ctx, state) {
 
     case "svc_create_expiration":
       await ctx.reply(
-        "⏳ До какой даты тур *актуален*?\n" +
-          "✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+       "⏳ До какой даты и времени тур *актуален*?\n" +
+       "✅ Формат: *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm*\n" +
           "Или напишите `нет`.",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
@@ -2213,10 +2225,10 @@ bot.on("text", async (ctx, next) => {
       
         if (state === "svc_edit_expiration") {
           const lower = text.toLowerCase();
-          const normExp = normalizeDateInput(text);
+          const normExp = normalizeDateTimeInput(text);
       
-          if (normExp === null && lower !== "нет") {
-            await ctx.reply("😕 Не понял дату. Введите YYYY-MM-DD / YYYY.MM.DD или `нет`.", { ...editNavKeyboard() });
+        if (normExp && isPastDateTime(normExp)) {
+          await ctx.reply("⚠️ Дата/время актуальности в прошлом. Укажите будущую или `нет`.", { ...editNavKeyboard() });
             return;
           }
           if (normExp && isPastYMD(normExp)) {
@@ -2387,18 +2399,18 @@ bot.on("text", async (ctx, next) => {
 
         case "svc_create_expiration": {
           const lower = text.trim().toLowerCase();
-          const normExp = normalizeDateInput(text);
+          const normExp = normalizeDateTimeInput(text);
 
           if (normExp === null && lower !== "нет") {
             await ctx.reply(
               "😕 Не понял дату актуальности.\n" +
-                "Введите *YYYY-MM-DD* или *YYYY.MM.DD* (например *2025-12-15*) или `нет`.",
+                "Введите *YYYY-MM-DD HH:mm* или *YYYY.MM.DD HH:mm* (например *2025-12-15 21:30*) или `нет`.",
               { parse_mode: "Markdown", ...wizNavKeyboard() }
             );
             return;
           }
 
-          if (normExp && isPastYMD(normExp)) {
+          if (normExp && isPastDateTime(normExp)) {
             await ctx.reply(
               "⚠️ Дата актуальности уже в прошлом.\n" +
                 "Укажите будущую дату или напишите `нет`.",
