@@ -2,7 +2,7 @@
 
 const db = require("../db");
 const { tgSend } = require("../utils/telegram");
-const { isServiceActual, parseDateFlexible } = require("../telegram/helpers/serviceActual");
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 
 function safeJsonParseMaybe(v) {
   if (!v) return {};
@@ -35,7 +35,7 @@ async function askActualReminder() {
     JOIN providers p ON p.id = s.provider_id
     WHERE
       s.category LIKE 'refused_%'
-      AND s.status = 'approved'
+      AND s.status IN ('approved','published')
       AND p.telegram_chat_id IS NOT NULL
   `);
 
