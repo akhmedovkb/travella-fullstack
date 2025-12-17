@@ -74,6 +74,23 @@ const axios = axiosBase.create({
   timeout: 10000,
 });
 
+const INLINE_CACHE_TTL_MS = 8000;
+const inlineCache = new Map();
+
+function cacheGet(key) {
+  const v = inlineCache.get(key);
+  if (!v) return null;
+  if (Date.now() - v.ts > INLINE_CACHE_TTL_MS) {
+    inlineCache.delete(key);
+    return null;
+  }
+  return v.data;
+}
+
+function cacheSet(key, data) {
+  inlineCache.set(key, { ts: Date.now(), data });
+}
+
 // ==== INIT BOT ====
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -539,6 +556,8 @@ function buildServiceMessage(svc, category, role = "client") {
   if (hotelSafe) lines.push(`Отель: ${hotelSafe}`);
   if (accommodationSafe) lines.push(`Размещение: ${accommodationSafe}`);
   if (price) lines.push(`${priceLabel}: *${price}*`);
+  const badge = getExpiryBadge(d, svc);
+  if (badge) lines.push(escapeMarkdown(badge));
   lines.push(providerLine);
   if (telegramLine) lines.push(telegramLine);
   lines.push("");
@@ -2582,27 +2601,37 @@ bot.on("inline_query", async (ctx) => {
 
     // ✅ FIX: если inline делает агент — показываем net, иначе gross
     const roleForInline = await resolveRoleByUserId(chatId, ctx);
-
-    let data = null;
-    if (isMy) {
-      // "Мои услуги" доступны только провайдеру
-      if (roleForInline !== "provider") {
-        await ctx.answerInlineQuery([], {
-          cache_time: 3,
-          is_personal: true,
-          switch_pm_text: "🧳 Мои услуги доступны поставщикам. Открыть бота",
-          switch_pm_parameter: "start",
-        });
-        return;
-      }
-      const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
-      data = resp.data;
-    } else {
-      const resp = await axios.get(`/api/telegram/client/${chatId}/search`, {
-        params: { category },
+    // ✅ 1) "Мои услуги" доступны только провайдеру (оставляем как было)
+    if (isMy && roleForInline !== "provider") {
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "🧳 Мои услуги доступны поставщикам. Открыть бота",
+        switch_pm_parameter: "start",
       });
-      data = resp.data;
-    };
+      return;
+    }
+
+    // ✅ 2) КЭШ на 8 секунд (меньше дергаем API)
+    const cacheKey = isMy
+      ? `my:${chatId}`
+      : `search:${chatId}:${category}`;
+
+    let data = cacheGet(cacheKey);
+
+    if (!data) {
+      if (isMy) {
+        const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
+        data = resp.data;
+      } else {
+        const resp = await axios.get(`/api/telegram/client/${chatId}/search`, {
+          params: { category },
+        });
+        data = resp.data;
+      }
+      cacheSet(cacheKey, data);
+    }
+
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
@@ -2719,7 +2748,9 @@ bot.on("inline_query", async (ctx) => {
       const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
       const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
 
+      const badge = getExpiryBadge(d, svc);
       const descParts = [];
+      if (badge) descParts.push(badge);
       if (datesLine) descParts.push(datesLine);
       if (hotelLine) descParts.push(hotelLine);
       if (priceLine) descParts.push(priceLine);
