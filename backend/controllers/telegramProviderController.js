@@ -682,8 +682,7 @@ async function updateServiceFromBot(req, res) {
     }
 
     const body = req.body || {};
-    const nextTitle =
-      typeof body.title === "string" && body.title.trim() ? body.title.trim() : existing.title;
+
     const nextTitleRaw =
       typeof body.title === "string" && body.title.trim()
         ? body.title.trim()
