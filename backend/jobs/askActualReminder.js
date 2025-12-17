@@ -50,9 +50,7 @@ async function askActualReminder() {
 
     const parsedDetails = safeJsonParseMaybe(details);
     
-    // актуальность
-    if (!isServiceActual(details, row)) continue;
-
+    // актуальность (проверяем только распарсенный объект)
     if (!isServiceActual(parsedDetails, row)) continue;
 
     /**
