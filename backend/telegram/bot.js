@@ -1325,6 +1325,7 @@ bot.action("prov_services:list", async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
+          [{ text: "✏️ Редактировать", callback_data: `svc:${svc.id}:edit` }],
           [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
           [{ text: "🛑 Снять с продажи", callback_data: `svc:${svc.id}:unpublish` }],
           [
@@ -1548,6 +1549,41 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
     await ctx.reply(msg);
   } catch (e) {
     console.error("[tg-bot] svc action handler error:", e?.response?.data || e);
+    try {
+      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
+    } catch (_) {}
+  }
+});
+
+// ==== РЕДАКТИРОВАНИЕ УСЛУГИ (пока через кабинет) ====
+
+bot.action(/^svc:(\d+):edit$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    await ctx.answerCbQuery();
+
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+      return;
+    }
+
+    // ведём сразу в кабинет на нужную услугу
+    const editUrl = `${SITE_URL}/dashboard?from=tg&service=${serviceId}`;
+
+    await safeReply(
+      ctx,
+      `✏️ Редактирование услуги #${serviceId}\n\nОткрываю в кабинете 👇`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🌐 Открыть редактор", url: editUrl }],
+            [{ text: "⬅️ Назад к моим услугам", callback_data: "prov_services:list" }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] svc edit handler error:", e?.response?.data || e);
     try {
       await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
     } catch (_) {}
