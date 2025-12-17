@@ -612,6 +612,86 @@ function editNavKeyboard() {
   };
 }
 
+async function promptEditState(ctx, state) {
+  const draft = ctx.session?.editDraft || {};
+  const details = draft.details || {};
+
+  switch (state) {
+    case "svc_edit_menu":
+      await openEditMenu(ctx);
+      return;
+
+    case "svc_edit_title":
+      await safeReply(ctx, "✍️ Введите новое *название тура*:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_dates_start":
+      await safeReply(ctx, "📅 Введите *дату начала* (YYYY-MM-DD или YYYY.MM.DD):", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_dates_end": {
+      const start = details.startDate || "—";
+      await safeReply(ctx, `📅 Введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):\nНачало: ${start}`, {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+    }
+
+    case "svc_edit_hotel":
+      await safeReply(ctx, "🏨 Введите новое *название отеля*:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_accommodation":
+      await safeReply(ctx, "🛏 Введите новое *размещение*:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_netPrice":
+      await safeReply(ctx, "💰 Введите новую *цену NETTO*:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_grossPrice":
+      await safeReply(ctx, "💳 Введите новую *цену BRUTTO*:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_expiration":
+      await safeReply(ctx, "⏳ Введите новую *дату актуальности* (YYYY-MM-DD / YYYY.MM.DD) или `нет`:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    case "svc_edit_isActive":
+      await safeReply(ctx, "✅ Активно? Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...editNavKeyboard(),
+      });
+      return;
+
+    default:
+      await openEditMenu(ctx);
+      return;
+  }
+}
+
 function resetEditWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.editStateStack = null;
@@ -663,16 +743,16 @@ async function openEditMenu(ctx) {
   await safeReply(ctx, lines.join("\n"), {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📝 Название", callback_data: "svc_edit_field:title" }],
-        [{ text: "📅 Даты (начало/конец)", callback_data: "svc_edit_field:dates" }],
-        [{ text: "🏨 Отель", callback_data: "svc_edit_field:hotel" }],
-        [{ text: "🛏 Размещение", callback_data: "svc_edit_field:accommodation" }],
+        [{ text: "📝 Название", callback_data: "svc_edit:field:title" }],
+        [{ text: "📅 Даты (начало/конец)", callback_data: "svc_edit:field:dates" }],
+        [{ text: "🏨 Отель", callback_data: "svc_edit:field:hotel" }],
+        [{ text: "🛏 Размещение", callback_data: "svc_edit:field:accommodation" }],
         [
-          { text: "💰 Цена NETTO", callback_data: "svc_edit_field:netPrice" },
-          { text: "💳 Цена BRUTTO", callback_data: "svc_edit_field:grossPrice" },
+          { text: "💰 Цена NETTO", callback_data: "svc_edit:field:netPrice" },
+          { text: "💳 Цена BRUTTO", callback_data: "svc_edit:field:grossPrice" },
         ],
-        [{ text: "⏳ Актуально до", callback_data: "svc_edit_field:expiration" }],
-        [{ text: "✅/⛔ Активность", callback_data: "svc_edit_field:isActive" }],
+        [{ text: "⏳ Актуально до", callback_data: "svc_edit:field:expiration" }],
+        [{ text: "✅/⛔ Активность", callback_data: "svc_edit:field:isActive" }],
         [{ text: "⬅️ Назад к моим услугам", callback_data: "prov_services:list" }],
       ],
     },
@@ -1580,7 +1660,6 @@ bot.action("svc_edit:back", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // если сессии нет — просто откроем меню редактирования
     if (!ctx.session?.editDraft) {
       await safeReply(ctx, "⚠️ Сессия редактирования устарела. Откройте «🧳 Мои услуги» и нажмите ✏️.");
       resetEditWizard(ctx);
@@ -1590,46 +1669,24 @@ bot.action("svc_edit:back", async (ctx) => {
     const stack = ctx.session.editStateStack || [];
     const prev = stack.length ? stack.pop() : null;
 
-    // если некуда назад — возвращаем в меню редактирования
     if (!prev) {
-      ctx.session.state = null;
-      await openEditMenu(ctx);
+      ctx.session.state = "svc_edit_menu";
+      await promptEditState(ctx, "svc_edit_menu");
       return;
     }
 
-    // ставим предыдущее состояние
     ctx.session.state = prev;
-
-    // ✅ ВАЖНО: после "назад" показываем понятный шаг
-    // если назад в один из "prompt'овых" стейтов — повторяем вопрос
-    if (prev === "svc_edit_dates_start") {
-      await safeReply(ctx, "📅 Введите *дату начала* (YYYY-MM-DD или YYYY.MM.DD):", {
-        parse_mode: "Markdown",
-        ...editNavKeyboard(),
-      });
-      return;
-    }
-
-    if (prev === "svc_edit_dates_end") {
-      const start = ctx.session.editDraft?.details?.startDate || "—";
-      await safeReply(ctx, `📅 Введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):\nНачало: ${start}`, {
-        parse_mode: "Markdown",
-        ...editNavKeyboard(),
-      });
-      return;
-    }
-
-    // если непонятно куда вернулись — просто открываем меню редактирования
-    await openEditMenu(ctx);
+    await promptEditState(ctx, prev);
   } catch (e) {
     console.error("[tg-bot] svc_edit:back error:", e?.response?.data || e);
   }
 });
 
 
+
 /* ===================== РЕДАКТИРОВАНИЕ: выбор поля ===================== */
 
-bot.action(/^svc_edit_field:(.+)$/, async (ctx) => {
+bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
@@ -1640,66 +1697,29 @@ bot.action(/^svc_edit_field:(.+)$/, async (ctx) => {
       return;
     }
 
-    // Выбираем правильный state + текст подсказки
-    let nextState = null;
-    let prompt = null;
+    // ✅ При выборе поля "назад" должен возвращать в меню редактирования
+    if (!ctx.session.editStateStack) ctx.session.editStateStack = [];
+    ctx.session.editStateStack.push("svc_edit_menu");
 
-    switch (field) {
-      case "title":
-        nextState = "svc_edit_title";
-        prompt = "✍️ Введите новое *название тура*:";
-        break;
-
-      case "dates":
-        nextState = "svc_edit_dates_start";
-        prompt = "📅 Введите *дату начала* (YYYY-MM-DD или YYYY.MM.DD):";
-        break;
-
-      case "hotel":
-        nextState = "svc_edit_hotel";
-        prompt = "🏨 Новое *название отеля*:";
-        break;
-
-      case "accommodation":
-        nextState = "svc_edit_accommodation";
-        prompt = "🛏 Новое *размещение*:";
-        break;
-
-      case "netPrice":
-        nextState = "svc_edit_netPrice";
-        prompt = "💰 Новая *цена NETTO*:";
-        break;
-
-      case "grossPrice":
-        nextState = "svc_edit_grossPrice";
-        prompt = "💳 Новая *цена BRUTTO*:";
-        break;
-
-      case "expiration":
-        nextState = "svc_edit_expiration";
-        prompt = "⏳ Новая *дата актуальности* (YYYY-MM-DD) или `нет`:";
-        break;
-
-      case "isActive":
-        nextState = "svc_edit_isActive";
-        prompt = "✅ Активно? Ответьте `да` или `нет`:";
-        break;
-
-      default:
-        await safeReply(ctx, "⚠️ Неизвестное поле.");
-        return;
-    }
+    // ✅ маппинг на реальные состояния, которые у тебя уже обработаны в bot.on("text")
+    let nextState = "svc_edit_menu";
+    if (field === "title") nextState = "svc_edit_title";
+    else if (field === "dates") nextState = "svc_edit_dates_start";
+    else if (field === "hotel") nextState = "svc_edit_hotel";
+    else if (field === "accommodation") nextState = "svc_edit_accommodation";
+    else if (field === "netPrice") nextState = "svc_edit_netPrice";
+    else if (field === "grossPrice") nextState = "svc_edit_grossPrice";
+    else if (field === "expiration") nextState = "svc_edit_expiration";
+    else if (field === "isActive") nextState = "svc_edit_isActive";
 
     ctx.session.state = nextState;
 
-    await safeReply(ctx, prompt, {
-      parse_mode: "Markdown",
-      ...editNavKeyboard(),
-    });
+    await promptEditState(ctx, nextState);
   } catch (e) {
-    console.error("[tg-bot] svc_edit_field error:", e?.message || e);
+    console.error("[tg-bot] svc_edit field error:", e?.message || e);
   }
 });
+
 
 
 /* ===================== НОВОЕ: старт мастера создания услуги ===================== */
@@ -1738,8 +1758,7 @@ bot.action("svc_new", async (ctx) => {
   }
 });
 
-bot.action(
-  /^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
+bot.action(/^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
   async (ctx) => {
     try {
       await ctx.answerCbQuery();
@@ -2049,12 +2068,22 @@ bot.on("text", async (ctx, next) => {
             await ctx.reply("⚠️ Эта дата в прошлом. Укажите будущую дату.", { ...editNavKeyboard() });
             return;
           }
+        
           details.startDate = norm;
           draft.details = details;
+        
+          // ✅ чтобы "⬅️ Назад" из ввода конца вернул в ввод начала
+          if (!ctx.session.editStateStack) ctx.session.editStateStack = [];
+          ctx.session.editStateStack.push("svc_edit_dates_start");
+        
           ctx.session.state = "svc_edit_dates_end";
-          await ctx.reply("📅 Теперь введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):", { parse_mode: "Markdown", ...editNavKeyboard() });
+          await ctx.reply(
+            "📅 Теперь введите *дату окончания* (YYYY-MM-DD или YYYY.MM.DD):",
+            { parse_mode: "Markdown", ...editNavKeyboard() }
+          );
           return;
         }
+
       
         if (state === "svc_edit_dates_end") {
           const normEnd = normalizeDateInput(text);
