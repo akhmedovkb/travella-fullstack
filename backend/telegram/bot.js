@@ -301,6 +301,62 @@ function getStartDateForSort(svc) {
   return parseDateSafe(raw);
 }
 
+// === Актуальность услуги (для inline/списков) ===
+// Правила:
+// - если details.isActive === false -> неактуально
+// - если expiration (details.expiration или svc.expiration) в прошлом -> неактуально
+// - если endDate/returnFlightDate/endFlightDate в прошлом -> неактуально
+function parseDateFlexible(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  // сначала пробуем существующий безопасный парсер
+  const d1 = parseDateSafe(s);
+  if (d1) return d1;
+
+  // если это YYYY-MM-DD или YYYY.MM.DD — приводим к YYYY-MM-DD и пробуем ещё раз
+  const ymd = normalizeDateInput(s);
+  if (ymd) {
+    const d2 = parseDateSafe(ymd);
+    if (d2) return d2;
+  }
+
+  return null;
+}
+
+function isServiceActual(detailsRaw, svc) {
+  let d = detailsRaw || {};
+  if (typeof d === "string") {
+    try { d = JSON.parse(d); } catch { d = {}; }
+  }
+
+  // isActive
+  if (typeof d.isActive === "boolean" && d.isActive === false) return false;
+
+  const now = new Date();
+
+  // expiration
+  const expirationRaw = d.expiration || svc?.expiration || null;
+  if (expirationRaw) {
+    const exp = parseDateFlexible(expirationRaw);
+    if (exp && exp.getTime() < now.getTime()) return false;
+  }
+
+  // end date (tour/hotel) or return flight date
+  const endRaw =
+    d.endFlightDate ||
+    d.returnFlightDate ||
+    d.endDate ||
+    null;
+  if (endRaw) {
+    const endD = parseDateFlexible(endRaw);
+    if (endD && endD.getTime() < now.getTime()) return false;
+  }
+
+  return true;
+}
+
 /**
  * Картинки
  *
@@ -1910,93 +1966,6 @@ bot.action(/^svc:(\d+):edit$/, async (ctx) => {
   }
 });
 
-
-// ==== ПОИСК ОТКАЗНЫХ УСЛУГ (кнопка "Найти услугу") ====
-
-// ✅ FIX: роль определяем через ensureProviderRole, иначе агент видел gross
-bot.action(
-  /^find:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
-  async (ctx) => {
-    try {
-      const category = ctx.match[1];
-
-      await ctx.answerCbQuery();
-      logUpdate(ctx, `action search ${category}`);
-
-      // ✅ правильная роль
-      const maybeProvider = await ensureProviderRole(ctx);
-      const role = maybeProvider || ctx.session?.role || "client";
-
-      const actorId = getActorId(ctx); // ✅ всегда ctx.from.id (или fallback)
-      if (!actorId) {
-        await ctx.reply("⚠️ Не удалось определить пользователя. Попробуйте позже.");
-        return;
-      }
-      await ctx.reply("⏳ Ищу подходящие предложения...");
-
-      const { data } = await axios.get(`/api/telegram/client/${actorId}/search`, {
-        params: { category },
-      });
-
-      if (!data || !data.success || !Array.isArray(data.items)) {
-        console.log("[tg-bot] search resp malformed:", data);
-        await ctx.reply("⚠️ Ошибка загрузки. Попробуйте позже.");
-        return;
-      }
-
-      if (!data.items.length) {
-        await ctx.reply("😕 По этой категории сейчас нет предложений.");
-        return;
-      }
-
-      await ctx.reply(`✅ Нашёл предложений: ${data.items.length}\nПоказываю топ 10 👇`);
-
-      for (const svc of data.items.slice(0, 10)) {
-        const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, role);
-
-        const keyboard = {
-          inline_keyboard: [
-            [
-              { text: "Подробнее на сайте", url: serviceUrl },
-              { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-            ],
-          ],
-        };
-
-        if (photoUrl) {
-          try {
-            if (photoUrl.startsWith("tgfile:")) {
-              const fileId = photoUrl.replace(/^tgfile:/, "");
-              await ctx.replyWithPhoto(fileId, {
-                caption: text,
-                parse_mode: "Markdown",
-                reply_markup: keyboard,
-              });
-            } else {
-              await ctx.replyWithPhoto(photoUrl, {
-                caption: text,
-                parse_mode: "Markdown",
-                reply_markup: keyboard,
-              });
-            }
-          } catch (e) {
-            console.error(
-              "[tg-bot] replyWithPhoto failed in search, fallback to text:",
-              e?.response?.data || e?.message || e
-            );
-            await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
-          }
-        } else {
-          await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
-        }
-      }
-    } catch (e) {
-      console.error("[tg-bot] error in search:", e?.response?.data || e.message || e);
-      await ctx.reply("⚠️ Не удалось загрузить услуги. Попробуйте позже.");
-    }
-  }
-);
-
 // ==== Быстрый запрос ====
 
 bot.action(/^request:(\d+)$/, async (ctx) => {
@@ -2583,7 +2552,28 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-    const itemsSorted = [...data.items].sort((a, b) => {
+        // ✅ Фильтр: показываем только актуальные (и для клиента, и для провайдера)
+    // Для "#my" тоже логично скрывать просроченные/неактивные, чтобы не засорять выдачу.
+    const itemsActual = (data.items || []).filter((svc) => {
+      try {
+        return isServiceActual(svc.details, svc);
+      } catch (_) {
+        // если что-то пошло не так — лучше не показывать "сомнительные"
+        return false;
+      }
+    });
+
+    if (!itemsActual.length) {
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "Открыть главное меню бота",
+        switch_pm_parameter: "start",
+      });
+      return;
+    }
+
+    const itemsSorted = [...itemsActual].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
 
