@@ -309,15 +309,17 @@ function startAskActualReminderScheduler() {
 }
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
 
-if (bot) {
-  console.log("[tg-bot] index.js: starting bot (polling) ...");
-
-  // ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
+// ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
   try {
     startAskActualReminderScheduler();
   } catch (e) {
     console.warn("[askActualReminder] scheduler start failed:", e?.message || e);
   }
+
+if (bot) {
+  console.log("[tg-bot] index.js: starting bot (polling) ...");
+
+
 
   (async () => {
     try {
