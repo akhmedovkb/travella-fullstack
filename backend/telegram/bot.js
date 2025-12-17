@@ -1166,6 +1166,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   await ctx.reply("🧳 Выберите действие:", {
     reply_markup: {
       inline_keyboard: [
+        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my " }],
         [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
         [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
         [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
@@ -2033,6 +2034,7 @@ bot.on("inline_query", async (ctx) => {
     logUpdate(ctx, "inline_query");
 
     const q = (ctx.inlineQuery?.query || "").toLowerCase().trim();
+    const isMy = q.startsWith("#my");
 
     let category = "refused_tour";
 
@@ -2056,9 +2058,21 @@ bot.on("inline_query", async (ctx) => {
     // ✅ FIX: если inline делает агент — показываем net, иначе gross
     const roleForInline = await resolveRoleByUserId(chatId, ctx);
 
-    const { data } = await axios.get(`/api/telegram/client/${chatId}/search`, {
-      params: { category },
-    });
+    let data = null;
+    if (isMy) {
+      // "Мои услуги" доступны только провайдеру
+      if (roleForInline !== "provider") {
+        await ctx.answerInlineQuery([], { cache_time: 3, is_personal: true });
+        return;
+      }
+      const resp = await axios.get(`/api/telegram/provider/${chatId}/services`);
+      data = resp.data;
+    } else {
+      const resp = await axios.get(`/api/telegram/client/${chatId}/search`, {
+        params: { category },
+      });
+      data = resp.data;
+    };
 
     if (!data || !data.success || !Array.isArray(data.items)) {
       console.log("[tg-bot] inline search resp malformed:", data);
@@ -2078,9 +2092,10 @@ bot.on("inline_query", async (ctx) => {
     });
 
     const results = itemsSorted.slice(0, 25).map((svc, idx) => {
+      const svcCategory = (svc.category || svc.type || category);
       const { text, photoUrl, serviceUrl } = buildServiceMessage(
         svc,
-        category,
+        svcCategory,
         roleForInline
       );
 
@@ -2137,7 +2152,7 @@ bot.on("inline_query", async (ctx) => {
       return {
         type: "article",
         id: String(svc.id) + "_" + idx,
-        title: normalizeTitleSoft(svc.title) || CATEGORY_LABELS[category] || "Услуга",
+        title: normalizeTitleSoft(svc.title) || CATEGORY_LABELS[svcCategory] || "Услуга",
         description,
         thumb_url: thumbUrl || undefined,
         input_message_content: {
