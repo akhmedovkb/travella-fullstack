@@ -297,6 +297,44 @@ if (bot) {
   );
 }
 
+/** ===================== CRON: TG reminders ===================== */
+/**
+ * Напоминание поставщикам: "Отказ ещё актуален?"
+ * ⏰ 10:00, 14:00, 18:00 (по локальному времени сервера)
+ *
+ * Вынесено в job, чтобы не нагружать index.js логикой.
+ */
+try {
+  const { askActualReminder } = require("./jobs/askActualReminder");
+
+  cron.schedule("0 10,14,18 * * *", async () => {
+    try {
+      await askActualReminder();
+    } catch (e) {
+      console.error("[cron] askActualReminder error:", e);
+    }
+  });
+
+  console.log("[cron] askActualReminder scheduled: 10:00, 14:00, 18:00");
+} catch (e) {
+  console.warn("[cron] askActualReminder not scheduled:", e?.message || e);
+}
+📌 Что ещё нужно (чтобы не упало)
+npm i node-cron в backend
+
+Файл backend/jobs/askActualReminder.js должен существовать
+
+(если ты хочешь анти-спам как я писал) — поле в БД tg_last_actual_check_at
+
+Если хочешь — я дам diff для обработчиков кнопок (svc_actual:<id>:yes/no/extend7) прямо в backend/telegram/bot.js, тоже точечно и без конфликтов.
+
+
+
+
+
+
+
+
 
 /** ===================== EntryFees ===================== */
 // публичные
