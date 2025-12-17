@@ -203,6 +203,12 @@ function logUpdate(ctx, label = "update") {
   } catch (_) {}
 }
 
+// ✅ ВАЖНО: для callback/inline в группах ctx.chat.id = id группы.
+// Для идентификации пользователя (поставщик/клиент) всегда используем ctx.from.id.
+function getActorId(ctx) {
+  return ctx?.from?.id || ctx?.chat?.id || null;
+}
+
 // Маппинг подписей для категорий
 const CATEGORY_LABELS = {
   refused_tour: "Отказной тур",
@@ -499,11 +505,11 @@ async function ensureProviderRole(ctx) {
   if (ctx.session?.role === "provider") {
     return "provider";
   }
-  const chatId = ctx.chat?.id;
-  if (!chatId) return ctx.session?.role || null;
+  const actorId = getActorId(ctx);
+  if (!actorId) return ctx.session?.role || null;
 
   try {
-    const resProv = await axios.get(`/api/telegram/profile/provider/${chatId}`);
+    const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
     if (resProv.data && resProv.data.success) {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = "provider";
@@ -767,8 +773,8 @@ async function saveEditedService(ctx) {
     return;
   }
 
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
+  const actorId = getActorId(ctx);
+  if (!actorId) return;
 
   const payload = {
     title: draft.title,
@@ -777,7 +783,7 @@ async function saveEditedService(ctx) {
   };
 
   const { data } = await axios.patch(
-    `/api/telegram/provider/${chatId}/services/${draft.serviceId}`,
+   `/api/telegram/provider/${actorId}/services/${draft.serviceId}`,
     payload
   );
 
@@ -956,7 +962,8 @@ async function finishCreateServiceFromWizard(ctx) {
       images: draft.images || [],
     };
 
-    const chatId = ctx.chat.id;
+    const chatId = getActorId(ctx);
+    if (!chatId) return;
 
     const { data } = await axios.post(
       `/api/telegram/provider/${chatId}/services`,
@@ -1794,7 +1801,8 @@ bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
   try {
     const serviceId = Number(ctx.match[1]);
     const action = ctx.match[2];
-    const chatId = ctx.chat.id;
+    const chatId = getActorId(ctx);
+    if (!chatId) return;
 
     await ctx.answerCbQuery();
 
@@ -1849,7 +1857,8 @@ bot.action(/^svc:(\d+):edit$/, async (ctx) => {
       return;
     }
 
-    const chatId = ctx.chat.id;
+    const chatId = getActorId(ctx);
+    if (!chatId) return;
 
     // грузим услугу с backend
     const { data } = await axios.get(
