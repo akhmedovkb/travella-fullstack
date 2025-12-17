@@ -357,29 +357,6 @@ if (bot) {
   );
 }
 
-/** ===================== CRON: TG reminders ===================== */
-/**
- * Напоминание поставщикам: "Отказ ещё актуален?"
- * ⏰ 10:00, 14:00, 18:00 (по локальному времени сервера)
- *
- * Вынесено в job, чтобы не нагружать index.js логикой.
- */
-try {
-  const { askActualReminder } = require("./jobs/askActualReminder");
-
-  cron.schedule("0 10,14,18 * * *", async () => {
-    try {
-      await askActualReminder();
-    } catch (e) {
-      console.error("[cron] askActualReminder error:", e);
-    }
-  });
-
-  console.log("[cron] askActualReminder scheduled: 10:00, 14:00, 18:00");
-} catch (e) {
-  console.warn("[cron] askActualReminder not scheduled:", e?.message || e);
-}
-
 /** ===================== EntryFees ===================== */
 // публичные
 const entryFeesRoutes = require("./routes/entryFeesRoutes");
