@@ -271,6 +271,39 @@ function isBeforeYMD(a, b) {
   return da.getTime() < db.getTime();
 }
 
+function ymdLocal(dt) {
+  if (!dt) return null;
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getExpiryBadge(detailsRaw, svc) {
+  let d = detailsRaw || {};
+  if (typeof d === "string") {
+    try { d = JSON.parse(d); } catch { d = {}; }
+  }
+
+  const expirationRaw = d.expiration || svc?.expiration || null;
+  if (!expirationRaw) return null;
+
+  const exp = parseDateFlexible(expirationRaw);
+  if (!exp) return null;
+
+  const today = new Date();
+  const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const tomorrow0 = new Date(today0.getTime() + 24 * 60 * 60 * 1000);
+
+  const exp0 = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate());
+
+  if (exp0.getTime() === today0.getTime()) return "⏳ истекает сегодня";
+  if (exp0.getTime() === tomorrow0.getTime()) return "⏳ истекает завтра";
+
+  // можно расширить: "через N дней"
+  return null;
+}
+
 // безопасный парсинг дат для сортировки
 function parseDateSafe(value) {
   if (!value) return null;
