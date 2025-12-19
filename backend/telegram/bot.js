@@ -245,6 +245,96 @@ const CATEGORY_LABELS = {
   refused_flight: "Отказной авиабилет",
   refused_ticket: "Отказной билет",
 };
+// Emoji по категориям (для заголовков/inline)
+const CATEGORY_EMOJI = {
+  refused_tour: "📍",
+  refused_hotel: "🏨",
+  refused_flight: "✈️",
+  refused_ticket: "🎫",
+};
+
+// пытаемся вытащить звёзды из roomCategory / accommodationCategory (например "5*", "5 *", "⭐️5")
+function extractStars(details) {
+  const d = details || {};
+  const raw = String(d.accommodationCategory || d.roomCategory || "").trim();
+  if (!raw) return null;
+
+  const m = raw.match(/([1-7])\s*\*|⭐\s*([1-7])/);
+  const stars = m ? Number(m[1] || m[2]) : null;
+  if (!stars) return null;
+
+  return `⭐️ ${stars}*`;
+}
+
+// 2025-12-20 -> 20.12
+function shortDM(ymd) {
+  const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return `${m[3]}.${m[2]}`;
+}
+
+// "20–27.12" (если один месяц) или "28.12–03.01" (если разные)
+function shortDateRange(startYmd, endYmd) {
+  const s = shortDM(startYmd);
+  const e = shortDM(endYmd);
+  if (!s && !e) return "";
+
+  if (s && e && s !== e) {
+    const sm = s.slice(3);
+    const em = e.slice(3);
+    const sd = s.slice(0, 2);
+    const ed = e.slice(0, 2);
+
+    if (sm === em) return `${sd}–${ed}.${sm}`;
+    return `${s}–${e}`;
+  }
+  return s || e || "";
+}
+
+// авто-заголовок для refused_tour (если title пустой)
+function autoTitleRefusedTour(draft) {
+  const from = (draft.fromCity || "").trim();
+  const to = (draft.toCity || "").trim();
+  const country = (draft.country || "").trim();
+  const range = shortDateRange(draft.startDate, draft.endDate);
+
+  const dir =
+    from && to ? `${from} → ${to}` : (to || from || "");
+  const parts = [];
+  if (dir) parts.push(dir);
+  if (country) parts.push(country);
+  if (range) parts.push(range);
+
+  // fallback
+  if (!parts.length) return "Отказной тур";
+  return parts.join(" · ");
+}
+
+// авто-заголовок для refused_hotel (если title пустой)
+function autoTitleRefusedHotel(draft) {
+  const hotel = (draft.hotel || "Отель").trim();
+  const city = (draft.toCity || "").trim();
+  const range = shortDateRange(draft.startDate, draft.endDate);
+
+  const parts = [hotel];
+  if (city) parts.push(city);
+  if (range) parts.push(range);
+
+  return parts.join(" · ");
+}
+
+// gross = net + % (по умолчанию 10%)
+const DEFAULT_GROSS_MARKUP_PERCENT = Number(
+  process.env.GROSS_MARKUP_PERCENT || "10"
+);
+function calcGrossFromNet(netNum) {
+  const p = Number.isFinite(DEFAULT_GROSS_MARKUP_PERCENT)
+    ? DEFAULT_GROSS_MARKUP_PERCENT
+    : 10;
+  const gross = netNum * (1 + p / 100);
+  // округлим до целого, чтобы не было 1250.0000001
+  return Math.round(gross);
+}
 
 /**
  * Даты
@@ -467,7 +557,14 @@ function buildServiceMessage(svc, category, role = "client") {
   // ✅ заголовок
   const titleRaw = svc.title || CATEGORY_LABELS[category] || "Услуга";
   const titlePretty = normalizeTitleSoft(titleRaw);
-  const title = escapeMarkdown(titlePretty);
+  
+  // emoji + stars
+  const emoji = CATEGORY_EMOJI[category] || "";
+  const stars = extractStars(d);
+  
+  const titleDecor = [emoji, titlePretty, stars].filter(Boolean).join(" ");
+  const title = escapeMarkdown(titleDecor);
+
 
   // Направление (страна/города) + чистим странные ’n
   const directionParts = [];
@@ -1110,7 +1207,8 @@ async function promptWizardState(ctx, state) {
     
       await ctx.reply(
         `💳 Укажите *цену БРУТТО* (${label})\n` +
-          "Пример: *1250* или *1250 USD*",
+          "Пример: *1250* или *1250 USD*\n" +
+          `Или напишите *пропустить* — бот посчитает автоматически (+${DEFAULT_GROSS_MARKUP_PERCENT || 10}%).`,
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -1164,46 +1262,51 @@ async function finishCreateServiceFromWizard(ctx) {
     }
 
     const grossNum = normalizePrice(draft.grossPrice);
-    if (grossNum === null) {
+    if (grossNum === null && String(draft.grossPrice || "").trim()) {
       await ctx.reply(
         "😕 Не понял цену брутто.\n" +
-          "Введите число, например: *1250* или *1250 USD*.",
+          "Введите число (например *1250*) или напишите *пропустить* — посчитаю автоматически.",
         { parse_mode: "Markdown" }
       );
       ctx.session.state = "svc_create_grossPrice";
       return;
     }
+    // если пусто/пропуск — рассчитаем ниже
+
     draft.grossPriceNum = grossNum;
 
     let details;
     let title;
     
+    // ---- gross: если не ввели / не распарсили — считаем автоматически ----
+    let grossNumFinal = normalizePrice(draft.grossPrice);
+    if (grossNumFinal === null) {
+      grossNumFinal = calcGrossFromNet(priceNum);
+    }
+    draft.grossPriceNum = grossNumFinal;
+    
+    let details;
+    let title;
+    
+    if (category === "refused_tour") {
+      details = buildDetailsForRefusedTour(draft, priceNum);
+      // авто-заголовок тура, если пустой
+      if (draft.title && draft.title.trim()) {
+        title = draft.title.trim();
+      } else {
+        title = autoTitleRefusedTour(draft);
+      }
     } else {
       details = buildDetailsForRefusedHotel(draft, priceNum);
     
+      // авто-заголовок отеля, если пустой
       if (draft.title && draft.title.trim()) {
-        // если пользователь задал заголовок — уважаем его
         title = draft.title.trim();
       } else {
-        const hotel = draft.hotel || "Отель";
-        const city = draft.toCity || "";
-        const start = draft.startDate;
-        const end = draft.endDate;
-    
-        let datesPart = "";
-        if (start && end) {
-          const sd = start.slice(5).replace("-", ".");
-          const ed = end.slice(5).replace("-", ".");
-          datesPart = ` · ${sd}–${ed}`;
-        } else if (start) {
-          const sd = start.slice(5).replace("-", ".");
-          datesPart = ` · ${sd}`;
-        }
-    
-        title = [hotel, city].filter(Boolean).join(" · ") + datesPart;
+        title = autoTitleRefusedHotel(draft);
       }
     }
-   
+  
     const payload = {
       category,
       title,
@@ -2829,7 +2932,15 @@ bot.on("text", async (ctx, next) => {
           return;
 
         case "svc_create_grossPrice": {
-          draft.grossPrice = text;
+          const lower = text.trim().toLowerCase();
+        
+          // можно пропустить — тогда рассчитаем позже из net
+          if (lower === "пропустить" || lower === "нет") {
+            draft.grossPrice = null;
+          } else {
+            draft.grossPrice = text;
+          }
+        
           pushWizardState(ctx, "svc_create_grossPrice");
           ctx.session.state = "svc_create_expiration";
           await promptWizardState(ctx, "svc_create_expiration");
