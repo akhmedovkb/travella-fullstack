@@ -654,6 +654,20 @@ function normalizePrice(text) {
   return n;
 }
 
+function parsePaxTriple(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+
+  // допускаем: "2/1/0" или "2 1 0" или "2,1,0"
+  const parts = t.split(/[\/,\s]+/).filter(Boolean);
+  if (parts.length !== 3) return null;
+
+  const [a, c, i] = parts.map((x) => Number(String(x).replace(/[^\d]/g, "")));
+  if ([a, c, i].some((n) => Number.isNaN(n) || n < 0)) return null;
+
+  return { adt: a, chd: c, inf: i };
+}
+
 // собираем details для refused_tour из draft
 function buildDetailsForRefusedTour(draft, priceNum) {
   return {
@@ -672,6 +686,34 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     isActive: true,
   };
 }
+
+function buildDetailsForRefusedHotel(draft, netPriceNum) {
+  return {
+    directionCountry: draft.country || "",
+    directionTo: draft.toCity || "",
+    hotel: draft.hotel || "",
+    startDate: draft.startDate || "",
+    endDate: draft.endDate || "",
+    accommodationCategory: draft.roomCategory || "",
+    accommodation: draft.accommodation || "",
+    food: draft.food || "",
+    halal: typeof draft.halal === "boolean" ? draft.halal : false,
+    transfer: draft.transfer || "",
+    changeable: typeof draft.changeable === "boolean" ? draft.changeable : false,
+
+    // pax
+    accommodationADT: typeof draft.adt === "number" ? draft.adt : 0,
+    accommodationCHD: typeof draft.chd === "number" ? draft.chd : 0,
+    accommodationINF: typeof draft.inf === "number" ? draft.inf : 0,
+
+    netPrice: netPriceNum,
+    grossPrice:
+      typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    expiration: draft.expiration || null,
+    isActive: true,
+  };
+}
+
 
 function wizNavKeyboard() {
   return {
@@ -889,7 +931,10 @@ async function saveEditedService(ctx) {
 function pushWizardState(ctx, prevState) {
   if (!ctx.session) ctx.session = {};
   if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
-  if (prevState && String(prevState).startsWith("svc_create_")) {
+  if (
+    prevState &&
+    (String(prevState).startsWith("svc_create_") || String(prevState).startsWith("svc_hotel_"))
+  ) {
     ctx.session.wizardStack.push(prevState);
   }
 }
@@ -961,6 +1006,91 @@ async function promptWizardState(ctx, state) {
         }
       );
       return;
+    // ===== REFUSED HOTEL =====
+    case "svc_hotel_country":
+      await ctx.reply("🌍 Укажите *страну* (например: Турция):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_city":
+      await ctx.reply("🏙 Укажите *город* (например: Стамбул):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_name":
+      await ctx.reply("🏨 Укажите *название отеля*:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_checkin":
+      await ctx.reply(
+        "📅 Укажите *дату заезда*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-20*",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_hotel_checkout":
+      await ctx.reply(
+        "📅 Укажите *дату выезда*\n✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\nПример: *2025-12-27*",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_hotel_roomcat":
+      await ctx.reply("⭐️ Укажите *категорию номера* (например: Standard / Deluxe / Suite):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_accommodation":
+      await ctx.reply(
+        "🛏 Укажите *размещение*\nНапример: *DBL*, *SGL*, *2ADL+1CHD* и т.д.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_hotel_food":
+      await ctx.reply("🍽 Укажите *питание* (например: BB / HB / FB / AI / UAI):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_halal":
+      await ctx.reply("🥗 *Halal питание?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_transfer":
+      await ctx.reply("🚗 Укажите *трансфер* (Индивидуальный / Групповой / Отсутствует):", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_changeable":
+      await ctx.reply("🔁 *Можно вносить изменения?* Ответьте `да` или `нет`:", {
+        parse_mode: "Markdown",
+        ...wizNavKeyboard(),
+      });
+      return;
+
+    case "svc_hotel_pax":
+      await ctx.reply(
+        "👥 Укажите количество человек в формате *ADT/CHD/INF*\n" +
+          "Пример: *2/1/0* (2 взрослых, 1 ребёнок, 0 младенцев)",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
 
     case "svc_create_price":
       await ctx.reply(
@@ -969,7 +1099,7 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
-    case "svc_create_gross_price":
+    case "svc_create_grossPrice":
       await ctx.reply(
         "💳 Укажите *цену БРУТТО* (за тур)\n" + "Пример: *1250* или *1250 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
@@ -1002,7 +1132,9 @@ async function promptWizardState(ctx, state) {
 async function finishCreateServiceFromWizard(ctx) {
   try {
     const draft = ctx.session?.serviceDraft;
-    if (!draft || draft.category !== "refused_tour") {
+    const category = draft?.category;
+    
+    if (!draft || (category !== "refused_tour" && category !== "refused_hotel")) {
       await ctx.reply(
         "⚠️ Не вижу данных мастера.\n" +
           "Пожалуйста, начните создание услуги заново через «🧳 Мои услуги»."
@@ -1028,21 +1160,34 @@ async function finishCreateServiceFromWizard(ctx) {
           "Введите число, например: *1250* или *1250 USD*.",
         { parse_mode: "Markdown" }
       );
-      ctx.session.state = "svc_create_gross_price";
+      ctx.session.state = "svc_create_grossPrice";
       return;
     }
     draft.grossPriceNum = grossNum;
 
-    const details = buildDetailsForRefusedTour(draft, priceNum);
-
+    let details;
+    let title;
+    
+    if (category === "refused_tour") {
+      details = buildDetailsForRefusedTour(draft, priceNum);
+      title = draft.title;
+    } else {
+      details = buildDetailsForRefusedHotel(draft, priceNum);
+    
+      // автозаголовок (можно потом улучшить)
+      title =
+        draft.title ||
+        `Отказной отель: ${draft.hotel || "Отель"} (${draft.toCity || "город"})`;
+    }
+    
     const payload = {
-      category: "refused_tour",
-      title: draft.title,
+      category,
+      title,
       price: priceNum,
       details,
       images: draft.images || [],
     };
-
+    
     const chatId = getActorId(ctx);
     if (!chatId) return;
 
@@ -1773,7 +1918,10 @@ bot.action("svc_wiz:back", async (ctx) => {
     await ctx.answerCbQuery();
 
     const cur = ctx.session?.state || null;
-    if (!cur || !String(cur).startsWith("svc_create_")) {
+    if (
+      !cur ||
+      !(String(cur).startsWith("svc_create_") || String(cur).startsWith("svc_hotel_"))
+    ) {
       return;
     }
 
@@ -1930,16 +2078,32 @@ bot.action(/^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_tick
       if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
       ctx.session.serviceDraft.category = category;
 
-      // Полный мастер сейчас реализован ТОЛЬКО для refused_tour
-      if (category !== "refused_tour") {
+      
+      // Полный мастер сейчас реализован для refused_tour и refused_hotel
+      if (category !== "refused_tour" && category !== "refused_hotel") {
         await ctx.reply(
-          "⚠️ Создание через бот пока доступно только для категории «Отказной тур».\n\n" +
+          "⚠️ Создание через бот пока доступно только для категорий «Отказной тур» и «Отказной отель».\n\n" +
             "Для остальных категорий используйте, пожалуйста, личный кабинет:\n" +
             `${SITE_URL}`
         );
         resetServiceWizard(ctx);
         return;
       }
+      
+      // стартуем мастер
+      ctx.session.wizardStack = [];
+      
+      if (category === "refused_tour") {
+        ctx.session.state = "svc_create_title";
+        await promptWizardState(ctx, "svc_create_title");
+        return;
+      }
+      
+      // refused_hotel
+      ctx.session.state = "svc_hotel_country";
+      await promptWizardState(ctx, "svc_hotel_country");
+      return;
+      
 
       // стартуем мастер
       ctx.session.wizardStack = [];
@@ -2358,8 +2522,9 @@ bot.on("text", async (ctx, next) => {
         return;
       }
 
-    // 2) мастер создания отказного тура
-    if (state && state.startsWith("svc_create_")) {
+    // 2) мастер создания отказных (tour + hotel)
+    if (state && (state.startsWith("svc_create_") || state.startsWith("svc_hotel_"))) {
+
       const text = ctx.message.text.trim();
 
       // текстовая отмена тоже работает
@@ -2481,17 +2646,166 @@ bot.on("text", async (ctx, next) => {
           ctx.session.state = "svc_create_price";
           await promptWizardState(ctx, "svc_create_price");
           return;
+          
+        // ===== REFUSED HOTEL FLOW =====
+        case "svc_hotel_country":
+          draft.country = text;
+          pushWizardState(ctx, "svc_hotel_country");
+          ctx.session.state = "svc_hotel_city";
+          await promptWizardState(ctx, "svc_hotel_city");
+          return;
+
+        case "svc_hotel_city":
+          draft.toCity = text;
+          pushWizardState(ctx, "svc_hotel_city");
+          ctx.session.state = "svc_hotel_name";
+          await promptWizardState(ctx, "svc_hotel_name");
+          return;
+
+        case "svc_hotel_name":
+          draft.hotel = text;
+          pushWizardState(ctx, "svc_hotel_name");
+          ctx.session.state = "svc_hotel_checkin";
+          await promptWizardState(ctx, "svc_hotel_checkin");
+          return;
+
+        case "svc_hotel_checkin": {
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply("😕 Не понял дату заезда. Введите YYYY-MM-DD или YYYY.MM.DD.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (isPastYMD(norm)) {
+            await ctx.reply("⚠️ Эта дата в прошлом. Укажите будущую дату заезда.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.startDate = norm;
+          pushWizardState(ctx, "svc_hotel_checkin");
+          ctx.session.state = "svc_hotel_checkout";
+          await promptWizardState(ctx, "svc_hotel_checkout");
+          return;
+        }
+
+        case "svc_hotel_checkout": {
+          const normEnd = normalizeDateInput(text);
+          if (!normEnd) {
+            await ctx.reply("😕 Не понял дату выезда. Введите YYYY-MM-DD или YYYY.MM.DD.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          if (draft.startDate && isBeforeYMD(normEnd, draft.startDate)) {
+            await ctx.reply(
+              "⚠️ Дата выезда раньше даты заезда.\n" +
+                `Заезд: ${draft.startDate}\n` +
+                "Укажите корректную дату выезда.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+          if (isPastYMD(normEnd)) {
+            await ctx.reply("⚠️ Эта дата в прошлом. Укажите будущую дату выезда.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.endDate = normEnd;
+          pushWizardState(ctx, "svc_hotel_checkout");
+          ctx.session.state = "svc_hotel_roomcat";
+          await promptWizardState(ctx, "svc_hotel_roomcat");
+          return;
+        }
+
+        case "svc_hotel_roomcat":
+          draft.roomCategory = text;
+          pushWizardState(ctx, "svc_hotel_roomcat");
+          ctx.session.state = "svc_hotel_accommodation";
+          await promptWizardState(ctx, "svc_hotel_accommodation");
+          return;
+
+        case "svc_hotel_accommodation":
+          draft.accommodation = text;
+          pushWizardState(ctx, "svc_hotel_accommodation");
+          ctx.session.state = "svc_hotel_food";
+          await promptWizardState(ctx, "svc_hotel_food");
+          return;
+
+        case "svc_hotel_food":
+          draft.food = text;
+          pushWizardState(ctx, "svc_hotel_food");
+          ctx.session.state = "svc_hotel_halal";
+          await promptWizardState(ctx, "svc_hotel_halal");
+          return;
+
+        case "svc_hotel_halal": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.halal = yn;
+          pushWizardState(ctx, "svc_hotel_halal");
+          ctx.session.state = "svc_hotel_transfer";
+          await promptWizardState(ctx, "svc_hotel_transfer");
+          return;
+        }
+
+        case "svc_hotel_transfer":
+          draft.transfer = text;
+          pushWizardState(ctx, "svc_hotel_transfer");
+          ctx.session.state = "svc_hotel_changeable";
+          await promptWizardState(ctx, "svc_hotel_changeable");
+          return;
+
+        case "svc_hotel_changeable": {
+          const yn = parseYesNo(text);
+          if (yn === null) {
+            await ctx.reply("😕 Ответьте `да` или `нет`.", { parse_mode: "Markdown", ...wizNavKeyboard() });
+            return;
+          }
+          draft.changeable = yn;
+          pushWizardState(ctx, "svc_hotel_changeable");
+          ctx.session.state = "svc_hotel_pax";
+          await promptWizardState(ctx, "svc_hotel_pax");
+          return;
+        }
+
+        case "svc_hotel_pax": {
+          const pax = parsePaxTriple(text);
+          if (!pax) {
+            await ctx.reply("😕 Не понял формат. Введите строго *ADT/CHD/INF*, например *2/1/0*.", {
+              parse_mode: "Markdown",
+              ...wizNavKeyboard(),
+            });
+            return;
+          }
+          draft.adt = pax.adt;
+          draft.chd = pax.chd;
+          draft.inf = pax.inf;
+          pushWizardState(ctx, "svc_hotel_pax");
+          ctx.session.state = "svc_create_price";
+          await promptWizardState(ctx, "svc_create_price");
+          return;
+        }
 
         case "svc_create_price":
           draft.price = text;
           pushWizardState(ctx, "svc_create_price");
-          ctx.session.state = "svc_create_gross_price";
-          await promptWizardState(ctx, "svc_create_gross_price");
+          ctx.session.state = "svc_create_grossPrice";
+          await promptWizardState(ctx, "svc_create_grossPrice");
           return;
 
-        case "svc_create_gross_price": {
+        case "svc_create_grossPrice": {
           draft.grossPrice = text;
-          pushWizardState(ctx, "svc_create_gross_price");
+          pushWizardState(ctx, "svc_create_grossPrice");
           ctx.session.state = "svc_create_expiration";
           await promptWizardState(ctx, "svc_create_expiration");
           return;
