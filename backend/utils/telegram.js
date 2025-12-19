@@ -16,6 +16,10 @@ const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 // enabled — это “включён ли основной бот”
 const enabled = !!BOT_TOKEN;
 
+// ✅ enabledOld = включён старый бот (строго для callback/edit/getChat)
+// (у тебя в коде он использовался, но не был объявлен)
+const enabledOld = !!BOT_TOKEN;
+
 // Админские чаты (можно передать один id или список через запятую/пробел)
 const ADMIN_CHAT_IDS =
   (process.env.ADMIN_TG_CHAT_IDS ||
@@ -28,6 +32,11 @@ const ADMIN_CHAT_IDS =
     .filter(Boolean);
 
 /* ================== low-level helpers ================== */
+
+function _tgApiByToken(token) {
+  const t = token || "";
+  return t ? `https://api.telegram.org/bot${t}` : "";
+}
 
 /**
  * tgSend:
@@ -43,7 +52,7 @@ async function tgSend(
   throwOnError = false
 ) {
   const token = tokenOverride || BOT_TOKEN;
-  const api = token ? `https://api.telegram.org/bot${token}` : "";
+  const api = _tgApiByToken(token);
 
   if (!token || !api || !chatId || !text) {
     const err = new Error("tgSend: missing token/api/chatId/text");
@@ -75,11 +84,16 @@ async function tgSend(
   }
 }
 
-async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}) {
-  // callback всегда должен отвечать тем же ботом, что отправил сообщение => старый бот
-  if (!enabledOld || !cbQueryId) return;
+// ✅ token-aware (но старые вызовы не ломаем: tokenOverride optional)
+async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}, tokenOverride = "") {
+  // callback должен отвечать тем же ботом, что отправил сообщение.
+  // по умолчанию — старый бот, но можно override.
+  const token = tokenOverride || BOT_TOKEN;
+  const api = _tgApiByToken(token);
+
+  if (!enabledOld || !cbQueryId || !api) return;
   try {
-    await axios.post(`${API}/answerCallbackQuery`, {
+    await axios.post(`${api}/answerCallbackQuery`, {
       callback_query_id: cbQueryId,
       text,
       show_alert: Boolean(opts.show_alert),
@@ -92,11 +106,18 @@ async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}) {
   }
 }
 
-async function tgEditMessageReplyMarkup({ chat_id, message_id, reply_markup }) {
-  // editMessageReplyMarkup должен быть тем же ботом => старый бот
-  if (!enabledOld || !chat_id || !message_id) return;
+// ✅ token-aware
+async function tgEditMessageReplyMarkup(
+  { chat_id, message_id, reply_markup },
+  tokenOverride = ""
+) {
+  // editMessageReplyMarkup должен быть тем же ботом, что отправил сообщение.
+  const token = tokenOverride || BOT_TOKEN;
+  const api = _tgApiByToken(token);
+
+  if (!enabledOld || !chat_id || !message_id || !api) return;
   try {
-    await axios.post(`${API}/editMessageReplyMarkup`, {
+    await axios.post(`${api}/editMessageReplyMarkup`, {
       chat_id,
       message_id,
       reply_markup,
@@ -176,12 +197,16 @@ function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
 
 // very small cache to avoid frequent getChat calls
 const __chatUserCache = new Map(); // chatId -> username (without @)
-async function tgGetUsername(chatId) {
-  // getChat должен быть тем же ботом => старый бот
-  if (!enabledOld || !chatId) return "";
+
+// ✅ token-aware (по умолчанию — старый бот)
+async function tgGetUsername(chatId, tokenOverride = "") {
+  const token = tokenOverride || BOT_TOKEN;
+  const api = _tgApiByToken(token);
+
+  if (!enabledOld || !chatId || !api) return "";
   if (__chatUserCache.has(chatId)) return __chatUserCache.get(chatId) || "";
   try {
-    const res = await axios.post(`${API}/getChat`, { chat_id: chatId });
+    const res = await axios.post(`${api}/getChat`, { chat_id: chatId });
     const uname = res?.data?.result?.username || "";
     __chatUserCache.set(chatId, uname);
     return uname || "";
@@ -231,18 +256,7 @@ function fmtDates(arr) {
       d1.getUTCFullYear() === d2.getUTCFullYear() &&
       d1.getUTCMonth() === d2.getUTCMonth();
     const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
+      "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec",
     ];
     const pad = (n) => String(n).padStart(2, "0");
     const dd1 = pad(d1.getUTCDate());
@@ -308,7 +322,8 @@ function _isRefusedCategory(category) {
     c === "refused_tour" ||
     c === "refused_hotel" ||
     c === "refused_flight" ||
-    c === "refused_event_ticket"
+    c === "refused_ticket" ||          // ✅ поддержка старого имени
+    c === "refused_event_ticket"       // ✅ поддержка текущего имени
   );
 }
 
@@ -486,12 +501,24 @@ async function notifyNewRequest({ booking }) {
       );
       if (a.client?.name || a.client?.phone || a.client?.username) {
         lines.push(
-          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
+          lineContact(
+            "👤",
+            "Клиент",
+            a.client.name,
+            a.client.phone,
+            a.client.username
+          )
         );
       }
     } else {
       lines.push(
-        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
+        lineContact(
+          "👤",
+          "Клиент",
+          a.client?.name,
+          a.client?.phone,
+          a.client?.username
+        )
       );
     }
 
@@ -523,7 +550,13 @@ async function notifyQuote({ booking, price, currency, note }) {
     if (note) lines.push(`📝 Комментарий: ${esc(note)}`);
 
     lines.push(
-      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username)
+      lineContact(
+        "🏢",
+        "Поставщик",
+        a.provider?.name,
+        a.provider?.phone,
+        a.provider?.username
+      )
     );
 
     lines.push("");
@@ -563,7 +596,13 @@ async function notifyConfirmed({ booking }) {
       }
     } else {
       applicantLines.push(
-        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
+        lineContact(
+          "👤",
+          "Клиент",
+          a.client?.name,
+          a.client?.phone,
+          a.client?.username
+        )
       );
     }
 
@@ -577,19 +616,25 @@ async function notifyConfirmed({ booking }) {
 
     const textForClient = [
       ...base,
-      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      lineContact(
+        "🏢",
+        "Поставщик",
+        a.provider?.name,
+        a.provider?.phone,
+        a.provider?.username
+      ),
       "",
       `🔗 Открыть: ${urlClient("bookings")}`,
     ].join("\n");
 
-    // Кому шлём по refused_*:
+    // refused_*:
     // - клиент/агент: новый бот (если есть), иначе старый
     // - провайдер: старый
     const useClientBot = _isRefusedCategory(a.serviceCategory) && !!CLIENT_BOT_TOKEN;
     const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
 
     if (a.client?.chatId) await tgSend(a.client.chatId, textForClient, {}, tokenOverride);
-    if (a.provider?.chatId) await tgSend(a.provider.chatId, textForProvider); // старый бот
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, textForProvider);
     if (a.agent?.chatId) await tgSend(a.agent.chatId, textForAgent, {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyConfirmed failed:", e?.response?.data || e?.message || e);
@@ -613,7 +658,13 @@ async function notifyRejected({ booking, reason }) {
     if (reason) lines.push(`📝 Причина: ${esc(reason)}`);
 
     lines.push(
-      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username)
+      lineContact(
+        "🏢",
+        "Поставщик",
+        a.provider?.name,
+        a.provider?.phone,
+        a.provider?.username
+      )
     );
 
     lines.push("");
@@ -666,7 +717,6 @@ async function notifyCancelledByRequester({ booking }) {
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${urlProvider("bookings")}`;
 
-    // провайдеру — старый бот
     await tgSend(a.provider.chatId, text);
   } catch (e) {
     console.error(
@@ -697,7 +747,6 @@ async function notifyReqNew({ request_id }) {
     lines.push("");
     lines.push(`🔗 Открыть: ${urlProvider("requests")}`);
 
-    // провайдеру — старый бот (его кабинет)
     await tgSend(a.toProviderChat, lines.join("\n"));
   } catch (e) {
     console.error("[tg] notifyReqNew failed:", e?.response?.data || e?.message || e);
@@ -724,12 +773,10 @@ async function notifyReqStatusChanged({ request_id, status }) {
     if (a.row.note) lines.push(`📝 Сообщение: ${esc(a.row.note)}`);
 
     lines.push("");
-    const link =
-      a.from.kind === "agent" ? urlProvider("requests") : urlClient("requests");
+    const link = a.from.kind === "agent" ? urlProvider("requests") : urlClient("requests");
     lines.push(`🔗 Открыть: ${link}`);
 
-    const useClientBot =
-      _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
+    const useClientBot = _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
     const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
 
     await tgSend(a.from.chatId, lines.join("\n"), {}, tokenOverride);
@@ -751,7 +798,6 @@ async function notifyReqCancelledByRequester({ request_id }) {
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${urlProvider("requests")}`;
 
-    // провайдеру — старый бот
     await tgSend(a.toProviderChat, text);
   } catch (e) {
     console.error(
@@ -766,15 +812,13 @@ async function notifyReqDeletedByProvider({ request_id }) {
     const a = await getRequestActors(request_id);
     if (!a?.from?.chatId) return;
 
-    const link =
-      a.from.kind === "agent" ? urlProvider("requests") : urlClient("requests");
+    const link = a.from.kind === "agent" ? urlProvider("requests") : urlClient("requests");
     const text =
       `<b>🗑️ Заявка удалена провайдером №${a.row.id}</b>\n` +
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${link}`;
 
-    const useClientBot =
-      _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
+    const useClientBot = _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
     const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
 
     await tgSend(a.from.chatId, text, {}, tokenOverride);
@@ -1077,7 +1121,9 @@ async function tgSendToAdmins(text, extra = {}) {
   const ids = await getAdminChatIds();
   if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
 
-  const results = await Promise.allSettled(ids.map((chatId) => tgSend(chatId, text, extra)));
+  const results = await Promise.allSettled(
+    ids.map((chatId) => tgSend(chatId, text, extra))
+  );
 
   return { ok: true, count: ids.length, results };
 }
