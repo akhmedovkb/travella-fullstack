@@ -1,0 +1,174 @@
+// backend/telegram/handlers/serviceActualHandler.js
+
+const db = require("../../db");
+const { tgAnswerCallbackQuery, tgSend } = require("../../utils/telegram");
+const { isServiceActual } = require("../helpers/serviceActual");
+const { buildSvcActualKeyboard } = require("../keyboards/serviceActual");
+
+function safeJsonParseMaybe(v) {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d;
+}
+
+async function loadServiceWithProvider(serviceId) {
+  const q = await db.query(
+    `
+    SELECT
+      s.id, s.title, s.category, s.status, s.details,
+      p.telegram_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+    LIMIT 1
+    `,
+    [serviceId]
+  );
+  return q.rows[0] || null;
+}
+
+function getMeta(details) {
+  const d = details || {};
+  const meta =
+    d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
+      ? d.tg_actual_reminders_meta
+      : {};
+  return {
+    totalSent: Number(meta.totalSent || 0),
+    lastSentAt: meta.lastSentAt || null,
+    lastConfirmedAt: meta.lastConfirmedAt || null,
+    lastSlotKeySent: meta.lastSlotKeySent || null,
+    ignoredDays: Number(meta.ignoredDays || 0),
+  };
+}
+
+async function saveDetails(serviceId, details) {
+  await db.query(`UPDATE services SET details = $2 WHERE id = $1`, [
+    serviceId,
+    JSON.stringify(details),
+  ]);
+}
+
+async function handleServiceActualCallback(ctxLike) {
+  // ctxLike: { callbackQueryId, data, fromChatId }
+  const { callbackQueryId, data, fromChatId } = ctxLike;
+
+  // data: svc_actual:<id>:<action>
+  const m = /^svc_actual:(\d+):(yes|no|extend7)$/.exec(String(data || ""));
+  if (!m) return { handled: false };
+
+  const serviceId = Number(m[1]);
+  const action = m[2];
+
+  const row = await loadServiceWithProvider(serviceId);
+  if (!row) {
+    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Услуга не найдена", { show_alert: true });
+    return { handled: true };
+  }
+
+  // Защита: отвечать может только владелец чата (провайдер)
+  // (если хочешь разрешить админам — расширим)
+  if (row.telegram_chat_id && fromChatId && String(row.telegram_chat_id) !== String(fromChatId)) {
+    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Нет доступа", { show_alert: true });
+    return { handled: true };
+  }
+
+  const details = safeJsonParseMaybe(row.details);
+  const meta = getMeta(details);
+  const nowIso = new Date().toISOString();
+
+  // Всегда: при любом ответе сбрасываем ignoredDays (иначе авто-снятие будет ошибочным)
+  const next = {
+    ...details,
+    tg_actual_reminders_meta: {
+      ...meta,
+      ignoredDays: 0,
+      lastConfirmedAt: nowIso, // считаем подтверждением и extend7, и yes, и no (это “ответ”)
+      lastAnswer: action,
+      lastAnswerAt: nowIso,
+    },
+  };
+
+  if (action === "yes") {
+    next.isActive = true;
+    await saveDetails(serviceId, next);
+
+    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Отлично ✅", { show_alert: false });
+
+    // можно обновить клавиатуру (покажем, что всё ок)
+    // тут мы не редактируем сообщение (у тебя edit идёт старым ботом),
+    // но можно послать отдельное короткое уведомление:
+    if (row.telegram_chat_id) {
+      const txt = `✅ Подтверждено: <b>${row.title || "Услуга"}</b> — актуально`;
+      const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, CLIENT_BOT_TOKEN);
+    }
+
+    return { handled: true };
+  }
+
+  if (action === "no") {
+    next.isActive = false;
+    await saveDetails(serviceId, next);
+
+    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Снято с актуальности ⛔", { show_alert: false });
+
+    if (row.telegram_chat_id) {
+      const txt = `⛔ Снято с актуальности: <b>${row.title || "Услуга"}</b>`;
+      const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+      await tgSend(row.telegram_chat_id, txt, { parse_mode: "HTML" }, CLIENT_BOT_TOKEN);
+    }
+
+    return { handled: true };
+  }
+
+  // extend7
+  {
+    // продлеваем expiration на 7 дней
+    const cur = details.expiration ? new Date(details.expiration) : null;
+    const base = cur && !Number.isNaN(cur.getTime()) ? cur : new Date();
+    const extended = addDays(base, 7);
+
+    next.expiration = extended.toISOString();
+    next.isActive = true;
+
+    await saveDetails(serviceId, next);
+
+    // если после продления всё равно не актуально — предупредим (на всякий случай)
+    const actual = isServiceActual(next, row);
+
+    if (callbackQueryId) await tgAnswerCallbackQuery(callbackQueryId, "Продлено на 7 дней ♻️", { show_alert: false });
+
+    if (row.telegram_chat_id) {
+      const txt =
+        `♻️ Продлено на 7 дней: <b>${row.title || "Услуга"}</b>\n` +
+        `Новая актуальность до: <b>${extended.toISOString().slice(0, 10)}</b>` +
+        (actual ? "" : `\n\n⚠️ Но сейчас услуга всё равно выглядит неактуальной по датам/флагам.`);
+      const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+      await tgSend(
+        row.telegram_chat_id,
+        txt,
+        { parse_mode: "HTML", reply_markup: buildSvcActualKeyboard(serviceId, { isActual: actual }) },
+        CLIENT_BOT_TOKEN
+      );
+    }
+
+    return { handled: true };
+  }
+}
+
+module.exports = { handleServiceActualCallback };
