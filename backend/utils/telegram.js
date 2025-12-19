@@ -4,22 +4,17 @@
 const pool = require("../db");
 const axios = require("axios");
 
-/**
- * ВАЖНО:
- * - Старый бот (travella.uz) = TELEGRAM_BOT_TOKEN -> для inline-кнопок/callback/edit/getChat и админских уведомлений
- * - Новый бот (OTKAZNYX...)  = TELEGRAM_CLIENT_BOT_TOKEN -> для уведомлений по refused_* (отказные туры/отели/авиа/билеты)
- *
- * Это предотвращает поломку callback/editMessageReplyMarkup, т.к. Telegram требует, чтобы редактировал/отвечал тот же бот.
- */
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ""; // старый бот (travella.uz)
-const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || ""; // новый клиентский бот (OTKAZNYX...)
+// старый (основной) бот — ВСЕ callback/edit/getChat по нему
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+
+// новый клиентский бот (отказные)
+const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+
 const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 
-// enabled = включён хоть один бот (чтобы tgSend мог работать через override)
-const enabled = !!(BOT_TOKEN || CLIENT_BOT_TOKEN);
-// enabledOld = включён старый бот (строго для callback/edit/getChat)
-const enabledOld = !!BOT_TOKEN;
+// enabled — это “включён ли основной бот”
+const enabled = !!BOT_TOKEN;
 
 // Админские чаты (можно передать один id или список через запятую/пробел)
 const ADMIN_CHAT_IDS =
