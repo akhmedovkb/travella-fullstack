@@ -81,15 +81,16 @@ async function askActualReminder() {
       `⏳ *Отказ ещё актуален?*\n\n` +
       `🧳 ${title}\n\n` +
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
+    
+    // посчитать статус актуальности один раз
+    const isActualNow = isServiceActual(parsedDetails, row);
 
     try {
       await tgSend(telegram_chat_id, text, {
         parse_mode: "Markdown",
-        const parsedDetails = safeJsonParseMaybe(details);
-        const isActualNow = isServiceActual(parsedDetails, row);
-        
         reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
       });
+
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
