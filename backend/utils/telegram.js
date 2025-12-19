@@ -308,7 +308,7 @@ function _isRefusedCategory(category) {
     c === "refused_tour" ||
     c === "refused_hotel" ||
     c === "refused_flight" ||
-    c === "refused_ticket"
+    c === "refused_event_ticket"
   );
 }
 
