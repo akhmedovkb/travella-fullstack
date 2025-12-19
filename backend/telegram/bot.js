@@ -295,17 +295,13 @@ function shortDateRange(startYmd, endYmd) {
 function autoTitleRefusedTour(draft) {
   const from = (draft.fromCity || "").trim();
   const to = (draft.toCity || "").trim();
-  const country = (draft.country || "").trim();
   const range = shortDateRange(draft.startDate, draft.endDate);
 
-  const dir =
-    from && to ? `${from} → ${to}` : (to || from || "");
+  const dir = from && to ? `${from} → ${to}` : (to || from || "");
   const parts = [];
   if (dir) parts.push(dir);
-  if (country) parts.push(country);
   if (range) parts.push(range);
 
-  // fallback
   if (!parts.length) return "Отказной тур";
   return parts.join(" · ");
 }
@@ -1274,9 +1270,6 @@ async function finishCreateServiceFromWizard(ctx) {
     // если пусто/пропуск — рассчитаем ниже
 
     draft.grossPriceNum = grossNum;
-
-    let details;
-    let title;
     
     // ---- gross: если не ввели / не распарсили — считаем автоматически ----
     let grossNumFinal = normalizePrice(draft.grossPrice);
