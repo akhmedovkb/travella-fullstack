@@ -1,9 +1,18 @@
-// backend/jobs/askActualReminder.js
+//backend/jobs/askActualReminder.js
 
 const db = require("../db");
 const { tgSend } = require("../utils/telegram");
 const { isServiceActual } = require("../telegram/helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
+
+const TZ = "Asia/Tashkent";
+
+// В какие часы спрашиваем (локально по Ташкенту)
+const SLOTS_HOURS = [10, 14, 18];
+
+// “Окно” в минутах от начала часа, когда разрешаем отправку.
+// Например, 10:00–10:20, 14:00–14:20, 18:00–18:20
+const WINDOW_MINUTES = 25;
 
 function safeJsonParseMaybe(v) {
   if (!v) return {};
@@ -19,132 +28,66 @@ function safeJsonParseMaybe(v) {
   return {};
 }
 
-function getLocalYMD_Tashkent(date, tzOffsetMinutes = 300) {
-  const t = new Date(date.getTime() + tzOffsetMinutes * 60 * 1000);
-  const yyyy = t.getUTCFullYear();
-  const mm = String(t.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(t.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
+// Получаем локальные компоненты времени в TZ без сторонних библиотек
+function getLocalParts(date, timeZone = TZ) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
-/**
- * Ключ слота: YYYY-MM-DD_HH (например 2025-12-19_10)
- */
-function buildSlotKey(now, slotHour, tzOffsetMinutes = 300) {
-  const ymd = getLocalYMD_Tashkent(now, tzOffsetMinutes);
-  const hh = String(slotHour).padStart(2, "0");
-  return `${ymd}_${hh}`;
-}
-
-function pickSlotHourFromNow(now, tzOffsetMinutes = 300) {
-  const t = new Date(now.getTime() + tzOffsetMinutes * 60 * 1000);
-  const h = t.getUTCHours();
-  if (h < 12) return 10;
-  if (h < 16) return 14;
-  return 18;
-}
-
-function cleanupReminderMap(map, keepDays = 14) {
-  const out = { ...(map || {}) };
-  const now = Date.now();
-  const keepMs = keepDays * 24 * 3600 * 1000;
-
-  for (const k of Object.keys(out)) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})$/.exec(k);
-    if (!m) {
-      delete out[k];
-      continue;
-    }
-    const [_, Y, M, D, H] = m;
-    const dt = Date.UTC(Number(Y), Number(M) - 1, Number(D), Number(H), 0, 0);
-    if (!Number.isFinite(dt) || now - dt > keepMs) delete out[k];
+  // en-CA обычно даёт YYYY-MM-DD и компоненты
+  const parts = fmt.formatToParts(date);
+  const map = {};
+  for (const p of parts) {
+    if (p.type !== "literal") map[p.type] = p.value;
   }
-  return out;
-}
 
-function getMeta(details) {
-  const d = details || {};
-  const meta =
-    d.tg_actual_reminders_meta && typeof d.tg_actual_reminders_meta === "object"
-      ? d.tg_actual_reminders_meta
-      : {};
+  const yyyy = map.year || "1970";
+  const mm = map.month || "01";
+  const dd = map.day || "01";
+  const hour = Number(map.hour || 0);
+  const minute = Number(map.minute || 0);
 
   return {
-    totalSent: Number(meta.totalSent || 0),
-    lastSentAt: meta.lastSentAt || null,
-    lastConfirmedAt: meta.lastConfirmedAt || null,
-    lastSlotKeySent: meta.lastSlotKeySent || null,
-    ignoredDays: Number(meta.ignoredDays || 0),
+    dateStr: `${yyyy}-${mm}-${dd}`, // YYYY-MM-DD
+    hour,
+    minute,
   };
 }
 
-async function setServiceDetails(serviceId, newDetails) {
-  await db.query(`UPDATE services SET details = $2 WHERE id = $1`, [
-    serviceId,
-    JSON.stringify(newDetails),
-  ]);
+// Определяем, какой слот сейчас активен (если мы в окне)
+function getActiveSlot(now) {
+  const { dateStr, hour, minute } = getLocalParts(now, TZ);
+
+  if (!SLOTS_HOURS.includes(hour)) return null;
+  if (minute < 0 || minute > WINDOW_MINUTES) return null;
+
+  // slotKey используем как ключ в JSON (например "10", "14", "18")
+  const slotKey = String(hour);
+
+  return { dateStr, slotKey, hour, minute };
 }
 
-async function autoDeactivateIfIgnored({
-  serviceId,
-  providerChatId,
-  details,
-  ignoredDays,
-  thresholdDays,
-  clientBotToken,
-}) {
-  if (ignoredDays < thresholdDays) return false;
+async function askActualReminder() {
+  const now = new Date();
+  const slot = getActiveSlot(now);
 
-  const next = { ...(details || {}) };
-  next.isActive = false;
+  // Если сейчас не 10/14/18 и не в окне — просто выходим
+  if (!slot) return;
 
-  const meta = getMeta(next);
-  meta.ignoredDays = thresholdDays;
-  next.tg_actual_reminders_meta = {
-    ...meta,
-    autoDeactivatedAt: new Date().toISOString(),
-  };
-
-  await setServiceDetails(serviceId, next);
-
-  const text =
-    `⚠️ <b>Услуга снята с актуальности</b>\n\n` +
-    `Мы не получили подтверждение актуальности несколько дней подряд.\n` +
-    `Если услуга всё ещё актуальна — зайдите в кабинет и активируйте её снова.`;
-
-  await tgSend(providerChatId, text, { parse_mode: "HTML" }, clientBotToken || "");
-  return true;
-}
-
-async function askActualReminder(options = {}) {
-  const now = options.now instanceof Date ? options.now : new Date();
-
-  const TZ_OFFSET_MIN = 300; // Asia/Tashkent (+05:00)
-  const KEEP_DAYS = Number(process.env.ASK_ACTUAL_KEEP_DAYS || 14);
-  const IGNORE_DAYS_THRESHOLD = Number(process.env.ASK_ACTUAL_IGNORE_DAYS || 3);
-
-  const forceDay = options.forceDay || process.env.ASK_ACTUAL_FORCE_DAY || "";
-  const forceSlot = Number(options.forceSlot || process.env.ASK_ACTUAL_FORCE_SLOT || 0);
-
-  let slotHour = forceSlot;
-  if (![10, 14, 18].includes(slotHour)) {
-    slotHour = pickSlotHourFromNow(now, TZ_OFFSET_MIN);
-  }
-
-  const todayYMD = forceDay && /^\d{4}-\d{2}-\d{2}$/.test(forceDay)
-    ? forceDay
-    : getLocalYMD_Tashkent(now, TZ_OFFSET_MIN);
-
-  const slotKey = `${todayYMD}_${String(slotHour).padStart(2, "0")}`;
-  const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  const { dateStr, slotKey } = slot;
 
   const res = await db.query(`
     SELECT
       s.id,
       s.title,
       s.details,
-      s.category,
-      s.status,
+      s.tg_last_actual_check_at,
       p.telegram_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
@@ -155,126 +98,99 @@ async function askActualReminder(options = {}) {
   `);
 
   for (const row of res.rows) {
-    const serviceId = row.id;
-    const title = row.title || "Услуга";
-    const providerChatId = row.telegram_chat_id;
+    const { id, title, details, telegram_chat_id } = row;
 
-    const details = safeJsonParseMaybe(row.details);
-    const meta = getMeta(details);
+    const parsedDetails = safeJsonParseMaybe(details);
 
-    // ✅ если уже подтвердили сегодня — НЕ спрашиваем больше сегодня (ни 14/18)
-    if (meta.lastConfirmedAt) {
-      const confirmed = new Date(meta.lastConfirmedAt);
-      if (!Number.isNaN(confirmed.getTime())) {
-        const confirmedYMD = getLocalYMD_Tashkent(confirmed, TZ_OFFSET_MIN);
-        if (confirmedYMD === todayYMD) continue;
-      }
-    }
+    // 1) Спрашиваем ТОЛЬКО пока актуально
+    const isActualNow = isServiceActual(parsedDetails, row);
+    if (!isActualNow) continue;
 
-    const remindersMap = cleanupReminderMap(details.tg_actual_reminders, KEEP_DAYS);
+    /**
+     * 2) 🔒 Антидубль на СЛОТ:
+     * атомарно помечаем, что для (dateStr, slotKey) уже спросили.
+     *
+     * Храним в details:
+     * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
+     *
+     * Условие:
+     * - если date совпадает И sent[slotKey] уже true -> НЕ шлём
+     * - если date другая -> сбрасываем sent и ставим текущий слот
+     */
+    const lockRes = await db.query(
+      `
+      UPDATE services
+      SET
+        tg_last_actual_check_at = NOW(),
+        details = CASE
+          WHEN (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+          THEN
+            jsonb_set(
+              COALESCE(details::jsonb, '{}'::jsonb),
+              ARRAY['tgActualReminder','sent',$3],
+              'true'::jsonb,
+              true
+            )
+          ELSE
+            jsonb_set(
+              jsonb_set(
+                COALESCE(details::jsonb, '{}'::jsonb),
+                '{tgActualReminder,date}',
+                to_jsonb($2::text),
+                true
+              ),
+              '{tgActualReminder,sent}',
+              jsonb_build_object($3, true),
+              true
+            )
+        END
+      WHERE id = $1
+        AND (
+          NOT (
+            (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+            AND (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3)
+          )
+        )
+      RETURNING id
+      `,
+      [id, dateStr, slotKey]
+    );
 
-    // если не актуально — ничего не шлём, только подчистим
-    const isActualNow = isServiceActual(details, row);
-    if (!isActualNow) {
-      const next = { ...details, tg_actual_reminders: remindersMap };
-      // сброс ignoredDays, если стало неактуально
-      next.tg_actual_reminders_meta = { ...meta, ignoredDays: 0 };
-      if (JSON.stringify(next) !== JSON.stringify(details)) {
-        await setServiceDetails(serviceId, next);
-      }
-      continue;
-    }
-
-    // антидубль по слоту
-    if (remindersMap && remindersMap[slotKey]) {
-      const next = { ...details, tg_actual_reminders: remindersMap };
-      if (JSON.stringify(next) !== JSON.stringify(details)) {
-        await setServiceDetails(serviceId, next);
-      }
+    if (lockRes.rowCount === 0) {
+      // Уже отправляли в этот слот сегодня (или другой инстанс успел)
       continue;
     }
 
     const text =
-      `⏳ <b>Отказ ещё актуален?</b>\n\n` +
-      `🧳 <b>${title}</b>\n\n` +
-      `Подтвердите, пожалуйста, чтобы услуга не осталась с устаревшим статусом.`;
-
-    const nextDetails = {
-      ...details,
-      tg_actual_reminders: {
-        ...(remindersMap || {}),
-        [slotKey]: new Date().toISOString(),
-      },
-      tg_actual_reminders_meta: {
-        ...meta,
-        totalSent: meta.totalSent + 1,
-        lastSentAt: new Date().toISOString(),
-        lastSlotKeySent: slotKey,
-      },
-    };
-
-    // сохраняем ДО отправки (антидубль для нескольких инстансов)
-    await setServiceDetails(serviceId, nextDetails);
+      `⏳ *Отказ ещё актуален?*\n\n` +
+      `🧳 ${title}\n\n` +
+      `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
     try {
-      await tgSend(
-        providerChatId,
-        text,
-        { parse_mode: "HTML", reply_markup: buildSvcActualKeyboard(serviceId, { isActual: true }) },
-        CLIENT_BOT_TOKEN || ""
-      );
-
-      // ignoredDays считаем 1 раз/день на 18:00, если НЕ подтвердили сегодня
-      if (slotHour === 18) {
-        const metaAfter = getMeta(nextDetails);
-        const confirmedAt = metaAfter.lastConfirmedAt;
-        let confirmedToday = false;
-
-        if (confirmedAt) {
-          const d = new Date(confirmedAt);
-          if (!Number.isNaN(d.getTime())) {
-            confirmedToday = getLocalYMD_Tashkent(d, TZ_OFFSET_MIN) === todayYMD;
-          }
-        }
-
-        if (!confirmedToday) {
-          const upd = { ...nextDetails };
-          upd.tg_actual_reminders_meta = {
-            ...metaAfter,
-            ignoredDays: Number(metaAfter.ignoredDays || 0) + 1,
-          };
-          await setServiceDetails(serviceId, upd);
-
-          await autoDeactivateIfIgnored({
-            serviceId,
-            providerChatId,
-            details: upd,
-            ignoredDays: upd.tg_actual_reminders_meta.ignoredDays,
-            thresholdDays: IGNORE_DAYS_THRESHOLD,
-            clientBotToken: CLIENT_BOT_TOKEN || "",
-          });
-        } else {
-          // если подтвердили — гарантированно держим ignoredDays=0
-          if (Number(metaAfter.ignoredDays || 0) !== 0) {
-            const upd = { ...nextDetails };
-            upd.tg_actual_reminders_meta = { ...metaAfter, ignoredDays: 0 };
-            await setServiceDetails(serviceId, upd);
-          }
-        }
-      }
+      await tgSend(telegram_chat_id, text, {
+        parse_mode: "Markdown",
+        reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+      });
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
-        serviceId,
-        chatId: providerChatId,
-        error: e?.response?.data || e?.message || e,
+        serviceId: id,
+        chatId: telegram_chat_id,
+        error: e?.message || e,
       });
 
-      // откат отметки слота
-      const rollback = { ...details };
-      const rbMap = cleanupReminderMap(rollback.tg_actual_reminders, KEEP_DAYS);
-      if (rbMap && rbMap[slotKey]) delete rbMap[slotKey];
-      rollback.tg_actual_reminders = rbMap;
-      await setServiceDetails(serviceId, rollback);
+      // ❗ если отправка не удалась — откатываем флаг слота,
+      // чтобы можно было попробовать снова в том же слоте
+      await db.query(
+        `
+        UPDATE services
+        SET details = (
+          COALESCE(details::jsonb, '{}'::jsonb)
+          #- ARRAY['tgActualReminder','sent',$2]
+        )
+        WHERE id = $1
+        `,
+        [id, slotKey]
+      );
     }
   }
 }
