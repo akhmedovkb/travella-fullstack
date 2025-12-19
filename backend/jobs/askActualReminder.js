@@ -50,10 +50,7 @@ async function askActualReminder() {
     }
 
     const parsedDetails = safeJsonParseMaybe(details);
-    
-    // актуальность (проверяем только распарсенный объект)
-    if (!isServiceActual(parsedDetails, row)) continue;
-
+  
     /**
      * 🔒 Антидубль:
      * атомарно "бронируем" право на отправку
@@ -85,7 +82,8 @@ async function askActualReminder() {
     
     // посчитать статус актуальности один раз
     const isActualNow = isServiceActual(parsedDetails, row);
-
+    if (!isActualNow) continue;
+    
     try {
       await tgSend(telegram_chat_id, text, {
         parse_mode: "Markdown",
