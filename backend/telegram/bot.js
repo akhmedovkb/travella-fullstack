@@ -6,9 +6,9 @@ const axiosBase = require("axios");
 const {
   parseDateFlexible,
   isServiceActual,
-  normalizeDateInput: normalizeDateInputHelper,
   normalizeDateTimeInput: normalizeDateTimeInputHelper,
 } = require("./helpers/serviceActual");
+
 
 // ==== CONFIG ====
 
@@ -1092,19 +1092,29 @@ async function promptWizardState(ctx, state) {
       );
       return;
 
-    case "svc_create_price":
+    case "svc_create_price": {
+      const cat = ctx.session?.serviceDraft?.category;
+      const label = cat === "refused_hotel" ? "за отель" : "за тур";
+    
       await ctx.reply(
-        "💰 Укажите *цену НЕТТО* (за тур)\n" + "Пример: *1130* или *1130 USD*",
+        `💰 Укажите *цену НЕТТО* (${label})\n` +
+          "Пример: *1130* или *1130 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
-
-    case "svc_create_grossPrice":
+    }
+      
+    case "svc_create_grossPrice": {
+      const cat = ctx.session?.serviceDraft?.category;
+      const label = cat === "refused_hotel" ? "за отель" : "за тур";
+    
       await ctx.reply(
-        "💳 Укажите *цену БРУТТО* (за тур)\n" + "Пример: *1250* или *1250 USD*",
+        `💳 Укажите *цену БРУТТО* (${label})\n` +
+          "Пример: *1250* или *1250 USD*",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
+    }
 
     case "svc_create_expiration":
       await ctx.reply(
@@ -1542,9 +1552,15 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
   const st = ctx.session?.state || null;
 
   // ✅ 1) Если идёт мастер — НЕ глотаем сообщение, а пропускаем дальше в bot.on("text")
-  if (st && (String(st).startsWith("svc_create_") || String(st).startsWith("svc_edit_"))) {
+  if (
+    st &&
+    (String(st).startsWith("svc_create_") ||
+      String(st).startsWith("svc_hotel_") ||
+      String(st).startsWith("svc_edit_"))
+  ) {
     return next();
   }
+
 
   // ✅ 2) Если это похоже на дату — тоже пропускаем дальше
   const t = String(ctx.message?.text || "").trim();
@@ -2103,12 +2119,7 @@ bot.action(/^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_tick
       ctx.session.state = "svc_hotel_country";
       await promptWizardState(ctx, "svc_hotel_country");
       return;
-      
 
-      // стартуем мастер
-      ctx.session.wizardStack = [];
-      ctx.session.state = "svc_create_title";
-      await promptWizardState(ctx, "svc_create_title");
     } catch (e) {
       console.error("[tg-bot] svc_new_cat action error:", e);
     }
@@ -2488,24 +2499,24 @@ bot.on("text", async (ctx, next) => {
         }
       
         if (state === "svc_edit_expiration") {
-          const lower = text.toLowerCase();
           const normExp = normalizeDateTimeInput(text);
-      
-        if (normExp && isPastDateTime(normExp)) {
-          await ctx.reply("⚠️ Дата/время актуальности в прошлом. Укажите будущую или `нет`.", { ...editNavKeyboard() });
+        
+          // normExp может быть null (если пользователь ввёл "нет" или пусто по правилам helper)
+          if (normExp && isPastDateTime(normExp)) {
+            await ctx.reply(
+              "⚠️ Дата/время актуальности в прошлом. Укажите будущую или `нет`.",
+              { ...editNavKeyboard() }
+            );
             return;
           }
-          if (normExp && isPastYMD(normExp)) {
-            await ctx.reply("⚠️ Дата актуальности в прошлом. Укажите будущую или `нет`.", { ...editNavKeyboard() });
-            return;
-          }
+        
           details.expiration = normExp; // может быть null
           draft.details = details;
           await saveEditedService(ctx);
           return;
         }
-      
-        if (state === "svc_edit_isActive") {
+
+          if (state === "svc_edit_isActive") {
           const yn = parseYesNo(text);
           if (yn === null) {
             await ctx.reply("😕 Ответьте `да` или `нет`.", { ...editNavKeyboard() });
