@@ -1178,18 +1178,32 @@ async function finishCreateServiceFromWizard(ctx) {
     let details;
     let title;
     
-    if (category === "refused_tour") {
-      details = buildDetailsForRefusedTour(draft, priceNum);
-      title = draft.title;
     } else {
       details = buildDetailsForRefusedHotel(draft, priceNum);
     
-      // автозаголовок (можно потом улучшить)
-      title =
-        draft.title ||
-        `Отказной отель: ${draft.hotel || "Отель"} (${draft.toCity || "город"})`;
-    }
+      if (draft.title && draft.title.trim()) {
+        // если пользователь задал заголовок — уважаем его
+        title = draft.title.trim();
+      } else {
+        const hotel = draft.hotel || "Отель";
+        const city = draft.toCity || "";
+        const start = draft.startDate;
+        const end = draft.endDate;
     
+        let datesPart = "";
+        if (start && end) {
+          const sd = start.slice(5).replace("-", ".");
+          const ed = end.slice(5).replace("-", ".");
+          datesPart = ` · ${sd}–${ed}`;
+        } else if (start) {
+          const sd = start.slice(5).replace("-", ".");
+          datesPart = ` · ${sd}`;
+        }
+    
+        title = [hotel, city].filter(Boolean).join(" · ") + datesPart;
+      }
+    }
+   
     const payload = {
       category,
       title,
