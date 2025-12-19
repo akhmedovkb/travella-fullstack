@@ -420,31 +420,6 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
-function buildSvcActualKeyboard(serviceId, options = {}) {
-  const { isActual = true } = options;
-
-  // Если услуга уже неактуальна — не даём "Да, актуален"
-  if (!isActual) {
-    return {
-      inline_keyboard: [
-        [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
-        [{ text: "📁 Архивировать", callback_data: `svc:${serviceId}:archive` }],
-      ],
-    };
-  }
-
-  // Обычный вариант: да/нет/продлить
-  return {
-    inline_keyboard: [
-      [
-        { text: "✅ Да, актуален", callback_data: `svc_actual:${serviceId}:yes` },
-        { text: "⛔ Нет, снять", callback_data: `svc_actual:${serviceId}:no` },
-      ],
-      [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
-    ],
-  };
-}
-
 // мягкое скрытие кнопок (если сообщение редактируемое)
 async function hideInlineButtons(ctx) {
   try {
