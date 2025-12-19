@@ -11,6 +11,9 @@ const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 const SLOTS = new Set([10, 14, 18]);
 const TZ = "Asia/Tashkent";
 
+// сколько дней хранить историю tg_actual_reminders
+const KEEP_DAYS = Number(process.env.ASK_ACTUAL_KEEP_DAYS || 14);
+
 function safeJsonParseMaybe(v) {
   if (!v) return {};
   if (typeof v === "object") return v;
@@ -50,7 +53,7 @@ function getTashkentNowParts() {
 
 function getCurrentSlotHour() {
   // Можно принудительно тестировать без ожидания 10/14/18:
-  // ASK_ACTUAL_FORCE_SLOT=10 (или 14/18) + запускаешь job вручную
+  // ASK_ACTUAL_FORCE_SLOT=10 (или 14/18)
   const forced = Number(process.env.ASK_ACTUAL_FORCE_SLOT);
   if (Number.isFinite(forced) && SLOTS.has(forced)) return forced;
 
@@ -68,10 +71,56 @@ function getDayKey() {
   return dayKey;
 }
 
+async function pruneTgActualReminders(serviceId, keepDays = 14) {
+  const days = Number.isFinite(Number(keepDays)) ? Math.max(1, Number(keepDays)) : 14;
+
+  // Оставляем только ключи:
+  // 1) формата YYYY-MM-DD_(10|14|18)
+  // 2) где дата >= (сегодня по Ташкенту - days)
+  //
+  // Важно: сравнение делаем в БД по (now() at time zone 'Asia/Tashkent')::date
+  await db.query(
+    `
+    WITH cur AS (
+      SELECT (NOW() AT TIME ZONE $2)::date AS d0
+    ),
+    src AS (
+      SELECT COALESCE(details::jsonb->'tg_actual_reminders', '{}'::jsonb) AS obj
+      FROM services
+      WHERE id = $1
+    ),
+    kv AS (
+      SELECT e.key, e.value
+      FROM src, LATERAL jsonb_each(src.obj) AS e(key, value)
+    ),
+    flt AS (
+      SELECT key, value
+      FROM kv, cur
+      WHERE
+        key ~ '^\\d{4}-\\d{2}-\\d{2}_(10|14|18)$'
+        AND (substring(key from 1 for 10))::date >= (cur.d0 - make_interval(days => $3))::date
+    ),
+    agg AS (
+      SELECT COALESCE(jsonb_object_agg(key, value), '{}'::jsonb) AS new_obj
+      FROM flt
+    )
+    UPDATE services
+    SET details = jsonb_set(
+      COALESCE(details::jsonb, '{}'::jsonb),
+      '{tg_actual_reminders}',
+      (SELECT new_obj FROM agg),
+      true
+    )
+    WHERE id = $1
+    `,
+    [serviceId, TZ, days]
+  );
+}
+
 async function askActualReminder() {
   const slotHour = getCurrentSlotHour();
   if (!slotHour) {
-    // не наш слот — ничего не делаем (защита от случайных запусков)
+    // не наш слот — ничего не делаем
     return;
   }
 
@@ -98,21 +147,28 @@ async function askActualReminder() {
 
     const parsedDetails = safeJsonParseMaybe(details);
 
-    // 1) Спрашиваем ТОЛЬКО пока услуга актуальна
+    // Спрашиваем ТОЛЬКО пока услуга актуальна
     const isActualNow = isServiceActual(parsedDetails, row);
-    if (!isActualNow) continue;
+    if (!isActualNow) {
+      // можно заодно чистить хвосты даже если уже не актуально
+      try {
+        await pruneTgActualReminders(id, KEEP_DAYS);
+      } catch {}
+      continue;
+    }
 
-    // 2) Не дублируем в рамках одного слота дня
-    const already =
-      parsedDetails?.tg_actual_reminders &&
-      parsedDetails.tg_actual_reminders[reminderKey] === true;
-
-    if (already) continue;
+    // Быстрая проверка (до БД)
+    if (parsedDetails?.tg_actual_reminders?.[reminderKey] === true) {
+      // всё равно чуть чистим хвосты
+      try {
+        await pruneTgActualReminders(id, KEEP_DAYS);
+      } catch {}
+      continue;
+    }
 
     /**
-     * 3) Антидубль (multi-instance):
+     * Антидубль (multi-instance):
      * атомарно ставим отметку "этот слот сегодня уже отправлен"
-     * если другой инстанс успел раньше — rowCount=0
      */
     const lockRes = await db.query(
       `
@@ -135,7 +191,13 @@ async function askActualReminder() {
       [id, ["tg_actual_reminders", reminderKey], reminderKey]
     );
 
-    if (lockRes.rowCount === 0) continue;
+    if (lockRes.rowCount === 0) {
+      // другой процесс уже отправил
+      try {
+        await pruneTgActualReminders(id, KEEP_DAYS);
+      } catch {}
+      continue;
+    }
 
     const text =
       `⏳ *Отказ ещё актуален?*\n\n` +
@@ -143,7 +205,6 @@ async function askActualReminder() {
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
     try {
-      // Для refused_* — шлём через новый бот (если есть), иначе через старый (fallback)
       const tokenOverride = CLIENT_BOT_TOKEN ? CLIENT_BOT_TOKEN : "";
 
       await tgSend(
@@ -155,6 +216,9 @@ async function askActualReminder() {
         },
         tokenOverride
       );
+
+      // ✅ после успешной отправки чистим старые ключи
+      await pruneTgActualReminders(id, KEEP_DAYS);
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
@@ -162,7 +226,7 @@ async function askActualReminder() {
         error: e?.message || e,
       });
 
-      // Если отправка не удалась — откатываем отметку слота, чтобы попробовать снова
+      // если отправка не удалась — откатываем отметку слота, чтобы можно было попробовать снова
       try {
         await db.query(
           `
@@ -176,8 +240,16 @@ async function askActualReminder() {
           [id, ["tg_actual_reminders", reminderKey]]
         );
       } catch (rollbackErr) {
-        console.error("[askActualReminder] rollback failed:", rollbackErr?.message || rollbackErr);
+        console.error(
+          "[askActualReminder] rollback failed:",
+          rollbackErr?.message || rollbackErr
+        );
       }
+
+      // и всё равно чистим хвосты (на всякий)
+      try {
+        await pruneTgActualReminders(id, KEEP_DAYS);
+      } catch {}
     }
   }
 }
