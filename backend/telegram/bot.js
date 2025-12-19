@@ -419,6 +419,51 @@ function getExpiryBadge(detailsRaw, svc) {
   return null;
 }
 
+function buildSvcActualKeyboard(serviceId, options = {}) {
+  const { isActual = true } = options;
+
+  // Если услуга уже неактуальна — не даём "Да, актуален"
+  if (!isActual) {
+    return {
+      inline_keyboard: [
+        [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
+        [{ text: "📁 Архивировать", callback_data: `svc:${serviceId}:archive` }],
+      ],
+    };
+  }
+
+  // Обычный вариант: да/нет/продлить
+  return {
+    inline_keyboard: [
+      [
+        { text: "✅ Да, актуален", callback_data: `svc_actual:${serviceId}:yes` },
+        { text: "⛔ Нет, снять", callback_data: `svc_actual:${serviceId}:no` },
+      ],
+      [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
+    ],
+  };
+}
+
+// мягкое скрытие кнопок (если сообщение редактируемое)
+async function hideInlineButtons(ctx) {
+  try {
+    await ctx.editMessageReplyMarkup(undefined);
+  } catch (_) {
+    // иногда Telegram не даёт редактировать (старое сообщение, нет прав в группе и т.п.)
+  }
+}
+
+// простое форматирование даты (YYYY-MM-DD -> DD.MM.YYYY; иначе вернём как есть)
+function prettyDateTime(value) {
+  if (!value) return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (!m) return s;
+  const [, y, mm, dd, hh, mi] = m;
+  if (hh && mi) return `${dd}.${mm}.${y} ${hh}:${mi}`;
+  return `${dd}.${mm}.${y}`;
+}
+
 // безопасный парсинг дат для сортировки
 function parseDateSafe(value) {
   if (!value) return null;
@@ -2353,8 +2398,10 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
     const actorId = getActorId(ctx);
     if (!actorId) return;
 
+    // ✅ чтобы не нажимали повторно — прячем кнопки сразу
+    await hideInlineButtons(ctx);
+
     if (action === "extend7") {
-      // используем твой существующий эндпоинт продления
       const endpoint = `/api/telegram/provider/${actorId}/services/${serviceId}/extend7`;
       const { data } = await axios.post(endpoint);
 
@@ -2364,17 +2411,33 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
         return;
       }
 
-      await safeReply(ctx, "♻️ Продлено на 7 дней. Таймер актуальности обновлён.");
+      // ✅ узнаём новую дату актуальности точно (из текущей услуги)
+      let newExp = null;
+      try {
+        const { data: fresh } = await axios.get(
+          `/api/telegram/provider/${actorId}/services/${serviceId}`
+        );
+        if (fresh?.success && fresh.service) {
+          const d = safeJsonParseMaybe(fresh.service.details);
+          newExp = d.expiration || fresh.service.expiration || null;
+        }
+      } catch (_) {}
+
+      const expLine = newExp ? `\n⏳ Новая актуальность: *${escapeMarkdown(prettyDateTime(newExp))}*` : "";
+      await safeReply(ctx, `♻️ Продлено на 7 дней.${expLine}`, { parse_mode: "Markdown" });
       return;
     }
 
     if (action === "yes") {
       await setServiceIsActive(ctx, serviceId, true);
+      // ✅ прячем кнопки после выполнения (на всякий случай)
+      await hideInlineButtons(ctx);
       return;
     }
 
     if (action === "no") {
       await setServiceIsActive(ctx, serviceId, false);
+      await hideInlineButtons(ctx);
       return;
     }
   } catch (e) {
