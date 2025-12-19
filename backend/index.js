@@ -392,6 +392,11 @@ app.use("/api/admin", adminProvidersRoutes);
 const insideRoutes = require("./routes/insideRoutes");
 app.use("/api/inside", insideRoutes);
 
+/** ===================== принудительно спросить сейчас об актуальности отказа в боте ===================== */
+const adminJobsRoutes = require("./routes/adminJobsRoutes");
+app.use("/api/admin", adminJobsRoutes);
+
+
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
