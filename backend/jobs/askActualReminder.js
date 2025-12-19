@@ -85,17 +85,10 @@ async function askActualReminder() {
     try {
       await tgSend(telegram_chat_id, text, {
         parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
-              { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
-            ],
-            [
-              { text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` },
-            ],
-          ],
-        },
+        const parsedDetails = safeJsonParseMaybe(details);
+        const isActualNow = isServiceActual(parsedDetails, row);
+        
+        reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
       });
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
