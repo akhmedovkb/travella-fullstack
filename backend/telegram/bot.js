@@ -308,9 +308,9 @@ function getStartDateForSort(svc) {
     }
   }
   const raw =
-    d.startFlightDate ||
     d.departureFlightDate ||
     d.startDate ||
+    d.startFlightDate ||
     d.start_flight_date;
   return parseDateSafe(raw);
 }
@@ -332,7 +332,7 @@ function calcGrossFromNet(netNum) {
 function normalizeDateInput(raw) {
   if (!raw) return null;
   const txt = String(raw).trim();
-  if (/^нет$/i.test(txt)) return null;
+  if (/^(нет|пропустить|skip|-)\s*$/i.test(txt)) return null;
 
   const m = txt.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
   if (!m) return null;
@@ -526,8 +526,8 @@ function buildServiceMessage(svc, category, role = "client") {
 
   const direction = directionParts.length ? directionParts.join(" · ") : null;
 
-  const startRaw = d.startFlightDate || d.departureFlightDate || d.startDate || null;
-  const endRaw = d.endFlightDate || d.returnFlightDate || d.endDate || null;
+  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
+  const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
 
   const startClean = startRaw ? normalizeWeirdSeparator(startRaw) : null;
   const endClean = endRaw ? normalizeWeirdSeparator(endRaw) : null;
@@ -619,8 +619,8 @@ function buildInlineDescription(svc, category, roleForInline) {
 
   if (country) parts.push(country);
 
-  const startRaw = d.startFlightDate || d.departureFlightDate || d.startDate || null;
-  const endRaw = d.endFlightDate || d.returnFlightDate || d.endDate || null;
+  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
+  const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
 
   if (startRaw && endRaw && String(startRaw) !== String(endRaw)) {
     parts.push(`${prettyDateTime(startRaw)}–${prettyDateTime(endRaw)}`);
@@ -1743,9 +1743,9 @@ bot.action("prov_services:list", async (ctx) => {
       const expirationRaw = details.expiration || svc.expiration || null;
 
       const headerLines = [];
-      headerLines.push(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`);
-      headerLines.push(`Статус: ${status}${!isActive ? " (неактуально)" : ""}`);
-      if (expirationRaw) headerLines.push(`Актуально до: ${expirationRaw}`);
+      headerLines.push(escapeMarkdown(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`));
+      headerLines.push(escapeMarkdown(`Статус: ${status}${!isActive ? " (неактуально)" : ""}`));
+      if (expirationRaw) headerLines.push(escapeMarkdown(`Актуально до: ${expirationRaw}`));
 
       const msg = headerLines.join("\n") + "\n\n" + text;
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
@@ -2690,8 +2690,8 @@ bot.on("inline_query", async (ctx) => {
         thumbUrl = null;
       }
       
-      // ✅ fallback: чтобы все inline карточки были ровными (photo)
-      if (!thumbUrl) thumbUrl = INLINE_PLACEHOLDER_THUMB;
+      // ✅ thumb всегда должен быть валидным URL
+      const thumbStable = thumbUrl || INLINE_PLACEHOLDER_THUMB;
 
       const title = truncate(
         normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"),
@@ -2701,34 +2701,19 @@ bot.on("inline_query", async (ctx) => {
       // result object
       const photoMain = (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")))
         ? photoUrl
-        : thumbUrl;
+        : thumbStable;
       
       results.push({
         id: `${svcCategory}:${svc.id}`,
         type: "photo",
         photo_url: photoMain,            // ✅ основное фото (если есть)
-        thumb_url: INLINE_PLACEHOLDER_THUMB, // ✅ миниатюра всегда стабильная
+        thumb_url: thumbStable,          // ✅ миниатюра: реальная или плейсхолдер
         title,
         description,
         caption: text,
         parse_mode: "Markdown",
         reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
-
-      } else {
-        results.push({
-          id: `${svcCategory}:${svc.id}`,
-          type: "article",
-          title,
-          description,
-          input_message_content: {
-            message_text: text,
-            parse_mode: "Markdown",
-            disable_web_page_preview: true,
-          },
-          reply_markup: isMy ? keyboardForMy : keyboardForClient,
-        });
-      }
     }
 
     await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
