@@ -2789,7 +2789,6 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
           title,
           description,
           caption: text,
-          parse_mode: "Markdown",
           reply_markup: isMy ? keyboardForMy : keyboardForClient,
         });
       } else {
@@ -2800,7 +2799,6 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
           description,
           input_message_content: {
             message_text: text,
-            parse_mode: "Markdown",
             disable_web_page_preview: false,
           },
           ...(thumbUrl ? { thumb_url: thumbUrl } : {}),
@@ -2809,7 +2807,21 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
       }
     }
 
-    await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
+    try {
+  await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
+} catch (e) {
+  console.error("[tg-bot] answerInlineQuery FAILED:", e?.response?.data || e?.message || e);
+  // чтобы хотя бы кнопка "Открыть бота" появилась:
+  try {
+    await ctx.answerInlineQuery([], {
+      cache_time: 1,
+      is_personal: true,
+      switch_pm_text: "⚠️ Ошибка inline (открыть бота)",
+      switch_pm_parameter: "start",
+    });
+  } catch {}
+}
+
   } catch (e) {
     console.error("[tg-bot] inline_query error:", e?.response?.data || e?.message || e);
     try {
