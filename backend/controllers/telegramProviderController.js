@@ -331,6 +331,51 @@ async function getProviderServices(req, res) {
   }
 }
 
+async function searchPublicServices(req, res) {
+  try {
+    const chatId = Number(req.params.chatId);
+    const category = String(req.query.category || "").trim();
+
+    if (!Number.isFinite(chatId) || chatId <= 0) {
+      return res.status(400).json({ success: false, error: "BAD_CHAT_ID" });
+    }
+
+    if (!category || !REFUSED_CATEGORIES.includes(category)) {
+      return res.status(400).json({ success: false, error: "BAD_CATEGORY" });
+    }
+
+    // Публичный поиск: берём одобренные услуги (маркетплейс)
+    const q = `
+      SELECT
+        s.id,
+        s.category,
+        s.status,
+        s.moderation_status,
+        s.title,
+        s.price,
+        s.details,
+        s.images,
+        s.expiration_at AS expiration,
+        s.created_at,
+        p.name   AS provider_name,
+        p.social AS provider_telegram
+      FROM services s
+      LEFT JOIN providers p ON p.id = s.provider_id
+      WHERE s.status = 'approved'
+        AND s.category = $1
+      ORDER BY s.created_at DESC
+      LIMIT 100
+    `;
+
+    const { rows } = await pool.query(q, [category]);
+
+    return res.json({ success: true, items: rows || [] });
+  } catch (err) {
+    console.error("[telegram] searchPublicServices error:", err);
+    return res.status(500).json({ success: false, error: "SERVER_ERROR" });
+  }
+}
+
 async function serviceActionFromBot(req, res, action) {
   try {
     const { chatId, serviceId } = req.params;
@@ -723,6 +768,7 @@ module.exports = {
   confirmBooking,
   rejectBooking,
   getProviderServices,
+  searchPublicServices,
   getProviderServiceByIdFromBot,
   updateServiceFromBot,
   unpublishServiceFromBot,
