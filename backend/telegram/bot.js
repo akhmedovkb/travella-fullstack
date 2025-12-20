@@ -3630,97 +3630,37 @@ bot.on("inline_query", async (ctx) => {
       return da.getTime() - db.getTime();
     });
 
-    const results = itemsSorted.slice(0, 25).map((svc, idx) => {
-      const svcCategory = (svc.category || svc.type || category);
-      const { text, photoUrl, serviceUrl } = buildServiceMessage(
-        svc,
-        svcCategory,
-        roleForInline
-      );
+const results = [];
 
-      // ✅ если это "#my" (мои услуги) — вместо "Подробнее" показываем "Редактировать"
-      // управление ведём через уже существующий action: svc:<id>:edit
-      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+for (let idx = 0; idx < itemsSorted.length; idx++) {
+  const svc = itemsSorted[idx];
 
-      const keyboardForMy = {
-        inline_keyboard: [
-          [{ text: "✏️ Редактировать", callback_data: `svc:${svc.id}:edit` }],
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
-        ],
-      };
+  let thumbUrl = null;
 
-      const keyboardForClient = {
-        inline_keyboard: [
-          [
-            { text: "Подробнее на сайте", url: serviceUrl },
-            { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
-          ],
-        ],
-      };
+  if (photoUrl?.startsWith("tgfile:")) {
+    const fileId = photoUrl.replace("tgfile:", "").trim();
+    try {
+      thumbUrl = await getPublicThumbUrlFromTgFile(bot, fileId);
+    } catch (e) {
+      console.log("[tg] getFileLink failed", e.message);
+    }
+  } else if (photoUrl?.startsWith("http")) {
+    thumbUrl = photoUrl;
+  }
 
-      let d = svc.details || {};
-      if (typeof d === "string") {
-        try {
-          d = JSON.parse(d);
-        } catch {
-          d = {};
-        }
-      }
+  results.push({
+    id: `${svcCategory}:${svc.id}`,
+    type: thumbUrl ? "photo" : "article",
+    photo_url: thumbUrl || undefined,
+    thumb_url: thumbUrl || undefined,
+    title: truncate(normalizeTitleSoft(svc.title), 60),
+    description,
+    caption: text,
+    parse_mode: "Markdown",
+    reply_markup: isMyMode ? keyboardForMy : keyboardForClient,
+  });
+}
 
-      const truncate = (str, n = 40) =>
-        str && str.length > n ? str.slice(0, n - 1) + "…" : str;
-
-      const startFlight = d.startFlightDate || d.startDate;
-      const endFlight = d.endFlightDate || d.endDate;
-
-      let datesLine = "";
-      if (startFlight && endFlight) {
-        const sf = String(startFlight).replace(/-/g, ".");
-        const ef = String(endFlight).replace(/-/g, ".");
-        const raw = `ДАТЫ: ${sf} → ${ef}`;
-        datesLine = normalizeWeirdSeparator(raw);
-      } else if (startFlight) {
-        const sf = String(startFlight).replace(/-/g, ".");
-        datesLine = `ДАТА: ${normalizeWeirdSeparator(sf)}`;
-      }
-      
-      const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelLine = hotelNameRaw ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}` : "";
-      
-      const priceInline = pickPrice(d, svc, roleForInline);
-      const priceWithCur = formatPriceWithCurrency(priceInline);
-      const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
-      const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
-      
-      const badge = getExpiryBadge(d, svc);
-      
-      const descParts = [];
-      if (badge) descParts.push(badge);
-      if (datesLine) descParts.push(datesLine);
-      if (hotelLine) descParts.push(hotelLine);
-      if (priceLine) descParts.push(priceLine);
-      
-      let description = descParts.join(" · ");
-      if (description.length > 140) description = description.slice(0, 137) + "…";
-      
-      // thumb_url: только http(s), tgfile нельзя
-      let thumbUrl = null;
-      
-      if (photoUrl) {
-        if (photoUrl.startsWith("tgfile:")) {
-          const fileId = photoUrl.replace(/^tgfile:/, "").trim();
-          if (fileId) {
-            try {
-              thumbUrl = await getPublicThumbUrlFromTgFile(bot, fileId);
-            } catch (e) {
-              console.log("[tg-bot] getFileLink failed:", e?.message || e);
-              thumbUrl = null;
-            }
-          }
-        } else if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
-          thumbUrl = photoUrl;
-        }
-      }
 
       // ⚠️ ВАЖНО: inline_result "photo" требует URL. Если его нет — делаем article.
       // Так карточка всегда будет показываться, даже без превью.
