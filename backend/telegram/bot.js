@@ -3721,7 +3721,7 @@ bot.on("inline_query", async (ctx) => {
       return {
         ...resultBase,
         type: "photo",
-        photo_url: photoUrl || thumbUrl,
+        photo_url: thumbUrl,
         thumb_url: thumbUrl,
         title: truncate(normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"), 60),
         description,
