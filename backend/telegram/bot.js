@@ -19,6 +19,17 @@ if (!CLIENT_TOKEN) {
   );
 }
 const BOT_TOKEN = CLIENT_TOKEN;
+// Username бота (без @). Нужен для стабильных ссылок, т.к. ctx.me не всегда доступен в inline.
+// Пример: TELEGRAM_BOT_USERNAME=Travella2025Bot
+const BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "").trim();
+
+// Шаблон ссылки на карточку услуги на сайте.
+// По умолчанию оставляем как было: https://travella.uz?service=123
+// Можно переопределить, например:
+// SERVICE_URL_TEMPLATE=https://travella.uz/marketplace?service={id}
+// SERVICE_URL_TEMPLATE=https://travella.uz/service/{id}
+const SERVICE_URL_TEMPLATE =
+  (process.env.SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}").trim();
 
 // Публичный URL Travella для кнопок "Подробнее"
 const SITE_URL = (
@@ -68,6 +79,8 @@ console.log("[tg-bot] Using TELEGRAM_CLIENT_BOT_TOKEN (polling)");
 console.log("[tg-bot] API_BASE =", API_BASE);
 console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
 console.log("[tg-bot] SITE_URL =", SITE_URL);
+console.log("[tg-bot] BOT_USERNAME =", BOT_USERNAME || "(not set)");
+console.log("[tg-bot] SERVICE_URL_TEMPLATE =", SERVICE_URL_TEMPLATE);
 console.log(
   "[tg-bot] MANAGER_CHAT_ID =",
   MANAGER_CHAT_ID ? MANAGER_CHAT_ID : "(not set)"
@@ -110,7 +123,7 @@ bot.use(
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
 const tgFileLinkCache = new Map();
-const TG_FILE_LINK_TTL = 60 * 60 * 1000; // 1 час
+const TG_FILE_LINK_TTL = 20 * 60 * 1000; // 1 час
 
 async function getPublicThumbUrlFromTgFile(botInstance, fileId) {
   const cached = tgFileLinkCache.get(fileId);
@@ -492,6 +505,16 @@ function pickPrice(details, svc, role) {
   }
   return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
 }
+function buildServiceUrl(serviceId) {
+  const tpl = SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}";
+  return tpl
+    .replace(/\{SITE_URL\}/g, SITE_URL)
+    .replace(/\{id\}/g, String(serviceId));
+}
+
+function buildBotStartUrl() {
+  return BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=start` : SITE_URL;
+}
 
 /**
  * Преобразуем услугу в красивый текст + url картинки + url на сайт
@@ -576,7 +599,7 @@ function buildServiceMessage(svc, category, role = "client") {
     telegramLine = `Telegram: @${mdUsername}`;
   }
 
-  const serviceUrl = `${SITE_URL}?service=${svc.id}`;
+  const serviceUrl = buildServiceUrl(svc.id);
 
   const lines = [];
   lines.push(`*${title}*`);
@@ -842,6 +865,7 @@ function buildDetailsForRefusedTour(draft, priceNum) {
 
 function buildDetailsForRefusedHotel(draft, netPriceNum) {
   return {
+    title: draft.title || "",
     directionCountry: draft.country || "",
     directionTo: draft.toCity || "",
     hotel: draft.hotel || "",
@@ -1757,7 +1781,7 @@ bot.action("prov_services:list", async (ctx) => {
       const keyboard = {
         inline_keyboard: [
           [{ text: "✏️ Редактировать", callback_data: `svc:${svc.id}:edit` }],
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
           [{ text: "🛑 Снять с продажи", callback_data: `svc:${svc.id}:unpublish` }],
           [
             { text: "♻️ Продлить на 7 дней", callback_data: `svc:${svc.id}:extend7` },
