@@ -20,6 +20,24 @@ const tgAxios = axiosBase.create({
   timeout: 15000,
 });
 
+// ---------- public base helpers (для imageUrl) ----------
+const SITE_PUBLIC_URL = (
+  process.env.SITE_PUBLIC_URL ||
+  process.env.SITE_URL ||
+  "https://travella.uz"
+).replace(/\/+$/, "");
+
+const API_PUBLIC_URL = (
+  process.env.API_PUBLIC_URL ||
+  process.env.API_BASE_URL ||
+  process.env.SITE_API_URL ||
+  ""
+).replace(/\/+$/, "");
+
+function publicBase() {
+  return SITE_PUBLIC_URL || API_PUBLIC_URL || "https://travella.uz";
+}
+
 // ---------- helpers ----------
 function guessMimeByPath(path) {
   const p = String(path || "").toLowerCase();
@@ -84,8 +102,7 @@ async function normalizeImagesForDb(images) {
     }
 
     if (it && typeof it === "object") {
-      const v =
-        it.url || it.src || it.path || it.location || it.href || null;
+      const v = it.url || it.src || it.path || it.location || it.href || null;
       if (typeof v === "string" && v.trim()) out.push(v.trim());
     }
   }
@@ -331,6 +348,18 @@ async function getProviderServices(req, res) {
   }
 }
 
+/**
+ * ✅ Публичный поиск (маркетплейс) для provider-бота
+ * GET /api/telegram/provider/:chatId/search?category=refused_tour
+ *
+ * FIX: раньше было только status='approved' => часто 0 результатов.
+ * Теперь логика как у client-search:
+ * - status IN ('approved','published','active')
+ * - isActive true
+ * - expiration не истёк
+ * - endDate/endFlightDate не в прошлом
+ * + добавляем imageUrl (Telegram-friendly)
+ */
 async function searchPublicServices(req, res) {
   try {
     const chatId = Number(req.params.chatId);
@@ -344,7 +373,6 @@ async function searchPublicServices(req, res) {
       return res.status(400).json({ success: false, error: "BAD_CATEGORY" });
     }
 
-    // Публичный поиск: берём одобренные услуги (маркетплейс)
     const q = `
       SELECT
         s.id,
@@ -361,15 +389,67 @@ async function searchPublicServices(req, res) {
         p.social AS provider_telegram
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
-      WHERE s.status = 'approved'
-        AND s.category = $1
+      WHERE s.category = $1
+        AND s.status IN ('approved', 'published', 'active')
+        AND (
+          s.details IS NULL
+          OR (s.details::jsonb->>'isActive') IS NULL
+          OR LOWER(s.details::jsonb->>'isActive') = 'true'
+        )
+        AND (
+          s.expiration_at IS NULL
+          OR s.expiration_at > NOW()
+        )
+        AND (
+          (s.details::jsonb->>'expiration') IS NULL
+          OR (s.details::jsonb->>'expiration')::timestamp > NOW()
+        )
+        AND (
+          COALESCE(
+            (s.details::jsonb->>'endFlightDate')::date,
+            (s.details::jsonb->>'endDate')::date
+          ) IS NULL
+          OR COALESCE(
+            (s.details::jsonb->>'endFlightDate')::date,
+            (s.details::jsonb->>'endDate')::date
+          ) >= CURRENT_DATE
+        )
       ORDER BY s.created_at DESC
       LIMIT 100
     `;
 
     const { rows } = await pool.query(q, [category]);
 
-    return res.json({ success: true, items: rows || [] });
+    const base = publicBase();
+    const PLACEHOLDER = `${base}/api/telegram/placeholder.png`;
+
+    const normalized = (rows || []).map((row) => {
+      let imgs = row.images;
+
+      if (!imgs) imgs = [];
+      if (typeof imgs === "string") {
+        try {
+          imgs = JSON.parse(imgs);
+        } catch {
+          imgs = [imgs];
+        }
+      }
+      if (!Array.isArray(imgs)) imgs = [];
+
+      const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
+
+      const imageUrl = hasAny
+        ? `${base}/api/telegram/service-image/${row.id}`
+        : PLACEHOLDER;
+
+      return {
+        ...row,
+        images: imgs,
+        imageUrl,
+      };
+    });
+
+    return res.json({ success: true, items: normalized });
   } catch (err) {
     console.error("[telegram] searchPublicServices error:", err);
     return res.status(500).json({ success: false, error: "SERVER_ERROR" });
