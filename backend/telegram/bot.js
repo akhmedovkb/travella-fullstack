@@ -27,7 +27,7 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
-const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/o.jpg`; // сделай реальный файл на сайте
+const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/o.jpg`;
 
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
@@ -2699,18 +2699,22 @@ bot.on("inline_query", async (ctx) => {
       );
 
       // result object
-      if (thumbUrl) {
-        results.push({
-          id: `${svcCategory}:${svc.id}`,
-          type: "photo",
-          photo_url: thumbUrl,
-          thumb_url: thumbUrl,
-          title,
-          description,
-          caption: text,
-          parse_mode: "Markdown",
-          reply_markup: isMy ? keyboardForMy : keyboardForClient,
-        });
+      const photoMain = (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")))
+        ? photoUrl
+        : thumbUrl;
+      
+      results.push({
+        id: `${svcCategory}:${svc.id}`,
+        type: "photo",
+        photo_url: photoMain,            // ✅ основное фото (если есть)
+        thumb_url: INLINE_PLACEHOLDER_THUMB, // ✅ миниатюра всегда стабильная
+        title,
+        description,
+        caption: text,
+        parse_mode: "Markdown",
+        reply_markup: isMy ? keyboardForMy : keyboardForClient,
+      });
+
       } else {
         results.push({
           id: `${svcCategory}:${svc.id}`,
