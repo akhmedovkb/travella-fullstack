@@ -259,12 +259,33 @@ router.get("/webhook/:secret/_debug/ping", (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
+// =====================================================================
+// ✅ NEW: Встроенный placeholder (гарантированный 200 image/png)
+// =====================================================================
+function sendPlaceholderPng(res) {
+  const png1x1 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9oG9cAAAAASUVORK5CYII=";
+  const buf = Buffer.from(png1x1, "base64");
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Content-Length", buf.length);
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.send(buf);
+}
+
+// GET /api/telegram/placeholder.png
+router.get("/placeholder.png", (req, res) => {
+  return sendPlaceholderPng(res);
+});
+
 /**
  * 🔥 ВРЕМЕННЫЙ РОУТ ДЛЯ КАРТИНОК ИЗ services.images (base64)
  *
  * GET /api/telegram/service-image/:id
  * Находит услугу в таблице services по id, берёт первую запись из images,
  * если это data:image/...;base64,... — декодирует и отдаёт бинарную картинку.
+ *
+ * ✅ ВАЖНО: Telegram inline "photo" не терпит 404/HTML. Поэтому:
+ * - если картинок нет/битые — отдаём placeholder 200 image/png
  */
 router.get("/service-image/:id", async (req, res) => {
   try {
@@ -277,13 +298,17 @@ router.get("/service-image/:id", async (req, res) => {
       "SELECT images FROM services WHERE id = $1 LIMIT 1",
       [serviceId]
     );
+
+    // Если услуги нет — это реально 404 (оставляем как есть)
     if (!result.rows.length) {
       return res.status(404).send("Service not found");
     }
 
     let images = result.rows[0].images;
+
+    // Если картинок нет — отдаём placeholder
     if (!images) {
-      return res.status(404).send("No images");
+      return sendPlaceholderPng(res);
     }
 
     if (typeof images === "string") {
@@ -296,7 +321,7 @@ router.get("/service-image/:id", async (req, res) => {
     }
 
     if (!Array.isArray(images) || !images.length) {
-      return res.status(404).send("No images");
+      return sendPlaceholderPng(res);
     }
 
     let v = images[0];
@@ -306,15 +331,15 @@ router.get("/service-image/:id", async (req, res) => {
     }
 
     if (!v || typeof v !== "string") {
-      return res.status(404).send("No valid image");
+      return sendPlaceholderPng(res);
     }
 
     v = v.trim();
     if (!v) {
-      return res.status(404).send("Empty image");
+      return sendPlaceholderPng(res);
     }
 
-    // Если уже http/https — можно сделать редирект (на случай если в БД URL)
+    // Если уже http/https — редирект (на случай если в БД URL)
     if (v.startsWith("http://") || v.startsWith("https://")) {
       return res.redirect(v);
     }
@@ -323,17 +348,19 @@ router.get("/service-image/:id", async (req, res) => {
     if (v.startsWith("/")) {
       if (SITE_PUBLIC_URL) return res.redirect(SITE_PUBLIC_URL + v);
       if (API_PUBLIC_URL) return res.redirect(API_PUBLIC_URL + v);
-      return res.status(400).send("Relative image path, but no public base url");
+      // если нет базового URL — вместо 400 лучше placeholder (Telegram-friendly)
+      return sendPlaceholderPng(res);
     }
 
     // Основной случай: data:image/...;base64,XXXX
     if (!v.startsWith("data:image")) {
-      return res.status(400).send("Unsupported image format");
+      // вместо 400 — placeholder (Telegram-friendly)
+      return sendPlaceholderPng(res);
     }
 
     const m = v.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (!m) {
-      return res.status(400).send("Invalid data URL format");
+      return sendPlaceholderPng(res);
     }
 
     const mimeType = m[1] || "image/jpeg";
@@ -342,7 +369,11 @@ router.get("/service-image/:id", async (req, res) => {
     try {
       buf = Buffer.from(b64, "base64");
     } catch {
-      return res.status(400).send("Invalid base64 data");
+      return sendPlaceholderPng(res);
+    }
+
+    if (!buf || !buf.length) {
+      return sendPlaceholderPng(res);
     }
 
     res.setHeader("Content-Type", mimeType);
@@ -351,7 +382,8 @@ router.get("/service-image/:id", async (req, res) => {
     return res.send(buf);
   } catch (e) {
     console.error("[tg] /service-image error:", e?.message || e);
-    return res.status(500).send("Internal error");
+    // Telegram-friendly
+    return sendPlaceholderPng(res);
   }
 });
 
@@ -372,6 +404,7 @@ router.get(
   "/client/:chatId/search",
   telegramClientController.searchClientServices
 );
+
 // поиск отказных услуг по категории ДЛЯ ПРОВАЙДЕРА
 // GET /api/telegram/provider/:chatId/search?category=refused_tour
 router.get(
