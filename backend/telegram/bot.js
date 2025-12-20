@@ -722,6 +722,34 @@ async function ensureProviderRole(ctx) {
   return ctx.session?.role || null;
 }
 
+// ---- helper: доопределить роль клиента по chatId, если сессия пуста ----
+async function ensureClientRole(ctx) {
+  if (ctx.session?.role === "client") {
+    return "client";
+  }
+  const actorId = getActorId(ctx);
+  if (!actorId) return ctx.session?.role || null;
+
+  try {
+    const resClient = await axios.get(`/api/telegram/profile/client/${actorId}`);
+    if (resClient.data && resClient.data.success) {
+      if (!ctx.session) ctx.session = {};
+      ctx.session.role = "client";
+      ctx.session.linked = true;
+      return "client";
+    }
+  } catch (e) {
+    if (e?.response?.status !== 404) {
+      console.log(
+        "[tg-bot] ensureClientRole error:",
+        e?.response?.data || e.message || e
+      );
+    }
+  }
+
+  return ctx.session?.role || null;
+}
+
 // ✅ для inline_query (там нет ctx.chat, есть ctx.from.id)
 async function resolveRoleByUserId(userId, ctx) {
   try {
@@ -739,7 +767,25 @@ async function resolveRoleByUserId(userId, ctx) {
       console.log("[tg-bot] resolveRoleByUserId error:", e?.response?.data || e.message || e);
     }
   }
-  return "client";
+  // если не провайдер — проверим клиента
+  try {
+    const resClient = await axios.get(`/api/telegram/profile/client/${userId}`);
+    if (resClient.data && resClient.data.success) {
+      if (ctx && ctx.session) {
+        ctx.session.role = "client";
+        ctx.session.linked = true;
+      }
+      return "client";
+    }
+  } catch (e) {
+    // ignore 404
+    if (e?.response?.status !== 404) {
+      console.log("[tg-bot] resolveRoleByUserId client error:", e?.response?.data || e.message || e);
+    }
+  }
+
+  // не привязан
+  return null;
 }
 
 /* ===================== SERVICE WIZARD (создание refused_tour) ===================== */
@@ -791,6 +837,9 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     directionTo: draft.toCity || "",
     startDate: draft.startDate || "",
     endDate: draft.endDate || "",
+    departureFlightDate: draft.departureFlightDate || "",
+    returnFlightDate: draft.returnFlightDate || "",
+    flightDetails: draft.flightDetails || "",
     hotel: draft.hotel || "",
     accommodation: draft.accommodation || "",
     netPrice: priceNum,
@@ -922,6 +971,16 @@ async function promptEditState(ctx, state) {
       });
       return;
 
+    case "svc_edit_image":
+      await safeReply(
+        ctx,
+        "🖼 Отправьте *фото* для объявления (одно).\n" +
+          "Или напишите `удалить`, чтобы убрать фото.\n" +
+          "Или `пропустить`, чтобы ничего не менять.",
+        { parse_mode: "Markdown", ...editNavKeyboard() }
+      );
+      return;
+
     case "svc_edit_isActive":
       await safeReply(ctx, "✅ Активно? Ответьте `да` или `нет`:", {
         parse_mode: "Markdown",
@@ -994,6 +1053,7 @@ async function openEditMenu(ctx) {
           { text: "💰 Цена NETTO", callback_data: "svc_edit:field:netPrice" },
           { text: "💳 Цена BRUTTO", callback_data: "svc_edit:field:grossPrice" },
         ],
+        [{ text: "🖼 Фото", callback_data: "svc_edit:field:image" }],
         [{ text: "⏳ Актуально до", callback_data: "svc_edit:field:expiration" }],
         [{ text: "✅/⛔ Активность", callback_data: "svc_edit:field:isActive" }],
         [{ text: "⬅️ Назад к моим услугам", callback_data: "prov_services:list" }],
@@ -1019,6 +1079,11 @@ async function saveEditedService(ctx) {
     details: draft.details || {},
   };
 
+  // 🖼 images from bot (optional)
+  if (Array.isArray(draft.images)) {
+    payload.images = draft.images;
+  }
+
   const { data } = await axios.patch(
    `/api/telegram/provider/${actorId}/services/${draft.serviceId}`,
     payload
@@ -1035,6 +1100,7 @@ async function saveEditedService(ctx) {
   draft.title = svc.title;
   draft.price = svc.price;
   draft.details = safeJsonParseMaybe(svc.details);
+  draft.images = Array.isArray(svc.images) ? svc.images : draft.images;
 
   await safeReply(ctx, "✅ Изменения сохранены.");
   ctx.session.state = null;
@@ -1099,6 +1165,32 @@ async function promptWizardState(ctx, state) {
         "📅 Укажите *дату окончания тура*\n" +
           "✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
           "Пример: *2025-12-15*",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_flight_departure":
+      await ctx.reply(
+        "🛫 Укажите *дату рейса вылета* (опционально)\n" +
+          "✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+          "Если не нужно — напишите *пропустить*.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_flight_return":
+      await ctx.reply(
+        "🛬 Укажите *дату рейса обратно* (опционально)\n" +
+          "✅ Формат: *YYYY-MM-DD* или *YYYY.MM.DD*\n" +
+          "Если не нужно — напишите *пропустить*.",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
+      return;
+
+    case "svc_create_flight_details":
+      await ctx.reply(
+        "✈️ Укажите *детали рейса* (номер/время/авиакомпания)\n" +
+          "Если не нужно — напишите *пропустить*.",
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -1715,6 +1807,19 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   logUpdate(ctx, "hears Найти услугу");
 
+  const maybeProvider = await ensureProviderRole(ctx);
+  const maybeClient = maybeProvider ? null : await ensureClientRole(ctx);
+  const linked = !!ctx.session?.linked;
+  const role = maybeProvider || maybeClient || ctx.session?.role || null;
+
+  if (!linked && !role) {
+    await ctx.reply(
+      "📌 Чтобы искать и бронировать услуги, нужно привязать аккаунт по номеру телефона."
+    );
+    await askRole(ctx);
+    return;
+  }
+
   await ctx.reply("🔎 Выберите тип услуги (отправка в текущий чат):", {
     reply_markup: {
       inline_keyboard: [
@@ -2166,6 +2271,7 @@ bot.action(/^svc_edit:field:(.+)$/, async (ctx) => {
     else if (field === "accommodation") nextState = "svc_edit_accommodation";
     else if (field === "netPrice") nextState = "svc_edit_netPrice";
     else if (field === "grossPrice") nextState = "svc_edit_grossPrice";
+    else if (field === "image") nextState = "svc_edit_image";
     else if (field === "expiration") nextState = "svc_edit_expiration";
     else if (field === "isActive") nextState = "svc_edit_isActive";
 
@@ -2453,6 +2559,7 @@ bot.action(/^svc:(\d+):edit$/, async (ctx) => {
 
     const svc = data.service;
     const details = safeJsonParseMaybe(svc.details);
+    const images = Array.isArray(svc.images) ? svc.images : safeJsonParseMaybe(svc.images);
 
     if (!ctx.session) ctx.session = {};
     ctx.session.editDraft = {
@@ -2461,6 +2568,7 @@ bot.action(/^svc:(\d+):edit$/, async (ctx) => {
       title: svc.title || "",
       price: svc.price ?? null,
       details,
+      images: Array.isArray(images) ? images : [],
     };
     ctx.session.editStateStack = [];
     ctx.session.state = null;
@@ -2553,6 +2661,24 @@ bot.on("text", async (ctx, next) => {
         if (text.toLowerCase() === "отмена") {
           resetEditWizard(ctx);
           await ctx.reply("❌ Редактирование отменено.");
+          return;
+        }
+
+        // 🖼 Фото
+        if (state === "svc_edit_image") {
+          const t = text.toLowerCase();
+          if (t === "пропустить" || t === "skip") {
+            // ничего не меняем
+            ctx.session.state = null;
+            await openEditMenu(ctx, draft);
+            return;
+          }
+          if (t === "удалить" || t === "remove" || t === "delete") {
+            draft.images = [];
+            await saveEditedService(ctx);
+            return;
+          }
+          await ctx.reply("🖼 Пришлите фото сообщением (как картинку), либо напишите `удалить` / `пропустить`.", { parse_mode: "Markdown", ...editNavKeyboard() });
           return;
         }
       
@@ -2657,6 +2783,24 @@ bot.on("text", async (ctx, next) => {
               { ...editNavKeyboard() }
             );
             return;
+          }
+
+          // ✅ дополнительная проверка: дедлайн не должен быть позже дат поездки/рейса
+          if (normExp) {
+            const dt = parseDateFlexible(normExp);
+            const expYmd = ymdLocal(dt);
+
+            const startYmd = details.startDate;
+            const depYmd = details.departureFlightDate;
+
+            const cap = depYmd || startYmd || null;
+            if (cap && isBeforeYMD(cap, expYmd)) {
+              await ctx.reply(
+                `⚠️ Дедлайн актуальности не может быть позже даты поездки/вылета (${cap}). Укажите дату раньше или равную.`,
+                { ...editNavKeyboard() }
+              );
+              return;
+            }
           }
         
           details.expiration = normExp; // может быть null
@@ -2788,6 +2932,142 @@ bot.on("text", async (ctx, next) => {
           }
           draft.endDate = normEnd;
           pushWizardState(ctx, "svc_create_tour_end");
+          ctx.session.state = "svc_create_flight_departure";
+          await promptWizardState(ctx, "svc_create_flight_departure");
+          return;
+        }
+
+        case "svc_create_flight_departure": {
+          const low = text.toLowerCase();
+          if (low === "пропустить" || low === "skip" || low === "-" || low === "нет") {
+            draft.departureFlightDate = null;
+            pushWizardState(ctx, "svc_create_flight_departure");
+            ctx.session.state = "svc_create_flight_return";
+            await promptWizardState(ctx, "svc_create_flight_return");
+            return;
+          }
+
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply(
+              "😕 Не понял дату рейса вылета.\n" +
+                "Введите *YYYY-MM-DD* или *YYYY.MM.DD* (например *2025-12-09*)\n" +
+                "или напишите *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (isPastYMD(norm)) {
+            await ctx.reply(
+              "⚠️ Эта дата уже в прошлом. Укажите будущую дату или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (draft.startDate && isBeforeYMD(draft.startDate, norm)) {
+            await ctx.reply(
+              "⚠️ Дата рейса вылета позже даты начала тура.\n" +
+                `Начало тура: ${draft.startDate}\n` +
+                "Укажите корректную дату вылета или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (draft.endDate && isBeforeYMD(draft.endDate, norm)) {
+            await ctx.reply(
+              "⚠️ Дата рейса вылета позже даты окончания тура.\n" +
+                `Окончание тура: ${draft.endDate}\n` +
+                "Укажите корректную дату вылета или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          draft.departureFlightDate = norm;
+          pushWizardState(ctx, "svc_create_flight_departure");
+          ctx.session.state = "svc_create_flight_return";
+          await promptWizardState(ctx, "svc_create_flight_return");
+          return;
+        }
+
+        case "svc_create_flight_return": {
+          const low = text.toLowerCase();
+          if (low === "пропустить" || low === "skip" || low === "-" || low === "нет") {
+            draft.returnFlightDate = null;
+            pushWizardState(ctx, "svc_create_flight_return");
+            ctx.session.state = "svc_create_flight_details";
+            await promptWizardState(ctx, "svc_create_flight_details");
+            return;
+          }
+
+          const norm = normalizeDateInput(text);
+          if (!norm) {
+            await ctx.reply(
+              "😕 Не понял дату рейса обратно.\n" +
+                "Введите *YYYY-MM-DD* или *YYYY.MM.DD* (например *2025-12-15*)\n" +
+                "или напишите *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (isPastYMD(norm)) {
+            await ctx.reply(
+              "⚠️ Эта дата уже в прошлом. Укажите будущую дату или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (draft.departureFlightDate && isBeforeYMD(norm, draft.departureFlightDate)) {
+            await ctx.reply(
+              "⚠️ Дата рейса обратно раньше даты вылета.\n" +
+                `Вылет: ${draft.departureFlightDate}\n` +
+                "Укажите корректную дату обратно или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (draft.endDate && isBeforeYMD(norm, draft.endDate)) {
+            await ctx.reply(
+              "⚠️ Дата рейса обратно раньше даты окончания тура.\n" +
+                `Окончание тура: ${draft.endDate}\n` +
+                "Укажите корректную дату обратно или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          if (draft.startDate && isBeforeYMD(norm, draft.startDate)) {
+            await ctx.reply(
+              "⚠️ Дата рейса обратно раньше даты начала тура.\n" +
+                `Начало тура: ${draft.startDate}\n` +
+                "Укажите корректную дату обратно или *пропустить*.",
+              { parse_mode: "Markdown", ...wizNavKeyboard() }
+            );
+            return;
+          }
+
+          draft.returnFlightDate = norm;
+          pushWizardState(ctx, "svc_create_flight_return");
+          ctx.session.state = "svc_create_flight_details";
+          await promptWizardState(ctx, "svc_create_flight_details");
+          return;
+        }
+
+        case "svc_create_flight_details": {
+          const low = text.toLowerCase();
+          if (low === "пропустить" || low === "skip" || low === "-" || low === "нет") {
+            draft.flightDetails = null;
+          } else {
+            draft.flightDetails = text;
+          }
+
+          pushWizardState(ctx, "svc_create_flight_details");
           ctx.session.state = "svc_create_tour_hotel";
           await promptWizardState(ctx, "svc_create_tour_hotel");
           return;
@@ -3059,6 +3339,24 @@ bot.on("photo", async (ctx, next) => {
       await finishCreateServiceFromWizard(ctx);
       return;
     }
+
+    // ✅ editing existing service photo
+    if (state === "svc_edit_image" && ctx.session?.editDraft) {
+      const photos = ctx.message.photo || [];
+      if (!photos.length) {
+        await ctx.reply("⚠️ Не удалось прочитать фото. Попробуйте ещё раз.");
+        return;
+      }
+
+      const largest = photos[photos.length - 1];
+      const fileId = largest.file_id;
+
+      // сохраняем tg:fileId, backend преобразует в dataURL
+      ctx.session.editDraft.images = [`tg:${fileId}`];
+
+      await saveEditedService(ctx);
+      return;
+    }
   } catch (e) {
     console.error("[tg-bot] photo handler error:", e);
   }
@@ -3195,6 +3493,17 @@ bot.on("inline_query", async (ctx) => {
 
     // ✅ FIX: если inline делает агент — показываем net, иначе gross
     const roleForInline = await resolveRoleByUserId(chatId, ctx);
+
+    // 🔐 Требуем привязку аккаунта перед любым поиском/выбором услуг
+    if (!roleForInline) {
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "🔐 Сначала привяжите аккаунт (номер телефона)",
+        switch_pm_parameter: "start",
+      });
+      return;
+    }
     // ✅ 1) "Мои услуги" доступны только провайдеру (оставляем как было)
     if (isMy && roleForInline !== "provider") {
       await ctx.answerInlineQuery([], {
