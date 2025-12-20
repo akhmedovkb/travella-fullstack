@@ -496,7 +496,16 @@ function getStartDateForSort(svc) {
 function getFirstImageUrl(svc) {
   let arr = svc.images;
 
-  if (!arr) return null;
+  // ✅ 0) если images пустые/нет — попробуем взять из details.telegramPhotoFileId
+  if (!arr) {
+    let d = svc.details || {};
+    if (typeof d === "string") {
+      try { d = JSON.parse(d); } catch { d = {}; }
+    }
+    const fid = (d.telegramPhotoFileId || "").trim();
+    if (fid) return `tgfile:${fid}`;
+    return null;
+  }
 
   if (typeof arr === "string") {
     try {
@@ -507,7 +516,16 @@ function getFirstImageUrl(svc) {
     }
   }
 
-  if (!Array.isArray(arr) || !arr.length) return null;
+  if (!Array.isArray(arr) || !arr.length) {
+    // ✅ fallback если массив пустой
+    let d = svc.details || {};
+    if (typeof d === "string") {
+      try { d = JSON.parse(d); } catch { d = {}; }
+    }
+    const fid = (d.telegramPhotoFileId || "").trim();
+    if (fid) return `tgfile:${fid}`;
+    return null;
+  }
 
   let v = arr[0];
 
@@ -847,6 +865,7 @@ function buildDetailsForRefusedTour(draft, priceNum) {
       typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
     isActive: true,
+    telegramPhotoFileId: draft.telegramPhotoFileId || null,
   };
 }
 
@@ -874,6 +893,7 @@ function buildDetailsForRefusedHotel(draft, netPriceNum) {
       typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
     isActive: true,
+    telegramPhotoFileId: draft.telegramPhotoFileId || null,
   };
 }
 
@@ -3334,7 +3354,9 @@ bot.on("photo", async (ctx, next) => {
       const fileId = largest.file_id;
 
       // ✅ сохраняем "tg:fileId" — затем бот сможет показать это фото в карточке
-      ctx.session.serviceDraft.images = [`tg:${fileId}`];
+      ctx.session.serviceDraft.telegramPhotoFileId = fileId;   // ✅ главное
+      ctx.session.serviceDraft.images = [`tg:${fileId}`];      // можно оставить, не мешает
+
 
       await finishCreateServiceFromWizard(ctx);
       return;
