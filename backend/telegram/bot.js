@@ -2457,19 +2457,25 @@ bot.on("photo", async (ctx, next) => {
 
 /* ===================== /tour_123 ===================== */
 
-async function findServiceByIdViaSearch(actorId, serviceId) {
+async function findServiceByIdViaSearch(actorId, serviceId, role = "client") {
+  const basePath =
+    role === "provider"
+      ? `/api/telegram/provider/${actorId}/search`
+      : `/api/telegram/client/${actorId}/search`;
+
   for (const category of REFUSED_CATEGORIES) {
     try {
-      const { data } = await axios.get(`/api/telegram/client/${actorId}/search`, {
-        params: { category },
-      });
+      const { data } = await axios.get(basePath, { params: { category } });
 
       if (!data || !data.success || !Array.isArray(data.items)) continue;
 
       const svc = data.items.find((s) => Number(s.id) === Number(serviceId));
       if (svc) return { svc, category };
     } catch (e) {
-      console.error("[tg-bot] findServiceByIdViaSearch error:", e?.response?.data || e.message || e);
+      console.error(
+        "[tg-bot] findServiceByIdViaSearch error:",
+        e?.response?.data || e.message || e
+      );
     }
   }
   return null;
@@ -2490,7 +2496,7 @@ bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
 
     await ctx.reply("⏳ Ищу по ID...");
 
-    const found = await findServiceByIdViaSearch(actorId, serviceId);
+    const found = await findServiceByIdViaSearch(actorId, serviceId, role);
     if (!found) {
       await ctx.reply(
         "😕 Не нашёл услугу с таким ID.\n" +
