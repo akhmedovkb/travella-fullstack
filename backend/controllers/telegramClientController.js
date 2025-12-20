@@ -1,6 +1,23 @@
 // backend/controllers/telegramClientController.js
 const pool = require("../db");
 const { tgSendToAdmins } = require("../utils/telegram");
+const SITE_PUBLIC_URL = (
+  process.env.SITE_PUBLIC_URL ||
+  process.env.SITE_URL ||
+  "https://travella.uz"
+).replace(/\/+$/, "");
+
+const API_PUBLIC_URL = (
+  process.env.API_PUBLIC_URL ||
+  process.env.API_BASE_URL ||
+  process.env.SITE_API_URL ||
+  ""
+).replace(/\/+$/, "");
+
+function publicBase() {
+  return SITE_PUBLIC_URL || API_PUBLIC_URL || "https://travella.uz";
+}
+
 
 /**
  * Технический bcrypt-хэш "левого" пароля (для соблюдения NOT NULL и bcrypt.compare).
@@ -471,6 +488,36 @@ async function searchClientServices(req, res) {
 
     const items = result.rows || [];
     console.log("[tg-api] searchClientServices rows:", items.length);
+    const base = publicBase();
+    const PLACEHOLDER = `${base}/placeholder.png`; // или любой твой реальный файл
+    
+    const normalized = items.map((row) => {
+      let imgs = row.images;
+
+        // привести к массиву
+        if (!imgs) imgs = [];
+        if (typeof imgs === "string") {
+          try { imgs = JSON.parse(imgs); } catch { imgs = [imgs]; }
+        }
+        if (!Array.isArray(imgs)) imgs = [];
+      
+        // есть ли вообще “валидная” картинка?
+        const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
+      
+        // Telegram-friendly URL (НЕ dataURL)
+        const imageUrl = hasAny
+          ? `${base}/api/telegram/service-image/${row.id}`
+          : PLACEHOLDER;
+      
+        return {
+          ...row,
+          images: imgs,
+          imageUrl,
+        };
+      });
+
+    return res.json({ success: true, items: normalized });
+
 
     return res.json({ success: true, items });
   } catch (e) {
