@@ -2597,7 +2597,7 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
     else category = "refused_tour";
   }
 }
-
+}
 
     const userId = ctx.from.id;
 
