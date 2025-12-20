@@ -713,6 +713,23 @@ async function updateServiceFromBot(req, res) {
       }
     }
 
+    // ✅ allow editing images from Telegram bot
+    // body.images:
+    //   - omitted            -> keep existing
+    //   - null               -> clear
+    //   - array              -> replace
+    let nextImages = existing.images || [];
+    if (typeof nextImages === "string") {
+      try { nextImages = JSON.parse(nextImages); } catch { nextImages = []; }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "images")) {
+      if (body.images === null) {
+        nextImages = [];
+      } else if (Array.isArray(body.images)) {
+        nextImages = normalizeImagesForDb(body.images);
+      }
+    }
+
     const updRes = await pool.query(
       `
       UPDATE services
@@ -720,7 +737,8 @@ async function updateServiceFromBot(req, res) {
            title = $3,
            price = $4,
            details = $5::jsonb,
-           expiration_at = $6
+           expiration_at = $6,
+           images = $7::jsonb
        WHERE id = $1 AND provider_id = $2
        RETURNING id, title, price, category, status, details, images, expiration_at
       `,
@@ -731,6 +749,7 @@ async function updateServiceFromBot(req, res) {
         nextPrice,
         JSON.stringify(mergedDetails),
         nextExpirationAt,
+        JSON.stringify(nextImages),
       ]
     );
 
