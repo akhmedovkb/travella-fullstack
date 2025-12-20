@@ -3711,7 +3711,7 @@ bot.on("inline_query", async (ctx) => {
           input_message_content: {
             message_text: text,
             parse_mode: "Markdown",
-            disable_web_page_preview: false,
+            disable_web_page_preview: true,
           },
           reply_markup: isMyMode ? keyboardForMy : keyboardForClient,
         };
