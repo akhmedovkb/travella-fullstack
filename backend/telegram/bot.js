@@ -19,17 +19,21 @@ if (!CLIENT_TOKEN) {
   );
 }
 const BOT_TOKEN = CLIENT_TOKEN;
+
 // Username бота (без @). Нужен для стабильных ссылок, т.к. ctx.me не всегда доступен в inline.
 // Пример: TELEGRAM_BOT_USERNAME=Travella2025Bot
-const BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "").trim();
+const BOT_USERNAME = (process.env.TELEGRAM_BOT_USERNAME || "")
+  .replace(/^@/, "")
+  .trim();
 
 // Шаблон ссылки на карточку услуги на сайте.
 // По умолчанию оставляем как было: https://travella.uz?service=123
 // Можно переопределить, например:
 // SERVICE_URL_TEMPLATE=https://travella.uz/marketplace?service={id}
 // SERVICE_URL_TEMPLATE=https://travella.uz/service/{id}
-const SERVICE_URL_TEMPLATE =
-  (process.env.SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}").trim();
+const SERVICE_URL_TEMPLATE = (
+  process.env.SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}"
+).trim();
 
 // Публичный URL Travella для кнопок "Подробнее"
 const SITE_URL = (
@@ -123,7 +127,7 @@ bot.use(
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
 const tgFileLinkCache = new Map();
-const TG_FILE_LINK_TTL = 20 * 60 * 1000; // 1 час
+const TG_FILE_LINK_TTL = 20 * 60 * 1000; // 20 минут
 
 async function getPublicThumbUrlFromTgFile(botInstance, fileId) {
   const cached = tgFileLinkCache.get(fileId);
@@ -290,7 +294,9 @@ function extractStars(details) {
 function prettyDateTime(value) {
   if (!value) return "";
   const s = String(value).trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
+  const m = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?$/
+  );
   if (!m) return s;
   const [, y, mm, dd, hh, mi] = m;
   if (hh && mi) return `${dd}.${mm}.${y} ${hh}:${mi}`;
@@ -336,7 +342,11 @@ function parseDetailsAny(details) {
   if (!details) return {};
   if (typeof details === "object") return details;
   if (typeof details === "string") {
-    try { return JSON.parse(details); } catch { return {}; }
+    try {
+      return JSON.parse(details);
+    } catch {
+      return {};
+    }
   }
   return {};
 }
@@ -403,14 +413,6 @@ function isBeforeYMD(a, b) {
   return da.getTime() < db.getTime();
 }
 
-function ymdLocal(dt) {
-  if (!dt) return null;
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const d = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function getExpiryBadge(detailsRaw, svc) {
   let d = detailsRaw || {};
   if (typeof d === "string") {
@@ -462,7 +464,11 @@ function getFirstImageUrl(svc) {
 
   // ✅ 1) если images строка — пробуем JSON, иначе считаем единичным значением
   if (typeof arr === "string") {
-    try { arr = JSON.parse(arr); } catch { arr = [arr]; }
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      arr = [arr];
+    }
   }
 
   // ✅ 2) если images объект (например {}), превращаем в пустой массив
@@ -472,7 +478,11 @@ function getFirstImageUrl(svc) {
   if (!arr.length) {
     let d = svc.details || {};
     if (typeof d === "string") {
-      try { d = JSON.parse(d); } catch { d = {}; }
+      try {
+        d = JSON.parse(d);
+      } catch {
+        d = {};
+      }
     }
     const fid = (d.telegramPhotoFileId || "").trim();
     if (fid) return `tgfile:${fid}`;
@@ -505,7 +515,6 @@ function getFirstImageUrl(svc) {
   return null;
 }
 
-
 // выбираем цену в зависимости от роли
 function pickPrice(details, svc, role) {
   const d = details || {};
@@ -514,6 +523,7 @@ function pickPrice(details, svc, role) {
   }
   return d.grossPrice ?? d.price ?? d.netPrice ?? svc.price ?? null;
 }
+
 function buildServiceUrl(serviceId) {
   const tpl = SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}";
   return tpl
@@ -555,14 +565,18 @@ function buildServiceMessage(svc, category, role = "client") {
     ? normalizeWeirdSeparator(d.directionCountry)
     : null;
 
-  if (from && to) directionParts.push(`${escapeMarkdown(from)} → ${escapeMarkdown(to)}`);
+  if (from && to)
+    directionParts.push(
+      `${escapeMarkdown(from)} → ${escapeMarkdown(to)}`
+    );
   else if (from) directionParts.push(escapeMarkdown(from));
   else if (to) directionParts.push(escapeMarkdown(to));
   if (country) directionParts.push(escapeMarkdown(country));
 
   const direction = directionParts.length ? directionParts.join(" · ") : null;
 
-  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
+  const startRaw =
+    d.departureFlightDate || d.startDate || d.startFlightDate || null;
   const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
 
   const startClean = startRaw ? normalizeWeirdSeparator(startRaw) : null;
@@ -590,7 +604,8 @@ function buildServiceMessage(svc, category, role = "client") {
   const providerName = escapeMarkdown(providerNameRaw);
   const providerTelegram = svc.provider_telegram || null;
 
-  const providerId = svc.provider_id || svc.providerId || svc.provider?.id || null;
+  const providerId =
+    svc.provider_id || svc.providerId || svc.provider?.id || null;
   const providerProfileUrl = providerId
     ? `${SITE_URL}/profile/provider/${providerId}`
     : null;
@@ -647,7 +662,9 @@ function buildInlineDescription(svc, category, roleForInline) {
 
   const from = d.directionFrom ? normalizeWeirdSeparator(d.directionFrom) : null;
   const to = d.directionTo ? normalizeWeirdSeparator(d.directionTo) : null;
-  const country = d.directionCountry ? normalizeWeirdSeparator(d.directionCountry) : null;
+  const country = d.directionCountry
+    ? normalizeWeirdSeparator(d.directionCountry)
+    : null;
 
   if (from && to) parts.push(`${from} → ${to}`);
   else if (to) parts.push(to);
@@ -655,7 +672,8 @@ function buildInlineDescription(svc, category, roleForInline) {
 
   if (country) parts.push(country);
 
-  const startRaw = d.departureFlightDate || d.startDate || d.startFlightDate || null;
+  const startRaw =
+    d.departureFlightDate || d.startDate || d.startFlightDate || null;
   const endRaw = d.returnFlightDate || d.endDate || d.endFlightDate || null;
 
   if (startRaw && endRaw && String(startRaw) !== String(endRaw)) {
@@ -682,7 +700,9 @@ async function ensureProviderRole(ctx) {
   if (!actorId) return ctx.session?.role || null;
 
   try {
-    const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
+    const resProv = await axios.get(
+      `/api/telegram/profile/provider/${actorId}`
+    );
     if (resProv.data && resProv.data.success) {
       if (!ctx.session) ctx.session = {};
       ctx.session.role = "provider";
@@ -778,8 +798,7 @@ function resetServiceWizard(ctx) {
 function parseYesNo(text) {
   const t = text.trim().toLowerCase();
   if (["да", "ha", "xa", "yes", "y"].includes(t)) return true;
-  if (["нет", "yo'q", "yoq", "yo‘q", "yok", "no", "n"].includes(t))
-    return false;
+  if (["нет", "yo'q", "yoq", "yo‘q", "yok", "no", "n"].includes(t)) return false;
   return null;
 }
 
@@ -864,8 +883,7 @@ function buildDetailsForRefusedTour(draft, priceNum) {
     hotel: draft.hotel || "",
     accommodation: draft.accommodation || "",
     netPrice: priceNum,
-    grossPrice:
-      typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
     isActive: true,
     telegramPhotoFileId: draft.telegramPhotoFileId || null,
@@ -892,8 +910,7 @@ function buildDetailsForRefusedHotel(draft, netPriceNum) {
     accommodationINF: typeof draft.inf === "number" ? draft.inf : 0,
 
     netPrice: netPriceNum,
-    grossPrice:
-      typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
+    grossPrice: typeof draft.grossPriceNum === "number" ? draft.grossPriceNum : null,
     expiration: draft.expiration || null,
     isActive: true,
     telegramPhotoFileId: draft.telegramPhotoFileId || null,
@@ -1080,10 +1097,10 @@ async function promptWizardState(ctx, state) {
       return;
 
     case "svc_hotel_transfer":
-      await ctx.reply("🚗 Укажите *трансфер* (Индивидуальный / Групповой / Отсутствует):", {
-        parse_mode: "Markdown",
-        ...wizNavKeyboard(),
-      });
+      await ctx.reply(
+        "🚗 Укажите *трансфер* (Индивидуальный / Групповой / Отсутствует):",
+        { parse_mode: "Markdown", ...wizNavKeyboard() }
+      );
       return;
 
     case "svc_hotel_changeable":
@@ -1192,10 +1209,16 @@ async function finishCreateServiceFromWizard(ctx) {
 
     if (category === "refused_tour") {
       details = buildDetailsForRefusedTour(draft, priceNum);
-      title = draft.title && draft.title.trim() ? draft.title.trim() : autoTitleRefusedTour(draft);
+      title =
+        draft.title && draft.title.trim()
+          ? draft.title.trim()
+          : autoTitleRefusedTour(draft);
     } else {
       details = buildDetailsForRefusedHotel(draft, priceNum);
-      title = draft.title && draft.title.trim() ? draft.title.trim() : autoTitleRefusedHotel(draft);
+      title =
+        draft.title && draft.title.trim()
+          ? draft.title.trim()
+          : autoTitleRefusedHotel(draft);
     }
 
     const payload = {
@@ -1209,7 +1232,10 @@ async function finishCreateServiceFromWizard(ctx) {
     const chatId = getActorId(ctx);
     if (!chatId) return;
 
-    const { data } = await axios.post(`/api/telegram/provider/${chatId}/services`, payload);
+    const { data } = await axios.post(
+      `/api/telegram/provider/${chatId}/services`,
+      payload
+    );
 
     if (!data || !data.success) {
       console.log("[tg-bot] createServiceFromWizard resp:", data);
@@ -1238,7 +1264,10 @@ async function finishCreateServiceFromWizard(ctx) {
       },
     });
   } catch (e) {
-    console.error("[tg-bot] finishCreateServiceFromWizard error:", e?.response?.data || e);
+    console.error(
+      "[tg-bot] finishCreateServiceFromWizard error:",
+      e?.response?.data || e
+    );
     await ctx.reply("⚠️ Ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
@@ -1434,7 +1463,11 @@ bot.start(async (ctx) => {
       return;
     }
 
-    if (startPayloadRaw === "start" || startPayloadRaw === "my_empty" || startPayloadRaw === "search_empty") {
+    if (
+      startPayloadRaw === "start" ||
+      startPayloadRaw === "my_empty" ||
+      startPayloadRaw === "search_empty"
+    ) {
       await ctx.reply(
         "👋 Чтобы бот работал корректно, нужно привязать аккаунт по номеру телефона.\n\n" +
           "Сейчас сделаем это 👇"
@@ -1629,7 +1662,9 @@ bot.hears(/👤 Профиль/i, async (ctx) => {
   }
 
   if (role === "provider") {
-    await ctx.reply(`🏢 Профиль поставщика можно изменить в личном кабинете:\n\n${SITE_URL}/dashboard/profile`);
+    await ctx.reply(
+      `🏢 Профиль поставщика можно изменить в личном кабинете:\n\n${SITE_URL}/dashboard/profile`
+    );
     return;
   }
 
@@ -1789,13 +1824,8 @@ bot.action("prov_services:list", async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
-          [{ text: "✏️ Редактировать", callback_data: `svc:${svc.id}:edit` }],
+          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
           [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
-          [{ text: "🛑 Снять с продажи", callback_data: `svc:${svc.id}:unpublish` }],
-          [
-            { text: "♻️ Продлить на 7 дней", callback_data: `svc:${svc.id}:extend7` },
-            { text: "📁 Архивировать", callback_data: `svc:${svc.id}:archive` },
-          ],
         ],
       };
 
@@ -1921,48 +1951,6 @@ bot.action(
   }
 );
 
-/* ===================== SERVICE ACTIONS (provider) ===================== */
-
-bot.action(/^svc:(\d+):(unpublish|extend7|archive)$/, async (ctx) => {
-  try {
-    const serviceId = Number(ctx.match[1]);
-    const action = ctx.match[2];
-    const chatId = getActorId(ctx);
-    if (!chatId) return;
-
-    await ctx.answerCbQuery();
-
-    let endpoint;
-    if (action === "unpublish") {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/unpublish`;
-    } else if (action === "extend7") {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/extend7`;
-    } else {
-      endpoint = `/api/telegram/provider/${chatId}/services/${serviceId}/archive`;
-    }
-
-    const { data } = await axios.post(endpoint);
-
-    if (!data || !data.success) {
-      console.log("[tg-bot] svc action error resp:", data);
-      await ctx.reply("⚠️ Не удалось обновить услугу.\nПопробуйте позже или выполните действие в кабинете.");
-      return;
-    }
-
-    let msg;
-    if (action === "unpublish") msg = "🛑 Услуга снята с продажи и больше не показывается в поиске.";
-    else if (action === "extend7") msg = "♻️ Актуальность продлена на 7 дней. Таймер обновлён в кабинете.";
-    else msg = "📁 Услуга архивирована и скрыта из маркетплейса.";
-
-    await ctx.reply(msg);
-  } catch (e) {
-    console.error("[tg-bot] svc action handler error:", e?.response?.data || e);
-    try {
-      await ctx.answerCbQuery("Ошибка, попробуйте ещё раз", { show_alert: true });
-    } catch (_) {}
-  }
-});
-
 /* ===================== QUICK REQUEST ===================== */
 
 bot.action(/^request:(\d+)$/, async (ctx) => {
@@ -2018,7 +2006,9 @@ bot.on("text", async (ctx, next) => {
           "*Сообщение:*\n" +
           safeMsg;
 
-        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, { parse_mode: "Markdown" });
+        await bot.telegram.sendMessage(MANAGER_CHAT_ID, textForManager, {
+          parse_mode: "Markdown",
+        });
 
         await ctx.reply(
           "✅ Спасибо!\n\n" +
@@ -2631,14 +2621,13 @@ bot.on("inline_query", async (ctx) => {
         const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
         data = resp.data;
       } else {
-      const searchPath =
-        roleForInline === "provider"
-          ? `/api/telegram/provider/${userId}/search`
-          : `/api/telegram/client/${userId}/search`;
-      
-      const resp = await axios.get(searchPath, { params: { category } });
-      data = resp.data;
+        const searchPath =
+          roleForInline === "provider"
+            ? `/api/telegram/provider/${userId}/search`
+            : `/api/telegram/client/${userId}/search`;
 
+        const resp = await axios.get(searchPath, { params: { category } });
+        data = resp.data;
       }
       cacheSet(cacheKey, data);
     }
@@ -2653,94 +2642,58 @@ bot.on("inline_query", async (ctx) => {
       });
       return;
     }
-    
-// ===================== DEBUG INLINE FILTER =====================
-const DEBUG_INLINE = String(process.env.DEBUG_INLINE || "").trim() === "1";
 
-if (DEBUG_INLINE) {
-  console.log("\n[tg-bot][inline] qRaw =", qRaw);
-  console.log("[tg-bot][inline] isMy =", isMy, "category =", category, "role =", roleForInline);
-  console.log("[tg-bot][inline] items from API =", Array.isArray(data.items) ? data.items.length : "not array");
-
-  const sample = (Array.isArray(data.items) ? data.items : []).slice(0, 10).map((svc) => {
-    const det = parseDetailsAny(svc.details);
-    const status = String(svc.status || "");
-    const isActive = (() => {
-      try { return isServiceActual(det, svc); } catch { return false; }
-    })();
-
-    return {
-      id: svc.id,
-      category: svc.category || svc.type || category,
-      status,
-      exp: det.expiration || svc.expiration || null,
-      isActive,
-      // полезно видеть даты/флаги если есть
-      start: det.startDate || det.departureFlightDate || null,
-      end: det.endDate || det.returnFlightDate || null,
-      details_isActive: det.isActive,
-    };
-  });
-
-  console.log("[tg-bot][inline] sample:", sample);
-}
-// ===============================================================
-
-// ✅ itemsForInline: для #my показываем ВСЁ, для поиска — только актуальные
-let itemsForInline = Array.isArray(data.items) ? data.items : [];
-
-if (isMy) {
-  // для "мои" — показываем все (можно убрать archived при желании)
-  itemsForInline = itemsForInline.filter(
-    (svc) => String(svc.status || "").toLowerCase() !== "archived"
-  );
-} else {
-  // для поиска — только актуальные
-  itemsForInline = itemsForInline.filter((svc) => {
-    try {
-      const det = parseDetailsAny(svc.details);
-      return isServiceActual(det, svc);
-    } catch (_) {
-      return false;
+    // ===================== DEBUG INLINE FILTER =====================
+    const DEBUG_INLINE = String(process.env.DEBUG_INLINE || "").trim() === "1";
+    if (DEBUG_INLINE) {
+      console.log("\n[tg-bot][inline] qRaw =", qRaw);
+      console.log("[tg-bot][inline] isMy =", isMy, "category =", category, "role =", roleForInline);
+      console.log("[tg-bot][inline] items from API =", Array.isArray(data.items) ? data.items.length : "not array");
+      const sample = (Array.isArray(data.items) ? data.items : []).slice(0, 10).map((svc) => {
+        const det = parseDetailsAny(svc.details);
+        const status = String(svc.status || "");
+        const isActive = (() => {
+          try { return isServiceActual(det, svc); } catch { return false; }
+        })();
+        return {
+          id: svc.id,
+          category: svc.category || svc.type || category,
+          status,
+          exp: det.expiration || svc.expiration || null,
+          isActive,
+          start: det.startDate || det.departureFlightDate || null,
+          end: det.endDate || det.returnFlightDate || null,
+          details_isActive: det.isActive,
+        };
+      });
+      console.log("[tg-bot][inline] sample:", sample);
     }
-  });
-}
+    // ===============================================================
 
-if (!itemsForInline.length) {
-  if (isMy) {
-    await ctx.answerInlineQuery([], {
-      cache_time: 3,
-      is_personal: true,
-      switch_pm_text: "🧳 У вас пока нет услуг. Открыть бота",
-      switch_pm_parameter: "my_empty",
-    });
-  } else {
-    await ctx.answerInlineQuery([], {
-      cache_time: 3,
-      is_personal: true,
-      switch_pm_text: "😕 Нет актуальных предложений. Открыть бота",
-      switch_pm_parameter: "search_empty",
-    });
-  }
-  return;
-}
+    // ✅ itemsForInline: для #my показываем ВСЁ (кроме archived), для поиска — только актуальные
+    let itemsForInline = Array.isArray(data.items) ? data.items : [];
 
-const itemsSorted = [...itemsForInline].sort((a, b) => {
-  const da = getStartDateForSort(a);
-  const db = getStartDateForSort(b);
-  if (!da && !db) return 0;
-  if (!da) return 1;
-  if (!db) return -1;
-  return da.getTime() - db.getTime();
-});
+    if (isMy) {
+      itemsForInline = itemsForInline.filter(
+        (svc) => String(svc.status || "").toLowerCase() !== "archived"
+      );
+    } else {
+      itemsForInline = itemsForInline.filter((svc) => {
+        try {
+          const det = parseDetailsAny(svc.details);
+          return isServiceActual(det, svc);
+        } catch (_) {
+          return false;
+        }
+      });
+    }
 
-
-    if (!itemsActual.length) {
+    if (!itemsForInline.length) {
       if (isMy) {
         await ctx.answerInlineQuery([], {
           cache_time: 3,
           is_personal: true,
-          switch_pm_text: "🛑 Нет актуальных моих услуг. Открыть бота",
+          switch_pm_text: "🧳 У вас пока нет услуг. Открыть бота",
           switch_pm_parameter: "my_empty",
         });
       } else {
@@ -2754,7 +2707,7 @@ const itemsSorted = [...itemsForInline].sort((a, b) => {
       return;
     }
 
-    const itemsSorted = [...itemsActual].sort((a, b) => {
+    const itemsSorted = [...itemsForInline].sort((a, b) => {
       const da = getStartDateForSort(a);
       const db = getStartDateForSort(b);
       if (!da && !db) return 0;
@@ -2768,15 +2721,11 @@ const itemsSorted = [...itemsForInline].sort((a, b) => {
     for (const svc of itemsSorted.slice(0, 50)) {
       const svcCategory = svc.category || category || "refused_tour";
 
-      // текст карточки
       const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, svcCategory, roleForInline);
       const description = buildInlineDescription(svc, svcCategory, roleForInline);
 
-      // клавиатуры
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
-      // ВАЖНО: callback_data для inline-сообщений работает, но для "#my" лучше давать URL (без callback),
-      // чтобы не зависеть от ограничений чата.
       const keyboardForClient = {
         inline_keyboard: [
           [
@@ -2805,47 +2754,36 @@ const itemsSorted = [...itemsForInline].sort((a, b) => {
         }
       } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
         thumbUrl = photoUrl;
-      } else {
-        thumbUrl = null;
       }
-      
+
       const title = truncate(
         normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"),
         60
       );
 
-      // ✅ Правильная логика:
-      // - Если есть реальное публичное фото (http/https или tg file link) → отдаём type "photo"
-      // - Если фото нет/невалидно → отдаём type "article" (без фото), иначе Telegram покажет "Не найдено"
-
-      const hasRealPhotoHttp =
-        typeof photoUrl === "string" &&
-        (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"));
-
-      const hasRealPhotoFromTg =
+      // ✅ Если есть реальное публичное фото → type "photo"
+      // иначе → article (и Telegram не выкинет результат)
+      const inlinePhotoUrl =
         typeof thumbUrl === "string" &&
-        (thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://"));
-
-      // Для tgfile: фотоUrl не http, но thumbUrl будет https://api.telegram.org/file/...
-      const inlinePhotoUrl = hasRealPhotoHttp ? photoUrl : (hasRealPhotoFromTg ? thumbUrl : null);
+        (thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://"))
+          ? thumbUrl
+          : null;
 
       if (inlinePhotoUrl) {
-        const payload = {
+        results.push({
           id: `${svcCategory}:${svc.id}`,
           type: "photo",
           photo_url: inlinePhotoUrl,
-          // thumb_url можно отдать, если он реально есть
-          ...(hasRealPhotoFromTg ? { thumb_url: thumbUrl } : {}),
+          // thumb_url опционально
+          ...(thumbUrl ? { thumb_url: thumbUrl } : {}),
           title,
           description,
           caption: text,
           parse_mode: "Markdown",
           reply_markup: isMy ? keyboardForMy : keyboardForClient,
-        };
-        results.push(payload);
+        });
       } else {
-        // fallback без картинки — всегда работает
-        const payload = {
+        results.push({
           id: `${svcCategory}:${svc.id}`,
           type: "article",
           title,
@@ -2855,11 +2793,9 @@ const itemsSorted = [...itemsForInline].sort((a, b) => {
             parse_mode: "Markdown",
             disable_web_page_preview: false,
           },
-          // thumb_url в article опционален — не форсим плейсхолдер
           ...(thumbUrl ? { thumb_url: thumbUrl } : {}),
           reply_markup: isMy ? keyboardForMy : keyboardForClient,
-        };
-        results.push(payload);
+        });
       }
     }
 
