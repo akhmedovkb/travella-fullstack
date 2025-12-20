@@ -3664,26 +3664,27 @@ bot.on("inline_query", async (ctx) => {
         const sf = String(startFlight).replace(/-/g, ".");
         datesLine = `ДАТА: ${normalizeWeirdSeparator(sf)}`;
       }
-
+      
       const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelLine = hotelNameRaw ? ОТЕЛЬ: ${truncate(hotelNameRaw, 45)} : "";
-
+      const hotelLine = hotelNameRaw ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}` : "";
+      
       const priceInline = pickPrice(d, svc, roleForInline);
       const priceWithCur = formatPriceWithCurrency(priceInline);
       const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
-      const priceLine = priceWithCur ? ${priceLabelInline}: ${priceWithCur} : "";
-
+      const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
+      
       const badge = getExpiryBadge(d, svc);
+      
       const descParts = [];
       if (badge) descParts.push(badge);
       if (datesLine) descParts.push(datesLine);
       if (hotelLine) descParts.push(hotelLine);
       if (priceLine) descParts.push(priceLine);
-
+      
       let description = descParts.join(" · ");
       if (description.length > 140) description = description.slice(0, 137) + "…";
-
-            // ✅ thumb_url: только http(s), tgfile нельзя
+      
+      // thumb_url: только http(s), tgfile нельзя
       let thumbUrl = null;
       if (photoUrl && !photoUrl.startsWith("tgfile:")) {
         if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
