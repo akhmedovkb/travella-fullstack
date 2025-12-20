@@ -3683,7 +3683,7 @@ bot.on("inline_query", async (ctx) => {
       let description = descParts.join(" · ");
       if (description.length > 140) description = description.slice(0, 137) + "…";
 
-      // ✅ thumb_url: только http(s), tgfile нельзя
+            // ✅ thumb_url: только http(s), tgfile нельзя
       let thumbUrl = null;
       if (photoUrl && !photoUrl.startsWith("tgfile:")) {
         if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
@@ -3691,30 +3691,59 @@ bot.on("inline_query", async (ctx) => {
         }
       }
 
+      // ⚠️ ВАЖНО: inline_result "photo" требует URL. Если его нет — делаем article.
+      // Так карточка всегда будет показываться, даже без превью.
+      const resultBase = {
+        id: String(svc.id || idx),
+      };
+
+      // Для "#my" используем "article", чтобы можно было показать текст и кнопку "Открыть в кабинете"
+      // (callback_data в inline-кнопках часто НЕ работает, см. пояснение ниже)
+      const isMyMode = isMy === true;
+
+      if (!thumbUrl) {
+        // ---- ARTICLE (без превью) ----
+        return {
+          ...resultBase,
+          type: "article",
+          title: truncate(normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"), 60),
+          description,
+          input_message_content: {
+            message_text: text,
+            parse_mode: "Markdown",
+            disable_web_page_preview: true,
+          },
+          reply_markup: isMyMode ? keyboardForMy : keyboardForClient,
+        };
+      }
+
+      // ---- PHOTO (с превью) ----
       return {
-        type: "article",
-        id: String(svc.id) + "_" + idx,
-        title: normalizeTitleSoft(svc.title) || CATEGORY_LABELS[svcCategory] || "Услуга",
+        ...resultBase,
+        type: "photo",
+        photo_url: thumbUrl,
+        thumb_url: thumbUrl,
+        title: truncate(normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"), 60),
         description,
-        thumb_url: thumbUrl || undefined,
-        input_message_content: {
-          message_text: text,
-          parse_mode: "Markdown",
-        },
-        reply_markup: isMy ? keyboardForMy : keyboardForClient,
+        caption: text,
+        parse_mode: "Markdown",
+        reply_markup: isMyMode ? keyboardForMy : keyboardForClient,
       };
     });
 
     await ctx.answerInlineQuery(results, {
-      cache_time: 5,
+      cache_time: 3,
       is_personal: true,
-      switch_pm_text: "Открыть главное меню бота",
-      switch_pm_parameter: "start",
     });
   } catch (e) {
-    console.error("[tg-bot] inline_query error:", e?.response?.data || e.message || e);
+    console.error("[tg-bot] inline_query error:", e?.response?.data || e?.message || e);
     try {
-      await ctx.answerInlineQuery([], { cache_time: 3 });
+      await ctx.answerInlineQuery([], {
+        cache_time: 3,
+        is_personal: true,
+        switch_pm_text: "⚠️ Ошибка. Открыть бота",
+        switch_pm_parameter: "start",
+      });
     } catch (_) {}
   }
 });
