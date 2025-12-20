@@ -27,6 +27,8 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
+const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/placeholder.png`; // сделай реальный файл на сайте
+
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
@@ -53,8 +55,8 @@ const API_PUBLIC_BASE = (
   process.env.API_PUBLIC_URL ||
   process.env.SITE_API_PUBLIC_URL ||
   process.env.API_BASE_PUBLIC_URL ||
-  process.env.SITE_API_URL || // если он у тебя публичный
-  ""
+  process.env.SITE_API_URL ||
+  SITE_URL // ✅ fallback: если API проксируется через travella.uz
 ).replace(/\/+$/, "");
 
 console.log("=== BOT.JS LOADED ===");
@@ -424,39 +426,27 @@ async function hideInlineButtons(ctx) {
  * - "tg:<file_id>" (если фото добавлено через Telegram)
  */
 function getFirstImageUrl(svc) {
-  let arr = svc.images;
-
-  // ✅ 0) если images нет — попробуем взять из details.telegramPhotoFileId
-  if (!arr) {
-    let d = svc.details || {};
-    if (typeof d === "string") {
-      try {
-        d = JSON.parse(d);
-      } catch {
-        d = {};
-      }
-    }
-    const fid = (d.telegramPhotoFileId || "").trim();
-    if (fid) return `tgfile:${fid}`;
-    return null;
+  // ✅ 0) если API уже отдал готовый публичный URL — используем его
+  if (svc?.imageUrl && typeof svc.imageUrl === "string") {
+    const u = svc.imageUrl.trim();
+    if (u) return u;
   }
 
+  let arr = svc?.images ?? null;
+
+  // ✅ 1) если images строка — пробуем JSON, иначе считаем единичным значением
   if (typeof arr === "string") {
-    try {
-      arr = JSON.parse(arr);
-    } catch {
-      arr = [arr];
-    }
+    try { arr = JSON.parse(arr); } catch { arr = [arr]; }
   }
 
-  if (!Array.isArray(arr) || !arr.length) {
+  // ✅ 2) если images объект (например {}), превращаем в пустой массив
+  if (!Array.isArray(arr)) arr = [];
+
+  // ✅ 3) fallback: фото, загруженное через Telegram
+  if (!arr.length) {
     let d = svc.details || {};
     if (typeof d === "string") {
-      try {
-        d = JSON.parse(d);
-      } catch {
-        d = {};
-      }
+      try { d = JSON.parse(d); } catch { d = {}; }
     }
     const fid = (d.telegramPhotoFileId || "").trim();
     if (fid) return `tgfile:${fid}`;
@@ -472,27 +462,23 @@ function getFirstImageUrl(svc) {
   v = v.trim();
   if (!v) return null;
 
-  // ✅ поддержка tg:fileId
   if (v.startsWith("tg:")) {
     const fileId = v.slice(3).trim();
     if (!fileId) return null;
     return `tgfile:${fileId}`;
   }
 
-  // base64 -> через наш прокси
+  // ✅ base64 -> через прокси (API_PUBLIC_BASE теперь всегда не пустой)
   if (v.startsWith("data:image")) {
-    if (!API_PUBLIC_BASE) return null;
     return `${API_PUBLIC_BASE}/api/telegram/service-image/${svc.id}`;
   }
 
-  // Полный URL
   if (v.startsWith("http://") || v.startsWith("https://")) return v;
-
-  // Относительный путь от корня сайта
   if (v.startsWith("/")) return SITE_URL + v;
 
   return null;
 }
+
 
 // выбираем цену в зависимости от роли
 function pickPrice(details, svc, role) {
@@ -2703,6 +2689,9 @@ bot.on("inline_query", async (ctx) => {
       } else {
         thumbUrl = null;
       }
+      
+      // ✅ fallback: чтобы все inline карточки были ровными (photo)
+      if (!thumbUrl) thumbUrl = INLINE_PLACEHOLDER_THUMB;
 
       const title = truncate(
         normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"),
