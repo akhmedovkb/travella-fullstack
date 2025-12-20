@@ -1424,7 +1424,7 @@ bot.start(async (ctx) => {
         await ctx.reply("🧳 Выберите действие:", {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my " }],
+              [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
               [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
               [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
               [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
@@ -1699,7 +1699,7 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   await ctx.reply("🧳 Выберите действие:", {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my " }],
+        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
         [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
         [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
         [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
@@ -2567,24 +2567,37 @@ bot.on("inline_query", async (ctx) => {
   try {
     logUpdate(ctx, "inline_query");
 
-    const qRaw = ctx.inlineQuery?.query || "";
-    const q = qRaw.toLowerCase().trim();
-    const isMy = q.startsWith("#my");
+const qRaw = ctx.inlineQuery?.query || "";
+const q = String(qRaw).trim().toLowerCase();
 
-    // определяем категорию
-    let category = "refused_tour";
-    if (q.startsWith("#hotel")) category = "refused_hotel";
-    else if (q.startsWith("#flight")) category = "refused_flight";
-    else if (q.startsWith("#ticket")) category = "refused_ticket";
-    else if (q.startsWith("#tour")) category = "refused_tour";
-    else if (q.startsWith("#my")) {
-      // мои услуги
-    } else {
-      if (q.includes("отель") || q.includes("hotel")) category = "refused_hotel";
-      else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) category = "refused_flight";
-      else if (q.includes("билет") || q.includes("ticket")) category = "refused_ticket";
-      else category = "refused_tour";
-    }
+// ✅ разбираем по токенам: "#tour refused_tour" или "#my refused_tour"
+const parts = q.split(/\s+/).filter(Boolean);
+const tag = parts[0] || "";
+const tokenCat = parts[1] || "";
+
+const isMy = tag === "#my";
+
+// ✅ категория по токену (если пришёл новый формат), иначе fallback на старый
+let category = "refused_tour";
+
+if (REFUSED_CATEGORIES.includes(tokenCat)) {
+  category = tokenCat;
+} else {
+  // fallback (на случай старых кнопок/ввода вручную)
+  if (q.startsWith("#hotel")) category = "refused_hotel";
+  else if (q.startsWith("#flight")) category = "refused_flight";
+  else if (q.startsWith("#ticket")) category = "refused_ticket";
+  else if (q.startsWith("#tour")) category = "refused_tour";
+  else if (q.startsWith("#my")) {
+    // мои услуги (категория по умолчанию не важна)
+  } else {
+    if (q.includes("отель") || q.includes("hotel")) category = "refused_hotel";
+    else if (q.includes("авиа") || q.includes("flight") || q.includes("avia")) category = "refused_flight";
+    else if (q.includes("билет") || q.includes("ticket")) category = "refused_ticket";
+    else category = "refused_tour";
+  }
+}
+
 
     const userId = ctx.from.id;
 
