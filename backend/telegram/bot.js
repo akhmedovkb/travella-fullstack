@@ -2654,15 +2654,54 @@ bot.on("inline_query", async (ctx) => {
       return;
     }
 
-    // фильтруем актуальные
-    const itemsActual = (data.items || []).filter((svc) => {
-      try {
-        const det = parseDetailsAny(svc.details);
-        return isServiceActual(det, svc);
-      } catch (_) {
-        return false;
-      }
+// ✅ itemsForInline: для #my показываем ВСЁ, для поиска — только актуальные
+let itemsForInline = Array.isArray(data.items) ? data.items : [];
+
+if (isMy) {
+  // для "мои" — показываем все (можно убрать archived при желании)
+  itemsForInline = itemsForInline.filter(
+    (svc) => String(svc.status || "").toLowerCase() !== "archived"
+  );
+} else {
+  // для поиска — только актуальные
+  itemsForInline = itemsForInline.filter((svc) => {
+    try {
+      const det = parseDetailsAny(svc.details);
+      return isServiceActual(det, svc);
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
+if (!itemsForInline.length) {
+  if (isMy) {
+    await ctx.answerInlineQuery([], {
+      cache_time: 3,
+      is_personal: true,
+      switch_pm_text: "🧳 У вас пока нет услуг. Открыть бота",
+      switch_pm_parameter: "my_empty",
     });
+  } else {
+    await ctx.answerInlineQuery([], {
+      cache_time: 3,
+      is_personal: true,
+      switch_pm_text: "😕 Нет актуальных предложений. Открыть бота",
+      switch_pm_parameter: "search_empty",
+    });
+  }
+  return;
+}
+
+const itemsSorted = [...itemsForInline].sort((a, b) => {
+  const da = getStartDateForSort(a);
+  const db = getStartDateForSort(b);
+  if (!da && !db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  return da.getTime() - db.getTime();
+});
+
 
     if (!itemsActual.length) {
       if (isMy) {
