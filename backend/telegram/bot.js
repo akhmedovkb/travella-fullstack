@@ -2680,8 +2680,14 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
     }
     // ===============================================================
 
-    // ✅ itemsForInline: для #my показываем ВСЁ (кроме archived), для поиска — только актуальные
+        // ✅ itemsForInline: для #my показываем ВСЁ (кроме archived), для поиска — только актуальные
     let itemsForInline = Array.isArray(data.items) ? data.items : [];
+        // ✅ фильтруем по категории, если она указана токеном (например "#my refused_tour")
+    if (category && REFUSED_CATEGORIES.includes(category)) {
+      itemsForInline = itemsForInline.filter(
+        (svc) => String(svc.category || svc.type || "").trim() === category
+      );
+    }
 
     if (isMy) {
       itemsForInline = itemsForInline.filter(
