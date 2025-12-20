@@ -2625,7 +2625,7 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
       return;
     }
 
-    const cacheKey = isMy ? `my:${userId}` : `search:${userId}:${category}`;
+    const cacheKey = `${isMy ? "my" : "search"}:${roleForInline}:${userId}:${category}`;
     let data = cacheGet(cacheKey);
 
     if (!data) {
@@ -2633,12 +2633,10 @@ if (REFUSED_CATEGORIES.includes(tokenCat)) {
         const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
         data = resp.data;
       } else {
-        const searchPath =
-          roleForInline === "provider"
-            ? `/api/telegram/provider/${userId}/search`
-            : `/api/telegram/client/${userId}/search`;
+      const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
+        params: { category },
+      });
 
-        const resp = await axios.get(searchPath, { params: { category } });
         data = resp.data;
       }
       cacheSet(cacheKey, data);
