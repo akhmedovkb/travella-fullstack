@@ -1,4 +1,4 @@
-//backend/jobs/askActualReminder.js
+// backend/jobs/askActualReminder.js
 
 const db = require("../db");
 const { tgSend } = require("../utils/telegram");
@@ -10,8 +10,7 @@ const TZ = "Asia/Tashkent";
 // В какие часы спрашиваем (локально по Ташкенту)
 const SLOTS_HOURS = [10, 14, 18];
 
-// “Окно” в минутах от начала часа, когда разрешаем отправку.
-// Например, 10:00–10:20, 14:00–14:20, 18:00–18:20
+// “Окно” в минутах от начала часа для авто-планировщика
 const WINDOW_MINUTES = 25;
 
 function safeJsonParseMaybe(v) {
@@ -40,7 +39,6 @@ function getLocalParts(date, timeZone = TZ) {
     hour12: false,
   });
 
-  // en-CA обычно даёт YYYY-MM-DD и компоненты
   const parts = fmt.formatToParts(date);
   const map = {};
   for (const p of parts) {
@@ -60,24 +58,52 @@ function getLocalParts(date, timeZone = TZ) {
   };
 }
 
-// Определяем, какой слот сейчас активен (если мы в окне)
-function getActiveSlot(now) {
+function normalizeSlotHour(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (!SLOTS_HOURS.includes(n)) return null;
+  return n;
+}
+
+/**
+ * options:
+ * - now?: Date
+ * - forceSlot?: 10|14|18   (ручной запуск слота)
+ * - forceDay?: "YYYY-MM-DD" (ручной запуск дня)
+ */
+function getActiveSlot(now, options = {}) {
+  const forceSlot = normalizeSlotHour(options.forceSlot);
+  const forcedDay =
+    typeof options.forceDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(options.forceDay)
+      ? options.forceDay
+      : null;
+
+  // РУЧНОЙ запуск: игнорируем “окно минут”
+  if (forceSlot) {
+    const { dateStr } = getLocalParts(now, TZ);
+    return {
+      dateStr: forcedDay || dateStr,
+      slotKey: String(forceSlot),
+      hour: forceSlot,
+      minute: 0,
+      forced: true,
+    };
+  }
+
+  // АВТО-режим по окну 10/14/18
   const { dateStr, hour, minute } = getLocalParts(now, TZ);
 
   if (!SLOTS_HOURS.includes(hour)) return null;
   if (minute < 0 || minute > WINDOW_MINUTES) return null;
 
-  // slotKey используем как ключ в JSON (например "10", "14", "18")
-  const slotKey = String(hour);
-
-  return { dateStr, slotKey, hour, minute };
+  return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
-async function askActualReminder() {
-  const now = new Date();
-  const slot = getActiveSlot(now);
+async function askActualReminder(options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const slot = getActiveSlot(now, options);
 
-  // Если сейчас не 10/14/18 и не в окне — просто выходим
+  // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
   if (!slot) return;
 
   const { dateStr, slotKey } = slot;
@@ -108,14 +134,7 @@ async function askActualReminder() {
 
     /**
      * 2) 🔒 Антидубль на СЛОТ:
-     * атомарно помечаем, что для (dateStr, slotKey) уже спросили.
-     *
-     * Храним в details:
      * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
-     *
-     * Условие:
-     * - если date совпадает И sent[slotKey] уже true -> НЕ шлём
-     * - если date другая -> сбрасываем sent и ставим текущий слот
      */
     const lockRes = await db.query(
       `
@@ -178,8 +197,7 @@ async function askActualReminder() {
         error: e?.message || e,
       });
 
-      // ❗ если отправка не удалась — откатываем флаг слота,
-      // чтобы можно было попробовать снова в том же слоте
+      // откатываем флаг слота
       await db.query(
         `
         UPDATE services
