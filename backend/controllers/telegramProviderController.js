@@ -362,10 +362,12 @@ async function getProviderServices(req, res) {
  */
 async function searchPublicServices(req, res) {
   try {
-    const chatId = Number(req.params.chatId);
+    const chatIdRaw = req.params.chatId;
     const category = String(req.query.category || "").trim();
 
-    if (!Number.isFinite(chatId) || chatId <= 0) {
+    // chatId может быть большим int, оставим строкой для сравнения
+    const chatId = String(chatIdRaw || "").trim();
+    if (!chatId) {
       return res.status(400).json({ success: false, error: "BAD_CHAT_ID" });
     }
 
@@ -373,6 +375,20 @@ async function searchPublicServices(req, res) {
       return res.status(400).json({ success: false, error: "BAD_CATEGORY" });
     }
 
+    // определим провайдера по chatId (если это провайдер)
+    let providerId = null;
+    try {
+      const pr = await pool.query(
+        `SELECT id FROM providers WHERE telegram_chat_id::text = $1 LIMIT 1`,
+        [chatId]
+      );
+      providerId = pr.rows[0]?.id || null;
+    } catch (e) {
+      providerId = null;
+    }
+
+    // Публичные: approved
+    // Свои (если providerId найден): published/active/pending/approved
     const q = `
       SELECT
         s.id,
@@ -390,71 +406,27 @@ async function searchPublicServices(req, res) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.category = $1
-        AND s.status IN ('approved', 'published', 'active')
         AND (
-          s.details IS NULL
-          OR (s.details::jsonb->>'isActive') IS NULL
-          OR LOWER(s.details::jsonb->>'isActive') = 'true'
-        )
-        AND (
-          s.expiration_at IS NULL
-          OR s.expiration_at > NOW()
-        )
-        AND (
-          (s.details::jsonb->>'expiration') IS NULL
-          OR (s.details::jsonb->>'expiration')::timestamp > NOW()
-        )
-        AND (
-          COALESCE(
-            (s.details::jsonb->>'endFlightDate')::date,
-            (s.details::jsonb->>'endDate')::date
-          ) IS NULL
-          OR COALESCE(
-            (s.details::jsonb->>'endFlightDate')::date,
-            (s.details::jsonb->>'endDate')::date
-          ) >= CURRENT_DATE
+          s.status = 'approved'
+          OR (
+            $2::int IS NOT NULL
+            AND s.provider_id = $2
+            AND s.status IN ('published', 'active', 'pending', 'approved')
+          )
         )
       ORDER BY s.created_at DESC
       LIMIT 100
     `;
 
-    const { rows } = await pool.query(q, [category]);
+    const { rows } = await pool.query(q, [category, providerId]);
 
-    const base = publicBase();
-    const PLACEHOLDER = `${base}/api/telegram/placeholder.png`;
-
-    const normalized = (rows || []).map((row) => {
-      let imgs = row.images;
-
-      if (!imgs) imgs = [];
-      if (typeof imgs === "string") {
-        try {
-          imgs = JSON.parse(imgs);
-        } catch {
-          imgs = [imgs];
-        }
-      }
-      if (!Array.isArray(imgs)) imgs = [];
-
-      const hasAny = imgs.some((x) => typeof x === "string" && x.trim());
-
-      const imageUrl = hasAny
-        ? `${base}/api/telegram/service-image/${row.id}`
-        : PLACEHOLDER;
-
-      return {
-        ...row,
-        images: imgs,
-        imageUrl,
-      };
-    });
-
-    return res.json({ success: true, items: normalized });
+    return res.json({ success: true, items: rows || [] });
   } catch (err) {
     console.error("[telegram] searchPublicServices error:", err);
     return res.status(500).json({ success: false, error: "SERVER_ERROR" });
   }
 }
+
 
 async function serviceActionFromBot(req, res, action) {
   try {
