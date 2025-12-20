@@ -2592,10 +2592,14 @@ bot.on("inline_query", async (ctx) => {
         const resp = await axios.get(`/api/telegram/provider/${userId}/services`);
         data = resp.data;
       } else {
-        const resp = await axios.get(`/api/telegram/client/${userId}/search`, {
-          params: { category },
-        });
-        data = resp.data;
+      const searchPath =
+        roleForInline === "provider"
+          ? `/api/telegram/provider/${userId}/search`
+          : `/api/telegram/client/${userId}/search`;
+      
+      const resp = await axios.get(searchPath, { params: { category } });
+      data = resp.data;
+
       }
       cacheSet(cacheKey, data);
     }
