@@ -56,11 +56,6 @@ async function tgFileIdToDataUrl(fileId) {
 }
 
 async function normalizeImagesForDb(images) {
-  // В БД хотим хранить либо:
-  // - data:image/...;base64,...
-  // - http(s)://...
-  // - /relative/path (если у тебя такое бывает)
-  // А tg:<fileId> конвертим в dataURL
   if (!Array.isArray(images)) return [];
 
   const out = [];
@@ -78,7 +73,6 @@ async function normalizeImagesForDb(images) {
             out.push(dataUrl);
             continue;
           }
-          // если не получилось — не падаем, но и мусор не кладём
         } catch (e) {
           console.log("[telegram] tgFileIdToDataUrl failed:", e?.message || e);
         }
@@ -89,7 +83,6 @@ async function normalizeImagesForDb(images) {
       continue;
     }
 
-    // если прилетит объект — попробуем вытащить url
     if (it && typeof it === "object") {
       const v =
         it.url || it.src || it.path || it.location || it.href || null;
@@ -98,6 +91,14 @@ async function normalizeImagesForDb(images) {
   }
 
   return out;
+}
+
+// ---------- helpers: safe string limits ----------
+function clampString(s, maxLen) {
+  if (s === null || s === undefined) return "";
+  const str = String(s).trim();
+  if (!maxLen || maxLen <= 0) return str;
+  return str.length > maxLen ? str.slice(0, maxLen) : str;
 }
 
 /**
@@ -160,9 +161,6 @@ async function getProviderBookings(req, res) {
   }
 }
 
-/**
- * POST /api/telegram/provider/:chatId/bookings/:bookingId/confirm
- */
 async function confirmBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
@@ -204,7 +202,6 @@ async function confirmBooking(req, res) {
       [bookingId]
     );
 
-    // уведомляем клиента
     if (row.client_chat_id) {
       const text =
         `✅ <b>Ваша бронь подтверждена!</b>\n\n` +
@@ -221,9 +218,6 @@ async function confirmBooking(req, res) {
   }
 }
 
-/**
- * POST /api/telegram/provider/:chatId/bookings/:bookingId/reject
- */
 async function rejectBooking(req, res) {
   try {
     const { chatId, bookingId } = req.params;
@@ -263,7 +257,6 @@ async function rejectBooking(req, res) {
       [bookingId]
     );
 
-    // уведомляем клиента
     if (row.client_chat_id) {
       const text =
         `❌ <b>Ваша бронь отклонена.</b>\n\n` +
@@ -279,12 +272,6 @@ async function rejectBooking(req, res) {
   }
 }
 
-/**
- * Список услуг поставщика (отказные туры/отели/авиабилеты/билеты)
- * GET /api/telegram/provider/:chatId/services
- *
- * Используется bot.js в команде "🧳 Мои услуги"
- */
 async function getProviderServices(req, res) {
   try {
     const { chatId } = req.params;
@@ -344,10 +331,6 @@ async function getProviderServices(req, res) {
   }
 }
 
-/**
- * Общий helper для действий по услуге от бота:
- * action: "unpublish" | "extend7" | "archive"
- */
 async function serviceActionFromBot(req, res, action) {
   try {
     const { chatId, serviceId } = req.params;
@@ -464,23 +447,12 @@ async function serviceActionFromBot(req, res, action) {
 async function unpublishServiceFromBot(req, res) {
   return serviceActionFromBot(req, res, "unpublish");
 }
-
 async function extendService7FromBot(req, res) {
   return serviceActionFromBot(req, res, "extend7");
 }
-
 async function archiveServiceFromBot(req, res) {
   return serviceActionFromBot(req, res, "archive");
 }
-
-// ---------- helpers: safe string limits ----------
-function clampString(s, maxLen) {
-  if (s === null || s === undefined) return "";
-  const str = String(s).trim();
-  if (!maxLen || maxLen <= 0) return str;
-  return str.length > maxLen ? str.slice(0, maxLen) : str;
-}
-
 
 /**
  * Создание услуги из Telegram-бота (шаговый мастер)
@@ -505,9 +477,6 @@ async function createServiceFromBot(req, res) {
         .json({ success: false, error: "TITLE_REQUIRED" });
     }
 
-   
-    // ✅ FIX: services.title в БД часто varchar(100)
-    // чтобы не падать на "value too long for type character varying(100)"
     const safeTitle = clampString(title, MAX_TITLE_LEN);
 
     const providerRes = await pool.query(
@@ -532,14 +501,11 @@ async function createServiceFromBot(req, res) {
     const safeDetails = details && typeof details === "object" ? details : {};
     const safeImagesArr = Array.isArray(images) ? images : [];
 
-    // ✅ ключевое: преобразуем tg:fileId в data:image;base64
     const normalizedImages = await normalizeImagesForDb(safeImagesArr);
 
-    // ✅ КРИТИЧНО: jsonb — всегда строкой
     const safeDetailsJson = JSON.stringify(safeDetails);
     const safeImagesJson = JSON.stringify(normalizedImages);
 
-    // ⚠️ статус делаем pending, чтобы админка точно увидела в "Ожидают"
     const insertRes = await pool.query(
       `
         INSERT INTO services (
@@ -582,10 +548,7 @@ async function createServiceFromBot(req, res) {
       .json({ success: false, error: "SERVER_ERROR" });
   }
 }
-/**
- * Получить одну услугу поставщика по serviceId (для редактирования в боте)
- * GET /api/telegram/provider/:chatId/services/:serviceId
- */
+
 async function getProviderServiceByIdFromBot(req, res) {
   try {
     const { chatId, serviceId } = req.params;
@@ -639,10 +602,8 @@ async function getProviderServiceByIdFromBot(req, res) {
 }
 
 /**
- * Редактирование услуги из Telegram-бота (частичное обновление)
  * PATCH /api/telegram/provider/:chatId/services/:serviceId
- *
- * body: { title?, price?, details? }
+ * body: { title?, price?, details?, images? }
  */
 async function updateServiceFromBot(req, res) {
   try {
@@ -676,7 +637,6 @@ async function updateServiceFromBot(req, res) {
 
     const existing = svcRes.rows[0];
 
-    // редактирование только для отказных категорий
     if (!REFUSED_CATEGORIES.includes(existing.category)) {
       return res.status(400).json({ success: false, error: "CATEGORY_NOT_EDITABLE" });
     }
@@ -688,15 +648,14 @@ async function updateServiceFromBot(req, res) {
         ? body.title.trim()
         : existing.title;
 
-    // ✅ FIX: clamp title to DB limit (varchar(100))
     const nextTitle = clampString(nextTitleRaw, MAX_TITLE_LEN);
+
     let nextPrice = existing.price;
     if (body.price !== undefined && body.price !== null && body.price !== "") {
       const n = Number(body.price);
       if (!Number.isNaN(n)) nextPrice = n;
     }
 
-    // details: мерджим поверх существующих (shallow)
     let prevDetails = existing.details || {};
     if (typeof prevDetails === "string") {
       try { prevDetails = JSON.parse(prevDetails); } catch { prevDetails = {}; }
@@ -704,20 +663,18 @@ async function updateServiceFromBot(req, res) {
     const patchDetails = body.details && typeof body.details === "object" ? body.details : {};
     const mergedDetails = { ...(prevDetails || {}), ...(patchDetails || {}) };
 
-    // синхронизируем expiration_at если пришёл details.expiration
     let nextExpirationAt = existing.expiration_at || null;
     if (mergedDetails && mergedDetails.expiration) {
       const d = new Date(mergedDetails.expiration);
       if (!Number.isNaN(d.getTime())) {
-        nextExpirationAt = d.toISOString(); // postgres сам приведёт
+        nextExpirationAt = d.toISOString();
       }
     }
 
-    // ✅ allow editing images from Telegram bot
-    // body.images:
-    //   - omitted            -> keep existing
-    //   - null               -> clear
-    //   - array              -> replace
+    // images:
+    //   omitted -> keep existing
+    //   null    -> clear
+    //   array   -> replace (ВАЖНО: await!)
     let nextImages = existing.images || [];
     if (typeof nextImages === "string") {
       try { nextImages = JSON.parse(nextImages); } catch { nextImages = []; }
@@ -726,7 +683,8 @@ async function updateServiceFromBot(req, res) {
       if (body.images === null) {
         nextImages = [];
       } else if (Array.isArray(body.images)) {
-        nextImages = normalizeImagesForDb(body.images);
+        // ✅ FIX: await (иначе в БД попадёт {} и будет jsonb_typeof <> 'array')
+        nextImages = await normalizeImagesForDb(body.images);
       }
     }
 
