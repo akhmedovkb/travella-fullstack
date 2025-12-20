@@ -27,7 +27,7 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
-const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/placeholder.png`; // сделай реальный файл на сайте
+const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/o.jpg`; // сделай реальный файл на сайте
 
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
