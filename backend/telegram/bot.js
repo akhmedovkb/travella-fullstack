@@ -1444,10 +1444,10 @@ bot.start(async (ctx) => {
         await ctx.reply("🔎 Выберите тип услуги (отправка в текущий чат):", {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour " }],
-              [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#hotel " }],
-              [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#flight " }],
-              [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#ticket " }],
+              [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour refused_tour" }],
+              [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
+              [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
+              [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#tour refused_ticket" }],
             ],
           },
         });
@@ -1585,10 +1585,10 @@ bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   await ctx.reply("🔎 Выберите тип услуги (отправка в текущий чат):", {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour " }],
-        [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#hotel " }],
-        [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#flight " }],
-        [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#ticket " }],
+        [{ text: "📍 Отказной тур", switch_inline_query_current_chat: "#tour refused_tour" }],
+        [{ text: "🏨 Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
+        [{ text: "✈️ Отказной авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
+        [{ text: "🎫 Отказной билет", switch_inline_query_current_chat: "#tour refused_ticket" }],
       ],
     },
   });
