@@ -3666,12 +3666,12 @@ bot.on("inline_query", async (ctx) => {
       }
 
       const hotelNameRaw = d.hotel || d.hotelName || "";
-      const hotelLine = hotelNameRaw ? `ОТЕЛЬ: ${truncate(hotelNameRaw, 45)}` : "";
+      const hotelLine = hotelNameRaw ? ОТЕЛЬ: ${truncate(hotelNameRaw, 45)} : "";
 
       const priceInline = pickPrice(d, svc, roleForInline);
       const priceWithCur = formatPriceWithCurrency(priceInline);
       const priceLabelInline = roleForInline === "provider" ? "ЦЕНА NETTO" : "ЦЕНА";
-      const priceLine = priceWithCur ? `${priceLabelInline}: ${priceWithCur}` : "";
+      const priceLine = priceWithCur ? ${priceLabelInline}: ${priceWithCur} : "";
 
       const badge = getExpiryBadge(d, svc);
       const descParts = [];
@@ -3694,7 +3694,7 @@ bot.on("inline_query", async (ctx) => {
       // ⚠️ ВАЖНО: inline_result "photo" требует URL. Если его нет — делаем article.
       // Так карточка всегда будет показываться, даже без превью.
       const resultBase = {
-        id: `${svcCategory}:${svc.id || idx}`,
+        id: String(svc.id || idx),
       };
 
       // Для "#my" используем "article", чтобы можно было показать текст и кнопку "Открыть в кабинете"
