@@ -27,7 +27,11 @@ const SITE_URL = (
   "https://travella.uz"
 ).replace(/\/+$/, "");
 
-const INLINE_PLACEHOLDER_THUMB = `${SITE_URL}/o.jpg`;
+// ⚠️ ВАЖНО:
+// Telegram для inline типа "photo" требует реальный публичный HTTPS URL картинки.
+// Если подставить несуществующий плейсхолдер (404) — Telegram выкинет результаты и будет "Не найдено".
+// Поэтому плейсхолдер НЕ форсим — лучше вернуть inline type "article".
+const INLINE_PLACEHOLDER_THUMB = ""; // не используем как обязательный fallback
 
 // Кому отправлять "быстрые запросы" из бота (чат менеджера)
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
@@ -2690,30 +2694,58 @@ bot.on("inline_query", async (ctx) => {
         thumbUrl = null;
       }
       
-      // ✅ thumb всегда должен быть валидным URL
-      const thumbStable = thumbUrl || INLINE_PLACEHOLDER_THUMB;
-
       const title = truncate(
         normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"),
         60
       );
 
-      // result object
-      const photoMain = (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")))
-        ? photoUrl
-        : thumbStable;
-      
-      results.push({
-        id: `${svcCategory}:${svc.id}`,
-        type: "photo",
-        photo_url: photoMain,            // ✅ основное фото (если есть)
-        thumb_url: thumbStable,          // ✅ миниатюра: реальная или плейсхолдер
-        title,
-        description,
-        caption: text,
-        parse_mode: "Markdown",
-        reply_markup: isMy ? keyboardForMy : keyboardForClient,
-      });
+      // ✅ Правильная логика:
+      // - Если есть реальное публичное фото (http/https или tg file link) → отдаём type "photo"
+      // - Если фото нет/невалидно → отдаём type "article" (без фото), иначе Telegram покажет "Не найдено"
+
+      const hasRealPhotoHttp =
+        typeof photoUrl === "string" &&
+        (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"));
+
+      const hasRealPhotoFromTg =
+        typeof thumbUrl === "string" &&
+        (thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://"));
+
+      // Для tgfile: фотоUrl не http, но thumbUrl будет https://api.telegram.org/file/...
+      const inlinePhotoUrl = hasRealPhotoHttp ? photoUrl : (hasRealPhotoFromTg ? thumbUrl : null);
+
+      if (inlinePhotoUrl) {
+        const payload = {
+          id: `${svcCategory}:${svc.id}`,
+          type: "photo",
+          photo_url: inlinePhotoUrl,
+          // thumb_url можно отдать, если он реально есть
+          ...(hasRealPhotoFromTg ? { thumb_url: thumbUrl } : {}),
+          title,
+          description,
+          caption: text,
+          parse_mode: "Markdown",
+          reply_markup: isMy ? keyboardForMy : keyboardForClient,
+        };
+        results.push(payload);
+      } else {
+        // fallback без картинки — всегда работает
+        const payload = {
+          id: `${svcCategory}:${svc.id}`,
+          type: "article",
+          title,
+          description,
+          input_message_content: {
+            message_text: text,
+            parse_mode: "Markdown",
+            disable_web_page_preview: false,
+          },
+          // thumb_url в article опционален — не форсим плейсхолдер
+          ...(thumbUrl ? { thumb_url: thumbUrl } : {}),
+          reply_markup: isMy ? keyboardForMy : keyboardForClient,
+        };
+        results.push(payload);
+      }
     }
 
     await ctx.answerInlineQuery(results, { cache_time: 3, is_personal: true });
