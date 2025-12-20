@@ -332,6 +332,15 @@ function getStartDateForSort(svc) {
   return parseDateSafe(raw);
 }
 
+function parseDetailsAny(details) {
+  if (!details) return {};
+  if (typeof details === "object") return details;
+  if (typeof details === "string") {
+    try { return JSON.parse(details); } catch { return {}; }
+  }
+  return {};
+}
+
 // gross = net + % (по умолчанию 10%)
 const DEFAULT_GROSS_MARKUP_PERCENT = Number(
   process.env.GROSS_MARKUP_PERCENT || "10"
@@ -2648,7 +2657,8 @@ bot.on("inline_query", async (ctx) => {
     // фильтруем актуальные
     const itemsActual = (data.items || []).filter((svc) => {
       try {
-        return isServiceActual(svc.details, svc);
+        const det = parseDetailsAny(svc.details);
+        return isServiceActual(det, svc);
       } catch (_) {
         return false;
       }
@@ -2708,7 +2718,7 @@ bot.on("inline_query", async (ctx) => {
       const keyboardForMy = {
         inline_keyboard: [
           [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
-          [{ text: "🔁 Открыть меню в боте", url: `https://t.me/${ctx.me}?start=start` }],
+          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
 
