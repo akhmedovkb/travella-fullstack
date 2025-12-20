@@ -104,6 +104,25 @@ bot.use(
   })
 );
 
+/* ===================== TG FILE LINK CACHE ===================== */
+
+// file_id -> { url, ts }
+const tgFileLinkCache = new Map();
+const TG_FILE_LINK_TTL = 60 * 60 * 1000; // 1 час
+
+async function getPublicThumbUrlFromTgFile(bot, fileId) {
+  const cached = tgFileLinkCache.get(fileId);
+  if (cached && Date.now() - cached.ts < TG_FILE_LINK_TTL) {
+    return cached.url;
+  }
+
+  const link = await bot.telegram.getFileLink(fileId); // Telegram API
+  const url = String(link);
+
+  tgFileLinkCache.set(fileId, { url, ts: Date.now() });
+  return url;
+}
+
 // ==== HELPERS ====
 
 // экранирование текста для Telegram Markdown (V1)
@@ -3686,8 +3705,19 @@ bot.on("inline_query", async (ctx) => {
       
       // thumb_url: только http(s), tgfile нельзя
       let thumbUrl = null;
-      if (photoUrl && !photoUrl.startsWith("tgfile:")) {
-        if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+      
+      if (photoUrl) {
+        if (photoUrl.startsWith("tgfile:")) {
+          const fileId = photoUrl.replace(/^tgfile:/, "").trim();
+          if (fileId) {
+            try {
+              thumbUrl = await getPublicThumbUrlFromTgFile(bot, fileId);
+            } catch (e) {
+              console.log("[tg-bot] getFileLink failed:", e?.message || e);
+              thumbUrl = null;
+            }
+          }
+        } else if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
           thumbUrl = photoUrl;
         }
       }
