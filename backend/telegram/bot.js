@@ -2653,6 +2653,38 @@ bot.on("inline_query", async (ctx) => {
       });
       return;
     }
+    
+// ===================== DEBUG INLINE FILTER =====================
+const DEBUG_INLINE = String(process.env.DEBUG_INLINE || "").trim() === "1";
+
+if (DEBUG_INLINE) {
+  console.log("\n[tg-bot][inline] qRaw =", qRaw);
+  console.log("[tg-bot][inline] isMy =", isMy, "category =", category, "role =", roleForInline);
+  console.log("[tg-bot][inline] items from API =", Array.isArray(data.items) ? data.items.length : "not array");
+
+  const sample = (Array.isArray(data.items) ? data.items : []).slice(0, 10).map((svc) => {
+    const det = parseDetailsAny(svc.details);
+    const status = String(svc.status || "");
+    const isActive = (() => {
+      try { return isServiceActual(det, svc); } catch { return false; }
+    })();
+
+    return {
+      id: svc.id,
+      category: svc.category || svc.type || category,
+      status,
+      exp: det.expiration || svc.expiration || null,
+      isActive,
+      // полезно видеть даты/флаги если есть
+      start: det.startDate || det.departureFlightDate || null,
+      end: det.endDate || det.returnFlightDate || null,
+      details_isActive: det.isActive,
+    };
+  });
+
+  console.log("[tg-bot][inline] sample:", sample);
+}
+// ===============================================================
 
 // ✅ itemsForInline: для #my показываем ВСЁ, для поиска — только актуальные
 let itemsForInline = Array.isArray(data.items) ? data.items : [];
