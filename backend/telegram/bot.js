@@ -3694,7 +3694,7 @@ bot.on("inline_query", async (ctx) => {
       // ⚠️ ВАЖНО: inline_result "photo" требует URL. Если его нет — делаем article.
       // Так карточка всегда будет показываться, даже без превью.
       const resultBase = {
-        id: String(svc.id || idx),
+        id: `${svcCategory}:${svc.id || idx}`,
       };
 
       // Для "#my" используем "article", чтобы можно было показать текст и кнопку "Открыть в кабинете"
@@ -3711,7 +3711,7 @@ bot.on("inline_query", async (ctx) => {
           input_message_content: {
             message_text: text,
             parse_mode: "Markdown",
-            disable_web_page_preview: true,
+            disable_web_page_preview: false,
           },
           reply_markup: isMyMode ? keyboardForMy : keyboardForClient,
         };
@@ -3721,7 +3721,7 @@ bot.on("inline_query", async (ctx) => {
       return {
         ...resultBase,
         type: "photo",
-        photo_url: thumbUrl,
+        photo_url: photoUrl || thumbUrl,
         thumb_url: thumbUrl,
         title: truncate(normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"), 60),
         description,
