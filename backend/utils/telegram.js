@@ -1,24 +1,25 @@
-//backend/utils/telegram.js
+// backend/utils/telegram.js
 
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
 const axios = require("axios");
 
-// старый (основной) бот — ВСЕ callback/edit/getChat по нему
+// старый (основной) бот — ВСЕ callback/edit/getChat по нему ДЛЯ СТАРЫХ СЦЕНАРИЕВ
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 // новый клиентский бот (отказные)
 const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
-const API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : "";
 const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
 
 // enabled — это “включён ли основной бот”
 const enabled = !!BOT_TOKEN;
 
-// ✅ enabledOld = включён старый бот (строго для callback/edit/getChat)
-// (у тебя в коде он использовался, но не был объявлен)
+// enabledOld = включён старый бот
 const enabledOld = !!BOT_TOKEN;
+
+// enabledClient = включён новый (отказной) бот
+const enabledClient = !!CLIENT_BOT_TOKEN;
 
 // Админские чаты (можно передать один id или список через запятую/пробел)
 const ADMIN_CHAT_IDS =
@@ -84,14 +85,15 @@ async function tgSend(
   }
 }
 
-// ✅ token-aware (но старые вызовы не ломаем: tokenOverride optional)
+// token-aware
 async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}, tokenOverride = "") {
-  // callback должен отвечать тем же ботом, что отправил сообщение.
-  // по умолчанию — старый бот, но можно override.
   const token = tokenOverride || BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  if (!enabledOld || !cbQueryId || !api) return;
+  // ВАЖНО: отвечать должен тот бот, который получил callback
+  const okEnabled = tokenOverride ? enabledClient : enabledOld;
+  if (!okEnabled || !cbQueryId || !api) return;
+
   try {
     await axios.post(`${api}/answerCallbackQuery`, {
       callback_query_id: cbQueryId,
@@ -106,16 +108,17 @@ async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}, tokenOverride =
   }
 }
 
-// ✅ token-aware
+// token-aware
 async function tgEditMessageReplyMarkup(
   { chat_id, message_id, reply_markup },
   tokenOverride = ""
 ) {
-  // editMessageReplyMarkup должен быть тем же ботом, что отправил сообщение.
   const token = tokenOverride || BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  if (!enabledOld || !chat_id || !message_id || !api) return;
+  const okEnabled = tokenOverride ? enabledClient : enabledOld;
+  if (!okEnabled || !chat_id || !message_id || !api) return;
+
   try {
     await axios.post(`${api}/editMessageReplyMarkup`, {
       chat_id,
@@ -148,7 +151,6 @@ function _toIntlDigitsForWA(phone) {
 function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
   const intl = _toIntlDigitsForWA(phone);
   const wa = intl ? `https://wa.me/${intl}` : null;
-  // ⚠️ Никаких tel: ссылок в inline-кнопках — Telegram их не принимает
   const contactRow = wa ? [{ text: "WhatsApp", url: wa }] : [];
 
   const adminRow = adminUrl ? [{ text: "Админка: Лиды", url: adminUrl }] : [];
@@ -196,19 +198,23 @@ function buildLeadKB({ state = "new", id, phone, adminUrl, assigneeName }) {
 }
 
 // very small cache to avoid frequent getChat calls
-const __chatUserCache = new Map(); // chatId -> username (without @)
+const __chatUserCache = new Map(); // key: token|chatId -> username (without @)
 
-// ✅ token-aware (по умолчанию — старый бот)
+// token-aware
 async function tgGetUsername(chatId, tokenOverride = "") {
   const token = tokenOverride || BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  if (!enabledOld || !chatId || !api) return "";
-  if (__chatUserCache.has(chatId)) return __chatUserCache.get(chatId) || "";
+  const okEnabled = tokenOverride ? enabledClient : enabledOld;
+  if (!okEnabled || !chatId || !api) return "";
+
+  const cacheKey = `${token}|${chatId}`;
+  if (__chatUserCache.has(cacheKey)) return __chatUserCache.get(cacheKey) || "";
+
   try {
     const res = await axios.post(`${api}/getChat`, { chat_id: chatId });
     const uname = res?.data?.result?.username || "";
-    __chatUserCache.set(chatId, uname);
+    __chatUserCache.set(cacheKey, uname);
     return uname || "";
   } catch {
     return "";
@@ -236,11 +242,9 @@ function urlClient(path) {
   const slug = String(path || "").replace(/^\/+/, "");
   return `${SITE}/client/${slug}`;
 }
-
 function urlAdmin(path) {
   if (!SITE) return "";
   const slug = String(path || "").replace(/^\/+/, "");
-  // по умолчанию открываем очередь модерации
   return `${SITE}/admin/${slug || "moderation"}`;
 }
 
@@ -317,14 +321,18 @@ async function getClientChatId(clientId) {
 
 function _isRefusedCategory(category) {
   const c = String(category || "").toLowerCase();
-  // новый бот — для отказных туров/отелей/авиа/билетов
   return (
     c === "refused_tour" ||
     c === "refused_hotel" ||
     c === "refused_flight" ||
-    c === "refused_ticket" ||          // ✅ поддержка старого имени
-    c === "refused_event_ticket"       // ✅ поддержка текущего имени
+    c === "refused_ticket" ||
+    c === "refused_event_ticket"
   );
+}
+
+function _tokenForRefusedActors(category) {
+  // Для refused_* шлём клиенту/агенту новым ботом (если включён), иначе старым.
+  return _isRefusedCategory(category) && CLIENT_BOT_TOKEN ? CLIENT_BOT_TOKEN : "";
 }
 
 async function getBookingActors(input) {
@@ -373,10 +381,15 @@ async function getBookingActors(input) {
   if (!q.rowCount) return null;
   const row = q.rows[0];
 
+  const refusedToken = _tokenForRefusedActors(row.service_category);
+
+  // ✅ ВАЖНО:
+  // - провайдера (его кабинет/старые нотифы) — старым ботом
+  // - клиента/агента по refused_* — новым ботом (если есть), иначе старым
   const [unameProv, unameClient, unameAgent] = await Promise.all([
-    tgGetUsername(row.provider__chat),
-    tgGetUsername(row.client__chat),
-    tgGetUsername(row.agent__chat),
+    tgGetUsername(row.provider__chat), // всегда старый
+    tgGetUsername(row.client__chat, refusedToken),
+    tgGetUsername(row.agent__chat, refusedToken),
   ]);
 
   return {
@@ -451,9 +464,11 @@ async function getRequestActors(requestId) {
   if (!q.rowCount) return null;
   const row = q.rows[0];
 
+  const refusedToken = _tokenForRefusedActors(row.service_category);
+
   const [unameClient, unameAgent] = await Promise.all([
-    tgGetUsername(row.client_chat),
-    tgGetUsername(row.agent_chat),
+    tgGetUsername(row.client_chat, refusedToken),
+    tgGetUsername(row.agent_chat, refusedToken),
   ]);
 
   const from = row.agent_id
@@ -501,31 +516,19 @@ async function notifyNewRequest({ booking }) {
       );
       if (a.client?.name || a.client?.phone || a.client?.username) {
         lines.push(
-          lineContact(
-            "👤",
-            "Клиент",
-            a.client.name,
-            a.client.phone,
-            a.client.username
-          )
+          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
         );
       }
     } else {
       lines.push(
-        lineContact(
-          "👤",
-          "Клиент",
-          a.client?.name,
-          a.client?.phone,
-          a.client?.username
-        )
+        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
       );
     }
 
     lines.push("");
     lines.push(`🔗 Открыть: ${urlProvider("bookings")}`);
 
-    // провайдеру — всегда через старого бота (его кабинет, его нотифы)
+    // провайдеру — всегда через старого бота
     await tgSend(a.provider.chatId, lines.join("\n"));
   } catch (e) {
     console.error("[tg] notifyNewRequest failed:", e?.response?.data || e?.message || e);
@@ -564,10 +567,7 @@ async function notifyQuote({ booking, price, currency, note }) {
       `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`
     );
 
-    // Для refused_* -> новый бот (если есть), иначе старый (fallback)
-    const useClientBot = _isRefusedCategory(a.serviceCategory) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
-
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
     await tgSend(dest.chatId, lines.join("\n"), {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyQuote failed:", e?.response?.data || e?.message || e);
@@ -612,7 +612,6 @@ async function notifyConfirmed({ booking }) {
       "",
       `🔗 Открыть: ${urlProvider("bookings")}`,
     ].join("\n");
-    const textForAgent = textForProvider;
 
     const textForClient = [
       ...base,
@@ -630,12 +629,11 @@ async function notifyConfirmed({ booking }) {
     // refused_*:
     // - клиент/агент: новый бот (если есть), иначе старый
     // - провайдер: старый
-    const useClientBot = _isRefusedCategory(a.serviceCategory) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
 
     if (a.client?.chatId) await tgSend(a.client.chatId, textForClient, {}, tokenOverride);
     if (a.provider?.chatId) await tgSend(a.provider.chatId, textForProvider);
-    if (a.agent?.chatId) await tgSend(a.agent.chatId, textForAgent, {}, tokenOverride);
+    if (a.agent?.chatId) await tgSend(a.agent.chatId, textForProvider, {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyConfirmed failed:", e?.response?.data || e?.message || e);
   }
@@ -672,9 +670,7 @@ async function notifyRejected({ booking, reason }) {
       `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`
     );
 
-    const useClientBot = _isRefusedCategory(a.serviceCategory) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
-
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
     await tgSend(dest.chatId, lines.join("\n"), {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyRejected failed:", e?.response?.data || e?.message || e);
@@ -697,9 +693,7 @@ async function notifyCancelled({ booking }) {
       `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
       `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`;
 
-    const useClientBot = _isRefusedCategory(a.serviceCategory) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
-
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
     await tgSend(dest.chatId, text, {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyCancelled failed:", e?.response?.data || e?.message || e);
@@ -776,9 +770,7 @@ async function notifyReqStatusChanged({ request_id, status }) {
     const link = a.from.kind === "agent" ? urlProvider("requests") : urlClient("requests");
     lines.push(`🔗 Открыть: ${link}`);
 
-    const useClientBot = _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
-
+    const tokenOverride = _tokenForRefusedActors(a.row?.service_category);
     await tgSend(a.from.chatId, lines.join("\n"), {}, tokenOverride);
   } catch (e) {
     console.error(
@@ -818,9 +810,7 @@ async function notifyReqDeletedByProvider({ request_id }) {
       (a.row.service_title ? `🏷️ Услуга: <b>${esc(a.row.service_title)}</b>\n` : "") +
       `🔗 Открыть: ${link}`;
 
-    const useClientBot = _isRefusedCategory(a.row?.service_category) && !!CLIENT_BOT_TOKEN;
-    const tokenOverride = useClientBot ? CLIENT_BOT_TOKEN : "";
-
+    const tokenOverride = _tokenForRefusedActors(a.row?.service_category);
     await tgSend(a.from.chatId, text, {}, tokenOverride);
   } catch (e) {
     console.error(
@@ -880,35 +870,6 @@ async function notifyLeadNew({ lead }) {
     console.error("[tg] notifyLeadNew failed:", e?.message || e);
   }
 }
-
-module.exports = {
-  enabled,
-  tgSend,
-  tgAnswerCallbackQuery,
-  tgEditMessageReplyMarkup,
-  buildLeadKB,
-  linkProviderChat,
-  linkClientChat,
-  // ADMIN / MODERATION:
-  notifyModerationNew,
-  notifyModerationApproved,
-  notifyModerationRejected,
-  notifyModerationUnpublished,
-  // BOOKINGS:
-  notifyNewRequest,
-  notifyQuote,
-  notifyConfirmed,
-  notifyRejected,
-  notifyCancelled,
-  notifyCancelledByRequester,
-  // REQUESTS:
-  notifyReqNew,
-  notifyReqStatusChanged,
-  notifyReqCancelledByRequester,
-  notifyReqDeletedByProvider,
-  // LEADS:
-  notifyLeadNew,
-};
 
 /* ================== MODERATION (ADMIN) ================== */
 async function getAdminChatIds() {
@@ -1097,27 +1058,7 @@ async function notifyModerationUnpublished({ service }) {
 }
 
 /* ====================== ADMIN NOTIFY HELPERS ====================== */
-
-function _tgGetAdminChatIds() {
-  const raw =
-    process.env.TELEGRAM_ADMIN_CHAT_IDS ||
-    process.env.ADMIN_TG_CHAT_IDS ||
-    process.env.ADMIN_TG_CHAT ||
-    process.env.TELEGRAM_ADMIN_CHAT ||
-    "";
-
-  return raw
-    .split(/[,\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((x) => Number(x))
-    .filter((n) => Number.isFinite(n));
-}
-
-// ====================== ADMIN NOTIFY HELPERS ======================
-
 async function tgSendToAdmins(text, extra = {}) {
-  // единый источник админских чатов: ENV + БД (как в модерации)
   const ids = await getAdminChatIds();
   if (!ids.length) return { ok: false, error: "no_admin_chat_ids" };
 
@@ -1128,5 +1069,40 @@ async function tgSendToAdmins(text, extra = {}) {
   return { ok: true, count: ids.length, results };
 }
 
-// НЕ ломает exports — добавляем поле
-module.exports.tgSendToAdmins = tgSendToAdmins;
+module.exports = {
+  enabled,
+  tgSend,
+  tgSendToAdmins,
+
+  tgAnswerCallbackQuery,
+  tgEditMessageReplyMarkup,
+  tgGetUsername,
+
+  buildLeadKB,
+
+  linkProviderChat,
+  linkClientChat,
+
+  // ADMIN / MODERATION:
+  notifyModerationNew,
+  notifyModerationApproved,
+  notifyModerationRejected,
+  notifyModerationUnpublished,
+
+  // BOOKINGS:
+  notifyNewRequest,
+  notifyQuote,
+  notifyConfirmed,
+  notifyRejected,
+  notifyCancelled,
+  notifyCancelledByRequester,
+
+  // REQUESTS:
+  notifyReqNew,
+  notifyReqStatusChanged,
+  notifyReqCancelledByRequester,
+  notifyReqDeletedByProvider,
+
+  // LEADS:
+  notifyLeadNew,
+};
