@@ -474,7 +474,7 @@ function getFirstImageUrl(svc) {
   // относительные пути:
   // - "/uploads/..." -> SITE_URL + ...
   // - "uploads/..."  -> API_PUBLIC_BASE + "/uploads/..."
-  if (v.startsWith("/")) return SITE_URL + v;
+  if (v.startsWith("/")) return API_PUBLIC_BASE + v;
 
   // <-- ключевой фикс: если путь без "/" — тоже собираем URL
   return `${API_PUBLIC_BASE}/${v.replace(/^\/+/, "")}`;
