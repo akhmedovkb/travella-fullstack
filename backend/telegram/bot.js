@@ -2530,9 +2530,12 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = null;
         }
       } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
-        thumbUrl = photoUrl;
-      } else if (INLINE_PLACEHOLDER_THUMB) {
-        thumbUrl = INLINE_PLACEHOLDER_THUMB;
+        // если это наш service-image — просим thumb=1
+        if (photoUrl.includes("/api/telegram/service-image/")) {
+          thumbUrl = photoUrl + (photoUrl.includes("?") ? "&thumb=1" : "?thumb=1");
+        } else {
+          thumbUrl = photoUrl;
+        }
       }
 
       const inlinePhotoUrl =
