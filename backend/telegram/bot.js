@@ -2632,20 +2632,15 @@ bot.on("inline_query", async (ctx) => {
 
       // ✅ thumb_url: только реальный публичный https (и НЕ placeholder)
       let thumbUrl = null;
-
+      
       if (photoUrl && photoUrl.startsWith("tgfile:")) {
         const fileId = photoUrl.replace(/^tgfile:/, "").trim();
         try {
           thumbUrl = await getPublicThumbUrlFromTgFile(bot, fileId);
-        } catch (e) {
-          console.log("[tg-bot] getFileLink failed:", e?.message || e);
+        } catch {
           thumbUrl = null;
         }
-      } else if (
-        photoUrl &&
-        (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))
-      ) {
-        // 🔥 КЛЮЧЕВОЙ ФИКС ДЛЯ INLINE
+      } else if (photoUrl?.startsWith("https://")) {
         if (photoUrl.includes("/api/telegram/service-image/")) {
           thumbUrl = photoUrl.includes("?")
             ? `${photoUrl}&thumb=1`
@@ -2654,16 +2649,12 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = photoUrl;
         }
       }
-
-      // 🔧 НЕ передаём thumb_url если это плейсхолдер/мусор
+      
       const inlinePhotoUrl =
-        typeof thumbUrl === "string" &&
-        thumbUrl.startsWith("https://") &&
-        !thumbUrl.includes("placeholder") &&
-        !thumbUrl.includes("/api/telegram/placeholder") &&
-        thumbUrl !== INLINE_PLACEHOLDER_THUMB
+        typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
           ? thumbUrl
           : null;
+
 
       // ✅ Точечный фикс по задаче:
       // - убираем "Отказной тур" как заголовок по умолчанию
