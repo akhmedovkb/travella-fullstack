@@ -2546,6 +2546,13 @@ bot.on("inline_query", async (ctx) => {
         60
       );
 
+      console.log("[inline]", {
+        svcId: svc.id,
+        photoUrl,
+        thumbUrl,
+        inlinePhotoUrl,
+      });
+
       results.push({
         id: `${svcCategory}:${svc.id}`,
         type: "article",
