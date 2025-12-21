@@ -2521,6 +2521,7 @@ bot.on("inline_query", async (ctx) => {
 
       // ✅ thumb_url: только реальный публичный https
       let thumbUrl = null;
+      
       if (photoUrl && photoUrl.startsWith("tgfile:")) {
         const fileId = photoUrl.replace(/^tgfile:/, "").trim();
         try {
@@ -2530,12 +2531,20 @@ bot.on("inline_query", async (ctx) => {
           thumbUrl = null;
         }
       } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
-        // если это наш service-image — просим thumb=1
-      thumbUrl = photoUrl;
+        // 🔥 КЛЮЧЕВОЙ ФИКС ДЛЯ INLINE
+        if (photoUrl.includes("/api/telegram/service-image/")) {
+          thumbUrl = photoUrl.includes("?")
+            ? `${photoUrl}&thumb=1`
+            : `${photoUrl}?thumb=1`;
+        } else {
+          thumbUrl = photoUrl;
+        }
       }
-
+      
       const inlinePhotoUrl =
-        typeof thumbUrl === "string" && thumbUrl.startsWith("https://") ? thumbUrl : null;
+        typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
+          ? thumbUrl
+          : null;
 
       const title = truncate(
         normalizeTitleSoft(svc.title || CATEGORY_LABELS[svcCategory] || "Услуга"),
