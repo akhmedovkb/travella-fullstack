@@ -417,10 +417,18 @@ function isBeforeYMD(a, b) {
  * - "tg:<file_id>"
  */
 function getFirstImageUrl(svc) {
-  // 0) готовый публичный URL
-  if (svc?.imageUrl && typeof svc.imageUrl === "string") {
-    const u = svc.imageUrl.trim();
-    if (u) return u;
+  // 0) разные варианты поля "готовая ссылка"
+  const directCandidates = [
+    svc?.imageUrl,
+    svc?.image_url,
+    svc?.thumbnailUrl,
+    svc?.thumbnail_url,
+    svc?.image,
+    svc?.photo,
+  ];
+
+  for (const c of directCandidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
   }
 
   let arr = svc?.images ?? null;
@@ -444,7 +452,7 @@ function getFirstImageUrl(svc) {
 
   let v = arr[0];
   if (v && typeof v === "object") {
-    v = v.url || v.src || v.path || v.location || v.href || null;
+    v = v.url || v.src || v.path || v.location || v.href || v.imageUrl || v.image_url || null;
   }
   if (typeof v !== "string") return null;
 
@@ -453,18 +461,23 @@ function getFirstImageUrl(svc) {
 
   if (v.startsWith("tg:")) {
     const fileId = v.slice(3).trim();
-    if (!fileId) return null;
-    return `tgfile:${fileId}`;
+    return fileId ? `tgfile:${fileId}` : null;
   }
 
   if (v.startsWith("data:image")) {
+    // ВАЖНО: этот endpoint должен реально существовать на публичном HTTPS домене API_PUBLIC_BASE
     return `${API_PUBLIC_BASE}/api/telegram/service-image/${svc.id}`;
   }
 
   if (v.startsWith("http://") || v.startsWith("https://")) return v;
+
+  // относительные пути:
+  // - "/uploads/..." -> SITE_URL + ...
+  // - "uploads/..."  -> API_PUBLIC_BASE + "/uploads/..."
   if (v.startsWith("/")) return SITE_URL + v;
 
-  return null;
+  // <-- ключевой фикс: если путь без "/" — тоже собираем URL
+  return `${API_PUBLIC_BASE}/${v.replace(/^\/+/, "")}`;
 }
 
 function buildServiceMessage(svc, category, role = "client") {
