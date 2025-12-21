@@ -5,6 +5,7 @@ const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
+const sharp = require("sharp");
 
 const {
   tgSend,
@@ -374,6 +375,25 @@ router.get("/service-image/:id", async (req, res) => {
 
     if (!buf || !buf.length) {
       return sendPlaceholderPng(res);
+    }
+    const wantThumb = String(req.query.thumb || "0") === "1";
+    
+    // если это inline thumb — делаем маленький jpeg
+    if (wantThumb) {
+      try {
+        const out = await sharp(buf)
+          .resize({ width: 320, withoutEnlargement: true })
+          .jpeg({ quality: 72 })
+          .toBuffer();
+    
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Content-Length", out.length);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(out);
+      } catch (e) {
+        console.error("[tg] thumb sharp error:", e?.message || e);
+        return sendPlaceholderPng(res);
+      }
     }
 
     res.setHeader("Content-Type", mimeType);
