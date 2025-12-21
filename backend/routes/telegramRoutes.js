@@ -5,7 +5,15 @@ const router = express.Router();
 const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
-const sharp = require("sharp");
+let sharp = null;
+try {
+  // sharp опционален: если не установлен — backend не падает
+  sharp = require("sharp");
+} catch (e) {
+  console.warn("[tg] sharp is not installed; thumb generation disabled");
+  sharp = null;
+}
+
 
 const {
   tgSend,
@@ -379,7 +387,13 @@ router.get("/service-image/:id", async (req, res) => {
     const wantThumb = String(req.query.thumb || "0") === "1";
     
     // если это inline thumb — делаем маленький jpeg
+    // если это inline thumb — делаем маленький jpeg
     if (wantThumb) {
+      if (!sharp) {
+        // Telegram-friendly: лучше 200 png placeholder, чем падение сервера
+        return sendPlaceholderPng(res);
+      }
+    
       try {
         const out = await sharp(buf)
           .resize({ width: 320, withoutEnlargement: true })
@@ -395,6 +409,7 @@ router.get("/service-image/:id", async (req, res) => {
         return sendPlaceholderPng(res);
       }
     }
+
 
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", buf.length);
