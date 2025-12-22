@@ -331,6 +331,29 @@ function editWizNavKeyboard() {
   };
 }
 
+function editImagesKeyboard(images = []) {
+  const rows = [];
+
+  if (images.length) {
+    const delRow = images.map((_, i) => ({
+      text: `❌ ${i + 1}`,
+      callback_data: `svc_edit_img_del:${i}`,
+    }));
+    rows.push(delRow);
+    rows.push([{ text: "🧹 Очистить все", callback_data: "svc_edit_img_clear" }]);
+  }
+
+  rows.push([
+    { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+    { text: "✅ Готово", callback_data: "svc_edit_img_done" },
+  ]);
+
+  return {
+    reply_markup: {
+      inline_keyboard: rows,
+    },
+  };
+}
 
 function buildEditImagesKeyboard(draft) {
   const images = Array.isArray(draft?.images) ? draft.images : [];
@@ -561,7 +584,21 @@ async function promptEditState(ctx, state) {
         editWizNavKeyboard()
       );
       return;
-
+      
+    // IMAGES
+    case "svc_edit_images": {
+      const images = ctx.session?.serviceDraft?.images || [];
+      await safeReply(
+        ctx,
+        `🖼 Фото услуги\n\n` +
+          `Сейчас: ${images.length} шт.\n\n` +
+          `• Отправляйте фото — они добавятся\n` +
+          `• Удаляйте кнопками ниже\n` +
+          `• Нажмите «Готово», когда закончите`,
+        editImagesKeyboard(images)
+      );
+      return;
+    }
     // FINALS
     case "svc_edit_price":
       await safeReply(
