@@ -331,67 +331,6 @@ function editWizNavKeyboard() {
   };
 }
 
-
-function buildEditImagesKeyboard(draft) {
-  const images = Array.isArray(draft?.images) ? draft.images : [];
-  const rows = [];
-
-  // Кнопки удаления по индексу (ограничим до 8, чтобы не раздувать клавиатуру)
-  const max = Math.min(images.length, 8);
-  if (max > 0) {
-    const btns = [];
-    for (let i = 0; i < max; i++) {
-      btns.push(Markup.button.callback(`❌ ${i + 1}`, `svc_edit_img_remove:${i}`));
-      // по 4 в ряд
-      if (btns.length === 4) {
-        rows.push(btns.splice(0, btns.length));
-      }
-    }
-    if (btns.length) rows.push(btns);
-  }
-
-  rows.push([
-    Markup.button.callback("🧹 Очистить все", "svc_edit_img_clear"),
-    Markup.button.callback("✅ Готово", "svc_edit_img_done"),
-  ]);
-
-  return Markup.inlineKeyboard(rows);
-}
-
-async function handleSvcEditWizardPhoto(ctx) {
-  const step = ctx.session?.editWiz?.step;
-  const draft = ctx.session?.editDraft;
-
-  if (step !== "svc_edit_images" || !draft) return false;
-
-  const photos = ctx.message?.photo;
-  if (!Array.isArray(photos) || photos.length === 0) {
-    await safeReply(ctx, "⚠️ Пришлите фото (как изображение), чтобы добавить его к услуге.");
-    return true;
-  }
-
-  // Берём самый большой размер
-  const best = photos[photos.length - 1];
-  const fileId = best?.file_id;
-  if (!fileId) {
-    await safeReply(ctx, "⚠️ Не удалось получить file_id. Попробуйте отправить фото ещё раз.");
-    return true;
-  }
-
-  const tgRef = `tg:${fileId}`;
-  if (!Array.isArray(draft.images)) draft.images = [];
-  draft.images.push(tgRef);
-
-  const count = draft.images.length;
-  await safeReply(
-    ctx,
-    `✅ Фото добавлено. Сейчас в услуге: ${count} шт.\n\nОтправьте ещё фото или нажмите «✅ Готово».`,
-    buildEditImagesKeyboard(draft)
-  );
-
-  return true;
-}
-
 async function promptEditState(ctx, state) {
   const draft = ctx.session?.serviceDraft || {};
 
@@ -628,8 +567,7 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_visaIncluded",
       "svc_edit_netPrice",
       "svc_edit_expiration",
-    "svc_edit_isActive",
-    "svc_edit_images",
+      "svc_edit_isActive",
       "svc_edit_departureFlightDate",
       "svc_edit_returnFlightDate",
       "svc_edit_flightDetails",
@@ -3190,43 +3128,18 @@ async function handleSvcEditWizardText(ctx) {
                 draft.isActive = b;
               }
 
-              ctx.session.state = "svc_edit_images";
-              await safeReply(
-                ctx,
-                "🖼 Отправьте новое фото услуги (одну картинку).
-
-• Напишите «пропустить» — оставить текущее фото
-• Напишите «удалить» — удалить фото",
-                editWizNavKeyboard()
-              );
+              // ====== FINISH: save ======
+              if (typeof finishEditWizard === "function") {
+                await finishEditWizard(ctx);
+              } else {
+                await safeReply(
+                  ctx,
+                  "✅ Данные собраны. Теперь сохрани изменения через твою функцию finishEditWizard(ctx).",
+                  editWizNavKeyboard()
+                );
+              }
               return;
             }
-
-            case "svc_edit_images": {
-              const raw = (txt || "").trim().toLowerCase();
-
-              // пропустить/оставить
-              if (raw === "пропустить" || raw === "skip" || raw === "оставить") {
-                await finishEditWizard(ctx);
-                return;
-              }
-
-              // удалить
-              if (raw === "удалить" || raw === "delete" || raw === "remove") {
-                draft.images = [];
-                await finishEditWizard(ctx);
-                return;
-              }
-
-              // Если ввели что-то другое — ждём фото
-              await safeReply(
-                ctx,
-                "📷 Пришлите фото сообщением (не как файл).\nИли напишите «пропустить» / «удалить».",
-                editWizNavKeyboard()
-              );
-              return;
-            }
-
 
             default: {
               await safeReply(
@@ -3724,65 +3637,119 @@ bot.on("text", async (ctx, next) => {
 
 bot.on("photo", async (ctx, next) => {
   try {
-    // 1) Фото в режиме редактирования изображений услуги
-    if (await handleSvcEditWizardPhoto(ctx)) return;
+    const state = ctx.session?.state || null;
 
-    // 1b) Фото в старом режиме редактирования (если где-то ещё используется ctx.session.state)
-    const legacyState = ctx.session?.state;
-    const legacyDraft = ctx.session?.serviceDraft;
-    if (legacyState === "svc_edit_images" && legacyDraft) {
-      const photos = ctx.message?.photo;
-      const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
-      const fileId = best?.file_id;
-
-      if (!fileId) {
-        await safeReply(ctx, "⚠️ Не удалось получить file_id. Отправьте фото ещё раз.");
+    if (state === "svc_create_photo" && ctx.session?.serviceDraft) {
+      const photos = ctx.message.photo || [];
+      if (!photos.length) {
+        await ctx.reply("⚠️ Не удалось прочитать фото. Попробуйте ещё раз.");
         return;
       }
 
-      const tgRef = `tg:${fileId}`;
-      if (!Array.isArray(legacyDraft.images)) legacyDraft.images = [];
-      legacyDraft.images.push(tgRef);
+      const largest = photos[photos.length - 1];
+      const fileId = largest.file_id;
 
-      await safeReply(
-        ctx,
-        `✅ Фото добавлено. Сейчас в услуге: ${legacyDraft.images.length} шт.\n\nОтправьте ещё фото или нажмите «✅ Готово».`,
-        buildEditImagesKeyboard(legacyDraft)
-      );
+      ctx.session.serviceDraft.telegramPhotoFileId = fileId;
+      ctx.session.serviceDraft.images = [`tg:${fileId}`];
+
+      await finishCreateServiceFromWizard(ctx);
       return;
     }
-
-
-    // 2) Фото в мастере создания услуги
-    const wizStep = ctx.session?.wiz?.step;
-    const draft = ctx.session?.serviceDraft;
-
-    if (wizStep !== "create_images" || !draft) {
-      return next();
-    }
-
-    const photos = ctx.message?.photo;
-    const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
-    const fileId = best?.file_id;
-
-    if (!fileId) {
-      await safeReply(ctx, "⚠️ Не удалось получить file_id. Отправьте фото ещё раз.");
-      return;
-    }
-
-    const tgRef = `tg:${fileId}`;
-    if (!Array.isArray(draft.images)) draft.images = [];
-    draft.images.push(tgRef);
-
-    await safeReply(
-      ctx,
-      `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.\n\nОтправьте ещё фото или напишите «готово».`
-    );
   } catch (e) {
-    console.error("photo handler error:", e);
-    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
+    console.error("[tg-bot] photo handler error:", e);
+  }
+  return next();
+});
+
+/* ===================== /tour_123 ===================== */
+
+async function findServiceByIdViaSearch(actorId, serviceId, role = "client") {
+  const basePath =
+    role === "provider"
+      ? `/api/telegram/provider/${actorId}/search`
+      : `/api/telegram/client/${actorId}/search`;
+
+  for (const category of REFUSED_CATEGORIES) {
+    try {
+      const { data } = await axios.get(basePath, { params: { category } });
+
+      if (!data || !data.success || !Array.isArray(data.items)) continue;
+
+      const svc = data.items.find((s) => Number(s.id) === Number(serviceId));
+      if (svc) return { svc, category };
+    } catch (e) {
+      console.error("[tg-bot] findServiceByIdViaSearch error:", e?.response?.data || e.message || e);
+    }
+  }
+  return null;
+}
+
+bot.hears(/^\/tour_(\d+)$/i, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const actorId = getActorId(ctx);
+    if (!actorId) {
+      await ctx.reply("⚠️ Не удалось определить пользователя. Попробуйте позже.");
+      return;
+    }
+
+    const maybeProvider = await ensureProviderRole(ctx);
+    const role = maybeProvider || ctx.session?.role || "client";
+
+    await ctx.reply("⏳ Ищу по ID...");
+
+    const found = await findServiceByIdViaSearch(actorId, serviceId, role);
+    if (!found) {
+      await ctx.reply("😕 Не нашёл услугу с таким ID.\nВозможно, она снята с продажи или не относится к отказным.");
+      return;
+    }
+
+    const { svc, category } = found;
+    const { text, photoUrl, serviceUrl } = buildServiceMessage(svc, category, role);
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: "Подробнее на сайте", url: serviceUrl },
+          { text: "📩 Быстрый запрос", callback_data: `request:${svc.id}` },
+        ],
+      ],
+    };
+
+    if (photoUrl) {
+      try {
+        if (photoUrl.startsWith("tgfile:")) {
+          const fileId = photoUrl.replace(/^tgfile:/, "");
+          await ctx.replyWithPhoto(fileId, {
+            caption: text,
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
+        } else {
+          await ctx.replyWithPhoto(photoUrl, {
+            caption: text,
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          });
+        }
+      } catch (e) {
+        console.error(
+          "[tg-bot] replyWithPhoto failed in /tour, fallback to text:",
+          e?.response?.data || e?.message || e
+        );
+        await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
+      }
+    } else {
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
+    }
+  } catch (e) {
+    console.error("[tg-bot] /tour_ handler error:", e);
+    await ctx.reply("⚠️ Не удалось загрузить. Попробуйте позже.");
   }
 });
+
+/* ===================== INLINE SEARCH ===================== */
+
 bot.on("inline_query", async (ctx) => {
   try {
     logUpdate(ctx, "inline_query");
@@ -4060,85 +4027,5 @@ bot.on("inline_query", async (ctx) => {
   }
 });
 
-// ⚠️ здесь НЕТ 
-/* ===================== EDIT IMAGES (ADD/REMOVE/CLEAR) ===================== */
-
-bot.action(/^svc_edit_img_remove:(\d+)$/, async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-
-    const idx = Number(ctx.match[1]);
-    const draft =
-      ctx.session?.editDraft ||
-      ctx.session?.serviceDraft ||
-      null;
-
-    if (!draft || !Array.isArray(draft.images)) {
-      await safeReply(ctx, "⚠️ Изображения не найдены.");
-      return;
-    }
-    if (Number.isNaN(idx) || idx < 0 || idx >= draft.images.length) {
-      await safeReply(ctx, "⚠️ Некорректный номер изображения.");
-      return;
-    }
-
-    draft.images.splice(idx, 1);
-
-    await safeReply(
-      ctx,
-      `✅ Удалено. Сейчас в услуге: ${draft.images.length} шт.\\n\\nОтправьте новое фото или нажмите «✅ Готово».`,
-      buildEditImagesKeyboard(draft)
-    );
-  } catch (e) {
-    console.error("svc_edit_img_remove error:", e);
-    await safeReply(ctx, "⚠️ Не удалось удалить изображение.");
-  }
-});
-
-bot.action("svc_edit_img_clear", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-
-    const draft =
-      ctx.session?.editDraft ||
-      ctx.session?.serviceDraft ||
-      null;
-
-    if (!draft) {
-      await safeReply(ctx, "⚠️ Черновик услуги не найден.");
-      return;
-    }
-
-    draft.images = [];
-
-    await safeReply(
-      ctx,
-      "🧹 Все изображения очищены. Пришлите новое фото или нажмите «✅ Готово».",
-      buildEditImagesKeyboard(draft)
-    );
-  } catch (e) {
-    console.error("svc_edit_img_clear error:", e);
-    await safeReply(ctx, "⚠️ Не удалось очистить изображения.");
-  }
-});
-
-bot.action("svc_edit_img_done", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-
-    // Переходим в подтверждение/выбор следующего поля.
-    if (ctx.session?.editWiz) {
-      ctx.session.editWiz.step = "svc_edit_confirm";
-    } else {
-      ctx.session.state = "svc_edit_confirm";
-    }
-
-    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
-  } catch (e) {
-    console.error("svc_edit_img_done error:", e);
-    await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
-  }
-});
-
-bot.launch() — запуск делаем из index.js
+// ⚠️ здесь НЕТ bot.launch() — запуск делаем из index.js
 module.exports = { bot };
