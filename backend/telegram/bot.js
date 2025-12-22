@@ -2147,29 +2147,29 @@ bot.on("text", async (ctx, next) => {
       ctx.session.pendingRequestServiceId = null;
       return;
     }
-// 1.5) мастер РЕДАКТИРОВАНИЯ (полный)
-if (state && String(state).startsWith("svc_edit_") && ctx.session?.serviceDraft) {
-  const text = ctx.message.text.trim();
-  const draft = ctx.session.serviceDraft;
-  const low = text.toLowerCase();
-    if (low === "отмена") {
-    ctx.session.state = null;
-    ctx.session.editingServiceId = null;
-    ctx.session.serviceDraft = null;
-    ctx.session.wizardStack = null;
-  
-    await ctx.reply("❌ Редактирование отменено.");
-    await ctx.reply("🧳 Выберите действие:", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
-          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
-          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
-        ],
-      },
-    });
-    return;
-  }
+    // 1.5) мастер РЕДАКТИРОВАНИЯ (полный)
+    if (state && String(state).startsWith("svc_edit_") && ctx.session?.serviceDraft) {
+      const text = ctx.message.text.trim();
+      const draft = ctx.session.serviceDraft;
+      const low = text.toLowerCase();
+        if (low === "отмена") {
+        ctx.session.state = null;
+        ctx.session.editingServiceId = null;
+        ctx.session.serviceDraft = null;
+        ctx.session.wizardStack = null;
+      
+        await ctx.reply("❌ Редактирование отменено.");
+        await ctx.reply("🧳 Выберите действие:", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+              [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+            ],
+          },
+        });
+        return;
+      }
 
 
   const keep = () => ["пропустить", "skip", "-"].includes(low);
@@ -2524,6 +2524,447 @@ if (state && String(state).startsWith("svc_edit_") && ctx.session?.serviceDraft)
 
     default:
       break;
+  }
+}
+
+    // ===================== EDIT WIZARD (svc_edit_*) TEXT HANDLER =====================
+// Вставь ЭТОТ блок внутрь твоего bot.on("text", async (ctx) => { ... })
+// ПРИОРИТЕТНО: поставь его ВЫШЕ обычного svc_wiz_* (создание), чтобы не пересекалось.
+
+const state = ctx.session?.state || null;
+const textRaw = (ctx.message?.text || "").trim();
+const text = textRaw;
+
+// helper: user typed "пропустить"
+const keep = () => {
+  const v = String(text || "").toLowerCase().trim();
+  return (
+    v === "пропустить" ||
+    v === "skip" ||
+    v === "-" ||
+    v === "—" ||
+    v === "•" ||
+    v === "_"
+  );
+};
+
+// helper: user typed "нет" (to clear optional fields)
+const isNo = () => {
+  const v = String(text || "").toLowerCase().trim();
+  return v === "нет" || v === "no" || v === "none" || v === "null";
+};
+
+// helper: bool parse (да/нет)
+const parseYesNo = () => {
+  const v = String(text || "").toLowerCase().trim();
+  if (["да", "y", "yes", "true", "1"].includes(v)) return true;
+  if (["нет", "n", "no", "false", "0"].includes(v)) return false;
+  return null;
+};
+
+// helper: number parse
+const parseNum = () => {
+  const v = String(text || "").replace(",", ".").trim();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// helper: simple date validate YYYY-MM-DD
+const isISODate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "").trim());
+
+// helper: pax "2/1/0"
+const parsePax = () => {
+  const v = String(text || "").trim();
+  const m = v.match(/^(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)$/);
+  if (!m) return null;
+  return { adt: Number(m[1]), chd: Number(m[2]), inf: Number(m[3]) };
+};
+
+// helper: wizard navigation
+const go = async (nextState, message) => {
+  if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
+  ctx.session.wizardStack.push(state);
+  ctx.session.state = nextState;
+  await ctx.reply(message, editWizNavKeyboard());
+};
+
+// ---- MAIN EDIT ROUTER ----
+if (state && String(state).startsWith("svc_edit_") && ctx.session?.serviceDraft) {
+  const draft = ctx.session.serviceDraft;
+
+  switch (state) {
+    // ---------- COMMON START ----------
+    case "svc_edit_title": {
+      if (!keep()) draft.title = text;
+      // дальше — зависит от category в draft
+      if (draft.category === "refused_hotel") {
+        await go(
+          "svc_edit_hotel_country",
+          `🌍 Страна (текущее: ${draft.country || "(пусто)"}).\nВведите новую или "пропустить":`
+        );
+        return;
+      }
+      // default: refused_tour / author_tour / other tour-like
+      await go(
+        "svc_edit_tour_country",
+        `🌍 Страна направления (текущее: ${draft.country || "(пусто)"}).\nВведите новую или "пропустить":`
+      );
+      return;
+    }
+
+    // ---------- TOURS (refused_tour / author_tour) ----------
+    case "svc_edit_tour_country": {
+      if (!keep()) draft.country = text;
+      await go(
+        "svc_edit_tour_from",
+        `🛫 Город вылета (текущее: ${draft.fromCity || "(пусто)"}).\nВведите новый или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_from": {
+      if (!keep()) draft.fromCity = text;
+      await go(
+        "svc_edit_tour_to",
+        `🛬 Город прибытия (текущее: ${draft.toCity || "(пусто)"}).\nВведите новый или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_to": {
+      if (!keep()) draft.toCity = text;
+      await go(
+        "svc_edit_tour_start",
+        `📅 Дата начала (текущее: ${draft.startDate || "(пусто)"}).\nФормат YYYY-MM-DD или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_start": {
+      if (!keep()) {
+        if (!isISODate(text)) {
+          await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.startDate = text;
+      }
+      await go(
+        "svc_edit_tour_end",
+        `📅 Дата окончания (текущее: ${draft.endDate || "(пусто)"}).\nФормат YYYY-MM-DD или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_end": {
+      if (!keep()) {
+        if (!isISODate(text)) {
+          await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.endDate = text;
+      }
+
+      // Переходим к рейсам (опционально)
+      await go(
+        "svc_edit_flight_departure",
+        `🛫 Дата рейса вылета (текущее: ${draft.departureFlightDate || "(нет)"}).\nВведите YYYY-MM-DD, или "нет" чтобы убрать, или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_flight_departure": {
+      if (!keep()) {
+        if (isNo()) {
+          draft.departureFlightDate = "";
+        } else {
+          if (!isISODate(text)) {
+            await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или «нет», или «пропустить».", editWizNavKeyboard());
+            return;
+          }
+          draft.departureFlightDate = text;
+        }
+      }
+      await go(
+        "svc_edit_flight_return",
+        `🛬 Дата рейса обратно (текущее: ${draft.returnFlightDate || "(нет)"}).\nВведите YYYY-MM-DD, или "нет" чтобы убрать, или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_flight_return": {
+      if (!keep()) {
+        if (isNo()) {
+          draft.returnFlightDate = "";
+        } else {
+          if (!isISODate(text)) {
+            await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или «нет», или «пропустить».", editWizNavKeyboard());
+            return;
+          }
+          draft.returnFlightDate = text;
+        }
+      }
+      await go(
+        "svc_edit_flight_details",
+        `✈️ Детали рейса (текущее: ${draft.flightDetails || "(нет)"}).\nВведите текст, или "нет" чтобы убрать, или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_flight_details": {
+      if (!keep()) {
+        if (isNo()) draft.flightDetails = "";
+        else draft.flightDetails = text;
+      }
+      await go(
+        "svc_edit_tour_hotel",
+        `🏨 Отель (текущее: ${draft.hotel || "(пусто)"}).\nВведите новый или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_hotel": {
+      if (!keep()) draft.hotel = text;
+      await go(
+        "svc_edit_tour_accommodation",
+        `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите новое или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_tour_accommodation": {
+      if (!keep()) draft.accommodation = text;
+
+      // Общие финальные поля
+      await go(
+        "svc_edit_price",
+        `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или "пропустить":`
+      );
+      return;
+    }
+
+    // ---------- REFUSED HOTEL ----------
+    case "svc_edit_hotel_country": {
+      if (!keep()) draft.country = text;
+      await go(
+        "svc_edit_hotel_city",
+        `🏙 Город (текущее: ${draft.toCity || "(пусто)"}).\nВведите новый или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_city": {
+      if (!keep()) draft.toCity = text;
+      await go(
+        "svc_edit_hotel_name",
+        `🏨 Отель (текущее: ${draft.hotel || "(пусто)"}).\nВведите новый или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_name": {
+      if (!keep()) draft.hotel = text;
+      await go(
+        "svc_edit_hotel_checkin",
+        `📅 Дата заезда (текущее: ${draft.startDate || "(пусто)"}).\nYYYY-MM-DD или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_checkin": {
+      if (!keep()) {
+        if (!isISODate(text)) {
+          await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.startDate = text;
+      }
+      await go(
+        "svc_edit_hotel_checkout",
+        `📅 Дата выезда (текущее: ${draft.endDate || "(пусто)"}).\nYYYY-MM-DD или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_checkout": {
+      if (!keep()) {
+        if (!isISODate(text)) {
+          await ctx.reply("⚠️ Нужен формат YYYY-MM-DD. Или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.endDate = text;
+      }
+      await go(
+        "svc_edit_hotel_roomcat",
+        `⭐️ Категория номера (текущее: ${draft.roomCategory || "(пусто)"}).\nВведите или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_roomcat": {
+      if (!keep()) draft.roomCategory = text;
+      await go(
+        "svc_edit_hotel_accommodation",
+        `🛏 Размещение (текущее: ${draft.accommodation || "(пусто)"}).\nВведите или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_accommodation": {
+      if (!keep()) draft.accommodation = text;
+      await go(
+        "svc_edit_hotel_food",
+        `🍽 Питание (текущее: ${draft.food || "(пусто)"}).\nВведите или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_food": {
+      if (!keep()) draft.food = text;
+      await go(
+        "svc_edit_hotel_halal",
+        `🥗 Halal? (текущее: ${draft.halal ? "да" : "нет"}).\nОтветьте да/нет или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_halal": {
+      if (!keep()) {
+        const b = parseYesNo();
+        if (b === null) {
+          await ctx.reply("⚠️ Ответьте да/нет или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.halal = b;
+      }
+      await go(
+        "svc_edit_hotel_transfer",
+        `🚗 Трансфер (текущее: ${draft.transfer || "(пусто)"}).\nВведите или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_transfer": {
+      if (!keep()) draft.transfer = text;
+      await go(
+        "svc_edit_hotel_changeable",
+        `🔁 Можно изменения? (текущее: ${draft.changeable ? "да" : "нет"}).\nда/нет или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_changeable": {
+      if (!keep()) {
+        const b = parseYesNo();
+        if (b === null) {
+          await ctx.reply("⚠️ Ответьте да/нет или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.changeable = b;
+      }
+      await go(
+        "svc_edit_hotel_pax",
+        `👥 ADT/CHD/INF (текущее: ${draft.adt ?? 0}/${draft.chd ?? 0}/${draft.inf ?? 0}).\nВведите 2/1/0 или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_hotel_pax": {
+      if (!keep()) {
+        const p = parsePax();
+        if (!p) {
+          await ctx.reply('⚠️ Введите в формате "2/1/0" или напишите «пропустить».', editWizNavKeyboard());
+          return;
+        }
+        draft.adt = p.adt;
+        draft.chd = p.chd;
+        draft.inf = p.inf;
+      }
+      await go(
+        "svc_edit_price",
+        `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или "пропустить":`
+      );
+      return;
+    }
+
+    // ---------- COMMON FINALS ----------
+    case "svc_edit_price": {
+      if (!keep()) {
+        const n = parseNum();
+        if (n === null || n < 0) {
+          await ctx.reply("⚠️ Введите корректное число (например 1200) или «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.price = n;
+      }
+      await go(
+        "svc_edit_grossPrice",
+        `💳 Цена БРУТТО (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_grossPrice": {
+      if (!keep()) {
+        const n = parseNum();
+        if (n === null || n < 0) {
+          await ctx.reply("⚠️ Введите корректное число или «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.grossPrice = n;
+      }
+      await go(
+        "svc_edit_expiration",
+        `⏳ Актуально до (YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${draft.expiration || "(нет)"}\nВведите или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_expiration": {
+      if (!keep()) {
+        if (isNo()) {
+          draft.expiration = "";
+        } else {
+          // здесь можно оставить твою функцию normalizeDateTimeInputHelper если хочешь
+          // но чтобы было самодостаточно — примем текст как есть, а нормализацию сделает backend/validator
+          draft.expiration = text;
+        }
+      }
+      await go(
+        "svc_edit_isActive",
+        `✅ Активна? (текущее: ${draft.isActive ? "да" : "нет"}).\nда/нет или "пропустить":`
+      );
+      return;
+    }
+
+    case "svc_edit_isActive": {
+      if (!keep()) {
+        const b = parseYesNo();
+        if (b === null) {
+          await ctx.reply("⚠️ Ответьте да/нет или напишите «пропустить».", editWizNavKeyboard());
+          return;
+        }
+        draft.isActive = b;
+      }
+
+      // ====== FINISH: save ======
+      // Тут НЕ делаем API автоматически, потому что у тебя может быть своя функция сохранения.
+      // Вызови свою существующую функцию, например saveEditedService(ctx) / providerUpdateService(...) и т.п.
+      // Я оставляю универсальный хук:
+      if (typeof finishEditWizard === "function") {
+        await finishEditWizard(ctx);
+      } else {
+        await ctx.reply(
+          "✅ Данные собраны. Теперь сохрани изменения через твою функцию finishEditWizard(ctx).",
+          editWizNavKeyboard()
+        );
+      }
+      return;
+    }
+
+    default: {
+      await ctx.reply("🤔 Не понял шаг редактирования. Нажмите ⬅️ Назад или ❌ Отмена.", editWizNavKeyboard());
+      return;
+    }
   }
 }
 
