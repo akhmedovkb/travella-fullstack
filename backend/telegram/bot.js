@@ -2414,6 +2414,58 @@ const keyboard = {
     await safeReply(ctx, "⚠️ Не удалось загрузить услуги. Попробуйте позже.");
   }
 });
+/* ===================== SERVICE ACTION BUTTONS ===================== */
+
+bot.action(/^svc_extend:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("⏳ Продлеваю…");
+    const serviceId = Number(ctx.match[1]);
+    const actorId = getActorId(ctx);
+
+    await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/extend7`
+    );
+
+    await safeReply(ctx, "✅ Услуга продлена на 7 дней.");
+  } catch (e) {
+    console.error("[tg-bot] svc_extend error:", e?.response?.data || e);
+    await safeReply(ctx, "⚠️ Не удалось продлить услугу.");
+  }
+});
+
+bot.action(/^svc_unpublish:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("⛔ Снимаю…");
+    const serviceId = Number(ctx.match[1]);
+    const actorId = getActorId(ctx);
+
+    await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/unpublish`
+    );
+
+    await safeReply(ctx, "⛔ Услуга снята с публикации.");
+  } catch (e) {
+    console.error("[tg-bot] svc_unpublish error:", e?.response?.data || e);
+    await safeReply(ctx, "⚠️ Не удалось снять услугу.");
+  }
+});
+
+bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery("🗄 Архивирую…");
+    const serviceId = Number(ctx.match[1]);
+    const actorId = getActorId(ctx);
+
+    await axios.post(
+      `/api/telegram/provider/${actorId}/services/${serviceId}/archive`
+    );
+
+    await safeReply(ctx, "🗄 Услуга архивирована.");
+  } catch (e) {
+    console.error("[tg-bot] svc_archive error:", e?.response?.data || e);
+    await safeReply(ctx, "⚠️ Не удалось архивировать услугу.");
+  }
+});
 
 /* ===================== WIZARD: CANCEL/BACK ===================== */
 
