@@ -563,6 +563,100 @@ bot.action("svc_edit_cancel", async (ctx) => {
   }
 });
 
+bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    // 1) доступ только поставщику
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Редактирование доступно только поставщикам.", getMainMenuKeyboard("client"));
+      return;
+    }
+
+    // 2) кто редактирует
+    const actorId = getActorId(ctx);
+    if (!actorId) {
+      await safeReply(ctx, "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
+
+    const serviceId = Number(ctx.match[1]);
+    if (!serviceId) {
+      await safeReply(ctx, "⚠️ Некорректный ID услуги.");
+      return;
+    }
+
+    // 3) грузим услугу (используем твой endpoint списка)
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      await safeReply(ctx, "⚠️ Не удалось загрузить услуги. Попробуйте позже.");
+      return;
+    }
+
+    const svc = data.items.find((s) => Number(s.id) === serviceId);
+    if (!svc) {
+      await safeReply(ctx, "⚠️ Услуга не найдена (возможно удалена/скрыта).");
+      return;
+    }
+
+    const category = String(svc.category || svc.type || "refused_tour").trim();
+    const det = parseDetailsAny(svc.details);
+
+    // 4) собираем draft в формате, который ждёт твой edit-wizard
+    const draft = {
+      id: svc.id,
+      category,
+
+      // общие
+      title: svc.title || det.title || "",
+      price: det.netPrice ?? det.price ?? svc.price ?? "",
+      grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+
+      expiration: det.expiration || svc.expiration || "",
+      isActive: typeof det.isActive === "boolean" ? det.isActive : (typeof svc.isActive === "boolean" ? svc.isActive : true),
+
+      // туры
+      country: det.directionCountry || "",
+      fromCity: det.directionFrom || "",
+      toCity: det.directionTo || "",
+      startDate: det.startDate || "",
+      endDate: det.endDate || "",
+      departureFlightDate: det.departureFlightDate || "",
+      returnFlightDate: det.returnFlightDate || "",
+      flightDetails: det.flightDetails || "",
+      hotel: det.hotel || "",
+      accommodation: det.accommodation || "",
+
+      // отели (wizard использует roomCategory / halal / transfer / changeable / adt/chd/inf)
+      roomCategory: det.roomCategory || det.accommodationCategory || "",
+      food: det.food || "",
+      halal: typeof det.halal === "boolean" ? det.halal : false,
+      transfer: det.transfer || "",
+      changeable: typeof det.changeable === "boolean" ? det.changeable : false,
+
+      // pax: поддержим оба варианта ключей (на случай старых данных)
+      adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
+      chd: Number.isFinite(det.chd) ? det.chd : (Number.isFinite(det.accommodationCHD) ? det.accommodationCHD : 0),
+      inf: Number.isFinite(det.inf) ? det.inf : (Number.isFinite(det.accommodationINF) ? det.accommodationINF : 0),
+    };
+
+    // 5) стартуем wizard
+    if (!ctx.session) ctx.session = {};
+    ctx.session.serviceDraft = draft;
+    ctx.session.editingServiceId = svc.id;
+    ctx.session.wizardStack = [];
+    ctx.session.state = "svc_edit_title";
+
+    await safeReply(ctx, `✏️ Редактирование услуги #${svc.id}\n\nНачнём 👇`);
+    await promptEditState(ctx, "svc_edit_title");
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_start error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось запустить редактирование. Попробуйте позже.");
+  }
+});
+
+
 async function finishEditWizard(ctx) {
   const draft = ctx.session?.serviceDraft;
   const serviceId = ctx.session?.editingServiceId || draft?.id;
@@ -577,20 +671,22 @@ async function finishEditWizard(ctx) {
   const details = {};
 
   if (draft.category === "refused_hotel") {
-    details.directionCountry = draft.country || "";
-    details.directionTo = draft.toCity || "";
-    details.hotel = draft.hotel || "";
-    details.startDate = draft.startDate || "";
-    details.endDate = draft.endDate || "";
-    details.roomCategory = draft.roomCategory || "";
-    details.accommodation = draft.accommodation || "";
-    details.food = draft.food || "";
-    details.halal = !!draft.halal;
-    details.transfer = draft.transfer || "";
-    details.changeable = !!draft.changeable;
-    details.adt = draft.adt ?? 0;
-    details.chd = draft.chd ?? 0;
-    details.inf = draft.inf ?? 0;
+  details.directionCountry = draft.country || "";
+  details.directionTo = draft.toCity || "";
+  details.hotel = draft.hotel || "";
+  details.startDate = draft.startDate || "";
+  details.endDate = draft.endDate || "";
+  details.accommodationCategory = draft.roomCategory || ""; // <-- как в create
+  details.accommodation = draft.accommodation || "";
+  details.food = draft.food || "";
+  details.halal = !!draft.halal;
+  details.transfer = draft.transfer || "";
+  details.changeable = !!draft.changeable;
+
+  // <-- как в create
+  details.accommodationADT = draft.adt ?? 0;
+  details.accommodationCHD = draft.chd ?? 0;
+  details.accommodationINF = draft.inf ?? 0;
   } else {
     details.directionCountry = draft.country || "";
     details.directionFrom = draft.fromCity || "";
@@ -2111,10 +2207,14 @@ bot.action("prov_services:list_cards", async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [
+            { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
+            { text: "🌐 Открыть в кабинете", url: manageUrl },
+          ],
           [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
+
 
       if (photoUrl) {
         try {
@@ -2241,7 +2341,10 @@ bot.action("prov_services:list", async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [
+            { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
+            { text: "🌐 Открыть в кабинете", url: manageUrl },
+          ],
           [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
