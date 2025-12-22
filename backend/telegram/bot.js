@@ -318,11 +318,21 @@ async function safeReply(ctx, text, extra) {
 /* ===================== EDIT WIZARD NAV (svc_edit_*) ===================== */
 
 function editWizNavKeyboard() {
-  return Markup.inlineKeyboard([
-    Markup.button.callback("⬅️ Назад", "svc_edit_back"),
-    Markup.button.callback("❌ Отмена", "svc_edit_cancel"),
-  ]);
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
+        ],
+        [
+          { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
+          { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+        ],
+      ],
+    },
+  };
 }
+
 
 async function promptEditState(ctx, state) {
   const draft = ctx.session?.serviceDraft || {};
@@ -546,6 +556,33 @@ bot.action("svc_edit_back", async (ctx) => {
     await promptEditState(ctx, prev);
   } catch (e) {
     console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
+  }
+});
+
+bot.action("svc_edit:skip", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    const state = ctx.session?.state;
+    if (!state || !state.startsWith("svc_edit_")) {
+      return;
+    }
+
+    // Эмулируем ввод "пропустить"
+    ctx.message = { text: "пропустить" };
+
+    // Переиспользуем существующий text handler
+    await bot.handleUpdate({
+      update_id: Date.now(),
+      message: {
+        message_id: Date.now(),
+        from: ctx.from,
+        chat: ctx.chat,
+        text: "пропустить",
+      },
+    });
+  } catch (e) {
+    console.error("[tg-bot] svc_edit:skip error:", e);
   }
 });
 
