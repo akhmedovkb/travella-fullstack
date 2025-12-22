@@ -148,6 +148,65 @@ async function getPublicThumbUrlFromTgFile(botInstance, fileId) {
 
 /* ===================== HELPERS ===================== */
 
+function buildServicesTextList(items, role = "provider") {
+  const lines = [];
+
+  for (const svc of items) {
+    const category = svc.category || svc.type || "refused_tour";
+    const d = parseDetailsAny(svc.details);
+
+    const catLabel = CATEGORY_LABELS[category] || "Услуга";
+    const startRaw = d.departureFlightDate || d.startDate || null;
+    const endRaw = d.returnFlightDate || d.endDate || null;
+
+    let datePart = "";
+    if (startRaw && endRaw && String(startRaw) !== String(endRaw)) {
+      datePart = `${prettyDateTime(startRaw)}–${prettyDateTime(endRaw)}`;
+    } else if (startRaw) {
+      datePart = `${prettyDateTime(startRaw)}`;
+    }
+
+    const priceRaw = pickPrice(d, svc, role);
+    const priceWithCur = formatPriceWithCurrency(priceRaw);
+
+    const title = normalizeTitleSoft(
+      (typeof svc.title === "string" && svc.title.trim()) ? svc.title.trim() : (catLabel || "Услуга")
+    );
+
+    // ссылка на кабинет
+    const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+    const parts = [];
+    parts.push(`#${svc.id}`);
+    parts.push(catLabel);
+    if (title) parts.push(title);
+    if (datePart) parts.push(datePart);
+    if (priceWithCur) parts.push(priceWithCur);
+
+    // одна строка
+    lines.push(`• ${parts.join(" · ")}\n  ${manageUrl}`);
+  }
+
+  return lines;
+}
+
+function chunkText(lines, maxLen = 3800) {
+  const chunks = [];
+  let buf = "";
+
+  for (const line of lines) {
+    if ((buf + "\n" + line).length > maxLen) {
+      if (buf.trim()) chunks.push(buf.trim());
+      buf = line;
+    } else {
+      buf = buf ? (buf + "\n" + line) : line;
+    }
+  }
+
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks;
+}
+
 function truncate(str, max = 64) {
   const s = String(str || "");
   if (s.length <= max) return s;
@@ -265,7 +324,7 @@ function editWizNavKeyboard() {
   ]);
 }
 
-+async function promptEditState(ctx, state) {
+async function promptEditState(ctx, state) {
   const draft = ctx.session?.serviceDraft || {};
 
   switch (state) {
@@ -1917,16 +1976,20 @@ bot.hears(/🧳 Мои услуги/i, async (ctx) => {
     return;
   }
 
-  await ctx.reply("🧳 Выберите действие:", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
-        [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
-        [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
-        [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+await ctx.reply("🧳 Выберите действие:", {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
+      [
+        { text: "📋 Списком", callback_data: "prov_services:list_text" },
+        { text: "🖼 Карточками", callback_data: "prov_services:list_cards" },
       ],
-    },
-  });
+      [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+      [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+    ],
+  },
+});
+
 });
 
 bot.action("prov_services:back", async (ctx) => {
@@ -1968,7 +2031,136 @@ bot.action("prov_services:create", async (ctx) => {
     console.error("[tg-bot] prov_services:create error:", e?.response?.data || e);
   }
 });
+bot.action("prov_services:list_cards", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
 
+    const role = await ensureProviderRole(ctx);
+    if (role !== "provider") {
+      await safeReply(ctx, "⚠️ Раздел доступен только поставщикам.", getMainMenuKeyboard("client"));
+      return;
+    }
+
+    const actorId = getActorId(ctx);
+    if (!actorId) {
+      await safeReply(
+        ctx,
+        "⚠️ Не удалось определить пользователя. Откройте бота в ЛС и попробуйте ещё раз."
+      );
+      return;
+    }
+
+    await safeReply(ctx, "⏳ Загружаю ваши услуги...");
+    const { data } = await axios.get(`/api/telegram/provider/${actorId}/services`);
+
+    if (!data || !data.success || !Array.isArray(data.items)) {
+      console.log("[tg-bot] provider services malformed:", data);
+      await safeReply(ctx, "⚠️ Не удалось загрузить услуги. Попробуйте позже.");
+      return;
+    }
+
+    if (!data.items.length) {
+      await safeReply(
+        ctx,
+        "Пока нет опубликованных услуг.\n\nНажмите «➕ Создать услугу» или добавьте через кабинет.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+              [{ text: "🌐 Открыть кабинет", url: `${SITE_URL}/dashboard/services/marketplace?from=tg` }],
+              [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    await safeReply(
+      ctx,
+      `✅ Найдено услуг: ${data.items.length}.\nПоказываю первые 10 (по ближайшей дате).`
+    );
+
+    const itemsSorted = [...data.items].sort((a, b) => {
+      const da = getStartDateForSort(a);
+      const db = getStartDateForSort(b);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.getTime() - db.getTime();
+    });
+
+    for (const svc of itemsSorted.slice(0, 10)) {
+      const category = svc.category || svc.type || "refused_tour";
+      const details = parseDetailsAny(svc.details);
+
+      const { text, photoUrl } = buildServiceMessage(svc, category, "provider");
+      const status = svc.status || "draft";
+      const isActive = isServiceActual(details, svc);
+      const expirationRaw = details.expiration || svc.expiration || null;
+
+      const headerLines = [];
+      headerLines.push(
+        escapeMarkdown(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`)
+      );
+      headerLines.push(escapeMarkdown(`Статус: ${status}${!isActive ? " (неактуально)" : ""}`));
+      if (expirationRaw) headerLines.push(escapeMarkdown(`Актуально до: ${expirationRaw}`));
+
+      const msg = headerLines.join("\n") + "\n\n" + text;
+      const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
+        ],
+      };
+
+      if (photoUrl) {
+        try {
+          if (photoUrl.startsWith("tgfile:")) {
+            const fileId = photoUrl.replace(/^tgfile:/, "");
+            await ctx.replyWithPhoto(fileId, {
+              caption: msg,
+              parse_mode: "Markdown",
+              reply_markup: keyboard,
+            });
+          } else {
+            await ctx.replyWithPhoto(photoUrl, {
+              caption: msg,
+              parse_mode: "Markdown",
+              reply_markup: keyboard,
+            });
+          }
+        } catch (e) {
+          console.error(
+            "[tg-bot] replyWithPhoto failed, fallback to text:",
+            e?.response?.data || e?.message || e
+          );
+          await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
+        }
+      } else {
+        await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
+      }
+    }
+
+    await safeReply(ctx, "Что делаем дальше? 👇", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
+  } catch (e) {
+    console.error(
+      "[tg-bot] provider services error:",
+      e?.response?.data || e?.message || e
+    );
+    await safeReply(ctx, "⚠️ Не удалось загрузить услуги. Попробуйте позже.");
+  }
+});
 bot.action("prov_services:list", async (ctx) => {
   try {
     await ctx.answerCbQuery();
