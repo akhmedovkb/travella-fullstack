@@ -2640,15 +2640,25 @@ bot.on("inline_query", async (ctx) => {
         } catch {
           thumbUrl = null;
         }
-      } else if (photoUrl?.startsWith("https://")) {
-        if (photoUrl.includes("/api/telegram/service-image/")) {
-          thumbUrl = photoUrl.includes("?")
-            ? `${photoUrl}&thumb=1`
-            : `${photoUrl}?thumb=1`;
+      } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
+        // ✅ inline thumb должен быть публичным и желательно https
+        let u = photoUrl;
+      
+        // если это наш сервисный эндпоинт - просим миниатюру
+        if (u.includes("/api/telegram/service-image/")) {
+          u = u.includes("?") ? `${u}&thumb=1` : `${u}?thumb=1`;
+        }
+      
+        // Telegram thumb_url: лучше строго https
+        if (u.startsWith("http://")) {
+          // если у тебя в проде реально https — лучше чтобы сюда никогда не попадало
+          // но на всякий случай не отправляем http как thumb
+          thumbUrl = null;
         } else {
-          thumbUrl = photoUrl;
+          thumbUrl = u;
         }
       }
+
       
       const inlinePhotoUrl =
         typeof thumbUrl === "string" && thumbUrl.startsWith("https://")
