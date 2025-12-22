@@ -540,22 +540,6 @@ async function promptEditState(ctx, state) {
   }
 }
 
-bot.action("svc_edit_back", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    const stack = ctx.session?.wizardStack || [];
-    const prev = stack.pop();
-    if (!prev) {
-      await safeReply(ctx, "⏮ Назад больше некуда.", editWizNavKeyboard());
-      return;
-    }
-    ctx.session.state = prev;
-    await promptEditState(ctx, prev);
-  } catch (e) {
-    console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
-  }
-});
-
 bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -607,6 +591,7 @@ bot.action("svc_edit:skip", async (ctx) => {
     ];
 
     const isHotelFlow = category.includes("hotel");
+
     const order = isHotelFlow ? hotelOrder : tourOrder;
 
     const idx = order.indexOf(state);
@@ -625,6 +610,23 @@ bot.action("svc_edit:skip", async (ctx) => {
   } catch (e) {
     console.error("svc_edit:skip error", e);
     await safeReply(ctx, "⚠️ Ошибка при пропуске. Попробуйте ещё раз.");
+  }
+});
+
+
+bot.action("svc_edit_back", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const stack = ctx.session?.wizardStack || [];
+    const prev = stack.pop();
+    if (!prev) {
+      await safeReply(ctx, "⏮ Назад больше некуда.", editWizNavKeyboard());
+      return;
+    }
+    ctx.session.state = prev;
+    await promptEditState(ctx, prev);
+  } catch (e) {
+    console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
   }
 });
 
@@ -817,40 +819,6 @@ async function finishEditWizard(ctx) {
     });
   }
 }
-
-// Универсальный вход: обрабатывает "ввод текста" для wizard'а редактирования
-async function handleSvcEditText(ctx, rawText) {
-  const state = ctx.session?.state;
-  if (!state || !state.startsWith("svc_edit_")) return false;
-
-  const text = String(rawText ?? "").trim();
-
-  // Тут должна быть ТА ЖЕ логика, что у тебя сейчас внутри bot.on("text"),
-  // в ветке if (state.startsWith("svc_edit_")) { ... }
-  //
-  // Суть: НЕ отвечать в чат "похоже вы не в режиме редактирования" —
-  // просто вернуть false, если не наш случай.
-  //
-  // ВАЖНО: "пропустить" должен вести к переходу на следующий шаг
-  // (как сейчас у тебя работает при вводе текстом).
-
-  // === ПРИМЕР СХЕМЫ (замени на твою реальную) ===
-  // switch (state) {
-  //   case "svc_edit_title":
-  //     if (text.toLowerCase() !== "пропустить") ctx.session.serviceDraft.title = text;
-  //     pushEditStack(ctx, state); ctx.session.state = "svc_edit_price";
-  //     await promptEditState(ctx, ctx.session.state);
-  //     return true;
-  //   ...
-  //   case "svc_edit_finish":
-  //     await finishEditWizard(ctx);
-  //     return true;
-  // }
-  // === /ПРИМЕР ===
-
-  return true;
-}
-
 
 function logUpdate(ctx, label = "update") {
   try {
