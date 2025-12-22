@@ -695,87 +695,83 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
 
 
 async function finishEditWizard(ctx) {
-  const draft = ctx.session?.serviceDraft;
-  const serviceId = ctx.session?.editingServiceId || draft?.id;
   const actorId = getActorId(ctx);
+  const draft = ctx.session?.serviceDraft;
 
-  if (!actorId || !draft || !serviceId) {
-    await safeReply(ctx, "⚠️ Не вижу данных редактирования. Начните заново.");
+  if (!draft?.id) {
+    await safeReply(ctx, "⚠️ Не найден черновик редактирования.");
+    resetServiceWizard(ctx);
     return;
   }
 
-  // Собираем details в твоём стиле (как в create)
-  const details = {};
-
-  if (draft.category === "refused_hotel") {
-  details.directionCountry = draft.country || "";
-  details.directionTo = draft.toCity || "";
-  details.hotel = draft.hotel || "";
-  details.startDate = draft.startDate || "";
-  details.endDate = draft.endDate || "";
-  details.accommodationCategory = draft.roomCategory || ""; // <-- как в create
-  details.accommodation = draft.accommodation || "";
-  details.food = draft.food || "";
-  details.halal = !!draft.halal;
-  details.transfer = draft.transfer || "";
-  details.changeable = !!draft.changeable;
-
-  // <-- как в create
-  details.accommodationADT = draft.adt ?? 0;
-  details.accommodationCHD = draft.chd ?? 0;
-  details.accommodationINF = draft.inf ?? 0;
-  } else {
-    details.directionCountry = draft.country || "";
-    details.directionFrom = draft.fromCity || "";
-    details.directionTo = draft.toCity || "";
-    details.startDate = draft.startDate || "";
-    details.endDate = draft.endDate || "";
-    details.departureFlightDate = draft.departureFlightDate || "";
-    details.returnFlightDate = draft.returnFlightDate || "";
-    details.flightDetails = draft.flightDetails || "";
-    details.hotel = draft.hotel || "";
-    details.accommodation = draft.accommodation || "";
-  }
-
-  // финальные поля
-  const payload = {
-    title: draft.title || "",
-    category: draft.category,
-    price: draft.price === "" ? null : Number(draft.price),
-    grossPrice: draft.grossPrice === "" ? null : Number(draft.grossPrice),
-    expiration: draft.expiration || null,
-    isActive: typeof draft.isActive === "boolean" ? draft.isActive : true,
-    details,
-  };
-
   try {
-    const { data } = await axios.put(
-      `/api/telegram/provider/${actorId}/services/${serviceId}`,
+    const payload = {
+      title: draft.title || "",
+      price: draft.price ?? null,
+
+      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, скажи, добавим на backend
+      // grossPrice: draft.grossPrice ?? null,
+
+      details: {
+        // оставляем совместимость с твоими ключами
+        category: draft.category,
+        country: draft.country || "",
+        fromCity: draft.fromCity || "",
+        toCity: draft.toCity || "",
+        startDate: draft.startDate || "",
+        endDate: draft.endDate || "",
+        hotel: draft.hotel || "",
+        accommodation: draft.accommodation || "",
+        roomCategory: draft.roomCategory || "",
+        food: draft.food || "",
+        halal: !!draft.halal,
+        transfer: draft.transfer || "",
+        changeable: !!draft.changeable,
+        adt: draft.adt ?? 0,
+        chd: draft.chd ?? 0,
+        inf: draft.inf ?? 0,
+
+        departureFlightDate: draft.departureFlightDate || null,
+        returnFlightDate: draft.returnFlightDate || null,
+        flightDetails: draft.flightDetails || null,
+
+        expiration: draft.expiration || null,
+        isActive: !!draft.isActive,
+      },
+
+      // ✅ images опционально: если не хочешь трогать — НЕ передавай вообще
+      // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
+      ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
+    };
+
+    const { data } = await axios.patch(
+      `/api/telegram/provider/${actorId}/services/${draft.id}`,
       payload
     );
 
-    if (!data || !data.success) {
-      console.log("[tg-bot] finishEditWizard resp:", data);
-      await safeReply(ctx, "⚠️ Не удалось сохранить изменения. Попробуйте позже.");
+    if (!data?.success) {
+      console.log("[tg-bot] update service failed:", data);
+      await safeReply(ctx, "⚠️ Не удалось сохранить изменения.");
       return;
     }
 
-    await safeReply(ctx, `✅ Изменения сохранены (услуга #${serviceId}).`);
+    await safeReply(ctx, `✅ Изменения сохранены (#${draft.id}).`);
   } catch (e) {
-    console.error("[tg-bot] finishEditWizard error:", e?.response?.data || e);
-    await safeReply(
-      ctx,
-      "⚠️ Ошибка сохранения изменений.\nПроверь backend endpoint PUT /api/telegram/provider/:actorId/services/:serviceId"
-    );
-    return;
+    console.error("[tg-bot] finishEditWizard error:", e?.response?.data || e?.message || e);
+    await safeReply(ctx, "⚠️ Ошибка сохранения изменений.");
   } finally {
-    // чистим сессию, чтобы не пересекалось с create-wizard
-    if (ctx.session) {
-      ctx.session.state = null;
-      ctx.session.wizardStack = [];
-      ctx.session.serviceDraft = null;
-      ctx.session.editingServiceId = null;
-    }
+    resetServiceWizard(ctx);
+
+    await safeReply(ctx, "Что делаем дальше? 👇", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
   }
 }
 
