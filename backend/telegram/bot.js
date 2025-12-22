@@ -628,6 +628,14 @@ async function promptEditState(ctx, state) {
         editWizNavKeyboard()
       );
       return;
+      
+      case "svc_edit_images":
+        await safeReply(
+          ctx,
+          `🖼 Изображения услуги.\nСейчас: ${Array.isArray(draft.images) ? draft.images.length : 0} шт.\n\nОтправляйте фото в чат (можно несколько), либо управляйте кнопками ниже:`,
+          buildEditImagesKeyboard(draft)
+        );
+        return;
 
     default:
       await safeReply(
@@ -702,7 +710,7 @@ bot.action("svc_edit:skip", async (ctx) => {
     }
 
     if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
-    ctx.session.wizardStack.push(state);
+    ctx.session.wizardStack.push(ctx.session.state);
     ctx.session.state = nextState;
 
     await promptEditState(ctx, nextState);
@@ -2817,7 +2825,7 @@ async function handleSvcEditWizardText(ctx) {
         // helper: wizard navigation
         const go = async (nextState, message) => {
           if (!ctx.session.wizardStack) ctx.session.wizardStack = [];
-          ctx.session.wizardStack.push(state);
+          ctx.session.wizardStack.push(ctx.session.state);
           ctx.session.state = nextState;
           await safeReply(ctx, message, editWizNavKeyboard());
         };
