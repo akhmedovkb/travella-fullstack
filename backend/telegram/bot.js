@@ -1718,7 +1718,10 @@ bot.action("prov_services:list", async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [
+            { text: "✏️ Редактировать", callback_data: `edit:${svc.id}` },
+            { text: "🌐 Открыть в кабинете", url: manageUrl },
+          ],
           [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
