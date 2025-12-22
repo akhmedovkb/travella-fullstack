@@ -560,32 +560,74 @@ bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    const state = ctx.session?.state;
-    if (!state || !state.startsWith("svc_edit_")) {
+    if (!ctx.session?.state || !ctx.session?.serviceDraft) {
+      await safeReply(ctx, "⚠️ Нечего пропускать. Откройте редактирование услуги заново.");
       return;
     }
 
-    // Переиспользуем существующий text handler
-    const chatFromCb = ctx.callbackQuery?.message?.chat;
-    if (!chatFromCb && !ctx.chat) {
-      await safeReply(ctx, "⚠️ Не удалось определить чат. Откройте бота в ЛС и попробуйте ещё раз.");
+    const state = String(ctx.session.state);
+    const category = String(ctx.session.serviceDraft?.category || "");
+
+    const tourOrder = [
+      "svc_edit_title",
+      "svc_edit_tour_country",
+      "svc_edit_tour_from",
+      "svc_edit_tour_to",
+      "svc_edit_startDate",
+      "svc_edit_endDate",
+      "svc_edit_hotel",
+      "svc_edit_accommodation",
+      "svc_edit_food",
+      "svc_edit_transfer",
+      "svc_edit_changeable",
+      "svc_edit_visaIncluded",
+      "svc_edit_netPrice",
+      "svc_edit_expiration",
+      "svc_edit_isActive",
+      "svc_edit_departureFlightDate",
+      "svc_edit_returnFlightDate",
+      "svc_edit_flightDetails",
+    ];
+
+    const hotelOrder = [
+      "svc_edit_title",
+      "svc_edit_hotel_country",
+      "svc_edit_hotel_city",
+      "svc_edit_hotel_name",
+      "svc_edit_hotel_checkin",
+      "svc_edit_hotel_checkout",
+      "svc_edit_hotel_roomCategory",
+      "svc_edit_hotel_accommodation",
+      "svc_edit_hotel_food",
+      "svc_edit_hotel_transfer",
+      "svc_edit_hotel_changeable",
+      "svc_edit_hotel_netPrice",
+      "svc_edit_hotel_expiration",
+      "svc_edit_hotel_isActive",
+    ];
+
+    const isHotelFlow = category.includes("hotel");
+    const order = isHotelFlow ? hotelOrder : tourOrder;
+
+    const idx = order.indexOf(state);
+    const nextState = idx >= 0 ? order[idx + 1] : null;
+
+    if (!nextState) {
+      await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
       return;
     }
 
-    await bot.handleUpdate({
-      update_id: Date.now(),
-      message: {
-        message_id: Date.now(),
-        from: ctx.from,
-        chat: chatFromCb || ctx.chat, // ✅ главное изменение
-        text: "пропустить",
-      },
-    });
+    if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
+    ctx.session.wizardStack.push(state);
+    ctx.session.state = nextState;
 
+    await promptEditState(ctx, nextState);
   } catch (e) {
-    console.error("[tg-bot] svc_edit:skip error:", e);
+    console.error("svc_edit:skip error", e);
+    await safeReply(ctx, "⚠️ Ошибка при пропуске. Попробуйте ещё раз.");
   }
 });
+
 
 bot.action("svc_edit_cancel", async (ctx) => {
   try {
@@ -775,6 +817,40 @@ async function finishEditWizard(ctx) {
     });
   }
 }
+
+// Универсальный вход: обрабатывает "ввод текста" для wizard'а редактирования
+async function handleSvcEditText(ctx, rawText) {
+  const state = ctx.session?.state;
+  if (!state || !state.startsWith("svc_edit_")) return false;
+
+  const text = String(rawText ?? "").trim();
+
+  // Тут должна быть ТА ЖЕ логика, что у тебя сейчас внутри bot.on("text"),
+  // в ветке if (state.startsWith("svc_edit_")) { ... }
+  //
+  // Суть: НЕ отвечать в чат "похоже вы не в режиме редактирования" —
+  // просто вернуть false, если не наш случай.
+  //
+  // ВАЖНО: "пропустить" должен вести к переходу на следующий шаг
+  // (как сейчас у тебя работает при вводе текстом).
+
+  // === ПРИМЕР СХЕМЫ (замени на твою реальную) ===
+  // switch (state) {
+  //   case "svc_edit_title":
+  //     if (text.toLowerCase() !== "пропустить") ctx.session.serviceDraft.title = text;
+  //     pushEditStack(ctx, state); ctx.session.state = "svc_edit_price";
+  //     await promptEditState(ctx, ctx.session.state);
+  //     return true;
+  //   ...
+  //   case "svc_edit_finish":
+  //     await finishEditWizard(ctx);
+  //     return true;
+  // }
+  // === /ПРИМЕР ===
+
+  return true;
+}
+
 
 function logUpdate(ctx, label = "update") {
   try {
