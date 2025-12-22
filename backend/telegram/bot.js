@@ -1987,7 +1987,7 @@ async function finishEditServiceFromWizard(ctx) {
     details,
   };
 
-  const { data } = await axios.put(
+  const { data } = await axios.patch(
     `/api/telegram/provider/${actorId}/services/${serviceId}`,
     payload
   );
@@ -3218,7 +3218,10 @@ bot.on("inline_query", async (ctx) => {
 
       const keyboardForMy = {
         inline_keyboard: [
-          [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
+          [
+            { text: "✏️ Редактировать", callback_data: `edit:${svc.id}` },
+            { text: "🌐 Открыть в кабинете", url: manageUrl },
+          ],
           [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
