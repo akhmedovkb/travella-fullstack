@@ -299,8 +299,10 @@ router.get("/placeholder.png", (req, res) => {
 router.get("/service-image/:id", async (req, res) => {
   try {
     const serviceId = Number(req.params.id);
+
+    // ✅ Telegram-friendly: всегда 200 png
     if (!Number.isFinite(serviceId) || serviceId <= 0) {
-      return res.status(400).send("Bad service id");
+      return sendPlaceholderPng(res);
     }
 
     const result = await pool.query(
@@ -308,9 +310,9 @@ router.get("/service-image/:id", async (req, res) => {
       [serviceId]
     );
 
-    // Если услуги нет — это реально 404 (оставляем как есть)
+    // ✅ Telegram-friendly: не 404
     if (!result.rows.length) {
-      return res.status(404).send("Service not found");
+      return sendPlaceholderPng(res);
     }
 
     let images = result.rows[0].images;
