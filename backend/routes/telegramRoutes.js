@@ -1,4 +1,6 @@
 // backend/routes/telegramRoutes.js
+const axiosBase = require("axios");
+const http = axiosBase.create({ timeout: 15000, responseType: "arraybuffer" });
 
 const express = require("express");
 const router = express.Router();
@@ -349,10 +351,28 @@ router.get("/service-image/:id", async (req, res) => {
     if (!v) {
       return sendPlaceholderPng(res);
     }
-
-    // Если уже http/https — редирект (на случай если в БД URL)
-    if (v.startsWith("http://") || v.startsWith("https://")) {
-      return res.redirect(v);
+    
+    // ✅ Если URL — лучше отдать бинарник (Telegram-friendly)
+    if (v.startsWith("https://")) {
+      try {
+        const r = await http.get(v);
+        const buf = Buffer.from(r.data || []);
+        if (!buf.length) return sendPlaceholderPng(res);
+    
+        const ct = (r.headers && (r.headers["content-type"] || r.headers["Content-Type"])) || "image/jpeg";
+        res.setHeader("Content-Type", String(ct));
+        res.setHeader("Content-Length", buf.length);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(buf);
+      } catch (e) {
+        console.error("[tg] fetch https image failed:", e?.message || e);
+        return sendPlaceholderPng(res);
+      }
+    }
+    
+    if (v.startsWith("http://")) {
+      // Telegram часто не принимает http — безопаснее placeholder
+      return sendPlaceholderPng(res);
     }
 
     // Если относительный путь — редиректим на сайт или на API (что задано)
