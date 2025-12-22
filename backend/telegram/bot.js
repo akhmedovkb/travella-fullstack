@@ -2152,6 +2152,25 @@ if (state && String(state).startsWith("svc_edit_") && ctx.session?.serviceDraft)
   const text = ctx.message.text.trim();
   const draft = ctx.session.serviceDraft;
   const low = text.toLowerCase();
+    if (low === "отмена") {
+    ctx.session.state = null;
+    ctx.session.editingServiceId = null;
+    ctx.session.serviceDraft = null;
+    ctx.session.wizardStack = null;
+  
+    await ctx.reply("❌ Редактирование отменено.");
+    await ctx.reply("🧳 Выберите действие:", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    });
+    return;
+  }
+
 
   const keep = () => ["пропустить", "skip", "-"].includes(low);
 
