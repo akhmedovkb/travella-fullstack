@@ -565,19 +565,23 @@ bot.action("svc_edit:skip", async (ctx) => {
       return;
     }
 
-    // Эмулируем ввод "пропустить"
-    ctx.message = { text: "пропустить" };
-
     // Переиспользуем существующий text handler
+    const chatFromCb = ctx.callbackQuery?.message?.chat;
+    if (!chatFromCb && !ctx.chat) {
+      await safeReply(ctx, "⚠️ Не удалось определить чат. Откройте бота в ЛС и попробуйте ещё раз.");
+      return;
+    }
+
     await bot.handleUpdate({
       update_id: Date.now(),
       message: {
         message_id: Date.now(),
         from: ctx.from,
-        chat: ctx.chat,
+        chat: chatFromCb || ctx.chat, // ✅ главное изменение
         text: "пропустить",
       },
     });
+
   } catch (e) {
     console.error("[tg-bot] svc_edit:skip error:", e);
   }
