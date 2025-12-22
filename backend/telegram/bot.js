@@ -321,18 +321,15 @@ function editWizNavKeyboard() {
   return {
     reply_markup: {
       inline_keyboard: [
+        [{ text: "⏭ Пропустить", callback_data: "svc_edit:skip" }],
         [
-          { text: "⏭ Пропустить", callback_data: "svc_edit:skip" },
-        ],
-        [
-          { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
-          { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
+          { text: "⬅️ Назад", callback_data: "svc_edit_back" },
+          { text: "❌ Отмена", callback_data: "svc_edit_cancel" },
         ],
       ],
     },
   };
 }
-
 
 async function promptEditState(ctx, state) {
   const draft = ctx.session?.serviceDraft || {};
@@ -591,7 +588,7 @@ bot.action("svc_edit_cancel", async (ctx) => {
     await ctx.answerCbQuery();
     if (!ctx.session) return;
     ctx.session.state = null;
-   ctx.session.wizardStack = [];
+    ctx.session.wizardStack = [];
     ctx.session.serviceDraft = null;
     ctx.session.editingServiceId = null;
     await safeReply(ctx, "❌ Редактирование отменено.");
