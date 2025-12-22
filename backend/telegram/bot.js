@@ -70,10 +70,21 @@ const API_PUBLIC_BASE = (
   SITE_URL
 ).replace(/\/+$/, "");
 
+// ✅ ВАЖНО для Telegram inline-картинок:
+// Используем прямой публичный backend (Railway), НЕ сайт (travella.uz), чтобы не было редиректов/прокси.
+const TG_IMAGE_BASE = (
+  process.env.TG_IMAGE_BASE ||            // <-- добавим в env (Railway URL)
+  process.env.API_PUBLIC_URL ||           // если уже задано, тоже ок
+  process.env.SITE_API_PUBLIC_URL ||
+  process.env.API_BASE_PUBLIC_URL ||
+  API_BASE                                // fallback
+).replace(/\/+$/, "");
+
 console.log("=== BOT.JS LOADED ===");
 console.log("[tg-bot] Using TELEGRAM_CLIENT_BOT_TOKEN (polling)");
 console.log("[tg-bot] API_BASE =", API_BASE);
 console.log("[tg-bot] API_PUBLIC_BASE =", API_PUBLIC_BASE || "(not set)");
+console.log("[tg-bot] TG_IMAGE_BASE =", TG_IMAGE_BASE || "(not set)");
 console.log("[tg-bot] SITE_URL =", SITE_URL);
 console.log("[tg-bot] BOT_USERNAME =", BOT_USERNAME || "(not set)");
 console.log("[tg-bot] SERVICE_URL_TEMPLATE =", SERVICE_URL_TEMPLATE);
@@ -482,19 +493,18 @@ function getFirstImageUrl(svc) {
   }
 
   if (v.startsWith("data:image")) {
-    // ВАЖНО: этот endpoint должен реально существовать на публичном HTTPS домене API_PUBLIC_BASE
-    return `${API_PUBLIC_BASE}/api/telegram/service-image/${svc.id}`;
+    // ✅ Telegram должен тянуть с прямого домена backend (Railway)
+    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}`;
   }
-
+  
   if (v.startsWith("http://") || v.startsWith("https://")) return v;
-
+  
   // относительные пути:
-  // - "/uploads/..." -> SITE_URL + ...
-  // - "uploads/..."  -> API_PUBLIC_BASE + "/uploads/..."
-  if (v.startsWith("/")) return API_PUBLIC_BASE + v;
-
+  if (v.startsWith("/")) return TG_IMAGE_BASE + v;
+  
   // <-- ключевой фикс: если путь без "/" — тоже собираем URL
-  return `${API_PUBLIC_BASE}/${v.replace(/^\/+/, "")}`;
+  return `${TG_IMAGE_BASE}/${v.replace(/^\/+/, "")}`;
+
 }
 
 function buildServiceMessage(svc, category, role = "client") {
@@ -2643,7 +2653,11 @@ bot.on("inline_query", async (ctx) => {
       } else if (photoUrl && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://"))) {
         // ✅ inline thumb должен быть публичным и желательно https
         let u = photoUrl;
-      
+      // ✅ если ссылка пришла через SITE_URL (/api/...), переписываем на прямой TG_IMAGE_BASE
+        if (u.startsWith(SITE_URL + "/api/")) {
+          u = TG_IMAGE_BASE + u.slice(SITE_URL.length);
+        }
+
         // если это наш сервисный эндпоинт - просим миниатюру
         if (u.includes("/api/telegram/service-image/")) {
           u = u.includes("?") ? `${u}&thumb=1` : `${u}?thumb=1`;
