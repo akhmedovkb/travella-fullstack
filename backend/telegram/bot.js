@@ -2205,15 +2205,25 @@ bot.action("prov_services:list_cards", async (ctx) => {
       const msg = headerLines.join("\n") + "\n\n" + text;
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
-      const keyboard = {
-        inline_keyboard: [
-          [
-            { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
-            { text: "🌐 Открыть в кабинете", url: manageUrl },
-          ],
-          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
-        ],
-      };
+const keyboard = {
+  inline_keyboard: [
+    [
+      { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
+      { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
+    ],
+    [
+      { text: "⛔ Снять", callback_data: `svc_unpublish:${svc.id}` },
+      { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
+    ],
+    [
+      { text: "🌐 Открыть в кабинете", url: manageUrl },
+    ],
+    [
+      { text: "🔁 Открыть меню в боте", url: buildBotStartUrl() },
+    ],
+  ],
+};
+
 
 
       if (photoUrl) {
@@ -2339,15 +2349,25 @@ bot.action("prov_services:list", async (ctx) => {
       const msg = headerLines.join("\n") + "\n\n" + text;
       const manageUrl = `${SITE_URL}/dashboard?from=tg&service=${svc.id}`;
 
-      const keyboard = {
-        inline_keyboard: [
-          [
-            { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
-            { text: "🌐 Открыть в кабинете", url: manageUrl },
-          ],
-          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
-        ],
-      };
+const keyboard = {
+  inline_keyboard: [
+    [
+      { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
+      { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
+    ],
+    [
+      { text: "⛔ Снять", callback_data: `svc_unpublish:${svc.id}` },
+      { text: "🗄 Архивировать", callback_data: `svc_archive:${svc.id}` },
+    ],
+    [
+      { text: "🌐 Открыть в кабинете", url: manageUrl },
+    ],
+    [
+      { text: "🔁 Открыть меню в боте", url: buildBotStartUrl() },
+    ],
+  ],
+};
+
 
       if (photoUrl) {
         try {
