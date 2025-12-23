@@ -331,6 +331,20 @@ function editWizNavKeyboard() {
   };
 }
 
+
+function editConfirmKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💾 Сохранить", callback_data: "svc_edit_save" }],
+        [{ text: "✏️ Продолжить редактирование", callback_data: "svc_edit_continue" }],
+        [{ text: "❌ Отмена", callback_data: "svc_edit_cancel" }],
+      ],
+    },
+  };
+}
+
+
 function editImagesKeyboard(images = []) {
   const rows = [];
 
@@ -354,60 +368,6 @@ function editImagesKeyboard(images = []) {
     },
   };
 }
-
-
-function coerceImagesArray(val) {
-  if (!val) return [];
-  if (Array.isArray(val)) {
-    return val
-      .map((x) => {
-        if (!x) return null;
-        if (typeof x === "string") return x.trim();
-        if (typeof x === "object") return (x.url || x.src || x.path || "").trim();
-        return String(x).trim();
-      })
-      .filter(Boolean);
-  }
-
-  // строка: попробуем JSON или список через запятую
-  if (typeof val === "string") {
-    const s = val.trim();
-    if (!s) return [];
-    try {
-      if (s.startsWith("[") && s.endsWith("]")) {
-        const parsed = JSON.parse(s);
-        return coerceImagesArray(parsed);
-      }
-    } catch (_) {}
-    return s
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
-function pickExistingImagesFromService(svc, det) {
-  // поддержим разные варианты, которые могли сохраниться в БД
-  const candidates = [
-    det?.images,
-    det?.imageUrls,
-    det?.photos,
-    svc?.images,
-    svc?.imageUrls,
-    svc?.photos,
-    svc?.image,
-    svc?.photo,
-    svc?.thumbnail,
-  ];
-  for (const c of candidates) {
-    const arr = coerceImagesArray(c);
-    if (arr.length) return arr;
-  }
-  return [];
-}
-
 
 function buildEditImagesKeyboard(draft) {
   const images = Array.isArray(draft?.images) ? draft.images : [];
@@ -437,7 +397,7 @@ function buildEditImagesKeyboard(draft) {
 
 async function handleSvcEditWizardPhoto(ctx) {
   const step = ctx.session?.editWiz?.step;
-  const draft = ctx.session?.serviceDraft;
+  const draft = ctx.session?.editDraft;
 
   if (step !== "svc_edit_images" || !draft) return false;
 
@@ -683,6 +643,14 @@ async function promptEditState(ctx, state) {
       );
       return;
 
+    case "svc_edit_confirm":
+      await safeReply(
+        ctx,
+        "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.",
+        editConfirmKeyboard()
+      );
+      return;
+
     default:
       await safeReply(
         ctx,
@@ -695,6 +663,9 @@ async function promptEditState(ctx, state) {
 bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+
+
+    if (!ctx.session) ctx.session = {};
 
     // ✅ поддерживаем и новый editWiz.step, и legacy ctx.session.state
     const currentState = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
@@ -753,6 +724,20 @@ bot.action("svc_edit:skip", async (ctx) => {
 
     const idx = order.indexOf(state);
     const nextState = idx >= 0 ? order[idx + 1] : null;
+
+    // ✅ На шаге изображений «Пропустить» = перейти к подтверждению (оставить фото как есть)
+    if (state === "svc_edit_images") {
+      if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
+      ctx.session.wizardStack.push(state);
+
+      ctx.session.state = "svc_edit_confirm";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_confirm";
+
+      await promptEditState(ctx, "svc_edit_confirm");
+      return;
+    }
+
 
     if (!nextState) {
       await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
@@ -881,7 +866,6 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
       chd: Number.isFinite(det.chd) ? det.chd : (Number.isFinite(det.accommodationCHD) ? det.accommodationCHD : 0),
       inf: Number.isFinite(det.inf) ? det.inf : (Number.isFinite(det.accommodationINF) ? det.accommodationINF : 0),
-    images: pickExistingImagesFromService(svc, det),
     };
 
     // 5) стартуем wizard
@@ -890,7 +874,6 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     ctx.session.editingServiceId = svc.id;
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
-    ctx.session.editWiz = { step: "svc_edit_title" };
 
     await safeReply(ctx, `✏️ Редактирование услуги #${svc.id}\n\nНачнём 👇`);
     await promptEditState(ctx, "svc_edit_title");
@@ -916,12 +899,15 @@ async function finishEditWizard(ctx) {
       title: draft.title || "",
       price: draft.price ?? null,
 
-      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, скажи, добавим на backend
-      // grossPrice: draft.grossPrice ?? null,
+      grossPrice: draft.grossPrice ?? null,
 
       details: {
         // оставляем совместимость с твоими ключами
         category: draft.category,
+        // цены: дублируем в details для совместимости с витриной/карточкой
+        netPrice: draft.price ?? null,
+        price: draft.price ?? null,
+        grossPrice: draft.grossPrice ?? null,
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
@@ -950,10 +936,6 @@ async function finishEditWizard(ctx) {
       // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
       ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
     };
-
-    if (process.env.TG_DEBUG_EDIT_PAYLOAD === "1") {
-      console.log("[tg-bot] finishEditWizard PATCH payload:", JSON.stringify(payload));
-    }
 
     const { data } = await axios.patch(
       `/api/telegram/provider/${actorId}/services/${draft.id}`,
@@ -1887,12 +1869,6 @@ async function finishCreateServiceFromWizard(ctx) {
       details,
       images: draft.images || [],
     };
-
-
-    if (process.env.TG_DEBUG_CREATE_PAYLOAD === "1") {
-      console.log("[tg-bot] createServiceFromWizard payload:", JSON.stringify(payload));
-    }
-
 
     const chatId = getActorId(ctx);
     if (!chatId) return;
@@ -3686,39 +3662,7 @@ bot.on("text", async (ctx, next) => {
 
 /* ===================== PHOTO HANDLER (wizard create) ===================== */
 
-async function handleSvcEditWizardPhoto(ctx) {
-  const step = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
-  const draft = ctx.session?.serviceDraft;
-
-  if (step !== "svc_edit_images" || !draft) return false;
-
-  const photos = ctx.message?.photo;
-  if (!Array.isArray(photos) || photos.length === 0) {
-    await safeReply(ctx, "⚠️ Пришлите фото (как изображение), чтобы добавить его к услуге.");
-    return true;
-  }
-
-  // Берём самый большой размер
-  const best = photos[photos.length - 1];
-  const fileId = best?.file_id;
-  if (!fileId) {
-    await safeReply(ctx, "⚠️ Не удалось получить file_id. Попробуйте отправить фото ещё раз.");
-    return true;
-  }
-
-  const tgRef = `tg:${fileId}`;
-  if (!Array.isArray(draft.images)) draft.images = [];
-  draft.images.push(tgRef);
-
-  const count = draft.images.length;
-  await safeReply(
-    ctx,
-    `✅ Фото добавлено. Сейчас в услуге: ${count} шт.\n\nОтправьте ещё фото или нажмите «✅ Готово».`,
-    buildEditImagesKeyboard(draft)
-  );
-
-  return true;
-}, async (ctx, next) => {
+bot.on("photo", async (ctx, next) => {
   try {
     // 1) Фото в режиме редактирования изображений услуги
     if (await handleSvcEditWizardPhoto(ctx)) return;
@@ -4065,6 +4009,7 @@ bot.action(/^svc_edit_img_remove:(\d+)$/, async (ctx) => {
 
     const idx = Number(ctx.match[1]);
     const draft =
+      ctx.session?.editDraft ||
       ctx.session?.serviceDraft ||
       null;
 
@@ -4095,6 +4040,7 @@ bot.action("svc_edit_img_clear", async (ctx) => {
     await ctx.answerCbQuery();
 
     const draft =
+      ctx.session?.editDraft ||
       ctx.session?.serviceDraft ||
       null;
 
@@ -4120,19 +4066,50 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // Переходим в подтверждение/выбор следующего поля.
-    if (ctx.session?.editWiz) {
-      ctx.session.editWiz.step = "svc_edit_confirm";
-    } else {
-      ctx.session.state = "svc_edit_confirm";
-    }
+    if (!ctx.session) ctx.session = {};
 
-    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
+    // ✅ синхронизируем legacy + new
+    ctx.session.state = "svc_edit_confirm";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_confirm";
+
+    await promptEditState(ctx, "svc_edit_confirm");
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
   }
 });
 
+
 // bot.launch() — запуск делаем из index.js
+
+bot.action("svc_edit_save", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    await finishEditWizard(ctx);
+  } catch (e) {
+    console.error("svc_edit_save error:", e);
+    await safeReply(ctx, "⚠️ Ошибка при сохранении изменений.");
+  }
+});
+
+bot.action("svc_edit_continue", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+
+    // возвращаемся к первому шагу редактирования (можно поменять на любой другой)
+    ctx.session.state = "svc_edit_title";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_title";
+
+    await promptEditState(ctx, "svc_edit_title");
+  } catch (e) {
+    console.error("svc_edit_continue error:", e);
+    await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
+  }
+});
+
+
 module.exports = { bot };
