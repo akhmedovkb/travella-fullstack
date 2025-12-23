@@ -3916,18 +3916,15 @@ bot.on("inline_query", async (ctx) => {
           u = TG_IMAGE_BASE + u.slice(SITE_URL.length);
         }
 
-        // если это наш сервисный эндпоинт - просим миниатюру
+                // inline thumb_url: только быстрый публичный https.
+        // ВАЖНО: НЕ используем /api/telegram/service-image/... в inline (даёт таймауты и спамит логи).
         if (u.includes("/api/telegram/service-image/")) {
-          u = u.includes("?") ? `${u}&thumb=1` : `${u}?thumb=1`;
-        }
-      
-        // Telegram thumb_url: лучше строго https
-        if (u.startsWith("http://")) {
-          // если у тебя в проде реально https — лучше чтобы сюда никогда не попадало
-          // но на всякий случай не отправляем http как thumb
           thumbUrl = null;
-        } else {
+        } else if (u.startsWith("https://")) {
           thumbUrl = u;
+        } else {
+          // http:// или другое — не ставим thumb_url
+          thumbUrl = null;
         }
       }
 
@@ -3951,13 +3948,21 @@ bot.on("inline_query", async (ctx) => {
 
       const title = truncate(normalizeTitleSoft(titleSource), 60);
 
-      console.log("[inline]", {
-        svcId: svc.id,
-        photoUrl,
-        thumbUrl,
-        inlinePhotoUrl,
-      });
+      if (process.env.TG_DEBUG_INLINE === "1") {
 
+              console.log("[inline]", {
+
+                svcId: svc.id,
+
+                photoUrl,
+
+                thumbUrl,
+
+                inlinePhotoUrl,
+
+              });
+
+            }
       results.push({
         id: `${svcCategory}:${svc.id}`,
         type: "article",
