@@ -642,34 +642,35 @@ bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    if (!ctx.session?.state || !ctx.session?.serviceDraft) {
+    // ✅ поддерживаем и новый editWiz.step, и legacy ctx.session.state
+    const currentState = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
+
+    if (!currentState || !ctx.session?.serviceDraft) {
       await safeReply(ctx, "⚠️ Нечего пропускать. Откройте редактирование услуги заново.");
       return;
     }
 
-    const state = String(ctx.session.state);
+    const state = currentState;
     const category = String(ctx.session.serviceDraft?.category || "");
 
+    // ✅ порядок шагов должен СОВПАДАТЬ с promptEditState() и handleSvcEditWizardText()
     const tourOrder = [
       "svc_edit_title",
       "svc_edit_tour_country",
       "svc_edit_tour_from",
       "svc_edit_tour_to",
-      "svc_edit_startDate",
-      "svc_edit_endDate",
-      "svc_edit_hotel",
-      "svc_edit_accommodation",
-      "svc_edit_food",
-      "svc_edit_transfer",
-      "svc_edit_changeable",
-      "svc_edit_visaIncluded",
-      "svc_edit_netPrice",
+      "svc_edit_tour_start",
+      "svc_edit_tour_end",
+      "svc_edit_flight_departure",
+      "svc_edit_flight_return",
+      "svc_edit_flight_details",
+      "svc_edit_tour_hotel",
+      "svc_edit_tour_accommodation",
+      "svc_edit_price",
+      "svc_edit_grossPrice",
       "svc_edit_expiration",
-    "svc_edit_isActive",
-    "svc_edit_images",
-      "svc_edit_departureFlightDate",
-      "svc_edit_returnFlightDate",
-      "svc_edit_flightDetails",
+      "svc_edit_isActive",
+      "svc_edit_images",
     ];
 
     const hotelOrder = [
@@ -679,18 +680,21 @@ bot.action("svc_edit:skip", async (ctx) => {
       "svc_edit_hotel_name",
       "svc_edit_hotel_checkin",
       "svc_edit_hotel_checkout",
-      "svc_edit_hotel_roomCategory",
+      "svc_edit_hotel_roomcat",
       "svc_edit_hotel_accommodation",
       "svc_edit_hotel_food",
+      "svc_edit_hotel_halal",
       "svc_edit_hotel_transfer",
       "svc_edit_hotel_changeable",
-      "svc_edit_hotel_netPrice",
-      "svc_edit_hotel_expiration",
-      "svc_edit_hotel_isActive",
+      "svc_edit_hotel_pax",
+      "svc_edit_price",
+      "svc_edit_grossPrice",
+      "svc_edit_expiration",
+      "svc_edit_isActive",
+      "svc_edit_images",
     ];
 
     const isHotelFlow = category.includes("hotel");
-
     const order = isHotelFlow ? hotelOrder : tourOrder;
 
     const idx = order.indexOf(state);
@@ -703,7 +707,11 @@ bot.action("svc_edit:skip", async (ctx) => {
 
     if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
     ctx.session.wizardStack.push(state);
+
+    // ✅ синхронизация new + legacy
     ctx.session.state = nextState;
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = nextState;
 
     await promptEditState(ctx, nextState);
   } catch (e) {
@@ -711,7 +719,6 @@ bot.action("svc_edit:skip", async (ctx) => {
     await safeReply(ctx, "⚠️ Ошибка при пропуске. Попробуйте ещё раз.");
   }
 });
-
 
 bot.action("svc_edit_back", async (ctx) => {
   try {
