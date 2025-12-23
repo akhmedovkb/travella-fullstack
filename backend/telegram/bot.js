@@ -609,7 +609,7 @@ async function promptEditState(ctx, state) {
           `• Отправляйте фото — они добавятся\n` +
           `• Удаляйте кнопками ниже\n` +
           `• Нажмите «Готово», когда закончите`,
-        editImagesKeyboard(images)
+        buildEditImagesKeyboard(ctx.session.serviceDraft)
       );
       return;
     }
@@ -769,7 +769,10 @@ bot.action("svc_edit_back", async (ctx) => {
       return;
     }
     ctx.session.state = prev;
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = prev;
     await promptEditState(ctx, prev);
+
   } catch (e) {
     console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
   }
@@ -3190,6 +3193,13 @@ async function handleSvcEditWizardText(ctx) {
     return true;
   }
 }
+
+// ===================== PHOTO HANDLER (edit wizard images) =====================
+bot.on("photo", async (ctx, next) => {
+  // если фото обработано в режиме редактирования — дальше не идём
+  if (await handleSvcEditWizardPhoto(ctx)) return;
+  return next();
+});
 
 
 bot.on("text", async (ctx, next) => {
