@@ -664,6 +664,9 @@ bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
+
+    if (!ctx.session) ctx.session = {};
+
     // ✅ поддерживаем и новый editWiz.step, и legacy ctx.session.state
     const currentState = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
 
@@ -721,6 +724,20 @@ bot.action("svc_edit:skip", async (ctx) => {
 
     const idx = order.indexOf(state);
     const nextState = idx >= 0 ? order[idx + 1] : null;
+
+    // ✅ На шаге изображений «Пропустить» = перейти к подтверждению (оставить фото как есть)
+    if (state === "svc_edit_images") {
+      if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
+      ctx.session.wizardStack.push(state);
+
+      ctx.session.state = "svc_edit_confirm";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_confirm";
+
+      await promptEditState(ctx, "svc_edit_confirm");
+      return;
+    }
+
 
     if (!nextState) {
       await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
@@ -887,7 +904,10 @@ async function finishEditWizard(ctx) {
       details: {
         // оставляем совместимость с твоими ключами
         category: draft.category,
-          grossPrice: draft.grossPrice ?? null,
+        // цены: дублируем в details для совместимости с витриной/карточкой
+        netPrice: draft.price ?? null,
+        price: draft.price ?? null,
+        grossPrice: draft.grossPrice ?? null,
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
