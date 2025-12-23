@@ -875,6 +875,41 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
 
+        // ===== FIX: подтягиваем существующее фото в draft.images =====
+    try {
+      let imgs = draft.images;
+    
+      // если images строкой
+      if (typeof imgs === "string") {
+        try {
+          const parsed = JSON.parse(imgs);
+          imgs = Array.isArray(parsed) ? parsed : [String(parsed)];
+        } catch {
+          imgs = [imgs];
+        }
+      }
+    
+      if (!Array.isArray(imgs)) imgs = [];
+    
+      // если images пуст, но у услуги есть фото — подтягиваем его
+      if (!imgs.length) {
+        const first = getFirstImageUrl(svc);
+        if (first) {
+          // tgfile:<id> → tg:<id>
+          if (first.startsWith("tgfile:")) {
+            imgs = [`tg:${first.slice(7)}`];
+          } else {
+            imgs = [first];
+          }
+        }
+      }
+    
+      draft.images = imgs;
+    } catch (e) {
+      draft.images = [];
+    }
+    
+
     await safeReply(ctx, `✏️ Редактирование услуги #${svc.id}\n\nНачнём 👇`);
     await promptEditState(ctx, "svc_edit_title");
   } catch (e) {
