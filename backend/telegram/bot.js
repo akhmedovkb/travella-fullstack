@@ -1208,7 +1208,7 @@ function getFirstImageUrl(svc) {
 
   if (v.startsWith("data:image")) {
     // ✅ Telegram должен тянуть с прямого домена backend (Railway)
-    return `${TG_IMAGE_BASE}/api/telegram/service-image/${svc.id}`;
+    return null;
   }
   
   if (v.startsWith("http://") || v.startsWith("https://")) return v;
