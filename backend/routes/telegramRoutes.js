@@ -352,22 +352,12 @@ router.get("/service-image/:id", async (req, res) => {
       return sendPlaceholderPng(res);
     }
     
-    // ✅ Если URL — лучше отдать бинарник (Telegram-friendly)
+    // ✅ Если это внешний https URL — НЕ качаем на backend (иначе таймауты).
+    // Просто редиректим: Telegram сам заберёт картинку напрямую.
     if (v.startsWith("https://")) {
-      try {
-        const r = await http.get(v);
-        const buf = Buffer.from(r.data || []);
-        if (!buf.length) return sendPlaceholderPng(res);
-    
-        const ct = (r.headers && (r.headers["content-type"] || r.headers["Content-Type"])) || "image/jpeg";
-        res.setHeader("Content-Type", String(ct));
-        res.setHeader("Content-Length", buf.length);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        return res.send(buf);
-      } catch (e) {
-        console.error("[tg] fetch https image failed:", e?.message || e);
-        return sendPlaceholderPng(res);
-      }
+      // Telegram обычно нормально следует редиректам
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.redirect(302, v);
     }
     
     if (v.startsWith("http://")) {
