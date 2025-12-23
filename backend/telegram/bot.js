@@ -396,8 +396,8 @@ function buildEditImagesKeyboard(draft) {
 }
 
 async function handleSvcEditWizardPhoto(ctx) {
-  const step = ctx.session?.editWiz?.step;
-  const draft = ctx.session?.editDraft;
+  const step = ctx.session?.editWiz?.step || ctx.session?.state;
+  const draft = ctx.session?.serviceDraft; // ✅ было editDraft
 
   if (step !== "svc_edit_images" || !draft) return false;
 
@@ -832,11 +832,23 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
 
     const category = String(svc.category || svc.type || "refused_tour").trim();
     const det = parseDetailsAny(svc.details);
+    // ✅ подтягиваем старые картинки из услуги
+    let existingImages = svc.images ?? [];
+    if (typeof existingImages === "string") {
+      try {
+        existingImages = JSON.parse(existingImages);
+      } catch {
+        existingImages = existingImages ? [existingImages] : [];
+      }
+    }
+    if (!Array.isArray(existingImages)) existingImages = [];
+
 
     // 4) собираем draft в формате, который ждёт твой edit-wizard
     const draft = {
       id: svc.id,
       category,
+      images: existingImages,
 
       // общие
       title: svc.title || det.title || "",
@@ -877,6 +889,9 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     ctx.session.editingServiceId = svc.id;
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_title";
+
 
     await safeReply(ctx, `✏️ Редактирование услуги #${svc.id}\n\nНачнём 👇`);
     await promptEditState(ctx, "svc_edit_title");
