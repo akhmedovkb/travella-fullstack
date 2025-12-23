@@ -3966,7 +3966,7 @@ bot.on("inline_query", async (ctx) => {
           parse_mode: "Markdown",
           disable_web_page_preview: false,
         },
-        ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
+        // ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
         reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
     }
