@@ -397,7 +397,7 @@ function buildEditImagesKeyboard(draft) {
 
 async function handleSvcEditWizardPhoto(ctx) {
   const step = ctx.session?.editWiz?.step;
-  const draft = ctx.session?.editDraft;
+  const draft = ctx.session?.serviceDraft;
 
   if (step !== "svc_edit_images" || !draft) return false;
 
@@ -936,6 +936,8 @@ async function finishEditWizard(ctx) {
       // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
       ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
     };
+
+    if (String(process.env.TG_DEBUG_EDIT_PAYLOAD || "").trim() === "1") console.log("[tg-bot][edit][payload]", draft.id, JSON.stringify(payload));
 
     const { data } = await axios.patch(
       `/api/telegram/provider/${actorId}/services/${draft.id}`,
@@ -3694,13 +3696,13 @@ bot.on("photo", async (ctx, next) => {
 
 
     // 2) Фото в мастере создания услуги
-    const wizStep = ctx.session?.wiz?.step;
     const draft = ctx.session?.serviceDraft;
+    const state = String(ctx.session?.wiz?.step || ctx.session?.state || "");
 
-    if (wizStep !== "create_images" || !draft) {
+    // поддерживаем и новый wiz.step, и legacy state
+    if (!draft || state !== "svc_create_photo") {
       return next();
     }
-
     const photos = ctx.message?.photo;
     const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
     const fileId = best?.file_id;
@@ -3914,18 +3916,15 @@ bot.on("inline_query", async (ctx) => {
           u = TG_IMAGE_BASE + u.slice(SITE_URL.length);
         }
 
-        // если это наш сервисный эндпоинт - просим миниатюру
+                // inline thumb_url: только быстрый публичный https.
+        // ВАЖНО: НЕ используем /api/telegram/service-image/... в inline (даёт таймауты и спамит логи).
         if (u.includes("/api/telegram/service-image/")) {
-          u = u.includes("?") ? `${u}&thumb=1` : `${u}?thumb=1`;
-        }
-      
-        // Telegram thumb_url: лучше строго https
-        if (u.startsWith("http://")) {
-          // если у тебя в проде реально https — лучше чтобы сюда никогда не попадало
-          // но на всякий случай не отправляем http как thumb
           thumbUrl = null;
-        } else {
+        } else if (u.startsWith("https://")) {
           thumbUrl = u;
+        } else {
+          // http:// или другое — не ставим thumb_url
+          thumbUrl = null;
         }
       }
 
@@ -3949,13 +3948,21 @@ bot.on("inline_query", async (ctx) => {
 
       const title = truncate(normalizeTitleSoft(titleSource), 60);
 
-      console.log("[inline]", {
-        svcId: svc.id,
-        photoUrl,
-        thumbUrl,
-        inlinePhotoUrl,
-      });
+      if (process.env.TG_DEBUG_INLINE === "1") {
 
+              console.log("[inline]", {
+
+                svcId: svc.id,
+
+                photoUrl,
+
+                thumbUrl,
+
+                inlinePhotoUrl,
+
+              });
+
+            }
       results.push({
         id: `${svcCategory}:${svc.id}`,
         type: "article",
@@ -3966,7 +3973,6 @@ bot.on("inline_query", async (ctx) => {
           parse_mode: "Markdown",
           disable_web_page_preview: false,
         },
-        // ...(inlinePhotoUrl ? { thumb_url: inlinePhotoUrl } : {}),
         reply_markup: isMy ? keyboardForMy : keyboardForClient,
       });
     }
@@ -4008,10 +4014,7 @@ bot.action(/^svc_edit_img_remove:(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
 
     const idx = Number(ctx.match[1]);
-    const draft =
-      ctx.session?.editDraft ||
-      ctx.session?.serviceDraft ||
-      null;
+    const draft = ctx.session?.serviceDraft || null;
 
     if (!draft || !Array.isArray(draft.images)) {
       await safeReply(ctx, "⚠️ Изображения не найдены.");
@@ -4039,10 +4042,7 @@ bot.action("svc_edit_img_clear", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    const draft =
-      ctx.session?.editDraft ||
-      ctx.session?.serviceDraft ||
-      null;
+    const draft = ctx.session?.serviceDraft || null;
 
     if (!draft) {
       await safeReply(ctx, "⚠️ Черновик услуги не найден.");
