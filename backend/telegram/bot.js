@@ -344,6 +344,7 @@ function editConfirmKeyboard() {
   };
 }
 
+
 function editImagesKeyboard(images = []) {
   const rows = [];
 
@@ -642,7 +643,6 @@ async function promptEditState(ctx, state) {
       );
       return;
 
-
     case "svc_edit_confirm":
       await safeReply(
         ctx,
@@ -650,7 +650,6 @@ async function promptEditState(ctx, state) {
         editConfirmKeyboard()
       );
       return;
-
 
     default:
       await safeReply(
@@ -883,12 +882,12 @@ async function finishEditWizard(ctx) {
       title: draft.title || "",
       price: draft.price ?? null,
 
-      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, скажи, добавим на backend
-      // grossPrice: draft.grossPrice ?? null,
+      grossPrice: draft.grossPrice ?? null,
 
       details: {
         // оставляем совместимость с твоими ключами
         category: draft.category,
+          grossPrice: draft.grossPrice ?? null,
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
@@ -4047,10 +4046,12 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // ✅ переходим на экран подтверждения и синхронизируем new + legacy state
+    if (!ctx.session) ctx.session = {};
+
+    // ✅ синхронизируем legacy + new
+    ctx.session.state = "svc_edit_confirm";
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = "svc_edit_confirm";
-    ctx.session.state = "svc_edit_confirm";
 
     await promptEditState(ctx, "svc_edit_confirm");
   } catch (e) {
@@ -4060,9 +4061,12 @@ bot.action("svc_edit_img_done", async (ctx) => {
 });
 
 
+// bot.launch() — запуск делаем из index.js
+
 bot.action("svc_edit_save", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
     await finishEditWizard(ctx);
   } catch (e) {
     console.error("svc_edit_save error:", e);
@@ -4073,11 +4077,12 @@ bot.action("svc_edit_save", async (ctx) => {
 bot.action("svc_edit_continue", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
 
-    // Возвращаемся к первому шагу мастера редактирования (можешь поменять на любой другой шаг)
+    // возвращаемся к первому шагу редактирования (можно поменять на любой другой)
+    ctx.session.state = "svc_edit_title";
     ctx.session.editWiz = ctx.session.editWiz || {};
     ctx.session.editWiz.step = "svc_edit_title";
-    ctx.session.state = "svc_edit_title";
 
     await promptEditState(ctx, "svc_edit_title");
   } catch (e) {
@@ -4086,5 +4091,5 @@ bot.action("svc_edit_continue", async (ctx) => {
   }
 });
 
-// bot.launch() — запуск делаем из index.js
+
 module.exports = { bot };
