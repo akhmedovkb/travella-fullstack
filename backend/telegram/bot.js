@@ -331,6 +331,19 @@ function editWizNavKeyboard() {
   };
 }
 
+
+function editConfirmKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💾 Сохранить", callback_data: "svc_edit_save" }],
+        [{ text: "✏️ Продолжить редактирование", callback_data: "svc_edit_continue" }],
+        [{ text: "❌ Отмена", callback_data: "svc_edit_cancel" }],
+      ],
+    },
+  };
+}
+
 function editImagesKeyboard(images = []) {
   const rows = [];
 
@@ -628,6 +641,16 @@ async function promptEditState(ctx, state) {
         editWizNavKeyboard()
       );
       return;
+
+
+    case "svc_edit_confirm":
+      await safeReply(
+        ctx,
+        "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.",
+        editConfirmKeyboard()
+      );
+      return;
+
 
     default:
       await safeReply(
@@ -4024,17 +4047,42 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // Переходим в подтверждение/выбор следующего поля.
-    if (ctx.session?.editWiz) {
-      ctx.session.editWiz.step = "svc_edit_confirm";
-    } else {
-      ctx.session.state = "svc_edit_confirm";
-    }
+    // ✅ переходим на экран подтверждения и синхронизируем new + legacy state
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_confirm";
+    ctx.session.state = "svc_edit_confirm";
 
-    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
+    await promptEditState(ctx, "svc_edit_confirm");
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
+  }
+});
+
+
+bot.action("svc_edit_save", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    await finishEditWizard(ctx);
+  } catch (e) {
+    console.error("svc_edit_save error:", e);
+    await safeReply(ctx, "⚠️ Ошибка при сохранении изменений.");
+  }
+});
+
+bot.action("svc_edit_continue", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    // Возвращаемся к первому шагу мастера редактирования (можешь поменять на любой другой шаг)
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_title";
+    ctx.session.state = "svc_edit_title";
+
+    await promptEditState(ctx, "svc_edit_title");
+  } catch (e) {
+    console.error("svc_edit_continue error:", e);
+    await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
   }
 });
 
