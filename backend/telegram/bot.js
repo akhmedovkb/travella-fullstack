@@ -587,7 +587,9 @@ async function promptEditState(ctx, state) {
       
     // IMAGES
     case "svc_edit_images": {
-      const images = ctx.session?.serviceDraft?.images || [];
+      // В этом шаге используем editDraft как источник правды (см. svc_edit_start)
+      const liveDraft = ctx.session?.editDraft || ctx.session?.serviceDraft || draft;
+      const images = Array.isArray(liveDraft.images) ? liveDraft.images : [];
       await safeReply(
         ctx,
         `🖼 Фото услуги\n\n` +
@@ -595,7 +597,7 @@ async function promptEditState(ctx, state) {
           `• Отправляйте фото — они добавятся\n` +
           `• Удаляйте кнопками ниже\n` +
           `• Нажмите «Готово», когда закончите`,
-        editImagesKeyboard(images)
+        buildEditImagesKeyboard(images)
       );
       return;
     }
@@ -832,6 +834,12 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     // 5) стартуем wizard
     if (!ctx.session) ctx.session = {};
     ctx.session.serviceDraft = draft;
+    // ⚠️ ВАЖНО: единый источник правды для шага «Фото услуги».
+    // Обработчики фото/inline-кнопок используют ctx.session.editDraft.
+    // Держим ссылку на тот же объект, чтобы добавление/удаление фото работало.
+    ctx.session.editDraft = ctx.session.serviceDraft;
+    // гарантируем массив
+    if (!Array.isArray(ctx.session.editDraft.images)) ctx.session.editDraft.images = [];
     ctx.session.editingServiceId = svc.id;
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
@@ -1403,6 +1411,7 @@ function resetServiceWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.state = null;
   ctx.session.serviceDraft = null;
+  ctx.session.editDraft = null;
   ctx.session.wizardStack = null;
 }
 
