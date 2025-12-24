@@ -2743,25 +2743,6 @@ bot.action(
     }
   }
 );
-        resetServiceWizard(ctx);
-        return;
-      }
-
-      ctx.session.wizardStack = [];
-
-      if (category === "refused_tour") {
-        ctx.session.state = "svc_create_title";
-        await promptWizardState(ctx, "svc_create_title");
-        return;
-      }
-
-      ctx.session.state = "svc_hotel_country";
-      await promptWizardState(ctx, "svc_hotel_country");
-    } catch (e) {
-      console.error("[tg-bot] svc_new_cat action error:", e);
-    }
-  }
-);
 
 /* ===================== QUICK REQUEST ===================== */
 
