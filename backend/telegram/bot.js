@@ -834,7 +834,6 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     const draft = {
       id: svc.id,
       category,
-      images: imagesArr,
 
       // общие
       title: svc.title || det.title || "",
@@ -867,6 +866,7 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       adt: Number.isFinite(det.adt) ? det.adt : (Number.isFinite(det.accommodationADT) ? det.accommodationADT : 0),
       chd: Number.isFinite(det.chd) ? det.chd : (Number.isFinite(det.accommodationCHD) ? det.accommodationCHD : 0),
       inf: Number.isFinite(det.inf) ? det.inf : (Number.isFinite(det.accommodationINF) ? det.accommodationINF : 0),
+      images: parseImagesAny(svc.images),
     };
 
     // 5) стартуем wizard
@@ -1044,6 +1044,39 @@ function parseDetailsAny(details) {
   }
   return {};
 }
+
+function parseImagesAny(images) {
+  if (!images) return [];
+  if (Array.isArray(images)) return images;
+
+  if (typeof images === "string") {
+    const s = images.trim();
+    if (!s) return [];
+    try {
+      const parsed = JSON.parse(s);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [s];
+    }
+  }
+
+  // на всякий случай (если вдруг объект)
+  if (typeof images === "object") {
+    const u =
+      images.url ||
+      images.src ||
+      images.path ||
+      images.location ||
+      images.href ||
+      images.imageUrl ||
+      images.image_url ||
+      null;
+    return u ? [String(u)] : [];
+  }
+
+  return [];
+}
+
 
 function getStartDateForSort(svc) {
   const d = parseDetailsAny(svc.details);
@@ -3159,16 +3192,13 @@ async function handleSvcEditWizardText(ctx) {
           }
           draft.isActive = b;
         }
-
-        // переход к картинкам
+      
+        // ✅ Переходим на шаг картинок ТАК, как на скрине (с текущим количеством и кнопками)
         ctx.session.editWiz = ctx.session.editWiz || {};
         ctx.session.editWiz.step = "svc_edit_images";
         ctx.session.state = "svc_edit_images";
-        await safeReply(
-          ctx,
-          `🖼 Отправьте новое фото услуги (одну картинку).\n\n• «пропустить» — оставить текущее\n• «удалить» — удалить фото`,
-          editWizNavKeyboard()
-        );
+      
+        await promptEditState(ctx, "svc_edit_images");
         return true;
       }
 
@@ -4088,11 +4118,11 @@ bot.action("svc_edit_img_clear", async (ctx) => {
 bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    // ✅ “Готово” = сохраняем изменения (картинки — финальный шаг в твоём порядке)
+    // ✅ как “раньше”: нажал «Готово» = сразу сохраняем
     await finishEditWizard(ctx);
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
-    await safeReply(ctx, "⚠️ Не удалось сохранить изменения.");
+    await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
   }
 });
 
