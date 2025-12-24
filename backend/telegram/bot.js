@@ -587,9 +587,7 @@ async function promptEditState(ctx, state) {
       
     // IMAGES
     case "svc_edit_images": {
-      // В этом шаге используем editDraft как источник правды (см. svc_edit_start)
-      const liveDraft = ctx.session?.editDraft || ctx.session?.serviceDraft || draft;
-      const images = Array.isArray(liveDraft.images) ? liveDraft.images : [];
+      const images = ctx.session?.serviceDraft?.images || [];
       await safeReply(
         ctx,
         `🖼 Фото услуги\n\n` +
@@ -597,7 +595,8 @@ async function promptEditState(ctx, state) {
           `• Отправляйте фото — они добавятся\n` +
           `• Удаляйте кнопками ниже\n` +
           `• Нажмите «Готово», когда закончите`,
-        buildEditImagesKeyboard(images)
+	        // ✅ как было: кнопки удаления (❌1...), затем «🧹 Очистить все» + «✅ Готово»
+	        buildEditImagesKeyboard(ctx.session?.serviceDraft)
       );
       return;
     }
@@ -834,12 +833,6 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     // 5) стартуем wizard
     if (!ctx.session) ctx.session = {};
     ctx.session.serviceDraft = draft;
-    // ⚠️ ВАЖНО: единый источник правды для шага «Фото услуги».
-    // Обработчики фото/inline-кнопок используют ctx.session.editDraft.
-    // Держим ссылку на тот же объект, чтобы добавление/удаление фото работало.
-    ctx.session.editDraft = ctx.session.serviceDraft;
-    // гарантируем массив
-    if (!Array.isArray(ctx.session.editDraft.images)) ctx.session.editDraft.images = [];
     ctx.session.editingServiceId = svc.id;
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_edit_title";
@@ -1411,7 +1404,6 @@ function resetServiceWizard(ctx) {
   if (!ctx.session) return;
   ctx.session.state = null;
   ctx.session.serviceDraft = null;
-  ctx.session.editDraft = null;
   ctx.session.wizardStack = null;
 }
 
@@ -4040,62 +4032,17 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // ✅ Как было (и как должно быть): после «Готово» показываем выбор —
-    // «Сохранить» / «Продолжить редактирование» / «Отмена».
-    // Никаких автоподгрузок фото, никаких лишних кнопок.
-
+    // Переходим в подтверждение/выбор следующего поля.
     if (ctx.session?.editWiz) {
       ctx.session.editWiz.step = "svc_edit_confirm";
     } else {
       ctx.session.state = "svc_edit_confirm";
     }
 
-    await safeReply(
-      ctx,
-      "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.",
-      Markup.inlineKeyboard([
-        [Markup.button.callback("💾 Сохранить", "svc_edit_save")],
-        [Markup.button.callback("✏️ Продолжить редактирование", "svc_edit_continue")],
-        [Markup.button.callback("❌ Отмена", "svc_edit_cancel")],
-      ])
-    );
+    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
-  }
-});
-
-// --- Подтверждение после блока фото (как в старом UX) ---
-bot.action("svc_edit_save", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-    await finishEditWizard(ctx);
-  } catch (e) {
-    console.error("svc_edit_save error:", e);
-    await safeReply(ctx, "⚠️ Не удалось сохранить изменения.");
-  }
-});
-
-bot.action("svc_edit_continue", async (ctx) => {
-  try {
-    await ctx.answerCbQuery();
-
-    // Возвращаем пользователя к предыдущему шагу редактирования (аналог «Назад»),
-    // чтобы он мог продолжить менять поля.
-    if (ctx.session?.editWiz) {
-      const prev = ctx.session.editWiz.wizardStack?.pop();
-      ctx.session.editWiz.step = prev || "svc_edit_title";
-      ctx.session.state = ctx.session.editWiz.step;
-      await promptEditState(ctx);
-      return;
-    }
-
-    const prev = ctx.session?.wizardStack?.pop();
-    ctx.session.state = prev || "svc_edit_title";
-    await promptEditState(ctx);
-  } catch (e) {
-    console.error("svc_edit_continue error:", e);
-    await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
   }
 });
 
