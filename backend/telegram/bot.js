@@ -2848,18 +2848,28 @@ bot.action("svc_wiz:skip", async (ctx) => {
     const category = String(draft.category || "");
 
     // порядок шагов должен соответствовать promptWizardState() и handleWizardText()
-    const tourOrder = [
-      "svc_create_title",
-      "svc_create_tour_country",
-      "svc_create_tour_from",
-      "svc_create_tour_to",
-      "svc_create_tour_start",
-      "svc_create_tour_end",
-      "svc_create_price",
-      "svc_create_grossPrice",
-      "svc_create_expiration",
-      "svc_create_photo",
-    ];
+const tourOrder = [
+  "svc_create_title",
+  "svc_create_tour_country",
+  "svc_create_tour_from",
+  "svc_create_tour_to",
+  "svc_create_tour_start",
+  "svc_create_tour_end",
+
+  // ✅ ДОБАВИТЬ
+  "svc_create_flight_departure",
+  "svc_create_flight_return",
+  "svc_create_flight_details",
+
+  "svc_create_tour_hotel",
+  "svc_create_tour_accommodation",
+
+  "svc_create_price",
+  "svc_create_grossPrice",
+  "svc_create_expiration",
+  "svc_create_photo",
+];
+
 
     const hotelOrder = [
       "svc_hotel_title",
@@ -3831,18 +3841,20 @@ bot.on("text", async (ctx, next) => {
 
 bot.on("photo", async (ctx, next) => {
   try {
-    // 1) сначала даём шанс edit-wizard
-    if (await handleSvcEditWizardPhoto(ctx)) return;
+    // 1) Сначала — редактирование (если сейчас edit-wizard на шаге изображений)
+    // (оставляем твою существующую логику, если она у тебя уже вызывается)
+    const handledEdit = await handleSvcEditWizardPhoto(ctx);
+    if (handledEdit) return;
 
+    // 2) Создание услуги: ориентируемся на ctx.session.state
     const state = String(ctx.session?.state || "");
     const draft = ctx.session?.serviceDraft;
 
-    // 2) create-wizard: ждём именно шаг фото
-    const isCreatePhotoStep =
-      state === "svc_create_photo" ||
-      state === "svc_hotel_photo";
+    if (!draft) return next();
 
-    if (!isCreatePhotoStep || !draft) return next();
+    // ✅ Фото принимаем ТОЛЬКО на шаге *_photo
+    // (svc_create_photo, svc_hotel_photo и т.п.)
+    if (!state.endsWith("_photo")) return next();
 
     const photos = ctx.message?.photo;
     if (!Array.isArray(photos) || photos.length === 0) {
@@ -3854,22 +3866,27 @@ bot.on("photo", async (ctx, next) => {
     const fileId = best?.file_id;
 
     if (!fileId) {
-      await safeReply(ctx, "⚠️ Не удалось получить file_id. Отправьте фото ещё раз.");
+      await safeReply(ctx, "⚠️ Не удалось получить file_id. Попробуйте отправить фото ещё раз.");
       return;
     }
 
-    // сохраняем fileId в черновик (у тебя оно потом уходит как telegramPhotoFileId) :contentReference[oaicite:5]{index=5}
+    // сохраняем telegram file_id (оно потом уходит в details через buildDetailsForRefusedTour/Hotel)
     draft.telegramPhotoFileId = fileId;
 
-    // по твоему UX: "одно фото" -> сразу сохраняем услугу
-    pushWizardState(ctx, state);
-    await safeReply(ctx, "✅ Фото получено. Сохраняю услугу…");
+    // сохраняем ссылку на телеграм-фото в images (твоя логика ожидает tg:*)
+    if (!Array.isArray(draft.images)) draft.images = [];
+    draft.images = [`tg:${fileId}`]; // одно фото (как ты просишь в тексте)
+
+    await safeReply(ctx, "✅ Фото принято. Сохраняю услугу…");
+
+    // В твоём мастере “одно фото” = сразу завершить создание
     await finishCreateServiceFromWizard(ctx);
   } catch (e) {
     console.error("[tg-bot] photo handler error:", e);
-    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте отправить ещё раз.");
+    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
   }
 });
+
 
 bot.on("inline_query", async (ctx) => {
   try {
