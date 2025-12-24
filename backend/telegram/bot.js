@@ -1659,6 +1659,7 @@ function wizNavKeyboard() {
   return {
     reply_markup: {
       inline_keyboard: [
+        [{ text: "⏭ Пропустить", callback_data: "svc_wiz:skip" }],
         [
           { text: "⬅️ Назад", callback_data: "svc_wiz:back" },
           { text: "❌ Отмена", callback_data: "svc_wiz:cancel" },
@@ -1667,6 +1668,7 @@ function wizNavKeyboard() {
     },
   };
 }
+
 
 function pushWizardState(ctx, prevState) {
   if (!ctx.session) ctx.session = {};
@@ -2830,6 +2832,83 @@ bot.action("svc_wiz:back", async (ctx) => {
   }
 });
 
+bot.action("svc_wiz:skip", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    if (!ctx.session) ctx.session = {};
+    const state = String(ctx.session.state || "");
+    const draft = ctx.session.serviceDraft;
+
+    if (!state || !draft) {
+      await safeReply(ctx, "⚠️ Нечего пропускать. Запустите создание услуги заново.");
+      return;
+    }
+
+    const category = String(draft.category || "");
+
+    // порядок шагов должен соответствовать promptWizardState() и handleWizardText()
+    const tourOrder = [
+      "svc_create_title",
+      "svc_create_tour_country",
+      "svc_create_tour_from",
+      "svc_create_tour_to",
+      "svc_create_tour_start",
+      "svc_create_tour_end",
+      "svc_create_price",
+      "svc_create_grossPrice",
+      "svc_create_expiration",
+      "svc_create_photo",
+    ];
+
+    const hotelOrder = [
+      "svc_hotel_title",
+      "svc_hotel_country",
+      "svc_hotel_city",
+      "svc_hotel_name",
+      "svc_hotel_checkin",
+      "svc_hotel_checkout",
+      "svc_hotel_roomcat",
+      "svc_hotel_accommodation",
+      "svc_hotel_food",
+      "svc_hotel_halal",
+      "svc_hotel_transfer",
+      "svc_hotel_changeable",
+      "svc_hotel_pax",
+      "svc_hotel_price",
+      "svc_hotel_grossPrice",
+      "svc_hotel_expiration",
+      "svc_hotel_photo",
+    ];
+
+    const isHotelFlow = category.includes("hotel") || state.startsWith("svc_hotel_");
+    const order = isHotelFlow ? hotelOrder : tourOrder;
+
+    const idx = order.indexOf(state);
+
+    // если мы на шаге фото — пропуск = сразу сохраняем услугу
+    if (state.endsWith("_photo")) {
+      pushWizardState(ctx, state);
+      // не меняем поля, просто завершаем
+      await finishCreateServiceFromWizard(ctx);
+      return;
+    }
+
+    const nextState = idx >= 0 ? order[idx + 1] : null;
+    if (!nextState) {
+      await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
+      return;
+    }
+
+    pushWizardState(ctx, state);
+    ctx.session.state = nextState;
+    await promptWizardState(ctx, nextState);
+  } catch (e) {
+    console.error("svc_wiz:skip error", e);
+    await safeReply(ctx, "⚠️ Ошибка при пропуске. Попробуйте ещё раз.");
+  }
+});
+
 /* ===================== CREATE: choose category ===================== */
 
 bot.action(
@@ -3811,6 +3890,7 @@ bot.on("photo", async (ctx, next) => {
     await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
   }
 });
+
 bot.on("inline_query", async (ctx) => {
   try {
     logUpdate(ctx, "inline_query");
