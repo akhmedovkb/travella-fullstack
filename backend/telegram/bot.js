@@ -834,6 +834,7 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
     const draft = {
       id: svc.id,
       category,
+      images: imagesArr,
 
       // общие
       title: svc.title || det.title || "",
@@ -2334,6 +2335,11 @@ bot.action("prov_services:create", async (ctx) => {
     await ctx.reply("➕ Ок! Давайте создадим новую услугу 👇");
 
     if (!ctx.session) ctx.session = {};
+    / ✅ ВАЖНО: сбрасываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
+    ctx.session.editWiz = null;
+    ctx.session.editDraft = null;
+    ctx.session.editingServiceId = null;
+    
     ctx.session.serviceDraft = { category: null, images: [] };
     ctx.session.wizardStack = [];
     ctx.session.state = "svc_create_choose_category";
@@ -2817,8 +2823,14 @@ async function handleSvcEditWizardText(ctx) {
     const text = textRaw;
 
     // ✅ ВОТ ЭТО КРИТИЧНО: state объявлен ДО ЛЮБОГО использования
-    const state = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
-
+    const legacy = String(ctx.session?.state || "");
+    const editStep = String(ctx.session?.editWiz?.step || "");
+    
+    // ✅ если идёт создание — не даём edit-wizard перехватить ввод
+    const state = legacy.startsWith("svc_create_") || legacy.startsWith("svc_hotel_")
+      ? legacy
+      : (editStep || legacy);
+    
     // Если это НЕ режим редактирования — выходим
     if (!state.startsWith("svc_edit_")) return false;
 
@@ -3831,6 +3843,17 @@ bot.on("inline_query", async (ctx) => {
       itemsForInline = itemsForInline.filter((svc) => {
         try {
           const det = parseDetailsAny(svc.details);
+          // ✅ подхватываем существующие изображения услуги
+          let imagesArr = svc.images ?? [];
+          if (typeof imagesArr === "string") {
+            try {
+              imagesArr = JSON.parse(imagesArr);
+            } catch {
+              imagesArr = imagesArr ? [imagesArr] : [];
+            }
+          }
+          if (!Array.isArray(imagesArr)) imagesArr = [];
+
           return isServiceActual(det, svc);
         } catch (_) {
           return false;
@@ -4065,21 +4088,13 @@ bot.action("svc_edit_img_clear", async (ctx) => {
 bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-
-    if (!ctx.session) ctx.session = {};
-
-    // ✅ синхронизируем legacy + new
-    ctx.session.state = "svc_edit_confirm";
-    ctx.session.editWiz = ctx.session.editWiz || {};
-    ctx.session.editWiz.step = "svc_edit_confirm";
-
-    await promptEditState(ctx, "svc_edit_confirm");
+    // ✅ “Готово” = сохраняем изменения (картинки — финальный шаг в твоём порядке)
+    await finishEditWizard(ctx);
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
-    await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
+    await safeReply(ctx, "⚠️ Не удалось сохранить изменения.");
   }
 });
-
 
 // bot.launch() — запуск делаем из index.js
 
