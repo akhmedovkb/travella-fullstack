@@ -351,7 +351,7 @@ function editImagesKeyboard(images = []) {
   if (images.length) {
     const delRow = images.map((_, i) => ({
       text: `❌ ${i + 1}`,
-      callback_data: `svc_edit_img_del:${i}`,
+      callback_data: `svc_edit_img_remove:${i}`,
     }));
     rows.push(delRow);
     rows.push([{ text: "🧹 Очистить все", callback_data: "svc_edit_img_clear" }]);
