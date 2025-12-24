@@ -3831,45 +3831,26 @@ bot.on("text", async (ctx, next) => {
 
 bot.on("photo", async (ctx, next) => {
   try {
-    // 1) Фото в режиме редактирования изображений услуги
+    // 1) сначала даём шанс edit-wizard
     if (await handleSvcEditWizardPhoto(ctx)) return;
 
-    // 1b) Фото в старом режиме редактирования (если где-то ещё используется ctx.session.state)
-    const legacyState = ctx.session?.state;
-    const legacyDraft = ctx.session?.serviceDraft;
-    if (legacyState === "svc_edit_images" && legacyDraft) {
-      const photos = ctx.message?.photo;
-      const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
-      const fileId = best?.file_id;
+    const state = String(ctx.session?.state || "");
+    const draft = ctx.session?.serviceDraft;
 
-      if (!fileId) {
-        await safeReply(ctx, "⚠️ Не удалось получить file_id. Отправьте фото ещё раз.");
-        return;
-      }
+    // 2) create-wizard: ждём именно шаг фото
+    const isCreatePhotoStep =
+      state === "svc_create_photo" ||
+      state === "svc_hotel_photo";
 
-      const tgRef = `tg:${fileId}`;
-      if (!Array.isArray(legacyDraft.images)) legacyDraft.images = [];
-      legacyDraft.images.push(tgRef);
+    if (!isCreatePhotoStep || !draft) return next();
 
-      await safeReply(
-        ctx,
-        `✅ Фото добавлено. Сейчас в услуге: ${legacyDraft.images.length} шт.\n\nОтправьте ещё фото или нажмите «✅ Готово».`,
-        buildEditImagesKeyboard(legacyDraft)
-      );
+    const photos = ctx.message?.photo;
+    if (!Array.isArray(photos) || photos.length === 0) {
+      await safeReply(ctx, "⚠️ Пришлите фото как изображение (не файл).");
       return;
     }
 
-
-    // 2) Фото в мастере создания услуги
-    const wizStep = ctx.session?.wiz?.step;
-    const draft = ctx.session?.serviceDraft;
-
-    if (wizStep !== "create_images" || !draft) {
-      return next();
-    }
-
-    const photos = ctx.message?.photo;
-    const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
+    const best = photos[photos.length - 1];
     const fileId = best?.file_id;
 
     if (!fileId) {
@@ -3877,17 +3858,16 @@ bot.on("photo", async (ctx, next) => {
       return;
     }
 
-    const tgRef = `tg:${fileId}`;
-    if (!Array.isArray(draft.images)) draft.images = [];
-    draft.images.push(tgRef);
+    // сохраняем fileId в черновик (у тебя оно потом уходит как telegramPhotoFileId) :contentReference[oaicite:5]{index=5}
+    draft.telegramPhotoFileId = fileId;
 
-    await safeReply(
-      ctx,
-      `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.\n\nОтправьте ещё фото или напишите «готово».`
-    );
+    // по твоему UX: "одно фото" -> сразу сохраняем услугу
+    pushWizardState(ctx, state);
+    await safeReply(ctx, "✅ Фото получено. Сохраняю услугу…");
+    await finishCreateServiceFromWizard(ctx);
   } catch (e) {
-    console.error("photo handler error:", e);
-    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
+    console.error("[tg-bot] photo handler error:", e);
+    await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте отправить ещё раз.");
   }
 });
 
