@@ -2141,7 +2141,7 @@ bot.start(async (ctx) => {
 
 /* ===================== ROLE PICK ===================== */
 
-bot.action(/^role:(client|provider)$/, async (ctx) => {
+(/^role:(client|provider)$/, async (ctx) => {
   try {
     const role = ctx.match[1];
     if (!ctx.session) ctx.session = {};
@@ -2368,7 +2368,7 @@ bot.action("prov_services:create", async (ctx) => {
     await ctx.reply("➕ Ок! Давайте создадим новую услугу 👇");
 
     if (!ctx.session) ctx.session = {};
-    / ✅ ВАЖНО: сбрасываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
+    // ✅ ВАЖНО: сбрасываем edit-wizard, чтобы создание НЕ перехватывалось редактированием
     ctx.session.editWiz = null;
     ctx.session.editDraft = null;
     ctx.session.editingServiceId = null;
