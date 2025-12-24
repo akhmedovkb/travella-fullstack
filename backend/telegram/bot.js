@@ -2920,8 +2920,24 @@ bot.action("svc_wiz:skip", async (ctx) => {
       draft.flightDetails = null;
     }
 
+    // Иногда пользователи нажимают кнопку «Пропустить» под старым сообщением,
+    // когда ctx.session.state уже успел измениться. Чтобы не получать
+    // «Уже нечего пропускать», делаем явные переходы для optional-шагов.
+    const forcedNext =
+      state === "svc_create_flight_departure"
+        ? "svc_create_flight_return"
+        : state === "svc_create_flight_return"
+          ? "svc_create_flight_details"
+          : state === "svc_create_flight_details"
+            ? "svc_create_tour_hotel"
+            : state === "svc_create_grossPrice"
+              ? "svc_create_expiration"
+              : state === "svc_create_expiration"
+                ? "svc_create_photo"
+                : null;
+
     const idx = order.indexOf(state);
-    const nextState = idx >= 0 ? order[idx + 1] : null;
+    const nextState = forcedNext || (idx >= 0 ? order[idx + 1] : null);
 
     // если пропускаем фото — сразу финализируем без фото
     if (state === "svc_create_photo") {
@@ -3896,13 +3912,17 @@ bot.on("photo", async (ctx, next) => {
     }
 
 
-    // 2) Фото в мастере создания услуги
-    const wizStep = ctx.session?.wiz?.step;
+    // 2) Фото в мастере создания услуги (текущий мастер использует ctx.session.state)
+    const state = ctx.session?.state;
     const draft = ctx.session?.serviceDraft;
 
-    if (wizStep !== "create_images" || !draft) {
-      return next();
-    }
+    // Поддержка двух вариантов (на случай старого/другого кода):
+    // - state === "svc_create_photo" (актуальный мастер)
+    // - ctx.session.wiz.step === "create_images" (если где-то ещё используется)
+    const wizStep = ctx.session?.wiz?.step;
+    const isCreatePhotoStep = state === "svc_create_photo" || wizStep === "create_images";
+
+    if (!isCreatePhotoStep || !draft) return next();
 
     const photos = ctx.message?.photo;
     const best = Array.isArray(photos) && photos.length ? photos[photos.length - 1] : null;
@@ -3916,11 +3936,17 @@ bot.on("photo", async (ctx, next) => {
     const tgRef = `tg:${fileId}`;
     if (!Array.isArray(draft.images)) draft.images = [];
     draft.images.push(tgRef);
+    draft.telegramPhotoFileId = fileId;
 
-    await safeReply(
-      ctx,
-      `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.\n\nОтправьте ещё фото или напишите «готово».`
-    );
+    // В мастере создания «Отказной тур/отель» по UX ожидается одно фото.
+    // После получения фото — финализируем создание.
+    if (state === "svc_create_photo") {
+      await finishCreateServiceFromWizard(ctx);
+      return;
+    }
+
+    // fallback (если где-то ещё используется многофото режим)
+    await safeReply(ctx, `✅ Фото добавлено. Сейчас выбрано: ${draft.images.length} шт.`);
   } catch (e) {
     console.error("photo handler error:", e);
     await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
