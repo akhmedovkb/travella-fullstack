@@ -309,11 +309,57 @@ function getActorId(ctx) {
 }
 
 async function safeReply(ctx, text, extra) {
-  if (ctx.chat?.id) return ctx.reply(text, extra);
   const uid = ctx.from?.id;
-  if (!uid) return;
-  return bot.telegram.sendMessage(uid, text, extra);
+
+  async function sendViaReply() {
+    // reply работает только когда есть ctx.chat.id
+    if (ctx.chat?.id) return ctx.reply(text, extra);
+    throw new Error("NO_CHAT_ID_FOR_REPLY");
+  }
+
+  async function sendViaDM() {
+    if (!uid) throw new Error("NO_USER_ID");
+    return bot.telegram.sendMessage(uid, text, extra);
+  }
+
+  // 1) пробуем обычный reply (если можно)
+  try {
+    return await sendViaReply();
+  } catch (e1) {
+    // 2) если reply не прошёл — пробуем ЛС
+    try {
+      return await sendViaDM();
+    } catch (e2) {
+      // 3) если упали из-за ECONNRESET/сетевых проблем — сделаем 1 ретрай
+      const msg = String(e2?.message || e1?.message || "");
+      const code = e2?.code || e1?.code;
+
+      const isConnReset =
+        code === "ECONNRESET" ||
+        msg.includes("ECONNRESET") ||
+        msg.includes("network") ||
+        msg.includes("FetchError");
+
+      if (!isConnReset) throw e2; // это не сеть — пусть логируется выше
+
+      // маленькая пауза и повтор
+      await new Promise((r) => setTimeout(r, 600));
+
+      // повторяем через DM (самый стабильный вариант)
+      if (uid) {
+        try {
+          return await bot.telegram.sendMessage(uid, text, extra);
+        } catch (e3) {
+          // если и второй раз не вышло — просто пробросим
+          throw e3;
+        }
+      }
+
+      throw e2;
+    }
+  }
 }
+
 
 /* ===================== EDIT WIZARD NAV (svc_edit_*) ===================== */
 
