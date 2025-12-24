@@ -147,6 +147,36 @@ async function getPublicThumbUrlFromTgFile(botInstance, fileId) {
 }
 
 /* ===================== HELPERS ===================== */
+function normalizeImages(input) {
+  const out = [];
+
+  const push = (v) => {
+    if (v === null || v === undefined) return;
+
+    if (typeof v === "number") {
+      if (v === 0) return;
+      v = String(v);
+    }
+
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s || s === "0" || s === "null" || s === "undefined") return;
+      out.push(s);
+      return;
+    }
+
+    if (Array.isArray(v)) return v.forEach(push);
+
+    if (typeof v === "object") {
+      if (typeof v.url === "string") push(v.url);
+      if (typeof v.file_id === "string") push(`tg:${v.file_id}`);
+      if (Array.isArray(v.images)) push(v.images);
+    }
+  };
+
+  push(input);
+  return [...new Set(out)];
+}
 
 function buildServicesTextList(items, role = "provider") {
   const lines = [];
@@ -402,8 +432,10 @@ async function handleSvcEditWizardPhoto(ctx) {
   }
 
   const tgRef = `tg:${fileId}`;
-  if (!Array.isArray(draft.images)) draft.images = [];
+  draft.images = normalizeImages(draft.images);
   draft.images.push(tgRef);
+  draft.images = normalizeImages(draft.images);
+
 
   const count = draft.images.length;
   await safeReply(
@@ -587,7 +619,8 @@ async function promptEditState(ctx, state) {
       
     // IMAGES
     case "svc_edit_images": {
-      const images = ctx.session?.serviceDraft?.images || [];
+      const images = normalizeImages(ctx.session?.serviceDraft?.images || []);
+      ctx.session.serviceDraft.images = images;
       await safeReply(
         ctx,
         `🖼 Фото услуги\n\n` +
@@ -729,12 +762,17 @@ bot.action("svc_edit_back", async (ctx) => {
       await safeReply(ctx, "⏮ Назад больше некуда.", editWizNavKeyboard());
       return;
     }
+
     ctx.session.state = prev;
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = prev;
+
     await promptEditState(ctx, prev);
   } catch (e) {
     console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
   }
 });
+
 
 
 bot.action("svc_edit_cancel", async (ctx) => {
@@ -855,17 +893,25 @@ async function finishEditWizard(ctx) {
     return;
   }
 
+  // ✅ нормализуем images ДО payload
+  let imagesNormalized = null;
+  if (Array.isArray(draft.images)) {
+    imagesNormalized = normalizeImages(draft.images);
+    draft.images = imagesNormalized;
+  }
+
   try {
     const payload = {
       title: draft.title || "",
       price: draft.price ?? null,
 
-      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, скажи, добавим на backend
+      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, добавим на backend
       // grossPrice: draft.grossPrice ?? null,
 
       details: {
-        // оставляем совместимость с твоими ключами
         category: draft.category,
+
+        // туры
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
@@ -873,6 +919,8 @@ async function finishEditWizard(ctx) {
         endDate: draft.endDate || "",
         hotel: draft.hotel || "",
         accommodation: draft.accommodation || "",
+
+        // отели
         roomCategory: draft.roomCategory || "",
         food: draft.food || "",
         halal: !!draft.halal,
@@ -882,6 +930,7 @@ async function finishEditWizard(ctx) {
         chd: draft.chd ?? 0,
         inf: draft.inf ?? 0,
 
+        // рейсы
         departureFlightDate: draft.departureFlightDate || null,
         returnFlightDate: draft.returnFlightDate || null,
         flightDetails: draft.flightDetails || null,
@@ -890,9 +939,8 @@ async function finishEditWizard(ctx) {
         isActive: !!draft.isActive,
       },
 
-      // ✅ images опционально: если не хочешь трогать — НЕ передавай вообще
-      // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
-      ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
+      // ✅ images опционально: если есть массив — отправляем, иначе не трогаем
+      ...(Array.isArray(imagesNormalized) ? { images: imagesNormalized } : {}),
     };
 
     const { data } = await axios.patch(
@@ -925,6 +973,7 @@ async function finishEditWizard(ctx) {
     });
   }
 }
+
 
 function logUpdate(ctx, label = "update") {
   try {
