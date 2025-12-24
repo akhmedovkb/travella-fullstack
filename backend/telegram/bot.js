@@ -4056,7 +4056,7 @@ bot.on("inline_query", async (ctx) => {
 // ⚠️ здесь НЕТ 
 /* ===================== EDIT IMAGES (ADD/REMOVE/CLEAR) ===================== */
 
-bot.action(/^svc_edit_img_remove:(\d+)$/, async (ctx) => {
+bot.action(/^svc_edit_img_(?:remove|del):(\d+)$/, async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
