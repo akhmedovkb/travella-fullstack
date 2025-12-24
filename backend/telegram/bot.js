@@ -147,36 +147,6 @@ async function getPublicThumbUrlFromTgFile(botInstance, fileId) {
 }
 
 /* ===================== HELPERS ===================== */
-function normalizeImages(input) {
-  const out = [];
-
-  const push = (v) => {
-    if (v === null || v === undefined) return;
-
-    if (typeof v === "number") {
-      if (v === 0) return;
-      v = String(v);
-    }
-
-    if (typeof v === "string") {
-      const s = v.trim();
-      if (!s || s === "0" || s === "null" || s === "undefined") return;
-      out.push(s);
-      return;
-    }
-
-    if (Array.isArray(v)) return v.forEach(push);
-
-    if (typeof v === "object") {
-      if (typeof v.url === "string") push(v.url);
-      if (typeof v.file_id === "string") push(`tg:${v.file_id}`);
-      if (Array.isArray(v.images)) push(v.images);
-    }
-  };
-
-  push(input);
-  return [...new Set(out)];
-}
 
 function buildServicesTextList(items, role = "provider") {
   const lines = [];
@@ -361,6 +331,20 @@ function editWizNavKeyboard() {
   };
 }
 
+
+function editConfirmKeyboard() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💾 Сохранить", callback_data: "svc_edit_save" }],
+        [{ text: "✏️ Продолжить редактирование", callback_data: "svc_edit_continue" }],
+        [{ text: "❌ Отмена", callback_data: "svc_edit_cancel" }],
+      ],
+    },
+  };
+}
+
+
 function editImagesKeyboard(images = []) {
   const rows = [];
 
@@ -432,10 +416,8 @@ async function handleSvcEditWizardPhoto(ctx) {
   }
 
   const tgRef = `tg:${fileId}`;
-  draft.images = normalizeImages(draft.images);
+  if (!Array.isArray(draft.images)) draft.images = [];
   draft.images.push(tgRef);
-  draft.images = normalizeImages(draft.images);
-
 
   const count = draft.images.length;
   await safeReply(
@@ -619,8 +601,7 @@ async function promptEditState(ctx, state) {
       
     // IMAGES
     case "svc_edit_images": {
-      const images = normalizeImages(ctx.session?.serviceDraft?.images || []);
-      ctx.session.serviceDraft.images = images;
+      const images = ctx.session?.serviceDraft?.images || [];
       await safeReply(
         ctx,
         `🖼 Фото услуги\n\n` +
@@ -662,6 +643,14 @@ async function promptEditState(ctx, state) {
       );
       return;
 
+    case "svc_edit_confirm":
+      await safeReply(
+        ctx,
+        "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.",
+        editConfirmKeyboard()
+      );
+      return;
+
     default:
       await safeReply(
         ctx,
@@ -674,6 +663,9 @@ async function promptEditState(ctx, state) {
 bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+
+
+    if (!ctx.session) ctx.session = {};
 
     // ✅ поддерживаем и новый editWiz.step, и legacy ctx.session.state
     const currentState = String(ctx.session?.editWiz?.step || ctx.session?.state || "");
@@ -733,6 +725,20 @@ bot.action("svc_edit:skip", async (ctx) => {
     const idx = order.indexOf(state);
     const nextState = idx >= 0 ? order[idx + 1] : null;
 
+    // ✅ На шаге изображений «Пропустить» = перейти к подтверждению (оставить фото как есть)
+    if (state === "svc_edit_images") {
+      if (!Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
+      ctx.session.wizardStack.push(state);
+
+      ctx.session.state = "svc_edit_confirm";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_confirm";
+
+      await promptEditState(ctx, "svc_edit_confirm");
+      return;
+    }
+
+
     if (!nextState) {
       await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
       return;
@@ -762,17 +768,12 @@ bot.action("svc_edit_back", async (ctx) => {
       await safeReply(ctx, "⏮ Назад больше некуда.", editWizNavKeyboard());
       return;
     }
-
     ctx.session.state = prev;
-    ctx.session.editWiz = ctx.session.editWiz || {};
-    ctx.session.editWiz.step = prev;
-
     await promptEditState(ctx, prev);
   } catch (e) {
     console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
   }
 });
-
 
 
 bot.action("svc_edit_cancel", async (ctx) => {
@@ -893,25 +894,20 @@ async function finishEditWizard(ctx) {
     return;
   }
 
-  // ✅ нормализуем images ДО payload
-  let imagesNormalized = null;
-  if (Array.isArray(draft.images)) {
-    imagesNormalized = normalizeImages(draft.images);
-    draft.images = imagesNormalized;
-  }
-
   try {
     const payload = {
       title: draft.title || "",
       price: draft.price ?? null,
 
-      // ⚠️ backend updateServiceFromBot НЕ умеет grossPrice — если надо, добавим на backend
-      // grossPrice: draft.grossPrice ?? null,
+      grossPrice: draft.grossPrice ?? null,
 
       details: {
+        // оставляем совместимость с твоими ключами
         category: draft.category,
-
-        // туры
+        // цены: дублируем в details для совместимости с витриной/карточкой
+        netPrice: draft.price ?? null,
+        price: draft.price ?? null,
+        grossPrice: draft.grossPrice ?? null,
         country: draft.country || "",
         fromCity: draft.fromCity || "",
         toCity: draft.toCity || "",
@@ -919,8 +915,6 @@ async function finishEditWizard(ctx) {
         endDate: draft.endDate || "",
         hotel: draft.hotel || "",
         accommodation: draft.accommodation || "",
-
-        // отели
         roomCategory: draft.roomCategory || "",
         food: draft.food || "",
         halal: !!draft.halal,
@@ -930,7 +924,6 @@ async function finishEditWizard(ctx) {
         chd: draft.chd ?? 0,
         inf: draft.inf ?? 0,
 
-        // рейсы
         departureFlightDate: draft.departureFlightDate || null,
         returnFlightDate: draft.returnFlightDate || null,
         flightDetails: draft.flightDetails || null,
@@ -939,8 +932,9 @@ async function finishEditWizard(ctx) {
         isActive: !!draft.isActive,
       },
 
-      // ✅ images опционально: если есть массив — отправляем, иначе не трогаем
-      ...(Array.isArray(imagesNormalized) ? { images: imagesNormalized } : {}),
+      // ✅ images опционально: если не хочешь трогать — НЕ передавай вообще
+      // но раз ты их уже тащишь в draft, можно отправлять (тогда будет replace)
+      ...(Array.isArray(draft.images) ? { images: draft.images } : {}),
     };
 
     const { data } = await axios.patch(
@@ -973,7 +967,6 @@ async function finishEditWizard(ctx) {
     });
   }
 }
-
 
 function logUpdate(ctx, label = "update") {
   try {
@@ -2755,40 +2748,38 @@ bot.action("svc_wiz:back", async (ctx) => {
 /* ===================== CREATE: choose category ===================== */
 
 bot.action(
-  /^svc_new_cat:(.+)$/,
+  /^svc_new_cat:(refused_tour|refused_hotel|refused_flight|refused_ticket)$/,
   async (ctx) => {
     try {
       await ctx.answerCbQuery();
-      const category = String(ctx.match[1] || "").trim();
-      if (!category) return;
+      const category = ctx.match[1];
 
-      // сбрасываем предыдущий визард
-      resetServiceWizard(ctx);
+      if (!ctx.session) ctx.session = {};
+      if (!ctx.session.serviceDraft) ctx.session.serviceDraft = {};
+      ctx.session.serviceDraft.category = category;
 
-      // инициализируем черновик
-      ctx.session.serviceDraft = {
-        category,
-        title: "",
-        description: "",
-        price: "",
-        grossPrice: "",
-        details: {},
-        images: [],
-      };
-
-      // отказной/авторский тур
-      if (category === "refused_tour" || category === "author_tour") {
-        ctx.session.state = "svc_create_title";
-        await promptWizardState(ctx, ctx.session.state);
+      if (category !== "refused_tour" && category !== "refused_hotel") {
+        await ctx.reply(
+          "⚠️ Создание через бот пока доступно только для «Отказной тур» и «Отказной отель».\n\n" +
+            "Для остальных категорий используйте личный кабинет:\n" +
+            `${SITE_URL}`
+        );
+        resetServiceWizard(ctx);
         return;
       }
 
-      // остальные категории (например, отказной отель и т.д.)
+      ctx.session.wizardStack = [];
+
+      if (category === "refused_tour") {
+        ctx.session.state = "svc_create_title";
+        await promptWizardState(ctx, "svc_create_title");
+        return;
+      }
+
       ctx.session.state = "svc_hotel_country";
-      await promptWizardState(ctx, ctx.session.state);
+      await promptWizardState(ctx, "svc_hotel_country");
     } catch (e) {
-      console.error("svc_new_cat error:", e);
-      await safeReply(ctx, "⚠️ Ошибка. Попробуйте ещё раз.");
+      console.error("[tg-bot] svc_new_cat action error:", e);
     }
   }
 );
@@ -3704,14 +3695,9 @@ bot.on("photo", async (ctx, next) => {
 
     // 2) Фото в мастере создания услуги
     const wizStep = ctx.session?.wiz?.step;
-    const state = ctx.session?.state;
     const draft = ctx.session?.serviceDraft;
 
-    const isCreateImages =
-      (state === "svc_create_photo" && !!draft) ||
-      (wizStep === "create_images" && !!draft);
-
-    if (!isCreateImages) {
+    if (wizStep !== "create_images" || !draft) {
       return next();
     }
 
@@ -4080,19 +4066,50 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // Переходим в подтверждение/выбор следующего поля.
-    if (ctx.session?.editWiz) {
-      ctx.session.editWiz.step = "svc_edit_confirm";
-    } else {
-      ctx.session.state = "svc_edit_confirm";
-    }
+    if (!ctx.session) ctx.session = {};
 
-    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
+    // ✅ синхронизируем legacy + new
+    ctx.session.state = "svc_edit_confirm";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_confirm";
+
+    await promptEditState(ctx, "svc_edit_confirm");
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
   }
 });
 
+
 // bot.launch() — запуск делаем из index.js
+
+bot.action("svc_edit_save", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    await finishEditWizard(ctx);
+  } catch (e) {
+    console.error("svc_edit_save error:", e);
+    await safeReply(ctx, "⚠️ Ошибка при сохранении изменений.");
+  }
+});
+
+bot.action("svc_edit_continue", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+
+    // возвращаемся к первому шагу редактирования (можно поменять на любой другой)
+    ctx.session.state = "svc_edit_title";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_title";
+
+    await promptEditState(ctx, "svc_edit_title");
+  } catch (e) {
+    console.error("svc_edit_continue error:", e);
+    await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
+  }
+});
+
+
 module.exports = { bot };
