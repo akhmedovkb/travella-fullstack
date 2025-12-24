@@ -4118,8 +4118,15 @@ bot.action("svc_edit_img_clear", async (ctx) => {
 bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
-    // ✅ как “раньше”: нажал «Готово» = сразу сохраняем
-    await finishEditWizard(ctx);
+
+    if (!ctx.session) ctx.session = {};
+
+    // ✅ переходим на шаг подтверждения, а НЕ сохраняем сразу
+    ctx.session.state = "svc_edit_confirm";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_confirm";
+
+    await promptEditState(ctx, "svc_edit_confirm");
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
