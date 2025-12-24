@@ -4031,17 +4031,62 @@ bot.action("svc_edit_img_done", async (ctx) => {
   try {
     await ctx.answerCbQuery();
 
-    // Переходим в подтверждение/выбор следующего поля.
+    // ✅ Как было (и как должно быть): после «Готово» показываем выбор —
+    // «Сохранить» / «Продолжить редактирование» / «Отмена».
+    // Никаких автоподгрузок фото, никаких лишних кнопок.
+
     if (ctx.session?.editWiz) {
       ctx.session.editWiz.step = "svc_edit_confirm";
     } else {
       ctx.session.state = "svc_edit_confirm";
     }
 
-    await safeReply(ctx, "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.");
+    await safeReply(
+      ctx,
+      "✅ Ок. Теперь можно продолжить редактирование или сохранить изменения.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("💾 Сохранить", "svc_edit_save")],
+        [Markup.button.callback("✏️ Продолжить редактирование", "svc_edit_continue")],
+        [Markup.button.callback("❌ Отмена", "svc_edit_cancel")],
+      ])
+    );
   } catch (e) {
     console.error("svc_edit_img_done error:", e);
     await safeReply(ctx, "⚠️ Не удалось завершить редактирование изображений.");
+  }
+});
+
+// --- Подтверждение после блока фото (как в старом UX) ---
+bot.action("svc_edit_save", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    await finishEditWizard(ctx);
+  } catch (e) {
+    console.error("svc_edit_save error:", e);
+    await safeReply(ctx, "⚠️ Не удалось сохранить изменения.");
+  }
+});
+
+bot.action("svc_edit_continue", async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+
+    // Возвращаем пользователя к предыдущему шагу редактирования (аналог «Назад»),
+    // чтобы он мог продолжить менять поля.
+    if (ctx.session?.editWiz) {
+      const prev = ctx.session.editWiz.wizardStack?.pop();
+      ctx.session.editWiz.step = prev || "svc_edit_title";
+      ctx.session.state = ctx.session.editWiz.step;
+      await promptEditState(ctx);
+      return;
+    }
+
+    const prev = ctx.session?.wizardStack?.pop();
+    ctx.session.state = prev || "svc_edit_title";
+    await promptEditState(ctx);
+  } catch (e) {
+    console.error("svc_edit_continue error:", e);
+    await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
   }
 });
 
