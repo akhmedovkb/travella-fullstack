@@ -32,7 +32,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.status = 'rejected'
+      WHERE s.moderation_status = 'rejected'
       ORDER BY COALESCE(s.rejected_at, s.updated_at) DESC`
   );
   res.json(q.rows);
@@ -56,40 +56,25 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
 // approve (в т.ч. подтверждение ранее отклонённых)
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
+
   const { rows } = await pool.query(
     `UPDATE services
         SET moderation_status = 'approved',
-            status         = 'published',
-            approved_at    = NOW(),
-            approved_by    = $2,
-            published_at   = NOW(),
-            -- чистим следы отклонения, если было
-            rejected_at    = NULL,
-            rejected_by    = NULL,
-            rejected_reason= NULL,
-            updated_at     = NOW()
+            status            = 'published',
+            approved_at       = NOW(),
+            approved_by       = $2,
+            published_at      = NOW(),
+            rejected_at       = NULL,
+            rejected_by       = NULL,
+            rejected_reason   = NULL,
+            updated_at        = NOW()
       WHERE id = $1 AND moderation_status = 'pending'
-      RETURNING id, status, published_at`,
+      RETURNING id, status, moderation_status, published_at`,
     [req.params.id, adminId]
   );
-  if (!rows.length) return res.status(400).json({ message: "Service must be pending or rejected" });
-    // TG → администраторам
-  notifyModerationApproved({ service: rows[0].id }).catch(()=>{});
-  
-    // TG → поставщику
-  const info = await pool.query(
-    `SELECT s.title, p.telegram_chat_id
-       FROM services s
-       JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1`,
-    [rows[0].id]
-  );
 
-  if (info.rows[0]?.telegram_chat_id) {
-    tgSend(
-      info.rows[0].telegram_chat_id,
-      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${info.rows[0].title}`
-    ).catch(() => {});
+  if (!rows.length) {
+    return res.status(400).json({ message: "Service not in pending" });
   }
 
   res.json({ ok: true, service: rows[0] });
@@ -99,36 +84,22 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
   const { reason = "" } = req.body || {};
+
   const { rows } = await pool.query(
     `UPDATE services
         SET moderation_status = 'rejected',
-            status          = 'rejected',
-            rejected_at     = NOW(),
-            rejected_by     = $2,
-            rejected_reason = $3,
-            updated_at      = NOW()
+            status            = 'rejected',
+            rejected_at       = NOW(),
+            rejected_by       = $2,
+            rejected_reason   = $3,
+            updated_at        = NOW()
       WHERE id = $1 AND moderation_status = 'pending'
-      RETURNING id, status, rejected_at, rejected_reason`,
+      RETURNING id, status, moderation_status, rejected_at, rejected_reason`,
     [req.params.id, adminId, reason]
   );
-  if (!rows.length) return res.status(400).json({ message: "Service not in pending" });
-    // TG → администраторам
-  notifyModerationRejected({ service: rows[0].id, reason }).catch(()=>{});
 
-    // TG → поставщику
-  const info = await pool.query(
-    `SELECT s.title, p.telegram_chat_id
-       FROM services s
-       JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1`,
-    [rows[0].id]
-  );
-
-  if (info.rows[0]?.telegram_chat_id) {
-    tgSend(
-      info.rows[0].telegram_chat_id,
-      `❌ Ваша услуга отклонена\n\n📌 ${info.rows[0].title}\n\nПричина:\n${reason || "Не указана"}`
-    ).catch(() => {});
+  if (!rows.length) {
+    return res.status(400).json({ message: "Service not in pending" });
   }
 
   res.json({ ok: true, service: rows[0] });
