@@ -2594,6 +2594,30 @@ bot.action("prov_services:create", async (ctx) => {
   }
 });
 
+bot.action("prov_services:list", async (ctx) => {
+  await ctx.answerCbQuery();
+
+  // 🔴 принудительно закрываем wizard
+  forceCloseEditWizard(ctx);
+
+  // просто переиспользуем существующую логику
+  return ctx.telegram.sendMessage(
+    ctx.chat.id,
+    "🧳 Выберите действие:",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
+          [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
+        ],
+      },
+    }
+  );
+});
+
+
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
     await ctx.answerCbQuery();
