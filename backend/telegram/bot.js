@@ -1012,43 +1012,6 @@ async function finishEditWizard(ctx) {
       if (!ok) return;
     }
 
-
-    // ✅ обязательные поля при сохранении (редактирование)
-if (!normReq(draft.title)) {
-  await safeReply(ctx, "⚠️ Поле *Название* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
-  ctx.session.state = "svc_edit_title";
-  ctx.session.editWiz = ctx.session.editWiz || {};
-  ctx.session.editWiz.step = "svc_edit_title";
-  return;
-}
-
-const isHotelFlow = String(draft.category || "").includes("hotel");
-if (!normReq(draft.country)) {
-  await safeReply(ctx, "⚠️ Поле *Страна* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
-  ctx.session.state = isHotelFlow ? "svc_edit_hotel_country" : "svc_edit_tour_country";
-  ctx.session.editWiz = ctx.session.editWiz || {};
-  ctx.session.editWiz.step = ctx.session.state;
-  return;
-}
-
-if (isHotelFlow) {
-  if (!normReq(draft.toCity)) {
-    await safeReply(ctx, "⚠️ Поле *Город* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
-    ctx.session.state = "svc_edit_hotel_city";
-    ctx.session.editWiz = ctx.session.editWiz || {};
-    ctx.session.editWiz.step = "svc_edit_hotel_city";
-    return;
-  }
-} else {
-  if (!normReq(draft.fromCity) || !normReq(draft.toCity)) {
-    await safeReply(ctx, "⚠️ Поля *Город вылета* и *Город прибытия* обязательны.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
-    ctx.session.state = !normReq(draft.fromCity) ? "svc_edit_tour_from" : "svc_edit_tour_to";
-    ctx.session.editWiz = ctx.session.editWiz || {};
-    ctx.session.editWiz.step = ctx.session.state;
-    return;
-  }
-}
-
     const payload = {
       title: draft.title || "",
       price: draft.price ?? null,
