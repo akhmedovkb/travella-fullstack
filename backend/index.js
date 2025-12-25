@@ -290,22 +290,14 @@ function getTZParts(date = new Date(), timeZone = REM_TZ) {
 function startAskActualReminderScheduler() {
   console.log("[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent");
 
-  setInterval(async () => {
-    try {
-      const { ymd, hour, minute } = getTZParts(new Date(), REM_TZ);
-      if (minute !== 0) return;
-      if (!REM_HOURS.has(hour)) return;
+setInterval(async () => {
+  try {
+    await askActualReminder();
+  } catch (e) {
+    console.error("[askActualReminder] tick error:", e?.message || e);
+  }
+}, 5 * 60 * 1000); // раз в 5 минут
 
-      const key = `${ymd}:${hour}`;
-      if (lastReminderKey === key) return;
-      lastReminderKey = key;
-
-      await askActualReminder();
-      console.log("[askActualReminder] sent tick:", key);
-    } catch (e) {
-      console.error("[askActualReminder] tick error:", e?.message || e);
-    }
-  }, 30 * 1000); // проверяем 2 раза в минуту, но gate не даст дубль
 }
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
 
