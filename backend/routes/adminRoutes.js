@@ -20,7 +20,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
     `SELECT s.*, p.name AS provider_name, p.type AS provider_type
        FROM services s
        JOIN providers p ON p.id = s.provider_id
-      WHERE s.status = 'pending'
+      WHERE s.moderation_status = 'pending'
       ORDER BY s.submitted_at ASC NULLS LAST, s.updated_at DESC`
   );
   res.json(q.rows);
@@ -58,7 +58,8 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   const adminId = req.user.id;
   const { rows } = await pool.query(
     `UPDATE services
-        SET status         = 'published',
+        SET moderation_status = 'approved',
+            status         = 'published',
             approved_at    = NOW(),
             approved_by    = $2,
             published_at   = NOW(),
@@ -67,7 +68,7 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
             rejected_by    = NULL,
             rejected_reason= NULL,
             updated_at     = NOW()
-      WHERE id = $1 AND status IN ('pending','rejected')
+      WHERE id = $1 AND moderation_status = 'pending'
       RETURNING id, status, published_at`,
     [req.params.id, adminId]
   );
@@ -100,12 +101,13 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
   const { reason = "" } = req.body || {};
   const { rows } = await pool.query(
     `UPDATE services
-        SET status          = 'rejected',
+        SET moderation_status = 'rejected',
+            status          = 'rejected',
             rejected_at     = NOW(),
             rejected_by     = $2,
             rejected_reason = $3,
             updated_at      = NOW()
-      WHERE id = $1 AND status = 'pending'
+      WHERE id = $1 AND moderation_status = 'pending'
       RETURNING id, status, rejected_at, rejected_reason`,
     [req.params.id, adminId, reason]
   );
