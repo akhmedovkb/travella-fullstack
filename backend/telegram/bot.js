@@ -1016,7 +1016,7 @@ async function finishEditWizard(ctx) {
       title: draft.title || "",
       price: draft.price ?? null,
       grossPrice: draft.grossPrice ?? null,
-      expiration: draft.expiration || null,
+      expiration: (draft.expiration === "" ? null : (draft.expiration ?? null)),
       isActive: !!draft.isActive,
 
 
@@ -1047,7 +1047,7 @@ async function finishEditWizard(ctx) {
         returnFlightDate: draft.returnFlightDate || null,
         flightDetails: draft.flightDetails || null,
 
-        expiration: draft.expiration || null,
+        expiration: (draft.expiration === "" ? null : (draft.expiration ?? null)),
         isActive: !!draft.isActive,
       },
 
@@ -3346,7 +3346,7 @@ async function handleSvcEditWizardText(ctx) {
         case "svc_edit_expiration": {
           if (!keep()) {
             if (isNo()) {
-              draft.expiration = "";
+              draft.expiration = null;
             } else {
               const norm = normalizeDateTimeInputHelper(text); // ✅ из helpers/serviceActual
               if (!norm) {
