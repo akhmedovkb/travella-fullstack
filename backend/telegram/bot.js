@@ -1001,30 +1001,17 @@ async function finishEditWizard(ctx) {
       return;
     }
 
-    // gross >= net (если обе цены введены числами)
-    const net = Number(String(draft.price ?? "").replace(",", ".").trim());
-    const gross = Number(String(draft.grossPrice ?? "").replace(",", ".").trim());
-
-    const netOk = Number.isFinite(net) && net > 0;
-    const grossOk = Number.isFinite(gross) && gross > 0;
-
-    if (netOk && grossOk && gross < net) {
-      await safeReply(
-        ctx,
-        `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\nСейчас: нетто=${net}, брутто=${gross}.\nВведите корректную цену БРУТТО.`,
-        { parse_mode: "Markdown", ...editWizNavKeyboard() }
-      );
-      ctx.session.state = "svc_edit_grossPrice";
-      ctx.session.editWiz = ctx.session.editWiz || {};
-      ctx.session.editWiz.step = "svc_edit_grossPrice";
-      await promptEditState(ctx, "svc_edit_grossPrice");
-      return;
-    }
     // ✅ валидация цен перед сохранением (редактирование)
     if (draft.price != null && draft.grossPrice != null) {
-      const ok = await validateGrossNotLessThanNet(ctx, draft.price, draft.grossPrice, "svc_edit_grossPrice");
+      const ok = await validateGrossNotLessThanNet(
+        ctx,
+        draft.price,
+        draft.grossPrice,
+        "svc_edit_grossPrice"
+      );
       if (!ok) return;
     }
+
 
     // ✅ обязательные поля при сохранении (редактирование)
 if (!normReq(draft.title)) {
