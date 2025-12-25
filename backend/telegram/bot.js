@@ -2537,9 +2537,6 @@ const keyboard = {
     [
       { text: "🌐 Открыть в кабинете", url: manageUrl },
     ],
-    [
-      { text: "🔁 Открыть меню в боте", url: buildBotStartUrl() },
-    ],
   ],
 };
 
@@ -3815,6 +3812,7 @@ bot.on("photo", async (ctx, next) => {
     await safeReply(ctx, "⚠️ Ошибка при обработке фото. Попробуйте ещё раз.");
   }
 });
+
 bot.on("inline_query", async (ctx) => {
   try {
     logUpdate(ctx, "inline_query");
@@ -3995,7 +3993,6 @@ bot.on("inline_query", async (ctx) => {
       const keyboardForMy = {
         inline_keyboard: [
           [{ text: "🌐 Открыть в кабинете", url: manageUrl }],
-          [{ text: "🔁 Открыть меню в боте", url: buildBotStartUrl() }],
         ],
       };
 
