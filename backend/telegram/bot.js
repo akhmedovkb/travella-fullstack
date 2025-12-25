@@ -952,6 +952,75 @@ async function finishEditWizard(ctx) {
   }
 
   try {
+        // ✅ ВАЛИДАЦИИ
+    const title = String(draft.title || "").trim();
+
+    const category = String(draft.category || "").trim();
+    const isHotel = category.includes("hotel");
+    const country = String(draft.country || "").trim();
+    const fromCity = String(draft.fromCity || "").trim();
+    const toCity = String(draft.toCity || "").trim();
+
+    // обязательные поля
+    if (!title) {
+      await safeReply(ctx, "⚠️ Укажите *Название* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      ctx.session.state = "svc_edit_title";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_title";
+      await promptEditState(ctx, "svc_edit_title");
+      return;
+    }
+
+    if (!country) {
+      const next = isHotel ? "svc_edit_hotel_country" : "svc_edit_tour_country";
+      await safeReply(ctx, "⚠️ Укажите *Страну* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      ctx.session.state = next;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = next;
+      await promptEditState(ctx, next);
+      return;
+    }
+
+    // для тура: нужны оба города, для отеля: нужен город (toCity)
+    if (!isHotel && (!fromCity || !toCity)) {
+      const next = !fromCity ? "svc_edit_tour_from" : "svc_edit_tour_to";
+      await safeReply(ctx, "⚠️ Укажите *города вылета и прибытия* (обязательные поля).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      ctx.session.state = next;
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = next;
+      await promptEditState(ctx, next);
+      return;
+    }
+
+    if (isHotel && !toCity) {
+      await safeReply(ctx, "⚠️ Укажите *Город* (обязательное поле).", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+      ctx.session.state = "svc_edit_hotel_city";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_hotel_city";
+      await promptEditState(ctx, "svc_edit_hotel_city");
+      return;
+    }
+
+    // gross >= net (если обе цены введены числами)
+    const net = Number(String(draft.price ?? "").replace(",", ".").trim());
+    const gross = Number(String(draft.grossPrice ?? "").replace(",", ".").trim());
+
+    const netOk = Number.isFinite(net) && net > 0;
+    const grossOk = Number.isFinite(gross) && gross > 0;
+
+    if (netOk && grossOk && gross < net) {
+      await safeReply(
+        ctx,
+        `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\nСейчас: нетто=${net}, брутто=${gross}.\nВведите корректную цену БРУТТО.`,
+        { parse_mode: "Markdown", ...editWizNavKeyboard() }
+      );
+      ctx.session.state = "svc_edit_grossPrice";
+      ctx.session.editWiz = ctx.session.editWiz || {};
+      ctx.session.editWiz.step = "svc_edit_grossPrice";
+      await promptEditState(ctx, "svc_edit_grossPrice");
+      return;
+    }
+
     const payload = {
       title: draft.title || "",
       price: draft.price ?? null,
@@ -1935,6 +2004,20 @@ async function finishCreateServiceFromWizard(ctx) {
     let grossNumFinal = normalizePrice(draft.grossPrice);
     if (grossNumFinal === null) grossNumFinal = calcGrossFromNet(priceNum);
     draft.grossPriceNum = grossNumFinal;
+    
+    // ✅ ВАЛИДАЦИЯ: БРУТТО НЕ МОЖЕТ БЫТЬ МЕНЬШЕ НЕТТО
+    // grossNumFinal уже финальный (введённый или рассчитанный)
+    if (grossNumFinal !== null && grossNumFinal < priceNum) {
+      await ctx.reply(
+        `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\n` +
+          `Сейчас: нетто=${priceNum}, брутто=${grossNumFinal}.\n\n` +
+          `Введите цену БРУТТО заново (например: *1250* или *1250 USD*) ` +
+          `или нажмите «⏭ Пропустить».`,
+        { parse_mode: "Markdown" }
+      );
+      ctx.session.state = "svc_create_grossPrice";
+      return;
+    }
 
     let details;
     let title;
