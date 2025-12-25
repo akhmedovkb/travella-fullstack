@@ -1020,6 +1020,47 @@ async function finishEditWizard(ctx) {
       await promptEditState(ctx, "svc_edit_grossPrice");
       return;
     }
+    // ✅ валидация цен перед сохранением (редактирование)
+    if (draft.price != null && draft.grossPrice != null) {
+      const ok = await validateGrossNotLessThanNet(ctx, draft.price, draft.grossPrice, "svc_edit_grossPrice");
+      if (!ok) return;
+    }
+
+    // ✅ обязательные поля при сохранении (редактирование)
+if (!normReq(draft.title)) {
+  await safeReply(ctx, "⚠️ Поле *Название* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+  ctx.session.state = "svc_edit_title";
+  ctx.session.editWiz = ctx.session.editWiz || {};
+  ctx.session.editWiz.step = "svc_edit_title";
+  return;
+}
+
+const isHotelFlow = String(draft.category || "").includes("hotel");
+if (!normReq(draft.country)) {
+  await safeReply(ctx, "⚠️ Поле *Страна* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+  ctx.session.state = isHotelFlow ? "svc_edit_hotel_country" : "svc_edit_tour_country";
+  ctx.session.editWiz = ctx.session.editWiz || {};
+  ctx.session.editWiz.step = ctx.session.state;
+  return;
+}
+
+if (isHotelFlow) {
+  if (!normReq(draft.toCity)) {
+    await safeReply(ctx, "⚠️ Поле *Город* обязательно.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+    ctx.session.state = "svc_edit_hotel_city";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = "svc_edit_hotel_city";
+    return;
+  }
+} else {
+  if (!normReq(draft.fromCity) || !normReq(draft.toCity)) {
+    await safeReply(ctx, "⚠️ Поля *Город вылета* и *Город прибытия* обязательны.", { parse_mode: "Markdown", ...editWizNavKeyboard() });
+    ctx.session.state = !normReq(draft.fromCity) ? "svc_edit_tour_from" : "svc_edit_tour_to";
+    ctx.session.editWiz = ctx.session.editWiz || {};
+    ctx.session.editWiz.step = ctx.session.state;
+    return;
+  }
+}
 
     const payload = {
       title: draft.title || "",
@@ -1758,6 +1799,52 @@ function pushWizardState(ctx, prevState) {
   ) {
     ctx.session.wizardStack.push(prevState);
   }
+}
+function normReq(text) {
+  const v = String(text ?? "").replace(/\s+/g, " ").trim();
+  return v.length ? v : null;
+}
+
+// универсальная проверка “обязательное текстовое поле”
+async function requireTextField(ctx, text, label, opts = {}) {
+  const { min = 2 } = opts;
+  const v = normReq(text);
+  if (!v) {
+    await ctx.reply(`⚠️ Поле *${label}* обязательно.\nВведите значение ещё раз.`, {
+      parse_mode: "Markdown",
+      ...wizNavKeyboard(),
+    });
+    return null;
+  }
+  if (v.length < min) {
+    await ctx.reply(`⚠️ Слишком коротко для *${label}*.\nВведите минимум ${min} символа(ов).`, {
+      parse_mode: "Markdown",
+      ...wizNavKeyboard(),
+    });
+    return null;
+  }
+  return v;
+}
+
+// проверка gross >= net
+async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
+  const net = normalizePrice(netStr);
+  const gross = normalizePrice(grossStr);
+
+  // если gross пустой/пропуск — валидировать нечего
+  if (grossStr == null || String(grossStr).trim() === "") return true;
+  if (gross === null) return true; // это уже отдельно обрабатывается у тебя
+
+  if (net !== null && gross < net) {
+    await ctx.reply(
+      `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\n` +
+        `НЕТТО: *${net}*\nБРУТТО: *${gross}*\n\nВведите корректную цену БРУТТО.`,
+      { parse_mode: "Markdown", ...wizNavKeyboard() }
+    );
+    if (backToState) ctx.session.state = backToState;
+    return false;
+  }
+  return true;
 }
 
 async function promptWizardState(ctx, state) {
@@ -3420,33 +3507,49 @@ bot.on("text", async (ctx, next) => {
       const draft = ctx.session.serviceDraft;
 
       switch (state) {
-        case "svc_create_title":
-          draft.title = text;
+        case "svc_create_title": {
+          const v = await requireTextField(ctx, text, "Название", { min: 2 });
+          if (!v) return;
+          draft.title = v;
+        
           pushWizardState(ctx, "svc_create_title");
           ctx.session.state = "svc_create_tour_country";
           await promptWizardState(ctx, "svc_create_tour_country");
           return;
+        }
 
-        case "svc_create_tour_country":
-          draft.country = text;
+        case "svc_create_tour_country": {
+          const v = await requireTextField(ctx, text, "Страна", { min: 2 });
+          if (!v) return;
+          draft.country = v;
+        
           pushWizardState(ctx, "svc_create_tour_country");
           ctx.session.state = "svc_create_tour_from";
           await promptWizardState(ctx, "svc_create_tour_from");
           return;
+        }
 
-        case "svc_create_tour_from":
-          draft.fromCity = text;
+        case "svc_create_tour_from": {
+          const v = await requireTextField(ctx, text, "Город вылета", { min: 2 });
+          if (!v) return;
+          draft.fromCity = v;
+        
           pushWizardState(ctx, "svc_create_tour_from");
           ctx.session.state = "svc_create_tour_to";
           await promptWizardState(ctx, "svc_create_tour_to");
           return;
-
-        case "svc_create_tour_to":
-          draft.toCity = text;
+        }
+          
+        case "svc_create_tour_to": {
+          const v = await requireTextField(ctx, text, "Город прибытия", { min: 2 });
+          if (!v) return;
+          draft.toCity = v;
+        
           pushWizardState(ctx, "svc_create_tour_to");
           ctx.session.state = "svc_create_tour_start";
           await promptWizardState(ctx, "svc_create_tour_start");
           return;
+        }
 
         case "svc_create_tour_start": {
           const norm = normalizeDateInput(text);
@@ -3598,19 +3701,27 @@ bot.on("text", async (ctx, next) => {
           return;
 
         // ===== HOTEL FLOW =====
-        case "svc_hotel_country":
-          draft.country = text;
-          pushWizardState(ctx, "svc_hotel_country");
-          ctx.session.state = "svc_hotel_city";
-          await promptWizardState(ctx, "svc_hotel_city");
-          return;
-
-        case "svc_hotel_city":
-          draft.toCity = text;
-          pushWizardState(ctx, "svc_hotel_city");
-          ctx.session.state = "svc_hotel_name";
-          await promptWizardState(ctx, "svc_hotel_name");
-          return;
+      case "svc_hotel_country": {
+        const v = await requireTextField(ctx, text, "Страна", { min: 2 });
+        if (!v) return;
+        draft.country = v;
+      
+        pushWizardState(ctx, "svc_hotel_country");
+        ctx.session.state = "svc_hotel_city";
+        await promptWizardState(ctx, "svc_hotel_city");
+        return;
+      }
+      
+      case "svc_hotel_city": {
+        const v = await requireTextField(ctx, text, "Город", { min: 2 });
+        if (!v) return;
+        draft.toCity = v;
+      
+        pushWizardState(ctx, "svc_hotel_city");
+        ctx.session.state = "svc_hotel_name";
+        await promptWizardState(ctx, "svc_hotel_name");
+        return;
+      }
 
         case "svc_hotel_name":
           draft.hotel = text;
