@@ -74,6 +74,23 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   if (!rows.length) return res.status(400).json({ message: "Service must be pending or rejected" });
     // TG → администраторам
   notifyModerationApproved({ service: rows[0].id }).catch(()=>{});
+  
+    // TG → поставщику
+  const info = await pool.query(
+    `SELECT s.title, p.telegram_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1`,
+    [rows[0].id]
+  );
+
+  if (info.rows[0]?.telegram_chat_id) {
+    tgSend(
+      info.rows[0].telegram_chat_id,
+      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${info.rows[0].title}`
+    ).catch(() => {});
+  }
+
   res.json({ ok: true, service: rows[0] });
 });
 
@@ -95,6 +112,23 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
   if (!rows.length) return res.status(400).json({ message: "Service not in pending" });
     // TG → администраторам
   notifyModerationRejected({ service: rows[0].id, reason }).catch(()=>{});
+
+    // TG → поставщику
+  const info = await pool.query(
+    `SELECT s.title, p.telegram_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1`,
+    [rows[0].id]
+  );
+
+  if (info.rows[0]?.telegram_chat_id) {
+    tgSend(
+      info.rows[0].telegram_chat_id,
+      `❌ Ваша услуга отклонена\n\n📌 ${info.rows[0].title}\n\nПричина:\n${reason || "Не указана"}`
+    ).catch(() => {});
+  }
+
   res.json({ ok: true, service: rows[0] });
 });
 
