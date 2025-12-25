@@ -2568,6 +2568,7 @@ bot.action("prov_services:create", async (ctx) => {
     console.error("[tg-bot] prov_services:create error:", e?.response?.data || e);
   }
 });
+
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -3342,30 +3343,61 @@ async function handleSvcEditWizardText(ctx) {
         return true;
       }
 
-      case "svc_edit_expiration": {
-        if (!keep()) draft.expiration = isNo() ? "" : text;
-        await go("svc_edit_isActive", `✅ Активна? (текущее: ${draft.isActive ? "да" : "нет"}).\nда/нет или нажмите «⏭ Пропустить»:`);
-        return true;
-      }
+        case "svc_edit_expiration": {
+          if (!keep()) {
+            if (isNo()) {
+              draft.expiration = "";
+            } else {
+              const norm = normalizeDateTimeInputHelper(text); // ✅ из helpers/serviceActual
+              if (!norm) {
+                await safeReply(
+                  ctx,
+                  "⚠️ Нужна дата: YYYY-MM-DD HH:mm (или YYYY.MM.DD HH:mm) или просто YYYY-MM-DD. Или «нет» / «пропустить».",
+                  editWizNavKeyboard()
+                );
+                return true;
+              }
+              draft.expiration = norm;
+            }
+          }
+        
+          await go(
+            "svc_edit_isActive",
+            `✅ Активна? (текущее: ${draft.isActive ? "да" : "нет"}).\nда/нет или нажмите «⏭ Пропустить»:`
+          );
+          return true;
+        }
 
-      case "svc_edit_isActive": {
-        if (!keep()) {
-          const b = parseYesNoLocal();
-          if (b === null) {
-            await safeReply(ctx, "⚠️ Ответьте да/нет или «пропустить».", editWizNavKeyboard());
+          case "svc_edit_isActive": {
+            if (!keep()) {
+              const b = parseYesNoLocal();
+              if (b === null) {
+                await safeReply(ctx, "⚠️ Ответьте да/нет или «пропустить».", editWizNavKeyboard());
+                return true;
+              }
+              draft.isActive = b;
+          
+              // ✅ ДОБАВИТЬ ВОТ ЭТО:
+              if (b === true) {
+                const now = new Date();
+                const expRaw = draft.expiration || null;
+                const exp = expRaw ? parseDateFlexible(expRaw) : null;
+                if (!exp || exp.getTime() < now.getTime()) {
+                  const next = new Date(now);
+                  next.setDate(next.getDate() + 7);
+                  draft.expiration = next.toISOString().slice(0, 10);
+                }
+              }
+            }
+          
+            ctx.session.editWiz = ctx.session.editWiz || {};
+            ctx.session.editWiz.step = "svc_edit_images";
+            ctx.session.state = "svc_edit_images";
+          
+            await promptEditState(ctx, "svc_edit_images");
             return true;
           }
-          draft.isActive = b;
-        }
-      
-        // ✅ Переходим на шаг картинок ТАК, как на скрине (с текущим количеством и кнопками)
-        ctx.session.editWiz = ctx.session.editWiz || {};
-        ctx.session.editWiz.step = "svc_edit_images";
-        ctx.session.state = "svc_edit_images";
-      
-        await promptEditState(ctx, "svc_edit_images");
-        return true;
-      }
+
 
       case "svc_edit_images": {
         const raw = (text || "").trim().toLowerCase();
