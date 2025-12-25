@@ -2318,7 +2318,7 @@ bot.start(async (ctx) => {
 
 /* ===================== ROLE PICK ===================== */
 
-(/^role:(client|provider)$/, async (ctx) => {
+bot.action(/^role:(client|provider)$/, async (ctx) => {
   try {
     const role = ctx.match[1];
     if (!ctx.session) ctx.session = {};
