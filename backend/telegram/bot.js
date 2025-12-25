@@ -2693,7 +2693,18 @@ bot.action("prov_services:list_cards", async (ctx) => {
       headerLines.push(
         escapeMarkdown(`#${svc.id} · ${CATEGORY_LABELS[category] || "Услуга"}`)
       );
-      headerLines.push(escapeMarkdown(`Статус: ${status}${!isActive ? " (неактуально)" : ""}`));
+      const isPending =
+        svc.status === "pending" || svc.moderation_status === "pending";
+      
+      let statusLabel = status;
+      if (isPending) statusLabel = "⏳ На модерации";
+      
+      headerLines.push(
+        escapeMarkdown(
+          `Статус: ${statusLabel}${!isPending && !isActive ? " (неактуально)" : ""}`
+        )
+      );
+      
       if (expirationRaw) headerLines.push(escapeMarkdown(`Актуально до: ${expirationRaw}`));
 
       const msg = headerLines.join("\n") + "\n\n" + text;
