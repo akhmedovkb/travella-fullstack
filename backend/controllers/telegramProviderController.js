@@ -794,6 +794,9 @@ async function updateServiceFromBot(req, res) {
            details = $5::jsonb,
            expiration_at = $6,
            images = $7::jsonb
+           status = 'pending',
+           moderation_status = 'pending',
+           submitted_at = NOW()
        WHERE id = $1 AND provider_id = $2
        RETURNING id, title, price, category, status, details, images, expiration_at
       `,
