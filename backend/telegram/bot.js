@@ -2695,15 +2695,30 @@ bot.action("prov_services:list_cards", async (ctx) => {
       );
       const isPending =
         svc.status === "pending" || svc.moderation_status === "pending";
-      
+      const isRejected =
+        svc.status === "rejected" || svc.moderation_status === "rejected";
+
+      const moderationComment =
+        svc.moderation_comment ||
+        svc.moderationComment ||
+        null;
+
       let statusLabel = status;
+
       if (isPending) statusLabel = "⏳ На модерации";
+      if (isRejected) statusLabel = "❌ Отклонено";
       
       headerLines.push(
         escapeMarkdown(
-          `Статус: ${statusLabel}${!isPending && !isActive ? " (неактуально)" : ""}`
+          `Статус: ${statusLabel}${!isPending && !isRejected && !isActive ? " (неактуально)" : ""}`
         )
       );
+      
+      if (isRejected && moderationComment) {
+        headerLines.push(
+          escapeMarkdown(`Причина: ${moderationComment}`)
+        );
+      }
       
       if (expirationRaw) headerLines.push(escapeMarkdown(`Актуально до: ${expirationRaw}`));
 
