@@ -1016,6 +1016,7 @@ async function finishEditWizard(ctx) {
       title: draft.title || "",
       price: draft.price ?? null,
       grossPrice: draft.grossPrice ?? null,
+      status: "pending",
       expiration: (draft.expiration === "" ? null : (draft.expiration ?? null)),
       isActive: !!draft.isActive,
 
