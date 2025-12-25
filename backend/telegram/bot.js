@@ -817,8 +817,10 @@ bot.action("svc_edit_back", async (ctx) => {
       return;
     }
     ctx.session.state = prev;
-    await promptEditState(ctx, prev);
-  } catch (e) {
+          // ✅ синхронизируем
+      if (ctx.session.editWiz) ctx.session.editWiz.step = prev;
+      await promptEditState(ctx, prev);
+    } catch (e) {
     console.error("[tg-bot] svc_edit_back error:", e?.response?.data || e);
   }
 });
@@ -828,15 +830,21 @@ bot.action("svc_edit_cancel", async (ctx) => {
   try {
     await ctx.answerCbQuery();
     if (!ctx.session) return;
+
     ctx.session.state = null;
     ctx.session.wizardStack = [];
     ctx.session.serviceDraft = null;
     ctx.session.editingServiceId = null;
+
+    // ✅ ВАЖНО: полностью вычищаем “след” редактирования
+    ctx.session.editWiz = null;
+
     await safeReply(ctx, "❌ Редактирование отменено.");
   } catch (e) {
     console.error("[tg-bot] svc_edit_cancel error:", e?.response?.data || e);
   }
 });
+
 
 bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
   try {
