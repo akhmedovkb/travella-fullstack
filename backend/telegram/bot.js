@@ -1600,6 +1600,25 @@ function resetServiceWizard(ctx) {
   ctx.session.wizardStack = null;
 }
 
+function forceCloseEditWizard(ctx) {
+  if (!ctx?.session) return;
+
+  // выключаем edit-wizard, чтобы он больше не перехватывал ввод
+  if (typeof ctx.session.state === "string" && ctx.session.state.startsWith("svc_edit_")) {
+    ctx.session.state = "";
+  }
+  if (
+    ctx.session.editWiz &&
+    typeof ctx.session.editWiz.step === "string" &&
+    ctx.session.editWiz.step.startsWith("svc_edit_")
+  ) {
+    ctx.session.editWiz.step = "";
+  }
+
+  if (Array.isArray(ctx.session.wizardStack)) ctx.session.wizardStack = [];
+  if (ctx.session.serviceDraft) delete ctx.session.serviceDraft;
+}
+
 function parseYesNo(text) {
   const t = text.trim().toLowerCase();
   if (["да", "ha", "xa", "yes", "y"].includes(t)) return true;
@@ -2396,6 +2415,9 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 
 bot.hears(/🔍 Найти услугу/i, async (ctx) => {
   logUpdate(ctx, "hears Найти услугу");
+  forceCloseEditWizard(ctx);
+  resetServiceWizard(ctx);
+
 
   const maybeProvider = await ensureProviderRole(ctx);
   const maybeClient = maybeProvider ? null : await ensureClientRole(ctx);
@@ -2501,6 +2523,9 @@ bot.hears(/🏢 Стать поставщиком/i, async (ctx) => {
 
 bot.hears(/🧳 Мои услуги/i, async (ctx) => {
   logUpdate(ctx, "hears Мои услуги");
+  forceCloseEditWizard(ctx);
+  resetServiceWizard(ctx);
+
 
   const role = await ensureProviderRole(ctx);
   if (role !== "provider") {
