@@ -1015,8 +1015,10 @@ async function finishEditWizard(ctx) {
     const payload = {
       title: draft.title || "",
       price: draft.price ?? null,
-
       grossPrice: draft.grossPrice ?? null,
+      expiration: draft.expiration || null,
+      isActive: !!draft.isActive,
+
 
       details: {
         // оставляем совместимость с твоими ключами
@@ -1075,7 +1077,7 @@ async function finishEditWizard(ctx) {
     await safeReply(ctx, "Что делаем дальше? 👇", {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "📋 Мои услуги", callback_data: "prov_services:choose" }],
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
           [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
           [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
@@ -3039,7 +3041,13 @@ async function handleSvcEditWizardText(ctx) {
     };
 
     const parseYesNoLocal = () => {
-      const v = String(text || "").toLowerCase().trim();
+      const raw = String(text || "").toLowerCase().trim();
+      // берём первое "слово" без эмодзи/знаков
+      const v = raw
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .trim()
+        .split(/\s+/)[0];
+    
       if (["да", "y", "yes", "true", "1"].includes(v)) return true;
       if (["нет", "n", "no", "false", "0"].includes(v)) return false;
       return null;
