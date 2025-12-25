@@ -1015,7 +1015,7 @@ async function finishEditWizard(ctx) {
     await safeReply(ctx, "Что делаем дальше? 👇", {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+          [{ text: "📋 Мои услуги", callback_data: "prov_services:choose" }],
           [{ text: "🖼 Карточками", callback_data: "prov_services:list_cards" }],
           [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
