@@ -2597,6 +2597,8 @@ bot.action("prov_services:create", async (ctx) => {
 bot.action("prov_services:list_cards", async (ctx) => {
   try {
     await ctx.answerCbQuery();
+        // 🔴 ВАЖНО: принудительно закрываем wizard редактирования
+    forceCloseEditWizard(ctx);
 
     const role = await ensureProviderRole(ctx);
     if (role !== "provider") {
