@@ -793,7 +793,7 @@ async function updateServiceFromBot(req, res) {
            price = $4,
            details = $5::jsonb,
            expiration_at = $6,
-           images = $7::jsonb
+           images = $7::jsonb,
            status = 'pending',
            moderation_status = 'pending',
            submitted_at = NOW()
