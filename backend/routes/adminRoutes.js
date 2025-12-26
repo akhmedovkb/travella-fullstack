@@ -1,4 +1,4 @@
-//backend/routes/adminRoutes.js
+// backend/routes/adminRoutes.js
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
@@ -77,24 +77,36 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   if (!rows.length) {
     return res.status(400).json({ message: "Service not in pending" });
   }
-  
-  // TG → поставщику (НОВЫЙ бот — refused)
+
+  // TG → поставщику
   const info = await pool.query(
     `SELECT 
         s.title,
-        COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id) AS chat_id
+        s.category,
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id
      FROM services s
      JOIN providers p ON p.id = s.provider_id
      WHERE s.id = $1`,
     [rows[0].id]
   );
 
-  const chatId = info.rows[0]?.telegram_refused_chat_id;
-  
+  const row = info.rows[0] || {};
+  const refusedChatId = row.telegram_refused_chat_id || null;
+  const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
+
+  const chatId = refusedChatId || fallbackChatId;
+
+  // если берём refused_chat_id — значит чат привязан к НОВОМУ (client/refused) боту
+  const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+
   if (chatId) {
     await tgSend(
       chatId,
-      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${info.rows[0].title}`
+      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${row.title || ""}`,
+      {},
+      tokenOverride
     );
   }
 
@@ -122,24 +134,34 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
   if (!rows.length) {
     return res.status(400).json({ message: "Service not in pending" });
   }
-  
-  // TG → поставщику (НОВЫЙ бот — refused)
+
+  // TG → поставщику
   const info = await pool.query(
     `SELECT 
         s.title,
-        COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id) AS chat_id
+        s.category,
+        p.telegram_refused_chat_id,
+        p.telegram_web_chat_id,
+        p.telegram_chat_id
      FROM services s
      JOIN providers p ON p.id = s.provider_id
      WHERE s.id = $1`,
     [rows[0].id]
   );
-  
-  const chatId = info.rows[0]?.telegram_refused_chat_id;
-  
+
+  const row = info.rows[0] || {};
+  const refusedChatId = row.telegram_refused_chat_id || null;
+  const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
+
+  const chatId = refusedChatId || fallbackChatId;
+  const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+
   if (chatId) {
     await tgSend(
       chatId,
-      `❌ Ваша услуга отклонена\n\n📌 ${info.rows[0].title}\n\nПричина:\n${reason || "Не указана"}`
+      `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`,
+      {},
+      tokenOverride
     );
   }
 
@@ -161,8 +183,8 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
     [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
-    // TG → администраторам
-  notifyModerationUnpublished({ service: rows[0].id }).catch(()=>{});
+  // TG → администраторам
+  notifyModerationUnpublished({ service: rows[0].id }).catch(() => {});
   res.json({ ok: true, service: rows[0] });
 });
 
@@ -204,6 +226,5 @@ router.patch(
     }
   }
 );
-
 
 module.exports = router;
