@@ -77,6 +77,30 @@ function parseDateFlexible(value) {
   return null;
 }
 
+/**
+ * ✅ Важное: если дата БЕЗ времени (YYYY-MM-DD),
+ * то для "актуально до" считаем ДО КОНЦА ДНЯ (23:59:59),
+ * иначе напоминания и проверки будут считать просроченным с 00:00.
+ */
+function parseDateFlexibleEndOfDay(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  const ymd = normalizeDateInput(s);
+  const hasTime =
+    /\d{2}:\d{2}/.test(s) || /T\d{2}:\d{2}/.test(s);
+
+  // если это ровно дата без времени → конец дня
+  if (ymd && !hasTime) {
+    const d = parseDateSafe(`${ymd}T23:59:59`);
+    return d || parseDateSafe(ymd) || null;
+  }
+
+  // иначе — обычный гибкий парсер
+  return parseDateFlexible(s);
+}
+
 // === Актуальность услуги (для inline/списков) ===
 // Правила:
 // - если details.isActive === false -> неактуально
@@ -100,14 +124,14 @@ function isServiceActual(detailsRaw, svc) {
   // expiration
   const expirationRaw = d.expiration || svc?.expiration || null;
   if (expirationRaw) {
-    const exp = parseDateFlexible(expirationRaw);
+    const exp = parseDateFlexibleEndOfDay(expirationRaw);
     if (exp && exp.getTime() < now.getTime()) return false;
   }
 
   // end date (tour/hotel) or return flight date
   const endRaw = d.endFlightDate || d.returnFlightDate || d.endDate || null;
   if (endRaw) {
-    const endD = parseDateFlexible(endRaw);
+    const endD = parseDateFlexibleEndOfDay(endRaw);
     if (endD && endD.getTime() < now.getTime()) return false;
   }
 
@@ -120,4 +144,3 @@ module.exports = {
   normalizeDateInput, // пригодится для "плашки" истечения
   normalizeDateTimeInput,
 };
-
