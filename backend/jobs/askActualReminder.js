@@ -106,7 +106,13 @@ async function askActualReminder(options = {}) {
   // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
   if (!slot) return;
 
+  await db.query(
+    `INSERT INTO admin_audit_log(action, meta) VALUES ($1, $2)`,
+    ["askActualReminder_ping", { dateStr, slotKey, at: new Date().toISOString() }]
+  );
+
   const { dateStr, slotKey } = slot;
+  console.log("[askActualReminder] RUN", { dateStr, slotKey, options });
 
   const res = await db.query(`
     SELECT
