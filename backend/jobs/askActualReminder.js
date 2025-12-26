@@ -114,19 +114,32 @@ async function askActualReminder(options = {}) {
       s.title,
       s.details,
       s.tg_last_actual_check_at,
-      p.telegram_chat_id
+      COALESCE(p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id) AS telegram_chat_id,
+      (p.telegram_refused_chat_id IS NOT NULL) AS use_client_bot
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
       s.category LIKE 'refused_%'
       AND s.status IN ('approved','published')
-      AND p.telegram_chat_id IS NOT NULL
+      AND (p.telegram_refused_chat_id IS NOT NULL OR p.telegram_chat_id IS NOT NULL OR p.telegram_web_chat_id IS NOT NULL)
   `);
 
   for (const row of res.rows) {
-    const { id, title, details, telegram_chat_id } = row;
+    const { id, title, details, telegram_chat_id, use_client_bot } = row;
 
     const parsedDetails = safeJsonParseMaybe(details);
+
+    // 0) Если уже отвечал сегодня — не спрашиваем вообще
+    const meta = parsedDetails?.tg_actual_reminders_meta || parsedDetails?.tgActualMeta || {};
+    if (meta.lastConfirmedAt) {
+      const last = new Date(meta.lastConfirmedAt);
+      if (!Number.isNaN(last.getTime())) {
+        const lastLocal = getLocalParts(last, TZ).dateStr;
+        if (lastLocal === dateStr) {
+          continue;
+        }
+      }
+    }
 
     // 1) Спрашиваем ТОЛЬКО пока актуально
     const isActualNow = isServiceActual(parsedDetails, row);
@@ -186,10 +199,17 @@ async function askActualReminder(options = {}) {
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
     try {
-      await tgSend(telegram_chat_id, text, {
-        parse_mode: "Markdown",
-        reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
-      });
+      const tokenOverride = use_client_bot ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+
+      await tgSend(
+        telegram_chat_id,
+        text,
+        {
+          parse_mode: "Markdown",
+          reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+        },
+        tokenOverride
+      );
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
