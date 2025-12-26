@@ -300,14 +300,18 @@ async function linkClientChat(clientId, chatId) {
     chatId,
   ]);
 }
+
 async function getProviderChatId(providerId) {
   if (!providerId) return null;
   const q = await pool.query(
-    `SELECT telegram_chat_id FROM providers WHERE id=$1`,
+    `SELECT COALESCE(telegram_web_chat_id, telegram_chat_id) AS chat_id
+       FROM providers
+      WHERE id=$1`,
     [providerId]
   );
-  return q.rows[0]?.telegram_chat_id || null;
+  return q.rows[0]?.chat_id || null;
 }
+
 async function getClientChatId(clientId) {
   if (!clientId) return null;
   const q = await pool.query(
