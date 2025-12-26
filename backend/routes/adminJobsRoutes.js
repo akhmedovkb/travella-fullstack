@@ -1,5 +1,3 @@
-// backend/routes/adminJobsRoutes.js
-
 const express = require("express");
 const router = express.Router();
 
@@ -19,23 +17,52 @@ function requireAdminJobToken(req, res, next) {
 
 /**
  * POST /api/admin/jobs/ask-actual-now
- * body: { slotHour?: 10|14|18, day?: "YYYY-MM-DD" }
+ *
+ * body:
+ *  - slotHour?: 10|14|18        (старый формат)
+ *  - forceSlot?: 10|14|18       (новый / ручной)
+ *  - day?: "YYYY-MM-DD"
  */
 router.post("/jobs/ask-actual-now", requireAdminJobToken, async (req, res) => {
   try {
-    const slotHour = req.body?.slotHour;
-    const day = req.body?.day;
+    const {
+      slotHour,
+      forceSlot,
+      day,
+    } = req.body || {};
+
+    const effectiveSlot =
+      forceSlot ??
+      slotHour ??
+      null;
+
+    if (!effectiveSlot) {
+      return res.status(400).json({
+        ok: false,
+        error: "slot_not_provided",
+        hint: "send { slotHour: 10 } or { forceSlot: 10 }",
+      });
+    }
 
     await askActualReminder({
-      forceSlot: slotHour,
+      forceSlot: Number(effectiveSlot),
       forceDay: day,
       now: new Date(),
     });
 
-    return res.json({ ok: true });
+    return res.json({
+      ok: true,
+      used: {
+        forceSlot: Number(effectiveSlot),
+        forceDay: day || null,
+      },
+    });
   } catch (e) {
-    console.error("[adminJobs] ask-actual-now failed:", e?.message || e);
-    return res.status(500).json({ ok: false, error: e?.message || "failed" });
+    console.error("[adminJobs] ask-actual-now failed:", e);
+    return res.status(500).json({
+      ok: false,
+      error: e?.message || "failed",
+    });
   }
 });
 
