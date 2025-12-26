@@ -13,6 +13,10 @@ const {
 // простая проверка роли
 const requireAdmin = require("../middleware/requireAdmin");
 
+function phoneToDigits(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
 /* ---------- СПИСКИ (идут первыми) ---------- */
 
 // /api/admin/services/pending
@@ -54,7 +58,7 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   res.json(q.rows[0]);
 });
 
-//  (в т.ч. подтверждение ранее отклонённых)
+// approve (только для pending)
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
 
@@ -78,42 +82,45 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     return res.status(400).json({ message: "Service not in pending" });
   }
 
-  // TG → поставщику
-  const info = await pool.query(
-    `SELECT 
-        s.title,
-        s.category,
-        p.telegram_refused_chat_id,
-        p.telegram_web_chat_id,
-        p.telegram_chat_id
-     FROM services s
-     JOIN providers p ON p.id = s.provider_id
-     WHERE s.id = $1`,
-    [rows[0].id]
-  );
-
-  const row = info.rows[0] || {};
-  const refusedChatId = row.telegram_refused_chat_id || null;
-  const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
-
-  const chatId = refusedChatId || fallbackChatId;
-
-  // если берём refused_chat_id — значит чат привязан к НОВОМУ (client/refused) боту
-  const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
-
-  if (chatId) {
-    await tgSend(
-      chatId,
-      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${row.title || ""}`,
-      {},
-      tokenOverride
+  // TG → поставщику (выбор правильного чата + правильного бота)
+  try {
+    const info = await pool.query(
+      `SELECT 
+          s.title,
+          p.telegram_refused_chat_id,
+          p.telegram_web_chat_id,
+          p.telegram_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+       WHERE s.id = $1`,
+      [rows[0].id]
     );
+
+    const row = info.rows[0] || {};
+    const refusedChatId = row.telegram_refused_chat_id || null;
+    const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
+
+    const chatId = refusedChatId || fallbackChatId;
+
+    // если используем telegram_refused_chat_id — это чат нового (client/refused) бота
+    const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+
+    if (chatId) {
+      await tgSend(
+        chatId,
+        `✅ Ваша услуга одобрена и опубликована\n\n📌 ${row.title || ""}`,
+        {},
+        tokenOverride
+      );
+    }
+  } catch (e) {
+    console.error("[admin approve] tg notify failed:", e?.message || e);
   }
 
   res.json({ ok: true, service: rows[0] });
 });
 
-// reject (оставляем только для pending)
+// reject (только для pending)
 router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
   const { reason = "" } = req.body || {};
@@ -135,34 +142,37 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
     return res.status(400).json({ message: "Service not in pending" });
   }
 
-  // TG → поставщику
-  const info = await pool.query(
-    `SELECT 
-        s.title,
-        s.category,
-        p.telegram_refused_chat_id,
-        p.telegram_web_chat_id,
-        p.telegram_chat_id
-     FROM services s
-     JOIN providers p ON p.id = s.provider_id
-     WHERE s.id = $1`,
-    [rows[0].id]
-  );
-
-  const row = info.rows[0] || {};
-  const refusedChatId = row.telegram_refused_chat_id || null;
-  const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
-
-  const chatId = refusedChatId || fallbackChatId;
-  const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
-
-  if (chatId) {
-    await tgSend(
-      chatId,
-      `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`,
-      {},
-      tokenOverride
+  // TG → поставщику (выбор правильного чата + правильного бота)
+  try {
+    const info = await pool.query(
+      `SELECT 
+          s.title,
+          p.telegram_refused_chat_id,
+          p.telegram_web_chat_id,
+          p.telegram_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+       WHERE s.id = $1`,
+      [rows[0].id]
     );
+
+    const row = info.rows[0] || {};
+    const refusedChatId = row.telegram_refused_chat_id || null;
+    const fallbackChatId = row.telegram_web_chat_id || row.telegram_chat_id || null;
+
+    const chatId = refusedChatId || fallbackChatId;
+    const tokenOverride = refusedChatId ? (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "") : "";
+
+    if (chatId) {
+      await tgSend(
+        chatId,
+        `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}`,
+        {},
+        tokenOverride
+      );
+    }
+  } catch (e) {
+    console.error("[admin reject] tg notify failed:", e?.message || e);
   }
 
   res.json({ ok: true, service: rows[0] });
@@ -183,12 +193,130 @@ router.post("/services/:id(\\d+)/unpublish", authenticateToken, requireAdmin, as
     [req.params.id, adminId]
   );
   if (!rows.length) return res.status(400).json({ message: "Service not in published" });
+
   // TG → администраторам
   notifyModerationUnpublished({ service: rows[0].id }).catch(() => {});
   res.json({ ok: true, service: rows[0] });
 });
 
-// --- Change provider password (admin only) ---
+/* ===================== RESET endpoints (совместимо с фронтом Leads.jsx) ===================== */
+/**
+ * POST /api/admin/reset-provider
+ * body: { leadId }
+ * - удаляет provider по телефону лида
+ * - сбрасывает lead: decision/status/decided_at
+ */
+router.post("/reset-provider", authenticateToken, requireAdmin, async (req, res) => {
+  const leadId = Number(req.body?.leadId);
+  if (!Number.isFinite(leadId)) {
+    return res.status(400).json({ ok: false, message: "bad leadId" });
+  }
+
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+
+    const leadRes = await db.query(`SELECT * FROM leads WHERE id=$1 FOR UPDATE`, [leadId]);
+    if (!leadRes.rowCount) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "lead_not_found" });
+    }
+
+    const lead = leadRes.rows[0];
+    const digits = phoneToDigits(lead.phone);
+
+    const delProv = await db.query(
+      `DELETE FROM providers
+        WHERE regexp_replace(phone,'\\D','','g') = $1
+        RETURNING id`,
+      [digits]
+    );
+
+    await db.query(
+      `UPDATE leads
+          SET decision = NULL,
+              decided_at = NULL,
+              status = 'new'
+        WHERE id = $1`,
+      [leadId]
+    );
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      providerFound: delProv.rowCount > 0,
+      providerId: delProv.rows?.[0]?.id ?? null,
+      leadReset: true,
+    });
+  } catch (e) {
+    await db.query("ROLLBACK");
+    console.error("[admin reset-provider] error:", e);
+    return res.status(500).json({ ok: false, message: "reset_failed" });
+  } finally {
+    db.release();
+  }
+});
+
+/**
+ * POST /api/admin/reset-client
+ * body: { leadId }
+ * - удаляет client по телефону лида
+ * - сбрасывает lead: decision/status/decided_at
+ */
+router.post("/reset-client", authenticateToken, requireAdmin, async (req, res) => {
+  const leadId = Number(req.body?.leadId);
+  if (!Number.isFinite(leadId)) {
+    return res.status(400).json({ ok: false, message: "bad leadId" });
+  }
+
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+
+    const leadRes = await db.query(`SELECT * FROM leads WHERE id=$1 FOR UPDATE`, [leadId]);
+    if (!leadRes.rowCount) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "lead_not_found" });
+    }
+
+    const lead = leadRes.rows[0];
+    const digits = phoneToDigits(lead.phone);
+
+    const delClient = await db.query(
+      `DELETE FROM clients
+        WHERE regexp_replace(phone,'\\D','','g') = $1
+        RETURNING id`,
+      [digits]
+    );
+
+    await db.query(
+      `UPDATE leads
+          SET decision = NULL,
+              decided_at = NULL,
+              status = 'new'
+        WHERE id = $1`,
+      [leadId]
+    );
+
+    await db.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      clientFound: delClient.rowCount > 0,
+      clientId: delClient.rows?.[0]?.id ?? null,
+      leadReset: true,
+    });
+  } catch (e) {
+    await db.query("ROLLBACK");
+    console.error("[admin reset-client] error:", e);
+    return res.status(500).json({ ok: false, message: "reset_failed" });
+  } finally {
+    db.release();
+  }
+});
+
+/* --- Change provider password (admin only) --- */
 // PATCH /api/admin/providers/:id/password
 // body: { password: "NewPass123" }
 router.patch(
