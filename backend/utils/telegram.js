@@ -992,7 +992,9 @@ async function notifyModerationApproved({ service }) {
         `✅ Услуга одобрена\n${_serviceLinesI18n(s, "ru").join("\n")}\n\n` +
         `✅ Xizmat tasdiqlandi\n${_serviceLinesI18n(s, "uz").join("\n")}\n\n` +
         `✅ Service approved\n${_serviceLinesI18n(s, "en").join("\n")}`;
-      await tgSend(chatId, textProvider);
+      
+      const tokenOverride = _tokenForRefusedActors(s.category);
+      await tgSend(chatId, textProvider, {}, tokenOverride);
     }
 
     const linesAdmin = [
@@ -1017,7 +1019,10 @@ async function notifyModerationRejected({ service, reason }) {
         `❌ Услуга отклонена\n${_serviceLinesI18n(s, "ru").join("\n")}\n${reasonLine}\n\n` +
         `❌ Xizmat rad etildi\n${_serviceLinesI18n(s, "uz").join("\n")}\n${reasonLine}\n\n` +
         `❌ Service rejected\n${_serviceLinesI18n(s, "en").join("\n")}\n${reasonLine}`;
-      await tgSend(chatId, textProvider);
+      
+      const tokenOverride = _tokenForRefusedActors(s.category);
+      await tgSend(chatId, textProvider, {}, tokenOverride);
+
     }
 
     const linesAdmin = [
@@ -1042,7 +1047,10 @@ async function notifyModerationUnpublished({ service }) {
         `📦 Услуга снята с публикации\n${_serviceLinesI18n(s, "ru").join("\n")}\n\n` +
         `📦 Xizmat nashrdan olindi\n${_serviceLinesI18n(s, "uz").join("\n")}\n\n` +
         `📦 Listing unpublished\n${_serviceLinesI18n(s, "en").join("\n")}`;
-      await tgSend(chatId, textProvider);
+      
+      const tokenOverride = _tokenForRefusedActors(s.category);
+      await tgSend(chatId, textProvider, {}, tokenOverride);
+
     }
 
     const linesAdmin = [
