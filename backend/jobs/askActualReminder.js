@@ -1,69 +1,216 @@
-const express = require("express");
-const router = express.Router();
+// backend/jobs/askActualReminder.js
 
-const { askActualReminder } = require("../jobs/askActualReminder");
+const db = require("../db");
+const { tgSend } = require("../utils/telegram");
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
+const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
 
-function requireAdminJobToken(req, res, next) {
-  const expected = process.env.ADMIN_JOB_TOKEN || "";
-  if (!expected) {
-    return res.status(500).json({ ok: false, error: "ADMIN_JOB_TOKEN_not_set" });
+const TZ = "Asia/Tashkent";
+
+// В какие часы спрашиваем (локально по Ташкенту)
+const SLOTS_HOURS = [10, 14, 18];
+
+// “Окно” в минутах от начала часа для авто-планировщика
+const WINDOW_MINUTES = 25;
+
+function safeJsonParseMaybe(v) {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
   }
-  const got = req.headers["x-admin-job-token"];
-  if (!got || String(got) !== String(expected)) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
+  return {};
+}
+
+// Получаем локальные компоненты времени в TZ без сторонних библиотек
+function getLocalParts(date, timeZone = TZ) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = fmt.formatToParts(date);
+  const map = {};
+  for (const p of parts) {
+    if (p.type !== "literal") map[p.type] = p.value;
   }
-  next();
+
+  const yyyy = map.year || "1970";
+  const mm = map.month || "01";
+  const dd = map.day || "01";
+  const hour = Number(map.hour || 0);
+  const minute = Number(map.minute || 0);
+
+  return {
+    dateStr: `${yyyy}-${mm}-${dd}`, // YYYY-MM-DD
+    hour,
+    minute,
+  };
+}
+
+function normalizeSlotHour(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (!SLOTS_HOURS.includes(n)) return null;
+  return n;
 }
 
 /**
- * POST /api/admin/jobs/ask-actual-now
- *
- * body:
- *  - slotHour?: 10|14|18        (старый формат)
- *  - forceSlot?: 10|14|18       (новый / ручной)
- *  - day?: "YYYY-MM-DD"
+ * options:
+ * - now?: Date
+ * - forceSlot?: 10|14|18   (ручной запуск слота)
+ * - forceDay?: "YYYY-MM-DD" (ручной запуск дня)
  */
-router.post("/jobs/ask-actual-now", requireAdminJobToken, async (req, res) => {
-  try {
-    const {
-      slotHour,
-      forceSlot,
-      day,
-    } = req.body || {};
+function getActiveSlot(now, options = {}) {
+  const forceSlot = normalizeSlotHour(options.forceSlot);
+  const forcedDay =
+    typeof options.forceDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(options.forceDay)
+      ? options.forceDay
+      : null;
 
-    const effectiveSlot =
-      forceSlot ??
-      slotHour ??
-      null;
+  // РУЧНОЙ запуск: игнорируем “окно минут”
+  if (forceSlot) {
+    const { dateStr } = getLocalParts(now, TZ);
+    return {
+      dateStr: forcedDay || dateStr,
+      slotKey: String(forceSlot),
+      hour: forceSlot,
+      minute: 0,
+      forced: true,
+    };
+  }
 
-    if (!effectiveSlot) {
-      return res.status(400).json({
-        ok: false,
-        error: "slot_not_provided",
-        hint: "send { slotHour: 10 } or { forceSlot: 10 }",
-      });
+  // АВТО-режим по окну 10/14/18
+  const { dateStr, hour, minute } = getLocalParts(now, TZ);
+
+  if (!SLOTS_HOURS.includes(hour)) return null;
+  if (minute < 0 || minute > WINDOW_MINUTES) return null;
+
+  return { dateStr, slotKey: String(hour), hour, minute, forced: false };
+}
+
+async function askActualReminder(options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const slot = getActiveSlot(now, options);
+
+  // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
+  if (!slot) return;
+
+  const { dateStr, slotKey } = slot;
+
+  const res = await db.query(`
+    SELECT
+      s.id,
+      s.title,
+      s.details,
+      s.tg_last_actual_check_at,
+      p.telegram_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE
+      s.category LIKE 'refused_%'
+      AND s.status IN ('approved','published')
+      AND p.telegram_chat_id IS NOT NULL
+  `);
+
+  for (const row of res.rows) {
+    const { id, title, details, telegram_chat_id } = row;
+
+    const parsedDetails = safeJsonParseMaybe(details);
+
+    // 1) Спрашиваем ТОЛЬКО пока актуально
+    const isActualNow = isServiceActual(parsedDetails, row);
+    if (!isActualNow) continue;
+
+    /**
+     * 2) 🔒 Антидубль на СЛОТ:
+     * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
+     */
+    const lockRes = await db.query(
+      `
+      UPDATE services
+      SET
+        tg_last_actual_check_at = NOW(),
+        details = CASE
+          WHEN (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+          THEN
+            jsonb_set(
+              COALESCE(details::jsonb, '{}'::jsonb),
+              ARRAY['tgActualReminder','sent',$3],
+              'true'::jsonb,
+              true
+            )
+          ELSE
+            jsonb_set(
+              jsonb_set(
+                COALESCE(details::jsonb, '{}'::jsonb),
+                '{tgActualReminder,date}',
+                to_jsonb($2::text),
+                true
+              ),
+              '{tgActualReminder,sent}',
+              jsonb_build_object($3, true),
+              true
+            )
+        END
+      WHERE id = $1
+        AND (
+          NOT (
+            (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+            AND (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3)
+          )
+        )
+      RETURNING id
+      `,
+      [id, dateStr, slotKey]
+    );
+
+    if (lockRes.rowCount === 0) {
+      // Уже отправляли в этот слот сегодня (или другой инстанс успел)
+      continue;
     }
 
-    await askActualReminder({
-      forceSlot: Number(effectiveSlot),
-      forceDay: day,
-      now: new Date(),
-    });
+    const text =
+      `⏳ *Отказ ещё актуален?*\n\n` +
+      `🧳 ${title}\n\n` +
+      `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
-    return res.json({
-      ok: true,
-      used: {
-        forceSlot: Number(effectiveSlot),
-        forceDay: day || null,
-      },
-    });
-  } catch (e) {
-    console.error("[adminJobs] ask-actual-now failed:", e);
-    return res.status(500).json({
-      ok: false,
-      error: e?.message || "failed",
-    });
+    try {
+      await tgSend(telegram_chat_id, text, {
+        parse_mode: "Markdown",
+        reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+      });
+    } catch (e) {
+      console.error("[askActualReminder] tgSend failed:", {
+        serviceId: id,
+        chatId: telegram_chat_id,
+        error: e?.message || e,
+      });
+
+      // откатываем флаг слота
+      await db.query(
+        `
+        UPDATE services
+        SET details = (
+          COALESCE(details::jsonb, '{}'::jsonb)
+          #- ARRAY['tgActualReminder','sent',$2]
+        )
+        WHERE id = $1
+        `,
+        [id, slotKey]
+      );
+    }
   }
-});
+}
 
-module.exports = router;
+module.exports = { askActualReminder };
