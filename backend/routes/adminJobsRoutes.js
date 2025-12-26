@@ -1,69 +1,64 @@
+// backend/routes/adminJobsRoutes.js
+
 const express = require("express");
 const router = express.Router();
 
+const authenticateToken = require("../middleware/authenticateToken");
+const requireAdmin = require("../middleware/requireAdmin");
+
 const { askActualReminder } = require("../jobs/askActualReminder");
 
-function requireAdminJobToken(req, res, next) {
-  const expected = process.env.ADMIN_JOB_TOKEN || "";
-  if (!expected) {
-    return res.status(500).json({ ok: false, error: "ADMIN_JOB_TOKEN_not_set" });
-  }
-  const got = req.headers["x-admin-job-token"];
-  if (!got || String(got) !== String(expected)) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
-  next();
+function normalizeSlot(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (![10, 14, 18].includes(n)) return null;
+  return n;
 }
 
-/**
- * POST /api/admin/jobs/ask-actual-now
- *
- * body:
- *  - slotHour?: 10|14|18        (старый формат)
- *  - forceSlot?: 10|14|18       (новый / ручной)
- *  - day?: "YYYY-MM-DD"
- */
-router.post("/jobs/ask-actual-now", requireAdminJobToken, async (req, res) => {
-  try {
-    const {
-      slotHour,
-      forceSlot,
-      day,
-    } = req.body || {};
+function normalizeDay(v) {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
 
-    const effectiveSlot =
-      forceSlot ??
-      slotHour ??
-      null;
+// POST /api/admin/jobs/ask-actual-now
+// Body (совместимость):
+//   { forceSlot: 10 }  или { slotHour: 10 }  (исторически по-разному называли)
+//   { forceDay: "YYYY-MM-DD" } или { day: "YYYY-MM-DD" }
+router.post(
+  "/jobs/ask-actual-now",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const rawForceSlot = req.body?.forceSlot ?? req.body?.slotHour ?? req.body?.slot ?? null;
+      const rawForceDay = req.body?.forceDay ?? req.body?.day ?? null;
 
-    if (!effectiveSlot) {
-      return res.status(400).json({
+      const forceSlot = normalizeSlot(rawForceSlot);
+      const forceDay = normalizeDay(rawForceDay);
+
+      const result = await askActualReminder({
+        forceSlot: forceSlot || undefined,
+        forceDay: forceDay || undefined,
+      });
+
+      // Чтобы Postman показывал, что реально использовано
+      res.json({
+        ok: true,
+        used: {
+          forceSlot: forceSlot || null,
+          forceDay: forceDay || null,
+        },
+        result, // тут будет used+stats из askActualReminder
+      });
+    } catch (e) {
+      res.status(500).json({
         ok: false,
-        error: "slot_not_provided",
-        hint: "send { slotHour: 10 } or { forceSlot: 10 }",
+        message: e?.message || "ask-actual-now failed",
       });
     }
-
-    await askActualReminder({
-      forceSlot: Number(effectiveSlot),
-      forceDay: day,
-      now: new Date(),
-    });
-
-    return res.json({
-      ok: true,
-      used: {
-        forceSlot: Number(effectiveSlot),
-        forceDay: day || null,
-      },
-    });
-  } catch (e) {
-    console.error("[adminJobs] ask-actual-now failed:", e);
-    return res.status(500).json({
-      ok: false,
-      error: e?.message || "failed",
-    });
   }
-});
+);
 
 module.exports = router;
