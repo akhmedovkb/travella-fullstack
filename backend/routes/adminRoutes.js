@@ -54,7 +54,7 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   res.json(q.rows[0]);
 });
 
-// approve (в т.ч. подтверждение ранее отклонённых)
+//  (в т.ч. подтверждение ранее отклонённых)
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
 
@@ -76,6 +76,24 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
 
   if (!rows.length) {
     return res.status(400).json({ message: "Service not in pending" });
+  }
+  
+  // TG → поставщику (НОВЫЙ бот — refused)
+  const info = await pool.query(
+    `SELECT s.title, p.telegram_refused_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1`,
+    [rows[0].id]
+  );
+  
+  const chatId = info.rows[0]?.telegram_refused_chat_id;
+  
+  if (chatId) {
+    await tgSend(
+      chatId,
+      `✅ Ваша услуга одобрена и опубликована\n\n📌 ${info.rows[0].title}`
+    );
   }
 
   res.json({ ok: true, service: rows[0] });
@@ -101,6 +119,24 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
 
   if (!rows.length) {
     return res.status(400).json({ message: "Service not in pending" });
+  }
+  
+  // TG → поставщику (НОВЫЙ бот — refused)
+  const info = await pool.query(
+    `SELECT s.title, p.telegram_refused_chat_id
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+      WHERE s.id = $1`,
+    [rows[0].id]
+  );
+  
+  const chatId = info.rows[0]?.telegram_refused_chat_id;
+  
+  if (chatId) {
+    await tgSend(
+      chatId,
+      `❌ Ваша услуга отклонена\n\n📌 ${info.rows[0].title}\n\nПричина:\n${reason || "Не указана"}`
+    );
   }
 
   res.json({ ok: true, service: rows[0] });
