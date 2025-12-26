@@ -108,25 +108,56 @@ async function askActualReminder(options = {}) {
 
   const { dateStr, slotKey } = slot;
 
+  // ВАЖНО: берём правильный chat_id + понимаем, каким ботом слать
   const res = await db.query(`
     SELECT
       s.id,
       s.title,
       s.details,
       s.tg_last_actual_check_at,
-      p.telegram_chat_id
+
+      p.telegram_refused_chat_id,
+      p.telegram_chat_id,
+      p.telegram_web_chat_id,
+
+      COALESCE(p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id) AS target_chat_id,
+      (p.telegram_refused_chat_id IS NOT NULL) AS use_client_bot
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
       s.category LIKE 'refused_%'
       AND s.status IN ('approved','published')
-      AND p.telegram_chat_id IS NOT NULL
+      AND (
+        p.telegram_refused_chat_id IS NOT NULL
+        OR p.telegram_chat_id IS NOT NULL
+        OR p.telegram_web_chat_id IS NOT NULL
+      )
   `);
 
+  const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  const PROVIDER_BOT_TOKEN = process.env.TELEGRAM_PROVIDER_BOT_TOKEN || "";
+
   for (const row of res.rows) {
-    const { id, title, details, telegram_chat_id } = row;
+    const id = row.id;
+    const title = row.title;
+    const details = row.details;
+
+    const targetChatId = row.target_chat_id; // bigint
+    const useClientBot = !!row.use_client_bot;
+
+    if (!targetChatId) continue;
 
     const parsedDetails = safeJsonParseMaybe(details);
+
+    // 0) Если уже отвечал сегодня — не спрашиваем вообще
+    const meta = parsedDetails?.tg_actual_reminders_meta || parsedDetails?.tgActualMeta || {};
+    if (meta.lastConfirmedAt) {
+      const last = new Date(meta.lastConfirmedAt);
+      if (!Number.isNaN(last.getTime())) {
+        const lastLocalDate = getLocalParts(last, TZ).dateStr;
+        if (lastLocalDate === dateStr) continue;
+      }
+    }
 
     // 1) Спрашиваем ТОЛЬКО пока актуально
     const isActualNow = isServiceActual(parsedDetails, row);
@@ -186,14 +217,23 @@ async function askActualReminder(options = {}) {
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
     try {
-      await tgSend(telegram_chat_id, text, {
-        parse_mode: "Markdown",
-        reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
-      });
+      // ✅ Выбор бота: refused_chat_id -> CLIENT, иначе -> PROVIDER
+      const BOT_TOKEN = useClientBot ? CLIENT_BOT_TOKEN : PROVIDER_BOT_TOKEN;
+
+      await tgSend(
+        targetChatId,
+        text,
+        {
+          parse_mode: "Markdown",
+          reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+        },
+        BOT_TOKEN
+      );
     } catch (e) {
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
-        chatId: telegram_chat_id,
+        chatId: String(targetChatId),
+        useClientBot,
         error: e?.message || e,
       });
 
