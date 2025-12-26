@@ -80,13 +80,15 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   
   // TG → поставщику (НОВЫЙ бот — refused)
   const info = await pool.query(
-    `SELECT s.title, p.telegram_refused_chat_id
-       FROM services s
-       JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1`,
+    `SELECT 
+        s.title,
+        COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id) AS chat_id
+     FROM services s
+     JOIN providers p ON p.id = s.provider_id
+     WHERE s.id = $1`,
     [rows[0].id]
   );
-  
+
   const chatId = info.rows[0]?.telegram_refused_chat_id;
   
   if (chatId) {
@@ -123,10 +125,12 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
   
   // TG → поставщику (НОВЫЙ бот — refused)
   const info = await pool.query(
-    `SELECT s.title, p.telegram_refused_chat_id
-       FROM services s
-       JOIN providers p ON p.id = s.provider_id
-      WHERE s.id = $1`,
+    `SELECT 
+        s.title,
+        COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id) AS chat_id
+     FROM services s
+     JOIN providers p ON p.id = s.provider_id
+     WHERE s.id = $1`,
     [rows[0].id]
   );
   
