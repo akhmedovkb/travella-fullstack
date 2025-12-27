@@ -2,22 +2,37 @@
 
 function buildSvcActualKeyboard(serviceId, opts = {}) {
   const id = Number(serviceId);
+  const safeId = Number.isFinite(id) ? id : 0;
 
   return {
     inline_keyboard: [
       [
-        { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
-        { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
+        { text: "✅ Да, актуален", callback_data: `svc_actual:${safeId}:yes` },
+        { text: "❌ Нет, снять", callback_data: `svc_actual:${safeId}:no` },
       ],
-      [{ text: "🌿 Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` }],
+      [
+        // На всякий случай — “обновить” (переотобразить)
+        { text: "🔄 Проверить", callback_data: `svc_actual:${safeId}:ping` },
+      ],
     ],
   };
 }
 
-function buildSvcActualDoneKeyboard(statusText = "✅ Подтверждено") {
+function buildSvcActualDoneKeyboard(serviceId, kind = "yes") {
+  const id = Number(serviceId);
+  const safeId = Number.isFinite(id) ? id : 0;
+
+  if (kind === "no") {
+    return {
+      inline_keyboard: [[{ text: "❌ Снято (неактуально)", callback_data: `noop:${safeId}` }]],
+    };
+  }
   return {
-    inline_keyboard: [[{ text: statusText, callback_data: "noop" }]],
+    inline_keyboard: [[{ text: "✅ Подтверждено (актуально)", callback_data: `noop:${safeId}` }]],
   };
 }
 
-module.exports = { buildSvcActualKeyboard, buildSvcActualDoneKeyboard };
+module.exports = {
+  buildSvcActualKeyboard,
+  buildSvcActualDoneKeyboard,
+};
