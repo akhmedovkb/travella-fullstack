@@ -1131,10 +1131,93 @@ async function tgSendToAdmins(text, extra = {}) {
   return { ok: true, count: ids.length, results };
 }
 
+/* ====================== HEALTH CHECK ====================== */
+
+function _maskToken(t) {
+  if (!t) return "";
+  const s = String(t);
+  if (s.length <= 10) return "***";
+  return `${s.slice(0, 6)}…${s.slice(-4)}`;
+}
+
+async function _tgGetMe(token) {
+  if (!token) return { ok: false, error: "missing_token" };
+  const api = _tgApiByToken(token);
+  if (!api) return { ok: false, error: "missing_api" };
+
+  try {
+    // Telegram expects GET for getMe (POST also works, but keep canonical)
+    const res = await axios.get(`${api}/getMe`, { timeout: 8000 });
+    if (res?.data?.ok) {
+      return {
+        ok: true,
+        username: res.data?.result?.username || "",
+        id: res.data?.result?.id || null,
+      };
+    }
+    return { ok: false, error: "not_ok", details: res?.data || null };
+  } catch (e) {
+    return { ok: false, error: "request_failed", details: e?.response?.data || e?.message || String(e) };
+  }
+}
+
+/**
+ * getTelegramHealth({ probe: boolean })
+ * - probe=false: только проверка ENV/конфигурации (без запросов к Telegram)
+ * - probe=true : дополнительно делает getMe по каждому токену
+ */
+async function getTelegramHealth({ probe = false } = {}) {
+  const managerChatId =
+    process.env.TELEGRAM_MANAGER_CHAT_ID ||
+    process.env.TELEGRAM_MANAGER_CHAT ||
+    "";
+
+  const out = {
+    ok: true,
+    ts: new Date().toISOString(),
+    env: {
+      has_old_bot_token: Boolean(BOT_TOKEN),
+      has_client_bot_token: Boolean(CLIENT_BOT_TOKEN),
+      old_bot_token_masked: _maskToken(BOT_TOKEN),
+      client_bot_token_masked: _maskToken(CLIENT_BOT_TOKEN),
+      admin_chat_ids_count: Array.isArray(ADMIN_CHAT_IDS) ? ADMIN_CHAT_IDS.length : 0,
+      has_manager_chat_id: Boolean(managerChatId),
+      tz: process.env.TZ || "",
+    },
+    bots: {
+      old: { enabled: enabledOld },
+      client: { enabled: enabledClient },
+    },
+  };
+
+  // базовые проверки
+  if (!BOT_TOKEN && !CLIENT_BOT_TOKEN) {
+    out.ok = false;
+    out.error = "no_bot_tokens";
+  }
+
+  if (probe) {
+    out.bots.old.getMe = await _tgGetMe(BOT_TOKEN);
+    out.bots.client.getMe = await _tgGetMe(CLIENT_BOT_TOKEN);
+
+    // если есть токен, но getMe не ок — это важно
+    const oldFail = BOT_TOKEN && out.bots.old.getMe && !out.bots.old.getMe.ok;
+    const clientFail =
+      CLIENT_BOT_TOKEN && out.bots.client.getMe && !out.bots.client.getMe.ok;
+
+    if (oldFail || clientFail) out.ok = false;
+  }
+
+  return out;
+}
+
 module.exports = {
   enabled,
   tgSend,
   tgSendToAdmins,
+
+  // HEALTH:
+  getTelegramHealth,
 
   tgAnswerCallbackQuery,
   tgEditMessageReplyMarkup,
