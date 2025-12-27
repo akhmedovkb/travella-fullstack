@@ -4,10 +4,23 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const { askActualReminder } = require("./jobs/askActualReminder");
 const tbTemplatesRoutes = require("./routes/TBtemplatesRoutes");
+const { getTelegramHealth } = require("./utils/telegram");
 
 dotenv.config();
 
 const app = express();
+
+// Telegram health (passive) on boot — no network calls
+getTelegramHealth({ probe: false })
+  .then((h) => {
+    const oldOk = h?.env?.has_old_bot_token ? "ON" : "OFF";
+    const clientOk = h?.env?.has_client_bot_token ? "ON" : "OFF";
+    const admins = h?.env?.admin_chat_ids_count ?? 0;
+    console.log(
+      `[tg-health] old:${oldOk} client:${clientOk} admins:${admins} tz:${h?.env?.tz || ""}`
+    );
+  })
+  .catch((e) => console.warn("[tg-health] failed:", e?.message || e));
 
 /** ===================== CORS (унифицированный) ===================== */
 /**
@@ -173,6 +186,14 @@ const authenticateToken = require("./middleware/authenticateToken");
 app.get("/api/_debug/whoami", authenticateToken, (req, res) =>
   res.json(req.user)
 );
+
+// ✅ Telegram health-check (protected by ADMIN_JOB_TOKEN)
+try {
+  const telegramHealthRoutes = require("./routes/telegramHealthRoutes");
+  app.use("/api/_debug", telegramHealthRoutes);
+} catch (e) {
+  console.warn("[tg-health] routes not mounted:", e?.message || e);
+}
 
 /** ===================== Aliases (Back-compat) ===================== */
 app.post(
