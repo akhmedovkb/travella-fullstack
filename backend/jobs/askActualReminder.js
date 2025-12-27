@@ -1,20 +1,21 @@
 // backend/jobs/askActualReminder.js
+// Напоминалка "Отказ ещё актуален?" для refused_* услуг.
+//  - Автослоты: 10:00 / 14:00 / 18:00 (Asia/Tashkent) с окном 25 минут
+//  - Ручной запуск: forceSlot (10|14|18) и/или forceDay (YYYY-MM-DD)
+//  - Антидубль: details.tgActualReminder = { date, sent:{ "10": true }, answeredDate? }
+//  - Спрашиваем только если услуга сейчас актуальна (isServiceActual)
+//  - Отправляем через CLIENT_BOT_TOKEN, чтобы кнопки работали
 
 const db = require("../db");
 const { tgSend } = require("../utils/telegram");
-const { isServiceActual } = require("../telegram/helpers/serviceActual");
+const { isServiceActual, normalizeDateInput } = require("../telegram/helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
 
-// новый клиентский бот (отказные)
-const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-
 const TZ = "Asia/Tashkent";
-
-// В какие часы спрашиваем (локально по Ташкенту)
 const SLOTS_HOURS = [10, 14, 18];
-
-// “Окно” в минутах от начала часа для авто-планировщика
 const WINDOW_MINUTES = 25;
+
+const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
 function safeJsonParseMaybe(v) {
   if (!v) return {};
@@ -30,7 +31,7 @@ function safeJsonParseMaybe(v) {
   return {};
 }
 
-// Получаем локальные компоненты времени в TZ без сторонних библиотек
+// локальная дата/время в TZ
 function getLocalParts(date, timeZone = TZ) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -55,7 +56,7 @@ function getLocalParts(date, timeZone = TZ) {
   const minute = Number(map.minute || 0);
 
   return {
-    dateStr: `${yyyy}-${mm}-${dd}`, // YYYY-MM-DD
+    dateStr: `${yyyy}-${mm}-${dd}`,
     hour,
     minute,
   };
@@ -68,12 +69,6 @@ function normalizeSlotHour(v) {
   return n;
 }
 
-/**
- * options:
- * - now?: Date
- * - forceSlot?: 10|14|18   (ручной запуск слота)
- * - forceDay?: "YYYY-MM-DD" (ручной запуск дня)
- */
 function getActiveSlot(now, options = {}) {
   const forceSlot = normalizeSlotHour(options.forceSlot);
   const forcedDay =
@@ -81,7 +76,7 @@ function getActiveSlot(now, options = {}) {
       ? options.forceDay
       : null;
 
-  // РУЧНОЙ запуск: игнорируем “окно минут”
+  // ручной запуск
   if (forceSlot) {
     const { dateStr } = getLocalParts(now, TZ);
     return {
@@ -93,23 +88,44 @@ function getActiveSlot(now, options = {}) {
     };
   }
 
-  // АВТО-режим по окну 10/14/18
+  // авто по окну
   const { dateStr, hour, minute } = getLocalParts(now, TZ);
-
   if (!SLOTS_HOURS.includes(hour)) return null;
   if (minute < 0 || minute > WINDOW_MINUTES) return null;
 
   return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
+function pickReminderChat(row) {
+  const v =
+    row.telegram_refused_chat_id ||
+    row.telegram_chat_id ||
+    row.telegram_web_chat_id ||
+    null;
+  return v ? Number(v) : null;
+}
+
+function buildDetailsSnippet(details) {
+  const d = details || {};
+  const parts = [];
+
+  const to = d.directionCountry || d.directionTo || d.direction || "";
+  const from = d.directionFrom || "";
+  if (from && to) parts.push(`${from} → ${to}`);
+  else if (to) parts.push(String(to));
+
+  const start = normalizeDateInput(d.startDate) || d.departureFlightDate || d.startDate;
+  const end = normalizeDateInput(d.endDate) || d.returnFlightDate || d.endDate;
+  if (start || end) parts.push(`${start || "?"} — ${end || "?"}`);
+
+  if (d.hotel) parts.push(String(d.hotel));
+
+  return parts.filter(Boolean).slice(0, 3).join(" · ");
+}
+
 async function askActualReminder(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const slot = getActiveSlot(now, options);
-
-  // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
-  if (!slot) return { ok: true, slot: null, stats: null };
-
-  const { dateStr, slotKey } = slot;
 
   const stats = {
     scanned: 0,
@@ -117,17 +133,24 @@ async function askActualReminder(options = {}) {
     locked: 0,
     sent: 0,
     failed: 0,
-    skippedConfirmedToday: 0,
+    skippedAnsweredToday: 0,
     skippedNoChat: 0,
   };
 
-  const res = await db.query(`
+  if (!slot) return { ok: true, slot: null, stats };
+
+  const { dateStr, slotKey } = slot;
+
+  const res = await db.query(
+    `
     SELECT
       s.id,
       s.title,
+      s.category,
       s.details,
-      s.tg_last_actual_check_at,
-      COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id) AS telegram_chat_id
+      p.telegram_chat_id,
+      p.telegram_refused_chat_id,
+      p.telegram_web_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
@@ -135,41 +158,43 @@ async function askActualReminder(options = {}) {
       AND s.status IN ('approved','published')
       AND (
         p.telegram_refused_chat_id IS NOT NULL
-        OR p.telegram_web_chat_id IS NOT NULL
         OR p.telegram_chat_id IS NOT NULL
+        OR p.telegram_web_chat_id IS NOT NULL
       )
-  `);
-
-  stats.scanned = res.rows.length;
+    `
+  );
 
   for (const row of res.rows) {
-    const { id, title, details, telegram_chat_id } = row;
+    stats.scanned += 1;
 
-    if (!telegram_chat_id) {
+    const chatId = pickReminderChat(row);
+    if (!chatId) {
       stats.skippedNoChat += 1;
       continue;
     }
 
-    const parsedDetails = safeJsonParseMaybe(details);
+    const parsedDetails = safeJsonParseMaybe(row.details);
 
-    // 1) Спрашиваем ТОЛЬКО пока актуально
+    // только если сейчас актуально
     const isActualNow = isServiceActual(parsedDetails, row);
     if (!isActualNow) continue;
     stats.actual += 1;
 
-    /**
-     * 2) 🔒 Антидубль на СЛОТ:
-     * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
-     *
-     * ВАЖНО: сравнения через COALESCE(), иначе NULL ломает NOT(...)
-     */
+    // если уже ответили сегодня — не дергать
+    const meta = parsedDetails?.tgActualReminder || {};
+    if (meta && meta.answeredDate === dateStr) {
+      stats.skippedAnsweredToday += 1;
+      continue;
+    }
+
+    // 🔒 антидубль на слот (между инстансами тоже)
     const lockRes = await db.query(
       `
       UPDATE services
       SET
         tg_last_actual_check_at = NOW(),
         details = CASE
-          WHEN COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date'),'') = $2
+          WHEN (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
           THEN
             jsonb_set(
               COALESCE(details::jsonb, '{}'::jsonb),
@@ -192,53 +217,43 @@ async function askActualReminder(options = {}) {
         END
       WHERE id = $1
         AND NOT (
-          COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date'),'') = $2
-          AND COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3), false) = true
+          (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+          AND (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3)
         )
       RETURNING id
       `,
-      [id, dateStr, slotKey]
+      [row.id, dateStr, slotKey]
     );
 
-    if (lockRes.rowCount === 0) {
-      // Уже отправляли в этот слот сегодня (или другой инстанс успел)
-      stats.skippedConfirmedToday += 1;
-      continue;
-    }
-
+    if (lockRes.rowCount === 0) continue;
     stats.locked += 1;
 
-  const text =
-    `⏳ *Отказ ещё актуален?*\n\n` +
-    `🆔 ID: ${id}\n` +
-    `🧳 ${title}\n` +
-    `📂 Категория: ${row.category || '—'}\n\n` +
-    `Пожалуйста, подтвердите актуальность.`;
+    const snippet = buildDetailsSnippet(parsedDetails);
+
+    const text =
+      `<b>⏳ Отказ ещё актуален?</b>\n` +
+      `🧾 ID: <code>${row.id}</code>\n` +
+      (row.title ? `🧳 <b>${String(row.title)}</b>\n` : "") +
+      (snippet ? `ℹ️ ${snippet}\n` : "") +
+      `\nПожалуйста, подтвердите, чтобы объявление не осталось с устаревшим статусом.`;
 
     try {
-      const ok = await tgSend(
-        telegram_chat_id,
+      await tgSend(
+        chatId,
         text,
         {
-          parse_mode: "Markdown",
-          reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+          parse_mode: "HTML",
           disable_web_page_preview: true,
+          reply_markup: buildSvcActualKeyboard(row.id, { isActual: isActualNow }),
         },
-        CLIENT_BOT_TOKEN || ""
+        CLIENT_BOT_TOKEN
       );
 
-      if (ok) stats.sent += 1;
-      else throw new Error("tgSend returned false");
+      stats.sent += 1;
     } catch (e) {
       stats.failed += 1;
 
-      console.error("[askActualReminder] tgSend failed:", {
-        serviceId: id,
-        chatId: telegram_chat_id,
-        error: e?.message || e,
-      });
-
-      // откатываем флаг слота
+      // откатим флаг слота
       await db.query(
         `
         UPDATE services
@@ -248,7 +263,7 @@ async function askActualReminder(options = {}) {
         )
         WHERE id = $1
         `,
-        [id, slotKey]
+        [row.id, slotKey]
       );
     }
   }
