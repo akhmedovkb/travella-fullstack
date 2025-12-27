@@ -709,6 +709,33 @@ async function promptEditState(ctx, state) {
   }
 }
 
+
+// ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
+// Эти кнопки приходят из напоминаний об актуальности. Обрабатывать должен тот же бот, который отправил кнопки.
+bot.action(/^svc_actual:(\d+):(yes|no|extend7)$/, async (ctx) => {
+  try {
+    const cbId = ctx.callbackQuery?.id || null;
+    const data = ctx.callbackQuery?.data || "";
+    const fromChatId = ctx.chat?.id || ctx.from?.id || null;
+    const tokenOverride = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+
+    const res = await handleServiceActualCallback({
+      callbackQueryId: cbId,
+      data,
+      fromChatId,
+      tokenOverride,
+    });
+
+    // если не наш обработчик — просто пропустим
+    if (!res || !res.handled) return;
+  } catch (e) {
+    console.error("[tg-bot] svc_actual handler error:", e?.response?.data || e?.message || e);
+    // обязательно снимем “часики” в Telegram
+    try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
+  }
+});
+// ===================== /ACTUAL REMINDER CALLBACK =====================
+
 bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -4470,19 +4497,6 @@ bot.action("svc_edit_continue", async (ctx) => {
   } catch (e) {
     console.error("svc_edit_continue error:", e);
     await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
-  }
-});
-
-// ✅ ACTUAL reminder кнопки (должно быть ДО module.exports)
-bot.action(/svc_actual:/, async (ctx) => {
-  try {
-    const handled = await handleServiceActualCallback(ctx);
-    if (handled) return;
-  } catch (e) {
-    console.error("[bot] svc_actual handler failed:", e?.message || e);
-    try {
-      await ctx.answerCbQuery("Ошибка обработки", { show_alert: true });
-    } catch {}
   }
 });
 
