@@ -1,11 +1,28 @@
 // backend/telegram/handlers/serviceActualHandler.js
-// Обработчик кнопок "Отказ ещё актуален?" (yes / no / extend7)
 
 const db = require("../../db");
-const { buildSvcActualDoneKeyboard } = require("../keyboards/serviceActual");
-const { parseDateFlexible, normalizeDateInput } = require("../helpers/serviceActual");
+const {
+  tgSend,
+  tgAnswerCallbackQuery,
+  tgEditMessageReplyMarkup,
+} = require("../../utils/telegram");
+
+const {
+  buildSvcActualKeyboard,
+  buildSvcActualDoneKeyboard,
+} = require("../keyboards/serviceActual");
 
 const TZ = "Asia/Tashkent";
+
+function getLocalDateStr(date, timeZone = TZ) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(date); // YYYY-MM-DD
+}
 
 function safeJsonParseMaybe(v) {
   if (!v) return {};
@@ -21,182 +38,175 @@ function safeJsonParseMaybe(v) {
   return {};
 }
 
-function getLocalDateStr(date, timeZone = TZ) {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  // en-CA => YYYY-MM-DD
-  return fmt.format(date);
-}
-
-function addDaysYYYYMMDD(baseDate, days) {
-  const d = new Date(baseDate);
-  d.setDate(d.getDate() + Number(days || 0));
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 async function loadServiceWithProvider(serviceId) {
+  const id = Number(serviceId);
+  if (!Number.isFinite(id)) return null;
+
   const q = await db.query(
     `
     SELECT
-      s.id, s.title, s.category, s.status, s.details,
-      p.id AS provider_id,
-      p.telegram_chat_id,
-      p.telegram_refused_chat_id,
-      p.telegram_web_chat_id
+      s.id, s.title, s.details, s.category, s.status, s.provider_id,
+      COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id) AS provider_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE s.id = $1
     LIMIT 1
     `,
-    [serviceId]
+    [id]
   );
+
   return q.rows[0] || null;
 }
 
-async function saveDetails(serviceId, details) {
-  await db.query(`UPDATE services SET details = $2 WHERE id = $1`, [
-    serviceId,
-    JSON.stringify(details),
-  ]);
-}
+async function updateServiceMeta(serviceId, patchJsonb) {
+  const id = Number(serviceId);
+  if (!Number.isFinite(id)) return;
 
-function pushLog(details, entry) {
-  const d = details || {};
-  const arr = Array.isArray(d.tgActualLog) ? d.tgActualLog : [];
-  arr.push(entry);
-  // ограничим хвост
-  const trimmed = arr.slice(-30);
-  return { ...d, tgActualLog: trimmed };
-}
-
-/**
- * Telegraf ctx handler
- * callback_data: svc_actual:<id>:<yes|no|extend7>
- */
-async function handleServiceActualCallback(ctx) {
-  const data = ctx?.callbackQuery?.data;
-  const m = /^svc_actual:(\d+):(yes|no|extend7)$/.exec(String(data || ""));
-  if (!m) return { handled: false };
-
-  const serviceId = Number(m[1]);
-  const action = m[2];
-
-  const fromChatId = ctx?.callbackQuery?.message?.chat?.id;
-  const msgId = ctx?.callbackQuery?.message?.message_id;
-
-  const row = await loadServiceWithProvider(serviceId);
-  if (!row) {
-    await ctx.answerCbQuery("Услуга не найдена", { show_alert: true });
-    return { handled: true };
-  }
-
-  // доступ: владелец (любое из полей чата)
-  const allowed = new Set(
-    [row.telegram_refused_chat_id, row.telegram_chat_id, row.telegram_web_chat_id]
-      .filter(Boolean)
-      .map((x) => String(x))
+  await db.query(
+    `
+    UPDATE services
+    SET details = COALESCE(details::jsonb, '{}'::jsonb) || $2::jsonb
+    WHERE id = $1
+    `,
+    [id, JSON.stringify(patchJsonb || {})]
   );
+}
 
-  if (allowed.size && fromChatId && !allowed.has(String(fromChatId))) {
-    await ctx.answerCbQuery("Нет доступа", { show_alert: true });
-    return { handled: true };
+// core: handle callback from CLIENT BOT
+async function handleServiceActualCallback(ctxLike) {
+  const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  if (!CLIENT_BOT_TOKEN) return false;
+
+  const cb = ctxLike?.callbackQuery || ctxLike?.update?.callback_query || null;
+  if (!cb?.data) return false;
+
+  const data = String(cb.data || "");
+  if (!data.startsWith("svc_actual:")) return false;
+
+  const parts = data.split(":"); // svc_actual:{id}:{action}
+  const serviceId = parts[1];
+  const action = parts[2] || "ping";
+
+  const chatId = cb?.message?.chat?.id;
+  const messageId = cb?.message?.message_id;
+  const cbId = cb?.id;
+
+  // always answer callback (same bot)
+  const answer = async (text, opts = {}) =>
+    tgAnswerCallbackQuery(cbId, text, opts, CLIENT_BOT_TOKEN);
+
+  const svc = await loadServiceWithProvider(serviceId);
+  if (!svc) {
+    await answer("Услуга не найдена", { show_alert: true });
+    return true;
   }
 
-  const now = new Date();
-  const todayTz = getLocalDateStr(now, TZ);
-  const nowIso = now.toISOString();
-
-  const details = safeJsonParseMaybe(row.details);
-  const meta = details.tgActualReminder && typeof details.tgActualReminder === "object"
-    ? details.tgActualReminder
-    : {};
-
-  // 🔒 защита от повторного клика по той же кнопке/сообщению
-  // если уже обработали ЭТО сообщение — не трогаем базу, просто отвечаем
-  if (meta.lastMsgId != null && msgId != null && String(meta.lastMsgId) === String(msgId)) {
-    await ctx.answerCbQuery("Уже обработано ✅", { show_alert: false });
-    try {
-      await ctx.editMessageReplyMarkup(buildSvcActualDoneKeyboard("✅ Уже подтверждено"));
-    } catch {}
-    return { handled: true };
+  // Защита: нажимать может только владелец (тот же chat_id)
+  if (svc.provider_chat_id && String(svc.provider_chat_id) !== String(chatId)) {
+    await answer("Это не ваша услуга", { show_alert: true });
+    return true;
   }
 
-  let next = { ...details };
+  const details = safeJsonParseMaybe(svc.details);
+  const today = getLocalDateStr(new Date(), TZ);
 
-  // лог
-  next = pushLog(next, {
-    ts: nowIso,
-    action,
-    serviceId,
-    chatId: fromChatId || null,
-    msgId: msgId || null,
-  });
-
-  // meta единое
-  next.tgActualReminder = {
-    ...(meta || {}),
-    answeredDate: todayTz,
-    lastAnswer: action,
-    lastAnswerAt: nowIso,
-    lastMsgId: msgId ?? null,
+  // мета для “уже отвечал сегодня”
+  const metaKey = "tgActualMeta";
+  const meta = details?.tg_actual_reminders_meta || details?.tgActualMeta || {};
+  const nextMeta = {
+    ...meta,
+    lastConfirmedAt: new Date().toISOString(),
+    lastConfirmedLocalDate: today,
+    lastAction: action,
   };
 
+  // ping — просто освежим клавиатуру
+  if (action === "ping") {
+    await answer("OK");
+    if (chatId && messageId) {
+      await tgEditMessageReplyMarkup(
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: buildSvcActualKeyboard(svc.id, { serviceId: svc.id }),
+        },
+        CLIENT_BOT_TOKEN
+      );
+    }
+    return true;
+  }
+
+  // YES: подтвердил актуальность
   if (action === "yes") {
-    next.isActive = true;
+    // фиксируем мету и isActive=true
+    const patch = {
+      [metaKey]: nextMeta,
+      isActive: true,
+    };
+    await updateServiceMeta(svc.id, patch);
 
-    await saveDetails(serviceId, next);
-    await ctx.answerCbQuery("Отлично ✅", { show_alert: false });
+    await answer("Подтверждено ✅");
 
-    try {
-      await ctx.editMessageReplyMarkup(buildSvcActualDoneKeyboard("✅ Подтверждено"));
-    } catch {}
+    // меняем кнопки на “подтверждено”
+    if (chatId && messageId) {
+      await tgEditMessageReplyMarkup(
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: buildSvcActualDoneKeyboard(svc.id, "yes"),
+        },
+        CLIENT_BOT_TOKEN
+      );
+    }
 
-    return { handled: true };
+    // (опционально) короткое сообщение, чтобы явно было “про какую услугу”
+    const title = svc.title || "—";
+    await tgSend(
+      chatId,
+      `✅ Подтверждено: *${title}* (Услуга #${svc.id})`,
+      { parse_mode: "Markdown" },
+      CLIENT_BOT_TOKEN
+    );
+
+    return true;
   }
 
+  // NO: снять как неактуально
   if (action === "no") {
-    next.isActive = false;
+    const patch = {
+      [metaKey]: nextMeta,
+      isActive: false,
+    };
+    await updateServiceMeta(svc.id, patch);
 
-    await saveDetails(serviceId, next);
-    await ctx.answerCbQuery("Снято ⛔", { show_alert: false });
+    await answer("Снято ❌");
 
-    try {
-      await ctx.editMessageReplyMarkup(buildSvcActualDoneKeyboard("⛔ Снято"));
-    } catch {}
+    if (chatId && messageId) {
+      await tgEditMessageReplyMarkup(
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: buildSvcActualDoneKeyboard(svc.id, "no"),
+        },
+        CLIENT_BOT_TOKEN
+      );
+    }
 
-    return { handled: true };
+    const title = svc.title || "—";
+    await tgSend(
+      chatId,
+      `❌ Снято как неактуально: *${title}* (Услуга #${svc.id})`,
+      { parse_mode: "Markdown" },
+      CLIENT_BOT_TOKEN
+    );
+
+    return true;
   }
 
-  // extend7
-  {
-    // продлеваем expiration на 7 дней (храним стабильно YYYY-MM-DD)
-    // базу берем: текущее expiration если валидно и в будущем, иначе сегодня
-    const cur = next.expiration ? parseDateFlexible(next.expiration) : null;
-    const base = cur && !Number.isNaN(cur.getTime()) ? cur : now;
-
-    // если expiration был в прошлом — тоже от today
-    const base2 = base.getTime() < now.getTime() ? now : base;
-    const newExp = addDaysYYYYMMDD(base2, 7);
-
-    next.expiration = newExp;
-    next.isActive = true;
-
-    await saveDetails(serviceId, next);
-    await ctx.answerCbQuery("Продлено на 7 дней 🌿", { show_alert: false });
-
-    try {
-      await ctx.editMessageReplyMarkup(buildSvcActualDoneKeyboard(`🌿 До ${normalizeDateInput(newExp) || newExp}`));
-    } catch {}
-
-    return { handled: true };
-  }
+  await answer("Неизвестная команда", { show_alert: true });
+  return true;
 }
 
-module.exports = { handleServiceActualCallback };
+module.exports = {
+  handleServiceActualCallback,
+};
