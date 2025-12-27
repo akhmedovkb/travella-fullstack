@@ -52,47 +52,99 @@ async function tgSend(
   tokenOverride = "",
   throwOnError = false
 ) {
-  const token = tokenOverride || BOT_TOKEN;
-  const api = _tgApiByToken(token);
+  // Если явно указан tokenOverride — используем его.
+  // Иначе пробуем старого бота, а при отсутствии — нового.
+  const primaryToken = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
+  const primaryApi = _tgApiByToken(primaryToken);
 
-  if (!token || !api || !chatId || !text) {
+  if (!primaryToken || !primaryApi || !chatId || !text) {
     const err = new Error("tgSend: missing token/api/chatId/text");
     if (throwOnError) throw err;
     return false;
   }
 
+  const payload = {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...extra,
+  };
+
+  const shouldFallbackToClient =
+    !tokenOverride && // fallback делаем только когда токен не задан явно
+    Boolean(CLIENT_BOT_TOKEN) &&
+    Boolean(BOT_TOKEN) &&
+    primaryToken === BOT_TOKEN; // первично шлём старым ботом
+
   try {
-    const payload = {
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      ...extra,
-    };
-    const res = await axios.post(`${api}/sendMessage`, payload);
-    if (!res?.data?.ok) {
-      console.error("[tg] sendMessage not ok:", res?.data);
-      const err = new Error("tgSend: sendMessage not ok");
-      err.details = res?.data;
-      if (throwOnError) throw err;
-      return false;
+    const res = await axios.post(`${primaryApi}/sendMessage`, payload);
+    if (res?.data?.ok) return true;
+
+    console.error("[tg] sendMessage not ok:", res?.data);
+
+    // мягкий fallback на клиент-бота (частая причина: пользователь не нажимал /start в старом боте)
+    if (shouldFallbackToClient) {
+      try {
+        const api2 = _tgApiByToken(CLIENT_BOT_TOKEN);
+        const res2 = await axios.post(`${api2}/sendMessage`, payload);
+        if (res2?.data?.ok) return true;
+        console.error("[tg] sendMessage (fallback client) not ok:", res2?.data);
+      } catch (e2) {
+        console.error(
+          "[tg] sendMessage (fallback client) error:",
+          e2?.response?.data || e2?.message || e2
+        );
+      }
     }
-    return Boolean(res?.data?.ok);
+
+    const err = new Error("tgSend: sendMessage not ok");
+    err.details = res?.data;
+    if (throwOnError) throw err;
+    return false;
   } catch (e) {
-    console.error("[tg] sendMessage error:", e?.response?.data || e?.message || e);
+    const data = e?.response?.data;
+    console.error("[tg] sendMessage error:", data || e?.message || e);
+
+    // fallback на клиент-бота при типичных ошибках "chat not found / blocked"
+    if (shouldFallbackToClient) {
+      const desc = String(data?.description || "");
+      const code = Number(data?.error_code || 0);
+      const isLikelyBotMismatch =
+        code === 400 ||
+        code === 403 ||
+        /chat not found/i.test(desc) ||
+        /bot was blocked/i.test(desc) ||
+        /forbidden/i.test(desc);
+
+      if (isLikelyBotMismatch) {
+        try {
+          const api2 = _tgApiByToken(CLIENT_BOT_TOKEN);
+          const res2 = await axios.post(`${api2}/sendMessage`, payload);
+          if (res2?.data?.ok) return true;
+          console.error("[tg] sendMessage (fallback client) not ok:", res2?.data);
+        } catch (e2) {
+          console.error(
+            "[tg] sendMessage (fallback client) error:",
+            e2?.response?.data || e2?.message || e2
+          );
+        }
+      }
+    }
+
     if (throwOnError) throw e;
     return false;
   }
 }
 
+
 // token-aware
 async function tgAnswerCallbackQuery(cbQueryId, text, opts = {}, tokenOverride = "") {
-  const token = tokenOverride || BOT_TOKEN;
+  const token = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  // ВАЖНО: отвечать должен тот бот, который получил callback
-  const okEnabled = tokenOverride ? enabledClient : enabledOld;
-  if (!okEnabled || !cbQueryId || !api) return;
+  // ВАЖНО: отвечать должен тот бот, который получил callback.
+  if (!token || !cbQueryId || !api) return;
 
   try {
     await axios.post(`${api}/answerCallbackQuery`, {
@@ -113,11 +165,10 @@ async function tgEditMessageReplyMarkup(
   { chat_id, message_id, reply_markup },
   tokenOverride = ""
 ) {
-  const token = tokenOverride || BOT_TOKEN;
+  const token = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  const okEnabled = tokenOverride ? enabledClient : enabledOld;
-  if (!okEnabled || !chat_id || !message_id || !api) return;
+  if (!token || !chat_id || !message_id || !api) return;
 
   try {
     await axios.post(`${api}/editMessageReplyMarkup`, {
@@ -202,11 +253,10 @@ const __chatUserCache = new Map(); // key: token|chatId -> username (without @)
 
 // token-aware
 async function tgGetUsername(chatId, tokenOverride = "") {
-  const token = tokenOverride || BOT_TOKEN;
+  const token = tokenOverride || BOT_TOKEN || CLIENT_BOT_TOKEN;
   const api = _tgApiByToken(token);
 
-  const okEnabled = tokenOverride ? enabledClient : enabledOld;
-  if (!okEnabled || !chatId || !api) return "";
+  if (!token || !chatId || !api) return "";
 
   const cacheKey = `${token}|${chatId}`;
   if (__chatUserCache.has(cacheKey)) return __chatUserCache.get(cacheKey) || "";
@@ -361,7 +411,7 @@ async function getBookingActors(input) {
       p.id   AS provider__id,
       p.name AS provider__name,
       p.phone AS provider__phone,
-      p.telegram_chat_id AS provider__chat,
+      COALESCE(p.telegram_web_chat_id, p.telegram_chat_id) AS provider__chat,
 
       c.id   AS client__id,
       c.name AS client__name,
@@ -371,7 +421,7 @@ async function getBookingActors(input) {
       p2.id   AS agent__id,
       p2.name AS agent__name,
       p2.phone AS agent__phone,
-      p2.telegram_chat_id AS agent__chat
+      COALESCE(p2.telegram_web_chat_id, p2.telegram_chat_id) AS agent__chat
     FROM bookings b
     LEFT JOIN services  s ON s.id = b.service_id
     LEFT JOIN providers p ON p.id = b.provider_id
@@ -448,10 +498,10 @@ async function getRequestActors(requestId) {
       p2.id    AS agent_id,
       p2.name  AS agent_name,
       p2.phone AS agent_phone,
-      p2.telegram_chat_id AS agent_chat,
+      COALESCE(p2.telegram_web_chat_id, p2.telegram_chat_id) AS agent_chat,
 
       p.id AS provider_id,
-      p.telegram_chat_id AS provider_chat
+      COALESCE(p.telegram_web_chat_id, p.telegram_chat_id) AS provider_chat
     FROM requests r
     LEFT JOIN services  s ON s.id = r.service_id
     LEFT JOIN clients   c ON c.id = r.client_id
