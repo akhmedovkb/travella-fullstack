@@ -3,56 +3,51 @@
 const express = require("express");
 const router = express.Router();
 
-const authenticateToken = require("../middleware/authenticateToken");
-const requireAdmin = require("../middleware/requireAdmin");
 const { askActualReminder } = require("../jobs/askActualReminder");
 
-function normalizeSlot(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  if (![10, 14, 18].includes(n)) return null;
-  return n;
-}
+// 1) Защита “job endpoint” отдельным токеном (для Postman/cron)
+// Header: x-admin-job-token: <TOKEN>
+// Env: ADMIN_JOB_TOKEN
+function requireJobToken(req, res, next) {
+  const expected = process.env.ADMIN_JOB_TOKEN || "";
+  const got =
+    req.headers["x-admin-job-token"] ||
+    req.headers["x-admin-jobs-token"] ||
+    req.headers["x-admin-jobs-secret"] ||
+    "";
 
-function normalizeDay(v) {
-  if (typeof v !== "string") return null;
-  const s = v.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  return s;
-}
-
-// ✅ либо JWT-админ, либо секрет в заголовке
-function adminOrJobsSecret(req, res, next) {
-  const secret = process.env.ADMIN_JOBS_SECRET || "";
-  const got = String(req.headers["x-admin-jobs-secret"] || "").trim();
-
-  if (secret && got && got === secret) return next();
-
-  // иначе идём по обычному пути: JWT + админ
-  return authenticateToken(req, res, () => requireAdmin(req, res, next));
+  if (!expected || String(got) !== String(expected)) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+  next();
 }
 
 // POST /api/admin/jobs/ask-actual-now
-router.post("/jobs/ask-actual-now", adminOrJobsSecret, async (req, res) => {
+// body: { forceSlot?: 10|14|18, forceDay?: "YYYY-MM-DD" }
+// legacy body (поддержим): { slotHour?: 10|14|18 }
+router.post("/jobs/ask-actual-now", requireJobToken, async (req, res) => {
   try {
-    const rawForceSlot = req.body?.forceSlot ?? req.body?.slotHour ?? req.body?.slot ?? null;
-    const rawForceDay = req.body?.forceDay ?? req.body?.day ?? null;
+    const body = req.body || {};
 
-    const forceSlot = normalizeSlot(rawForceSlot);
-    const forceDay = normalizeDay(rawForceDay);
+    const forceSlot = body.forceSlot ?? body.slotHour ?? null;
+    const forceDay = body.forceDay ?? null;
 
     const result = await askActualReminder({
-      forceSlot: forceSlot || undefined,
-      forceDay: forceDay || undefined,
+      forceSlot,
+      forceDay,
     });
 
-    res.json({
+    return res.json({
       ok: true,
-      used: { forceSlot: forceSlot || null, forceDay: forceDay || null },
+      used: { forceSlot: forceSlot ?? null, forceDay: forceDay ?? null },
       result,
     });
   } catch (e) {
-    res.status(500).json({ ok: false, message: e?.message || "ask-actual-now failed" });
+    console.error("[adminJobsRoutes] ask-actual-now failed:", e?.message || e);
+    return res.status(500).json({
+      ok: false,
+      error: e?.message || "internal_error",
+    });
   }
 });
 
