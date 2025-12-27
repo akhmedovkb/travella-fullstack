@@ -5,6 +5,9 @@ const { tgSend } = require("../utils/telegram");
 const { isServiceActual } = require("../telegram/helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("../telegram/keyboards/serviceActual");
 
+// новый клиентский бот (отказные)
+const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+
 const TZ = "Asia/Tashkent";
 
 // В какие часы спрашиваем (локально по Ташкенту)
@@ -99,50 +102,12 @@ function getActiveSlot(now, options = {}) {
   return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
-/**
- * Выбор куда слать напоминание:
- * - приоритет: telegram_refused_chat_id (новый бот) -> telegram_web_chat_id -> telegram_chat_id
- * - токен:
- *    - если используем telegram_refused_chat_id => TELEGRAM_CLIENT_BOT_TOKEN
- *    - иначе => старый (без tokenOverride)
- * - если отправка новым ботом не удалась — делаем fallback на старого (вдруг человек не запускал нового бота)
- */
-function pickReminderDestination(row) {
-  const refusedChatId = row.telegram_refused_chat_id || null;
-  const webChatId = row.telegram_web_chat_id || null;
-  const oldChatId = row.telegram_chat_id || null;
-
-  const chatId = refusedChatId || webChatId || oldChatId || null;
-
-  const clientToken = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-  const useClientBot = Boolean(refusedChatId && clientToken);
-
-  return {
-    chatId,
-    useClientBot,
-    clientToken,
-  };
-}
-
 async function askActualReminder(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const slot = getActiveSlot(now, options);
-  if (!slot) {
-    return {
-      ok: true,
-      skipped: true,
-      reason: "no_active_slot",
-      stats: {
-        scanned: 0,
-        actual: 0,
-        locked: 0,
-        sent: 0,
-        failed: 0,
-        skippedConfirmedToday: 0,
-        skippedNoChat: 0,
-      },
-    };
-  }
+
+  // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
+  if (!slot) return { ok: true, slot: null, stats: null };
 
   const { dateStr, slotKey } = slot;
 
@@ -162,11 +127,7 @@ async function askActualReminder(options = {}) {
       s.title,
       s.details,
       s.tg_last_actual_check_at,
-
-      p.telegram_chat_id,
-      p.telegram_web_chat_id,
-      p.telegram_refused_chat_id
-
+      COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id) AS telegram_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
@@ -179,44 +140,36 @@ async function askActualReminder(options = {}) {
       )
   `);
 
+  stats.scanned = res.rows.length;
+
   for (const row of res.rows) {
-    stats.scanned += 1;
+    const { id, title, details, telegram_chat_id } = row;
 
-    const { id, title, details } = row;
-    const parsedDetails = safeJsonParseMaybe(details);
-
-    // 0) Если уже отвечал сегодня — не спрашиваем вообще
-    const meta = parsedDetails?.tg_actual_reminders_meta || parsedDetails?.tgActualMeta || {};
-    if (meta.lastConfirmedAt) {
-      const last = new Date(meta.lastConfirmedAt);
-      if (!Number.isNaN(last.getTime())) {
-        const lastLocal = getLocalParts(last, TZ).dateStr;
-        if (lastLocal === dateStr) {
-          stats.skippedConfirmedToday += 1;
-          continue;
-        }
-      }
+    if (!telegram_chat_id) {
+      stats.skippedNoChat += 1;
+      continue;
     }
+
+    const parsedDetails = safeJsonParseMaybe(details);
 
     // 1) Спрашиваем ТОЛЬКО пока актуально
     const isActualNow = isServiceActual(parsedDetails, row);
     if (!isActualNow) continue;
     stats.actual += 1;
 
-    const dest = pickReminderDestination(row);
-    if (!dest.chatId) {
-      stats.skippedNoChat += 1;
-      continue;
-    }
-
-    // 2) 🔒 Антидубль на слот
+    /**
+     * 2) 🔒 Антидубль на СЛОТ:
+     * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
+     *
+     * ВАЖНО: сравнения через COALESCE(), иначе NULL ломает NOT(...)
+     */
     const lockRes = await db.query(
       `
       UPDATE services
       SET
         tg_last_actual_check_at = NOW(),
         details = CASE
-          WHEN (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
+          WHEN COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date'),'') = $2
           THEN
             jsonb_set(
               COALESCE(details::jsonb, '{}'::jsonb),
@@ -238,11 +191,9 @@ async function askActualReminder(options = {}) {
             )
         END
       WHERE id = $1
-        AND (
-          NOT (
-            (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date') = $2
-            AND (COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3)
-          )
+        AND NOT (
+          COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->>'date'),'') = $2
+          AND COALESCE((COALESCE(details::jsonb, '{}'::jsonb)->'tgActualReminder'->'sent' ? $3), false) = true
         )
       RETURNING id
       `,
@@ -250,8 +201,11 @@ async function askActualReminder(options = {}) {
     );
 
     if (lockRes.rowCount === 0) {
+      // Уже отправляли в этот слот сегодня (или другой инстанс успел)
+      stats.skippedConfirmedToday += 1;
       continue;
     }
+
     stats.locked += 1;
 
     const text =
@@ -259,44 +213,30 @@ async function askActualReminder(options = {}) {
       `🧳 ${title}\n\n` +
       `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
 
-    const extra = {
-      parse_mode: "Markdown",
-      reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
-      disable_web_page_preview: true,
-    };
-
     try {
-      // 3) Пытаемся отправить:
-      // - если есть telegram_refused_chat_id => сначала новым ботом
-      // - если не получилось — fallback на старый
-      let ok = false;
+      const ok = await tgSend(
+        telegram_chat_id,
+        text,
+        {
+          parse_mode: "Markdown",
+          reply_markup: buildSvcActualKeyboard(id, { isActual: isActualNow }),
+          disable_web_page_preview: true,
+        },
+        CLIENT_BOT_TOKEN || ""
+      );
 
-      if (dest.useClientBot) {
-        ok = await tgSend(dest.chatId, text, extra, dest.clientToken);
-        if (!ok) {
-          ok = await tgSend(dest.chatId, text, extra); // fallback старым
-        }
-      } else {
-        ok = await tgSend(dest.chatId, text, extra); // старым
-      }
-
-      if (ok) {
-        stats.sent += 1;
-        continue;
-      }
-
-      // если дошли сюда — значит tgSend вернул false
-      throw new Error("tgSend returned false");
+      if (ok) stats.sent += 1;
+      else throw new Error("tgSend returned false");
     } catch (e) {
       stats.failed += 1;
 
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
-        chatId: dest.chatId,
+        chatId: telegram_chat_id,
         error: e?.message || e,
       });
 
-      // откатываем флаг слота (чтобы можно было повторить)
+      // откатываем флаг слота
       await db.query(
         `
         UPDATE services
@@ -311,11 +251,7 @@ async function askActualReminder(options = {}) {
     }
   }
 
-  return {
-    ok: true,
-    slot,
-    stats,
-  };
+  return { ok: true, slot, stats };
 }
 
-module.exports = { askActualReminder };
+module.exports = { askActualReminder, getActiveSlot };
