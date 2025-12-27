@@ -10,6 +10,7 @@ const {
   normalizeDateTimeInput: normalizeDateTimeInputHelper,
 } = require("./helpers/serviceActual");
 const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
+const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 
 /* ===================== CONFIG ===================== */
 
@@ -4469,6 +4470,19 @@ bot.action("svc_edit_continue", async (ctx) => {
   } catch (e) {
     console.error("svc_edit_continue error:", e);
     await safeReply(ctx, "⚠️ Не удалось продолжить редактирование.");
+  }
+});
+
+// ✅ ACTUAL reminder кнопки (должно быть ДО module.exports)
+bot.action(/svc_actual:/, async (ctx) => {
+  try {
+    const handled = await handleServiceActualCallback(ctx);
+    if (handled) return;
+  } catch (e) {
+    console.error("[bot] svc_actual handler failed:", e?.message || e);
+    try {
+      await ctx.answerCbQuery("Ошибка обработки", { show_alert: true });
+    } catch {}
   }
 });
 
