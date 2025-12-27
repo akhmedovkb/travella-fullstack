@@ -1,26 +1,23 @@
-//backend/telegram/keyboards/serviceActual.js
+// backend/telegram/keyboards/serviceActual.js
 
-function buildSvcActualKeyboard(serviceId, options = {}) {
-  const { isActual = true } = options;
-
-  if (!isActual) {
-    return {
-      inline_keyboard: [
-        [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
-        [{ text: "📁 Архивировать", callback_data: `svc:${serviceId}:archive` }],
-      ],
-    };
-  }
+function buildSvcActualKeyboard(serviceId, opts = {}) {
+  const id = Number(serviceId);
 
   return {
     inline_keyboard: [
       [
-        { text: "✅ Да, актуален", callback_data: `svc_actual:${serviceId}:yes` },
-        { text: "⛔ Нет, снять", callback_data: `svc_actual:${serviceId}:no` },
+        { text: "✅ Да, актуален", callback_data: `svc_actual:${id}:yes` },
+        { text: "⛔ Нет, снять", callback_data: `svc_actual:${id}:no` },
       ],
-      [{ text: "♻️ Продлить на 7 дней", callback_data: `svc_actual:${serviceId}:extend7` }],
+      [{ text: "🌿 Продлить на 7 дней", callback_data: `svc_actual:${id}:extend7` }],
     ],
   };
 }
 
-module.exports = { buildSvcActualKeyboard };
+function buildSvcActualDoneKeyboard(statusText = "✅ Подтверждено") {
+  return {
+    inline_keyboard: [[{ text: statusText, callback_data: "noop" }]],
+  };
+}
+
+module.exports = { buildSvcActualKeyboard, buildSvcActualDoneKeyboard };
