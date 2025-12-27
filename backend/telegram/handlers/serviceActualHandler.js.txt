@@ -1,30 +1,51 @@
 // backend/telegram/handlers/serviceActualHandler.js
 
 const db = require("../../db");
-const {
-  tgSend,
-  tgAnswerCallbackQuery,
-  tgEditMessageReplyMarkup,
-} = require("../../utils/telegram");
+const { tgSend } = require("../../utils/telegram");
+const { buildSvcActualKeyboard } = require("../keyboards/serviceActual");
 
-const {
-  buildSvcActualKeyboard,
-  buildSvcActualDoneKeyboard,
-} = require("../keyboards/serviceActual");
+function parseSvcActualCallbackData(data) {
+  const s = String(data || "");
 
-const TZ = "Asia/Tashkent";
+  // варианты:
+  // 1) svc_actual:123:yes
+  // 2) svc_actual:yes:123
+  const m1 = s.match(/^svc_actual:(\d+):(yes|no)$/i);
+  if (m1) return { serviceId: Number(m1[1]), answer: m1[2].toLowerCase() };
 
-function getLocalDateStr(date, timeZone = TZ) {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return fmt.format(date); // YYYY-MM-DD
+  const m2 = s.match(/^svc_actual:(yes|no):(\d+)$/i);
+  if (m2) return { serviceId: Number(m2[2]), answer: m2[1].toLowerCase() };
+
+  return null;
 }
 
-function safeJsonParseMaybe(v) {
+async function loadServiceWithProvider(serviceId) {
+  const q = await db.query(
+    `
+    SELECT
+      s.id,
+      s.title,
+      s.status,
+      s.category,
+      s.details,
+      s.provider_id,
+
+      p.id AS provider_id,
+      p.name AS provider_name,
+      p.telegram_refused_chat_id,
+      p.telegram_chat_id,
+      p.telegram_web_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+    LIMIT 1
+    `,
+    [serviceId]
+  );
+  return q.rows[0] || null;
+}
+
+function safeJson(v) {
   if (!v) return {};
   if (typeof v === "object") return v;
   if (typeof v === "string") {
@@ -38,175 +59,137 @@ function safeJsonParseMaybe(v) {
   return {};
 }
 
-async function loadServiceWithProvider(serviceId) {
-  const id = Number(serviceId);
-  if (!Number.isFinite(id)) return null;
+function pickTokenForCallback(fromChatId, providerRow) {
+  // если callback пришёл из refused-чата — отвечаем/шлём клиентским ботом
+  const clientToken = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  const refusedChat = providerRow?.telegram_refused_chat_id;
 
-  const q = await db.query(
-    `
-    SELECT
-      s.id, s.title, s.details, s.category, s.status, s.provider_id,
-      COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id) AS provider_chat_id
-    FROM services s
-    JOIN providers p ON p.id = s.provider_id
-    WHERE s.id = $1
-    LIMIT 1
-    `,
-    [id]
-  );
-
-  return q.rows[0] || null;
+  if (clientToken && refusedChat && String(fromChatId) === String(refusedChat)) {
+    return clientToken;
+  }
+  // иначе (на будущее) — старый бот (tokenOverride пустой = старый токен в tgSend)
+  return "";
 }
 
-async function updateServiceMeta(serviceId, patchJsonb) {
-  const id = Number(serviceId);
-  if (!Number.isFinite(id)) return;
+async function handleServiceActualCallback(ctx) {
+  const data = ctx?.callbackQuery?.data || ctx?.update?.callback_query?.data || "";
+  const parsed = parseSvcActualCallbackData(data);
+  if (!parsed) return false;
 
-  await db.query(
-    `
-    UPDATE services
-    SET details = COALESCE(details::jsonb, '{}'::jsonb) || $2::jsonb
-    WHERE id = $1
-    `,
-    [id, JSON.stringify(patchJsonb || {})]
-  );
-}
+  const { serviceId, answer } = parsed;
 
-// core: handle callback from CLIENT BOT
-async function handleServiceActualCallback(ctxLike) {
-  const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-  if (!CLIENT_BOT_TOKEN) return false;
-
-  const cb = ctxLike?.callbackQuery || ctxLike?.update?.callback_query || null;
-  if (!cb?.data) return false;
-
-  const data = String(cb.data || "");
-  if (!data.startsWith("svc_actual:")) return false;
-
-  const parts = data.split(":"); // svc_actual:{id}:{action}
-  const serviceId = parts[1];
-  const action = parts[2] || "ping";
-
-  const chatId = cb?.message?.chat?.id;
-  const messageId = cb?.message?.message_id;
+  const cb = ctx?.callbackQuery || ctx?.update?.callback_query || null;
   const cbId = cb?.id;
+  const fromChatId = cb?.message?.chat?.id;
 
-  // always answer callback (same bot)
-  const answer = async (text, opts = {}) =>
-    tgAnswerCallbackQuery(cbId, text, opts, CLIENT_BOT_TOKEN);
+  if (!serviceId || !fromChatId) {
+    // если не можем понять кто нажал — просто гасим
+    try {
+      if (typeof ctx?.answerCbQuery === "function") {
+        await ctx.answerCbQuery("Ошибка: нет chatId", { show_alert: true });
+      }
+    } catch {}
+    return true;
+  }
 
   const svc = await loadServiceWithProvider(serviceId);
   if (!svc) {
-    await answer("Услуга не найдена", { show_alert: true });
+    try {
+      if (typeof ctx?.answerCbQuery === "function") {
+        await ctx.answerCbQuery("Услуга не найдена", { show_alert: true });
+      }
+    } catch {}
     return true;
   }
 
-  // Защита: нажимать может только владелец (тот же chat_id)
-  if (svc.provider_chat_id && String(svc.provider_chat_id) !== String(chatId)) {
-    await answer("Это не ваша услуга", { show_alert: true });
+  const allowedChatIds = [
+    svc.telegram_refused_chat_id,
+    svc.telegram_chat_id,
+    svc.telegram_web_chat_id,
+  ]
+    .filter(Boolean)
+    .map(String);
+
+  if (!allowedChatIds.includes(String(fromChatId))) {
+    try {
+      if (typeof ctx?.answerCbQuery === "function") {
+        await ctx.answerCbQuery("Нет доступа", { show_alert: true });
+      }
+    } catch {}
     return true;
   }
 
-  const details = safeJsonParseMaybe(svc.details);
-  const today = getLocalDateStr(new Date(), TZ);
+  const tokenOverride = pickTokenForCallback(fromChatId, svc);
 
-  // мета для “уже отвечал сегодня”
-  const metaKey = "tgActualMeta";
-  const meta = details?.tg_actual_reminders_meta || details?.tgActualMeta || {};
-  const nextMeta = {
-    ...meta,
-    lastConfirmedAt: new Date().toISOString(),
-    lastConfirmedLocalDate: today,
-    lastAction: action,
-  };
+  const details = safeJson(svc.details);
 
-  // ping — просто освежим клавиатуру
-  if (action === "ping") {
-    await answer("OK");
-    if (chatId && messageId) {
-      await tgEditMessageReplyMarkup(
-        {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: buildSvcActualKeyboard(svc.id, { serviceId: svc.id }),
-        },
-        CLIENT_BOT_TOKEN
-      );
+  // meta чтобы НЕ спрашивать повторно в этот же день
+  const metaKey = "tg_actual_reminders_meta";
+  const meta = details[metaKey] && typeof details[metaKey] === "object" ? details[metaKey] : {};
+  meta.lastConfirmedAt = new Date().toISOString();
+  meta.lastAnswer = answer;
+  meta.lastServiceId = svc.id;
+
+  details[metaKey] = meta;
+
+  // если ответ "no" — делаем неактуально
+  if (answer === "no") {
+    details.isActive = false;
+  } else {
+    details.isActive = true;
+  }
+
+  // сохраняем details
+  await db.query(
+    `
+    UPDATE services
+    SET details = $2::jsonb
+    WHERE id = $1
+    `,
+    [svc.id, JSON.stringify(details)]
+  );
+
+  // 1) ответ на callback
+  try {
+    if (typeof ctx?.answerCbQuery === "function") {
+      await ctx.answerCbQuery(answer === "yes" ? "✅ Отмечено: актуально" : "🛑 Отмечено: неактуально");
     }
-    return true;
+  } catch (e) {
+    // не критично
+    console.error("[serviceActualHandler] answerCbQuery failed:", e?.message || e);
   }
 
-  // YES: подтвердил актуальность
-  if (action === "yes") {
-    // фиксируем мету и isActive=true
-    const patch = {
-      [metaKey]: nextMeta,
-      isActive: true,
-    };
-    await updateServiceMeta(svc.id, patch);
-
-    await answer("Подтверждено ✅");
-
-    // меняем кнопки на “подтверждено”
-    if (chatId && messageId) {
-      await tgEditMessageReplyMarkup(
-        {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: buildSvcActualDoneKeyboard(svc.id, "yes"),
-        },
-        CLIENT_BOT_TOKEN
-      );
+  // 2) убрать кнопки, чтобы не жали повторно
+  try {
+    if (typeof ctx?.editMessageReplyMarkup === "function") {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     }
+  } catch (e) {
+    console.error("[serviceActualHandler] editMessageReplyMarkup failed:", e?.message || e);
+  }
 
-    // (опционально) короткое сообщение, чтобы явно было “про какую услугу”
-    const title = svc.title || "—";
+  // 3) подтверждение отдельным сообщением (чтобы было явно про какую услугу)
+  try {
+    const text =
+      (answer === "yes"
+        ? `✅ *Подтверждено: актуально*\n\n`
+        : `🛑 *Отмечено: неактуально*\n\n`) +
+      `🧾 *ID:* #${svc.id}\n` +
+      `🧳 *Услуга:* ${svc.title || "—"}`;
+
     await tgSend(
-      chatId,
-      `✅ Подтверждено: *${title}* (Услуга #${svc.id})`,
-      { parse_mode: "Markdown" },
-      CLIENT_BOT_TOKEN
+      fromChatId,
+      text,
+      { parse_mode: "Markdown", reply_markup: buildSvcActualKeyboard(svc.id, { isActual: answer === "yes" }) },
+      tokenOverride,
+      false
     );
-
-    return true;
+  } catch (e) {
+    console.error("[serviceActualHandler] confirm tgSend failed:", e?.message || e);
   }
 
-  // NO: снять как неактуально
-  if (action === "no") {
-    const patch = {
-      [metaKey]: nextMeta,
-      isActive: false,
-    };
-    await updateServiceMeta(svc.id, patch);
-
-    await answer("Снято ❌");
-
-    if (chatId && messageId) {
-      await tgEditMessageReplyMarkup(
-        {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: buildSvcActualDoneKeyboard(svc.id, "no"),
-        },
-        CLIENT_BOT_TOKEN
-      );
-    }
-
-    const title = svc.title || "—";
-    await tgSend(
-      chatId,
-      `❌ Снято как неактуально: *${title}* (Услуга #${svc.id})`,
-      { parse_mode: "Markdown" },
-      CLIENT_BOT_TOKEN
-    );
-
-    return true;
-  }
-
-  await answer("Неизвестная команда", { show_alert: true });
+  // ✅ обработали
   return true;
 }
 
-module.exports = {
-  handleServiceActualCallback,
-};
+module.exports = { handleServiceActualCallback };
