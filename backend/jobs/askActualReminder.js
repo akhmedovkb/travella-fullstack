@@ -99,33 +99,33 @@ function getActiveSlot(now, options = {}) {
   return { dateStr, slotKey: String(hour), hour, minute, forced: false };
 }
 
+function pickTokenForChat(row) {
+  // если напоминание идёт в отдельный refused-чат — шлём клиентским ботом
+  const clientToken = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
+  return row?.use_client_bot && clientToken ? clientToken : "";
+}
+
 async function askActualReminder(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const slot = getActiveSlot(now, options);
 
   // Если сейчас не 10/14/18 и не ручной forceSlot — выходим
   if (!slot) {
-    return { ok: true, skipped: "no_active_slot" };
+    return { ok: true, skipped: true, reason: "no_active_slot" };
   }
 
   const { dateStr, slotKey } = slot;
 
-  // ВАЖНО: напоминания “актуален?” — это refused_* => отправляем через CLIENT_BOT_TOKEN
-  const CLIENT_BOT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
-  if (!CLIENT_BOT_TOKEN) {
-    return { ok: false, error: "TELEGRAM_CLIENT_BOT_TOKEN is not set" };
-  }
-
   const stats = {
     ok: true,
-    slot: { dateStr, slotKey, forced: !!slot.forced },
+    slot: { dateStr, slotKey, hour: slot.hour, minute: slot.minute, forced: slot.forced },
     scanned: 0,
-    actual_now: 0,
-    already_confirmed_today: 0,
-    locked_sent: 0,
-    tg_sent_ok: 0,
-    tg_sent_fail: 0,
-    no_chat: 0,
+    eligible_actual: 0,
+    skipped_confirmed_today: 0,
+    skipped_not_actual: 0,
+    locked_out: 0,
+    sent: 0,
+    send_failed: 0,
   };
 
   const res = await db.query(`
@@ -134,38 +134,31 @@ async function askActualReminder(options = {}) {
       s.title,
       s.details,
       s.tg_last_actual_check_at,
-      COALESCE(p.telegram_refused_chat_id, p.telegram_web_chat_id, p.telegram_chat_id) AS telegram_chat_id
+
+      COALESCE(p.telegram_refused_chat_id, p.telegram_chat_id, p.telegram_web_chat_id) AS telegram_chat_id,
+      (p.telegram_refused_chat_id IS NOT NULL) AS use_client_bot
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
       s.category LIKE 'refused_%'
       AND s.status IN ('approved','published')
-      AND (
-        p.telegram_refused_chat_id IS NOT NULL
-        OR p.telegram_web_chat_id IS NOT NULL
-        OR p.telegram_chat_id IS NOT NULL
-      )
+      AND (p.telegram_refused_chat_id IS NOT NULL OR p.telegram_chat_id IS NOT NULL OR p.telegram_web_chat_id IS NOT NULL)
   `);
 
   for (const row of res.rows) {
     stats.scanned += 1;
 
     const { id, title, details, telegram_chat_id } = row;
-    if (!telegram_chat_id) {
-      stats.no_chat += 1;
-      continue;
-    }
-
     const parsedDetails = safeJsonParseMaybe(details);
 
-    // 0) Если уже отвечал сегодня — не спрашиваем вообще
+    // 0) Если уже отвечал сегодня — НЕ спрашиваем вообще
     const meta = parsedDetails?.tg_actual_reminders_meta || parsedDetails?.tgActualMeta || {};
     if (meta.lastConfirmedAt) {
       const last = new Date(meta.lastConfirmedAt);
       if (!Number.isNaN(last.getTime())) {
         const lastLocal = getLocalParts(last, TZ).dateStr;
         if (lastLocal === dateStr) {
-          stats.already_confirmed_today += 1;
+          stats.skipped_confirmed_today += 1;
           continue;
         }
       }
@@ -173,14 +166,13 @@ async function askActualReminder(options = {}) {
 
     // 1) Спрашиваем ТОЛЬКО пока актуально
     const isActualNow = isServiceActual(parsedDetails, row);
-    if (!isActualNow) continue;
+    if (!isActualNow) {
+      stats.skipped_not_actual += 1;
+      continue;
+    }
+    stats.eligible_actual += 1;
 
-    stats.actual_now += 1;
-
-    /**
-     * 2) 🔒 Антидубль на СЛОТ:
-     * details.tgActualReminder = { date: "YYYY-MM-DD", sent: { "10": true, "14": true, "18": true } }
-     */
+    // 2) 🔒 Антидубль на слот
     const lockRes = await db.query(
       `
       UPDATE services
@@ -221,17 +213,18 @@ async function askActualReminder(options = {}) {
     );
 
     if (lockRes.rowCount === 0) {
-      // Уже отправляли в этот слот сегодня (или другой инстанс успел)
+      stats.locked_out += 1;
       continue;
     }
 
-    stats.locked_sent += 1;
-
+    // 3) Текст — СРАЗУ понятно какая услуга
     const text =
       `⏳ *Отказ ещё актуален?*\n\n` +
-      `🧾 *Услуга #${id}*\n` +
-      `🧳 ${title || "—"}\n\n` +
-      `Пожалуйста, подтвердите, чтобы услуга не осталась с устаревшим статусом.`;
+      `🧾 *ID:* #${id}\n` +
+      `🧳 *Услуга:* ${title}\n\n` +
+      `Нажмите кнопку ниже 👇`;
+
+    const tokenOverride = pickTokenForChat(row);
 
     try {
       const ok = await tgSend(
@@ -239,15 +232,16 @@ async function askActualReminder(options = {}) {
         text,
         {
           parse_mode: "Markdown",
-          reply_markup: buildSvcActualKeyboard(id, { serviceId: id }),
+          reply_markup: buildSvcActualKeyboard(id, { isActual: true }),
         },
-        CLIENT_BOT_TOKEN
+        tokenOverride,
+        false
       );
 
-      if (ok) stats.tg_sent_ok += 1;
-      else stats.tg_sent_fail += 1;
+      if (ok) stats.sent += 1;
+      else throw new Error("tgSend returned false");
     } catch (e) {
-      stats.tg_sent_fail += 1;
+      stats.send_failed += 1;
 
       console.error("[askActualReminder] tgSend failed:", {
         serviceId: id,
