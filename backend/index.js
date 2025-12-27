@@ -288,17 +288,33 @@ function getTZParts(date = new Date(), timeZone = REM_TZ) {
 }
 
 function startAskActualReminderScheduler() {
-  console.log("[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent");
+  console.log(
+    "[askActualReminder] scheduler enabled: 10:00 / 14:00 / 18:00 Asia/Tashkent"
+  );
 
-setInterval(async () => {
-  try {
-    await askActualReminder();
-  } catch (e) {
-    console.error("[askActualReminder] tick error:", e?.message || e);
-  }
-}, 5 * 60 * 1000); // раз в 5 минут
+  // Пингуем часто, но job запускаем строго в нужные часы и только 1 раз на слот
+  setInterval(async () => {
+    try {
+      const { ymd, hour, minute } = getTZParts(new Date(), REM_TZ);
 
+      if (!REM_HOURS.has(hour)) return;
+
+      // чтобы не промахнуться из-за дрейфа таймера/нагрузки:
+      // считаем "окно запуска" первые 3 минуты нужного часа
+      if (minute > 2) return;
+
+      const slotKey = `${ymd}:${hour}`; // один запуск на часовой слот на инстанс
+      if (lastReminderKey === slotKey) return;
+
+      lastReminderKey = slotKey;
+
+      await askActualReminder();
+    } catch (e) {
+      console.error("[askActualReminder] tick error:", e?.message || e);
+    }
+  }, 30 * 1000); // каждые 30 секунд
 }
+
 /** ===================== /Ask Actual Reminder Scheduler ===================== */
 
 // ✅ Запускаем планировщик напоминаний (не зависит от polling — отправка идёт через tgSend в job)
