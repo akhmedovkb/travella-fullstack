@@ -1229,45 +1229,75 @@ function getStartDateForSort(svc) {
   const d = parseDetailsAny(svc.details);
   const cat = String(svc.category || svc.type || "").toLowerCase();
 
-  // 1) Категория-специфичные поля (самые точные)
-  const rawByCat =
+  // helper: взять первое найденное поле
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const v = d?.[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+      if (v instanceof Date) return v;
+    }
+    return null;
+  };
+
+  // 1) Самые частые поля по категориям
+  let raw =
     (cat === "refused_hotel" &&
-      (d.checkinDate ||
-        d.checkInDate ||
-        d.check_in ||
-        d.check_in_date ||
-        d.startDate ||
-        d.start_date)) ||
+      pick(
+        "checkinDate",
+        "checkInDate",
+        "check_in",
+        "check_in_date",
+        "arrivalDate",
+        "arrival_date",
+        "startDate",
+        "start_date"
+      )) ||
     (cat === "refused_ticket" &&
-      (d.eventDate || d.event_date || d.date || d.startDate || d.start_date)) ||
+      pick("eventDate", "event_date", "date", "startDate", "start_date")) ||
     (cat === "refused_flight" &&
-      (d.departureFlightDate ||
-        d.departureDate ||
-        d.departure_date ||
-        d.startFlightDate ||
-        d.start_flight_date ||
-        d.startDate ||
-        d.start_date)) ||
-    // refused_tour и всё остальное
-    (d.departureFlightDate ||
-      d.startDate ||
-      d.start_date ||
-      d.startFlightDate ||
-      d.start_flight_date);
+      pick(
+        "departureFlightDate",
+        "departureDate",
+        "departure_date",
+        "startFlightDate",
+        "start_flight_date",
+        "startDate",
+        "start_date"
+      )) ||
+    // refused_tour и остальные
+    pick(
+      "departureFlightDate",
+      "startDate",
+      "start_date",
+      "dateFrom",
+      "date_from",
+      "fromDate",
+      "from_date",
+      "beginDate",
+      "begin_date"
+    );
 
-  let dt = parseDateSafe(rawByCat);
+  let dt = parseDateSafe(raw);
   if (dt) return dt;
 
-  // 2) Фолбэки по endDate (иногда startDate пустой)
-  const rawFallback =
-    d.endDate || d.end_date || d.checkoutDate || d.checkOutDate || d.checkout_date;
-  dt = parseDateSafe(rawFallback);
+  // 2) Если start не найден — берём end/checkout как fallback
+  raw = pick(
+    "endDate",
+    "end_date",
+    "checkoutDate",
+    "checkOutDate",
+    "checkout_date",
+    "returnFlightDate",
+    "return_date"
+  );
+  dt = parseDateSafe(raw);
   if (dt) return dt;
 
-  // 3) Фолбэки по top-level полям (на всякий)
-  dt = parseDateSafe(svc.startDate || svc.start_date || svc.date || svc.date_from);
+  // 3) Совсем крайний случай — top-level
+  dt = parseDateSafe(svc.startDate || svc.start_date || svc.date);
   return dt;
 }
+
 
 
 function pickPrice(details, svc, role) {
