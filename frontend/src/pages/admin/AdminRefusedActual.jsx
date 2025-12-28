@@ -102,6 +102,12 @@ function Modal({ open, title, onClose, children, footer }) {
 export default function AdminRefusedActual() {
   const token = useMemo(() => getAuthToken(), []);
   const base = useMemo(() => apiBase(), []);
+  const apiPrefix = useMemo(() => {
+    const b = (base || "").replace(/\/+$/, "");
+    return b.endsWith("/api") ? "" : "/api";
+  }, [base]);
+
+  const apiPath = (p) => `${apiPrefix}${p.startsWith("/") ? p : `/${p}`}`;
 
   const http = useMemo(() => {
     const inst = axios.create({
@@ -166,7 +172,7 @@ export default function AdminRefusedActual() {
     setLoading(true);
     setError("");
     try {
-      const resp = await http.get("/api/admin/refused/actual", {
+      const resp = await http.get(apiPath("/admin/refused/actual"), {
         params: {
           category: category || "",
           status: status || "",
@@ -222,7 +228,7 @@ export default function AdminRefusedActual() {
     setDetailsItem(null);
     setError("");
     try {
-      const resp = await http.get(`/api/admin/refused/${id}`);
+      const resp = await http.get(apiPath(`/admin/refused/${id}`))
       const data = resp?.data;
       if (!data?.success) throw new Error(data?.message || "Bad response");
       setDetailsItem(data.item);
@@ -243,8 +249,7 @@ export default function AdminRefusedActual() {
     setSendingId(id);
     setError("");
     try {
-      const resp = await http.post(
-        `/api/admin/refused/${id}/ask-actual`,
+      const resp = await http.post(apiPath(`/admin/refused/${id}/ask-actual`),
         null,
         { params: { force: force ? "1" : "0" } }
       );
