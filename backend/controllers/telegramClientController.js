@@ -28,6 +28,28 @@ const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
   "$2b$10$N9qo8uLOickgx2ZMRZo5i.Ul5cW93vGN9VOGQsv5nPVnrwJknhkAu";
 
+// 🔐 SAFE DATE PARSER (never throws)
+function safeParseDate(val) {
+  if (!val || typeof val !== "string") return null;
+
+  // expected YYYY-MM-DD
+  const m = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+
+  let [, y, a, b] = m;
+  let mm = Number(a);
+  let dd = Number(b);
+
+  // 🔁 swap if month > 12 (e.g. 2026-16-01)
+  if (mm > 12 && dd <= 12) {
+    [mm, dd] = [dd, mm];
+  }
+
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  return new Date(`${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`);
+}
+
 /** Нормализация телефона: только цифры */
 function normalizePhone(raw) {
   if (!raw) return null;
@@ -470,17 +492,7 @@ async function searchClientServices(req, res) {
           AND (
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
-          )
-          AND (
-            COALESCE(
-              (s.details::jsonb->>'endFlightDate')::date,
-              (s.details::jsonb->>'endDate')::date
-            ) IS NULL
-            OR COALESCE(
-              (s.details::jsonb->>'endFlightDate')::date,
-              (s.details::jsonb->>'endDate')::date
-            ) >= CURRENT_DATE
-          )
+            )
         ORDER BY s.created_at DESC
         LIMIT 50
       `,
@@ -491,11 +503,25 @@ async function searchClientServices(req, res) {
     console.log("[tg-api] searchClientServices rows:", items.length);
 
     const base = publicBase();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     // ✅ FIX: гарантированный placeholder (наш встроенный роут)
     const PLACEHOLDER = `${base}/api/telegram/placeholder.png`;
 
-    const normalized = items.map((row) => {
+    const normalized = items
+      .filter((row) => {
+        const det = row.details || {};
+
+        const end =
+          safeParseDate(det.endFlightDate) ||
+          safeParseDate(det.endDate);
+
+        // если даты нет или она валидна и >= сегодня — оставляем
+        if (!end) return true;
+        return end >= today;
+      })
+      .map((row) => {
       let imgs = row.images;
 
       // привести к массиву
