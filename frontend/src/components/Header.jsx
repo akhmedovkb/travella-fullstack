@@ -402,6 +402,7 @@ export default function Header() {
                 {adminOpen && (
                   <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-[#171717] ring-1 ring-white/10 shadow-xl overflow-hidden">
                     <DropdownItem to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                    <DropdownItem to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
                     <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                     <DropdownItem to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
@@ -511,6 +512,7 @@ export default function Header() {
             {isAdmin && (
               <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/moderation" label={t("moderation.title", "Модерация")} icon={<IconModeration />} />
+                <NavItemMobileDark to="/admin/refused-actual" label={t("nav.refused_actual", "Актуальные отказы")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/admin/providers" label={t("nav.providers_admin", "Провайдеры")} icon={<IconUsers />} />
                 <NavItemMobileDark to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
