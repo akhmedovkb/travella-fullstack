@@ -18,6 +18,7 @@ import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
 import AdminLeads from "./pages/admin/Leads";
+import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
 import IndiaInside from "./pages/landing/IndiaInside";
 import LeadModal from "./components/LeadModal";
 
@@ -268,6 +269,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminLeads />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/refused-actual"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminRefusedActual />
                   </AdminRoute>
                 </PrivateRoute>
               }
