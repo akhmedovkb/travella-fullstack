@@ -417,6 +417,10 @@ app.use("/api/cms", cmsRoutes);
 const adminProvidersRoutes = require("./routes/adminProvidersRoutes");
 app.use("/api/admin", adminProvidersRoutes);
 
+/** ===================== Admin: Actual Refused ===================== */
+const adminRefusedRoutes = require("./routes/adminRefusedRoutes");
+app.use("/api/admin", adminRefusedRoutes);
+
 /** ===================== IndiaInside ===================== */
 const insideRoutes = require("./routes/insideRoutes");
 app.use("/api/inside", insideRoutes);
