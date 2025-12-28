@@ -1227,13 +1227,48 @@ function parseImagesAny(images) {
 
 function getStartDateForSort(svc) {
   const d = parseDetailsAny(svc.details);
-  const raw =
-    d.departureFlightDate ||
-    d.startDate ||
-    d.startFlightDate ||
-    d.start_flight_date;
-  return parseDateSafe(raw);
+  const cat = String(svc.category || svc.type || "").toLowerCase();
+
+  // 1) Категория-специфичные поля (самые точные)
+  const rawByCat =
+    (cat === "refused_hotel" &&
+      (d.checkinDate ||
+        d.checkInDate ||
+        d.check_in ||
+        d.check_in_date ||
+        d.startDate ||
+        d.start_date)) ||
+    (cat === "refused_ticket" &&
+      (d.eventDate || d.event_date || d.date || d.startDate || d.start_date)) ||
+    (cat === "refused_flight" &&
+      (d.departureFlightDate ||
+        d.departureDate ||
+        d.departure_date ||
+        d.startFlightDate ||
+        d.start_flight_date ||
+        d.startDate ||
+        d.start_date)) ||
+    // refused_tour и всё остальное
+    (d.departureFlightDate ||
+      d.startDate ||
+      d.start_date ||
+      d.startFlightDate ||
+      d.start_flight_date);
+
+  let dt = parseDateSafe(rawByCat);
+  if (dt) return dt;
+
+  // 2) Фолбэки по endDate (иногда startDate пустой)
+  const rawFallback =
+    d.endDate || d.end_date || d.checkoutDate || d.checkOutDate || d.checkout_date;
+  dt = parseDateSafe(rawFallback);
+  if (dt) return dt;
+
+  // 3) Фолбэки по top-level полям (на всякий)
+  dt = parseDateSafe(svc.startDate || svc.start_date || svc.date || svc.date_from);
+  return dt;
 }
+
 
 function pickPrice(details, svc, role) {
   const d = details || {};
