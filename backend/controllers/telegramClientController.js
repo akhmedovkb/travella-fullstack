@@ -493,14 +493,26 @@ async function searchClientServices(req, res) {
             (s.details::jsonb->>'expiration') IS NULL
             OR (s.details::jsonb->>'expiration')::timestamp > NOW()
             )
-          ORDER BY
+        ORDER BY
           COALESCE(
-            (s.details::jsonb->>'startDate')::date,
-            (s.details::jsonb->>'checkInDate')::date,
-            (s.details::jsonb->>'endFlightDate')::date,
-            (s.details::jsonb->>'eventDate')::date
-           ) ASC NULLS LAST,
-           s.created_at DESC
+            CASE
+              WHEN (s.details::jsonb->>'startDate') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN to_date(s.details::jsonb->>'startDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'checkInDate') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN to_date(s.details::jsonb->>'checkInDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'endFlightDate') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN to_date(s.details::jsonb->>'endFlightDate', 'YYYY-MM-DD')
+            END,
+            CASE
+              WHEN (s.details::jsonb->>'eventDate') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN to_date(s.details::jsonb->>'eventDate', 'YYYY-MM-DD')
+            END
+          ) ASC NULLS LAST,
+          s.created_at DESC
           LIMIT 50
       `,
       [category]
